@@ -741,10 +741,13 @@ func normalizeModelID(id string) string {
 	if len(parts) < 3 || parts[0] != "claude" {
 		return id
 	}
+	// Any claude-<family>-<numeric…> id normalizes. A family allowlist would
+	// leave the NEXT family name truncating raw in the MODEL cell — which is
+	// exactly how claude-fable-5 rendered as "claude-fable…" (dogfood day 0).
 	family := parts[1]
-	switch family {
-	case "opus", "sonnet", "haiku":
-	default:
+	if !allAlpha(family) {
+		// Old-style ids put the version first (claude-3-5-sonnet): pattern
+		// unknown, render the sourced id untouched rather than guess.
 		return id
 	}
 	rest := parts[2:]
@@ -755,7 +758,32 @@ func normalizeModelID(id string) string {
 	if len(rest) == 0 {
 		return id
 	}
+	// Every remaining part must be numeric (a version), or the id has a shape
+	// this function does not understand and must not restyle. The last part
+	// may carry a bracketed variant suffix (claude-opus-5[1m] -> "Opus 5[1m]").
+	for i, p := range rest {
+		if i == len(rest)-1 {
+			if b := strings.IndexByte(p, '['); b > 0 && strings.HasSuffix(p, "]") {
+				p = p[:b]
+			}
+		}
+		if !allDigits(p) {
+			return id
+		}
+	}
 	return strings.ToUpper(family[:1]) + family[1:] + " " + strings.Join(rest, ".")
+}
+
+func allAlpha(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < 'a' || s[i] > 'z' {
+			return false
+		}
+	}
+	return true
 }
 
 func allDigits(s string) bool {

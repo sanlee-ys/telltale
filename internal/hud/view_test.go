@@ -610,6 +610,12 @@ func TestDisplayModelNormalizesOnlyWhatItRecognizes(t *testing.T) {
 		{&model.Model{ID: "claude-sonnet-4-5"}, "Sonnet 4.5"},
 		{&model.Model{ID: "claude-haiku-4-5-20260101"}, "Haiku 4.5"},
 		{&model.Model{ID: "claude-opus-5[1m]"}, "Opus 5[1m]"},
+		// Families are not allowlisted: the next family must not render as a
+		// truncated raw id (claude-fable-5 did, dogfood day 0).
+		{&model.Model{ID: "claude-fable-5"}, "Fable 5"},
+		{&model.Model{ID: "claude-mythos-5"}, "Mythos 5"},
+		// But an alpha family with a non-numeric tail is not restyled.
+		{&model.Model{ID: "claude-code-guide"}, "claude-code-guide"},
 		// Unrecognized ids render as themselves rather than as a guess.
 		{&model.Model{ID: "gpt-5.1-codex"}, "gpt-5.1-codex"},
 		{&model.Model{ID: "something-else"}, "something-else"},
