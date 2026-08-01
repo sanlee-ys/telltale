@@ -14,9 +14,11 @@ guessed.
 - **In-prompt statusline for Claude Code** — model, context %, session cost, and quota
   pacing (`rate_limits` windows), rendered from the JSON Claude Code hands your
   statusline command on stdin. No network calls, no credential reads.
-- **A minimal watch-mode HUD (TUI)** for parallel sessions — the cross-vendor surface.
-  Ships with adapters for **Claude Code** and **Codex CLI**, each reading that vendor's
-  own native data (statusline JSON / transcripts; session JSONL / hook events).
+- **A watch-mode HUD (TUI)** for parallel sessions — the cross-vendor surface, and a
+  first-class UI investment (Go + Bubble Tea/Lipgloss; Windows Terminal is the reference
+  environment). Ships with adapters for **Claude Code** and **Codex CLI**, each reading
+  that vendor's own native data (statusline JSON / transcripts; session JSONL / hook
+  events). One binary, two modes: `telltale statusline` and `telltale hud`.
 - **A documented adapter interface** — one module per vendor — so you can wire in
   Gemini CLI, Cursor, or anything else that leaves session data on disk.
 

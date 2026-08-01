@@ -13,12 +13,17 @@ vendor adapters  ──►  normalized session model  ──►  renderers
 (claude, codex)       (one schema, documented)      (statusline / HUD)
 ```
 
-- **Statusline** (Claude Code only in v1): a single line rendered from the JSON Claude
-  Code passes on stdin. Zero I/O beyond stdin; budget-conscious output (every character
+One Go module, one binary (`telltale.exe`), two modes (ADR-002):
+
+- **`telltale statusline`** (Claude Code only in v1): reads the JSON Claude Code passes
+  on stdin, prints one line, exits. Latency budget: single-digit milliseconds; Bubble
+  Tea is never initialized on this path. Budget-conscious output (every character
   renders on every prompt).
-- **HUD** (cross-vendor): a minimal watch-mode TUI listing live sessions across vendors
-  with per-session gauges. Reads vendor-native data via adapters; refresh cadence and
-  degradation behavior specified below before build.
+- **`telltale hud`** (cross-vendor): a Bubble Tea/Lipgloss watch-mode TUI listing live
+  sessions across vendors with per-session gauges. **First-class UI surface** — a UI
+  design section (layout grid, color/threshold system, motion rules, empty/degraded
+  state designs) is written here BEFORE the HUD is built, and degraded-state renders
+  are eval fixtures. Windows Terminal is the reference rendering environment.
 
 ## 2. Statusline segments (v1)
 
@@ -67,9 +72,12 @@ Gemini CLI) are documentation deliverables of v1, not afterthoughts.
 
 ## 6. Open design questions (to resolve before build, each gets an ADR if consequential)
 
-1. Language/stack for statusline + TUI (constraint: Windows first-class, minimal deps,
-   near-zero install friction).
+1. ~~Language/stack~~ — **ANSWERED, ADR-002:** Go + Bubble Tea/Lipgloss, one binary,
+   two modes. Windows-first hardened; macOS/Linux deferred post-v1.
 2. Normalized session schema — the one contract everything hangs on.
 3. HUD refresh model (poll cadence vs file-watch; Windows file-watching behavior).
 4. Exact Claude/Codex on-disk data sources (verify live, per ADR-001's contract).
-5. npm package name (`telltale-hud` vs scoped) — at packaging time.
+5. Distribution naming (`telltale-hud` on any registry; winget/scoop manifests) — at
+   packaging time. Go binary means npm is optional, not required.
+6. HUD UI design section (layout, color/threshold system, motion, degraded states) —
+   written in this doc before HUD build starts (ADR-002 consequence).
