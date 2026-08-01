@@ -87,6 +87,14 @@ type Agent struct {
 // Parse decodes statusline stdin. Unknown fields are ignored by design: the
 // vendor adds fields between versions and a gauge must not break when the
 // payload grows.
+//
+// Framing note (audited 2026-08-01, see docs/design.md §4): this reads ONE JSON
+// value with a streaming decoder — there is no line splitting on this path, so
+// the U+2028/U+2029 record-tearing hazard that bites JSONL readers cannot occur
+// here. Do not "optimize" this into a read-a-line-then-Unmarshal: statusline
+// payloads carry model-authored text (session_name, display names), and those
+// characters are legal unescaped inside a JSON string value. stdin_test.go
+// pins this.
 func Parse(r io.Reader) (*StatuslineInput, error) {
 	var in StatuslineInput
 	dec := json.NewDecoder(r)

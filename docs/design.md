@@ -78,6 +78,40 @@ One module per vendor implementing:
 The contract, the normalized schema, and a worked third-party example (how you'd add
 Gemini CLI) are documentation deliverables of v1, not afterthoughts.
 
+### JSONL framing rule (binding on every adapter)
+
+Both vendors' on-disk sources are JSONL (Claude transcripts, `~/.codex/sessions`), and
+both carry model-authored text. **A JSONL record is framed by the `\n` byte (0x0A) and
+nothing else.** U+2028 (LINE SEPARATOR) and U+2029 (PARAGRAPH SEPARATOR) are legal
+*unescaped* inside a JSON string value, so a reader that splits on "lines" in the
+Unicode sense tears one record in two and both halves fail to parse — a HUD row that
+silently loses sessions. Node's `readline` has exactly this bug; pi's
+`packages/coding-agent/src/modes/rpc/jsonl.ts` hand-rolls a `\n`-only splitter to avoid
+it, with the reasoning written down.
+
+Go is structurally safer: `bufio.ScanLines`, `bufio.Reader.ReadBytes('\n')` and
+`bytes`/`strings.Split` all match the 0x0A byte exactly, and the UTF-8 encodings of
+U+2028 (`E2 80 A8`) and U+2029 (`E2 80 A9`) contain no 0x0A byte. So the rule for
+adapters is: **split at the byte level, never adopt a dependency that does Unicode
+line-breaking.** The property is pinned by tests in `internal/claude/stdin_test.go`
+rather than assumed.
+
+Two adjacent traps to avoid when the adapters land:
+
+- `bufio.Scanner` caps a token at 64 KiB by default and then returns
+  `bufio.ErrTooLong`. Transcript records routinely exceed that, and an ignored scanner
+  error truncates the rest of the file — reading as "no more sessions". Use
+  `bufio.Reader.ReadBytes('\n')`, or `Scanner` with an enlarged buffer, and **check
+  `Err()`**.
+- A trailing partial line (the vendor is still writing) is not a record. Hold it until
+  its `\n` arrives; a half-record must degrade to `—`, never to a parsed-looking value.
+
+**Audit record (2026-08-01):** the repo was swept for this hazard at the point the pi
+harness surfaced it. At that time the only parse site was `claude.Parse`
+(`internal/claude/stdin.go`), a streaming decode of a single JSON value from stdin with
+no line splitting anywhere — not exposed, nothing to fix. This section exists so the
+question is answered before the HUD adapters are written, not re-audited after.
+
 ## 5. Eval harness
 
 - Fixture-driven: recorded real inputs (statusline stdin JSON, Codex session files) per
