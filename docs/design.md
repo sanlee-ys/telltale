@@ -35,6 +35,11 @@ One Go module, one binary (`telltale.exe`), two modes (ADR-002):
 | Quota pacing (5h) | stdin `rate_limits.five_hour.used_percentage` + `resets_at` (unix s) | rate_limits absent on API-key logins; each window independently absent → hide, never zero; countdown hides without `resets_at` | **built** |
 | Quota pacing (7d) | stdin `rate_limits.seven_day.*` | same rule | **built** |
 | Worktree | stdin `worktree.name` (present only in `--worktree` sessions) | hide segment | **built** |
+| Folder | stdin `workspace.current_dir` (fallback `cwd`), basename only — no filesystem/git calls | hide segment | **built** |
+
+Deliberately not shown: git branch (would require an exec; the statusline path does no
+I/O beyond stdin — revisit only with a measured budget), permission mode (not in the
+payload; same call the predecessor script made).
 
 Threshold colors (applies to any percentage segment): green < 60, yellow ≥ 60, red ≥ 85.
 `NO_COLOR` env strips styling. Derived displays (reset countdown `↻2h13m`) are arithmetic

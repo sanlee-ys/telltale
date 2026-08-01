@@ -83,6 +83,17 @@ func TestMinimal(t *testing.T) {
 	}
 }
 
+func TestDirSegment(t *testing.T) {
+	got := renderPlain(t, "full.json")
+	if !strings.Contains(got, "myproject") {
+		t.Fatalf("dir segment missing: %q", got)
+	}
+	// minimal.json has no cwd/workspace — dir segment must hide.
+	if got := renderPlain(t, "minimal.json"); strings.Contains(got, "│") {
+		t.Fatalf("minimal must render model only: %q", got)
+	}
+}
+
 func TestWorktreeSegment(t *testing.T) {
 	got := renderPlain(t, "worktree.json")
 	if !strings.Contains(got, "⌥my-feature") {

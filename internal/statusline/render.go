@@ -63,6 +63,9 @@ func Render(in *claude.StatuslineInput, opts Options) string {
 	if s, ok := windowSegment("7d", in.RateLimits.GetSevenDay(), opts); ok {
 		segs = append(segs, s)
 	}
+	if s, ok := dirSegment(in, opts); ok {
+		segs = append(segs, s)
+	}
 	if s, ok := worktreeSegment(in, opts); ok {
 		segs = append(segs, s)
 	}
@@ -113,6 +116,31 @@ func windowSegment(label string, w *claude.Window, opts Options) (string, bool) 
 		}
 	}
 	return s, true
+}
+
+// dirSegment shows the working folder's basename, sourced from the stdin
+// payload only — no filesystem or git calls on this path. Git branch is
+// deliberately NOT here: it would need an exec, and the statusline path does
+// no I/O beyond stdin (docs/design.md §2).
+func dirSegment(in *claude.StatuslineInput, opts Options) (string, bool) {
+	dir := in.Cwd
+	if in.Workspace != nil && in.Workspace.CurrentDir != "" {
+		dir = in.Workspace.CurrentDir
+	}
+	if dir == "" {
+		return "", false
+	}
+	base := dir
+	for i := len(dir) - 1; i >= 0; i-- {
+		if dir[i] == '/' || dir[i] == '\\' {
+			base = dir[i+1:]
+			break
+		}
+	}
+	if base == "" {
+		return "", false
+	}
+	return colorize(dim, base, opts), true
 }
 
 func worktreeSegment(in *claude.StatuslineInput, opts Options) (string, bool) {
