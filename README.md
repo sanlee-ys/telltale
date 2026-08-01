@@ -7,7 +7,18 @@ guessed.
 > A telltale is the ribbon on a sail that shows true airflow. It doesn't interpret;
 > it just tells you what's actually happening.
 
-**Status: pre-v1, under active development.** Nothing here is installable yet.
+**Status: pre-v1, under active development.** The statusline mode works; the HUD is in
+design. Build from source: `go build -o telltale.exe ./cmd/telltale`, then wire it into
+Claude Code (`~/.claude/settings.json`):
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "C:\\path\\to\\telltale.exe statusline"
+  }
+}
+```
 
 ## What it will be
 

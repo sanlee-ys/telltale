@@ -1,0 +1,6 @@
+{
+  "session_id": "bare",
+  "transcript_path": "t.jsonl",
+  "version": "2.1.90",
+  "model": { "id": "claude-opus-5", "display_name": "" }
+}

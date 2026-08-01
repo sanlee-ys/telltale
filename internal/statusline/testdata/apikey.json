@@ -1,0 +1,13 @@
+{
+  "cwd": "C:\\Users\\dev\\code\\myproject",
+  "session_id": "apikey-session",
+  "transcript_path": "C:\\Users\\dev\\.claude\\projects\\x\\t.jsonl",
+  "version": "2.1.90",
+  "model": { "id": "claude-sonnet-5", "display_name": "Sonnet" },
+  "cost": { "total_cost_usd": 1.5, "total_duration_ms": 45000 },
+  "context_window": {
+    "context_window_size": 200000,
+    "used_percentage": 62.4,
+    "remaining_percentage": 37.6
+  }
+}

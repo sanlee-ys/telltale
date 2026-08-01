@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # Windows is the primary target (ADR-002): the eval runs where the users are.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Vet
+        run: go vet ./...
+      - name: Test (fixture eval)
+        run: go test ./...
+      - name: Build
+        run: go build -o telltale.exe ./cmd/telltale
+      - name: Smoke (fixture through the real binary)
+        shell: pwsh
+        run: |
+          $out = Get-Content internal/statusline/testdata/apikey.json -Raw | ./telltale.exe statusline
+          if ($out -notmatch 'Sonnet') { throw "unexpected statusline output: $out" }
+          if ($out -match '5h|7d') { throw "honest-gauge violation: quota rendered without rate_limits: $out" }

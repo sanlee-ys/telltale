@@ -1,0 +1,15 @@
+{
+  "cwd": "C:\\Users\\dev\\code\\myproject",
+  "session_id": "partial",
+  "transcript_path": "t.jsonl",
+  "version": "2.1.90",
+  "model": { "id": "claude-opus-5", "display_name": "Opus" },
+  "context_window": {
+    "context_window_size": 200000,
+    "used_percentage": 91,
+    "remaining_percentage": 9
+  },
+  "rate_limits": {
+    "five_hour": { "used_percentage": 88.0 }
+  }
+}

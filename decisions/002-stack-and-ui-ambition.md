@@ -50,8 +50,13 @@ tradeoffs; he chose terminal-native.
   section (layout grid, color/threshold system, motion rules, empty/degraded-state
   designs) BEFORE the HUD is built, and degraded-state renders are eval fixtures like
   everything else. Polish is specified, then verified — not vibes.
-- The statusline mode's latency budget (single-digit ms) is a testable constraint;
-  Bubble Tea is never initialized on the statusline path.
+- The statusline mode's latency budget, restated after measurement (2026-08-01):
+  telltale's own parse+render is sub-millisecond (benchmarked: ~0.9ms/op); end-to-end
+  invocation is bound by the Windows process-spawn floor (~15–30ms), well inside Claude
+  Code's 300ms debounce. Bubble Tea is never initialized on the statusline path. The
+  original "single-digit ms" phrasing described the end-to-end number, which no external
+  process can hit on Windows — the enforceable constraint is the benchmark plus
+  spawn-floor awareness.
 - macOS/Linux: no work until v1 ships; the only discipline is not writing
   Windows-only code where a portable call exists cheaply.
 

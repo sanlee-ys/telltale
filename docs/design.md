@@ -29,16 +29,23 @@ One Go module, one binary (`telltale.exe`), two modes (ADR-002):
 
 | Segment | Source (exact field) | Empty/degraded state | Status |
 |---|---|---|---|
-| Model | stdin JSON: model id | — (always present) | planned |
-| Context % | stdin JSON: context used_percentage (input-token based — display labeled accordingly) | hide segment | planned |
-| Session cost | stdin JSON: `total_cost_usd` | hide segment | planned |
-| Quota pacing (5h) | stdin JSON: `rate_limits.five_hour.used_percentage` + `resets_at` | API-key logins have no rate_limits → segment hidden, never zeroed | planned |
-| Quota pacing (7d) | stdin JSON: `rate_limits.seven_day.*` | same rule | planned |
+| Model | stdin `model.display_name` (falls back to `model.id`) | hide if both empty | **built** |
+| Context % | stdin `context_window.used_percentage` (input-token based per docs) | hide segment | **built** |
+| Session cost | stdin `cost.total_cost_usd` | hide segment | **built** |
+| Quota pacing (5h) | stdin `rate_limits.five_hour.used_percentage` + `resets_at` (unix s) | rate_limits absent on API-key logins; each window independently absent → hide, never zero; countdown hides without `resets_at` | **built** |
+| Quota pacing (7d) | stdin `rate_limits.seven_day.*` | same rule | **built** |
+| Worktree | stdin `worktree.name` (present only in `--worktree` sessions) | hide segment | **built** |
 
-Rules: no segment computes a number the source didn't provide; derived displays (e.g.
-time-to-reset countdown from `resets_at`) are arithmetic on a sourced value and are
-labeled by their source field here. Field names above are from the live docs as of
-2026-08-01 and get re-verified against stdin fixtures at build time.
+Threshold colors (applies to any percentage segment): green < 60, yellow ≥ 60, red ≥ 85.
+`NO_COLOR` env strips styling. Derived displays (reset countdown `↻2h13m`) are arithmetic
+on `resets_at` only.
+
+Schema verification record: full stdin JSON schema captured from
+code.claude.com/docs/en/statusline on 2026-08-01, including per-field absence semantics
+(`rate_limits` Pro/Max-only and only after first API response; each window independently
+absent). Statusline updates are debounced at 300ms and in-flight scripts are cancelled —
+which is the empirical backing for the fast-exit budget. Parsing ignores unknown fields
+by design (vendor adds fields between versions).
 
 ## 3. HUD (v1, minimal)
 
@@ -48,6 +55,10 @@ labeled by their source field here. Field names above are from the live docs as 
   transcript JSONL). To be filled in with exact paths/fields before build.
 - **Codex adapter sources:** TBD at build time (candidates: `~/.codex/sessions` JSONL,
   hooks/notify events). Codex has no statusline hook (ADR-001); the HUD is its surface.
+  **Machine note (2026-08-01): Codex CLI is not installed on the dev PC** (`~/.codex`
+  absent) — the adapter starts fixture-driven; ADR-001's live-session verification
+  happens on the Pi (`goguma`, where Codex-family tooling runs) or after a local
+  install, BEFORE the adapter is called done.
 - Degradation rule: a vendor field the adapter can't read renders as `—` (absent), never
   as a zero or a stale value presented as fresh.
 
