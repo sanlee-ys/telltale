@@ -1,0 +1,2 @@
+FIXTURE placeholder: the compression worker's lock file shares the session tree
+and must not be mistaken for a session.

@@ -1,0 +1,484 @@
+// Package claudecode adapts Claude Code's on-disk transcripts to
+// model.Session.
+//
+// Source verified live on 2026-08-01 against Claude Code 2.1.219 on the dev
+// machine: 33 project directories, 837 top-level transcripts, 13,211 records
+// walked read-only. The survey is written up in docs/design.md §3.1; nothing
+// from it is reproduced here or in testdata, which is synthesized to shape.
+//
+// # What this adapter cannot know, and why
+//
+// These are declared CapNone rather than filled with a plausible number. Each
+// was grepped for across the live corpus and returned zero matches:
+//
+//   - context_pct — there is no context_window_size on disk. Token counts are
+//     sourced, but the denominator varies by model and by the [1m] variant, so
+//     any percentage would need an assumed window. An assumed denominator is
+//     an invented gauge (decisions/001).
+//   - cost — cost.total_cost_usd exists only on the statusline stdin payload,
+//     which the HUD does not consume.
+//   - quota — rate_limits likewise stdin-only. Claude's quota lives on the
+//     statusline seam; Codex's lives on the disk seam (design.md §3.3).
+//   - liveness — see the LivenessHint note below.
+//
+// # Liveness
+//
+// The honest primitive is the transcript's mtime, which is LAST ACTIVITY and
+// is reported as such; the HUD classifies liveness from its age against one
+// shared threshold set, identically for every vendor.
+//
+// The survey found an undocumented registry at ~/.claude/sessions/<PID>.json
+// mapping live PIDs to session ids. This adapter deliberately does not read
+// it. Every use of it reduces to "a process with this id exists", which
+// design.md §4a.4 names explicitly as evidence a process exists rather than
+// evidence the session is doing anything — the one case where an adapter can
+// lie to the HUD undetectably. It is recorded in the design doc as a verified
+// observation and left unused in v1.
+package claudecode
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/sanlee-ys/telltale/internal/jsonl"
+	"github.com/sanlee-ys/telltale/internal/model"
+)
+
+// Vendor is the stable id for rows this adapter produces.
+const Vendor = model.VendorClaude
+
+// Read budget. Live transcripts routinely reach 7.7 MB, so Read never touches
+// the middle of a file: the head carries session identity (verified present on
+// the first record of 60 of 60 files sampled) and the tail carries the newest
+// model and usage. Both windows are generous enough that a normal session is
+// read whole.
+const (
+	headBytes int64 = 64 << 10
+	tailBytes int64 = 256 << 10
+)
+
+// futureSkew is how far a transcript's mtime may sit ahead of the observation
+// clock before the timestamp is treated as unreadable rather than as an age.
+// Sub-second skew between a file's mtime and the local clock is measurement
+// noise; minutes of it is a broken signal, and rendering it as "0s" would
+// claim the session was active this instant.
+const futureSkew = 2 * time.Second
+
+// syntheticModel is the model id Claude Code writes on locally generated
+// assistant records (API errors, interrupts). Those records carry zeroed
+// usage, so they must neither reach the model cell nor overwrite a real
+// reading.
+const syntheticModel = "<synthetic>"
+
+// Adapter reads Claude Code transcripts. It holds no mutable state and is safe
+// for concurrent use.
+type Adapter struct {
+	root string
+}
+
+// New returns an adapter rooted at the user's Claude projects directory.
+func New() *Adapter {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		// An unresolvable home is indistinguishable from "not installed" for
+		// our purposes: Discover will report the vendor absent.
+		return &Adapter{}
+	}
+	return &Adapter{root: filepath.Join(home, ".claude", "projects")}
+}
+
+// NewWithRoot points the adapter at an explicit projects directory. Tests use
+// it; so would a future config key.
+func NewWithRoot(root string) *Adapter { return &Adapter{root: root} }
+
+// Root is the directory this adapter watches, for the HUD's empty state. It is
+// the only path this adapter exposes for display — per-session locators can
+// name another user's paths on a shared machine and are never rendered.
+func (a *Adapter) Root() string { return a.root }
+
+func (a *Adapter) Vendor() model.VendorID { return Vendor }
+
+// Capabilities is static. See the package doc for why four of the eight fields
+// are absent from both sets.
+func (a *Adapter) Capabilities() model.Capabilities {
+	return model.Capabilities{
+		Reported: model.NewFieldSet(
+			model.FieldName,
+			model.FieldModel,
+			model.FieldWorkspace,
+			model.FieldLastActivity,
+		),
+	}
+}
+
+// Discover lists top-level transcripts. Directory listing and stat only — the
+// HUD calls this every poll tick.
+//
+// Two traps this encodes, both measured rather than assumed:
+//
+//   - The glob is projects/<slug>/<uuid>.jsonl and is NOT recursive.
+//     Recursing found 2021 files where 837 are sessions; the extra 1,184 are
+//     subagent transcripts under <sessionId>/subagents/ plus tool-results/ and
+//     workflows/ sidecars. A recursive glob inflates the session list 2.4x and
+//     double-counts every token.
+//   - The basename is validated as a UUID, not just as *.jsonl. Non-session
+//     .json/.md/.txt neighbours share these directories.
+//
+// The project-directory slug is never decoded to a path: it maps both '\' and
+// a literal '-' to '-', and the drive letter's case is not stable. cwd is read
+// from the record instead.
+func (a *Adapter) Discover(ctx context.Context) ([]model.SessionRef, error) {
+	if a.root == "" {
+		return nil, model.ErrVendorAbsent
+	}
+	projects, err := os.ReadDir(a.root)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, model.ErrVendorAbsent
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Keyed by session id: the same tree can hold sibling project directories
+	// differing only in drive-letter case, and a duplicate id would break the
+	// HUD's row matching. Newest mtime wins.
+	byID := make(map[string]model.SessionRef)
+	for _, p := range projects {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if !p.IsDir() {
+			continue
+		}
+		dir := filepath.Join(a.root, p.Name())
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			// The tree mutates during a sweep — a project directory vanished
+			// between enumeration and open during the live survey. A sweep
+			// that aborts on that loses every other vendor's rows too.
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			id, ok := sessionIDFromFile(e.Name())
+			if !ok {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			mod := info.ModTime()
+			if prev, seen := byID[id]; seen && prev.LastActivity != nil && !mod.After(*prev.LastActivity) {
+				continue
+			}
+			byID[id] = model.SessionRef{
+				Vendor:       Vendor,
+				ID:           id,
+				Locator:      filepath.Join(dir, e.Name()),
+				LastActivity: model.TimePtr(mod),
+			}
+		}
+	}
+
+	refs := make([]model.SessionRef, 0, len(byID))
+	for _, r := range byID {
+		refs = append(refs, r)
+	}
+	return refs, nil
+}
+
+// sessionIDFromFile accepts <uuid>.jsonl and nothing else.
+func sessionIDFromFile(name string) (string, bool) {
+	if !strings.HasSuffix(name, ".jsonl") {
+		return "", false
+	}
+	id := strings.TrimSuffix(name, ".jsonl")
+	if !isUUID(id) {
+		return "", false
+	}
+	return id, true
+}
+
+func isUUID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i := 0; i < 36; i++ {
+		c := s[i]
+		switch i {
+		case 8, 13, 18, 23:
+			if c != '-' {
+				return false
+			}
+		default:
+			isHex := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+			if !isHex {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// record is the subset of a transcript record this adapter reads. Unknown
+// fields are ignored by design: the vendor adds fields between versions.
+//
+// Only assistant and user records carry message. custom-title, last-prompt,
+// mode and ai-title carry {type, sessionId, <one payload key>} with no
+// timestamp and no cwd, so every field here is optional at the type level.
+type record struct {
+	Type        string `json:"type"`
+	SessionID   string `json:"sessionId"`
+	Cwd         string `json:"cwd"`
+	GitBranch   string `json:"gitBranch"`
+	Version     string `json:"version"`
+	Entrypoint  string `json:"entrypoint"`
+	IsSidechain bool   `json:"isSidechain"`
+	CustomTitle string `json:"customTitle"`
+	Message     *msg   `json:"message"`
+}
+
+// aiTitle extracts the label from an ai-title record.
+//
+// The survey verified the record's SHAPE — {type, sessionId, <one payload
+// key>} — but did not capture the payload key's name, and the live-doc rule
+// forbids guessing a field name from memory. So this matches on the verified
+// structure instead: exactly one key beyond type and sessionId, holding a
+// string. A record with a different shape yields no title, and the session
+// falls back to its workspace name, which is absence rather than a wrong label.
+func aiTitle(raw []byte) (string, bool) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return "", false
+	}
+	var found string
+	var n int
+	for k, v := range obj {
+		if k == "type" || k == "sessionId" {
+			continue
+		}
+		n++
+		var s string
+		if err := json.Unmarshal(v, &s); err == nil {
+			found = s
+		}
+	}
+	if n != 1 || found == "" {
+		return "", false
+	}
+	return found, true
+}
+
+type msg struct {
+	Model string `json:"model"`
+	Usage *usage `json:"usage"`
+}
+
+type usage struct {
+	InputTokens              int64 `json:"input_tokens"`
+	CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
+	OutputTokens             int64 `json:"output_tokens"`
+}
+
+// contextIn is the tokens actually sent as context on a request.
+//
+// input_tokens alone is a lie and the live corpus proves it: a real record
+// carried input_tokens=2 alongside cache_read=213388 and cache_creation=2464.
+// Reading input_tokens as "context used" renders 2 tokens for a ~216k context.
+func (u *usage) contextIn() int64 {
+	if u == nil {
+		return 0
+	}
+	return u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
+}
+
+// Read parses one transcript into the normalized model.
+//
+// Partial failure is not an error: a field that cannot be parsed is left nil,
+// marked degraded and explained in Diagnostics, and the row still renders with
+// an em dash in that cell.
+func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Session, error) {
+	f, err := os.Open(ref.Locator)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, model.ErrSessionGone
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	s := &model.Session{Vendor: Vendor, ID: ref.ID, ObservedAt: now}
+
+	// last_activity is the file's mtime. A timestamp meaningfully ahead of the
+	// observation clock is a broken read, not an age: it degrades to absent
+	// rather than clamping to "0s", which would claim the session was active
+	// this instant.
+	if mod := info.ModTime(); mod.After(now.Add(futureSkew)) {
+		s.Degraded = s.Degraded.With(model.FieldLastActivity)
+		s.Diagnostics = append(s.Diagnostics, "transcript mtime is ahead of the local clock")
+	} else {
+		s.LastActivity = model.TimePtr(mod)
+	}
+
+	// The head window must end where the tail window begins, or records in
+	// the overlap parse twice and inflate the unparseable-record count
+	// (last-wins application hides the duplication, the diagnostics don't).
+	// Files at or under tailBytes are covered by the tail alone; between
+	// tailBytes and tailBytes+headBytes the head window shrinks to the gap.
+	headWindow := int64(headBytes)
+	if gap := info.Size() - tailBytes; gap < headWindow {
+		headWindow = gap // <= 0 disables the head read entirely
+	}
+	var head [][]byte
+	if headWindow > 0 {
+		var err error
+		head, err = jsonl.Head(f, headWindow)
+		if err != nil {
+			return nil, err
+		}
+	}
+	tail, err := jsonl.Tail(f, info.Size(), tailBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	var bad int
+	apply := func(recs [][]byte) {
+		for _, raw := range recs {
+			var r record
+			if err := json.Unmarshal(raw, &r); err != nil {
+				// One bad record degrades the fields it feeds, not the row.
+				bad++
+				continue
+			}
+			if r.IsSidechain {
+				// Free insurance: 0 of 837 top-level transcripts carried one
+				// on 2.1.219 (they live in the subagents/ sidecar tree), but a
+				// vendor change that moves them inline must not inflate rows.
+				continue
+			}
+			a.applyRecord(s, &r)
+			// A custom title outranks a generated one, so an ai-title never
+			// overwrites a customTitle already seen.
+			if r.Type == "ai-title" && s.Name == nil {
+				if t, ok := aiTitle(raw); ok {
+					s.Name = model.Ptr(t)
+				}
+			}
+		}
+	}
+	apply(head)
+	apply(tail)
+
+	if bad > 0 {
+		// Structure only, never transcript content: this repo is public.
+		s.Diagnostics = append(s.Diagnostics, plural(bad, "unparseable record skipped", "unparseable records skipped"))
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// applyRecord folds one record into the session. Later records win, so the
+// tail's values overwrite the head's — which is what makes "the newest model"
+// fall out of a linear pass.
+func (a *Adapter) applyRecord(s *model.Session, r *record) {
+	if r.Cwd != "" {
+		s.WorkspaceDir = model.Ptr(r.Cwd)
+	}
+	if r.CustomTitle != "" {
+		s.Name = model.Ptr(r.CustomTitle)
+	}
+	if r.GitBranch != "" {
+		setExtra(s, "branch", r.GitBranch)
+	}
+	if r.Version != "" {
+		setExtra(s, "cli", r.Version)
+	}
+	if r.Message == nil {
+		return
+	}
+	// A synthetic record is Claude Code's own locally generated notice. Its
+	// zeroed usage must not overwrite the preceding real reading, and its id
+	// must never reach the model cell.
+	if r.Message.Model == "" || r.Message.Model == syntheticModel {
+		return
+	}
+	// The model identity is sourced from the record alone — an assistant
+	// record without a usage block still names the model (review finding:
+	// gating it on usage left the MODEL cell blank for real sessions).
+	s.Model = &model.Model{ID: r.Message.Model}
+	if r.Message.Usage == nil {
+		return
+	}
+	// Token counts are sourced but have no home in the v1 schema as a gauge:
+	// without a context window size there is no honest percentage to compute
+	// (see the package doc). They are carried as a display-only extra so the
+	// measurement is not silently discarded.
+	setExtra(s, "ctx tokens", formatTokens(r.Message.Usage.contextIn()))
+}
+
+func setExtra(s *model.Session, label, value string) {
+	for i := range s.Extras {
+		if s.Extras[i].Label == label {
+			s.Extras[i].Value = value
+			return
+		}
+	}
+	s.Extras = append(s.Extras, model.Extra{Label: label, Value: value})
+}
+
+func formatTokens(n int64) string {
+	switch {
+	case n <= 0:
+		return "0"
+	case n < 1000:
+		return itoa(n)
+	case n < 1_000_000:
+		return itoa(n/1000) + "k"
+	default:
+		return itoa(n/1_000_000) + "M"
+	}
+}
+
+func itoa(n int64) string {
+	if n == 0 {
+		return "0"
+	}
+	var b [20]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(b[i:])
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return itoa(int64(n)) + " " + many
+}
+
+// compile-time contract check.
+var _ model.Adapter = (*Adapter)(nil)

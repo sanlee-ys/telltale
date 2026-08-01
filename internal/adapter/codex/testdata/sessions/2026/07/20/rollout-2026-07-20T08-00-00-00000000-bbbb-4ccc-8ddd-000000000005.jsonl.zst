@@ -1,0 +1,3 @@
+FIXTURE placeholder: a rollout older than 7 days is compressed in place. Not
+real zstd, and deliberately so — the adapter must skip it on the filename, not
+on its contents, so no zstd dependency is ever needed for a live HUD row.

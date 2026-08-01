@@ -1,0 +1,10 @@
+ telltale  │  0 sessions
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                   no active sessions
+
+                                 claude   watching       %USERPROFILE%\.claude\projects
+                                 codex    not detected   %USERPROFILE%\.codex
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   v vendor   s sort   a all   r refresh   ? keys

@@ -1,0 +1,10 @@
+ telltale  │  4 sessions  │  cc 3  cx 1
+                5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
+ ──────────────────────────────────────────────────────────────────────
+        SESSION                             MODEL            CTX    AGE
+ ● CC │ telltale  C:\src\code               Opus 5         84.2% │  12s
+ ● CC │ acme-api  C:\src\work               Sonnet 4.5       41% │  48s
+ ◐ CX │ notes-api  C:\src\code              gpt-5.1-codex      — │   4m
+ ○ CC │ learning-notes  C:\src\code         Haiku 4.5      92.6% │  22m
+ ──────────────────────────────────────────────────────────────────────
+ q quit   v vendor   ? keys

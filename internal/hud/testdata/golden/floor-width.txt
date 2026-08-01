@@ -1,0 +1,1 @@
+ telltale needs 60 columns (have 52)

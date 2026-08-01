@@ -1,0 +1,10 @@
+ telltale  │  0 sessions
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                   no active sessions
+
+                       claude   unreadable     %USERPROFILE%\.claude\projects  Access is denied.
+                       codex    not detected   %USERPROFILE%\.codex
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   v vendor   s sort   a all   r refresh   ? keys

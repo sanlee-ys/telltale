@@ -1,0 +1,18 @@
+# JSONL fixtures are byte-exact by design and must survive checkout untouched.
+#
+# Two things would otherwise silently break them, and both would turn a passing
+# test into a test that cannot fail:
+#
+#   - CRLF conversion rewrites the 0x0A framing the adapters split on
+#     (docs/design.md §4), and would append a terminator to the deliberately
+#     torn final record in every fixture — the record that pins "a trailing
+#     partial line is not a record".
+#   - Text normalization can rewrite the raw U+2028 embedded in each fixture,
+#     which is the character the framing rule exists to survive.
+#
+# internal/jsonl and both adapter test suites assert those bytes directly, so a
+# rewrite fails the build rather than passing quietly. This entry is the belt.
+*.jsonl -text -diff
+
+# Golden renders are compared byte for byte at fixed terminal widths.
+internal/hud/testdata/golden/*.txt -text

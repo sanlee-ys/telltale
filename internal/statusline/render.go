@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/claude"
+	"github.com/sanlee-ys/telltale/internal/theme"
 )
 
 // ANSI styling. Claude Code renders ANSI in statuslines (documented).
@@ -29,11 +30,15 @@ const (
 
 const sep = " \x1b[2m│\x1b[0m "
 
-// Thresholds for percentage coloring (docs/design.md §2): green below warn,
-// yellow from warn, red from crit.
+// Thresholds for percentage coloring (docs/design.md §2, §7.5): green below
+// warn, yellow from warn, red from crit.
+//
+// The numbers live in internal/theme so the HUD cannot drift from them. That
+// package is stdlib-only and holds no Style type precisely so this path can
+// share the numbers without linking a TUI framework (ADR-002).
 const (
-	warnPct = 60.0
-	critPct = 85.0
+	warnPct = theme.WarnPct
+	critPct = theme.CritPct
 )
 
 type Options struct {

@@ -1,0 +1,9 @@
+ telltale  │  3 sessions  │  claude 2  codex 1
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                                                    MODEL            AGE
+ ● CC │ telltale  C:\src\code                                                                      Opus 5        │  12s
+ ◐ CX │ notes-api  C:\src\code                                                                     gpt-5.1-codex │   4m
+ ○ CC │ learning-notes  C:\src\code                                                                Haiku 4.5     │  22m
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   v vendor   s sort   a all   r refresh   ? keys

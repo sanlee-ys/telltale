@@ -1,0 +1,9 @@
+ telltale  │  4 sessions  │  claude 3  codex 1                                                 5h ███─────   42% ↻2h13m
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                      MODEL          CONTEXT                 COST    AGE
+ ● CC │ telltale  C:\src\code                                        Opus 5         ────────────     0%    $0.04 │   3s
+ ● CC │ a-really-long-project-name-that-overflows-the-label-column…  Opus 5         ███████████─  99.9%  $340.50 │   9s
+ ◐ CX │ 4f2a9c81-1d3e-4a77-9b02-000000000000                                                          —        — │   7m
+   CC │ acme-api  C:\src\work                                        Sonnet 4.5                       —    $1.02 │    —
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   v vendor   s sort   a all   r refresh   ? keys
