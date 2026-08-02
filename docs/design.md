@@ -1963,11 +1963,66 @@ find it.
 `/` is a mode, and it is the product's only one — which is why it takes over the whole
 footer instead of quietly changing what an unmodified key does.
 
-## 8. Roadmap after v1 (decided 2026-08-01)
+## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 
 Rigor stays the floor; features and front-end craft are the priority axis from here.
 Each item names its incumbent inspiration and the honest-gauge twist that makes it ours.
 Sources rule unchanged: a segment ships only when this doc names its source.
+
+ADR-005 adds a second axis: external adoption is now an explicit product goal alongside
+ADR-001's portfolio-evidence bar, and adoptability is a design input rather than a
+lagging indicator. That does not reorder the feature track below — it adds the adoption
+track that runs beside it, and one of its items lands *before* v1 is done, which is why
+this section is no longer titled "after v1".
+
+### Adoption track (ADR-005)
+
+ADR-001's sequence stands unchanged — dogfood → eval + design doc → launch post — so
+these items are ordered by that sequence, not by version number.
+
+1. **Activation slice — runs in parallel with the dogfood window**, i.e. now, not after
+   v1. Four pieces, all packaging rather than capability: prebuilt binaries via
+   goreleaser; one-command install with **scoop/winget first**, per Windows-first
+   (ADR-002); a README hero visual; and a useful **zero-config first frame** — the
+   binary's first run has to show something true without being configured, because an
+   install that lands on an empty screen has spent its only attempt. macOS/Linux binaries
+   are cross-compiled and shipped labeled **"built, not verified — Windows is the
+   verified target"**: ADR-002's "no macOS/Linux work until v1" is amended for
+   *distribution only*, the no-porting/no-verification-effort rule stands, and the label
+   is ADR-001's flagged-limitation pattern applied to a platform instead of a segment.
+   The README positioning line — *"one local HUD for every coding agent you use"* —
+   lands **with** this slice and deliberately not before it: a positioning claim that
+   arrives ahead of a one-command install is a promise the reader has no way to act on.
+2. **The launch post is experiment #1, and the hypothesis it tests is cross-harness
+   visibility** — do multi-harness power users want one honest local HUD across the
+   agents they already run? That, and only that, is what the launched product contains.
+   Its bar is pre-registered here before launch so the outcome is falsifiable either
+   way: **10 run-evidenced external users within 30 days of the post.** Run-evidence
+   means the person demonstrably ran telltale — a version-bearing bug report, a
+   real-session screenshot, a PR grounded in running it, package-manager feedback, or an
+   unsolicited statement of use. Engagement without run-evidence (a comment, a question,
+   a hot take) does not count, and a star does not count; stars stay weather (ADR-001).
+3. **Needs-input / blocked / done state is the first post-validation feature** — the
+   attention-routing job, and the reason the product is positioned the way it is. It is
+   built where the vendor seams already support it: Claude Code hooks, Codex notify
+   events, and agy's `agent_state` (observed live transitioning `tool_use` → `idle`,
+   §3.8). Not before experiment #1 reads out, and it then gets **its own experiment
+   (#2)**. The launch experiment explicitly does not claim this ground: its result is
+   evidence about cross-harness visibility only, and neither validates nor falsifies a
+   capability the launched product did not contain.
+4. **The agy disk-seam re-survey is the next scheduled adapter work item**, upgrading
+   §3.8's watch item from passive to active. New evidence (ccusage issue #1402): agy
+   ≥ 1.0.4 stores sessions in SQLite `.db` files whose `gen_metadata` table exposes
+   input / cache-read / output / thinking token counts, a response model per generation,
+   and per-turn rows dedupable by `responseId` — that is, the payload columns §3.8 read
+   as opaque protobuf may in fact be parseable. The survey runs against the local 1.1.9
+   corpus first and no coverage claim is made before it lands; the §3.8 verdict stays as
+   written until it does. If it verifies, agy stops being a statusline-only vendor and
+   telltale ships the lane's only Antigravity HUD adapter.
+
+Neither track discharges what verification already owes: §3.4's remaining passive-tail
+items and §3.7's first live Gemini pass stay open, and adoption work does not buy an
+exemption from them.
 
 ### v1.1 — the flagship trio (**BUILT**)
 
