@@ -1,0 +1,56 @@
+{
+  "cwd": "C:\\src\\code\\example-app",
+  "session_id": "00000000-dddd-4eee-8fff-000000000001",
+  "conversation_id": "00000000-dddd-4eee-8fff-000000000001",
+  "transcript_path": "C:\\src\\home\\.gemini\\antigravity\\brain\\00000000-dddd-4eee-8fff-000000000001\\.system_generated\\logs\\transcript.jsonl",
+  "model": {
+    "id": "Gemini 3.6 Flash (High)",
+    "display_name": "Gemini 3.6 Flash (High)",
+    "effort": "high"
+  },
+  "workspace": {
+    "current_dir": "C:\\src\\code\\example-app",
+    "project_dir": "C:\\src\\code\\example-app"
+  },
+  "version": "1.1.9",
+  "context_window": {
+    "total_input_tokens": 32391,
+    "total_output_tokens": 697,
+    "context_window_size": 1048576,
+    "used_percentage": 3.1,
+    "remaining_percentage": 96.9,
+    "current_usage": {
+      "input_tokens": 2699,
+      "output_tokens": 148,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 20562
+    }
+  },
+  "exceeds_200k_tokens": false,
+  "product": "antigravity",
+  "quota": {
+    "3p-weekly": {
+      "remaining_fraction": 1,
+      "reset_time": "2026-08-09T19:35:01Z",
+      "reset_in_seconds": 601200
+    },
+    "gemini-weekly": {
+      "remaining_fraction": 0.75,
+      "reset_time": "2026-08-09T19:35:01Z",
+      "reset_in_seconds": 601200
+    }
+  },
+  "agent_state": "working",
+  "vcs": {
+    "type": "git",
+    "branch": "main",
+    "dirty": true
+  },
+  "sandbox": {
+    "enabled": false
+  },
+  "plan_tier": "FIXTURE Starter Quota",
+  "email": "fixture@example.com",
+  "tool_confirmation_pending": false,
+  "terminal_width": 120
+}

@@ -13,14 +13,18 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/sanlee-ys/telltale/internal/adapter/claudecode"
 	"github.com/sanlee-ys/telltale/internal/adapter/codex"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
+	"github.com/sanlee-ys/telltale/internal/antigravity"
 	"github.com/sanlee-ys/telltale/internal/claude"
 	"github.com/sanlee-ys/telltale/internal/hud"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -51,14 +55,37 @@ func main() {
 }
 
 func runStatusline() {
-	in, err := claude.Parse(os.Stdin)
+	// One statusline command serves two vendors. Routing is the documented
+	// `product` field, an affirmative marker: agy stamps "antigravity" on
+	// every payload and Claude Code's payload has no product field at all.
+	// Stdin is read once; both parsers see the same bytes.
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
+		os.Exit(0)
+	}
+	var probe struct {
+		Product string `json:"product"`
+	}
+	_ = json.Unmarshal(raw, &probe) // a probe failure falls through to the Claude parser's own error
+
+	noColor := os.Getenv("NO_COLOR") != ""
+	if probe.Product == antigravity.Product {
+		in, err := antigravity.Parse(bytes.NewReader(raw))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
+			os.Exit(0)
+		}
+		fmt.Println(statusline.RenderAntigravity(in, statusline.Options{NoColor: noColor}))
+		return
+	}
+	in, err := claude.Parse(bytes.NewReader(raw))
 	if err != nil {
 		// A gauge must never crash the host UI: on bad input, render nothing
 		// and exit clean. The error goes to stderr for `/statusline` debugging.
 		fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
 		os.Exit(0)
 	}
-	noColor := os.Getenv("NO_COLOR") != ""
 	fmt.Println(statusline.Render(in, statusline.Options{NoColor: noColor}))
 }
 

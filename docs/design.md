@@ -69,6 +69,33 @@ stop reading as `100.0%`, a 7-day window would stop reading as `↻120h00m`), wh
 behaviour change to a shipped surface and is therefore a separate change with its own
 fixture updates. The thresholds are already unified; the formatters are not.
 
+### 2.1 Antigravity CLI statusline (added 2026-08-02, ADR-004)
+
+`telltale statusline` serves a second vendor: Antigravity CLI (`agy`) hands statusline
+commands a JSON payload on stdin, same seam shape as Claude Code. **Routing is the
+documented `product` field** — agy stamps `"product": "antigravity"` on every payload
+(observed on all six live captures) and Claude's payload has no product field; one
+binary, one subcommand, no flag. Stdin is read once and handed to whichever parser the
+marker selects (`internal/antigravity`).
+
+| Segment | Source (exact field) | Empty/degraded state | Status |
+|---|---|---|---|
+| Model | stdin `model.display_name` (falls back to `model.id`) | hide if both empty | **built** |
+| Context % | stdin `context_window.used_percentage` (vendor-reported; the payload also carries `context_window_size`) | hide segment; 0 is a reading and renders `ctx 0%` | **built** |
+| Quota buckets | stdin `quota.<id>.remaining_fraction` + `reset_in_seconds` (fallback `reset_time`) — one segment per NAMED bucket, ids rendered verbatim, sorted for stability; used% = (1−remaining)×100, a unit conversion | bucket without `remaining_fraction` hides; absent map hides all | **built** |
+| Agent state | stdin `agent_state` — the first vendor-REPORTED liveness signal on any seam; `tool_confirmation_pending: true` outranks it and renders `confirm?` | hide if empty; unknown vocabulary renders verbatim in dim | **built** |
+| Branch | stdin `vcs.branch` (+`*` when `vcs.dirty`) — in the payload, so no exec; the no-I/O-beyond-stdin rule holds | hide segment | **built** (documented; not yet observed live — §3.8) |
+| Folder | stdin `workspace.current_dir` (fallback `cwd`), basename only | hide segment | **built** |
+
+Not rendered, deliberately: `cost` does not exist anywhere in the payload (nothing is
+priced); `email` and `plan_tier` are identity, not gauges; `transcript_path` is
+advertised but never written by agy 1.1.9 (§3.8) and displaying a path to a
+nonexistent file would be narrating.
+
+Schema verification record: documented contract (antigravity.google/docs/cli/statusline)
+cross-checked against a six-payload live capture from a real interactive session on agy
+1.1.9, 2026-08-02 (§3.8). Fixtures are synthesized to the observed shapes.
+
 ## 3. HUD (v1)
 
 One row per live session, both vendors; per-row: vendor, session identity, model,
@@ -480,6 +507,49 @@ produce one — see the market note):
   limitation above).
 - Observe a real `$rewindTo` and confirm the truncate-or-clear replay against the
   loader's behaviour on the same file.
+
+### 3.8 Antigravity CLI seam — surveyed live 2026-08-02; statusline is the seam
+
+**Environment:** agy 1.1.9, installed 2026-08-02. Closed source (the GitHub repo,
+google-antigravity/antigravity-cli, is docs and examples only), so this survey is the
+Claude Code method: documented contracts cross-checked against live observation, no
+source read possible.
+
+**Disk verdict — no honest HUD adapter today.** Interactive and headless sessions both
+write only `~/.gemini/antigravity-cli/conversations/<conversation-id>.db`: SQLite,
+protobuf blobs in every payload column (`steps.step_payload`, `gen_metadata.data` —
+inspected read-only). Undocumented protobuf is unparseable without guessing, and the
+repo already rejected a SQLite dependency once (§3.2). The docs and the live statusline
+payload both advertise
+`~/.gemini/antigravity/brain/<conversation-id>/.system_generated/logs/transcript.jsonl`;
+**agy 1.1.9 never writes it** — that path does not exist, and the real (undocumented)
+`brain/` lives under `antigravity-cli/` and holds only empty `scratch/` dirs. A
+vendor-advertised path with no file behind it is the exact shape of thing this product
+refuses to render.
+
+**Watch item:** the payload's `transcript_path` field means the vendor intends the
+file. The day agy starts writing it, an Antigravity HUD adapter becomes buildable and
+the payload already says where to look. Until then, agy is a statusline-only vendor.
+
+**Statusline seam — verified live.** Capture method: a temporary statusline command
+(`telltale-capture.cmd`) appending each stdin payload to a file; six payloads captured
+across one interactive session. Confirmed against the documented schema: `product:
+"antigravity"` on every payload (the routing marker); model with display_name/effort;
+full context accounting (`context_window_size` 1,048,576 observed, `used_percentage`,
+per-request `current_usage` incl. cache reads); **named weekly quota buckets**
+(`gemini-weekly`, `3p-weekly` on the Starter tier) each carrying `remaining_fraction`,
+`reset_time`, `reset_in_seconds`; `agent_state` observed transitioning `tool_use` →
+`idle`; `tool_confirmation_pending` observed `true` while a permission prompt was on
+screen. Documented but not yet observed live (the capture session ran outside a repo):
+`vcs`, `artifact_count`, `task_count`, `execution_mode` — the parser carries them as
+optional; the branch segment's live confirmation is the itemized remainder here.
+
+**Fidelity notes:** the docs' storage path (`antigravity/`) and the real one
+(`antigravity-cli/`) disagree — recorded, not resolved; `model.id` equals the display
+string ("Gemini 3.6 Flash (High)"), not a machine id; the payload carries the signed-in
+email and plan tier, so real captures are PII and never enter `testdata/`.
+
+## 4. Adapter contract (v1)
 
 One module per vendor implementing:
 
@@ -895,6 +965,7 @@ statusline fixture). What it asserts today:
 | Layer | Package | What is pinned |
 |---|---|---|
 | Statusline renders | `internal/statusline` | every segment against five stdin fixtures, including the API-key login that must render no quota |
+| Statusline (agy) | `internal/statusline` + `internal/antigravity` | four agy fixtures + inline cases: full render exact, confirm? outranking the state word, ctx 0% as a reading beside hidden quota, bucket-without-reading hides, unknown state verbatim, reset_time fallback, U+2028 in a string value, the product routing marker |
 | Framing rule | `internal/jsonl` | 0x0A-only framing, a 300 KiB record surviving the `bufio.Scanner` cap, read errors surfacing, torn tails held back, a seek fragment discarded |
 | Schema gate | `internal/model` | `Validate` over every rejection case, liveness boundaries, presence semantics |
 | Claude adapter | `internal/adapter/claudecode` | discovery filters, the `<synthetic>` trap, the `input_tokens` trap, torn tail invisibility, torn-only session, future mtime, capability table |
