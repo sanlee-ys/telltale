@@ -344,14 +344,20 @@ noted below.
    (`Documents\Codex\<date>\<slug>`), so the workspace-basename fallback shows the
    thread slug, not a repo name. Cosmetic, vendor-truthful, unchanged.
 
+**Discharged 2026-08-01, same evening:**
+
+- ~~A rollout written by the **standalone CLI**~~ — observed live: two sessions from
+  the npm CLI at 0.146.0 write `session_meta` with `originator:"codex-tui"`,
+  `source:"cli"`, `thread_source:"user"` — same record shape and tree layout as the
+  Desktop writer, so no adapter change (nothing keys on originator). The observation
+  also reproduced §6 Q8 a second time: the first CLI rollout's mtime settled roughly
+  twenty minutes after the session ended, when the writer released the file.
+
 **Still owed:**
 
 - Null `info`/`rate_limits` mid-stream, "cleared" vs "unchanged" (§3.2): the corpus
   contained **no mid-stream nulls**, so the conservative "clearing" reading stands
   unfalsified rather than confirmed.
-- A rollout written by the **standalone CLI**: every live rollout so far came from the
-  Desktop writer. Same recorder crate, so divergence is unlikely, but "unlikely" is not
-  the bar this section exists to enforce.
 - An **API-key login** capture (rate_limits expected absent), and whether a paid plan
   ever populates `secondary`.
 - The 7-day `.zst` compression pass — unobservable until the corpus is a week old.
