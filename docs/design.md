@@ -445,6 +445,18 @@ tokens or tool calls settle, so a linear last-wins pass needs no dedup map.
 - `workspace` is read verbatim from the vendor's registry entry (REPORTED, a lookup
   not a computation), with a fidelity caveat: the vendor lowercases the recorded path
   on Windows.
+- The adapter replays the writer's grammar, not just its records: `$rewindTo`
+  truncates the ordered message log (a rewind to an id outside the read windows
+  conservatively clears it), and a `$set` messages checkpoint clears and rebuilds it —
+  both mirroring the vendor's own loader. Independent review (2026-08-02) caught the
+  first cut ignoring both; a rewound-away 215k-token reading would have kept rendering.
+- **Bounded-read limitation, stated:** the head/tail windows share the seam behaviour
+  of every adapter — a record crossing the boundary is read by neither window, and a
+  single line larger than the tail budget (256 KiB) is outside the read entirely. On
+  Gemini that line can be a whole-conversation checkpoint, so a giant checkpoint's
+  values are invisible until the next ordinary record re-establishes them. Accepted as
+  the same tradeoff the other adapters carry; the live pass below sizes real
+  checkpoints to check whether the budget needs raising.
 
 **First live pass — owed, unobservable until a corpus exists** (the CLI was installed
 for this adapter; no session has been run yet):
@@ -456,7 +468,11 @@ for this adapter; no session has been run yet):
 - Confirm the upsert pattern and per-message `tokens` against real traffic, and the
   non-resumable delete-on-exit behaviour.
 - Observe whether a live `$set` messages checkpoint exceeds the 64 KiB scanner cap in
-  practice (expected: yes, on any long session).
+  practice (expected: yes, on any long session), and whether any exceeds the 256 KiB
+  tail budget (which would put whole checkpoints outside the bounded read — see the
+  limitation above).
+- Observe a real `$rewindTo` and confirm the truncate-or-clear replay against the
+  loader's behaviour on the same file.
 
 One module per vendor implementing:
 

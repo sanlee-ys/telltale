@@ -37,10 +37,19 @@
 //     between Discover and Read in normal operation: ErrSessionGone, row
 //     dropped, no diagnostic.
 //   - Messages are UPSERTS: the writer re-appends the full message record
-//     with the same id when tokens or tool calls settle. A linear last-wins
-//     pass is therefore correct and needs no dedup map.
-//   - $set checkpoint records may carry the entire message array on one line;
-//     framing goes through internal/jsonl, which has no line cap.
+//     with the same id when tokens or tool calls settle. The adapter replays
+//     them through an ordered per-id log so the re-appended values win.
+//   - {"$rewindTo": id} removes that message and everything after it — the
+//     vendor's loader truncates its map there — so the adapter's replay
+//     truncates its log the same way. A rewind to an id outside the read
+//     windows conservatively clears the collected message state: values that
+//     may have been rewound away are absence, not a display (review finding,
+//     2026-08-02).
+//   - {"$set": {"messages": [...]}} is a CHECKPOINT: the loader clears and
+//     rebuilds from the array, so the replay does too. Those lines can carry
+//     the entire conversation; framing goes through internal/jsonl, which has
+//     no line cap — though a checkpoint larger than the tail budget is
+//     outside the bounded read entirely (documented in design.md §3.7).
 //   - Legacy pre-JSONL sessions are single-document *.json files. Discover
 //     skips them: parsing a second format for sessions that are by
 //     construction from an older install is not worth a second parse path in
@@ -100,8 +109,14 @@ type Adapter struct {
 	root string
 }
 
-// New returns an adapter rooted at the user's Gemini tmp directory.
+// New returns an adapter rooted at the user's Gemini tmp directory,
+// honouring GEMINI_CLI_HOME — the same resolution order as the vendor's
+// homedir() (paths.ts): the override replaces the home directory, and
+// .gemini/tmp hangs beneath whichever wins.
 func New() *Adapter {
+	if h := os.Getenv("GEMINI_CLI_HOME"); h != "" {
+		return &Adapter{root: filepath.Join(h, ".gemini", "tmp")}
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return &Adapter{}
@@ -208,15 +223,18 @@ func (a *Adapter) Discover(ctx context.Context) ([]model.SessionRef, error) {
 // metaRecord is the initial metadata line and any $set update, folded into
 // one shape. The writer's first line carries sessionId + projectHash; later
 // lines carry {"$set": {...partial...}}. Unknown fields are ignored by
-// design.
+// design. Messages appears in two places the loader also handles: on a $set
+// it is a whole-conversation CHECKPOINT (clear and rebuild); on the initial
+// line it is a legacy single-line record's message array.
 type metaRecord struct {
-	SessionID   string   `json:"sessionId"`
-	ProjectHash string   `json:"projectHash"`
-	StartTime   string   `json:"startTime"`
-	LastUpdated string   `json:"lastUpdated"`
-	Summary     string   `json:"summary"`
-	Kind        string   `json:"kind"`
-	Directories []string `json:"directories"`
+	SessionID   string          `json:"sessionId"`
+	ProjectHash string          `json:"projectHash"`
+	StartTime   string          `json:"startTime"`
+	LastUpdated string          `json:"lastUpdated"`
+	Summary     string          `json:"summary"`
+	Kind        string          `json:"kind"`
+	Directories []string        `json:"directories"`
+	Messages    []messageRecord `json:"messages"`
 }
 
 // messageRecord is the subset of a message record this adapter reads. Only
@@ -238,9 +256,20 @@ type tokens struct {
 	Total  int64 `json:"total"`
 }
 
-// setEnvelope detects a metadata-update record.
-type setEnvelope struct {
-	Set *metaRecord `json:"$set"`
+// envelope detects the two $-prefixed record shapes: a metadata update and a
+// rewind marker.
+type envelope struct {
+	Set      *metaRecord `json:"$set"`
+	RewindTo *string     `json:"$rewindTo"`
+}
+
+// msgSnapshot is one message's contribution to the fields this adapter
+// sources, held in an ordered log so rewinds and checkpoints can truncate or
+// rebuild it exactly as the vendor's own loader does.
+type msgSnapshot struct {
+	id     string
+	model  string
+	tokens *tokens
 }
 
 // Read parses one chat recording into the normalized model.
@@ -305,7 +334,55 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 			newestTS = ts
 		}
 	}
-	applyMeta := func(m *metaRecord) {
+
+	// The ordered message log, replayed exactly as the vendor's loader
+	// replays its map: upserts update in place, a rewind truncates from the
+	// target id, a checkpoint clears and rebuilds. Timestamps are noted at
+	// encounter regardless — a rewound record was still WRITTEN when its
+	// timestamp says, so it stays evidence of activity while its values stop
+	// being displayable.
+	var msgs []msgSnapshot
+	idx := map[string]int{}
+	resetMsgs := func() {
+		msgs = msgs[:0]
+		idx = map[string]int{}
+	}
+	applyMsg := func(m *messageRecord) {
+		noteTS(m.Timestamp)
+		if i, ok := idx[m.ID]; ok {
+			if m.Type == "gemini" {
+				if m.Model != "" {
+					msgs[i].model = m.Model
+				}
+				if m.Tokens != nil {
+					msgs[i].tokens = m.Tokens
+				}
+			}
+			return
+		}
+		idx[m.ID] = len(msgs)
+		snap := msgSnapshot{id: m.ID}
+		if m.Type == "gemini" {
+			snap.model = m.Model
+			snap.tokens = m.Tokens
+		}
+		msgs = append(msgs, snap)
+	}
+	rewind := func(id string) {
+		if i, ok := idx[id]; ok {
+			for _, m := range msgs[i:] {
+				delete(idx, m.id)
+			}
+			msgs = msgs[:i]
+			return
+		}
+		// The target sits outside the read windows (or never existed — the
+		// loader clears everything in that case too). Conservative side of
+		// the honest gauge: values that MAY have been rewound away are
+		// absence, and later records re-establish whatever survived.
+		resetMsgs()
+	}
+	applyMeta := func(m *metaRecord, isCheckpoint bool) {
 		if m.Kind == "subagent" {
 			// Backstop only — sub-agent files are excluded structurally by
 			// Discover. Signalled via sessionID below because apply() cannot
@@ -322,22 +399,37 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		}
 		noteTS(m.LastUpdated)
 		noteTS(m.StartTime)
+		if len(m.Messages) > 0 {
+			// $set.messages is a whole-conversation checkpoint: the loader
+			// clears its map and rebuilds from the array. A legacy initial
+			// record's array is applied without the clear, same as the loader.
+			if isCheckpoint {
+				resetMsgs()
+			}
+			for i := range m.Messages {
+				applyMsg(&m.Messages[i])
+			}
+		}
 	}
 	apply := func(recs [][]byte) {
 		for _, raw := range recs {
 			if bad == -1 {
 				return
 			}
-			// A record is exactly one of: $set update, message (string id),
-			// rewind marker, or the initial metadata line (sessionId +
-			// projectHash). Rewind markers carry nothing this adapter reads.
-			var env setEnvelope
+			// A record is exactly one of: $set update, $rewindTo marker,
+			// message (string id), or the initial metadata line (sessionId +
+			// projectHash).
+			var env envelope
 			if err := json.Unmarshal(raw, &env); err != nil {
 				bad++
 				continue
 			}
 			if env.Set != nil {
-				applyMeta(env.Set)
+				applyMeta(env.Set, true)
+				continue
+			}
+			if env.RewindTo != nil {
+				rewind(*env.RewindTo)
 				continue
 			}
 			var msg messageRecord
@@ -346,15 +438,7 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 				continue
 			}
 			if msg.ID != "" {
-				noteTS(msg.Timestamp)
-				if msg.Type == "gemini" {
-					if msg.Model != "" {
-						s.Model = &model.Model{ID: msg.Model}
-					}
-					if msg.Tokens != nil && msg.Tokens.Input > 0 {
-						setExtra(s, "ctx tokens", formatTokens(msg.Tokens.Input))
-					}
-				}
+				applyMsg(&msg)
 				continue
 			}
 			var meta metaRecord
@@ -363,16 +447,33 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 				continue
 			}
 			if meta.SessionID != "" && meta.ProjectHash != "" {
-				applyMeta(&meta)
+				applyMeta(&meta, false)
 			}
-			// Anything else (e.g. $rewindTo) is a known shape with nothing to
-			// read; it is not a parse failure.
+			// Anything else is a known-shaped record with nothing to read;
+			// it is not a parse failure.
 		}
 	}
 	apply(head)
 	apply(tail)
 	if bad == -1 {
 		return nil, ErrSubagentTranscript
+	}
+
+	// The newest surviving contribution wins — surviving meaning it was not
+	// truncated by a rewind or replaced by a checkpoint. A tokens reading of
+	// zero is a reading (the writer persists promptTokenCount ?? 0), so nil
+	// is the only absence.
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].model != "" {
+			s.Model = &model.Model{ID: msgs[i].model}
+			break
+		}
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].tokens != nil {
+			setExtra(s, "ctx tokens", formatTokens(msgs[i].tokens.Input))
+			break
+		}
 	}
 
 	// Q8 fold: the fresher valid signal wins; both invalid degrades.

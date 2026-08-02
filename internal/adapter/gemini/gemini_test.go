@@ -140,11 +140,12 @@ func TestReadHealthySession(t *testing.T) {
 		t.Fatalf("Validate: %v", err)
 	}
 
-	// The upsert is the vendor's write pattern: the same message id is
-	// re-appended when tokens settle, so a linear last-wins pass must land on
-	// the re-appended record's model, not the first occurrence's.
+	// The fixture walks the writer's full grammar: an upsert re-appends
+	// m002, a rewind to an id outside the file clears the collected state,
+	// and the final m002 record re-establishes it. The newest surviving
+	// record's model must win.
 	if got, _ := s.Model.Name(); got != "gemini-3-pro" {
-		t.Errorf("model = %q, want gemini-3-pro — the re-appended (upserted) record wins", got)
+		t.Errorf("model = %q, want gemini-3-pro — the newest surviving record wins", got)
 	}
 	if s.Name == nil || *s.Name != "FIXTURE example session" {
 		t.Errorf("name = %v, want the $set summary", s.Name)
@@ -447,6 +448,106 @@ func TestSubagentCountNeverExceedsTheTranscriptsPresent(t *testing.T) {
 	}
 	if *s.Subagents > 2 {
 		t.Errorf("counted %d, want at most 2 — note.partial.json is not a transcript", *s.Subagents)
+	}
+}
+
+// ------------------------------------------------------- replay semantics
+
+const metaLine = `{"sessionId":"` + healthySessionID + `","projectHash":"00000000000000000000000000000000000000000000000000000000000000c1"}`
+
+func writeSession(t *testing.T, chats, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(chats, healthyRef+".jsonl"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A rewind removes the target message and everything after it — the vendor's
+// loader truncates its map there, so values sourced from the removed records
+// must stop rendering (review finding 1, 2026-08-02).
+func TestRewindRemovesRewoundValues(t *testing.T) {
+	root, chats := tempTree(t)
+	writeSession(t, chats, metaLine+"\n"+
+		`{"id":"m1","timestamp":"2026-08-02T10:00:05.000Z","type":"user","content":"retry me"}`+"\n"+
+		`{"id":"m2","timestamp":"2026-08-02T10:01:00.000Z","type":"gemini","content":[{"text":"x"}],"model":"gemini-3-pro","tokens":{"input":215000,"output":10,"total":215010}}`+"\n"+
+		`{"$rewindTo":"m1"}`+"\n")
+	s := readOne(t, NewWithRoot(root), healthyRef)
+	if s.Model != nil {
+		t.Errorf("model = %v, want nil — the record that carried it was rewound away", s.Model)
+	}
+	if got := extra(s, "ctx tokens"); got != "" {
+		t.Errorf("ctx tokens = %q, want absent after the rewind", got)
+	}
+}
+
+// A rewind to an id outside the read windows clears the collected state:
+// values that MAY have been rewound away are absence, and later records
+// re-establish what survived.
+func TestRewindToUnknownIdClearsCollectedState(t *testing.T) {
+	root, chats := tempTree(t)
+	writeSession(t, chats, metaLine+"\n"+
+		`{"id":"m2","timestamp":"2026-08-02T10:01:00.000Z","type":"gemini","content":[{"text":"x"}],"model":"gemini-3-pro","tokens":{"input":9000,"output":10,"total":9010}}`+"\n"+
+		`{"$rewindTo":"m0-not-in-window"}`+"\n")
+	s := readOne(t, NewWithRoot(root), healthyRef)
+	if s.Model != nil {
+		t.Errorf("model = %v, want nil — the rewind target is unknowable, so survival is unknowable", s.Model)
+	}
+}
+
+// $set.messages is a whole-conversation checkpoint: the loader clears and
+// rebuilds from the array, so pre-checkpoint values must not survive it and
+// checkpoint-only values must render (review finding 2, 2026-08-02).
+func TestCheckpointReplacesMessageState(t *testing.T) {
+	root, chats := tempTree(t)
+	writeSession(t, chats, metaLine+"\n"+
+		`{"id":"m2","timestamp":"2026-08-02T10:01:00.000Z","type":"gemini","content":[{"text":"x"}],"model":"gemini-2.5-flash","tokens":{"input":215000,"output":10,"total":215010}}`+"\n"+
+		`{"$set":{"messages":[{"id":"m9","timestamp":"2026-08-02T10:04:00.000Z","type":"gemini","content":[{"text":"y"}],"model":"gemini-3-pro","tokens":{"input":5000,"output":2,"total":5002}}],"lastUpdated":"2026-08-02T10:04:01.000Z"}}`+"\n")
+	s := readOne(t, NewWithRoot(root), healthyRef)
+	if got, _ := s.Model.Name(); got != "gemini-3-pro" {
+		t.Errorf("model = %q, want the checkpoint's gemini-3-pro", got)
+	}
+	if got := extra(s, "ctx tokens"); got != "5k" {
+		t.Errorf("ctx tokens = %q, want 5k from the checkpoint, not the replaced 215k", got)
+	}
+}
+
+// The writer persists promptTokenCount ?? 0 — zero is a reading, and a later
+// zero must replace an earlier large value (review finding 5, 2026-08-02).
+func TestZeroTokenReadingReplacesPrior(t *testing.T) {
+	root, chats := tempTree(t)
+	writeSession(t, chats, metaLine+"\n"+
+		`{"id":"m2","timestamp":"2026-08-02T10:01:00.000Z","type":"gemini","content":[{"text":"x"}],"model":"gemini-3-pro","tokens":{"input":215000,"output":10,"total":215010}}`+"\n"+
+		`{"id":"m2","timestamp":"2026-08-02T10:01:00.000Z","type":"gemini","content":[{"text":"x"}],"model":"gemini-3-pro","tokens":{"input":0,"output":10,"total":10}}`+"\n")
+	s := readOne(t, NewWithRoot(root), healthyRef)
+	if got := extra(s, "ctx tokens"); got != "0" {
+		t.Errorf("ctx tokens = %q, want \"0\" — zero is data, not absence", got)
+	}
+}
+
+// GEMINI_CLI_HOME replaces the home directory in the vendor's own homedir()
+// (paths.ts), and .gemini/tmp hangs beneath it (review finding 4, 2026-08-02).
+func TestNewHonoursGeminiCliHome(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("GEMINI_CLI_HOME", dir)
+	if got, want := New().Root(), filepath.Join(dir, ".gemini", "tmp"); got != want {
+		t.Errorf("root = %q, want %q", got, want)
+	}
+}
+
+// The one branch that produces the honest "we could not count" state: the
+// nest path exists but is not listable. Driven directly (embedded NUL) — OS
+// error mapping for "file where a directory was expected" is
+// platform-dependent, so an invalid path is the reliable cross-platform
+// trigger for a non-NotExist ReadDir failure.
+func TestSubagentCountDegradesWhenTheNestIsUnlistable(t *testing.T) {
+	a := NewWithRoot(t.TempDir())
+	s := &model.Session{Vendor: Vendor, ID: healthyRef, ObservedAt: time.Now()}
+	a.countSubagents(s, filepath.Join(t.TempDir(), "bad\x00path", healthyRef+".jsonl"), healthySessionID, time.Now())
+	if s.Subagents != nil {
+		t.Errorf("count = %d; an unlistable nest must be nil — \"0\" would be a claim", *s.Subagents)
+	}
+	if !s.Degraded.Has(model.FieldSubagents) {
+		t.Error("unlistable nest must mark the field degraded")
 	}
 }
 
