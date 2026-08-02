@@ -1350,3 +1350,52 @@ agent.** telltale is a telltale.
 - The account quota block is sourced from one session (§7.1). A second quota-bearing
   vendor needs a per-vendor block.
 - The 1 s poll has not been measured on a cold cache over an 837-session tree (§6 Q3).
+
+## 8. Roadmap after v1 (decided 2026-08-01)
+
+Rigor stays the floor; features and front-end craft are the priority axis from here.
+Each item names its incumbent inspiration and the honest-gauge twist that makes it ours.
+Sources rule unchanged: a segment ships only when this doc names its source.
+
+### v1.1 — the flagship trio (in flight)
+
+1. **Detail pane** (inspiration: abtop / CASS drill-ins). Select a row, get an expanded
+   view: quota windows, extras (branch, CLI version, ctx tokens), session id, and —
+   crucially — the session's Diagnostics and degraded-field marks, which v1 carries with
+   no surface. The honesty machinery becomes visible product.
+2. **Burn-rate forecast** (inspiration: Claude-Code-Usage-Monitor / codeburn). The HUD
+   samples `rate_limits.used_percentage` over its own runtime; the slope is therefore a
+   telltale-measured value, rendered with the `~` derived marker AND its sampling window
+   ("~3:41pm, from last 20m"). Never extrapolated from a guessed budget; below a minimum
+   sample count/age it renders absent, not a wild line.
+3. **Subagent chips** (inspiration: claude-hud's active-subagent display). Count live
+   transcripts in a session's `subagents/` sidecar tree (already discovered and excluded
+   from rows in §3.1): a `⑂N` chip on rows running fan-outs. Pure sourced data.
+
+Also in v1.1: **`/` type-to-filter** on title/path substring (CASS's kernel without the
+embedding search).
+
+### v1.2 — the Windows-native leap
+
+- **`telltale notify`**: a third mode on the same binary, fed by Claude Code hook events
+  on stdin, raising a Windows toast when a session needs input or ends a long turn.
+  (agenttray had the idea; nobody has executed it well on Windows.) Read-only posture
+  holds: notify consumes hook payloads, sends nothing anywhere but the OS notification
+  API.
+- **Statusline context-breakdown bar** (two-line statusline): stacked mini-bar of
+  `current_usage` components (input / cache-read / cache-creation / output) — fully
+  sourced from stdin.
+
+### Later / unscheduled
+
+- Themes + segment config file (ccstatusline's adoption driver).
+- `telltale snap`: one-shot frame render to stdout (pipeable, screenshot-able; already
+  prototyped as a throwaway during v1 verification).
+- Gemini CLI adapter, once its seam is verified live (§4a.7 example becomes real).
+
+### Deliberately rejected
+
+- Cross-device pairing/sync (codeburn): network egress breaks "telltale never writes".
+- Plan-budget "% of plan" spend meters: the budget is a guess — the exact fabrication
+  this product exists to refuse.
+- On-disk cost estimation via price tables: inventing dollars from token counts.
