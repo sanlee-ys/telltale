@@ -278,7 +278,13 @@ type record struct {
 	Entrypoint  string `json:"entrypoint"`
 	IsSidechain bool   `json:"isSidechain"`
 	CustomTitle string `json:"customTitle"`
-	Message     *msg   `json:"message"`
+	// Timestamp is RFC3339, written by the vendor on most records (verified
+	// live 2026-08-01; housekeeping records may omit it). It feeds the §6 Q8
+	// ruling: NTFS defers mtime while the writer holds the file, so the
+	// newest record timestamp is the fresher of the two vendor signals on a
+	// hot session.
+	Timestamp string `json:"timestamp"`
+	Message   *msg   `json:"message"`
 }
 
 // aiTitle extracts the label from an ai-title record.
@@ -359,15 +365,19 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	now := time.Now()
 	s := &model.Session{Vendor: Vendor, ID: ref.ID, ObservedAt: now}
 
-	// last_activity is the file's mtime. A timestamp meaningfully ahead of the
-	// observation clock is a broken read, not an age: it degrades to absent
-	// rather than clamping to "0s", which would claim the session was active
-	// this instant.
-	if mod := info.ModTime(); mod.After(now.Add(futureSkew)) {
-		s.Degraded = s.Degraded.With(model.FieldLastActivity)
-		s.Diagnostics = append(s.Diagnostics, "transcript mtime is ahead of the local clock")
-	} else {
-		s.LastActivity = model.TimePtr(mod)
+	// last_activity is the fresher of two vendor-written signals: the file's
+	// mtime and the newest record timestamp (§6 Q8 ruling, 2026-08-01). NTFS
+	// defers the mtime update while the writer holds the file — observed lags
+	// of ~100 s on a hot session and ~20 min on a closing one — so mtime alone
+	// UNDER-reports activity on exactly the rows the HUD exists to watch. The
+	// record timestamps live in the tail window we already read, so the max is
+	// folded in after apply(); a signal meaningfully ahead of the observation
+	// clock is a broken read and is excluded, same as before. Only if BOTH
+	// signals are unreadable does the field degrade.
+	mtimeOK := false
+	var mtime time.Time
+	if mod := info.ModTime(); !mod.After(now.Add(futureSkew)) {
+		mtimeOK, mtime = true, mod
 	}
 
 	// The head window must end where the tail window begins, or records in
@@ -393,6 +403,7 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	}
 
 	var bad int
+	var newestTS time.Time
 	apply := func(recs [][]byte) {
 		for _, raw := range recs {
 			var r record
@@ -400,6 +411,10 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 				// One bad record degrades the fields it feeds, not the row.
 				bad++
 				continue
+			}
+			if ts, err := time.Parse(time.RFC3339Nano, r.Timestamp); err == nil &&
+				ts.After(newestTS) && !ts.After(now.Add(futureSkew)) {
+				newestTS = ts
 			}
 			if r.IsSidechain {
 				// Free insurance: 0 of 837 top-level transcripts carried one
@@ -419,6 +434,19 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	}
 	apply(head)
 	apply(tail)
+
+	// Q8 fold: the fresher valid signal wins; both invalid degrades.
+	switch {
+	case mtimeOK && newestTS.After(mtime):
+		s.LastActivity = model.TimePtr(newestTS)
+	case mtimeOK:
+		s.LastActivity = model.TimePtr(mtime)
+	case !newestTS.IsZero():
+		s.LastActivity = model.TimePtr(newestTS)
+	default:
+		s.Degraded = s.Degraded.With(model.FieldLastActivity)
+		s.Diagnostics = append(s.Diagnostics, "no readable activity timestamp (mtime ahead of the clock, no record timestamps)")
+	}
 
 	if bad > 0 {
 		// Structure only, never transcript content: this repo is public.

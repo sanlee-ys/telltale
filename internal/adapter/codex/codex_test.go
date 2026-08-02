@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/model"
 )
@@ -366,5 +367,44 @@ func TestRolloutFilenameFilter(t *testing.T) {
 		if id, accepted := sessionIDFromFile(name); accepted {
 			t.Errorf("%q accepted as session %q, want rejected", name, id)
 		}
+	}
+}
+
+// §6 Q8, codex side: same rule as the Claude adapter. The live corpus showed
+// mtime lagging the newest record by ~100 s on a hot rollout.
+func TestLastActivityUsesNewestRecordTimestampOverStaleMtime(t *testing.T) {
+	dir := t.TempDir()
+	day := filepath.Join(dir, "sessions", "2026", "08", "01")
+	if err := os.MkdirAll(day, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	fresh := now.Add(-45 * time.Second)
+	id := "00000000-bbbb-4ccc-8ddd-0000000000aa"
+	lines := `{"timestamp":"` + now.Add(-20*time.Minute).Format(time.RFC3339Nano) + `","type":"session_meta","payload":{"id":"` + id + `","session_id":"` + id + `","cwd":"C:/x/q8","thread_source":"user"}}` + "\n" +
+		`{"timestamp":"` + fresh.Format(time.RFC3339Nano) + `","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1"}}` + "\n"
+	p := filepath.Join(day, "rollout-2026-08-01T00-00-00-"+id+".jsonl")
+	if err := os.WriteFile(p, []byte(lines), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stale := now.Add(-15 * time.Minute)
+	if err := os.Chtimes(p, stale, stale); err != nil {
+		t.Fatal(err)
+	}
+	a := NewWithRoot(dir)
+	refs, err := a.Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := a.Read(context.Background(), refByID(t, refs, id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.LastActivity == nil {
+		t.Fatal("last_activity absent")
+	}
+	if s.LastActivity.Before(fresh.Add(-time.Second)) {
+		t.Errorf("last_activity = %v, want the record timestamp (~%v) to outvote the stale mtime (%v)",
+			s.LastActivity, fresh, stale)
 	}
 }

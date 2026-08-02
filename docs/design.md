@@ -337,9 +337,9 @@ noted below.
 3. **Windows mtime does not reliably advance mid-session.** On an active session the
    newest records were stamped ~100 s *after* the file's mtime: NTFS defers the mtime
    update while the writer holds the handle. `LastActivity` from mtime therefore
-   under-reports on live sessions (never over-reports). The ruling on switching to the
-   newest record's own `timestamp` — which the tail read already parses, and which
-   affects Claude rows equally — is **§6 Q8**.
+   under-reports on live sessions (never over-reports). ~~The ruling is §6 Q8~~ —
+   **ruled and implemented 2026-08-01**: `LastActivity = max(mtime, newest record
+   timestamp)`, both adapters; see §6 Q8 for the rules.
 4. Desktop threads run in per-thread scratch workspaces
    (`Documents\Codex\<date>\<slug>`), so the workspace-basename fallback shows the
    thread slug, not a repo name. Cosmetic, vendor-truthful, unchanged.
@@ -853,17 +853,19 @@ Rules that outrank convenience:
    additive change, and both adapters already carry the token count as an extra so
    nothing has to be re-derived. **Decide after two weeks of dogfood, not before.**
 
-8. **LastActivity source on Windows — OPEN, found by §3.4.** NTFS defers mtime updates
-   while the writer holds the file open, so an active session's rollout can show an
-   mtime minutes behind its newest record (~100 s observed live). `LastActivity` from
-   mtime under-reports on exactly the rows that are hottest, which the staleness badges
-   then mislabel. Options: (i) keep mtime and document the lag (it errs stale, never
-   fresh — the honest direction); (ii) use the newest parsed record's `timestamp` as
-   `LastActivity` — zero extra I/O since the tail read already carries it, and it is
-   the vendor's own stamp, but it changes semantics for BOTH adapters and interacts
-   with the future-skew guard (a wrong vendor clock becomes a wrong badge); (iii)
-   `max(mtime, newest record timestamp)`. Leaning (iii), but it touches the Claude
-   adapter and the staleness goldens, so it is a ruling, not a patch.
+8. ~~LastActivity source on Windows~~ — **RULED 2026-08-01: option (iii),
+   `max(mtime, newest record timestamp)`, implemented in both adapters.** NTFS defers
+   mtime while the writer holds the file (~100 s observed on a hot rollout; ~20 min on
+   a closing one, seen twice), so mtime alone under-reports on exactly the rows the HUD
+   exists to watch. The newest record `timestamp` (RFC3339, vendor-written on records
+   in both formats — verified live; some Claude housekeeping records omit it) comes out
+   of the tail window the adapters already read, so the fold is zero extra I/O. Rules:
+   each signal independently passes the future-skew guard or is excluded (a wrong
+   vendor clock cannot fresh-wash a row); the fresher valid signal wins; the field
+   degrades only when BOTH are unreadable. Still `CapReported` — the max of two
+   vendor-written stamps invents nothing. Pinned by
+   `TestLastActivityUsesNewestRecordTimestampOverStaleMtime` in each adapter; no HUD
+   golden changed (fixtures inject `LastActivity` directly).
 
 ## 7. HUD UI design
 

@@ -506,3 +506,50 @@ func TestSubagentCountDegradesWhenTheSidecarIsUnlistable(t *testing.T) {
 		t.Errorf("missing diagnostic; got %v", s.Diagnostics)
 	}
 }
+
+// §6 Q8: NTFS defers mtime while the writer holds the transcript, so the
+// newest record timestamp must be able to outvote a stale mtime — and a
+// future record timestamp must not (a broken clock is not activity).
+func TestLastActivityUsesNewestRecordTimestampOverStaleMtime(t *testing.T) {
+	dir := t.TempDir()
+	proj := filepath.Join(dir, "C--Users-dev-code-q8")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	fresh := now.Add(-30 * time.Second)
+	rec := `{"type":"user","cwd":"C:/x/q8","timestamp":"` + fresh.Format(time.RFC3339Nano) + `"}` + "\n"
+	p := filepath.Join(proj, healthyID+".jsonl")
+	if err := os.WriteFile(p, []byte(rec), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stale := now.Add(-10 * time.Minute)
+	if err := os.Chtimes(p, stale, stale); err != nil {
+		t.Fatal(err)
+	}
+	s := readOne(t, NewWithRoot(dir), healthyID)
+	if s.LastActivity == nil {
+		t.Fatal("last_activity absent")
+	}
+	if s.LastActivity.Before(fresh.Add(-time.Second)) {
+		t.Errorf("last_activity = %v, want the record timestamp (~%v) to outvote the stale mtime (%v)",
+			s.LastActivity, fresh, stale)
+	}
+
+	// Future record timestamp: excluded, mtime stands.
+	future := now.Add(time.Hour)
+	rec2 := `{"type":"user","cwd":"C:/x/q8","timestamp":"` + future.Format(time.RFC3339Nano) + `"}` + "\n"
+	if err := os.WriteFile(p, []byte(rec2), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(p, stale, stale); err != nil {
+		t.Fatal(err)
+	}
+	s = readOne(t, NewWithRoot(dir), healthyID)
+	if s.LastActivity == nil {
+		t.Fatal("last_activity absent")
+	}
+	if s.LastActivity.After(stale.Add(time.Second)) {
+		t.Errorf("last_activity = %v; a FUTURE record timestamp must not outvote the mtime (%v)", s.LastActivity, stale)
+	}
+}

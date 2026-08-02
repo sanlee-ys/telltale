@@ -348,11 +348,14 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	now := time.Now()
 	s := &model.Session{Vendor: Vendor, ID: ref.ID, ObservedAt: now}
 
-	if mod := info.ModTime(); mod.After(now.Add(futureSkew)) {
-		s.Degraded = s.Degraded.With(model.FieldLastActivity)
-		s.Diagnostics = append(s.Diagnostics, "rollout mtime is ahead of the local clock")
-	} else {
-		s.LastActivity = model.TimePtr(mod)
+	// last_activity is the fresher of two vendor-written signals: mtime and
+	// the newest record timestamp (§6 Q8 ruling — NTFS defers mtime while the
+	// writer holds the rollout; ~100 s lag observed live, ~20 min on close).
+	// The fold happens after consume(); both signals unreadable degrades.
+	mtimeOK := false
+	var mtime time.Time
+	if mod := info.ModTime(); !mod.After(now.Add(futureSkew)) {
+		mtimeOK, mtime = true, mod
 	}
 
 	// Head window ends where the tail window begins, so no record parses
@@ -375,8 +378,9 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	}
 
 	var (
-		st  state
-		bad int
+		st       state
+		bad      int
+		newestTS time.Time
 	)
 	consume := func(recs [][]byte) {
 		for _, raw := range recs {
@@ -384,6 +388,10 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 			if err := json.Unmarshal(raw, &line); err != nil {
 				bad++
 				continue
+			}
+			if ts, err := time.Parse(time.RFC3339Nano, line.Timestamp); err == nil &&
+				ts.After(newestTS) && !ts.After(now.Add(futureSkew)) {
+				newestTS = ts
 			}
 			applyLine(&st, &line)
 		}
@@ -399,6 +407,19 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+
+	// Q8 fold: the fresher valid signal wins; both invalid degrades.
+	switch {
+	case mtimeOK && newestTS.After(mtime):
+		s.LastActivity = model.TimePtr(newestTS)
+	case mtimeOK:
+		s.LastActivity = model.TimePtr(mtime)
+	case !newestTS.IsZero():
+		s.LastActivity = model.TimePtr(newestTS)
+	default:
+		s.Degraded = s.Degraded.With(model.FieldLastActivity)
+		s.Diagnostics = append(s.Diagnostics, "no readable activity timestamp (mtime ahead of the clock, no record timestamps)")
 	}
 
 	if bad > 0 {
