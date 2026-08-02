@@ -17,6 +17,12 @@ const (
 	healthyID  = "00000000-bbbb-4ccc-8ddd-000000000002"
 	apiKeyID   = "00000000-bbbb-4ccc-8ddd-000000000003"
 	subAgentID = "00000000-bbbb-4ccc-8ddd-000000000004"
+	// Pinned to the 2026-08-01 live corpus (design.md §3.4): an imported
+	// Claude transcript and a native Codex Desktop free-plan session. Neither
+	// carries `ordinal` — codex-cli 0.146.0 does not emit it; fixtures 0002/
+	// 0003 keep theirs to pin that the field stays tolerated when present.
+	importedID = "00000000-bbbb-4ccc-8ddd-000000000006"
+	freePlanID = "00000000-bbbb-4ccc-8ddd-000000000007"
 )
 
 func testAdapter(t *testing.T) *Adapter {
@@ -96,7 +102,9 @@ func TestDiscoverSkipsCompressedLockAndTmpNeighbours(t *testing.T) {
 	}
 	sort.Strings(ids)
 
-	want := []string{healthyID, apiKeyID, subAgentID}
+	// importedID is listed: the import shares the rollout filename shape, so
+	// only Read can reject it.
+	want := []string{healthyID, apiKeyID, subAgentID, importedID, freePlanID}
 	sort.Strings(want)
 	if len(ids) != len(want) {
 		t.Fatalf("discovered %v, want %v — the .jsonl.zst and rollout-compression.lock neighbours are not sessions", ids, want)
@@ -210,6 +218,72 @@ func TestSubAgentThreadIsNotASession(t *testing.T) {
 	_, err := a.Read(context.Background(), refByID(t, refs, subAgentID))
 	if !errors.Is(err, ErrSubAgentThread) {
 		t.Fatalf("Read of a sub-agent rollout returned %v, want ErrSubAgentThread", err)
+	}
+}
+
+// Codex Desktop's onboarding import re-serializes other agents' transcripts
+// into sessions/<date>/ (35 Claude sessions observed live, design.md §3.4).
+// Rendering one as a Codex row double-counts another vendor's work, so Read
+// rejects on the affirmative external-import-turn marker.
+func TestImportedTranscriptIsNotASession(t *testing.T) {
+	a := testAdapter(t)
+	refs, _ := a.Discover(context.Background())
+	_, err := a.Read(context.Background(), refByID(t, refs, importedID))
+	if !errors.Is(err, ErrImportedTranscript) {
+		t.Fatalf("Read of an imported transcript returned %v, want ErrImportedTranscript", err)
+	}
+}
+
+// Free-plan fixture pinned byte-for-byte to the shape a live Codex Desktop
+// session wrote on 2026-08-01: no `ordinal` in the envelope, a single primary
+// window of 43200 minutes (30 days — not the 5h/7d the source read guessed),
+// secondary null, and the newer rate_limits fields (limit_id, credits,
+// plan_type) present.
+func TestFreePlanSingleThirtyDayWindow(t *testing.T) {
+	a := testAdapter(t)
+	refs, _ := a.Discover(context.Background())
+	s, err := a.Read(context.Background(), refByID(t, refs, freePlanID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Validate(a.Capabilities()); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+
+	if s.Model == nil || s.Model.ID != "gpt-5.6-terra" {
+		t.Errorf("model = %+v, want gpt-5.6-terra from the last turn_context", s.Model)
+	}
+	if got, ok := s.WorkspaceName(); !ok || got != "example-thread" {
+		t.Errorf("workspace = %q ok=%v, want the Desktop scratch-dir slug", got, ok)
+	}
+
+	if s.ContextPercent == nil {
+		t.Fatal("context_pct absent; model_context_window was populated (258400)")
+	}
+	want := 21845.0 / 258400.0 * 100
+	if math.Abs(float64(*s.ContextPercent)-want) > 1e-9 {
+		t.Errorf("context_pct = %v, want %v", float64(*s.ContextPercent), want)
+	}
+
+	if len(s.Quota) != 1 {
+		t.Fatalf("quota windows = %d (%v), want only the primary window (secondary was null)", len(s.Quota), s.Quota)
+	}
+	w := s.Quota[0]
+	if w.ID != "primary" || w.Label != "30d" {
+		t.Errorf("window = %+v, want id=primary label=30d (from window_minutes 43200)", w)
+	}
+	if w.UsedPercent == nil || float64(*w.UsedPercent) != 8.0 {
+		t.Errorf("used_percent = %v, want 8", w.UsedPercent)
+	}
+
+	var plan string
+	for _, e := range s.Extras {
+		if e.Label == "plan" {
+			plan = e.Value
+		}
+	}
+	if plan != "free" {
+		t.Errorf("plan extra = %q, want %q", plan, "free")
 	}
 }
 

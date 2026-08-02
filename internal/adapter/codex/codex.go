@@ -1,18 +1,20 @@
 // Package codex adapts Codex CLI's rollout files to model.Session.
 //
-// # Verification status: SOURCE-READ, NOT LIVE-VERIFIED
+// # Verification status: FIRST LIVE PASS DISCHARGED 2026-08-01
 //
-// Codex CLI is not installed on the development machine (~/.codex absent,
-// codex not on PATH, re-confirmed 2026-08-01), so every claim below is read
-// from github.com/openai/codex at commit 1e85ca09 rather than from a running
-// install: codex-rs/utils/home-dir/src/lib.rs, codex-rs/rollout/src/{lib,
-// recorder,compression,policy,metadata}.rs and codex-rs/protocol/src/protocol.rs.
+// Originally written from github.com/openai/codex source at commit 1e85ca09
+// (codex-rs/utils/home-dir/src/lib.rs, codex-rs/rollout/src/{lib,recorder,
+// compression,policy,metadata}.rs, codex-rs/protocol/src/protocol.rs), then
+// verified against a live corpus on 2026-08-01: Codex Desktop bundling
+// codex-cli 0.146.0-alpha.9.2, plus the npm CLI at 0.146.0. docs/design.md
+// §3.4 carries the itemized results. Still owed there: the null-means-cleared
+// judgement below (no mid-stream nulls occurred in the live corpus), and a
+// rollout written by the standalone CLI rather than the Desktop app.
 //
-// ADR-001's live-session verification is still owed. docs/design.md §3.4
-// carries the nine-point checklist, and this adapter is not "done" until it is
-// discharged and the fixtures in testdata are reconciled against a real
-// rollout file. The two judgement calls most likely to move are marked
-// UNVERIFIED in the code below.
+// The live pass added one hard requirement this adapter now implements:
+// Desktop onboarding can IMPORT other agents' transcripts (observed: 35
+// Claude sessions) into sessions/<date>/ as rollout files. Those are not
+// Codex sessions and must never render as rows — see ErrImportedTranscript.
 //
 // # What this adapter cannot know, and why
 //
@@ -24,7 +26,12 @@
 //     the only signal and mtime is last activity, not liveness. Codex's own
 //     metadata extractor does the same thing (file_modified_time_utc feeds
 //     updated_at / recency_at), so this is vendor-consistent rather than a
-//     limitation we invented.
+//     limitation we invented. Live-verified caveat: on Windows, NTFS defers
+//     the mtime update while codex holds the file open, so mtime can lag the
+//     newest record by minutes on an ACTIVE session (observed ~100s,
+//     design.md §3.4). LastActivity therefore under-reports, never
+//     over-reports; the ruling on whether to use the newest record's
+//     timestamp instead is design.md §6 Q8 and applies to Claude rows too.
 //
 // # The capability matrix inverts against Claude
 //
@@ -59,6 +66,24 @@ const Vendor = model.VendorCodex
 // it cannot be seen from the filename — only Read can tell, so the filter
 // lives there and the HUD drops the row.
 var ErrSubAgentThread = errors.New("codex: rollout is a sub-agent thread, not a session")
+
+// ErrImportedTranscript reports that a rollout file is another agent's
+// transcript, re-serialized into rollout format by Codex Desktop's onboarding
+// import (observed live 2026-08-01: 35 Claude sessions). Rendering one as a
+// Codex row would double-count another vendor's work — the exact lie the
+// honest gauge exists to make impossible — so the HUD drops the row like any
+// other Read error.
+//
+// Detection is the AFFIRMATIVE marker only: imports stamp every turn's
+// task_started with turn_id "external-import-turn-<n>", and the first one sat
+// inside the head window in all 35 observed files. Imports also lack
+// session_meta.thread_source (native threads carry "user"), but absence is
+// NOT used as a signal — rollouts written before the vendor introduced
+// thread_source would be indistinguishable from imports by that test.
+var ErrImportedTranscript = errors.New("codex: rollout is an imported external-agent transcript, not a Codex session")
+
+// importTurnPrefix marks a turn as belonging to an imported transcript.
+const importTurnPrefix = "external-import-turn"
 
 // Read budget. Rollout files grow with the session; the head carries
 // session_meta (always the first record) and the tail carries the newest
@@ -126,7 +151,14 @@ func (a *Adapter) Capabilities() model.Capabilities {
 //     live row, so globbing *.jsonl skips them and avoids a zstd dependency
 //     for data no HUD row would ever show.
 //   - rollout-compression.lock and *.tmp, left by the compression worker.
-//   - archived_sessions/, a separate root, deliberately ignored.
+//   - archived_sessions/, a separate root, deliberately ignored. Live-pass
+//     confirmation (design.md §3.4): threads land there when archived — the
+//     Desktop auto-archives its onboarding threads — while live sessions are
+//     written under sessions/<date>/, so ignoring it remains correct.
+//
+// A fourth non-session, the imported external-agent transcript, shares the
+// filename shape with real rollouts and so passes Discover; only Read can
+// identify it (ErrImportedTranscript), same as sub-agent threads.
 //
 // Note the date directory is LOCAL time in the vendor's writer, not UTC. That
 // is why the glob does not filter by date: deriving today's directory from a
@@ -268,6 +300,7 @@ type turnContext struct {
 // fields. This is the single easiest thing to get wrong in the format.
 type eventMsg struct {
 	Type       string      `json:"type"`
+	TurnID     string      `json:"turn_id"`
 	Info       *tokenInfo  `json:"info"`
 	RateLimits *rateLimits `json:"rate_limits"`
 }
@@ -342,9 +375,8 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	}
 
 	var (
-		st       state
-		bad      int
-		subAgent bool
+		st  state
+		bad int
 	)
 	consume := func(recs [][]byte) {
 		for _, raw := range recs {
@@ -353,16 +385,17 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 				bad++
 				continue
 			}
-			if applyLine(&st, &line) {
-				subAgent = true
-			}
+			applyLine(&st, &line)
 		}
 	}
 	consume(head)
 	consume(tail)
 
-	if subAgent {
+	if st.subAgent {
 		return nil, ErrSubAgentThread
+	}
+	if st.imported {
+		return nil, ErrImportedTranscript
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -387,9 +420,12 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 // a sparse-update recovery", which reads as: null means we do not have it,
 // rather than reuse the previous value. That is also the conservative side of
 // the honest-gauge rule — never show a number the vendor's most recent
-// statement did not contain. Confirm against a live session before this is
-// called done.
+// statement did not contain. The 2026-08-01 live pass could not settle this:
+// no session in the corpus emitted a mid-stream null after a populated event,
+// so the conservative reading stands unfalsified rather than confirmed.
 type state struct {
+	subAgent     bool
+	imported     bool
 	sawMeta      bool
 	cwd          string
 	branch       string
@@ -404,14 +440,14 @@ type state struct {
 	sawBadRecord bool
 }
 
-// applyLine folds one envelope into the accumulator and reports whether the
-// record identifies this rollout as a sub-agent thread.
-func applyLine(st *state, line *rolloutLine) bool {
+// applyLine folds one envelope into the accumulator, setting the
+// classification flags (sub-agent thread, imported transcript) as it goes.
+func applyLine(st *state, line *rolloutLine) {
 	switch line.Type {
 	case "session_meta":
 		var m sessionMeta
 		if json.Unmarshal(line.Payload, &m) != nil {
-			return false
+			return
 		}
 		st.sawMeta = true
 		if m.Cwd != "" {
@@ -424,15 +460,17 @@ func applyLine(st *state, line *rolloutLine) bool {
 		st.historyMode = m.HistoryMode
 		// Either marker means this thread belongs to a sub-agent, so it is not
 		// a session to report at all.
-		return (m.AgentNickname != nil && *m.AgentNickname != "") ||
-			(m.AgentRole != nil && *m.AgentRole != "")
+		if (m.AgentNickname != nil && *m.AgentNickname != "") ||
+			(m.AgentRole != nil && *m.AgentRole != "") {
+			st.subAgent = true
+		}
 
 	case "turn_context":
 		// The model lives here, not on session_meta, and is rewritten once per
 		// real user turn — so the LAST turn_context is the current model.
 		var tc turnContext
 		if json.Unmarshal(line.Payload, &tc) != nil {
-			return false
+			return
 		}
 		if tc.Model != "" {
 			st.modelID = tc.Model
@@ -444,10 +482,15 @@ func applyLine(st *state, line *rolloutLine) bool {
 	case "event_msg":
 		var ev eventMsg
 		if json.Unmarshal(line.Payload, &ev) != nil {
-			return false
+			return
+		}
+		// The import marker rides on task_started events, but any event type
+		// carrying the prefixed turn_id identifies the whole rollout.
+		if strings.HasPrefix(ev.TurnID, importTurnPrefix) {
+			st.imported = true
 		}
 		if ev.Type != "token_count" {
-			return false
+			return
 		}
 		st.sawTokens = true
 		st.info = ev.Info
@@ -457,7 +500,6 @@ func applyLine(st *state, line *rolloutLine) bool {
 			st.plan = ev.RateLimits.PlanType
 		}
 	}
-	return false
 }
 
 // fold writes the accumulated state onto the session, applying the honest-gauge
