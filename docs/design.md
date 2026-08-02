@@ -15,8 +15,9 @@ vendor adapters  ──►  normalized session model  ──►  renderers
 
 One Go module, one binary (`telltale.exe`), two modes (ADR-002):
 
-- **`telltale statusline`** (Claude Code only in v1): reads the JSON Claude Code passes
-  on stdin, prints one line, exits. Latency budget: single-digit milliseconds; Bubble
+- **`telltale statusline`** (Claude Code and, since ADR-004, Antigravity CLI — routed
+  on the payload's documented `product` field, §2.1): reads the vendor's JSON on
+  stdin, prints one line, exits. Latency budget: single-digit milliseconds; Bubble
   Tea is never initialized on this path. Budget-conscious output (every character
   renders on every prompt).
 - **`telltale hud`** (cross-vendor): a Bubble Tea/Lipgloss watch-mode TUI listing live

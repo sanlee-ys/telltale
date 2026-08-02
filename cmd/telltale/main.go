@@ -2,7 +2,9 @@
 //
 // One binary, two modes (decisions/002):
 //
-//	telltale statusline   read Claude Code's statusline JSON on stdin, print one line
+//	telltale statusline   read a vendor statusline JSON payload on stdin, print one
+//	                      line (Claude Code, or Antigravity CLI via its documented
+//	                      product marker — ADR-004)
 //	telltale hud          cross-vendor watch-mode TUI
 //
 // The two paths share the normalized session model and internal/theme's
@@ -64,10 +66,19 @@ func runStatusline() {
 		fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
 		os.Exit(0)
 	}
+	// A probe failure is bad input, full stop — it must take the clean-exit
+	// path. Falling through to the Claude parser would be worse than nothing:
+	// claude.Parse uses a streaming decoder that reads only the FIRST JSON
+	// value, so a broken buffer that starts with a valid agy payload would
+	// render a plausible Claude-shaped line with quota, state and branch
+	// silently dropped (review finding, 2026-08-02).
 	var probe struct {
 		Product string `json:"product"`
 	}
-	_ = json.Unmarshal(raw, &probe) // a probe failure falls through to the Claude parser's own error
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
+		os.Exit(0)
+	}
 
 	noColor := os.Getenv("NO_COLOR") != ""
 	if probe.Product == antigravity.Product {

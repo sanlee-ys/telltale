@@ -140,7 +140,10 @@ func TestAgyU2028InPayloadStrings(t *testing.T) {
 }
 
 // The routing marker the cmd layer depends on: the vendor stamps this exact
-// value on every observed payload (live capture, 2026-08-02).
+// value on every observed payload (live capture, 2026-08-02). The routing
+// BRANCH itself lives in cmd and is exercised by CI's real-binary smoke step
+// (an agy fixture must produce bucket segments; a Claude fixture must not
+// misroute) — review finding 2, 2026-08-02.
 func TestAgyProductConstant(t *testing.T) {
 	if antigravity.Product != "antigravity" {
 		t.Fatalf("Product = %q", antigravity.Product)
@@ -148,5 +151,64 @@ func TestAgyProductConstant(t *testing.T) {
 	in := loadAgy(t, "agy-full.json")
 	if in.Product != antigravity.Product {
 		t.Fatalf("fixture product = %q", in.Product)
+	}
+}
+
+// A quota map with a JSON null bucket value must not panic and must hide.
+func TestAgyNullBucketValueIsSkipped(t *testing.T) {
+	in, err := antigravity.Parse(strings.NewReader(
+		`{"product":"antigravity","model":{"id":"m"},"quota":{"gemini-weekly":null}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := RenderAntigravity(in, Options{NoColor: true, Now: agyTestNow})
+	if strings.Contains(got, "weekly") {
+		t.Fatalf("a null bucket must hide: %q", got)
+	}
+}
+
+// Threshold coloring holds on the agy path: bucket used% and ctx% share the
+// same pct helper, so green under warn, yellow from 60, red from 85.
+func TestAgyThresholdColors(t *testing.T) {
+	mk := func(remaining float64, ctx float64) *antigravity.StatuslineInput {
+		in, err := antigravity.Parse(strings.NewReader(`{"product":"antigravity","model":{"id":"m"}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		in.ContextWindow = &antigravity.ContextWindow{UsedPercentage: &ctx}
+		in.Quota = map[string]*antigravity.QuotaBucket{
+			"gemini-weekly": {RemainingFraction: &remaining},
+		}
+		return in
+	}
+	cases := []struct {
+		remaining, ctx float64
+		code, label    string
+	}{
+		{0.75, 8, "\x1b[32m", "green under warn"},
+		{0.25, 8, "\x1b[33m", "yellow from 60 (bucket 75% used)"},
+		{0.05, 8, "\x1b[31m", "red from 85 (bucket 95% used)"},
+	}
+	for _, c := range cases {
+		got := RenderAntigravity(mk(c.remaining, c.ctx), Options{Now: agyTestNow})
+		if !strings.Contains(got, c.code) {
+			t.Errorf("%s: expected %q in %q", c.label, c.code, got)
+		}
+	}
+}
+
+// Same purpose as BenchmarkRender: parse+render cost isolated from process
+// spawn, proving the second vendor stays inside the millisecond budget.
+func BenchmarkRenderAntigravity(b *testing.B) {
+	data, err := os.ReadFile(filepath.Join("testdata", "agy-full.json"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	for i := 0; i < b.N; i++ {
+		in, err := antigravity.Parse(strings.NewReader(string(data)))
+		if err != nil {
+			b.Fatal(err)
+		}
+		RenderAntigravity(in, Options{Now: agyTestNow})
 	}
 }
