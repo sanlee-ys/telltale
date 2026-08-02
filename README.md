@@ -7,9 +7,10 @@ every number is traceable to measured tool output — nothing narrated, nothing 
 > it just tells you what's actually happening.
 
 **Status: pre-v1, under active development.** Both modes are built. The Claude Code
-adapter is verified against live on-disk data; the Codex CLI adapter is written from the
-vendor's source and still owes a live-session verification pass
-([docs/design.md §3.4](docs/design.md)).
+adapter is verified against live on-disk data; the Codex adapter had its first
+live-verification pass on 2026-08-01 (Codex Desktop corpus — including a filter for
+Desktop's imported non-Codex transcripts), with the short remainder itemized in
+[docs/design.md §3.4](docs/design.md).
 
 Build from source:
 

@@ -184,14 +184,15 @@ transcripts contain one on 2.1.219, but the filter is free.
 
 ### 3.2 Codex CLI adapter sources — RESEARCHED FROM SOURCE, **NOT LIVE-VERIFIED**
 
-Codex CLI is **not installed on the dev PC** (`~/.codex` absent, `codex` not on PATH,
-re-confirmed 2026-08-01). Everything below is read from `github.com/openai/codex` at
-commit `1e85ca09` (2026-08-01): `codex-rs/utils/home-dir/src/lib.rs`,
+Codex is now installed on the dev PC (2026-08-01): **Codex Desktop** (VS Code app
+26.727.51351, bundling `codex-cli 0.146.0-alpha.9.2` under `%LOCALAPPDATA%\OpenAI\Codex`)
+plus the **npm CLI** (`codex-cli 0.146.0`). The claims below were first read from
+`github.com/openai/codex` at commit `1e85ca09` (2026-08-01): `codex-rs/utils/home-dir/src/lib.rs`,
 `codex-rs/rollout/src/{lib,recorder,compression,policy,metadata}.rs`,
 `codex-rs/protocol/src/{protocol,models}.rs`,
-`codex-rs/login/src/auth/default_client.rs`, `codex-rs/thread-store/README.md`.
-**ADR-001's live-session verification is still owed** and the adapter is not "done"
-until §3.4 is discharged.
+`codex-rs/login/src/auth/default_client.rs`, `codex-rs/thread-store/README.md` — and then
+checked against the live corpus. **§3.4 carries the verified results and the itemized
+remainder**; the adapter is not "done" until the remainder is discharged.
 
 **Layout.** `$CODEX_HOME` (default `~/.codex`) `/sessions/<YYYY>/<MM>/<DD>/rollout-<YYYY-MM-DDThh-mm-ss>-<uuid>.jsonl`,
 fixed depth, no recursion. The date directory is **local** time, not UTC — deriving
@@ -239,7 +240,9 @@ that datum rather than leaving the previous value standing. `protocol.rs` annota
 neighbouring field with *"`None` is unavailable, not a sparse-update recovery"*, which
 reads as "we do not have it" rather than "unchanged"; it is also the conservative side of
 the honest-gauge rule, since it never shows a number the vendor's most recent statement
-did not contain. Confirm against a live session before the adapter is called done.
+did not contain. The 2026-08-01 live pass could not settle it — no session in the corpus
+emitted a mid-stream null after a populated event — so the conservative reading stands
+unfalsified rather than confirmed (§3.4 "still owed").
 
 **Codex capability gaps:** no cost in USD anywhere; **no process-liveness registry** (mtime
 is the only signal); no session title, so rows fall back to the workspace basename; cold
@@ -283,20 +286,75 @@ reproduce Codex's baseline-normalized figure: it computes a plain
 `last_token_usage.total_tokens ÷ model_context_window`, declares it `CapDerived`, and the
 HUD marks it with an estimate marker. See §6 Q7 for the resolution and its alternatives.
 
-### 3.4 Live-verification checklist owed for Codex (ADR-001)
+### 3.4 Live verification (ADR-001) — first pass run 2026-08-01; remainder itemized
 
-Run on a machine with a real Codex install, before the adapter is called done: confirm the
-`sessions/<YYYY>/<MM>/<DD>/` local-date path; confirm the literal `session_meta`
-envelope and whether `id` or `session_id` is written; confirm `history_mode` on a fresh
-session; capture one real `token_count` and check `model_context_window` is populated
-rather than `null`; **confirm whether a null `info`/`rate_limits` on a later event means
-"cleared" or "unchanged"** (§3.2); confirm `rate_limits.primary`/`.secondary` on a
-ChatGPT-plan login and their **absence** on an API-key login (the Codex analogue of
-Claude's degraded fixture) and record real `window_minutes` values instead of hard-coding
-"5h/7d"; confirm whether `ordinal` is emitted; confirm mtime advances mid-turn and that
-Go can `os.Open` the file while `codex` holds it; pin the exact `codex --version` here
-next to these claims, as `2.1.219` is pinned above; then reconcile
-`internal/adapter/codex/testdata/` against the real file.
+**Environment:** Codex Desktop app 26.727.51351 bundling `codex-cli 0.146.0-alpha.9.2`
+(every live rollout in the corpus was written by it, `originator: "Codex Desktop"`,
+`source: "vscode"`), with npm `codex-cli 0.146.0` installed alongside. The source read
+above was taken at CLI `2.1.219`; no contradiction between the two surfaced except where
+noted below.
+
+**Confirmed:**
+
+- `sessions/<YYYY>/<MM>/<DD>/` is the **local** date: events stamped `2026-08-02T00:12Z`
+  (UTC) sit under `08/01`. Walking the tree instead of computing today's path was right.
+- `session_meta` writes **both** `id` and `session_id`, identical values.
+- `history_mode` is `"legacy"` on every fresh thread.
+- `model_context_window` is populated (`258400` for `gpt-5.6-terra`), so the derived
+  context percentage works as designed.
+- `ordinal` is **not emitted** — the envelope is `{timestamp, type, payload}` only.
+  Fixtures 0002/0003 keep their `ordinal` deliberately (the field must stay tolerated);
+  fixtures 0006/0007 pin the observed no-`ordinal` shape.
+- `rate_limits`, live values: **free plan** = `primary` only with `window_minutes: 43200`
+  (a 30-day window), `secondary: null`; **plus plan** = `primary` with
+  `window_minutes: 10080` (7 days), `secondary: null` so far, `plan_type: "plus"`. The
+  "record real values instead of hard-coding 5h/7d" instinct was right — neither plan
+  matches the guessed pair, and labels derive from `window_minutes` alone. Newer fields
+  (`limit_id`, `credits{}`, `plan_type`, `rate_limit_reached_type`) are parsed loosely;
+  `credits.balance` has been observed as both `null` and the string `"0"`, so nothing in
+  it is typed strictly.
+- Go can `os.Open`, head-read, and tail-read a rollout **while a live codex process holds
+  it** (verified against an active session; Windows sharing mode is permissive).
+
+**Learned, not on the checklist:**
+
+1. **Imported external-agent transcripts.** Desktop onboarding imported 35 Claude
+   sessions into `sessions/<date>/` as rollout files. Markers: `session_meta` lacks
+   `thread_source` (native threads carry `"user"`); every turn's `task_started.turn_id`
+   is `external-import-turn-<n>` (inside the head window in all 35 observed files); the
+   single `token_count` is synthetic (zero components, non-zero `total_tokens`, null
+   window, null `rate_limits`). The adapter rejects these with `ErrImportedTranscript`
+   on the affirmative `turn_id` marker only — absence of `thread_source` is not used, so
+   pre-`thread_source` CLI rollouts are unaffected. Rendering an imported Claude
+   transcript as a Codex row is a cross-vendor double count; the filter is not optional.
+2. **`archived_sessions/` semantics confirmed the hard way.** The first inspection pass
+   found every real session in flat `archived_sessions/` and only imports in
+   `sessions/<date>/`, which read as "Desktop sessions are invisible to the adapter."
+   A later live session disproved that: Desktop writes live rollouts under
+   `sessions/<date>/` and threads move to `archived_sessions/` when archived — the
+   Desktop auto-archives its onboarding threads, which is what emptied the first hour.
+   Ignoring `archived_sessions/` remains correct.
+3. **Windows mtime does not reliably advance mid-session.** On an active session the
+   newest records were stamped ~100 s *after* the file's mtime: NTFS defers the mtime
+   update while the writer holds the handle. `LastActivity` from mtime therefore
+   under-reports on live sessions (never over-reports). The ruling on switching to the
+   newest record's own `timestamp` — which the tail read already parses, and which
+   affects Claude rows equally — is **§6 Q8**.
+4. Desktop threads run in per-thread scratch workspaces
+   (`Documents\Codex\<date>\<slug>`), so the workspace-basename fallback shows the
+   thread slug, not a repo name. Cosmetic, vendor-truthful, unchanged.
+
+**Still owed:**
+
+- Null `info`/`rate_limits` mid-stream, "cleared" vs "unchanged" (§3.2): the corpus
+  contained **no mid-stream nulls**, so the conservative "clearing" reading stands
+  unfalsified rather than confirmed.
+- A rollout written by the **standalone CLI**: every live rollout so far came from the
+  Desktop writer. Same recorder crate, so divergence is unlikely, but "unlikely" is not
+  the bar this section exists to enforce.
+- An **API-key login** capture (rate_limits expected absent), and whether a paid plan
+  ever populates `secondary`.
+- The 7-day `.zst` compression pass — unobservable until the corpus is a week old.
 
 ### 3.5 Framing rule — now measured, not assumed (see §4)
 
@@ -764,7 +822,8 @@ Rules that outrank convenience:
    correctness surface for a smaller win. Not yet measured on a cold cache — that is the
    open part.
 4. ~~Exact Claude/Codex on-disk data sources~~ — **ANSWERED, §3.1–3.3**, with Claude
-   verified live and Codex still owing §3.4.
+   verified live and Codex's first live pass run 2026-08-01 (§3.4; short remainder
+   itemized there).
 5. Distribution naming (`telltale-hud` on any registry; winget/scoop manifests) — at
    packaging time. Go binary means npm is optional, not required.
 6. ~~HUD UI design section~~ — **ANSWERED, §7:** layout grid, colour/threshold tokens
@@ -787,6 +846,18 @@ Rules that outrank convenience:
    badly in daily use — it needs a `context_tokens` field in the schema, which is an
    additive change, and both adapters already carry the token count as an extra so
    nothing has to be re-derived. **Decide after two weeks of dogfood, not before.**
+
+8. **LastActivity source on Windows — OPEN, found by §3.4.** NTFS defers mtime updates
+   while the writer holds the file open, so an active session's rollout can show an
+   mtime minutes behind its newest record (~100 s observed live). `LastActivity` from
+   mtime under-reports on exactly the rows that are hottest, which the staleness badges
+   then mislabel. Options: (i) keep mtime and document the lag (it errs stale, never
+   fresh — the honest direction); (ii) use the newest parsed record's `timestamp` as
+   `LastActivity` — zero extra I/O since the tail read already carries it, and it is
+   the vendor's own stamp, but it changes semantics for BOTH adapters and interacts
+   with the future-skew guard (a wrong vendor clock becomes a wrong badge); (iii)
+   `max(mtime, newest record timestamp)`. Leaning (iii), but it touches the Claude
+   adapter and the staleness goldens, so it is a ruling, not a patch.
 
 ## 7. HUD UI design
 
