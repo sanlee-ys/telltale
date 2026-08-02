@@ -1,4 +1,4 @@
- telltale  │  4 sessions  │  claude 3  codex 1                                                 5h ███─────   42% ↻2h13m
+ telltale  │  4 sessions  │  claude 3  codex 1                                                5h ███─────   42% ↻ 2h13m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         ────────────     0%    $0.04 │   3s

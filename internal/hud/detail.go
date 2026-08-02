@@ -201,7 +201,7 @@ func (p *pane) quota(caps model.Capabilities, s *model.Session) {
 		}
 		if w.ResetsAt != nil {
 			if d := w.ResetsAt.Sub(p.st.Now); d > 0 {
-				cell += "  " + p.sty.Muted.Render(p.g.Reset+theme.Countdown(d))
+				cell += "  " + p.sty.Muted.Render(p.g.Reset+" "+theme.Countdown(d))
 			}
 		}
 		p.raw(label, cell)

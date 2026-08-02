@@ -36,7 +36,7 @@ telltale.exe hud
 ```
 
 ```
- telltale  │  4 sessions  │  claude 2  codex 2                                                 5h ██████▎─ 88.4% ↻3h02m
+ telltale  │  4 sessions  │  claude 2  codex 2                                                5h ██████▎─ 88.4% ↻ 3h02m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                               MODEL          CONTEXT                AGE
  ● CC │ telltale  C:\src\code                                                 Opus 5                           — │  12s

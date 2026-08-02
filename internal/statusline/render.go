@@ -117,7 +117,11 @@ func windowSegment(label string, w *claude.Window, opts Options) (string, bool) 
 	s := fmt.Sprintf("%s %s", label, pct(*w.UsedPercentage, opts))
 	if w.ResetsAt != nil {
 		if d := time.Unix(*w.ResetsAt, 0).Sub(opts.Now); d > 0 {
-			s += colorize(dim, " ↻"+shortDur(d), opts)
+			// Space after the glyph, matching the HUD: ↻ renders at ambiguous
+			// width in common fonts and glued digits read as one garbled token.
+			// theme.Countdown is the shared formatter — the local shortDur had
+			// no days branch and rendered a 7d window as "122h13m".
+			s += colorize(dim, " ↻ "+theme.Countdown(d), opts)
 		}
 	}
 	return s, true
@@ -170,21 +174,6 @@ func pct(p float64, opts Options) string {
 		return colorize(c, fmt.Sprintf("%d%%", int64(p)), opts)
 	}
 	return colorize(c, fmt.Sprintf("%.1f%%", p), opts)
-}
-
-// shortDur renders a compact countdown: 2h13m, 47m, 90s.
-func shortDur(d time.Duration) string {
-	d = d.Round(time.Minute)
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	switch {
-	case h > 0:
-		return fmt.Sprintf("%dh%02dm", h, m)
-	case m > 0:
-		return fmt.Sprintf("%dm", m)
-	default:
-		return "<1m"
-	}
 }
 
 func colorize(code, s string, opts Options) string {

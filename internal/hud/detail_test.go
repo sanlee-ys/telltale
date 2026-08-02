@@ -225,7 +225,9 @@ func TestDetailPaneCountdownUsesTheSharedFormatter(t *testing.T) {
 		window("secondary", "7d", 18, 5*24*time.Hour+2*time.Hour),
 	}
 	got := paneText(st)
-	for _, want := range []string{"↻2h13m", "↻5d02h"} {
+	// Glyph and digits separated by a space (dogfood finding 2026-08-02:
+	// glued, ↻ reads as one garbled token in ambiguous-width fonts).
+	for _, want := range []string{"↻ 2h13m", "↻ 5d02h"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("countdown %q missing\n%s", want, got)
 		}

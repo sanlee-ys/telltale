@@ -1014,7 +1014,7 @@ vendor that declares every capability, so the whole grid is exercised; render I 
 shows what the real v1 capability mix produces.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1                  5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
+ telltale  │  4 sessions  │  claude 3  codex 1                5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
@@ -1033,7 +1033,7 @@ columns. Nothing about it looks like zero.
 
 ```
  telltale  │  4 sessions  │  claude 3  codex 1
-                        5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
+                      5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────
         SESSION                           MODEL          CONTEXT            AGE
  ● CC │ telltale  C:\src\code             Opus 5         █████▉──  84.2% │  12s
@@ -1048,7 +1048,7 @@ columns. Nothing about it looks like zero.
 
 ```
  telltale  │  4 sessions  │  cc 3  cx 1
-                5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
+              5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────
         SESSION                             MODEL            CTX    AGE
  ● CC │ telltale  C:\src\code               Opus 5         84.2% │  12s
@@ -1063,7 +1063,7 @@ columns. Nothing about it looks like zero.
 sorted by activity, so they do not appear in the order they are described.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1                                                 5h ███─────   42% ↻2h13m
+ telltale  │  4 sessions  │  claude 3  codex 1                                                5h ███─────   42% ↻ 2h13m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         ────────────     0%    $0.04 │   3s
@@ -1106,7 +1106,7 @@ is never used for notices — it holds identity and quota only, which keeps it f
 overflowing at any width.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1                  5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
+ telltale  │  4 sessions  │  claude 3  codex 1                5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
@@ -1122,7 +1122,7 @@ contradict the per-vendor totals beside it. Non-default filter/sort is stated in
 footer, because a monitor that silently hides rows is a liar.
 
 ```
- telltale  │  3 of 4 sessions  │  claude 3  codex 1             5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
+ telltale  │  3 of 4 sessions  │  claude 3  codex 1           5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
@@ -1172,7 +1172,7 @@ Codex line reads `not detected`, since `~/.codex` is absent (§3.2). The third w
 floating panel on a monitor obscures the thing being monitored.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1                  5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
+ telltale  │  4 sessions  │  claude 3  codex 1                5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
         q      quit  (also ctrl+c)
@@ -1196,7 +1196,7 @@ percentage (marked `~`) and real quota windows. Nothing sources cost, so the `CO
 column auto-hides and its width returns to `SESSION`.
 
 ```
- telltale  │  2 sessions  │  claude 1  codex 1                                                 5h ██████▎─ 88.4% ↻3h02m
+ telltale  │  2 sessions  │  claude 1  codex 1                                                5h ██████▎─ 88.4% ↻ 3h02m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                               MODEL          CONTEXT                AGE
  ● CC │ telltale  C:\src\code                                                 Opus 5                           — │  12s
@@ -1230,7 +1230,7 @@ real precision loss in the bar and acceptable only because the number beside it 
 the precision.
 
 ```
- telltale  |  4 sessions  |  claude 3  codex 1                  5h ###-----   42% ~2h13m   |   7d #-------   18% ~5d02h
+ telltale  |  4 sessions  |  claude 3  codex 1                5h ###-----   42% ~ 2h13m   |   7d #-------   18% ~ 5d02h
  ----------------------------------------------------------------------------------------------------------------------
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  * CC | telltale  C:\src\code                                        Opus 5         #########---  84.2%    $2.41 |  12s
@@ -1664,7 +1664,7 @@ quota is a property of the account):
 
 ```
  telltale  │  4 sessions  │  claude 3  codex 1
-                                            5h ███─────   42% ↻2h13m  ~13:27 · 18m basis   │   7d █▎──────   18% ↻5d02h
+                                          5h ███─────   42% ↻ 2h13m  ~13:27 · 18m basis   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
@@ -1742,7 +1742,7 @@ sourced number in the same visual class as a missing one.
 query and hands the keyboard back; `esc` clears it.
 
 ```
- telltale  │  2 of 4 sessions  │  claude 3  codex 1             5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
+ telltale  │  2 of 4 sessions  │  claude 3  codex 1           5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
@@ -1756,7 +1756,7 @@ query and hands the keyboard back; `esc` clears it.
 and once applied, with the mode left:
 
 ```
- telltale  │  2 of 4 sessions  │  claude 3  codex 1             5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
+ telltale  │  2 of 4 sessions  │  claude 3  codex 1           5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s

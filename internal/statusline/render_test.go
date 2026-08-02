@@ -36,11 +36,13 @@ func renderPlain(t *testing.T, fixture string) string {
 
 func TestFullRender(t *testing.T) {
 	got := renderPlain(t, "full.json")
-	want := "Opus │ ctx 8% │ $0.01 │ 5h 23.5% ↻2h13m │ 7d 41.2% ↻5d"
-	// 7d countdown spans days; assert prefix through the 5h window exactly,
-	// then the 7d segment's presence and shape separately.
-	if !strings.HasPrefix(got, "Opus │ ctx 8% │ $0.01 │ 5h 23.5% ↻2h13m │ 7d 41.2%") {
-		t.Fatalf("got %q, want prefix of %q", got, want)
+	// The 7d countdown is exact now that the formatter is shared
+	// theme.Countdown (the old local shortDur had no days branch and rendered
+	// "122h13m"). Glyph and digits are separated by a space — glued, ↻ reads
+	// as one garbled token in ambiguous-width fonts (dogfood, 2026-08-02).
+	want := "Opus │ ctx 8% │ $0.01 │ 5h 23.5% ↻ 2h13m │ 7d 41.2% ↻ 5d02h │ myproject"
+	if got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
 	}
 }
 

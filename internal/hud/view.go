@@ -331,7 +331,10 @@ func quotaBlock(st State, sty Styles, g Glyphs) string {
 		}
 		if w.ResetsAt != nil {
 			if d := w.ResetsAt.Sub(st.Now); d > 0 {
-				cell += " " + sty.Muted.Render(g.Reset+theme.Countdown(d))
+				// A space between the glyph and the digits: fonts render ↻ at
+				// ambiguous width, and glued to the countdown it reads as one
+				// garbled token (dogfood finding, 2026-08-02).
+				cell += " " + sty.Muted.Render(g.Reset+" "+theme.Countdown(d))
 			}
 		}
 		// The forecast only renders beside a current reading: a window that is
