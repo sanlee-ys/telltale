@@ -458,8 +458,15 @@ tokens or tool calls settle, so a linear last-wins pass needs no dedup map.
   the same tradeoff the other adapters carry; the live pass below sizes real
   checkpoints to check whether the budget needs raising.
 
+**Market note (2026-08-02, post-merge):** Gemini CLI stopped serving consumer tiers
+(free/Pro/Ultra) on 2026-06-18; it remains live for Gemini Code Assist
+Standard/Enterprise licenses and paid API keys, with Antigravity CLI (`agy`) as the
+consumer successor (ADR-003 addendum). This adapter therefore covers the
+enterprise/API-key flavour, and the live pass below needs an API-key login to run.
+
 **First live pass — owed, unobservable until a corpus exists** (the CLI was installed
-for this adapter; no session has been run yet):
+for this adapter; no session has been run yet, and a consumer login can no longer
+produce one — see the market note):
 
 - Confirm the metadata line is the FIRST line in every live file, and whether main
   sessions carry `kind:"main"` or omit the field (the fixture assumes omitted).

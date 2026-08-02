@@ -41,6 +41,30 @@ own "obvious third" (it is why §4a.7 used it as the example).
 - The empty-state vendor table, README hero frame, and capability goldens all show
   three vendors; doc-sync tests pin them.
 
+## Addendum (2026-08-02, same day, hours later)
+
+Post-merge fact check overturned part of the Context: **Gemini CLI stopped serving
+free/Pro/Ultra consumer requests on 2026-06-18** — Google folded the consumer terminal
+product into **Antigravity CLI (`agy`)**, closed-source, docs-only GitHub presence
+(google-antigravity/antigravity-cli). Gemini CLI continues only for Gemini Code Assist
+Standard/Enterprise licenses and paid API keys. So the "third vendor-native CLI seat"
+this ADR cited is, for consumers, agy — and this adapter covers Gemini CLI as the
+enterprise/API-key flavour of that seat.
+
+Consequences of the correction:
+
+- The §3.7 live pass now requires a **paid Gemini API key** (there is no consumer login
+  to capture). It stays owed; the verified-claim gate is unchanged.
+- **San's ruling (2026-08-02): telltale's consumer-facing Gemini-family capture target
+  is Antigravity CLI.** agy is closed-source, so its verification follows the Claude
+  Code precedent (documented contracts + live-corpus survey, no source read). Its
+  documented seams are promising and materially different: transcripts at
+  `~/.gemini/antigravity/brain/<conversation-id>/.system_generated/logs/transcript.jsonl`,
+  and a **statusline hook** whose stdin payload is a superset of Claude's (including
+  `context_window.context_window_size`, a `quota` object, and `agent_state` — the first
+  vendor-reported liveness signal in this product's universe). That work is a future
+  ADR once the live corpus exists; nothing about it is promised here.
+
 ## Downstream surfaces
 
 design.md (§3.3 matrix, §3.7 new, §4 intro, §4a.7 postscript, §5 eval table, §8
