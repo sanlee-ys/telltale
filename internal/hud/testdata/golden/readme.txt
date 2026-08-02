@@ -6,4 +6,4 @@
  ◐ CC │ acme-api  C:\src\work                                                 Sonnet 4.5                       — │   4m
  ○ CX │ notes-api  C:\src\code                                                gpt-5.1-codex  █▍────────── ~12.5% │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   a all   r refresh   ? keys
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys

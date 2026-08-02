@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,6 +73,10 @@ func TestCapabilitiesDeclareOnlyWhatIsOnDisk(t *testing.T) {
 		model.FieldQuota:          model.CapNone,
 		// "A process exists" is not liveness (design.md §4a.4).
 		model.FieldLiveness: model.CapNone,
+		// The sidecar tree IS on disk, but the number is not: the files are
+		// counted exactly and the recency boundary is the inference, so the
+		// field is derived and the HUD marks it.
+		model.FieldSubagents: model.CapDerived,
 	}
 	for f, w := range want {
 		if got := caps.Capability(f); got != w {
@@ -296,6 +301,120 @@ func TestFutureMtimeDegradesRatherThanClampingToZero(t *testing.T) {
 	}
 }
 
+// ------------------------------------------------------- sub-agent counting
+
+// fanoutTree builds a synthesized project tree with a subagents/ sidecar whose
+// mtimes are set explicitly.
+//
+// Checkout sets every fixture's mtime to checkout time, so a repo fixture can
+// never pin a recency boundary — it would pass on fresh CI and fail on a clone
+// that sat over a weekend. The ages that matter are therefore written here.
+func fanoutTree(t *testing.T, ages ...time.Duration) *Adapter {
+	t.Helper()
+	dir := t.TempDir()
+	proj := filepath.Join(dir, "C--Users-dev-code-fanout")
+	side := filepath.Join(proj, healthyID, "subagents")
+	if err := os.MkdirAll(side, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, healthyID+".jsonl"),
+		[]byte("{\"type\":\"user\",\"cwd\":\"C:\\\\x\\\\fanout\"}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Non-transcript neighbours: the sidecar tree holds these too, and
+	// counting one would inflate the chip. .meta.json is the shape the vendor
+	// actually writes beside every agent transcript (verified 2026-08-01).
+	if err := os.WriteFile(filepath.Join(side, "tool-results.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(side, "agent-a0000000000000000.meta.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	write := func(p string, age time.Duration) {
+		t.Helper()
+		if err := os.WriteFile(p, []byte("{\"type\":\"assistant\"}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		mod := now.Add(-age)
+		if err := os.Chtimes(p, mod, mod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Flat sidecar files carry the vendor's real basename shape.
+	for i, age := range ages {
+		write(filepath.Join(side, "agent-a000000000000000"+string(rune('1'+i))+".jsonl"), age)
+	}
+	// One workflow-nested transcript, fresh: subagents/workflows/<wf>/agent-*.jsonl
+	// is the second real shape and must be counted (review blocker follow-up).
+	wf := filepath.Join(side, "workflows", "wf_test0000-000")
+	if err := os.MkdirAll(wf, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(filepath.Join(wf, "agent-b0000000000000001.jsonl"), time.Minute)
+	return NewWithRoot(dir)
+}
+
+func readOne(t *testing.T, a *Adapter, id string) *model.Session {
+	t.Helper()
+	refs, err := a.Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := a.Read(context.Background(), refByID(t, refs, id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Validate(a.Capabilities()); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	return s
+}
+
+// The chip counts a fan-out in progress, not a fan-out that ever happened. A
+// transcript last written two hours ago is not a running sub-agent, and
+// counting it would put a "⑂3" on a session that has one thing going.
+func TestSubagentCountIsRecentOnly(t *testing.T) {
+	a := fanoutTree(t, time.Minute, 10*time.Minute, 2*time.Hour, -3*time.Hour)
+	s := readOne(t, a, healthyID)
+	if s.Subagents == nil {
+		t.Fatal("subagents absent; the sidecar exists and is readable")
+	}
+	if *s.Subagents != 3 {
+		t.Errorf("counted %d recent sub-agents, want 3 (flat 1m and 10m inside the %s horizon, plus the workflow-nested 1m; 2h is out, an mtime 3h in the FUTURE is not a readable time, and .meta.json/tool-results.json are not transcripts)",
+			*s.Subagents, subagentHorizon)
+	}
+	if !s.Derived.Has(model.FieldSubagents) {
+		t.Error("the count is computed from a recency boundary and must be marked derived")
+	}
+}
+
+// A session that never fanned out has a MEASURED zero, not missing data: we
+// looked where the sidecar would be and there was nothing there.
+func TestSubagentCountIsZeroWithoutASidecar(t *testing.T) {
+	a := testAdapter(t)
+	s := readOne(t, a, tornID)
+	if s.Subagents == nil {
+		t.Fatal("subagents absent; an absent sidecar directory is a countable zero")
+	}
+	if *s.Subagents != 0 {
+		t.Errorf("counted %d, want 0", *s.Subagents)
+	}
+}
+
+// The repo fixture pins the FILTER, not the boundary: its mtimes are whatever
+// checkout wrote. Two uuid transcripts plus one non-transcript neighbour, so
+// the count can never exceed two however fresh the clone is.
+func TestSubagentCountNeverExceedsTheTranscriptsPresent(t *testing.T) {
+	s := readOne(t, testAdapter(t), healthyID)
+	if s.Subagents == nil {
+		t.Fatal("subagents absent for a session whose sidecar exists")
+	}
+	if *s.Subagents > 2 {
+		t.Errorf("counted %d, want at most 2 — tool-results.json is not a transcript", *s.Subagents)
+	}
+}
+
 func TestUUIDFilter(t *testing.T) {
 	ok := []string{
 		"00000000-aaaa-4bbb-8ccc-000000000001.jsonl",
@@ -357,4 +476,33 @@ func describe(s *model.Session) string {
 	m, _ := s.Model.Name()
 	w, _ := s.WorkspaceName()
 	return "present=" + s.Present().String() + " model=" + m + " workspace=" + w + " degraded=" + s.Degraded.String()
+}
+
+// The one branch that produces the honest "we could not count" state: the
+// sidecar path exists but is not listable.
+//
+// Driven directly rather than through a fixture tree: OS error mapping for
+// "file where a directory was expected" is platform-dependent (Windows maps it
+// to ErrNotExist, which is the measured-zero branch), so the reliable
+// cross-platform trigger for a non-NotExist ReadDir failure is an invalid path
+// (embedded NUL).
+func TestSubagentCountDegradesWhenTheSidecarIsUnlistable(t *testing.T) {
+	a := NewWithRoot(t.TempDir())
+	s := &model.Session{Vendor: Vendor, ID: healthyID, ObservedAt: time.Now()}
+	a.countSubagents(s, filepath.Join(t.TempDir(), "bad\x00path", healthyID+".jsonl"), time.Now())
+	if s.Subagents != nil {
+		t.Errorf("count = %d; an unlistable sidecar must be nil — \"0\" would be a claim", *s.Subagents)
+	}
+	if !s.Degraded.Has(model.FieldSubagents) {
+		t.Error("unlistable sidecar must mark the field degraded")
+	}
+	found := false
+	for _, d := range s.Diagnostics {
+		if strings.Contains(d, "subagents directory unreadable") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("missing diagnostic; got %v", s.Diagnostics)
+	}
 }

@@ -65,6 +65,7 @@ const (
 	FieldQuota
 	FieldLastActivity
 	FieldLiveness
+	FieldSubagents
 	fieldCount
 )
 
@@ -77,6 +78,7 @@ var fieldNames = [fieldCount]string{
 	FieldQuota:          "quota",
 	FieldLastActivity:   "last_activity",
 	FieldLiveness:       "liveness",
+	FieldSubagents:      "subagents",
 }
 
 // AllFields lists every Field in declaration order. Renderers iterate this so a
@@ -377,6 +379,21 @@ type Session struct {
 	// whether the session is alive.
 	LastActivity *time.Time
 
+	// Subagents is how many of the session's sub-agent transcripts the adapter
+	// found recently modified — a fan-out in progress, counted rather than
+	// inferred.
+	//
+	// It is a COUNT, and the two absences are the usual pair: nil means the
+	// adapter could not perform the count (and says why in Diagnostics); zero
+	// means it counted and found none. Zero is a measurement and must survive
+	// as one — the HUD simply draws no chip for it, the same way an empty
+	// gauge track means zero rather than "no data".
+	//
+	// It is DERIVED, not reported: no vendor writes this number down. The
+	// adapter computes it from a directory listing plus a recency boundary,
+	// and that boundary is the inference the estimate marker exists to expose.
+	Subagents *int
+
 	// LivenessHint is the adapter's own verdict, and it overrides the
 	// age-based classification. Set it ONLY from a positive vendor signal that
 	// the HUD cannot see — a turn-started/turn-ended event, or a session the
@@ -445,6 +462,10 @@ func (s *Session) Has(f Field) bool {
 		// Only a hint counts as a sourced liveness value; age-based
 		// classification is computed by the HUD from FieldLastActivity.
 		return s.LivenessHint != nil && *s.LivenessHint != LivenessUnknown
+	case FieldSubagents:
+		// A count of zero is present: the adapter looked and found none. Only
+		// a failed or impossible count is absent.
+		return s.Subagents != nil
 	default:
 		return false
 	}
@@ -592,6 +613,9 @@ func (s *Session) Validate(caps Capabilities) error {
 	}
 	if s.LastActivity != nil && s.LastActivity.IsZero() {
 		errs = append(errs, errors.New("model: last_activity is the zero time (absence is nil, not zero)"))
+	}
+	if s.Subagents != nil && *s.Subagents < 0 {
+		errs = append(errs, fmt.Errorf("model: subagents %d is negative", *s.Subagents))
 	}
 
 	seen := make(map[string]bool, len(s.Quota))

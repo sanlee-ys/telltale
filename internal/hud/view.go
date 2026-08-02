@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,9 +57,9 @@ func Render(st State, sty Styles, g Glyphs) string {
 
 	full := st.Height >= fullChromeHeight
 	// The column-header row names the grid, so it appears only when the body
-	// IS the grid. Over a help overlay or an empty state it would label
-	// columns that are not on screen.
-	showColumns := full && !st.Help && len(rows) > 0
+	// IS the grid. Over a help overlay, a detail pane or an empty state it
+	// would label columns that are not on screen.
+	showColumns := full && !st.Help && !st.Detail && len(rows) > 0
 
 	chrome := len(header) + 1 // + footer
 	if full {
@@ -76,7 +77,9 @@ func Render(st State, sty Styles, g Glyphs) string {
 	isRows := false
 	switch {
 	case st.Help:
-		body = helpLines(st, lay, hasCtx, hasCost, sty)
+		body = helpLines(st, lay, hasCtx, hasCost, sty, g)
+	case st.Detail:
+		body = detailLines(st, rows, rowSty, g)
 	case len(rows) == 0:
 		body = emptyLines(st, sty, g)
 	default:
@@ -87,6 +90,18 @@ func Render(st State, sty Styles, g Glyphs) string {
 	hiddenBelow := 0
 	if len(body) > bodyHeight {
 		start := st.Scroll
+		if isRows && st.Cursor >= 0 {
+			// The viewport follows the selection rather than the other way
+			// round. Doing it here keeps every layout number in one place:
+			// Update does not know how tall the chrome is this frame, and a
+			// second copy of that arithmetic is a second thing to get wrong.
+			if st.Cursor < start {
+				start = st.Cursor
+			}
+			if st.Cursor > start+bodyHeight-1 {
+				start = st.Cursor - bodyHeight + 1
+			}
+		}
 		if start > len(body)-bodyHeight {
 			start = len(body) - bodyHeight
 		}
@@ -122,11 +137,17 @@ func Render(st State, sty Styles, g Glyphs) string {
 
 // ---------------------------------------------------------------- selection
 
-// visibleSessions applies the vendor filter, the idle cutoff and the sort.
+// visibleSessions applies the vendor filter, the find query, the idle cutoff
+// and the sort. Every one of those can hide a row, and every one of them is
+// stated in the footer when it is not the default — a monitor that silently
+// hides rows is a liar.
 func visibleSessions(st State) []*model.Session {
 	out := make([]*model.Session, 0, len(st.Snap.Sessions))
 	for _, s := range st.Snap.Sessions {
 		if !st.Filter.Accepts(s.Vendor) {
+			continue
+		}
+		if !st.Matches(s) {
 			continue
 		}
 		if !st.ShowAll {
@@ -292,6 +313,61 @@ func vendorCounts(st State, sty Styles) string {
 // that is exact; a second one would need a per-vendor block, which is a change
 // to this function and to the header layout, not to the schema.
 func quotaBlock(st State, sty Styles, g Glyphs) string {
+	windows := accountQuota(st)
+	if len(windows) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(windows))
+	for i := range windows {
+		w := windows[i]
+		cell := sty.Muted.Render(w.Label) + " " + gauge(w.UsedPercent, quotaGauge, g, sty) + " "
+		hasReading := w.UsedPercent != nil && *w.UsedPercent >= 0 && *w.UsedPercent <= 100
+		if hasReading {
+			p := float64(*w.UsedPercent)
+			cell += sty.Sev(p).Render(padLeft(theme.Percent(p), 5, g))
+		} else {
+			cell += sty.Absent().Render(padLeft(g.Absent, 5, g))
+		}
+		if w.ResetsAt != nil {
+			if d := w.ResetsAt.Sub(st.Now); d > 0 {
+				cell += " " + sty.Muted.Render(g.Reset+theme.Countdown(d))
+			}
+		}
+		// The forecast only renders beside a current reading: a window that is
+		// present without a usage figure THIS scan shows an em dash, and a
+		// live-looking projection next to a dash asserts a trend for a value we
+		// just said we don't have (review finding).
+		if hasReading {
+			if f, ok := st.Burn.Forecast(w.ID, st.Now); ok {
+				cell += "  " + sty.Muted.Render(forecastText(f, st.Now, g))
+			}
+		}
+		parts = append(parts, cell)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "   "+sty.Muted.Render(g.Sep)+"   ")
+}
+
+// accountQuota picks the windows the header block speaks for.
+//
+// It is a separate function because two callers must agree exactly: the
+// renderer, and the burn sampler in Update. If the sampler ever read a
+// different session's windows, the forecast would describe a quota the header
+// is not showing — the same class of error as a per-row quota cell.
+func accountQuota(st State) []model.QuotaWindow {
+	windows, _ := accountQuotaSource(st)
+	return windows
+}
+
+// accountQuotaSource is accountQuota plus the identity of the session whose
+// snapshot supplied the windows. The burn sampler needs it: two sessions carry
+// snapshots of the same account windows taken at different moments, and a
+// series stitched across sources mixes measurement times (review finding).
+// The renderer ignores the source; only the sampler resets on it.
+func accountQuotaSource(st State) ([]model.QuotaWindow, string) {
 	var best *model.Session
 	for _, s := range st.Snap.Sessions {
 		if !s.Has(model.FieldQuota) {
@@ -306,30 +382,28 @@ func quotaBlock(st State, sty Styles, g Glyphs) string {
 		}
 	}
 	if best == nil {
-		return ""
+		return nil, ""
 	}
+	return best.Quota, string(best.Vendor) + "/" + best.ID
+}
 
-	parts := make([]string, 0, len(best.Quota))
-	for i := range best.Quota {
-		w := best.Quota[i]
-		cell := sty.Muted.Render(w.Label) + " " + gauge(w.UsedPercent, quotaGauge, g, sty) + " "
-		if w.UsedPercent != nil && *w.UsedPercent >= 0 && *w.UsedPercent <= 100 {
-			p := float64(*w.UsedPercent)
-			cell += sty.Sev(p).Render(padLeft(theme.Percent(p), 5, g))
-		} else {
-			cell += sty.Absent().Render(padLeft(g.Absent, 5, g))
-		}
-		if w.ResetsAt != nil {
-			if d := w.ResetsAt.Sub(st.Now); d > 0 {
-				cell += " " + sty.Muted.Render(g.Reset+theme.Countdown(d))
-			}
-		}
-		parts = append(parts, cell)
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return strings.Join(parts, "   "+sty.Muted.Render(g.Sep)+"   ")
+// forecastText renders a burn-rate projection: "~15:41 · 18m basis".
+//
+// Three deliberate choices, all of them about what the string is allowed to
+// claim:
+//
+//   - the leading "~" is the same estimate marker the CONTEXT column uses. The
+//     number was computed by telltale from its own samples, not read from the
+//     vendor, and ADR-001 requires that be visible.
+//   - the basis travels WITH the number, always. "~15:41" alone is a
+//     prediction; "~15:41 · 18m basis" is a measurement with its scope
+//     attached, and it is the scope that lets a reader discount it.
+//   - the clock is formatted in State.Now's location, not the machine's. That
+//     keeps Render pure — it never consults the environment — and it is what
+//     makes a golden reproducible on any CI runner.
+func forecastText(f Forecast, now time.Time, g Glyphs) string {
+	return "~" + f.At.In(now.Location()).Format("15:04") +
+		" " + g.Mid + " " + theme.Age(f.Basis) + " basis"
 }
 
 // -------------------------------------------------------------------- rows
@@ -363,15 +437,24 @@ func columnHeader(lay Layout, sty Styles, g Glyphs) string {
 
 func rowLines(st State, rows []*model.Session, lay Layout, sty Styles, g Glyphs) []string {
 	out := make([]string, 0, len(rows))
-	for _, s := range rows {
-		out = append(out, renderRow(st, s, lay, sty, g))
+	for i, s := range rows {
+		out = append(out, renderRow(st, s, lay, sty, g, i == st.Cursor))
 	}
 	return out
 }
 
-func renderRow(st State, s *model.Session, lay Layout, sty Styles, g Glyphs) string {
+func renderRow(st State, s *model.Session, lay Layout, sty Styles, g Glyphs, selected bool) string {
 	var b strings.Builder
-	b.WriteString(" ")
+	// The selection mark lives in the leading pad column, which was already
+	// blank — selection costs the grid no width. It is a GLYPH, not a
+	// highlight: §7.1 rule 2 says every distinction is carried by a glyph or a
+	// number first, and a reverse-video row is a colour-only distinction that
+	// vanishes under NO_COLOR.
+	if selected {
+		b.WriteString(sty.Text.Render(g.Cursor))
+	} else {
+		b.WriteString(" ")
+	}
 	b.WriteString(livenessDot(s, st, sty, g))
 	b.WriteString(" ")
 	b.WriteString(sty.Identity.Render(vendorTag(s.Vendor)))
@@ -441,13 +524,32 @@ func vendorTag(v model.VendorID) string {
 }
 
 // sessionLabel is the row's identity: the session's own name if the vendor has
-// one, else the workspace basename, else the vendor session id.
+// one, else the workspace basename, else the vendor session id — followed by
+// the sub-agent chip when the session is fanning out, and then the parent
+// directory if there is still room.
+//
+// The chip's width is reserved BEFORE the name is truncated. A chip that
+// disappears on a long project name would make the same session look like a
+// different kind of session at a different terminal width, which is a lie by
+// omission; the name is the field that can afford to lose a character.
 //
 // The parent directory is appended only when at least 14 cells remain free. It
 // disambiguates same-named projects under different roots and stops the wide
 // tier from opening a dead gulf between the name and the model, and it drops
 // out automatically as the terminal narrows.
 func sessionLabel(s *model.Session, width int, g Glyphs) string {
+	chip := subagentChip(s, g)
+	budget := width
+	if chip != "" {
+		budget -= lipgloss.Width(chip) + 1
+	}
+	if budget < 1 {
+		// No room for a name beside the chip. The chip is the smaller claim
+		// and the one that cannot be reconstructed from anything else, so at
+		// this width the name goes and the chip stays.
+		return truncate(chip, width, g.Ellipsis)
+	}
+
 	label := ""
 	if s.Name != nil {
 		label = sanitize(*s.Name)
@@ -460,7 +562,10 @@ func sessionLabel(s *model.Session, width int, g Glyphs) string {
 	if label == "" {
 		label = s.ID
 	}
-	label = truncate(label, width, g.Ellipsis)
+	label = truncate(label, budget, g.Ellipsis)
+	if chip != "" {
+		label += " " + chip
+	}
 
 	remaining := width - lipgloss.Width(label)
 	if remaining < 14 || s.WorkspaceDir == nil {
@@ -471,6 +576,27 @@ func sessionLabel(s *model.Session, width int, g Glyphs) string {
 		return label
 	}
 	return label + "  " + elideLeft(parent, remaining-2, g.Ellipsis)
+}
+
+// subagentChip is the fan-out marker: "⑂~2" on a session with two recently
+// written sub-agent transcripts.
+//
+// The estimate marker is not decoration. The COUNT is exact — telltale listed
+// the directory — but "these are running right now" is an inference drawn from
+// a recency boundary, and ADR-001 requires the inferred part be visible. A
+// count of zero draws nothing at all: the absence of a chip is not a claim,
+// and a "⑂0" on every Claude row would be noise asserting a fact nobody asked
+// for. Zero is still stated in the detail pane, where there is room to say
+// "measured zero" instead of leaving it to be inferred.
+func subagentChip(s *model.Session, g Glyphs) string {
+	if s == nil || s.Subagents == nil || *s.Subagents <= 0 {
+		return ""
+	}
+	mark := ""
+	if s.Derived.Has(model.FieldSubagents) {
+		mark = "~"
+	}
+	return g.Fork + mark + strconv.Itoa(*s.Subagents)
 }
 
 // parentDir is display-only string handling, not path manipulation: a session
@@ -526,7 +652,15 @@ func ageCell(s *model.Session, now time.Time, sty Styles, g Glyphs) string {
 // never an error dialog.
 func emptyLines(st State, sty Styles, g Glyphs) []string {
 	head := "no active sessions"
-	if st.Filter != FilterAll && len(st.Snap.Sessions) > 0 {
+	// Naming the thing that emptied the list is the point: "no active
+	// sessions" when a query is hiding four of them is the monitor lying by
+	// omission. The query wins the sentence because it is the more recent and
+	// more surprising of the two narrowings.
+	switch {
+	case st.Query != "" && len(st.Snap.Sessions) > 0:
+		head = `no sessions matching "` +
+			truncate(sanitizeKeepingSpace(st.Query), st.Width/2, g.Ellipsis) + `"`
+	case st.Filter != FilterAll && len(st.Snap.Sessions) > 0:
 		head = "no " + st.Filter.String() + " sessions"
 	}
 
@@ -565,19 +699,39 @@ func emptyLines(st State, sty Styles, g Glyphs) []string {
 	return append(out, centerBlock(block, st.Width)...)
 }
 
-func helpLines(st State, lay Layout, hasCtx, hasCost bool, sty Styles) []string {
+// arrowHint spells the cursor keys in whichever alphabet is in use.
+func arrowHint(g Glyphs) string {
+	if g.ASCII {
+		return "up/down"
+	}
+	return "↑/↓" // ↑/↓
+}
+
+func helpLines(st State, lay Layout, hasCtx, hasCost bool, sty Styles, g Glyphs) []string {
 	pad := strings.Repeat(" ", 8)
 	keys := [][2]string{
-		{"q", "quit  (also esc, ctrl+c)"},
+		{"q", "quit  (also ctrl+c)"},
+		{arrowHint(g), "move the selection  (also j / k)"},
+		{"enter", "open the detail pane for the selected session"},
+		{"/", "find: narrow rows by name or path"},
+		{"esc", "close the pane, or cancel the find, or quit"},
 		{"v", "vendor filter: all -> claude -> codex"},
 		{"s", "sort: activity -> context -> cost"},
 		{"a", "show all (include sessions idle > 8h)"},
 		{"r", "rescan now"},
 		{"?", "close this help"},
 	}
+	// The key column is padded to the widest key so the descriptions form one
+	// left edge. Ragged descriptions read as a list of unrelated facts.
+	keyW := 0
+	for _, k := range keys {
+		if w := lipgloss.Width(k[0]); w > keyW {
+			keyW = w
+		}
+	}
 	out := []string{""}
 	for _, k := range keys {
-		out = append(out, pad+sty.Identity.Render(k[0])+"  "+sty.Text.Render(k[1]))
+		out = append(out, pad+sty.Identity.Render(padRight(k[0], keyW, g))+"  "+sty.Text.Render(k[1]))
 	}
 
 	// §7.2 requires the overlay to name any column auto-hidden this frame, and
@@ -622,16 +776,38 @@ func centerBlock(lines []string, width int) []string {
 // ------------------------------------------------------------------ footer
 
 func footerLine(st State, visible, hiddenBelow int, sty Styles, g Glyphs) string {
+	// Find mode takes the whole footer. It is the product's only mode, so it
+	// says so where the key hints normally live rather than letting an
+	// unmodified keystroke quietly mean something new.
+	if st.Finding {
+		hint := "esc clear   enter apply"
+		// The query is truncated to fit rather than allowed to push itself off
+		// the line. joinEnds gives the right slot priority when both cannot
+		// fit, so an over-long query would silently VANISH from the footer
+		// while still hiding rows — the one thing this footer exists to
+		// prevent. The ellipsis says there is more.
+		budget := st.Width - 3 - lipgloss.Width(hint) - 2
+		q := truncate(sanitizeKeepingSpace(st.Query), max(budget, 1), g.Ellipsis)
+		return joinEnds(" "+sty.Text.Render("/"+q+g.Caret), sty.Muted.Render(hint), st.Width)
+	}
+
 	var keys string
-	if st.Help {
+	switch {
+	case st.Help:
 		keys = " " + sty.Muted.Render("? close")
-	} else {
-		hints := []string{"q quit", "v vendor", "s sort", "a all", "r refresh", "? keys"}
+	case st.Detail:
+		keys = " " + sty.Muted.Render("esc close   "+arrowHint(g)+" session")
+	default:
+		// "r refresh" moved to the help overlay to make room. It is the
+		// cheapest hint to lose: the HUD already rescans every second, so `r`
+		// only ever shortens a wait, while `/` and `enter` are doors nobody
+		// finds by accident.
+		hints := []string{"q quit", "/ find", "enter detail", "v vendor", "s sort", "a all", "? keys"}
 		switch tierFor(st.Width) {
 		case TierNarrow:
-			hints = []string{"q quit", "v vendor", "? keys"}
+			hints = []string{"q quit", "/ find", "? keys"}
 		case TierCompact:
-			hints = []string{"q quit", "v vendor", "s sort", "? keys"}
+			hints = []string{"q quit", "/ find", "enter detail", "? keys"}
 		}
 		keys = " " + sty.Muted.Render(strings.Join(hints, "   "))
 	}
@@ -639,6 +815,13 @@ func footerLine(st State, visible, hiddenBelow int, sty Styles, g Glyphs) string
 	var notices []string
 	if hiddenBelow > 0 {
 		notices = append(notices, sty.Muted.Render(fmt.Sprintf("+%d more", hiddenBelow)))
+	}
+	if st.Query != "" {
+		// The query survives leaving find mode, so it has to keep announcing
+		// itself: an applied filter the user has forgotten about is the same
+		// silent row-hiding the vendor filter notice exists to prevent.
+		notices = append(notices, sty.Muted.Render(
+			`find "`+truncate(sanitizeKeepingSpace(st.Query), 24, g.Ellipsis)+`"`))
 	}
 	if st.Filter != FilterAll {
 		// A monitor that silently hides rows is a liar: a non-default filter is

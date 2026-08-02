@@ -21,6 +21,13 @@
 //     statusline seam; Codex's lives on the disk seam (design.md §3.3).
 //   - liveness — see the LivenessHint note below.
 //
+// # What it derives
+//
+//   - subagents — the count of recently written transcripts in the session's
+//     subagents/ sidecar (design.md §3.1). The files are counted exactly; the
+//     inference is the recency boundary that turns "written lately" into "a
+//     fan-out is running", so the field is CapDerived and the HUD marks it.
+//
 // # Liveness
 //
 // The honest primitive is the transcript's mtime, which is LAST ACTIVITY and
@@ -76,6 +83,26 @@ const futureSkew = 2 * time.Second
 // reading.
 const syntheticModel = "<synthetic>"
 
+// subagentDir is the sidecar directory name under <sessionId>/ that holds a
+// session's sub-agent transcripts (design.md §3.1). Discover deliberately does
+// not walk into it — those files are not sessions — but their COUNT is a fact
+// about the parent session, and counting them is a stat pass, not a read.
+const subagentDir = "subagents"
+
+// subagentHorizon is how recently a sub-agent transcript must have been
+// written to be counted as part of a fan-out in progress.
+//
+// It is deliberately model.DefaultLivenessThresholds.Idle rather than a second
+// number: the chip sits on a row whose dot already classifies "recent" at that
+// boundary, and two different definitions of recent on one line is how a
+// display starts contradicting itself. Sourcing it from the shared default
+// also means an operator who moves the boundary moves both.
+//
+// This boundary is the whole reason the count is DERIVED rather than reported.
+// The files are counted exactly; "these are a fan-out running now" is the
+// inference, and the HUD marks it.
+var subagentHorizon = model.DefaultLivenessThresholds.Idle
+
 // Adapter reads Claude Code transcripts. It holds no mutable state and is safe
 // for concurrent use.
 type Adapter struct {
@@ -104,8 +131,14 @@ func (a *Adapter) Root() string { return a.root }
 
 func (a *Adapter) Vendor() model.VendorID { return Vendor }
 
-// Capabilities is static. See the package doc for why four of the eight fields
+// Capabilities is static. See the package doc for why four of the nine fields
 // are absent from both sets.
+//
+// subagents is DERIVED: nothing on disk states the number, and the adapter
+// computes it from a directory listing plus a recency boundary. Claude Code is
+// the only vendor that writes the sidecar tree, so it is the only adapter that
+// declares the field at all — for Codex it stays CapNone and the HUD never
+// draws a chip on a Codex row.
 func (a *Adapter) Capabilities() model.Capabilities {
 	return model.Capabilities{
 		Reported: model.NewFieldSet(
@@ -114,6 +147,7 @@ func (a *Adapter) Capabilities() model.Capabilities {
 			model.FieldWorkspace,
 			model.FieldLastActivity,
 		),
+		Derived: model.NewFieldSet(model.FieldSubagents),
 	}
 }
 
@@ -391,10 +425,115 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		s.Diagnostics = append(s.Diagnostics, plural(bad, "unparseable record skipped", "unparseable records skipped"))
 	}
 
+	a.countSubagents(s, ref.Locator, now)
+
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+// countSubagents counts the session's recently written sub-agent transcripts.
+//
+// This is a stat pass and nothing more: one ReadDir plus one Info per entry,
+// no file is opened, no byte is parsed. That is what makes it affordable on
+// the 1 s poll — the same reason Discover is listing-only.
+//
+// The sidecar lives beside the transcript, at <transcript without .jsonl>/
+// subagents/ (design.md §3.1). Two absences, distinguished on purpose:
+//
+//   - the directory does not exist → this session has never fanned out, which
+//     is a measured ZERO, not missing data;
+//   - the directory exists and the OS refuses → nil plus a diagnostic. We do
+//     not know, and "0" would be a claim.
+func (a *Adapter) countSubagents(s *model.Session, locator string, now time.Time) {
+	dir := filepath.Join(strings.TrimSuffix(locator, ".jsonl"), subagentDir)
+	entries, err := os.ReadDir(dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		s.Subagents = model.Ptr(0)
+		s.Derived = s.Derived.With(model.FieldSubagents)
+		return
+	case err != nil:
+		s.Degraded = s.Degraded.With(model.FieldSubagents)
+		s.Diagnostics = append(s.Diagnostics, "subagents directory unreadable")
+		return
+	}
+
+	// Verified against the live tree 2026-08-01 (names only): sub-agent
+	// transcripts are agent-<hex>.jsonl with agent-<hex>.meta.json neighbours,
+	// NOT <uuid>.jsonl — the first cut of this function filtered for UUIDs and
+	// counted zero forever (review blocker). Workflow fan-outs nest exactly one
+	// level deeper at subagents/workflows/<wf_id>/agent-<hex>.jsonl, so those
+	// subdirectories are listed too; nothing recurses past that.
+	cutoff := now.Add(-subagentHorizon)
+	n := 0
+	countFile := func(e fs.DirEntry) {
+		if !isSubagentTranscript(e.Name()) {
+			return
+		}
+		info, err := e.Info()
+		if err != nil {
+			// Racing the vendor's writer is normal. Skipping the entry
+			// undercounts by one, which is the conservative direction: a chip
+			// that says 2 when 3 are running understates a fan-out; a chip
+			// that counts an entry it could not stat asserts one it never saw.
+			return
+		}
+		mod := info.ModTime()
+		if mod.Before(cutoff) {
+			return
+		}
+		if mod.After(now.Add(futureSkew)) {
+			// Same rule as the session's own mtime: a timestamp ahead of the
+			// clock is not a readable time, so it cannot be evidence of
+			// recency. Counting it would let a skewed clock invent a fan-out.
+			return
+		}
+		n++
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			countFile(e)
+			continue
+		}
+		if e.Name() != "workflows" {
+			continue
+		}
+		wfs, err := os.ReadDir(filepath.Join(dir, e.Name()))
+		if err != nil {
+			// The flat count is still real; a half-readable tree degrades the
+			// part we could not see into a diagnostic, not into silence.
+			s.Diagnostics = append(s.Diagnostics, "subagents workflow tree unreadable")
+			continue
+		}
+		for _, wf := range wfs {
+			if !wf.IsDir() {
+				continue
+			}
+			agents, err := os.ReadDir(filepath.Join(dir, e.Name(), wf.Name()))
+			if err != nil {
+				s.Diagnostics = append(s.Diagnostics, "subagents workflow tree unreadable")
+				continue
+			}
+			for _, ae := range agents {
+				if !ae.IsDir() {
+					countFile(ae)
+				}
+			}
+		}
+	}
+	s.Subagents = model.Ptr(n)
+	s.Derived = s.Derived.With(model.FieldSubagents)
+}
+
+// isSubagentTranscript matches the sidecar transcript shape: a .jsonl file
+// that is not a .meta.json neighbour. The basename prefix is deliberately NOT
+// pinned to "agent-": the vendor renamed this shape once already (early trees
+// held UUID basenames), and a count that goes quietly to zero on the next
+// rename is this function's known failure mode.
+func isSubagentTranscript(name string) bool {
+	return strings.HasSuffix(name, ".jsonl")
 }
 
 // applyRecord folds one record into the session. Later records win, so the

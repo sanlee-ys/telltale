@@ -1,11 +1,16 @@
  telltale  │  4 sessions  │  claude 3  codex 1                  5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-        q  quit  (also esc, ctrl+c)
-        v  vendor filter: all -> claude -> codex
-        s  sort: activity -> context -> cost
-        a  show all (include sessions idle > 8h)
-        r  rescan now
-        ?  close this help
+        q      quit  (also ctrl+c)
+        ↑/↓    move the selection  (also j / k)
+        enter  open the detail pane for the selected session
+        /      find: narrow rows by name or path
+        esc    close the pane, or cancel the find, or quit
+        v      vendor filter: all -> claude -> codex
+        s      sort: activity -> context -> cost
+        a      show all (include sessions idle > 8h)
+        r      rescan now
+        ?      close this help
+
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ? close

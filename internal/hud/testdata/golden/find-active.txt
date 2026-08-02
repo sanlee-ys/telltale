@@ -1,10 +1,9 @@
- telltale  │  0 sessions
+ telltale  │  2 of 4 sessions  │  claude 3  codex 1             5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-                                                   no active sessions
-
-                                 claude   watching       %USERPROFILE%\.claude\projects
-                                 codex    not detected   %USERPROFILE%\.codex
+        SESSION                                                      MODEL          CONTEXT                 COST    AGE
+ ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
+ ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ /api_                                                                                          esc clear   enter apply

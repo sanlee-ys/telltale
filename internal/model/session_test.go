@@ -254,3 +254,36 @@ func TestCapabilitiesDisjointness(t *testing.T) {
 		t.Errorf("Known() = %s", got)
 	}
 }
+
+// v1.1 added Subagents; its rules are pinned here in the schema's own package
+// rather than only via adapter tests (review finding).
+func TestSubagentsPresenceAndValidation(t *testing.T) {
+	caps := Capabilities{Derived: NewFieldSet(FieldSubagents)}
+
+	s := &Session{Vendor: VendorClaude, ID: "s", ObservedAt: time.Unix(1754000000, 0)}
+	if s.Has(FieldSubagents) {
+		t.Error("nil count must be absent")
+	}
+
+	s.Subagents = Ptr(0)
+	s.Derived = s.Derived.With(FieldSubagents)
+	if !s.Has(FieldSubagents) {
+		t.Error("a measured ZERO is present — we looked and there was nothing there")
+	}
+	if err := s.Validate(caps); err != nil {
+		t.Fatalf("Validate rejected a measured zero: %v", err)
+	}
+
+	s.Subagents = Ptr(-1)
+	if err := s.Validate(caps); err == nil {
+		t.Error("Validate accepted a negative count")
+	}
+
+	// A count from an adapter that never declared the capability is the
+	// honest-gauge lie Validate exists to catch.
+	bare := &Session{Vendor: VendorCodex, ID: "c", ObservedAt: time.Unix(1754000000, 0), Subagents: Ptr(2)}
+	bare.Derived = bare.Derived.With(FieldSubagents)
+	if err := bare.Validate(Capabilities{}); err == nil {
+		t.Error("Validate accepted a subagent count from a CapNone adapter")
+	}
+}

@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/sanlee-ys/telltale/internal/adapter/claudecode"
 	"github.com/sanlee-ys/telltale/internal/adapter/codex"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -46,6 +48,47 @@ func noActivity() sessionOpt { return func(s *model.Session) { s.LastActivity = 
 
 func withQuota(w ...model.QuotaWindow) sessionOpt {
 	return func(s *model.Session) { s.Quota = append(s.Quota, w...) }
+}
+
+// withSubagents sets the fan-out count AND marks it derived, because the
+// adapter that produces it does both — a count with no estimate marker would
+// be a state model.Validate rejects.
+func withSubagents(n int) sessionOpt {
+	return func(s *model.Session) {
+		s.Subagents = model.Ptr(n)
+		s.Derived = s.Derived.With(model.FieldSubagents)
+	}
+}
+
+func withExtras(kv ...string) sessionOpt {
+	return func(s *model.Session) {
+		for i := 0; i+1 < len(kv); i += 2 {
+			s.Extras = append(s.Extras, model.Extra{Label: kv[i], Value: kv[i+1]})
+		}
+	}
+}
+
+func withDiagnostics(d ...string) sessionOpt {
+	return func(s *model.Session) { s.Diagnostics = append(s.Diagnostics, d...) }
+}
+
+// burnSeries builds a pinned sampling history: n samples ending at the pinned
+// clock, spanning span, with usage rising linearly from->to.
+//
+// Golden and unit tests inject the series rather than letting a clock produce
+// one, which is the same discipline as State.Now: nothing about the forecast
+// depends on how long the test took to run.
+func burnSeries(id string, from, to float64, span time.Duration, n int, resets *time.Time) BurnSeries {
+	s := BurnSeries{WindowID: id}
+	for i := 0; i < n; i++ {
+		f := float64(i) / float64(n-1)
+		s.Samples = append(s.Samples, BurnSample{
+			At:     pinned.Add(-span).Add(time.Duration(f * float64(span))),
+			Used:   from + f*(to-from),
+			Resets: resets,
+		})
+	}
+	return s
 }
 
 func sess(vendor model.VendorID, id, workspace, modelID string, age time.Duration, opts ...sessionOpt) *model.Session {
@@ -129,14 +172,55 @@ func healthyState(w, h int) State {
 	return st
 }
 
+// v11State is the v1.1 fixture set, rendered with the REAL adapter capability
+// tables rather than the synthetic everything-vendor. Three Claude sessions
+// (one fanning out two sub-agents, one that measured zero, one running five)
+// and one Codex session whose records did not parse.
+func v11State(w, h int) State {
+	st := NewState()
+	st.Now = pinned
+	st.Width, st.Height = w, h
+	st.Snap = Snapshot{
+		At: pinned,
+		Sessions: []*model.Session{
+			sess(model.VendorClaude, "00000000-aaaa-4bbb-8ccc-000000000001",
+				`C:\src\code\telltale`, "claude-opus-5", 12*time.Second,
+				withName("telltale"), withSubagents(2),
+				withExtras("branch", "main", "cli", "2.1.219", "ctx tokens", "215k")),
+			sess(model.VendorClaude, "00000000-aaaa-4bbb-8ccc-000000000002",
+				`C:\src\work\acme-api`, "claude-sonnet-4-5", 48*time.Second,
+				withName("acme-api"), withSubagents(0),
+				withExtras("branch", "release", "cli", "2.1.219", "ctx tokens", "88k")),
+			// Discovered by filename; every record torn, so nothing parsed.
+			sess(model.VendorCodex, "4f2a9c81-1d3e-4a77-9b02-000000000000",
+				"", "", 7*time.Minute,
+				degraded(model.FieldWorkspace), degraded(model.FieldContextPercent),
+				withDiagnostics("2 unparseable records skipped", "no turn_context record in the read window")),
+			sess(model.VendorClaude, "00000000-aaaa-4bbb-8ccc-000000000003",
+				`C:\src\code\learning-notes`, "claude-haiku-4-5", 22*time.Minute,
+				withName("learning-notes"), withSubagents(5),
+				withExtras("branch", "main", "cli", "2.1.219", "ctx tokens", "31k")),
+		},
+		Vendors: []VendorView{
+			watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`,
+				(&claudecode.Adapter{}).Capabilities()),
+			watching(model.VendorCodex, `%USERPROFILE%\.codex`,
+				(&codex.Adapter{}).Capabilities()),
+		},
+	}
+	return st
+}
+
 // ------------------------------------------------------------------ goldens
 
-func TestGoldenRenders(t *testing.T) {
-	cases := []struct {
-		name  string
-		state func() State
-		ascii bool
-	}{
+type goldenCase struct {
+	name  string
+	state func() State
+	ascii bool
+}
+
+func goldenCases() []goldenCase {
+	return []goldenCase{
 		{name: "wide-healthy", state: func() State { return healthyState(120, 9) }},
 		{name: "compact", state: func() State { return healthyState(80, 10) }},
 		{name: "narrow", state: func() State { return healthyState(72, 10) }},
@@ -152,7 +236,7 @@ func TestGoldenRenders(t *testing.T) {
 		}},
 
 		{name: "help", state: func() State {
-			st := healthyState(120, 11)
+			st := healthyState(120, 16)
 			st.Help = true
 			return st
 		}},
@@ -320,6 +404,72 @@ func TestGoldenRenders(t *testing.T) {
 			return st
 		}},
 
+		// ---------------------------------------------------------- v1.1
+
+		// The detail pane over a Claude row, with the REAL adapter capability
+		// table: the honesty machinery on screen. "not sourced" names the
+		// three fields Claude cannot put on disk, which is why the row's
+		// CONTEXT and COST cells were empty in the first place.
+		{name: "detail-pane", state: func() State {
+			st := v11State(120, 18)
+			st.Detail = true
+			st.Cursor = 0
+			return st
+		}},
+
+		// The same pane over a session whose records did not parse. Degraded
+		// field names and the adapter's own diagnostics, which v1 carried and
+		// never displayed.
+		{name: "detail-degraded", state: func() State {
+			st := v11State(120, 17)
+			st.Detail = true
+			st.Cursor = 2
+			return st
+		}},
+
+		// The v1.1 row grammar, both changes at once: the selection mark in
+		// the leading pad column, and the fan-out chip. Row 2 measured ZERO
+		// sub-agents and therefore draws no chip at all — a "⑂0" would be a
+		// claim nobody asked for.
+		{name: "row-grammar", state: func() State {
+			st := v11State(120, 9)
+			st.Cursor = 0
+			return st
+		}},
+
+		// The burn forecast. The 5h window has 7 samples over 18 minutes and a
+		// projection that lands before its own reset; the 7d window has the
+		// same basis and is moving too slowly to reach 100% inside a day, so
+		// it renders NOTHING rather than a wild line.
+		{name: "burn-forecast", state: func() State {
+			st := healthyState(120, 10)
+			resets5 := pinned.Add(2*time.Hour + 13*time.Minute)
+			resets7 := pinned.Add(5*24*time.Hour + 2*time.Hour)
+			st.Burn = Burn{Series: []BurnSeries{
+				burnSeries("five_hour", 30, 42, 18*time.Minute, 7, &resets5),
+				burnSeries("seven_day", 18, 18.1, 18*time.Minute, 7, &resets7),
+			}}
+			return st
+		}},
+
+		// Find mode: the footer becomes the query line and says how to leave.
+		{name: "find-active", state: func() State {
+			st := healthyState(120, 9)
+			st.Finding = true
+			st.Query = "api"
+			return st
+		}},
+
+		// The query applied with the mode left. The header count reads "2 of
+		// 4" and the footer keeps naming the query, because a filter the user
+		// has forgotten about hides rows just as silently as one they cannot
+		// see.
+		{name: "find-applied", state: func() State {
+			st := healthyState(120, 9)
+			st.Query = "api"
+			return st
+		}},
+
 		// The third word: the directory exists and the OS refused.
 		{name: "empty-unreadable", state: func() State {
 			st := NewState()
@@ -336,11 +486,34 @@ func TestGoldenRenders(t *testing.T) {
 			return st
 		}},
 	}
+}
 
-	for _, c := range cases {
+func TestGoldenRenders(t *testing.T) {
+	for _, c := range goldenCases() {
 		t.Run(c.name, func(t *testing.T) {
 			got := Render(c.state(), PlainStyles(), GlyphsFor(c.ascii))
 			compareGolden(t, c.name, got)
+		})
+	}
+}
+
+// Every fixture that feeds a golden must be a session an adapter could
+// legally have produced. Without this the goldens are free to pin a render of
+// a state the schema forbids — a gauge drawn from data no honest adapter can
+// emit, which is exactly the thing the harness exists to catch.
+func TestGoldenFixturesSatisfyValidate(t *testing.T) {
+	for _, c := range goldenCases() {
+		t.Run(c.name, func(t *testing.T) {
+			st := c.state()
+			caps := map[model.VendorID]model.Capabilities{}
+			for _, v := range st.Snap.Vendors {
+				caps[v.Vendor] = v.Caps
+			}
+			for _, s := range st.Snap.Sessions {
+				if err := s.Validate(caps[s.Vendor]); err != nil {
+					t.Errorf("session %s: %v", s.Key(), err)
+				}
+			}
 		})
 	}
 }
@@ -659,6 +832,262 @@ func TestShowAllRevealsIdleSessionsButNeverHidesUnknownOnes(t *testing.T) {
 	st.ShowAll = true
 	if got := len(visibleSessions(st)); got != 3 {
 		t.Errorf("show-all shows %d rows, want 3", got)
+	}
+}
+
+// ---------------------------------------------------- v1.1 row grammar
+
+// The chip is a claim that a fan-out is running. Zero is not that claim, and a
+// "⑂0" on every Claude row would be noise asserting a fact nobody asked for —
+// the same reason an absent gauge draws nothing rather than an empty track.
+func TestSubagentChipOnlyAppearsForANonzeroCount(t *testing.T) {
+	g := UnicodeGlyphs()
+	cases := []struct {
+		name string
+		s    *model.Session
+		want string
+	}{
+		{"two running", sess(model.VendorClaude, "a", `C:\x\a`, "m", time.Second, withSubagents(2)), "⑂~2"},
+		{"measured zero", sess(model.VendorClaude, "b", `C:\x\b`, "m", time.Second, withSubagents(0)), ""},
+		{"never counted", sess(model.VendorClaude, "c", `C:\x\c`, "m", time.Second), ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := subagentChip(c.s, g); got != c.want {
+				t.Errorf("chip = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// The count is exact; "these are running right now" is the inference. ADR-001
+// requires the inferred part be visible, so the chip carries the same estimate
+// marker the CONTEXT column uses.
+func TestSubagentChipCarriesTheEstimateMarker(t *testing.T) {
+	g := UnicodeGlyphs()
+	derivedRow := sess(model.VendorClaude, "a", `C:\x\a`, "m", time.Second, withSubagents(3))
+	if got := subagentChip(derivedRow, g); !strings.Contains(got, "~") {
+		t.Errorf("chip = %q, want an estimate marker", got)
+	}
+	// A hypothetical adapter that could READ the number would not carry one.
+	reported := sess(model.VendorClaude, "b", `C:\x\b`, "m", time.Second)
+	reported.Subagents = model.Ptr(3)
+	if got := subagentChip(reported, g); strings.Contains(got, "~") {
+		t.Errorf("a reported count = %q must not be marked an estimate", got)
+	}
+}
+
+// The chip's width is reserved before the name is truncated. A chip that
+// disappeared on a long project name would make the same session look like a
+// different kind of session at a different terminal width.
+func TestSubagentChipSurvivesLabelTruncation(t *testing.T) {
+	g := UnicodeGlyphs()
+	long := sess(model.VendorClaude, "id", `C:\src\code\overflow`, "claude-opus-5", time.Second,
+		withName("a-really-long-project-name-that-overflows-the-label-column-and-then-some"),
+		withSubagents(4))
+	for _, w := range []int{12, 20, 34, 59} {
+		got := sessionLabel(long, w, g)
+		if !strings.Contains(got, "⑂~4") {
+			t.Errorf("width %d: chip lost to truncation: %q", w, got)
+		}
+		if n := lipgloss.Width(got); n > w {
+			t.Errorf("width %d: label is %d columns: %q", w, n, got)
+		}
+	}
+}
+
+// The selection is carried by a GLYPH in the leading pad column, not by
+// reverse video: §7.1 rule 2 says colour only ever reinforces, and a
+// highlight-only cursor vanishes under NO_COLOR.
+func TestSelectionIsAGlyphNotAHighlight(t *testing.T) {
+	st := v11State(120, 9)
+	unselected := Render(st, PlainStyles(), UnicodeGlyphs())
+	st.Cursor = 0
+	selected := Render(st, PlainStyles(), UnicodeGlyphs())
+	if unselected == selected {
+		t.Fatal("a selected row renders identically to an unselected one with styles stripped")
+	}
+	if !strings.Contains(selected, "▸●") {
+		t.Errorf("no selection glyph in the frame\n%s", selected)
+	}
+}
+
+// A monitor must not boot with a row already chosen: that asserts the row
+// matters. The mark appears the first time the user asks for it.
+func TestNothingIsSelectedUntilAskedFor(t *testing.T) {
+	st := v11State(120, 9)
+	if st.Cursor != -1 {
+		t.Fatalf("Cursor = %d on a fresh state, want -1", st.Cursor)
+	}
+	if got := Render(st, PlainStyles(), UnicodeGlyphs()); strings.Contains(got, "▸") {
+		t.Error("a selection mark rendered before anything was selected")
+	}
+}
+
+// Every v1.1 glyph has an ASCII form, and none of them collides with a glyph
+// that already means something else in that set.
+func TestASCIIRowGrammarUsesTheReducedGlyphs(t *testing.T) {
+	g := GlyphsFor(true)
+	st := v11State(120, 9)
+	st.Cursor = 0
+	got := Render(st, PlainStyles(), g)
+	if !strings.Contains(got, "Y~2") {
+		t.Errorf("no ASCII fan-out chip in the frame\n%s", got)
+	}
+	if !strings.Contains(got, "]*") {
+		t.Errorf("no ASCII selection mark in the frame\n%s", got)
+	}
+	for _, taken := range []string{g.Ellipsis, g.DotLive, g.DotStale} {
+		if g.Cursor == taken {
+			t.Errorf("the ASCII cursor %q already means something else", g.Cursor)
+		}
+	}
+}
+
+// ------------------------------------------------------------ v1.1 find
+
+func TestFindNarrowsOnNameWorkspaceAndID(t *testing.T) {
+	st := healthyState(120, 12)
+	cases := []struct {
+		query string
+		want  int
+	}{
+		{"", 4},
+		{"api", 2},          // acme-api (name), notes-api (workspace basename)
+		{"API", 2},          // case-insensitive
+		{`C:\src\work`, 1},  // path substring
+		{"bbbb", 1},         // the codex session id
+		{"nothing here", 0}, // no match hides every row, and says so
+	}
+	for _, c := range cases {
+		st.Query = c.query
+		if got := len(visibleSessions(st)); got != c.want {
+			t.Errorf("query %q matched %d rows, want %d", c.query, got, c.want)
+		}
+	}
+}
+
+// A monitor that hides rows must say it is hiding them, whether or not the
+// mode that applied the filter is still on.
+func TestAnAppliedQueryAlwaysAnnouncesItself(t *testing.T) {
+	st := healthyState(120, 9)
+	st.Query = "api"
+	got := Render(st, PlainStyles(), UnicodeGlyphs())
+	if !strings.Contains(got, `find "api"`) {
+		t.Errorf("an applied query is not stated in the footer\n%s", got)
+	}
+	if !strings.Contains(got, "2 of 4 sessions") {
+		t.Errorf("the header count does not reflect the query\n%s", got)
+	}
+}
+
+// An empty list must name what emptied it. "no active sessions" while a query
+// hides four of them is the monitor lying by omission.
+func TestAnEmptyResultNamesTheQuery(t *testing.T) {
+	st := healthyState(120, 12)
+	st.Query = "zzz"
+	got := Render(st, PlainStyles(), UnicodeGlyphs())
+	if !strings.Contains(got, `no sessions matching "zzz"`) {
+		t.Errorf("the empty state does not name the query\n%s", got)
+	}
+}
+
+// The query is text typed by a user and it lands in the footer and the empty
+// state. It gets the same treatment as a session name.
+func TestFindQueryCannotTearTheFooter(t *testing.T) {
+	st := healthyState(120, 12)
+	st.Query = "a\u2028b"
+	st.Finding = true
+	got := Render(st, PlainStyles(), UnicodeGlyphs())
+	if strings.ContainsAny(got, "\u2028\u2029") {
+		t.Fatal("a separator character reached the footer")
+	}
+}
+
+// A query longer than the footer must be truncated, never pushed off it:
+// joinEnds gives the right slot priority, so an over-long query would vanish
+// from the footer while still hiding rows \u2014 the exact silent row-hiding this
+// footer exists to prevent.
+func TestALongQueryIsTruncatedNotDropped(t *testing.T) {
+	for _, w := range []int{60, 72, 80, 120} {
+		st := healthyState(w, 12)
+		st.Query = strings.Repeat("verylongquery", 12)
+		for _, finding := range []bool{true, false} {
+			st.Finding = finding
+			out := Render(st, PlainStyles(), UnicodeGlyphs())
+			if !strings.Contains(out, "verylong") {
+				t.Errorf("width %d finding=%v: the query vanished from the footer\n%s", w, finding, out)
+			}
+			for i, line := range strings.Split(out, "\n") {
+				if n := len([]rune(line)); n > w {
+					t.Errorf("width %d finding=%v: line %d is %d columns\n%s", w, finding, i, n, line)
+				}
+			}
+		}
+	}
+}
+
+// What is on screen must be what is being matched. Trimming the displayed
+// query would show "acme" while the filter hid every row looking for "acme ".
+func TestTheDisplayedQueryIsTheQueryBeingMatched(t *testing.T) {
+	st := healthyState(120, 12)
+	st.Query = "acme "
+	st.Finding = true
+	got := Render(st, PlainStyles(), UnicodeGlyphs())
+	if !strings.Contains(got, "/acme _") {
+		t.Errorf("the trailing space the user typed is not on screen\n%s", got)
+	}
+}
+
+// ------------------------------------------------------------ v1.1 burn
+
+// The forecast renders only where the account quota does — in the header, once
+// — and only when it has a basis. The healthy fixture has no samples at all,
+// so it must render nothing rather than a placeholder.
+func TestNoForecastRendersWithoutABasis(t *testing.T) {
+	st := healthyState(120, 9)
+	if got := Render(st, PlainStyles(), UnicodeGlyphs()); strings.Contains(got, "basis") {
+		t.Errorf("a forecast rendered with no samples behind it\n%s", got)
+	}
+}
+
+// The projection travels with its scope, always. "~15:41" alone is a
+// prediction; "~15:41 · 18m basis" is a measurement with its scope attached.
+func TestForecastAlwaysCarriesItsBasis(t *testing.T) {
+	f := Forecast{At: pinned.Add(87 * time.Minute), Basis: 18 * time.Minute, Samples: 7}
+	got := forecastText(f, pinned, UnicodeGlyphs())
+	if got != "~13:27 · 18m basis" {
+		t.Errorf("forecastText = %q", got)
+	}
+	if !strings.HasPrefix(got, "~") {
+		t.Error("the forecast is telltale's own computation and must be marked derived")
+	}
+}
+
+// Render is pure over State, which includes the clock's location: a golden
+// must not depend on the CI runner's timezone.
+func TestForecastClockUsesTheStateLocation(t *testing.T) {
+	f := Forecast{At: pinned.Add(87 * time.Minute), Basis: 18 * time.Minute, Samples: 7}
+	east := time.FixedZone("UTC+5", 5*60*60)
+	got := forecastText(f, pinned.In(east), UnicodeGlyphs())
+	if !strings.HasPrefix(got, "~18:27") {
+		t.Errorf("forecastText = %q, want the state's own zone", got)
+	}
+}
+
+// The sampler and the header must read the same windows, or the forecast
+// describes a quota that is not on screen.
+func TestTheForecastSamplesTheWindowsTheHeaderShows(t *testing.T) {
+	st := healthyState(120, 9)
+	got := accountQuota(st)
+	if len(got) != 2 || got[0].ID != "five_hour" || got[1].ID != "seven_day" {
+		t.Fatalf("accountQuota returned %v", got)
+	}
+	// The most recently active quota-bearing session wins, exactly as the
+	// header block picks it.
+	st.Snap.Sessions[3].Quota = []model.QuotaWindow{window("weekly", "7d", 5, time.Hour)}
+	if got := accountQuota(st); got[0].ID != "five_hour" {
+		t.Errorf("accountQuota picked the stale session's windows: %v", got)
 	}
 }
 

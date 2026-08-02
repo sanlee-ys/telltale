@@ -31,6 +31,20 @@ type Glyphs struct {
 	Reset    string // quota countdown prefix
 	Warn     string // footer notice prefix
 
+	// Cursor marks the selected row. It lives in the row's leading pad column,
+	// which was already blank, so selection costs the grid nothing.
+	Cursor string
+	// Fork prefixes the sub-agent chip. A count, not a gauge — the row says
+	// "this session is fanning out", and the number says how wide.
+	Fork string
+	// Mid separates two facts inside one cell (the burn forecast's clock time
+	// from its sampling basis). Lighter than Sep, which separates zones.
+	Mid string
+	// Caret marks the insertion point in the find query. Static, never
+	// blinking: §7.1 rule 4 budgets exactly one moving cell on this screen and
+	// it is not this one.
+	Caret string
+
 	Spinner []string
 
 	// ASCII reports whether this is the reduced set, so callers can pick a
@@ -60,6 +74,10 @@ func UnicodeGlyphs() Glyphs {
 		Ellipsis: "…", // …
 		Reset:    "↻", // ↻
 		Warn:     "⚠", // ⚠
+		Cursor:   "▸", // ▸
+		Fork:     "⑂", // ⑂
+		Mid:      "·", // ·
+		Caret:    "_",
 		Spinner: []string{
 			"⠋", "⠙", "⠹", "⠸", "⠼",
 			"⠴", "⠦", "⠧", "⠇", "⠏",
@@ -86,7 +104,15 @@ func ASCIIGlyphs() Glyphs {
 		Ellipsis: ">",
 		Reset:    "~",
 		Warn:     "!",
-		Spinner:  []string{"-", "\\", "|", "/"},
+		// The cursor cannot be ">" here: ">" is already the ASCII ellipsis, and
+		// a mark that also means "truncated" is not a mark. "*" is taken by
+		// DotLive, so the selection uses the one bracket shape nothing else in
+		// the ASCII set uses.
+		Cursor:  "]",
+		Fork:    "Y",
+		Mid:     "-",
+		Caret:   "_",
+		Spinner: []string{"-", "\\", "|", "/"},
 	}
 }
 
@@ -128,7 +154,16 @@ func GlyphsFor(ascii bool) Glyphs {
 // newlines (design.md §4a.2 is explicit that renderers must not assume one
 // line). Any of those in a row would tear the layout apart at render time, so
 // they collapse to a space here and other control characters are dropped.
-func sanitize(s string) string {
+func sanitize(s string) string { return strings.TrimSpace(sanitizeKeepingSpace(s)) }
+
+// sanitizeKeepingSpace is sanitize without the trim, for text the user is
+// TYPING.
+//
+// Trimming a query would make the string on screen disagree with the string
+// being matched: type a trailing space and the footer would show "acme" while
+// the filter hides every row, because nothing contains "acme ". Small, and
+// exactly the class of silent divergence this product exists to refuse.
+func sanitizeKeepingSpace(s string) string {
 	if s == "" {
 		return s
 	}
@@ -146,5 +181,5 @@ func sanitize(s string) string {
 			b.WriteRune(r)
 		}
 	}
-	return strings.TrimSpace(b.String())
+	return b.String()
 }

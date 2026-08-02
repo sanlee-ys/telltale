@@ -71,6 +71,12 @@ func TestCapabilitiesInvertAgainstClaude(t *testing.T) {
 		model.FieldName:     model.CapNone,
 		model.FieldCost:     model.CapNone,
 		model.FieldLiveness: model.CapNone,
+		// Codex has no sub-agent sidecar tree to count. Sub-agent THREADS
+		// exist, but they are whole rollout files identified only by parsing
+		// (ErrSubAgentThread) and they carry no link back to a parent session,
+		// so there is nothing to attribute a chip to. CapNone means the HUD
+		// never draws one on a Codex row rather than drawing a zero.
+		model.FieldSubagents: model.CapNone,
 	}
 	for f, w := range want {
 		if got := caps.Capability(f); got != w {

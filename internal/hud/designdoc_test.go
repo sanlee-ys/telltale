@@ -11,11 +11,15 @@ import (
 // docPath is the design doc that §7.3 pastes generated renders into.
 var docPath = filepath.Join("..", "..", "docs", "design.md")
 
-// embedded lists the golden renders that appear verbatim in docs/design.md §7.3.
+// embedded lists the golden renders that appear verbatim in docs/design.md —
+// §7.3 for the v1 grid, §7.11–§7.14 for the v1.1 surfaces.
 var embedded = []string{
 	"wide-healthy", "compact", "narrow", "degraded", "zero-vs-absent",
 	"stale-scan-47s", "filter-sort", "empty-watching", "empty-unreadable",
 	"help", "v1-capabilities", "column-hidden", "ascii",
+	// v1.1
+	"detail-pane", "detail-degraded", "row-grammar", "burn-forecast",
+	"find-active", "find-applied",
 }
 
 // notEmbedded lists goldens deliberately kept out of the design doc, with the

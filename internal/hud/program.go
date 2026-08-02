@@ -35,6 +35,12 @@ type Model struct {
 	glyphs   Glyphs
 	inFlight bool
 	started  time.Time
+
+	// selectedKey is the Vendor/ID of the row under the cursor. State.Cursor
+	// is an INDEX because that is what Render needs; this is the identity that
+	// index is supposed to mean, kept here so a re-sort between scans cannot
+	// move the selection to a different session behind the user's back.
+	selectedKey string
 }
 
 // New builds the model. Nothing is rendered until the first WindowSizeMsg
@@ -121,6 +127,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		m.st.Now = time.Time(msg)
+		// The visible set is a function of Now (idle cutoff, clamped ages), so
+		// a tick alone can change it. Re-resolving the selection here keeps the
+		// cursor pointing at the same session rather than the same index
+		// (review finding: a row crossing the cutoff shifted the selection).
+		m.resyncSelection()
 		if m.inFlight {
 			// Ticks arriving during a scan are dropped: at most one scan is
 			// ever in flight.
@@ -153,25 +164,78 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.snap.At.After(m.st.Now) {
 			m.st.Now = msg.snap.At
 		}
-		m.clampScroll()
+		// Sample the account quota AFTER the snapshot lands, using the same
+		// windows the header renders, so the forecast can never describe a
+		// window that is not on screen. One sample per completed scan: a
+		// failed scan contributes nothing rather than a repeat of the last
+		// reading, which would flatten the measured slope with data we did not
+		// measure. The source identity resets the series when the sampled
+		// session changes.
+		windows, source := accountQuotaSource(m.st)
+		m.st.Burn.Observe(windows, source, m.st.Now)
+		m.resyncSelection()
 		return m, nil
 	}
 	return m, nil
 }
 
 func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Find mode swallows the keyboard. This is the whole reason it announces
+	// itself in the footer: while it is on, "q" is a letter, not a command,
+	// and a mode that changes what an unmodified key means without saying so
+	// is how a read-only monitor surprises someone.
+	if m.st.Finding {
+		return m.findKey(msg)
+	}
+
 	switch msg.String() {
-	case "q", "esc", "ctrl+c":
+	case "q", "ctrl+c":
 		return m, tea.Quit
+	case "esc":
+		// esc unwinds one layer at a time and only quits from the bottom one.
+		// v1's esc quit unconditionally; with a pane and a query to back out
+		// of, an esc that closed the program instead of the pane would punish
+		// the reflex it trained.
+		switch {
+		case m.st.Detail:
+			m.st.Detail = false
+		case m.st.Help:
+			m.st.Help = false
+		case m.st.Query != "":
+			m.setQuery("")
+		default:
+			return m, tea.Quit
+		}
+	case "enter":
+		if !m.st.Detail && len(visibleSessions(m.st)) == 0 {
+			// enter over an empty row area has no session to detail. Opening
+			// the pane anyway would replace the empty-state message (which
+			// carries the vendor status the user needs) with a claim about a
+			// session that was never selected (review finding).
+			break
+		}
+		m.st.Detail = !m.st.Detail
+		if m.st.Detail {
+			m.st.Help = false
+			if m.st.Cursor < 0 {
+				// enter with no selection opens the top row: the sort already
+				// put the most interesting session there.
+				m.moveCursor(0)
+			}
+		}
+	case "/":
+		m.st.Finding = true
+		m.st.Detail = false
+		m.st.Help = false
 	case "v":
 		m.st.Filter = m.st.Filter.Next()
-		m.st.Scroll = 0
+		m.resetSelection()
 	case "s":
 		m.st.Sort = m.st.Sort.Next()
-		m.st.Scroll = 0
+		m.resetSelection()
 	case "a":
 		m.st.ShowAll = !m.st.ShowAll
-		m.st.Scroll = 0
+		m.resetSelection()
 	case "r":
 		if !m.inFlight {
 			m.inFlight = true
@@ -179,26 +243,149 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "?":
 		m.st.Help = !m.st.Help
+		m.st.Detail = false
 		m.st.Scroll = 0
 	case "up", "k":
-		if m.st.Scroll > 0 {
-			m.st.Scroll--
+		// Over the help overlay the arrows scroll the overlay; everywhere else
+		// they move the selection. The rule is "the arrows move whatever the
+		// body is": help has no rows to select, and the row area has nothing
+		// to scroll independently of the cursor.
+		if m.st.Help {
+			if m.st.Scroll > 0 {
+				m.st.Scroll--
+			}
+			break
 		}
+		m.moveCursor(-1)
 	case "down", "j":
-		m.st.Scroll++
-		m.clampScroll()
+		if m.st.Help {
+			// Bounded against the overlay's own length rather than left to
+			// grow: Render clamps the viewport anyway, but an offset that
+			// keeps counting past the end takes as many keypresses to come
+			// back as it took to leave.
+			if m.st.Scroll < len(m.helpBody())-1 {
+				m.st.Scroll++
+			}
+			break
+		}
+		m.moveCursor(+1)
 	}
 	return m, nil
 }
 
-func (m *Model) clampScroll() {
-	n := len(visibleSessions(m.st))
-	if m.st.Scroll > n-1 {
-		m.st.Scroll = n - 1
+// helpBody renders the overlay off-screen purely to measure it. Cheap, and it
+// cannot disagree with what Render draws.
+func (m *Model) helpBody() []string {
+	rows := visibleSessions(m.st)
+	hasCtx, hasCost := columnsInUse(rows)
+	lay := resolveLayout(m.st.Width, hasCtx, hasCost)
+	return helpLines(m.st, lay, hasCtx, hasCost, m.styles, m.glyphs)
+}
+
+// findKey handles the one mode. Only four keys are commands; everything else
+// that carries text is text.
+func (m *Model) findKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		// The one key that always means the same thing.
+		return m, tea.Quit
+	case "esc":
+		// esc CLEARS. Leaving the query applied on the way out would hide rows
+		// behind a mode the user just cancelled.
+		m.st.Finding = false
+		m.setQuery("")
+	case "enter":
+		m.st.Finding = false
+	case "backspace":
+		if q := []rune(m.st.Query); len(q) > 0 {
+			m.setQuery(string(q[:len(q)-1]))
+		}
+	default:
+		if t := msg.Text; t != "" {
+			m.setQuery(m.st.Query + t)
+		}
 	}
-	if m.st.Scroll < 0 {
-		m.st.Scroll = 0
+	return m, nil
+}
+
+// setQuery changes the find query and drops the selection with it: the cursor
+// is an index into the visible rows, and a different row set makes the old
+// index point at a different session.
+func (m *Model) setQuery(q string) {
+	if q == m.st.Query {
+		return
 	}
+	m.st.Query = q
+	m.resetSelection()
+}
+
+// resetSelection clears the cursor and the viewport after any change to which
+// rows are visible or in what order.
+func (m *Model) resetSelection() {
+	m.st.Cursor = -1
+	m.selectedKey = ""
+	m.st.Scroll = 0
+	if m.st.Detail {
+		// The pane's subject just stopped being well defined. Closing it is
+		// the honest move; silently repointing it at whatever now sits at the
+		// old index would relabel one session's diagnostics with another's.
+		m.st.Detail = false
+	}
+}
+
+// moveCursor steps the selection, or plants it if there is none yet.
+//
+// delta 0 means "select the first row". The cursor starts at -1 and the mark
+// appears only once the user asks for it, so nothing on the steady-state
+// screen implies a row was chosen for them.
+func (m *Model) moveCursor(delta int) {
+	rows := visibleSessions(m.st)
+	if len(rows) == 0 {
+		m.st.Cursor = -1
+		m.selectedKey = ""
+		return
+	}
+	next := 0
+	if m.st.Cursor >= 0 {
+		next = m.st.Cursor + delta
+	} else if delta > 0 {
+		next = 0
+	} else if delta < 0 {
+		next = 0
+	}
+	if next < 0 {
+		next = 0
+	}
+	if next > len(rows)-1 {
+		next = len(rows) - 1
+	}
+	m.st.Cursor = next
+	m.selectedKey = rows[next].Key()
+}
+
+// resyncSelection re-points the cursor at the session it was on before the
+// scan, by KEY rather than by index.
+//
+// Sorting is by activity, so a session that just wrote a record can jump to
+// the top and shift every row under it. Holding the index would silently move
+// the selection — and with the detail pane open, would relabel one session's
+// diagnostics with another's.
+func (m *Model) resyncSelection() {
+	if m.selectedKey == "" {
+		return
+	}
+	rows := visibleSessions(m.st)
+	for i, s := range rows {
+		if s.Key() == m.selectedKey {
+			m.st.Cursor = i
+			return
+		}
+	}
+	// The selected session is gone. Say nothing new: drop the selection and
+	// close the pane rather than retarget it.
+	m.st.Cursor = -1
+	m.selectedKey = ""
+	m.st.Detail = false
 }
 
 // View is a thin wrapper over the pure renderer. It calls no clock: State.Now

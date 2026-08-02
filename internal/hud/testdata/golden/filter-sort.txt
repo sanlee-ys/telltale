@@ -6,4 +6,4 @@
  ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   a all   r refresh   ? keys                                   filter claude   sort context
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys                       filter claude   sort context

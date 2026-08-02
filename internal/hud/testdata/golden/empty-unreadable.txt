@@ -7,4 +7,4 @@
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   a all   r refresh   ? keys
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys

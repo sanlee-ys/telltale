@@ -110,6 +110,24 @@ and files and continues rather than aborting.
 | Last activity | file mtime | never (but see clock skew below) |
 | CLI version | `version` (display-only extra) | never |
 | Title | `custom-title.customTitle`, else an `ai-title` record | untitled sessions |
+| **Sub-agent count** (v1.1) | **stat only:** entries matching `<uuid>.jsonl` under `<sessionId>/subagents/`, mtime within 15 min | never — an absent directory is a measured **zero**; only an unreadable one is absent |
+
+**The sub-agent count is `CapDerived`, and the reason is worth stating precisely.** The
+files are counted *exactly* — one `ReadDir`, one `Info` per entry, no file opened and no
+byte parsed, which is what makes it affordable on the 1 s poll. What is inferred is the
+15-minute recency boundary that turns "written lately" into "a fan-out is running now".
+That inference is the thing the estimate marker exists to expose, so the chip renders
+`⑂~2` rather than `⑂2` (§7.13). The boundary is `model.DefaultLivenessThresholds.Idle`
+rather than a second constant: the chip sits on a row whose state dot already classifies
+"recent" at that boundary, and two definitions of recent on one line is how a display
+starts contradicting itself.
+
+Two absences are distinguished, per §4a.1: the directory **not existing** means the
+session never fanned out, which is a countable zero; the directory existing and the OS
+**refusing** is nil plus a diagnostic, because we do not know. A sub-agent transcript
+whose mtime is ahead of the local clock is not counted at all — the same rule the
+session's own mtime gets, for the same reason: a timestamp ahead of the clock is not a
+readable time, so it cannot be evidence of recency.
 
 Only `assistant` and `user` records carry `message`. `custom-title`, `last-prompt`,
 `mode` and `ai-title` carry `{type, sessionId, <one key>}` and have **no `timestamp`
@@ -243,6 +261,14 @@ JSONL stays canonical and readable without SQLite.
 | cost USD | no (stdin only) | no |
 | process liveness | registry exists, deliberately unread (§3.1) | none |
 | session title | yes | no |
+| sub-agent count | **derived** (`subagents/` sidecar, §3.1) | **no** |
+
+Codex is `CapNone` for the sub-agent count and not merely empty. Sub-agent *threads* do
+exist in the Codex format — `session_meta.payload.agent_nickname` marks one, and the
+adapter rejects those rollouts with `ErrSubAgentThread` — but they are whole top-level
+rollout files carrying no link back to a parent session, so there is nothing to attribute
+a chip to. Declaring the field and always emitting zero would assert "this Codex session
+is running no sub-agents", which is not something the format lets us check.
 
 Claude's quota lives on the statusline seam; Codex's lives on the disk seam. So the HUD's
 quota block is Codex-sourced today, and the CONTEXT column carries a Codex number beside
@@ -405,6 +431,7 @@ Optional — each has a stable **field id** used by `Capabilities`, fixtures, an
 | `quota` | `Quota` | `[]QuotaWindow` | labeled usage windows, see below |
 | `last_activity` | `LastActivity` | `*time.Time` | last observable activity. An **input** to liveness, not a claim about it |
 | `liveness` | `LivenessHint` | `*Liveness` | the adapter's own verdict; see 4a.4 for when you are allowed to set it |
+| `subagents` | `Subagents` | `*int` | count of the session's recently-written sub-agent transcripts. **Zero is a measurement** (we looked and found none) and must survive as one; nil means the count could not be taken |
 
 Three more per-snapshot annotations, all optional:
 
@@ -425,10 +452,18 @@ Three more per-snapshot annotations, all optional:
 `Extras []Extra` is the escape hatch for vendor-specific labeled strings, so an adapter
 with something extra to show does not stuff it into a field that means something else.
 Extras are display-only: no thresholds, no colors, no sorting, detail pane only. If an
-extra deserves a gauge, it deserves a `Field` — propose one. *(v1 note: there is no
-detail pane yet, so extras are carried and not rendered. Both adapters populate them —
-git branch, CLI version, Claude's context token count, Codex's plan and history mode —
-so the measurements are not discarded while the fork in §6 Q7 is open.)*
+extra deserves a gauge, it deserves a `Field` — propose one. *(v1.1: the detail pane
+(§7.11) is that surface, and it is now the only place extras appear —
+`TestDetailPaneIsTheOnlyPlaceExtrasAppear` asserts both halves. Both adapters populate
+them: git branch, CLI version, Claude's context token count, Codex's plan and history
+mode.)*
+
+**Why `subagents` is a `Field` and not an Extra.** It fails the Extra test in both
+directions: it is a *number* with an absent-versus-zero distinction the Extra type cannot
+carry (an Extra is a string, and `""` would collapse "none running" into "could not
+count"), and it renders as a gauge-adjacent mark in the grid rather than as a labelled
+line in the pane. That is exactly the "if an extra deserves a gauge, it deserves a Field"
+case, taken rather than dodged.
 
 ### 4a.3 Quota windows
 
@@ -697,9 +732,13 @@ statusline fixture). What it asserts today:
 | Schema gate | `internal/model` | `Validate` over every rejection case, liveness boundaries, presence semantics |
 | Claude adapter | `internal/adapter/claudecode` | discovery filters, the `<synthetic>` trap, the `input_tokens` trap, torn tail invisibility, torn-only session, future mtime, capability table |
 | Codex adapter | `internal/adapter/codex` | envelope + internally-tagged event parsing, derived context, quota window presence, null `rate_limits`, sub-agent rejection, capability table |
-| HUD renders | `internal/hud` | 18 golden frames byte-for-byte at 52/72/80/120 columns, the §7.4 gauge table, the estimate marker, threshold colours, frame width/height invariants |
+| Claude adapter (v1.1) | `internal/adapter/claudecode` | the sub-agent count: recency boundary, future-mtime exclusion, non-transcript neighbours ignored, absent sidecar as a measured zero |
+| HUD renders | `internal/hud` | every golden frame byte-for-byte at 52/72/80/120 columns (count enforced by TestEveryGoldenIsClassified, not restated here — a literal drifted once already), the §7.4 gauge table, the estimate marker, threshold colours, frame width/height invariants |
 | HUD behaviour | `internal/hud` | vendor status words from adapter errors, key handling, one-scan-in-flight, spinner lifecycle |
-| Doc/code sync | `internal/hud` | every render pasted into `docs/design.md` §7.3 and into `README.md` still matches its golden, and every golden is either embedded or explicitly exempted |
+| HUD behaviour (v1.1) | `internal/hud` | esc unwinding one layer at a time, find mode swallowing the keyboard, selection carried by session key across a re-sort, the pane closing when its session ends |
+| Burn arithmetic | `internal/hud` | the minimum basis, the four refusals, least-squares slope against injected series, rollover detection vs. `resets_at` jitter, sample throttling and eviction |
+| Fixture legality | `internal/hud` | every session behind every golden passes `model.Validate` against its vendor's declared capabilities — a golden may not pin a render of a state the schema forbids |
+| Doc/code sync | `internal/hud` | every render pasted into `docs/design.md` §7.3/§7.11–§7.14 and into `README.md` still matches its golden, and every golden is either embedded or explicitly exempted |
 
 Rules that outrank convenience:
 
@@ -812,7 +851,7 @@ Offsets below are 1-based for the wide tier at 120 columns.
 
 | Cols | Field | Width | Align | Notes |
 |---|---|---|---|---|
-| 1 | pad | 1 | | |
+| 1 | pad / **selection** | 1 | | blank, or `▸` on the selected row (§7.11) |
 | 2 | state dot | 1 | | `●` live / `◐` idle / `○` stale / blank unknown |
 | 4–5 | vendor | 2 | left | `CC` / `CX` |
 | 7 | separator | 1 | | dim `│` |
@@ -830,10 +869,17 @@ Only two `│` separators per row, deliberately. They cut the row into three zon
 A pipe between every column reads as a spreadsheet; two pipes read as structure.
 
 **Session label content.** The session's own `name` if the vendor has one, else the
-workspace basename, else the vendor session id. Then, only if ≥14 cells remain free, two
-spaces and the parent directory (left-elided with `…`). The parent path disambiguates
-same-named projects under different roots and stops the wide tier from opening a dead
-gulf between the name and the model. It drops out automatically as the terminal narrows.
+workspace basename, else the vendor session id. Then the sub-agent chip if the session is
+fanning out (§7.13). Then, only if ≥14 cells remain free, two spaces and the parent
+directory (left-elided with `…`). The parent path disambiguates same-named projects under
+different roots and stops the wide tier from opening a dead gulf between the name and the
+model. It drops out automatically as the terminal narrows.
+
+The chip's width is reserved **before** the name is truncated, and the name loses the
+character. A chip that vanished on a long project name would make the same session look
+like a different kind of session at a different terminal width — a lie by omission — and
+the name is the field that can afford to lose a character, because the parent path and
+the detail pane both still carry the identity.
 
 > **Deviation from the original spec, deliberate:** the `⌥worktree` mark is not rendered.
 > `worktree.name` exists only on the statusline's stdin payload, which the HUD does not
@@ -859,7 +905,10 @@ narrowed below 13: `gpt-5.1-codex` is exactly 13 columns, and truncating a model
 
 Height tiers: **H ≥ 9** full chrome; **6 ≤ H < 9** drops both rules and the column-header
 row (header + rows + footer only); **H < 6** shows the floor notice. Row overflow is not
-paginated — the footer gains `+3 more` and `↑/↓` scrolls the viewport.
+paginated — the footer gains `+3 more`, and the viewport **follows the selection**: `↑`/`↓`
+move the cursor and the visible window slides to keep it on screen. That arithmetic lives
+in `Render` rather than in `Update`, because `Update` does not know how tall the chrome is
+this frame and a second copy of the height maths is a second thing to get wrong.
 
 Floor renders, exactly:
 
@@ -894,7 +943,7 @@ shows what the real v1 capability mix produces.
  ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   a all   r refresh   ? keys
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
 
 Row 3 is the honest-gauge case in its normal habitat: a session whose adapter can source
@@ -913,7 +962,7 @@ columns. Nothing about it looks like zero.
  ◐ CX │ notes-api  C:\src\code            gpt-5.1-codex                — │   4m
  ○ CC │ learning-notes  C:\src\code       Haiku 4.5      ██████▌─  92.6% │  22m
  ──────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   ? keys
+ q quit   / find   enter detail   ? keys
 ```
 
 **C — narrow (72 cols).** Gauge gone; the number it encoded stays. Vendor names shorten.
@@ -928,7 +977,7 @@ columns. Nothing about it looks like zero.
  ◐ CX │ notes-api  C:\src\code              gpt-5.1-codex      — │   4m
  ○ CC │ learning-notes  C:\src\code         Haiku 4.5      92.6% │  22m
  ──────────────────────────────────────────────────────────────────────
- q quit   v vendor   ? keys
+ q quit   / find   ? keys
 ```
 
 **D — degraded rows (120 cols).** Four distinct failure shapes in one frame. Rows are
@@ -943,7 +992,7 @@ sorted by activity, so they do not appear in the order they are described.
  ◐ CX │ 4f2a9c81-1d3e-4a77-9b02-000000000000                                                          —        — │   7m
    CC │ acme-api  C:\src\work                                        Sonnet 4.5                       —    $1.02 │    —
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   a all   r refresh   ? keys
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
 
 Row 1 is at exactly 0% and draws a full track. Row 2 is the label-overflow case,
@@ -965,7 +1014,7 @@ staleness.
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   a all   r refresh   ? keys
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
 
 `0%` is a full track of `────────────`; absent is whitespace. If these two rows ever
@@ -986,7 +1035,7 @@ overflowing at any width.
  ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   a all   r refresh   ? keys                        ⚠ last scan 47s ago   Access is denied.
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys            ⚠ last scan 47s ago   Access is denied.
 ```
 
 **F — filter and sort active (120 cols).** The header count reads `3 of 4` so it cannot
@@ -1002,7 +1051,7 @@ footer, because a monitor that silently hides rows is a liar.
  ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   a all   r refresh   ? keys                                   filter claude   sort context
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys                       filter claude   sort context
 ```
 
 **G — empty (120 cols).** Distinguishes "watching, found nothing" from "vendor not
@@ -1019,7 +1068,7 @@ error dialog.
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   a all   r refresh   ? keys
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
 
 The vendor status word is one of exactly three: `watching` (directory exists and is
@@ -1037,7 +1086,7 @@ Codex line reads `not detected`, since `~/.codex` is absent (§3.2). The third w
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   a all   r refresh   ? keys
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
 
 **H — help overlay (120 cols).** Replaces the row area rather than floating over it; a
@@ -1047,12 +1096,17 @@ floating panel on a monitor obscures the thing being monitored.
  telltale  │  4 sessions  │  claude 3  codex 1                  5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-        q  quit  (also esc, ctrl+c)
-        v  vendor filter: all -> claude -> codex
-        s  sort: activity -> context -> cost
-        a  show all (include sessions idle > 8h)
-        r  rescan now
-        ?  close this help
+        q      quit  (also ctrl+c)
+        ↑/↓    move the selection  (also j / k)
+        enter  open the detail pane for the selected session
+        /      find: narrow rows by name or path
+        esc    close the pane, or cancel the find, or quit
+        v      vendor filter: all -> claude -> codex
+        s      sort: activity -> context -> cost
+        a      show all (include sessions idle > 8h)
+        r      rescan now
+        ?      close this help
+
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ? close
 ```
@@ -1071,7 +1125,7 @@ column auto-hides and its width returns to `SESSION`.
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   a all   r refresh   ? keys
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
 
 This render is the one to look at when judging §6 Q7. The ragged CONTEXT column is the
@@ -1088,7 +1142,7 @@ cost of option (2); it is honest, and whether it is *legible* is a dogfood quest
  ○ CC │ learning-notes  C:\src\code                                                                Haiku 4.5     │  22m
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   v vendor   s sort   a all   r refresh   ? keys
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
 
 **L — ASCII glyph mode (120 cols).** `--ascii`, `TELLTALE_ASCII=1`, or a non-terminal
@@ -1105,7 +1159,7 @@ the precision.
  o CX | notes-api  C:\src\code                                       gpt-5.1-codex                  n/a      n/a |   4m
  . CC | learning-notes  C:\src\code                                  Haiku 4.5      ##########--  92.6%   $11.07 |  22m
  ----------------------------------------------------------------------------------------------------------------------
- q quit   v vendor   s sort   a all   r refresh   ? keys
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
 
 ### 7.4 The gauge
@@ -1284,7 +1338,29 @@ paths, fake text — never copied from real transcripts.
 | `column-hidden` | `CONTEXT` and `COST` absent for every visible row | golden K | Columns dropped, width returned to `SESSION`; help overlay names them. |
 | `floor-width` / `-height` | 52 cols / 4 rows | goldens | One line, no partial grid. |
 | gauge scale | the §7.4 table | `TestGaugeScale` | Exact glyph string per value: the reserve-last-cell and min-eighth rules. |
-| separator injection | a session name containing U+2028/U+2029 | `TestSessionNameSeparatorsCannotTearTheGrid` | The character never reaches the frame and no line exceeds the terminal width. |
+| separator injection | a session name containing U+2028/U+2029 | `TestSessionNameSeparatorsCannotTearTheGrid`, `TestDetailPaneSanitizesModelAuthoredText`, `TestFindQueryCannotTearTheFooter` | The character never reaches the frame — grid, pane or footer — and no line exceeds the terminal width. |
+
+Added in v1.1:
+
+| Fixture | Condition | Where it is asserted | Assertion |
+|---|---|---|---|
+| `detail-pane` | pane over a Claude row, real capability table | golden + `TestDetailPaneSeparatesCantKnowFromAbsentNow` | Fields Claude declares `CapNone` get **no line**; they are named once on `not sourced`. |
+| `detail-degraded` | pane over a session whose records did not parse | golden + `TestDetailPaneShowsDegradedFieldsAndDiagnostics` | Degraded field names and every diagnostic are on screen; a declared-but-empty quota is `—`, never `0%`. |
+| clean session | no degraded fields, no diagnostics | `TestDetailPaneStatesTheAbsenceOfProblems` | The honesty block says `—` rather than going blank; a blank block is indistinguishable from a pane that forgot to render it. |
+| measured zero fan-out | `Subagents = 0` | `TestDetailPaneStatesAMeasuredZeroFanOut`, `TestSubagentChipOnlyAppearsForANonzeroCount` | Grid draws **no chip**; the pane says `~0 recent`. |
+| uncountable fan-out | sidecar unreadable | `TestDetailPaneRendersAnUncountableFanOutAsAbsent` | `—`, never `0`. |
+| selection vanishes | the selected session ends mid-poll | `TestASelectedSessionThatVanishesClosesThePane`, `TestDetailPaneSaysSoWhenItsSessionIsGone` | The pane closes rather than retargeting; an out-of-range cursor says "no longer listed". |
+| re-sort under the cursor | a bottom row becomes the newest | `TestSelectionFollowsTheSessionNotTheIndex` | The selection follows the **session key**, not the index. |
+| `row-grammar` | selection mark + fan-out chips | golden + `TestSelectionIsAGlyphNotAHighlight` | Selection is a glyph in the pad column, not reverse video. |
+| chip vs. truncation | a 73-character session name | `TestSubagentChipSurvivesLabelTruncation` | The chip survives at every width; the name gives way. |
+| `burn-forecast` | 7 samples over 18 min on one window, a near-flat second window | golden + `TestForecastArithmeticIsPinned` | Exact projected time and basis; the slow window renders **nothing**. |
+| below basis | < 3 samples, or a span < 5 min | `TestForecastRefusesToProjectBelowTheMinimumBasis`, `TestNoForecastRendersWithoutABasis` | Nothing renders. Not a placeholder, not a dash — the header cell simply ends. |
+| window rollover | usage drops, or `resets_at` jumps a window forward | `TestUsageDropClearsTheSamples`, `TestResetsAtJumpClearsTheSamplesButJitterDoesNot` | The buffer clears; three seconds of `resets_at` jitter does not clear it. |
+| `find-active` | find mode with a query typed | golden | The footer becomes the query line and says how to leave. |
+| `find-applied` | query applied, mode left | golden + `TestAnAppliedQueryAlwaysAnnouncesItself` | Header reads `2 of 4`; footer keeps naming the query. |
+| query hides everything | a query matching no row | `TestAnEmptyResultNamesTheQuery` | The empty state names the query rather than saying "no active sessions". |
+| over-long query | 156 characters at 60–120 cols | `TestALongQueryIsTruncatedNotDropped` | Truncated with `…`, never pushed off the footer — a query that vanished while still filtering is the silent row-hiding the footer exists to prevent. |
+| query with a trailing space | `"acme "` | `TestTheDisplayedQueryIsTheQueryBeingMatched` | The string on screen is the string being matched; the display is not trimmed. |
 
 Freshness escalation, stated once: **≤ 3 s** normal; **> 3 s** row area `Muted` + footer
 notice in `SevWarn`; **> 60 s** notice in `SevCrit` and the header quota goes `Muted` too.
@@ -1298,28 +1374,52 @@ Minimal, and every key earns its place.
 
 | Key | Action |
 |---|---|
-| `q`, `esc`, `ctrl+c` | quit |
+| `q`, `ctrl+c` | quit |
+| `esc` | close the detail pane → close help → clear the find query → **then** quit |
+| `↑`/`↓`, `j`/`k` | move the selection (scrolls the help overlay while it is open) |
+| `enter` | open the detail pane for the selected session; close it if open |
+| `/` | find: type-to-filter on name or path |
 | `v` | vendor filter cycle: all → claude → codex → all |
 | `s` | sort cycle: activity → context → cost → activity |
 | `a` | toggle show-all (default hides sessions idle > 8 h) |
 | `r` | rescan now |
 | `?` | toggle help |
-| `↑`/`↓`, `j`/`k` | scroll the row viewport when it overflows |
+
+In **find mode** the keyboard belongs to the query: only `esc` (clear and leave), `enter`
+(keep and leave), `backspace` and `ctrl+c` are commands, and everything else is text.
+That is why the mode takes over the whole footer — a mode that silently changes what `q`
+means without saying so is how a read-only monitor surprises someone.
 
 `--vendor all|claude|codex` sets the starting filter; the cycle takes over from there.
 
 Cycles, not multi-select menus: with two vendors and three sorts, a cycle is one keystroke
-and no mode. Non-default filter or sort is always visible in the footer. There is no
-selection cursor — the default sort puts the interesting sessions on top, and a cursor
-invites drill-down, which is a different product.
+and no mode. Non-default filter, sort or query is always visible in the footer.
+
+> **Reversed in v1.1, deliberately.** v1 said: *"There is no selection cursor — the
+> default sort puts the interesting sessions on top, and a cursor invites drill-down,
+> which is a different product."* The roadmap (§8) then decided drill-down **is** the
+> product: the schema already carried `Diagnostics`, `Degraded` and every `Extra` with no
+> surface to show them on, and that machinery is the thing this project is actually
+> about. The original objection is answered rather than ignored — the cursor starts at
+> **no selection** and the mark appears the first time the user asks for it, so the
+> steady-state monitor frame is byte-identical to v1's.
+
+Anything that changes *which rows are visible or in what order* (`v`, `s`, `a`, a new
+query) **drops the selection** and closes the pane. The cursor is an index into the
+visible rows, so a different row set makes the old index point at a different session.
+Between polls the selection is carried by **session key**, not by index, because the
+activity sort re-orders rows as sessions write — holding the index would silently move
+the selection, and with the pane open would relabel one session's diagnostics with
+another's.
 
 Show-all deliberately does **not** hide a session with no activity timestamp: "we have no
 signal" is not evidence that a session is old.
 
-Deliberately absent: mouse support, search, per-session detail panes, and configuration
-UI. And one invariant that outranks all future feature requests: **the HUD is strictly
-read-only. No keybinding may ever mutate vendor state or send anything to a running
-agent.** telltale is a telltale.
+Deliberately absent: mouse support, fuzzy/regex/embedding search (the query is displayed
+literally, and a syntax that can mean something other than what it looks like is a filter
+that hides rows without saying so), and configuration UI. And one invariant that outranks
+all future feature requests: **the HUD is strictly read-only. No keybinding may ever
+mutate vendor state or send anything to a running agent.** telltale is a telltale.
 
 ### 7.9 Golden tests
 
@@ -1338,11 +1438,20 @@ agent.** telltale is a telltale.
 
 ### 7.10 Known limitations
 
-- Every glyph in the visual language — `● ◐ ○ ─ │ █ ▏▎▍▌▋▊▉ … — ↻ ⚠` — is
+- Every glyph in the visual language — `● ◐ ○ ─ │ █ ▏▎▍▌▋▊▉ … — ↻ ⚠ ▸ ⑂ ·` — is
   East-Asian-**Ambiguous** width. Windows Terminal, the reference environment, renders
   ambiguous as narrow, which is what the grid assumes. A terminal configured to render
   ambiguous glyphs double-width will shear the layout; `--ascii` is the escape hatch.
   Stated here rather than discovered later.
+- `⑂` (U+2482 OCR FORK) is the least-common glyph in the set and the most likely to miss
+  from a font. It appears **only** on a session that is fanning out, so a font gap costs
+  a tofu box on a minority of rows rather than a broken grid — and `--ascii` renders it
+  `Y`. It was chosen over a second `│` or a bracket because both already mean something
+  here (`│` separates zones; `]` is the ASCII selection mark).
+- The detail pane does not scroll. A pane taller than the row area is clipped, and on a
+  terminal shorter than about 16 rows a long extras list can run off the bottom. The
+  arrows are spent on moving between sessions, which is the more valuable binding while
+  the pane is open; a scrollable pane needs a second axis and is deferred.
 - The `█` fill and `─` track differ in glyph height by design. Verified legible in
   Cascadia Mono; other fonts may render the step more harshly.
 - Fill resolution is one eighth of a cell (1.04% at 12 cells). The number beside the bar
@@ -1350,6 +1459,254 @@ agent.** telltale is a telltale.
 - The account quota block is sourced from one session (§7.1). A second quota-bearing
   vendor needs a per-vendor block.
 - The 1 s poll has not been measured on a cold cache over an 837-session tree (§6 Q3).
+- The burn forecast's sampling history lives in the process and dies with it. Restarting
+  the HUD restarts the basis at zero, and for the first five minutes of every run there
+  is no forecast at all. Persisting samples would mean writing to disk, which "telltale
+  never writes" forbids, so this limitation is load-bearing rather than an oversight.
+
+### 7.11 The detail pane
+
+**The problem it solves.** v1 carried `Diagnostics`, the `Degraded` field set and every
+`Extra` from adapter to renderer and displayed **none of them**. The grid can only draw
+one kind of nothing: a dropped column and an em dash both read as "no value here", and
+§4a.1 insists there are two different facts underneath. The pane is where the difference
+gets said in words. It is the honesty machinery becoming product rather than plumbing.
+
+`enter` opens it on the selected row; `enter` or `esc` closes it. It **replaces** the row
+area rather than floating over it, for the same reason the help overlay does — a panel
+covering the thing being monitored is a monitor you have to move to read.
+
+**Layout.** Line one is literally the selected row's identity zone (dot, vendor, `│`,
+label), so the pane opens where the row was. Everything below hangs off the `SESSION`
+column at offset 8: a 12-column muted label, two spaces, then the value. Field order
+mirrors the row's three zones — identity, measurement, time — then extras, then the
+honesty block, separated by one blank line because it is a different kind of statement.
+
+```
+ telltale  │  4 sessions  │  claude 3  codex 1
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ● CC │ telltale ⑂~2  C:\src\code
+        session       00000000-aaaa-4bbb-8ccc-000000000001
+        workspace     C:\src\code\telltale
+        model         Opus 5
+        subagents     ~2 recent
+        activity      live · 12s ago
+        branch        main
+        cli           2.1.219
+        ctx tokens    215k
+
+        degraded      —
+        diagnostics   —
+        not sourced   context_pct, cost, quota
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ esc close   ↑/↓ session
+```
+
+Read the last three lines together, because they are the whole point:
+
+- **`not sourced`** is "can't know" — the fields this vendor declared `CapNone`. They get
+  no line of their own at all, exactly as the grid drops a column no visible row can
+  fill. This line is the answer to "why is this row's CONTEXT cell empty?", and it is the
+  first surface in the product that answers it.
+- **`degraded`** is "we tried and failed", named field by field. §4a.2 requires degraded
+  and plain-absent to render identically in the grid — otherwise "we failed to read it"
+  starts to look like data — and this is the one place that difference is legible.
+- **`diagnostics`** is why. One line per note, structure only, never transcript content.
+
+A clean session prints `—` on both rather than going blank: a blank honesty block is
+indistinguishable from a pane that forgot to render one.
+
+Degraded and absent under real failure:
+
+```
+ telltale  │  4 sessions  │  claude 3  codex 1
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ◐ CX │ 4f2a9c81-1d3e-4a77-9b02-000000000000
+        session       4f2a9c81-1d3e-4a77-9b02-000000000000
+        workspace     —
+        model         —
+        context       —
+        quota         —
+        activity      idle · 7m ago
+
+        degraded      workspace, context_pct
+        diagnostics   2 unparseable records skipped
+                      no turn_context record in the read window
+        not sourced   name, cost, subagents
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ esc close   ↑/↓ session
+```
+
+Every `—` above is a field Codex **can** source and has no value for right now; every
+name on `not sourced` is one it never could. Same glyph in the grid, two different facts,
+and this is where they separate.
+
+**`activity` is the one line that never renders `—`.** It reports the liveness *class*,
+which the HUD can always produce, with the age only as the evidence behind it. A session
+with no timestamp reads `unknown`, not `—`: the em dash would say "no value" where the
+truthful statement is "no basis for a claim" (§4a.4).
+
+**Selection.** `▸` in the row's leading pad column — the column that was already blank,
+so selection costs the grid no width. A glyph rather than reverse video, because §7.1
+rule 2 says every distinction is carried by a glyph or a number first and a highlight-only
+cursor disappears under `NO_COLOR`. The mark is jammed against the state dot (`▸●`) on
+purpose: it reads as a pointer at the row's state, and the alternative is a dedicated
+column on every row forever to serve a mark that is off most of the time.
+
+```
+ telltale  │  4 sessions  │  claude 3  codex 1
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                                                    MODEL            AGE
+▸● CC │ telltale ⑂~2  C:\src\code                                                                  Opus 5        │  12s
+ ● CC │ acme-api  C:\src\work                                                                      Sonnet 4.5    │  48s
+ ◐ CX │ 4f2a9c81-1d3e-4a77-9b02-000000000000                                                                     │   7m
+ ○ CC │ learning-notes ⑂~5  C:\src\code                                                            Haiku 4.5     │  22m
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+```
+
+That frame is also §7.13's: row 2 measured **zero** sub-agents and therefore draws no
+chip, and the CONTEXT and COST columns are auto-hidden because these are real Claude rows.
+
+### 7.12 The burn-rate forecast
+
+**What makes this ours.** The incumbents in this lane project a burn line against a plan
+budget nobody publishes. That is the exact fabrication decisions/001 exists to forbid, and
+§8's "deliberately rejected" list names it. telltale instead samples the vendor's own
+`used_percentage` **over its own runtime**, reports the slope it measured, marks it
+derived, and states the sampling window beside it. The number is telltale's measurement of
+telltale's own observations, which is the one kind of computed figure this product is
+entitled to show.
+
+Rendered in the header beside the window it describes, never per row (the §7.1 corollary:
+quota is a property of the account):
+
+```
+ telltale  │  4 sessions  │  claude 3  codex 1
+                                            5h ███─────   42% ↻2h13m  ~13:27 · 18m basis   │   7d █▎──────   18% ↻5d02h
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                      MODEL          CONTEXT                 COST    AGE
+ ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
+ ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
+ ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
+ ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+```
+
+Both windows in that frame have the same 7 samples over the same 18 minutes. The 5h window
+is moving fast enough to project; the 7d window renders **nothing at all** — not a dash,
+not a placeholder, the cell simply ends. That contrast is the feature.
+
+**The four refusals.** A forecast renders only when all of these hold, and each one exists
+to prevent a specific lie:
+
+| Condition | The lie it prevents |
+|---|---|
+| ≥ **3 samples** spanning ≥ **5 minutes** | Two samples fit a line through themselves and cannot disagree; the third is the first one that can. Five minutes because a stepped percentage sampled over ninety seconds measures the step, not the rate. |
+| **positive slope** | "You will never run out" is not a time. A flat or falling window renders nothing rather than an infinity. |
+| exhaustion **before the window resets**, when `resets_at` is known | Projecting past the reset describes a window that will not exist. |
+| exhaustion **within 24 h** | The render is a wall clock with no date on it. `~04:12` sixteen hours out is misleading, not informative. |
+
+**The arithmetic**, pinned by `TestForecastArithmeticIsPinned`: least-squares slope over
+the retained samples, projected from the **last observed value**. Least squares rather
+than a first-to-last difference because vendor usage percentages move in steps and a
+two-point slope is dominated by whichever endpoints straddle a step. Anchored to the last
+observed reading rather than to the fitted line so the projection starts from the number
+printed next to it — a forecast that quietly starts from 44% while the cell says 42% is a
+small lie in the place this product is least allowed one.
+
+**Sampling.** One sample per *completed* scan (a failed scan contributes nothing rather
+than a repeat of the last reading, which would flatten the slope with data we did not
+measure), throttled to one every 15 s, bounded to 30 minutes and 128 entries. A window
+with a nil `UsedPercent` this scan is a **gap, not a reset** — the history stands.
+
+**Rollover clears the buffer**, on either of two signals: usage dropping (monotonic within
+a window, so a drop is a rollover), or `resets_at` jumping forward by more than a minute
+(a rollover moves it a whole window; jitter does not). Fitting a line across a rollover
+reports a negative rate or a wild one, and every sample before it describes a window that
+no longer exists.
+
+**Amendment to §7.1 rule 4** ("still by default"), stated rather than quietly taken: the
+forecast cell may change when a new sample lands, which is at most once every 15 s and
+only when the measurement itself moved. That is a measurement changing, not an animation —
+the §7.6 rule is about telltale never animating the *vendor's* state, and this is telltale
+reporting its own arithmetic on a new reading.
+
+### 7.13 The sub-agent chip
+
+`⑂~2` after the session label on any row whose adapter counted recently-written
+transcripts in that session's `subagents/` sidecar. Sourced by a stat pass (§3.1), Claude
+only.
+
+**Why the `~`.** The count is exact — telltale listed the directory. What is *inferred* is
+the 15-minute recency boundary that turns "written lately" into "a fan-out is running
+now", and ADR-001 requires the inferred part be visible. So the chip carries the same
+estimate marker the CONTEXT column does, and it means the same thing: this number was
+computed by telltale, not reported by the vendor.
+
+**Zero draws nothing.** The absence of a chip is not a claim, and a `⑂0` on every Claude
+row would be noise asserting a fact nobody asked for — the same reasoning as an absent
+gauge drawing no track. The measured zero is not discarded, though: the detail pane says
+`~0 recent`, where there is room to distinguish "we counted none" from "we could not
+count". A sidecar the OS refuses renders `—` there, never `0`.
+
+Styling: the chip renders in `Text`, not `Muted`. `Muted` is this palette's "chrome or
+absent" (§7.5, `Absent() = Muted`), and rendering real measured data in it would put a
+sourced number in the same visual class as a missing one.
+
+### 7.14 Type-to-filter
+
+`/` opens the query; typing narrows rows by case-insensitive substring; `enter` keeps the
+query and hands the keyboard back; `esc` clears it.
+
+```
+ telltale  │  2 of 4 sessions  │  claude 3  codex 1             5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                      MODEL          CONTEXT                 COST    AGE
+ ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
+ ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ /api_                                                                                          esc clear   enter apply
+```
+
+and once applied, with the mode left:
+
+```
+ telltale  │  2 of 4 sessions  │  claude 3  codex 1             5h ███─────   42% ↻2h13m   │   7d █▎──────   18% ↻5d02h
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                      MODEL          CONTEXT                 COST    AGE
+ ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
+ ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys                                         find "api"
+```
+
+Four rules, all of them the same rule — **a monitor that hides rows must say so**:
+
+1. The header count reads `2 of 4`, so the headline can never contradict the per-vendor
+   totals beside it. (Same mechanism as the vendor filter; they compose.)
+2. An applied query keeps announcing itself in the footer after the mode is gone. A filter
+   the user has forgotten about hides rows just as silently as one they cannot see.
+3. If nothing matches, the empty state says `no sessions matching "zzz"` rather than
+   `no active sessions` — naming the thing that emptied the list.
+4. The match is a literal substring, displayed literally. No globs, no regex, no fuzzy or
+   embedding search: a syntax that can silently mean something other than what it looks
+   like is a filter that hides rows without saying so.
+
+**What it matches:** the vendor's session name, the workspace path, and the session id.
+The id is in the set because a torn-record row is *labelled* by its id (§7.3 render D row
+3), and matching only the "title" would make the one piece of text on that line unable to
+find it.
+
+`/` is a mode, and it is the product's only one — which is why it takes over the whole
+footer instead of quietly changing what an unmodified key does.
 
 ## 8. Roadmap after v1 (decided 2026-08-01)
 
@@ -1357,23 +1714,34 @@ Rigor stays the floor; features and front-end craft are the priority axis from h
 Each item names its incumbent inspiration and the honest-gauge twist that makes it ours.
 Sources rule unchanged: a segment ships only when this doc names its source.
 
-### v1.1 — the flagship trio (in flight)
+### v1.1 — the flagship trio (**BUILT**)
 
-1. **Detail pane** (inspiration: abtop / CASS drill-ins). Select a row, get an expanded
-   view: quota windows, extras (branch, CLI version, ctx tokens), session id, and —
-   crucially — the session's Diagnostics and degraded-field marks, which v1 carries with
-   no surface. The honesty machinery becomes visible product.
-2. **Burn-rate forecast** (inspiration: Claude-Code-Usage-Monitor / codeburn). The HUD
-   samples `rate_limits.used_percentage` over its own runtime; the slope is therefore a
-   telltale-measured value, rendered with the `~` derived marker AND its sampling window
-   ("~3:41pm, from last 20m"). Never extrapolated from a guessed budget; below a minimum
-   sample count/age it renders absent, not a wild line.
-3. **Subagent chips** (inspiration: claude-hud's active-subagent display). Count live
-   transcripts in a session's `subagents/` sidecar tree (already discovered and excluded
-   from rows in §3.1): a `⑂N` chip on rows running fan-outs. Pure sourced data.
+1. **Detail pane** (inspiration: abtop / CASS drill-ins) — **BUILT, §7.11.** Select a row,
+   get an expanded view: quota windows, extras (branch, CLI version, ctx tokens), session
+   id, and — crucially — the session's Diagnostics and degraded-field marks, which v1
+   carried with no surface. The honesty machinery becomes visible product. Shipped with
+   one thing the spec did not ask for and the design demanded: a `not sourced` line, which
+   makes §4a.1's "can't know" versus "absent now" legible for the first time.
+2. **Burn-rate forecast** (inspiration: Claude-Code-Usage-Monitor / codeburn) — **BUILT,
+   §7.12.** The HUD samples the account window's `used_percentage` over its own runtime;
+   the slope is a telltale-measured value, rendered with the `~` derived marker AND its
+   sampling window (`~13:27 · 18m basis`). Never extrapolated from a guessed budget, and
+   below the minimum basis it renders nothing at all. Shipped with two refusals beyond the
+   spec's "minimum sample count/age": no projection past the window's own reset, and none
+   beyond 24 h, because the render is a wall clock with no date on it.
+3. **Sub-agent chips** (inspiration: claude-hud's active-subagent display) — **BUILT,
+   §7.13.** Counts recently-written transcripts in a session's `subagents/` sidecar tree
+   (already discovered and excluded from rows in §3.1): a `⑂~2` chip on rows running
+   fan-outs. Corrected against the spec: the roadmap called it "pure sourced data" and it
+   is not — the files are counted exactly, but the recency boundary is an inference, so
+   the field is `CapDerived` and the chip carries the estimate marker.
 
-Also in v1.1: **`/` type-to-filter** on title/path substring (CASS's kernel without the
-embedding search).
+Also in v1.1: **`/` type-to-filter** on name/path substring (CASS's kernel without the
+embedding search) — **BUILT, §7.14.**
+
+New schema field in v1.1: `subagents` (§4a.2), declared `CapDerived` by the Claude adapter
+and `CapNone` by Codex. `model.Validate` gained a non-negative check for it; nothing else
+in the schema moved.
 
 ### v1.2 — the Windows-native leap
 

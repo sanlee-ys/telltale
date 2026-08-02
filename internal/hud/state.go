@@ -1,6 +1,7 @@
 package hud
 
 import (
+	"strings"
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -136,6 +137,31 @@ type State struct {
 	Help    bool
 	Scroll  int
 
+	// Query is the type-to-filter substring, matched case-insensitively
+	// against the row's identity (§7.14). Empty matches everything.
+	Query string
+	// Finding reports that the footer is accepting query keystrokes. It is a
+	// mode, and it is the only one in the product — which is why it announces
+	// itself in the footer rather than changing what an unmodified key does
+	// silently.
+	Finding bool
+
+	// Cursor is the selected row's index among the VISIBLE rows, or -1 for no
+	// selection.
+	//
+	// -1 is the default and it is load-bearing: v1 shipped with no selection
+	// cursor at all, and a monitor that boots with a row already highlighted
+	// asserts that row matters. The mark appears the first time the user asks
+	// for it and not before, so the steady-state frame is unchanged.
+	Cursor int
+	// Detail opens the per-session pane over the row area (§7.11).
+	Detail bool
+
+	// Burn is telltale's own sampling history of the account quota windows.
+	// It is HUD state, not schema (§4a): it describes this process's
+	// observation history, not the session.
+	Burn Burn
+
 	// Scanning reports that a scan is in flight. It only ever produces a
 	// spinner while no scan has completed yet; later slow scans surface as
 	// staleness, not as motion (§7.6).
@@ -150,9 +176,34 @@ type State struct {
 	Home string
 }
 
-// NewState returns a State with the v1 defaults filled in.
+// NewState returns a State with the defaults filled in.
 func NewState() State {
-	return State{Thresholds: model.DefaultLivenessThresholds}
+	return State{Thresholds: model.DefaultLivenessThresholds, Cursor: -1}
+}
+
+// Matches reports whether a session satisfies the find query.
+//
+// It matches the row's identity as rendered: the vendor's session name, the
+// workspace path, and the session id — which is what a row falls back to
+// showing when it has neither of the other two. Matching only "title" would
+// make a torn-record row (labelled by its id) unfindable by the only text on
+// its line.
+//
+// Case-insensitive substring, no globs and no regex: the query is displayed
+// literally in the footer, and a syntax that can silently mean something other
+// than what it looks like is a filter that hides rows without saying so.
+func (st State) Matches(s *model.Session) bool {
+	if st.Query == "" {
+		return true
+	}
+	q := strings.ToLower(st.Query)
+	if s.Name != nil && strings.Contains(strings.ToLower(*s.Name), q) {
+		return true
+	}
+	if s.WorkspaceDir != nil && strings.Contains(strings.ToLower(*s.WorkspaceDir), q) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(s.ID), q)
 }
 
 func (st State) scanAge() time.Duration {

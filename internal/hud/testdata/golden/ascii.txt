@@ -6,4 +6,4 @@
  o CX | notes-api  C:\src\code                                       gpt-5.1-codex                  n/a      n/a |   4m
  . CC | learning-notes  C:\src\code                                  Haiku 4.5      ##########--  92.6%   $11.07 |  22m
  ----------------------------------------------------------------------------------------------------------------------
- q quit   v vendor   s sort   a all   r refresh   ? keys
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys

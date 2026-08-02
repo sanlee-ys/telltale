@@ -1,10 +1,9 @@
- telltale  │  0 sessions
+ telltale  │  4 sessions  │  claude 3  codex 1
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-                                                   no active sessions
-
-                                 claude   watching       %USERPROFILE%\.claude\projects
-                                 codex    not detected   %USERPROFILE%\.codex
-
-
+        SESSION                                                                                    MODEL            AGE
+▸● CC │ telltale ⑂~2  C:\src\code                                                                  Opus 5        │  12s
+ ● CC │ acme-api  C:\src\work                                                                      Sonnet 4.5    │  48s
+ ◐ CX │ 4f2a9c81-1d3e-4a77-9b02-000000000000                                                                     │   7m
+ ○ CC │ learning-notes ⑂~5  C:\src\code                                                            Haiku 4.5     │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
