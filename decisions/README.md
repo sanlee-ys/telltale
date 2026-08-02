@@ -8,3 +8,4 @@ Repo-local ADRs. Cross-repo decisions live in the architecture repo (SYS-NNN).
 | [002](002-stack-and-ui-ambition.md) | Windows-first hardened, HUD UI as first-class surface, Go + Charm stack | Accepted |
 | [003](003-gemini-adapter-built-in.md) | Gemini CLI becomes the third built-in adapter | Accepted |
 | [004](004-antigravity-statusline.md) | Antigravity CLI: statusline vendor, not (yet) a HUD vendor | Accepted |
+| [005](005-adoption-direction.md) | Adoption direction: multi-harness attention routing as product strategy | Accepted |
