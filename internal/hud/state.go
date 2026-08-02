@@ -7,19 +7,20 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
-// Filter is the vendor filter. It cycles rather than opening a menu: with two
-// vendors a cycle is one keystroke and no mode, and the active filter is
-// always stated in the footer.
+// Filter is the vendor filter. It cycles rather than opening a menu: with a
+// handful of vendors a cycle is one keystroke and no mode, and the active
+// filter is always stated in the footer.
 type Filter uint8
 
 const (
 	FilterAll Filter = iota
 	FilterClaude
 	FilterCodex
+	FilterGemini
 )
 
 func (f Filter) Next() Filter {
-	if f >= FilterCodex {
+	if f >= FilterGemini {
 		return FilterAll
 	}
 	return f + 1
@@ -31,6 +32,8 @@ func (f Filter) String() string {
 		return "claude"
 	case FilterCodex:
 		return "codex"
+	case FilterGemini:
+		return "gemini"
 	default:
 		return "all"
 	}
@@ -42,6 +45,8 @@ func (f Filter) Accepts(v model.VendorID) bool {
 		return v == model.VendorClaude
 	case FilterCodex:
 		return v == model.VendorCodex
+	case FilterGemini:
+		return v == model.VendorGemini
 	default:
 		return true
 	}

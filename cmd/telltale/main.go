@@ -20,6 +20,7 @@ import (
 
 	"github.com/sanlee-ys/telltale/internal/adapter/claudecode"
 	"github.com/sanlee-ys/telltale/internal/adapter/codex"
+	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
 	"github.com/sanlee-ys/telltale/internal/claude"
 	"github.com/sanlee-ys/telltale/internal/hud"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -63,7 +64,7 @@ func runStatusline() {
 
 func runHUD(args []string) error {
 	fs := flag.NewFlagSet("telltale hud", flag.ContinueOnError)
-	vendor := fs.String("vendor", "all", "vendor filter at startup: all, claude, codex")
+	vendor := fs.String("vendor", "all", "vendor filter at startup: all, claude, codex, gemini")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
 	if err := fs.Parse(args); err != nil {
@@ -82,10 +83,10 @@ func runHUD(args []string) error {
 	useASCII := *ascii || os.Getenv("TELLTALE_ASCII") != ""
 
 	return hud.Run(hud.Options{
-		// Both vendors are always registered. An adapter whose vendor is not
+		// Every vendor is always registered. An adapter whose vendor is not
 		// installed reports ErrVendorAbsent and vanishes from the HUD; there
 		// is nothing to configure and nothing to fail.
-		Adapters: []model.Adapter{claudecode.New(), codex.New()},
+		Adapters: []model.Adapter{claudecode.New(), codex.New(), gemini.New()},
 		Filter:   filter,
 		ASCII:    useASCII,
 		NoTitle:  *noTitle,
@@ -100,8 +101,10 @@ func parseFilter(s string) (hud.Filter, error) {
 		return hud.FilterClaude, nil
 	case "codex":
 		return hud.FilterCodex, nil
+	case "gemini":
+		return hud.FilterGemini, nil
 	default:
-		return hud.FilterAll, errors.New("unknown --vendor " + s + " (want all, claude or codex)")
+		return hud.FilterAll, errors.New("unknown --vendor " + s + " (want all, claude, codex or gemini)")
 	}
 }
 
@@ -114,7 +117,7 @@ usage:
   telltale version
 
 telltale hud flags:
-  --vendor all|claude|codex   start with a vendor filter applied
+  --vendor all|claude|codex|gemini   start with a vendor filter applied
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone`)
 }

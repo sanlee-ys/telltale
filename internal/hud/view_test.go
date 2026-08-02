@@ -12,6 +12,7 @@ import (
 
 	"github.com/sanlee-ys/telltale/internal/adapter/claudecode"
 	"github.com/sanlee-ys/telltale/internal/adapter/codex"
+	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -329,7 +330,9 @@ func goldenCases() []goldenCase {
 
 		// What v1 ACTUALLY renders, using the real adapters' declared
 		// capabilities: Claude sources neither context nor cost from disk;
-		// Codex sources a derived context percentage and real quota windows.
+		// Codex sources a derived context percentage and real quota windows;
+		// Gemini sources name/model/workspace and a derived sub-agent count,
+		// with no quota, context or cost anywhere on its disk seam.
 		{name: "v1-capabilities", state: func() State {
 			st := NewState()
 			st.Now = pinned
@@ -344,23 +347,32 @@ func goldenCases() []goldenCase {
 						`C:\src\code\example-app`, "gpt-5.1-codex", 90*time.Second,
 						withCtx(189888.0/272000.0*100), derived(),
 						withQuota(window("primary", "5h", 88.4, 3*time.Hour+2*time.Minute))),
+					// The registry records the project path lowercased on
+					// Windows — the fixture keeps that fidelity.
+					sess(model.VendorGemini, "session-2026-08-02T09-58-0a1b2c3d",
+						`c:\src\code\learning-notes`, "gemini-3-pro", 3*time.Minute,
+						withName("glossary tooltips"), withSubagents(2),
+						withExtras("ctx tokens", "215k")),
 				},
 				Vendors: []VendorView{
 					watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`,
 						(&claudecode.Adapter{}).Capabilities()),
 					watching(model.VendorCodex, `%USERPROFILE%\.codex`,
 						(&codex.Adapter{}).Capabilities()),
+					watching(model.VendorGemini, `%USERPROFILE%\.gemini\tmp`,
+						(&gemini.Adapter{}).Capabilities()),
 				},
 			}
 			return st
 		}},
 
 		// The frame pasted into README.md. Same real capability mix as
-		// "v1-capabilities", sized so the row area needs no blank padding.
+		// "v1-capabilities", sized so every row is visible (one pad line —
+		// the row area's slot math can't land on exactly five).
 		{name: "readme", state: func() State {
 			st := NewState()
 			st.Now = pinned
-			st.Width, st.Height = 120, 9
+			st.Width, st.Height = 120, 11
 			st.Snap = Snapshot{
 				At: pinned,
 				Sessions: []*model.Session{
@@ -377,12 +389,18 @@ func goldenCases() []goldenCase {
 					sess(model.VendorCodex, "00000000-bbbb-4ccc-8ddd-000000000003",
 						`C:\src\code\notes-api`, "gpt-5.1-codex", 22*time.Minute,
 						withCtx(12.5), derived()),
+					sess(model.VendorGemini, "session-2026-08-02T09-58-0a1b2c3d",
+						`c:\src\code\learning-notes`, "gemini-3-pro", 3*time.Minute,
+						withName("glossary tooltips"), withSubagents(2),
+						withExtras("ctx tokens", "215k")),
 				},
 				Vendors: []VendorView{
 					watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`,
 						(&claudecode.Adapter{}).Capabilities()),
 					watching(model.VendorCodex, `%USERPROFILE%\.codex`,
 						(&codex.Adapter{}).Capabilities()),
+					watching(model.VendorGemini, `%USERPROFILE%\.gemini\tmp`,
+						(&gemini.Adapter{}).Capabilities()),
 				},
 			}
 			return st
@@ -399,6 +417,7 @@ func goldenCases() []goldenCase {
 				Vendors: []VendorView{
 					watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`, fullCaps),
 					{Vendor: model.VendorCodex, Root: `%USERPROFILE%\.codex`, Status: StatusNotDetected},
+					{Vendor: model.VendorGemini, Root: `%USERPROFILE%\.gemini\tmp`, Status: StatusNotDetected},
 				},
 			}
 			return st
@@ -481,6 +500,7 @@ func goldenCases() []goldenCase {
 					{Vendor: model.VendorClaude, Root: `%USERPROFILE%\.claude\projects`,
 						Status: StatusUnreadable, Err: "Access is denied."},
 					{Vendor: model.VendorCodex, Root: `%USERPROFILE%\.codex`, Status: StatusNotDetected},
+					{Vendor: model.VendorGemini, Root: `%USERPROFILE%\.gemini\tmp`, Status: StatusNotDetected},
 				},
 			}
 			return st

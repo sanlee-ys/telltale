@@ -45,6 +45,7 @@ type VendorID string
 const (
 	VendorClaude VendorID = "claude"
 	VendorCodex  VendorID = "codex"
+	VendorGemini VendorID = "gemini"
 )
 
 // Field enumerates the optional fields of a Session: exactly those a vendor may

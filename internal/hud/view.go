@@ -288,7 +288,7 @@ func vendorCounts(st State, sty Styles) string {
 	}
 	short := st.Width < compactBreak
 	var out []string
-	for _, v := range []model.VendorID{model.VendorClaude, model.VendorCodex} {
+	for _, v := range []model.VendorID{model.VendorClaude, model.VendorCodex, model.VendorGemini} {
 		if counts[v] == 0 {
 			continue
 		}
@@ -517,6 +517,8 @@ func vendorTag(v model.VendorID) string {
 		return "CC"
 	case model.VendorCodex:
 		return "CX"
+	case model.VendorGemini:
+		return "GE"
 	default:
 		s := strings.ToUpper(string(v))
 		if len(s) > 2 {
@@ -718,7 +720,7 @@ func helpLines(st State, lay Layout, hasCtx, hasCost bool, sty Styles, g Glyphs)
 		{"enter", "open the detail pane for the selected session"},
 		{"/", "find: narrow rows by name or path"},
 		{"esc", "close the pane, or cancel the find, or quit"},
-		{"v", "vendor filter: all -> claude -> codex"},
+		{"v", "vendor: all -> claude -> codex -> gemini"},
 		{"s", "sort: activity -> context -> cost"},
 		{"a", "show all (include sessions idle > 8h)"},
 		{"r", "rescan now"},
