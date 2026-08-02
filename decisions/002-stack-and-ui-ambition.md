@@ -57,8 +57,11 @@ tradeoffs; he chose terminal-native.
   original "single-digit ms" phrasing described the end-to-end number, which no external
   process can hit on Windows — the enforceable constraint is the benchmark plus
   spawn-floor awareness.
-- macOS/Linux: no work until v1 ships; the only discipline is not writing
-  Windows-only code where a portable call exists cheaply.
+- macOS/Linux: no porting or verification work until v1 ships; the only discipline is
+  not writing Windows-only code where a portable call exists cheaply. *Amended
+  2026-08-02 (ADR-005 amendment): cross-compiled macOS/Linux binaries may ship pre-v1
+  for distribution, labeled "built, not verified — Windows is the verified target."
+  The effort rule stands.*
 
 ## Downstream surfaces
 

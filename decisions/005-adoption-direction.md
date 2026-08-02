@@ -85,19 +85,32 @@ the lane's only Antigravity HUD adapter.
    gauge (passive, zero API calls, absent ≠ zero, visible degradation), the broadest
    honest harness coverage (only tool with Gemini-family support), statusline + HUD in
    one binary, and the attention-routing job as the center.
-2. **Pre-registered adoption bar: 10 evidenced external users within 30 days of the
-   launch post.** Evidence = an issue, discussion, PR, or unsolicited mention/screenshot
-   from a distinct external user; a star does not count. Recorded here, before launch,
-   so the outcome is falsifiable either way. Stars remain weather (001).
+2. **Pre-registered adoption bar: 10 run-evidenced external users within 30 days of the
+   launch post.** Evidence must show the person actually ran telltale: a version-bearing
+   bug report, a real-session screenshot, a PR grounded in running it, package-manager
+   feedback, or an explicit unsolicited statement of use. Engagement without run-evidence
+   (a comment, a question, a hot take) does not count; a star does not count. Recorded
+   here, before launch, so the outcome is falsifiable either way. Stars remain weather
+   (001). *(Tightened from "evidenced" to "run-evidenced" at review — the bar measures
+   usage, not engagement.)*
 3. **Sequencing: 001's order stands** — dogfood → eval + design doc → launch post. The
-   activation slice runs in parallel during the dogfood window: prebuilt binaries for
-   Windows/macOS/Linux (goreleaser), one-command install (scoop/winget first, per
-   Windows-first), a README hero visual, and a useful zero-config first frame. The
-   launch post doubles as the hypothesis experiment: it leads with the multi-harness
-   positioning, and the adoption bar measures whether that is what resonates.
+   activation slice runs in parallel during the dogfood window: prebuilt binaries via
+   goreleaser, one-command install (scoop/winget first, per Windows-first), a README
+   hero visual, and a useful zero-config first frame. macOS/Linux binaries are
+   cross-compiled and shipped labeled **"built, not verified — Windows is the verified
+   target"** (this amends ADR-002's "no macOS/Linux work until v1" for *distribution
+   only*; the no-porting/no-verification-effort rule stands, and the label is 001's
+   flagged-limitation pattern). The launch post doubles as the hypothesis experiment,
+   and **the hypothesis it tests is cross-harness visibility** — do multi-harness power
+   users want one honest local HUD across the agents they already run? That is what the
+   launched product contains. The launch does not claim to test attention routing
+   (see 4).
 4. **First post-validation feature investment is needs-input/blocked/done state** — the
    attention-routing job — where vendor seams support it (Claude Code hooks, Codex
    notify events, agy `agent_state`). Not before the launch experiment reads out.
+   Attention routing then gets its own experiment once that slice ships; the launch
+   experiment's result is read as evidence about cross-harness visibility only, and
+   neither validates nor falsifies a capability the launched product did not contain.
 5. **The agy disk-seam re-survey is scheduled as the next adapter work item**, upgrading
    ADR-004's passive watch item to active on the #1402 evidence. Verification runs
    against the local 1.1.9 corpus before any coverage claim is made.
@@ -111,6 +124,27 @@ the lane's only Antigravity HUD adapter.
   job is attention, not bookkeeping; cost stays one segment among several.
 - **A machine-readable `snapshot --json` router surface**: still parked. The cross-tool
   strategy routes work by type, not by quota; no routing rule consults a gauge today.
+
+## Amendment — 2026-08-02: external review reconciliation
+
+A cross-agent review (Codex, same day, delivered after merge) returned three findings;
+all three were accepted. San ruled the two product forks:
+
+1. *The launch experiment cannot validate a feature deferred until afterward.* Ruled:
+   narrow the launch hypothesis to cross-harness visibility (decision 3 as amended);
+   attention routing gets its own experiment after the needs-input slice ships
+   (decision 4 as amended). Rejected alternative: building an attention-state slice
+   pre-launch, which would stall the running dogfood clock and stack two variables into
+   one experiment.
+2. *The activation slice conflicted with ADR-002's "no macOS/Linux work until v1."*
+   Ruled: amend ADR-002 for distribution only — cross-compiled binaries may ship
+   pre-v1, labeled built-not-verified; the no-porting/no-verification-effort rule
+   stands. Rationale: near-zero marginal work, and a Windows-only launch would
+   handicap the adoption bar in a macOS-heavy audience. ADR-002 carries the matching
+   amendment note.
+3. *"Evidenced external users" measured engagement, not usage.* Accepted outright:
+   bar tightened to run-evidenced (decision 2 as amended); 10 users / 30 days
+   unchanged.
 
 ## Downstream surfaces
 
