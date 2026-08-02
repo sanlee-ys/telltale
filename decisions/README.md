@@ -9,3 +9,4 @@ Repo-local ADRs. Cross-repo decisions live in the architecture repo (SYS-NNN).
 | [003](003-gemini-adapter-built-in.md) | Gemini CLI becomes the third built-in adapter | Accepted |
 | [004](004-antigravity-statusline.md) | Antigravity CLI: statusline vendor, not (yet) a HUD vendor | Accepted |
 | [005](005-adoption-direction.md) | Adoption direction: multi-harness attention routing as product strategy | Accepted |
+| [006](006-antigravity-hud-adapter.md) | Antigravity CLI becomes the fourth built-in adapter, on a hand-written SQLite reader | Accepted |

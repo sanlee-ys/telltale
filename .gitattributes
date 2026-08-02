@@ -16,3 +16,9 @@
 
 # Golden renders are compared byte for byte at fixed terminal widths.
 internal/hud/testdata/golden/*.txt -text
+
+# SQLite fixtures are binary: page headers, b-tree pointers and WAL checksums.
+# A single byte rewritten in transit fails a checksum, and a checkpoint's worth
+# of frames would be silently dropped by the very reader under test.
+*.db binary
+*.db-wal binary

@@ -10,6 +10,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	agyadapter "github.com/sanlee-ys/telltale/internal/adapter/antigravity"
 	"github.com/sanlee-ys/telltale/internal/adapter/claudecode"
 	"github.com/sanlee-ys/telltale/internal/adapter/codex"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
@@ -130,6 +131,24 @@ var fullCaps = model.Capabilities{
 		model.FieldContextPercent, model.FieldCost, model.FieldQuota,
 		model.FieldLastActivity,
 	),
+}
+
+// agySession is an Antigravity CLI row as the real adapter produces one: the
+// session's NAME is the head of its conversation id, because the vendor writes
+// no human title anywhere a public repo may read — the only free text on its
+// disk is prompt content. The model display string is the vendor's own, long
+// enough that the 13-column MODEL cell truncates it, which is what the HUD
+// really shows and therefore what the golden must pin.
+func agySession(age time.Duration) *model.Session {
+	return sess(model.VendorAntigravity, "4c8b21a7-0e35-4a12-9f6b-000000000001",
+		`C:\src\code\example-app`, "", age,
+		withName("4c8b21a7"),
+		withModel(&model.Model{ID: "gemini-3.6-flash", DisplayName: "Gemini 3.6 Flash (High)"}),
+		withExtras("uncached in", "40k", "output", "380", "generations", "2"))
+}
+
+func withModel(m *model.Model) sessionOpt {
+	return func(s *model.Session) { s.Model = m }
 }
 
 func watching(v model.VendorID, root string, caps model.Capabilities) VendorView {
@@ -332,7 +351,10 @@ func goldenCases() []goldenCase {
 		// capabilities: Claude sources neither context nor cost from disk;
 		// Codex sources a derived context percentage and real quota windows;
 		// Gemini sources name/model/workspace and a derived sub-agent count,
-		// with no quota, context or cost anywhere on its disk seam.
+		// with no quota, context or cost anywhere on its disk seam; Antigravity
+		// sources the same four fields as Gemini minus the sub-agent count,
+		// labelled by its conversation id because the only free text on its
+		// disk is somebody's prompt.
 		{name: "v1-capabilities", state: func() State {
 			st := NewState()
 			st.Now = pinned
@@ -353,6 +375,7 @@ func goldenCases() []goldenCase {
 						`c:\src\code\learning-notes`, "gemini-3-pro", 3*time.Minute,
 						withName("glossary tooltips"), withSubagents(2),
 						withExtras("ctx tokens", "215k")),
+					agySession(2 * time.Minute),
 				},
 				Vendors: []VendorView{
 					watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`,
@@ -361,6 +384,8 @@ func goldenCases() []goldenCase {
 						(&codex.Adapter{}).Capabilities()),
 					watching(model.VendorGemini, `%USERPROFILE%\.gemini\tmp`,
 						(&gemini.Adapter{}).Capabilities()),
+					watching(model.VendorAntigravity, `%USERPROFILE%\.gemini\antigravity-cli`,
+						(&agyadapter.Adapter{}).Capabilities()),
 				},
 			}
 			return st
@@ -368,11 +393,12 @@ func goldenCases() []goldenCase {
 
 		// The frame pasted into README.md. Same real capability mix as
 		// "v1-capabilities", sized so every row is visible (one pad line —
-		// the row area's slot math can't land on exactly five).
+		// the row area's slot math can't land on exactly five, and the fourth
+		// vendor pushed the scene from five rows to six).
 		{name: "readme", state: func() State {
 			st := NewState()
 			st.Now = pinned
-			st.Width, st.Height = 120, 11
+			st.Width, st.Height = 120, 12
 			st.Snap = Snapshot{
 				At: pinned,
 				Sessions: []*model.Session{
@@ -393,6 +419,7 @@ func goldenCases() []goldenCase {
 						`c:\src\code\learning-notes`, "gemini-3-pro", 3*time.Minute,
 						withName("glossary tooltips"), withSubagents(2),
 						withExtras("ctx tokens", "215k")),
+					agySession(2 * time.Minute),
 				},
 				Vendors: []VendorView{
 					watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`,
@@ -401,6 +428,8 @@ func goldenCases() []goldenCase {
 						(&codex.Adapter{}).Capabilities()),
 					watching(model.VendorGemini, `%USERPROFILE%\.gemini\tmp`,
 						(&gemini.Adapter{}).Capabilities()),
+					watching(model.VendorAntigravity, `%USERPROFILE%\.gemini\antigravity-cli`,
+						(&agyadapter.Adapter{}).Capabilities()),
 				},
 			}
 			return st
@@ -415,6 +444,9 @@ func goldenCases() []goldenCase {
 			st.Snap = Snapshot{
 				At: pinned,
 				Vendors: []VendorView{
+					// Scan sorts the vendor views by id, so agy leads.
+					{Vendor: model.VendorAntigravity, Root: `%USERPROFILE%\.gemini\antigravity-cli`,
+						Status: StatusNotDetected},
 					watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`, fullCaps),
 					{Vendor: model.VendorCodex, Root: `%USERPROFILE%\.codex`, Status: StatusNotDetected},
 					{Vendor: model.VendorGemini, Root: `%USERPROFILE%\.gemini\tmp`, Status: StatusNotDetected},
@@ -497,6 +529,8 @@ func goldenCases() []goldenCase {
 			st.Snap = Snapshot{
 				At: pinned,
 				Vendors: []VendorView{
+					{Vendor: model.VendorAntigravity, Root: `%USERPROFILE%\.gemini\antigravity-cli`,
+						Status: StatusNotDetected},
 					{Vendor: model.VendorClaude, Root: `%USERPROFILE%\.claude\projects`,
 						Status: StatusUnreadable, Err: "Access is denied."},
 					{Vendor: model.VendorCodex, Root: `%USERPROFILE%\.codex`, Status: StatusNotDetected},
