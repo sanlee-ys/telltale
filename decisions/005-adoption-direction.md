@@ -1,6 +1,6 @@
 # 005 — Adoption direction: multi-harness attention routing as product strategy
 
-Status: Proposed (2026-08-02) — design checkpoint; merges only after San's review
+Status: Accepted (2026-08-02) — reviewed at the design checkpoint; adoption bar ratified as proposed
 
 ## Context
 
