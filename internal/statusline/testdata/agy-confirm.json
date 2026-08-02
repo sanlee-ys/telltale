@@ -1,0 +1,7 @@
+{
+  "product": "antigravity",
+  "model": { "id": "Gemini 3.6 Flash (High)", "display_name": "Gemini 3.6 Flash (High)" },
+  "agent_state": "tool_use",
+  "tool_confirmation_pending": true,
+  "workspace": { "current_dir": "C:\\src\\code\\example-app", "project_dir": "C:\\src\\code\\example-app" }
+}

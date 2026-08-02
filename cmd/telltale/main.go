@@ -2,7 +2,9 @@
 //
 // One binary, two modes (decisions/002):
 //
-//	telltale statusline   read Claude Code's statusline JSON on stdin, print one line
+//	telltale statusline   read a vendor statusline JSON payload on stdin, print one
+//	                      line (Claude Code, or Antigravity CLI via its documented
+//	                      product marker — ADR-004)
 //	telltale hud          cross-vendor watch-mode TUI
 //
 // The two paths share the normalized session model and internal/theme's
@@ -13,14 +15,18 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/sanlee-ys/telltale/internal/adapter/claudecode"
 	"github.com/sanlee-ys/telltale/internal/adapter/codex"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
+	"github.com/sanlee-ys/telltale/internal/antigravity"
 	"github.com/sanlee-ys/telltale/internal/claude"
 	"github.com/sanlee-ys/telltale/internal/hud"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -51,14 +57,46 @@ func main() {
 }
 
 func runStatusline() {
-	in, err := claude.Parse(os.Stdin)
+	// One statusline command serves two vendors. Routing is the documented
+	// `product` field, an affirmative marker: agy stamps "antigravity" on
+	// every payload and Claude Code's payload has no product field at all.
+	// Stdin is read once; both parsers see the same bytes.
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
+		os.Exit(0)
+	}
+	// A probe failure is bad input, full stop — it must take the clean-exit
+	// path. Falling through to the Claude parser would be worse than nothing:
+	// claude.Parse uses a streaming decoder that reads only the FIRST JSON
+	// value, so a broken buffer that starts with a valid agy payload would
+	// render a plausible Claude-shaped line with quota, state and branch
+	// silently dropped (review finding, 2026-08-02).
+	var probe struct {
+		Product string `json:"product"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
+		os.Exit(0)
+	}
+
+	noColor := os.Getenv("NO_COLOR") != ""
+	if probe.Product == antigravity.Product {
+		in, err := antigravity.Parse(bytes.NewReader(raw))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
+			os.Exit(0)
+		}
+		fmt.Println(statusline.RenderAntigravity(in, statusline.Options{NoColor: noColor}))
+		return
+	}
+	in, err := claude.Parse(bytes.NewReader(raw))
 	if err != nil {
 		// A gauge must never crash the host UI: on bad input, render nothing
 		// and exit clean. The error goes to stderr for `/statusline` debugging.
 		fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
 		os.Exit(0)
 	}
-	noColor := os.Getenv("NO_COLOR") != ""
 	fmt.Println(statusline.Render(in, statusline.Options{NoColor: noColor}))
 }
 

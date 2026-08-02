@@ -12,7 +12,9 @@ live-verification pass on 2026-08-01 (Codex Desktop corpus — including a filte
 Desktop's imported non-Codex transcripts), with the short remainder itemized in
 [docs/design.md §3.4](docs/design.md). The Gemini CLI adapter is source-verified
 against gemini-cli v0.53.1 (the writer's own persistence code, read at tag), with its
-first live-corpus pass itemized in [docs/design.md §3.7](docs/design.md).
+first live-corpus pass itemized in [docs/design.md §3.7](docs/design.md). The
+statusline serves **Antigravity CLI (`agy`)** as a second vendor, verified against a
+live payload capture on agy 1.1.9 ([docs/design.md §2.1/§3.8](docs/design.md)).
 
 Build from source:
 
@@ -21,6 +23,19 @@ go build -o telltale.exe ./cmd/telltale
 ```
 
 Then wire the statusline into Claude Code (`~/.claude/settings.json`):
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "C:\\path\\to\\telltale.exe statusline"
+  }
+}
+```
+
+…and/or into Antigravity CLI (`~/.gemini/antigravity-cli/settings.json` — same block,
+same binary; telltale detects the vendor from the payload's documented `product`
+field):
 
 ```json
 {
@@ -87,8 +102,11 @@ mechanism.
   built with, kept alongside what live verification changed about its guesses.
 
 Honest claim, stated precisely: *cross-vendor monitoring; vendor-native statusline where
-the seam exists.* (Codex CLI has no statusline hook today — see
-[decisions/001](decisions/001-v1-scope.md).)
+the seam exists — and it exists twice: Claude Code and Antigravity CLI.* (Codex CLI has
+no statusline hook today — see [decisions/001](decisions/001-v1-scope.md). Antigravity
+is statusline-only in the other direction: its disk seam is SQLite+protobuf with a
+documented-but-never-written transcript file, so it has no HUD rows — see
+[decisions/004](decisions/004-antigravity-statusline.md).)
 
 **telltale never writes.** It reads vendor files, makes no network calls, reads no
 credentials, and no keybinding can mutate vendor state or send anything to a running

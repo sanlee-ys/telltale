@@ -1,0 +1,12 @@
+{
+  "product": "antigravity",
+  "model": { "id": "Gemini 3.6 Flash (High)", "display_name": "Gemini 3.6 Flash (High)" },
+  "context_window": {
+    "total_input_tokens": 0,
+    "total_output_tokens": 0,
+    "context_window_size": 1048576,
+    "used_percentage": 0,
+    "remaining_percentage": 100
+  },
+  "agent_state": "idle"
+}
