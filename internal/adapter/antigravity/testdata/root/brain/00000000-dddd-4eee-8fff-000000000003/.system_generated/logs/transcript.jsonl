@@ -1,0 +1,2 @@
+{"content": "SYNTHETIC-PROMPT-TEXT-MUST-NEVER-RENDER ask about the widget", "created_at": "2026-08-01T11:30:00Z", "source": "USER_EXPLICIT", "status": "DONE", "step_index": 0, "type": "USER_INPUT"}
+{"created_at": "2026-08-01T11:45:00Z", "source": "MODEL", "status": "DONE", "step_index": 1, "thinking": "SYNTHETIC-PROMPT-TEXT-MUST-NEVER-RENDER reasoning here", "tool_calls": [{"exit_code": 0, "name": "read_file"}], "type": "MODEL_RESPONSE"}

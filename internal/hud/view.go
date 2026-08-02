@@ -288,7 +288,9 @@ func vendorCounts(st State, sty Styles) string {
 	}
 	short := st.Width < compactBreak
 	var out []string
-	for _, v := range []model.VendorID{model.VendorClaude, model.VendorCodex, model.VendorGemini} {
+	for _, v := range []model.VendorID{
+		model.VendorClaude, model.VendorCodex, model.VendorGemini, model.VendorAntigravity,
+	} {
 		if counts[v] == 0 {
 			continue
 		}
@@ -519,6 +521,8 @@ func vendorTag(v model.VendorID) string {
 		return "CX"
 	case model.VendorGemini:
 		return "GE"
+	case model.VendorAntigravity:
+		return "AG"
 	default:
 		s := strings.ToUpper(string(v))
 		if len(s) > 2 {
@@ -720,8 +724,12 @@ func helpLines(st State, lay Layout, hasCtx, hasCost bool, sty Styles, g Glyphs)
 		{"enter", "open the detail pane for the selected session"},
 		{"/", "find: narrow rows by name or path"},
 		{"esc", "close the pane, or cancel the find, or quit"},
-		{"v", "vendor: all -> claude -> codex -> gemini"},
-		{"s", "sort: activity -> context -> cost"},
+		// The cycle separator is "> " and not "-> " for one reason: a fourth
+		// vendor pushed this line past the 60-column floor, and the arrow was
+		// the two cells per hop that bought nothing the chevron does not say.
+		// TestNoLineExceedsTheTerminalWidth is what caught it.
+		{"v", "vendor: all > claude > codex > gemini > agy"},
+		{"s", "sort: activity > context > cost"},
 		{"a", "show all (include sessions idle > 8h)"},
 		{"r", "rescan now"},
 		{"?", "close this help"},

@@ -23,6 +23,7 @@ import (
 	"io"
 	"os"
 
+	agyadapter "github.com/sanlee-ys/telltale/internal/adapter/antigravity"
 	"github.com/sanlee-ys/telltale/internal/adapter/claudecode"
 	"github.com/sanlee-ys/telltale/internal/adapter/codex"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
@@ -102,7 +103,7 @@ func runStatusline() {
 
 func runHUD(args []string) error {
 	fs := flag.NewFlagSet("telltale hud", flag.ContinueOnError)
-	vendor := fs.String("vendor", "all", "vendor filter at startup: all, claude, codex, gemini")
+	vendor := fs.String("vendor", "all", "vendor filter at startup: all, claude, codex, gemini, agy")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
 	if err := fs.Parse(args); err != nil {
@@ -124,7 +125,9 @@ func runHUD(args []string) error {
 		// Every vendor is always registered. An adapter whose vendor is not
 		// installed reports ErrVendorAbsent and vanishes from the HUD; there
 		// is nothing to configure and nothing to fail.
-		Adapters: []model.Adapter{claudecode.New(), codex.New(), gemini.New()},
+		Adapters: []model.Adapter{
+			claudecode.New(), codex.New(), gemini.New(), agyadapter.New(),
+		},
 		Filter:   filter,
 		ASCII:    useASCII,
 		NoTitle:  *noTitle,
@@ -141,8 +144,14 @@ func parseFilter(s string) (hud.Filter, error) {
 		return hud.FilterCodex, nil
 	case "gemini":
 		return hud.FilterGemini, nil
+	case "agy", "antigravity":
+		// Both spellings: `agy` is the vendor id the footer and the header
+		// count print, and `antigravity` is what the product is called
+		// everywhere else in this repo. Rejecting the name a reader just saw
+		// in the README would be a flag being clever.
+		return hud.FilterAntigravity, nil
 	default:
-		return hud.FilterAll, errors.New("unknown --vendor " + s + " (want all, claude, codex or gemini)")
+		return hud.FilterAll, errors.New("unknown --vendor " + s + " (want all, claude, codex, gemini or agy)")
 	}
 }
 
@@ -155,7 +164,7 @@ usage:
   telltale version
 
 telltale hud flags:
-  --vendor all|claude|codex|gemini   start with a vendor filter applied
+  --vendor all|claude|codex|gemini|agy   start with a vendor filter applied
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone`)
 }

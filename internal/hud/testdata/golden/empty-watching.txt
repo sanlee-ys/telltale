@@ -2,9 +2,9 @@
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
                                                    no active sessions
 
-                                 claude   watching       %USERPROFILE%\.claude\projects
-                                 codex    not detected   %USERPROFILE%\.codex
-                                 gemini   not detected   %USERPROFILE%\.gemini\tmp
-
+                             agy      not detected   %USERPROFILE%\.gemini\antigravity-cli
+                             claude   watching       %USERPROFILE%\.claude\projects
+                             codex    not detected   %USERPROFILE%\.codex
+                             gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys

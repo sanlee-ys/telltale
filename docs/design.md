@@ -281,18 +281,18 @@ JSONL stays canonical and readable without SQLite.
 
 ### 3.3 Cross-vendor capability matrix — the asymmetry is a design fact, not a bug
 
-| Field | Claude (disk) | Codex (disk) | Gemini (disk, §3.7) |
-|---|---|---|---|
-| session id, cwd, git branch | yes | yes | id yes; cwd via `projects.json`; branch no |
-| model | yes | yes | yes (per message) |
-| token counts | yes | yes | yes (per message) |
-| context window size | **no** | yes | **no** (static table in CLI source only) |
-| context % | **not derivable** | **derived** | **not derivable** |
-| quota / rate limits | **no** (statusline stdin only) | yes | **no** (runtime 429 handling only) |
-| cost USD | no (stdin only) | no | no |
-| process liveness | registry exists, deliberately unread (§3.1) | none | none |
-| session title | yes | no | yes (`summary` metadata) |
-| sub-agent count | **derived** (`subagents/` sidecar, §3.1) | **no** | **derived** (`chats/<parent-id>/` nest) |
+| Field | Claude (disk) | Codex (disk) | Gemini (disk, §3.7) | Antigravity (disk, §3.8) |
+|---|---|---|---|---|
+| session id, cwd, git branch | yes | yes | id yes; cwd via `projects.json`; branch no | id yes; cwd via the trajectory blob's `file:///` URI; branch no |
+| model | yes | yes | yes (per message) | yes (per generation, id + display name) |
+| token counts | yes | yes | yes (per message) | yes (per generation, self-checking) |
+| context window size | **no** | yes | **no** (static table in CLI source only) | **no** (statusline payload only) |
+| context % | **not derivable** | **derived** | **not derivable** | **not derivable** |
+| quota / rate limits | **no** (statusline stdin only) | yes | **no** (runtime 429 handling only) | **no** (statusline stdin only; never persisted) |
+| cost USD | no (stdin only) | no | no | no |
+| process liveness | registry exists, deliberately unread (§3.1) | none | none | `steps.status` exists, structural only (never observed in-flight) |
+| session title | yes | no | yes (`summary` metadata) | **no** — the only free text on disk is prompt content |
+| sub-agent count | **derived** (`subagents/` sidecar, §3.1) | **no** | **derived** (`chats/<parent-id>/` nest) | **no** — `parent_references` observed empty |
 
 Codex is `CapNone` for the sub-agent count and not merely empty. Sub-agent *threads* do
 exist in the Codex format — `session_meta.payload.agent_nickname` marks one, and the
@@ -587,6 +587,34 @@ per-request `current_usage` incl. cache reads); **named weekly quota buckets**
 screen. Documented but not yet observed live (the capture session ran outside a repo):
 `vcs`, `artifact_count`, `task_count`, `execution_mode` — the parser carries them as
 optional; the branch segment's live confirmation is the itemized remainder here.
+
+**Adapter built, 2026-08-02 (decisions/006, `internal/adapter/antigravity`).** What the
+adapter took from this survey and what it left:
+
+- **Took:** Name (conversation id, shortened for the grid — the only label on disk that
+  is not somebody's prompt), Model (`#1.#21` display name, `#1.#19` id fallback),
+  Workspace (the trajectory blob's URI, converted to a native path), LastActivity (the
+  Q8 fold over the transcript's newest `created_at` and the mtimes of the transcript,
+  the database and its sidecar — the sidecar because on a live conversation that is the
+  file being written). All four REPORTED; nothing is derived.
+- **Left:** context % (the numerator is measured and the denominator is not — the token
+  totals are display-only extras instead), cost, quota, liveness and subagents, all
+  `CapNone` for the reasons itemized above. The liveness and subagent deferrals are
+  pending live observation, not pending effort.
+- **The identity is asserted, not assumed:** every generation must satisfy `thinking +
+  answer == output` before its numbers count. A generation that fails contributes
+  nothing and the row says a self-check failed. Across the live corpus on the day the
+  adapter landed the identity held **16/16** (one more generation than this survey's 15,
+  a conversation having advanced in between).
+- **Zero dependencies added.** The `.db` and `-wal` bytes are read by `internal/sqlite`,
+  a read-only reader written for this seam: header, `sqlite_master`, table b-trees,
+  overflow chains, and a WAL overlay applying SQLite's own recovery semantics. The
+  rejected alternative and the reasoning are decisions/006.
+- **Live verification, same day:** all five local conversations discovered and read;
+  model `Gemini 3.6 Flash (High)` on every one; three workspaces resolved to
+  `C:\Users\sanle` and two absent (those conversations genuinely carry no URI — absence,
+  not degradation); a real 284 KiB `-wal` parsed and accepted with no diagnostic; every
+  session passed `Validate` with an empty degraded set.
 
 **Fidelity notes:** the docs' storage path (`antigravity/`) and the real one
 (`antigravity-cli/`) disagree — the re-survey confirmed the real tree (the docs path
@@ -1015,6 +1043,8 @@ statusline fixture). What it asserts today:
 | Schema gate | `internal/model` | `Validate` over every rejection case, liveness boundaries, presence semantics |
 | Claude adapter | `internal/adapter/claudecode` | discovery filters, the `<synthetic>` trap, the `input_tokens` trap, torn tail invisibility, torn-only session, future mtime, capability table |
 | Codex adapter | `internal/adapter/codex` | envelope + internally-tagged event parsing, derived context, quota window presence, null `rate_limits`, sub-agent rejection, capability table |
+| SQLite reader | `internal/sqlite` | record decoding across every storage class, the zero-width serial types, the overflow-page chain (25 KiB blob against a 4 KiB page), missing-table-is-absence, and the WAL overlay: a committed sidecar value winning, a corrupt frame ignored with a note, a bad header rejected whole, mismatched salts ignored, a torn tail never assembled |
+| Antigravity adapter | `internal/adapter/antigravity` | discovery that ignores the stale summary index and the sidecars, WAL overlay changing the reported model, overflow-spanning generation blob, dedup on the response id rather than the constant conversation UUID, invariant violation dropping the tokens with a diagnostic, zero tokens as data, absent workspace as absence, missing transcript as a typed sentinel, unreadable database degrading rather than dropping the row, Q8 fold, future mtime, transcript content never reaching a field, capability table |
 | Gemini adapter | `internal/adapter/gemini` | fixed-depth discovery (legacy `.json` and nested sub-agent files excluded), upsert last-wins, `$set` summary/lastUpdated, registry workspace lookup (verbatim, corrupt-degrades, absent-is-absent), sub-agent nest counting, `kind:"subagent"` rejection, torn tail invisibility, future mtime, Q8 fold, capability table |
 | Claude adapter (v1.1) | `internal/adapter/claudecode` | the sub-agent count: recency boundary, future-mtime exclusion, non-transcript neighbours ignored, absent sidecar as a measured zero |
 | HUD renders | `internal/hud` | every golden frame byte-for-byte at 52/72/80/120 columns (count enforced by TestEveryGoldenIsClassified, not restated here — a literal drifted once already), the §7.4 gauge table, the estimate marker, threshold colours, frame width/height invariants |
@@ -1362,10 +1392,10 @@ error dialog.
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
                                                    no active sessions
 
-                                 claude   watching       %USERPROFILE%\.claude\projects
-                                 codex    not detected   %USERPROFILE%\.codex
-                                 gemini   not detected   %USERPROFILE%\.gemini\tmp
-
+                             agy      not detected   %USERPROFILE%\.gemini\antigravity-cli
+                             claude   watching       %USERPROFILE%\.claude\projects
+                             codex    not detected   %USERPROFILE%\.codex
+                             gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
@@ -1380,10 +1410,10 @@ Codex line reads `not detected`, since `~/.codex` is absent (§3.2). The third w
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
                                                    no active sessions
 
+                       agy      not detected   %USERPROFILE%\.gemini\antigravity-cli
                        claude   unreadable     %USERPROFILE%\.claude\projects  Access is denied.
                        codex    not detected   %USERPROFILE%\.codex
                        gemini   not detected   %USERPROFILE%\.gemini\tmp
-
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
@@ -1400,8 +1430,8 @@ floating panel on a monitor obscures the thing being monitored.
         enter  open the detail pane for the selected session
         /      find: narrow rows by name or path
         esc    close the pane, or cancel the find, or quit
-        v      vendor: all -> claude -> codex -> gemini
-        s      sort: activity -> context -> cost
+        v      vendor: all > claude > codex > gemini > agy
+        s      sort: activity > context > cost
         a      show all (include sessions idle > 8h)
         r      rescan now
         ?      close this help
@@ -1413,16 +1443,19 @@ floating panel on a monitor obscures the thing being monitored.
 **I — the v1 capability mix (120 cols).** What the real adapters actually render today:
 Claude sources neither context nor cost from disk, Codex sources a **derived** context
 percentage (marked `~`) and real quota windows. Nothing sources cost, so the `COST`
-column auto-hides and its width returns to `SESSION`.
+column auto-hides and its width returns to `SESSION`. The `AG` row is labelled by the
+head of its conversation id because the only free text on agy's disk is prompt content
+(§3.8), and its `MODEL` cell truncates because the vendor's display string is 23
+characters against a 13-column cell — both are what the HUD really shows.
 
 ```
- telltale  │  3 sessions  │  claude 1  codex 1  gemini 1                                      5h ██████▎─ 88.4% ↻ 3h02m
+ telltale  │  4 sessions  │  claude 1  codex 1  gemini 1  agy 1                               5h ██████▎─ 88.4% ↻ 3h02m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                               MODEL          CONTEXT                AGE
  ● CC │ telltale  C:\src\code                                                 Opus 5                           — │  12s
  ● CX │ example-app  C:\src\code                                              gpt-5.1-codex  ███████▋──── ~69.8% │   1m
+ ● AG │ 4c8b21a7  C:\src\code                                                 Gemini 3.6 F…                    — │   2m
  ◐ GE │ glossary tooltips ⑂~2  c:\src\code                                    gemini-3-pro                     — │   3m
-
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
@@ -1678,7 +1711,7 @@ Minimal, and every key earns its place.
 | `↑`/`↓`, `j`/`k` | move the selection (scrolls the help overlay while it is open) |
 | `enter` | open the detail pane for the selected session; close it if open |
 | `/` | find: type-to-filter on name or path |
-| `v` | vendor filter cycle: all → claude → codex → all |
+| `v` | vendor filter cycle: all → claude → codex → gemini → agy → all |
 | `s` | sort cycle: activity → context → cost → activity |
 | `a` | toggle show-all (default hides sessions idle > 8 h) |
 | `r` | rescan now |
@@ -1689,10 +1722,15 @@ In **find mode** the keyboard belongs to the query: only `esc` (clear and leave)
 That is why the mode takes over the whole footer — a mode that silently changes what `q`
 means without saying so is how a read-only monitor surprises someone.
 
-`--vendor all|claude|codex` sets the starting filter; the cycle takes over from there.
+`--vendor all|claude|codex|gemini|agy` sets the starting filter; the cycle takes over from
+there. `antigravity` is accepted as a synonym for `agy`, which is the id the footer and
+the header counts print.
 
-Cycles, not multi-select menus: with two vendors and three sorts, a cycle is one keystroke
-and no mode. Non-default filter, sort or query is always visible in the footer.
+Cycles, not multi-select menus: with four vendors and three sorts, a cycle is one keystroke
+and no mode. Non-default filter, sort or query is always visible in the footer. The help
+overlay writes the cycle with `>` rather than `->` for one reason worth recording: the
+fourth vendor pushed that line past the 60-column floor, and a golden test at that width
+is what caught it.
 
 > **Reversed in v1.1, deliberately.** v1 said: *"There is no selection cursor — the
 > default sort puts the interesting sessions on top, and a cursor invites drill-down,
@@ -2065,7 +2103,10 @@ these items are ordered by that sequence, not by version number.
    cautions (WAL sidecars, stale summary index, PII fields, assert-the-identity). agy
    stops being a statusline-only vendor when that ships, and telltale ships the lane's
    only Antigravity HUD adapter. Liveness and subagents stay structural-only until
-   observed live.
+   observed live. — **BUILT the same day** (decisions/006,
+   `internal/adapter/antigravity` + `internal/sqlite`, §3.8 "Adapter built"): four
+   reported fields, zero new dependencies, the token identity asserted at read time and
+   holding 16/16 on the live corpus. agy is now a HUD vendor; the two deferrals stand.
 
 Neither track discharges what verification already owes: §3.4's remaining passive-tail
 items and §3.7's first live Gemini pass stay open, and adoption work does not buy an

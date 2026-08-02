@@ -46,6 +46,12 @@ const (
 	VendorClaude VendorID = "claude"
 	VendorCodex  VendorID = "codex"
 	VendorGemini VendorID = "gemini"
+	// VendorAntigravity is Antigravity CLI. Its id is the binary's own name,
+	// `agy`, rather than the product's: it is what the user types, what the
+	// --vendor flag takes and what the header count prints, and a vendor
+	// column reading "antigravity" would cost eleven cells to say what three
+	// say (decisions/006). The adapter package is named for the product.
+	VendorAntigravity VendorID = "agy"
 )
 
 // Field enumerates the optional fields of a Session: exactly those a vendor may
