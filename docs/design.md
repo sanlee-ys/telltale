@@ -253,18 +253,18 @@ JSONL stays canonical and readable without SQLite.
 
 ### 3.3 Cross-vendor capability matrix — the asymmetry is a design fact, not a bug
 
-| Field | Claude (disk) | Codex (disk) |
-|---|---|---|
-| session id, cwd, git branch | yes | yes |
-| model | yes | yes |
-| token counts | yes | yes |
-| context window size | **no** | yes |
-| context % | **not derivable** | **derived** |
-| quota / rate limits | **no** (statusline stdin only) | yes |
-| cost USD | no (stdin only) | no |
-| process liveness | registry exists, deliberately unread (§3.1) | none |
-| session title | yes | no |
-| sub-agent count | **derived** (`subagents/` sidecar, §3.1) | **no** |
+| Field | Claude (disk) | Codex (disk) | Gemini (disk, §3.7) |
+|---|---|---|---|
+| session id, cwd, git branch | yes | yes | id yes; cwd via `projects.json`; branch no |
+| model | yes | yes | yes (per message) |
+| token counts | yes | yes | yes (per message) |
+| context window size | **no** | yes | **no** (static table in CLI source only) |
+| context % | **not derivable** | **derived** | **not derivable** |
+| quota / rate limits | **no** (statusline stdin only) | yes | **no** (runtime 429 handling only) |
+| cost USD | no (stdin only) | no | no |
+| process liveness | registry exists, deliberately unread (§3.1) | none | none |
+| session title | yes | no | yes (`summary` metadata) |
+| sub-agent count | **derived** (`subagents/` sidecar, §3.1) | **no** | **derived** (`chats/<parent-id>/` nest) |
 
 Codex is `CapNone` for the sub-agent count and not merely empty. Sub-agent *threads* do
 exist in the Codex format — `session_meta.payload.agent_nickname` marks one, and the
@@ -401,7 +401,78 @@ stale value presented as fresh. A record that parses only partially degrades the
 it could not source to `—` and keeps the rest. A truncated trailing line is not a record.
 The exact renders are §7.7.
 
-## 4. Adapter contract (v1)
+### 3.7 Gemini CLI seam — source-verified 2026-08-02; first live pass itemized
+
+**Environment:** gemini-cli 0.53.1 installed via npm 2026-08-02; the persistence layer
+read at tag v0.53.1 (`packages/core/src/services/chatRecordingService.ts` +
+`chatRecordingTypes.ts` for the writer and record shapes, `config/storage.ts` for the
+tree, `config/projectRegistry.ts` for the slug registry). This is the writer's own
+source, not its docs — the same standard as the Codex `rollout` read (§3.2).
+
+**Layout (from source):**
+
+- Sessions: `~/.gemini/tmp/<project-slug>/chats/session-<YYYY-MM-DDTHH-MM>-<id8>.jsonl`.
+  The filename embeds only the session id's first 8 characters; the full id is on the
+  first record. `~/.gemini/projects.json` maps absolute project paths (lowercased on
+  Windows) to slugs; the slug scheme replaced sha256-hash directory names in 0.5x, and
+  the registry self-heals from `.project_root` markers.
+- Sub-agent transcripts nest at `chats/<parent-session-id>/<id>.jsonl` — a structural
+  parent link, which is why Gemini declares `subagents` (derived) where Codex cannot
+  (§3.3): Codex's sub-agent threads are top-level files with no path back to a parent.
+- Legacy pre-JSONL sessions are single-document `*.json`; the adapter skips them.
+
+**Record shapes (from source):** the first line is metadata (`sessionId`,
+`projectHash`, `startTime`, `lastUpdated`, optional `kind`/`directories`); message
+records carry a string `id`, `timestamp`, `type`, and on `type:"gemini"` a `model` and
+a per-message `tokens` summary (`input` = promptTokenCount, `cached` a subset of it,
+`output`, `total`); `{"$set":{...}}` records patch metadata (including `summary`, the
+session title, and whole-array `messages` checkpoints that can put megabytes on one
+line — the §4 framing rule is earning its keep here); `{"$rewindTo":id}` truncates.
+**Messages are upserts**: the writer re-appends the full record under the same id when
+tokens or tool calls settle, so a linear last-wins pass needs no dedup map.
+
+**Traps encoded in the adapter:**
+
+- The writer **deletes** a session file on exit when it holds no resumable content, so
+  a file vanishing between Discover and Read is normal operation (`ErrSessionGone`,
+  row dropped silently).
+- Nothing quota-shaped is persisted — rate limiting exists only as runtime 429
+  handling (`googleQuotaErrors.ts`, `retry.ts`). `quota` is CapNone, not empty.
+- No context-window size reaches disk; the CLI's own percentage divides by a static
+  per-model table compiled into its source. An assumed denominator is an invented
+  gauge (decisions/001), so `context_pct` is CapNone — the §4a.7 sketch guessed
+  "derived" here, and the source read falsified the guess.
+- `workspace` is read verbatim from the vendor's registry entry (REPORTED, a lookup
+  not a computation), with a fidelity caveat: the vendor lowercases the recorded path
+  on Windows.
+- The adapter replays the writer's grammar, not just its records: `$rewindTo`
+  truncates the ordered message log (a rewind to an id outside the read windows
+  conservatively clears it), and a `$set` messages checkpoint clears and rebuilds it —
+  both mirroring the vendor's own loader. Independent review (2026-08-02) caught the
+  first cut ignoring both; a rewound-away 215k-token reading would have kept rendering.
+- **Bounded-read limitation, stated:** the head/tail windows share the seam behaviour
+  of every adapter — a record crossing the boundary is read by neither window, and a
+  single line larger than the tail budget (256 KiB) is outside the read entirely. On
+  Gemini that line can be a whole-conversation checkpoint, so a giant checkpoint's
+  values are invisible until the next ordinary record re-establishes them. Accepted as
+  the same tradeoff the other adapters carry; the live pass below sizes real
+  checkpoints to check whether the budget needs raising.
+
+**First live pass — owed, unobservable until a corpus exists** (the CLI was installed
+for this adapter; no session has been run yet):
+
+- Confirm the metadata line is the FIRST line in every live file, and whether main
+  sessions carry `kind:"main"` or omit the field (the fixture assumes omitted).
+- Confirm filename shape and that `projects.json` gains the entry promptly (the
+  registry can lag a fresh project; the adapter treats a missing entry as absence).
+- Confirm the upsert pattern and per-message `tokens` against real traffic, and the
+  non-resumable delete-on-exit behaviour.
+- Observe whether a live `$set` messages checkpoint exceeds the 64 KiB scanner cap in
+  practice (expected: yes, on any long session), and whether any exceeds the 256 KiB
+  tail budget (which would put whole checkpoints outside the bounded read — see the
+  limitation above).
+- Observe a real `$rewindTo` and confirm the truncate-or-clear replay against the
+  loader's behaviour on the same file.
 
 One module per vendor implementing:
 
@@ -409,9 +480,11 @@ One module per vendor implementing:
 - `read(session)` — return the normalized session model (schema TBD, documented here)
 - `capabilities()` — which normalized fields this vendor can actually source
 
-The contract, the normalized schema, and a worked third-party example (how you'd add
-Gemini CLI) are documentation deliverables of v1, not afterthoughts. The Go form is §4a.5
-and the worked example is §4a.7.
+The contract, the normalized schema, and a worked third-party example are documentation
+deliverables of v1, not afterthoughts. The Go form is §4a.5 and the worked example is
+§4a.7 — whose subject, Gemini CLI, became a real built-in adapter on 2026-08-02; the
+example keeps its original sketch precisely because live verification overturned part
+of it (see the §4a.7 postscript).
 
 ### JSONL framing rule (binding on every adapter)
 
@@ -664,6 +737,10 @@ not on the render path.
 
 ### 4a.7 Worked example: adding a Gemini CLI adapter
 
+*(2026-08-02: this example became real — `internal/adapter/gemini`, seam verification
+in §3.7. The sketch below is kept AS WRITTEN, wrong guess included, because the gap
+between it and the shipped adapter is the section's whole lesson; see the postscript.)*
+
 **Step 0 — verify the seam before writing a line of code.** ADR-001's live-doc rule
 applies to third-party adapters too: check the vendor's *current* docs for what it
 actually writes to disk. This repo's own Codex plan was falsified on first check (no
@@ -791,6 +868,17 @@ content enters `testdata/`, ever.
 declared `CapNone` with a one-line reason is a finished answer. A field quietly filled
 with a plausible number is the bug this whole schema exists to make hard.
 
+**Postscript — what Step 0 did to this very sketch.** The sketch above, written before
+anyone read the vendor's source, guessed `context_pct: derived` ("token counts summed
+from records"). The source read (§3.7) falsified it: Gemini's per-message token counts
+are real, but no context-window size reaches disk — the CLI's own percentage divides by
+a static table compiled into its binary, which is exactly the assumed denominator
+decisions/001 forbids. The shipped adapter declares `context_pct: CapNone` and carries
+the token reading as a display-only extra instead. The hypothetical also missed the two
+things only the source could reveal: message records are upserts (same id re-appended),
+and the writer deletes non-resumable sessions on exit. If you skip Step 0, those two
+become bugs; the wrong capability guess becomes a fabricated gauge.
+
 ## 5. Eval harness
 
 Fixture-driven, in-repo, CI-gating (`.github/workflows/ci.yml` runs `go vet ./...` and
@@ -804,6 +892,7 @@ statusline fixture). What it asserts today:
 | Schema gate | `internal/model` | `Validate` over every rejection case, liveness boundaries, presence semantics |
 | Claude adapter | `internal/adapter/claudecode` | discovery filters, the `<synthetic>` trap, the `input_tokens` trap, torn tail invisibility, torn-only session, future mtime, capability table |
 | Codex adapter | `internal/adapter/codex` | envelope + internally-tagged event parsing, derived context, quota window presence, null `rate_limits`, sub-agent rejection, capability table |
+| Gemini adapter | `internal/adapter/gemini` | fixed-depth discovery (legacy `.json` and nested sub-agent files excluded), upsert last-wins, `$set` summary/lastUpdated, registry workspace lookup (verbatim, corrupt-degrades, absent-is-absent), sub-agent nest counting, `kind:"subagent"` rejection, torn tail invisibility, future mtime, Q8 fold, capability table |
 | Claude adapter (v1.1) | `internal/adapter/claudecode` | the sub-agent count: recency boundary, future-mtime exclusion, non-transcript neighbours ignored, absent sidecar as a measured zero |
 | HUD renders | `internal/hud` | every golden frame byte-for-byte at 52/72/80/120 columns (count enforced by TestEveryGoldenIsClassified, not restated here — a literal drifted once already), the §7.4 gauge table, the estimate marker, threshold colours, frame width/height invariants |
 | HUD behaviour | `internal/hud` | vendor status words from adapter errors, key handling, one-scan-in-flight, spinner lifecycle |
@@ -1152,7 +1241,7 @@ error dialog.
 
                                  claude   watching       %USERPROFILE%\.claude\projects
                                  codex    not detected   %USERPROFILE%\.codex
-
+                                 gemini   not detected   %USERPROFILE%\.gemini\tmp
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
@@ -1170,7 +1259,7 @@ Codex line reads `not detected`, since `~/.codex` is absent (§3.2). The third w
 
                        claude   unreadable     %USERPROFILE%\.claude\projects  Access is denied.
                        codex    not detected   %USERPROFILE%\.codex
-
+                       gemini   not detected   %USERPROFILE%\.gemini\tmp
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
@@ -1188,7 +1277,7 @@ floating panel on a monitor obscures the thing being monitored.
         enter  open the detail pane for the selected session
         /      find: narrow rows by name or path
         esc    close the pane, or cancel the find, or quit
-        v      vendor filter: all -> claude -> codex
+        v      vendor: all -> claude -> codex -> gemini
         s      sort: activity -> context -> cost
         a      show all (include sessions idle > 8h)
         r      rescan now
@@ -1204,12 +1293,12 @@ percentage (marked `~`) and real quota windows. Nothing sources cost, so the `CO
 column auto-hides and its width returns to `SESSION`.
 
 ```
- telltale  │  2 sessions  │  claude 1  codex 1                                                5h ██████▎─ 88.4% ↻ 3h02m
+ telltale  │  3 sessions  │  claude 1  codex 1  gemini 1                                      5h ██████▎─ 88.4% ↻ 3h02m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                               MODEL          CONTEXT                AGE
  ● CC │ telltale  C:\src\code                                                 Opus 5                           — │  12s
  ● CX │ example-app  C:\src\code                                              gpt-5.1-codex  ███████▋──── ~69.8% │   1m
-
+ ◐ GE │ glossary tooltips ⑂~2  c:\src\code                                    gemini-3-pro                     — │   3m
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
@@ -1846,7 +1935,9 @@ in the schema moved.
 - Themes + segment config file (ccstatusline's adoption driver).
 - `telltale snap`: one-shot frame render to stdout (pipeable, screenshot-able; already
   prototyped as a throwaway during v1 verification).
-- Gemini CLI adapter, once its seam is verified live (§4a.7 example becomes real).
+- ~~Gemini CLI adapter, once its seam is verified live (§4a.7 example becomes real)~~ —
+  **landed 2026-08-02** (`internal/adapter/gemini`, §3.7; the §4a.7 example is real,
+  with its original sketch kept as the postscript's evidence).
 
 ### Deliberately rejected
 

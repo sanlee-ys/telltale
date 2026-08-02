@@ -1,0 +1,7 @@
+{"sessionId":"00000000-cccc-4ddd-8eee-000000000001","projectHash":"00000000000000000000000000000000000000000000000000000000000000c1","startTime":"2026-08-02T10:00:00.000Z","lastUpdated":"2026-08-02T10:00:00.000Z"}
+{"id":"00000000-cccc-4ddd-8eee-00000000m001","timestamp":"2026-08-02T10:00:05.000Z","type":"user","content":"FIXTURE prompt with a raw separator inside"}
+{"id":"00000000-cccc-4ddd-8eee-00000000m002","timestamp":"2026-08-02T10:01:00.000Z","type":"gemini","content":[{"text":"FIXTURE draft"}],"model":"gemini-2.5-flash"}
+{"$rewindTo":"00000000-cccc-4ddd-8eee-00000000m099"}
+{"id":"00000000-cccc-4ddd-8eee-00000000m002","timestamp":"2026-08-02T10:01:00.000Z","type":"gemini","content":[{"text":"FIXTURE final"}],"model":"gemini-3-pro","tokens":{"input":215000,"output":1200,"cached":180000,"thoughts":300,"tool":50,"total":216550}}
+{"$set":{"summary":"FIXTURE example session","lastUpdated":"2026-08-02T10:05:00.000Z"}}
+{"id":"00000000-cccc-4ddd-8eee-00000000m003","timestamp":"2026-08-02T10:06:00.000Z","type":"gem
