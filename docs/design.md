@@ -353,14 +353,22 @@ noted below.
   also reproduced §6 Q8 a second time: the first CLI rollout's mtime settled roughly
   twenty minutes after the session ended, when the writer released the file.
 
-**Still owed:**
+**Still owed** (re-scannable on demand: `tools/scan-passive-tail.py`):
 
 - Null `info`/`rate_limits` mid-stream, "cleared" vs "unchanged" (§3.2): the corpus
   contained **no mid-stream nulls**, so the conservative "clearing" reading stands
   unfalsified rather than confirmed.
 - An **API-key login** capture (rate_limits expected absent), and whether a paid plan
-  ever populates `secondary`.
+  ever populates `secondary`. Capture path when wanted: `codex login --with-api-key`
+  (reads the key from stdin), run one short session, re-scan, then plain
+  `codex login` to return to the ChatGPT plan.
 - The 7-day `.zst` compression pass — unobservable until the corpus is a week old.
+
+*Re-scan 2026-08-02:* 5 native rollouts (35 imports filtered), including one new
+Desktop session — still zero mid-stream nulls; plus-plan `secondary` still null
+across all 32 populated `rate_limits`; no API-key-signature session; no `.zst`
+anywhere under `sessions/`. Oldest native rollout is 2026-08-01, so the `.zst`
+pass stays unobservable before ~2026-08-08.
 
 ### 3.5 Framing rule — now measured, not assumed (see §4)
 
