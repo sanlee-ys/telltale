@@ -516,21 +516,64 @@ google-antigravity/antigravity-cli, is docs and examples only), so this survey i
 Claude Code method: documented contracts cross-checked against live observation, no
 source read possible.
 
-**Disk verdict — no honest HUD adapter today.** Interactive and headless sessions both
-write only `~/.gemini/antigravity-cli/conversations/<conversation-id>.db`: SQLite,
-protobuf blobs in every payload column (`steps.step_payload`, `gen_metadata.data` —
-inspected read-only). Undocumented protobuf is unparseable without guessing, and the
-repo already rejected a SQLite dependency once (§3.2). The docs and the live statusline
-payload both advertise
-`~/.gemini/antigravity/brain/<conversation-id>/.system_generated/logs/transcript.jsonl`;
-**agy 1.1.9 never writes it** — that path does not exist, and the real (undocumented)
-`brain/` lives under `antigravity-cli/` and holds only empty `scratch/` dirs. A
-vendor-advertised path with no file behind it is the exact shape of thing this product
-refuses to render.
+**Disk verdict (first survey — superseded the same day by the re-survey below).**
+Interactive and headless sessions both write
+`~/.gemini/antigravity-cli/conversations/<conversation-id>.db`: SQLite, protobuf blobs
+in every payload column (`steps.step_payload`, `gen_metadata.data` — inspected
+read-only). The first survey judged the blobs unparseable without guessing (and the
+repo had already rejected a SQLite dependency once, §3.2), and found no transcript: the
+docs and the live payload both advertise
+`~/.gemini/antigravity/brain/<conversation-id>/.system_generated/logs/transcript.jsonl`,
+that path did not exist, and `antigravity-cli/brain/` held only empty `scratch/` dirs
+at survey time. Verdict then: no honest HUD adapter; agy shipped as a statusline-only
+vendor (ADR-004), with a standing watch item on the transcript.
 
-**Watch item:** the payload's `transcript_path` field means the vendor intends the
-file. The day agy starts writing it, an Antigravity HUD adapter becomes buildable and
-the payload already says where to look. Until then, agy is a statusline-only vendor.
+**Re-survey (2026-08-02, later the same day; ADR-005 decision 5, prompted by ccusage
+issue #1402): the disk seam is OPEN, and the watch item is RESOLVED — the transcript is
+real.** Corpus: four conversations, all agy **1.1.9** — the same version the first
+survey ruled on; this is a correction, not a version change.
+
+- `brain/<id>/.system_generated/logs/transcript.jsonl` **exists for all four
+  conversations**, non-empty, plus an undocumented untruncated sibling
+  `transcript_full.jsonl` (`transcript.jsonl` marks its cuts with `truncated_fields`).
+  Written default-on, with `enableTelemetry: false`, under `antigravity-cli/` — the
+  docs' advertised `antigravity/` tree still does not exist. Why the first survey saw
+  only empty dirs is unresolved (a flush-timing artifact vs. a missed `.system_generated`
+  subdir); both observations stand as recorded. The transcript is plain JSONL, one line
+  per `steps` row (verified exact, 38/38 across the corpus): step_index, source, type,
+  status, created_at (RFC3339 UTC, second resolution), content, thinking, tool_calls,
+  exit_code.
+- `gen_metadata.data` **decodes with a stdlib protobuf wire walk** (no schema, no
+  deps). Per-generation token counts live at `#1.#4`: uncached input (`#2`), total
+  output (`#3`), cache-read (`#5` — inferred from position and magnitude, lower
+  confidence), thinking (`#9`), answer (`#10`), and the per-generation response id
+  (`#11`, the dedup key — the *top-level* `#4` UUID is constant per conversation and
+  must not be used). Model id at `#1.#19` (`gemini-3.6-flash`) and display name at
+  `#1.#21`, matching the live statusline string verbatim. **Self-check: `thinking +
+  answer == output` held in 15/15 decoded generations** — the arithmetic identity that
+  promotes this from field-guessing to a schema. An adapter must assert it at read time
+  and degrade to absent rather than render a number that fails it.
+- What an adapter could report as **measured**: Name, Model, Workspace (trajectory-blob
+  URI), LastActivity (max transcript `created_at`; the trajectory-blob timestamp is
+  session *start* — do not use it). **Partial**: context used-tokens (numerator
+  measured; the 1,048,576 window denominator appears nowhere on disk — it must come
+  from the statusline payload or a constant with stated provenance). **Absent**: cost
+  (consumer auth; no pricing on disk), quota (server-refreshed in memory, never
+  persisted). **Structural only, never observed live**: liveness (`steps.status` — all
+  38 observed rows `DONE`; no in-flight session sampled yet) and subagents
+  (`parent_references` empty, `has_subtrajectory` all zero, `define_subagent`/
+  `invoke_subagent` present in the tool registry).
+- Build cautions, recorded before any adapter work: **WAL sidecars are load-bearing**
+  (a `-wal` larger than the `.db` was observed — copy `.db`+`-wal`+`-shm` together, or
+  open the live file strictly read-only and let SQLite replay; never open it for
+  write). `conversation_summaries.db` is a stale index (1 row for 4 conversations) —
+  enumerate `conversations/*.db`, never trust it. `cache/last_conversations.json` is
+  written at session start and points at the *previous* session for a reused
+  workspace. Transcript `content`/`thinking` and the request blobs are PII (full
+  prompt text, file contents; the account email appears in `cli.log`) — an adapter
+  reads structural fields only and never surfaces those into the HUD or any log. All
+  protobuf field numbers are reverse-engineered and unversioned; the corpus is one
+  day, one model — field stability across models is untested.
 
 **Statusline seam — verified live.** Capture method: a temporary statusline command
 (`telltale-capture.cmd`) appending each stdin payload to a file; six payloads captured
@@ -546,7 +589,8 @@ screen. Documented but not yet observed live (the capture session ran outside a 
 optional; the branch segment's live confirmation is the itemized remainder here.
 
 **Fidelity notes:** the docs' storage path (`antigravity/`) and the real one
-(`antigravity-cli/`) disagree — recorded, not resolved; `model.id` equals the display
+(`antigravity-cli/`) disagree — the re-survey confirmed the real tree (the docs path
+has never existed on this machine); `model.id` equals the display
 string ("Gemini 3.6 Flash (High)"), not a machine id; the payload carries the signed-in
 email and plan tier, so real captures are PII and never enter `testdata/`.
 
@@ -2010,15 +2054,18 @@ these items are ordered by that sequence, not by version number.
    (#2)**. The launch experiment explicitly does not claim this ground: its result is
    evidence about cross-harness visibility only, and neither validates nor falsifies a
    capability the launched product did not contain.
-4. **The agy disk-seam re-survey is the next scheduled adapter work item**, upgrading
-   §3.8's watch item from passive to active. New evidence (ccusage issue #1402): agy
-   ≥ 1.0.4 stores sessions in SQLite `.db` files whose `gen_metadata` table exposes
-   input / cache-read / output / thinking token counts, a response model per generation,
-   and per-turn rows dedupable by `responseId` — that is, the payload columns §3.8 read
-   as opaque protobuf may in fact be parseable. The survey runs against the local 1.1.9
-   corpus first and no coverage claim is made before it lands; the §3.8 verdict stays as
-   written until it does. If it verifies, agy stops being a statusline-only vendor and
-   telltale ships the lane's only Antigravity HUD adapter.
+4. **The agy disk-seam re-survey RAN the same day this track landed — verdict: OPEN**
+   (§3.8 re-survey block; prompted by ccusage issue #1402). Both claimed surfaces
+   verified against the local 1.1.9 corpus: the advertised transcript.jsonl is real
+   (ADR-004's watch item resolved — the first survey's "never written" was wrong at the
+   same version), and `gen_metadata` token counts decode with a self-checking
+   arithmetic identity. **The next adapter work item is therefore the agy HUD adapter
+   itself** — transcript-first (Name/Workspace/LastActivity/liveness scaffolding from
+   plain JSONL), `gen_metadata` only for Model + token counts, honoring §3.8's build
+   cautions (WAL sidecars, stale summary index, PII fields, assert-the-identity). agy
+   stops being a statusline-only vendor when that ships, and telltale ships the lane's
+   only Antigravity HUD adapter. Liveness and subagents stay structural-only until
+   observed live.
 
 Neither track discharges what verification already owes: §3.4's remaining passive-tail
 items and §3.7's first live Gemini pass stay open, and adoption work does not buy an

@@ -53,7 +53,25 @@ San chose to build the statusline support immediately.
 - Live captures of the agy payload contain the signed-in email and plan tier: real
   payloads are PII and never enter `testdata/`; fixtures are synthesized to shape.
 
+## Amendment — 2026-08-02: the re-survey reversed the disk verdict
+
+ADR-005's scheduled re-survey ran the same day, against the same agy version (1.1.9),
+and reversed this ADR's disk ruling: **the seam is open.** The advertised transcript is
+real — written default-on for every conversation at
+`~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript.jsonl` (the
+docs' `antigravity/` tree never existed; the first survey found only empty dirs under
+`antigravity-cli/brain/`, a discrepancy recorded but not fully explained) — so the
+standing watch item is **resolved**. Separately, `gen_metadata`'s protobuf decodes with
+a stdlib wire walk and its token counts self-check (`thinking + answer == output`,
+15/15). Full findings, field map, and build cautions: design.md §3.8 re-survey block.
+
+Consequence: the "not (yet) a HUD vendor" title's *yet* has arrived — the agy HUD
+adapter is buildable and is the roadmap's next adapter work item (§8). The statusline
+decision above is unaffected. This ADR's original verdict stands as an honest record of
+what the first survey observed; the reversal is evidence-driven, not a rewrite.
+
 ## Downstream surfaces
 
-design.md (§2.1 new, §3.8 new, §5 eval row, restored §4 heading), README.md (status,
-statusline wiring, honest claim), decisions/README.md index, memory: telltale-project.
+design.md (§2.1 new, §3.8 new + re-survey block, §5 eval row, restored §4 heading),
+README.md (status, statusline wiring, honest claim), decisions/README.md index,
+memory: telltale-project.
