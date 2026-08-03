@@ -281,18 +281,18 @@ JSONL stays canonical and readable without SQLite.
 
 ### 3.3 Cross-vendor capability matrix — the asymmetry is a design fact, not a bug
 
-| Field | Claude (disk) | Codex (disk) | Gemini (disk, §3.7) | Antigravity (disk, §3.8) |
-|---|---|---|---|---|
-| session id, cwd, git branch | yes | yes | id yes; cwd via `projects.json`; branch no | id yes; cwd via the trajectory blob's `file:///` URI; branch no |
-| model | yes | yes | yes (per message) | yes (per generation, id + display name) |
-| token counts | yes | yes | yes (per message) | yes (per generation, self-checking) |
-| context window size | **no** | yes | **no** (static table in CLI source only) | **no** (statusline payload only) |
-| context % | **not derivable** | **derived** | **not derivable** | **not derivable** |
-| quota / rate limits | **no** (statusline stdin only) | yes | **no** (runtime 429 handling only) | **no** (statusline stdin only; never persisted) |
-| cost USD | no (stdin only) | no | no | no |
-| process liveness | registry exists, deliberately unread (§3.1) | none | none | `steps.status` exists, structural only (never observed in-flight) |
-| session title | yes | no | yes (`summary` metadata) | **no** — the only free text on disk is prompt content |
-| sub-agent count | **derived** (`subagents/` sidecar, §3.1) | **no** | **derived** (`chats/<parent-id>/` nest) | **no** — `parent_references` observed empty |
+| Field | Claude (disk) | Codex (disk) | Gemini (disk, §3.7) | Antigravity (disk, §3.8) | Cursor (disk, §3.9) |
+|---|---|---|---|---|---|
+| session id, cwd, git branch | yes | yes | id yes; cwd via `projects.json`; branch no | id yes; cwd via the trajectory blob's `file:///` URI; branch no | id yes; cwd via `workspaceStorage/<id>/workspace.json`; branch no |
+| model | yes | yes | yes (per message) | yes (per generation, id + display name) | yes (`modelConfig.modelName`, one string; sometimes the literal `default`) |
+| token counts | yes | yes | yes (per message) | yes (per generation, self-checking) | context totals yes; per-message counts present and **always 0** |
+| context window size | **no** | yes | **no** (static table in CLI source only) | **no** (statusline payload only) | yes (`contextTokenLimit`) |
+| context % | **not derivable** | **derived** | **not derivable** | **not derivable** | **reported** (the vendor persists its own; derived from raw counts only if it is missing) |
+| quota / rate limits | **no** (statusline stdin only) | yes | **no** (runtime 429 handling only) | **no** (statusline stdin only; never persisted) | **no** — plan *entitlements* on disk, no consumption record |
+| cost USD | no (stdin only) | no | no | no | **no** — `usageData` `{}`, token counts unpopulated zeros |
+| process liveness | registry exists, deliberately unread (§3.1) | none | none | `steps.status` exists, structural only (never observed in-flight) | `status`/`generatingBubbleIds` exist, structural only (never observed in-flight); Hooks is the real seam |
+| session title | yes | no | yes (`summary` metadata) | **no** — the only free text on disk is prompt content | yes (`value.name`, vendor-generated) |
+| sub-agent count | **derived** (`subagents/` sidecar, §3.1) | **no** | **derived** (`chats/<parent-id>/` nest) | **no** — `parent_references` observed empty | **no** — `isSubagent`/`numSubComposers` observed zero throughout |
 
 Codex is `CapNone` for the sub-agent count and not merely empty. Sub-agent *threads* do
 exist in the Codex format — `session_meta.payload.agent_nickname` marks one, and the
@@ -305,6 +305,12 @@ Claude's quota lives on the statusline seam; Codex's lives on the disk seam. So 
 quota block is Codex-sourced today, and the CONTEXT column carries a Codex number beside
 a Claude em dash. **Nothing sources cost**, so the COST column auto-hides in every real
 v1 frame — see the `v1-capabilities` render in §7.3.
+
+Cursor is the first vendor to put a context percentage on disk as a number *it* computed,
+which makes it the only unmarked bar in that frame. Everything else about it is the
+asymmetry again from the other side: it is also the first vendor whose store holds live
+credentials, so the adapter's most load-bearing property is the list of things it does
+not read (§3.9, decisions/007).
 
 **Percentage comparability.** Codex's own
 `TokenUsage::percent_of_context_window_remaining` subtracts `BASELINE_TOKENS = 12000`
@@ -621,6 +627,118 @@ adapter took from this survey and what it left:
 has never existed on this machine); `model.id` equals the display
 string ("Gemini 3.6 Flash (High)"), not a machine id; the payload carries the signed-in
 email and plan tier, so real captures are PII and never enter `testdata/`.
+
+### 3.9 Cursor (Composer) seam — surveyed live 2026-08-02; the store is open, and it holds credentials
+
+**Environment:** Cursor 3.14.7, Windows. Closed source, and the store format is
+**undocumented and unversioned** — there is no changelog for the 3.12–3.14 line and no
+schema anywhere. So this is the Claude Code / Antigravity method again: a read-only live
+survey, every field cross-checked, nothing claimed that was not observed.
+
+**Store inventory.** One SQLite database backs every Composer session:
+
+```
+%APPDATA%\Cursor\User\
+  globalStorage\state.vscdb          9.3 MB at survey time
+  globalStorage\state.vscdb-wal      4.6 MB — LIVE, Cursor was running
+  workspaceStorage\<workspace-id>\workspace.json
+  workspaceStorage\<workspace-id>\state.vscdb        4096 bytes
+  workspaceStorage\<workspace-id>\state.vscdb-wal    300–540 KB
+```
+
+Three tables. `composerHeaders(composerId, workspaceId, createdAt, lastUpdatedAt,
+isArchived, isSubagent, recency, checkpointAt, value)` is one row per session, `value`
+being a JSON blob. `cursorDiskKV(key, value)` is key/value: `composerData:<uuid>` holds
+per-session state, `bubbleId:*` and `ofsContent:*` hold the message payloads.
+**`ItemTable(key, value)` holds the credentials** — see below.
+
+**Field map.**
+
+| Field | Verdict | Source, and what was measured |
+|---|---|---|
+| name | **MEASURED** | `composerHeaders.value.name` — a vendor-GENERATED session title ("Multi-vendor orchestration"), same class as the Claude summaries the HUD already shows. Absent on a session the vendor has not titled yet; the composerId's first eight characters then. |
+| model | **MEASURED** | `composerData:<id>` → `modelConfig.modelName`. Observed `composer-2.5`, `grok-4.5`, `gpt-5.6-sol`, and the literal `default`. One string, no display name beside it. |
+| workspace | **MEASURED** | `composerHeaders.workspaceId` → `workspaceStorage/<id>/workspace.json` → `.folder`, a `file:///c%3A/...` URI (lower-case drive letter, percent-encoded colon). `value.workspaceIdentifier.uri.fsPath` carries the same path and confirms it. |
+| context % | **MEASURED** | `composerData.contextUsagePercent`, a float the vendor persists: 37.05, 29.008, 12.38, 10.99 observed, alongside raw `contextTokensUsed`/`contextTokenLimit` (94854/256000, 24763/200000, 44k/1M). The header row's `value.contextUsagePercent` mirrors it and agreed **exactly** on all four rows carrying both. |
+| cost | **ABSENT** | `usageData` was `{}` in all 8 blobs, and `tokenCount.inputTokens`/`outputTokens` read **0 in all 310 message rows**. The schema is present and never populated. |
+| quota | **ABSENT** | No consumption record on disk anywhere. What IS there is plan ENTITLEMENT (`credit_dollars: 25`, `included_usage_dollars: 40`) — what the plan grants, not what has been spent. |
+| last_activity | **MEASURED** | `lastUpdatedAt` / `recency` / `checkpointAt`, epoch **milliseconds**. Not every row has all three (`lastUpdatedAt` was NULL on 4 of 9). |
+| liveness | **PARTIAL, never observed in flight** | `composerData.status` (`completed`, `aborted`, `none`), `generatingBubbleIds`, `hasBlockingPendingActions`. All read terminal or empty across the corpus; no session was ever sampled mid-generation. |
+| subagents | **ABSENT (structural only)** | `isSubagent` 0, `numSubComposers` 0, `subComposerIds` `[]` on every row. The fields exist; the observation does not. |
+
+**Most rows are not sessions.** 9 header rows, of which **5** were: the empty-state
+draft (`composerId` literally `empty-state-draft`, `isDraft` true), two pre-created
+composers a new window makes before anyone types (no title, no `lastUpdatedAt`), and two
+archived threads. Filtering on `isDraft`, `isArchived`, `isSubagent`,
+`workspaceId == "empty-window"` and the draft sentinel left 4 real sessions, which is
+what the HUD shows.
+
+**Build cautions, recorded before any adapter work:**
+
+- **The WAL is where the data is.** This is stronger than the usual "read the sidecar
+  too" (§3.8): every workspace-level `state.vscdb` was **4096 bytes — one empty page —
+  with 300–540 KB in its `-wal`**. A reader that opens only the `.db` there does not get
+  stale data, it gets an empty database. The global store was 9.3 MB with a 4.6 MB live
+  sidecar. Read both as bytes; never open or lock the file Cursor owns.
+- **THE STORE HOLDS LIVE CREDENTIALS.** `ItemTable` carries `cursorAuth/accessToken`,
+  `cursorAuth/refreshToken`, `mcpOAuth.secret.*` and git-IPC auth tokens;
+  `composerData` blobs carry `blobEncryptionKey` and
+  `speculativeSummarizationEncryptionKey`. This is the first vendor where "read the
+  store" and "read the user's tokens" are the same sentence unless an adapter is
+  explicit about what it will not touch. The allowlist is decisions/007 and it is
+  asserted by a test, not promised in a comment.
+- **`ItemTable['composer.composerHeaders']` is a legacy JSON mirror and it is STALE.**
+  At survey time it named **3** composers to the table's **9**, and all three were rows
+  the filter drops — so an adapter reading the mirror would report *zero* sessions on a
+  machine running four. Read the table. (The mirror is in `ItemTable` anyway, so the
+  credential rule forbids it independently.)
+- **Timestamps are mixed.** The header columns are epoch milliseconds; ISO-8601 UTC
+  strings live in the same store at `composerData.fullConversationHeadersOnly[].createdAt`
+  (per-message, structural). That path is a finer-grained activity signal than
+  `lastUpdatedAt` and the adapter deliberately does **not** read it: it is outside the
+  allowlist, and widening the allowlist for precision is exactly the trade this seam
+  should not make. The timestamp reader accepts both encodings anyway, because an
+  unversioned INTEGER column is not promised to stay one.
+- **One store, many sessions**, so the store's file mtime dates the STORE. Folding it
+  into `last_activity` — which is what §6 Q8 prescribes for every other vendor — would
+  mark every Cursor row live whenever Cursor wrote anything, forever. The Q8 fold runs
+  over the per-row timestamps only, and degrades when none is readable. This is the one
+  deliberate departure from the Q8 shape, and the reason is that the shape assumes one
+  file per session.
+- **Version fragility.** No changelog, no schema version in the file, no documentation.
+  The adapter addresses columns by NAME (read out of the CREATE statement `sqlite_master`
+  stores) rather than by position, and a store missing `composerHeaders` or one of the
+  columns the field map needs is reported **unreadable with the reason** rather than as
+  zero sessions — a wrong "your agents are idle" is worse than a visible "I cannot read
+  this".
+
+**The needs-input seam, for later.** Cursor's *documented* surface is Hooks
+(cursor.com/docs/hooks): the base payload carries `conversation_id`, `model`,
+`workspace_roots` and `transcript_path`, and `preCompact` carries context numbers. That
+is a supported, versioned contract and it is where a liveness/needs-input signal should
+come from — not from reverse-engineering `status` out of the store. Recorded as the
+watch item; §8 carries it. Separately, the `cursor-agent` CLI keeps its own store, which
+is **not installed on this machine** and therefore an unverified surface, out of scope.
+
+**Adapter built, 2026-08-02 (decisions/007, `internal/adapter/cursor`).**
+Name, model, workspace and last_activity REPORTED; context % declared DERIVED and marked
+per read only when the adapter computed it; cost, quota, liveness and subagents
+`CapNone`. `internal/sqlite` gained two additions rather than being worked around:
+`Columns` (split the column list out of the stored CREATE statement, so columns are
+addressed by name) and `Rows` (stream a table to a callback that can stop, so filtering a
+key/value table by prefix retains nothing).
+
+**Live verification, same day:** 5 sessions discovered and read against the real store
+**with Cursor running** and a 4.6 MB live sidecar; workspaces resolved to `agent-ops` and
+`faithfulness-judge`; models `grok-4.5`, `composer-2.5`, `gpt-5.6-sol`; context
+percentages 4.42 / 12.93 / 37.05 all vendor-REPORTED, none marked derived; one session
+with no `composerData` row rendering an absent model rather than an empty one; every
+session passed `Validate` with an empty degraded set; no cost, no quota, no sub-agent
+count anywhere. First `Discover` 78 ms, second 0 ms (the store had not moved). What this
+does **not** cover, itemized: no in-flight session was sampled, no fan-out was observed,
+the derived-percentage path did not fire on live data (no real session was missing
+`contextUsagePercent` while carrying raw counts), and the corpus is one machine, one day,
+one Cursor version.
 
 ## 4. Adapter contract (v1)
 
@@ -1044,7 +1162,9 @@ statusline fixture). What it asserts today:
 | Claude adapter | `internal/adapter/claudecode` | discovery filters, the `<synthetic>` trap, the `input_tokens` trap, torn tail invisibility, torn-only session, future mtime, capability table |
 | Codex adapter | `internal/adapter/codex` | envelope + internally-tagged event parsing, derived context, quota window presence, null `rate_limits`, sub-agent rejection, capability table |
 | SQLite reader | `internal/sqlite` | record decoding across every storage class, the zero-width serial types, the overflow-page chain (25 KiB blob against a 4 KiB page), missing-table-is-absence, and the WAL overlay: a committed sidecar value winning, a corrupt frame ignored with a note, a bad header rejected whole, mismatched salts ignored, a torn tail never assembled |
+| SQLite reader (v1.2) | `internal/sqlite` | `Rows` streaming the same rows as `Table` and stopping when the callback says so; `Columns` splitting a CREATE statement across every quoting style, a parenthesized type, a comma inside a default and a table-level constraint, and yielding nothing rather than a guess on a statement it cannot read |
 | Antigravity adapter | `internal/adapter/antigravity` | discovery that ignores the stale summary index and the sidecars, WAL overlay changing the reported model, overflow-spanning generation blob, dedup on the response id rather than the constant conversation UUID, invariant violation dropping the tokens with a diagnostic, zero tokens as data, absent workspace as absence, missing transcript as a typed sentinel, unreadable database degrading rather than dropping the row, Q8 fold, future mtime, transcript content never reaching a field, capability table |
+| Cursor adapter | `internal/adapter/cursor` | discovery dropping the five row shapes that are not sessions (draft sentinel, `value.isDraft`, archived, sub-agent, empty-window), a store whose main file is one empty page reading entirely out of its sidecar, the vendor's own percentage reported unmarked, a computed one marked, neither-present as absence, `default` rendered literally, unpopulated zeros never becoming a cost or a token reading, missing workspace mapping as absence and an unparseable one as degradation, mixed epoch-ms/ISO-8601 timestamps, future-skew, all-timestamps-unreadable degrading, the stale `ItemTable` mirror losing to the table, an unrecognized schema erroring rather than reporting zero, capability table, and the allowlist: three planted markers (prompt text, credentials, plan entitlements) reaching no field, extra or diagnostic |
 | Gemini adapter | `internal/adapter/gemini` | fixed-depth discovery (legacy `.json` and nested sub-agent files excluded), upsert last-wins, `$set` summary/lastUpdated, registry workspace lookup (verbatim, corrupt-degrades, absent-is-absent), sub-agent nest counting, `kind:"subagent"` rejection, torn tail invisibility, future mtime, Q8 fold, capability table |
 | Claude adapter (v1.1) | `internal/adapter/claudecode` | the sub-agent count: recency boundary, future-mtime exclusion, non-transcript neighbours ignored, absent sidecar as a measured zero |
 | HUD renders | `internal/hud` | every golden frame byte-for-byte at 52/72/80/120 columns (count enforced by TestEveryGoldenIsClassified, not restated here — a literal drifted once already), the §7.4 gauge table, the estimate marker, threshold colours, frame width/height invariants |
@@ -1395,15 +1515,17 @@ error dialog.
                              agy      not detected   %USERPROFILE%\.gemini\antigravity-cli
                              claude   watching       %USERPROFILE%\.claude\projects
                              codex    not detected   %USERPROFILE%\.codex
+                             cursor   not detected   %APPDATA%\Cursor\User
                              gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
 
 The vendor status word is one of exactly three: `watching` (directory exists and is
-readable), `not detected` (directory absent), `unreadable` (directory exists, the OS
-refused — rendered `SevWarn` with the OS error appended). On the dev machine today the
-Codex line reads `not detected`, since `~/.codex` is absent (§3.2). The third word:
+readable), `not detected` (directory absent), `unreadable` (the vendor's data is there and
+the adapter cannot read it — an OS refusal, or a store whose schema the adapter does not
+recognize (§3.9); rendered `SevWarn` with the reason appended). On the dev machine today
+the Codex line reads `not detected`, since `~/.codex` is absent (§3.2). The third word:
 
 ```
  telltale  │  0 sessions
@@ -1413,6 +1535,7 @@ Codex line reads `not detected`, since `~/.codex` is absent (§3.2). The third w
                        agy      not detected   %USERPROFILE%\.gemini\antigravity-cli
                        claude   unreadable     %USERPROFILE%\.claude\projects  Access is denied.
                        codex    not detected   %USERPROFILE%\.codex
+                       cursor   not detected   %APPDATA%\Cursor\User
                        gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
@@ -1430,12 +1553,12 @@ floating panel on a monitor obscures the thing being monitored.
         enter  open the detail pane for the selected session
         /      find: narrow rows by name or path
         esc    close the pane, or cancel the find, or quit
-        v      vendor: all > claude > codex > gemini > agy
+        v      vendor: all > claude > codex >
+                       gemini > agy > cursor
         s      sort: activity > context > cost
         a      show all (include sessions idle > 8h)
         r      rescan now
         ?      close this help
-
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ? close
 ```
@@ -1446,13 +1569,17 @@ percentage (marked `~`) and real quota windows. Nothing sources cost, so the `CO
 column auto-hides and its width returns to `SESSION`. The `AG` row is labelled by the
 head of its conversation id because the only free text on agy's disk is prompt content
 (§3.8), and its `MODEL` cell truncates because the vendor's display string is 23
-characters against a 13-column cell — both are what the HUD really shows.
+characters against a 13-column cell — both are what the HUD really shows. The `CU` row
+is the one to read next to the `CX` row: both carry a context bar, and only one of them
+carries a `~`, because Cursor persists its own `contextUsagePercent` and telltale reads
+it rather than computing one (§3.9).
 
 ```
- telltale  │  4 sessions  │  claude 1  codex 1  gemini 1  agy 1                               5h ██████▎─ 88.4% ↻ 3h02m
+ telltale  │  5 sessions  │  claude 1  codex 1  gemini 1  agy 1  cursor 1                     5h ██████▎─ 88.4% ↻ 3h02m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                               MODEL          CONTEXT                AGE
  ● CC │ telltale  C:\src\code                                                 Opus 5                           — │  12s
+ ● CU │ multi-vendor orchestration  C:\src\code                               composer-2.5   ████▏───────    37% │   1m
  ● CX │ example-app  C:\src\code                                              gpt-5.1-codex  ███████▋──── ~69.8% │   1m
  ● AG │ 4c8b21a7  C:\src\code                                                 Gemini 3.6 F…                    — │   2m
  ◐ GE │ glossary tooltips ⑂~2  c:\src\code                                    gemini-3-pro                     — │   3m
@@ -1711,7 +1838,7 @@ Minimal, and every key earns its place.
 | `↑`/`↓`, `j`/`k` | move the selection (scrolls the help overlay while it is open) |
 | `enter` | open the detail pane for the selected session; close it if open |
 | `/` | find: type-to-filter on name or path |
-| `v` | vendor filter cycle: all → claude → codex → gemini → agy → all |
+| `v` | vendor filter cycle: all → claude → codex → gemini → agy → cursor → all |
 | `s` | sort cycle: activity → context → cost → activity |
 | `a` | toggle show-all (default hides sessions idle > 8 h) |
 | `r` | rescan now |
@@ -1722,15 +1849,17 @@ In **find mode** the keyboard belongs to the query: only `esc` (clear and leave)
 That is why the mode takes over the whole footer — a mode that silently changes what `q`
 means without saying so is how a read-only monitor surprises someone.
 
-`--vendor all|claude|codex|gemini|agy` sets the starting filter; the cycle takes over from
-there. `antigravity` is accepted as a synonym for `agy`, which is the id the footer and
-the header counts print.
+`--vendor all|claude|codex|gemini|agy|cursor` sets the starting filter; the cycle takes
+over from there. `antigravity` is accepted as a synonym for `agy` and `composer` for
+`cursor`; the short forms are the ids the footer and the header counts print.
 
-Cycles, not multi-select menus: with four vendors and three sorts, a cycle is one keystroke
+Cycles, not multi-select menus: with six vendors and three sorts, a cycle is one keystroke
 and no mode. Non-default filter, sort or query is always visible in the footer. The help
 overlay writes the cycle with `>` rather than `->` for one reason worth recording: the
 fourth vendor pushed that line past the 60-column floor, and a golden test at that width
-is what caught it.
+is what caught it. The **sixth** vendor exhausted that trick, and the cycle now wraps onto
+a continuation line indented under the first hop — shortening the vendor names instead
+would have made the overlay teach a name the footer does not print.
 
 > **Reversed in v1.1, deliberately.** v1 said: *"There is no selection cursor — the
 > default sort puts the interesting sessions on top, and a cursor invites drill-down,
@@ -2087,8 +2216,10 @@ these items are ordered by that sequence, not by version number.
 3. **Needs-input / blocked / done state is the first post-validation feature** — the
    attention-routing job, and the reason the product is positioned the way it is. It is
    built where the vendor seams already support it: Claude Code hooks, Codex notify
-   events, and agy's `agent_state` (observed live transitioning `tool_use` → `idle`,
-   §3.8). Not before experiment #1 reads out, and it then gets **its own experiment
+   events, agy's `agent_state` (observed live transitioning `tool_use` → `idle`, §3.8),
+   and Cursor Hooks (documented and versioned — §3.9, and the reason the Cursor adapter's
+   `status` field is deferred rather than mapped). Not before experiment #1 reads out,
+   and it then gets **its own experiment
    (#2)**. The launch experiment explicitly does not claim this ground: its result is
    evidence about cross-harness visibility only, and neither validates nor falsifies a
    capability the launched product did not contain.
@@ -2107,6 +2238,17 @@ these items are ordered by that sequence, not by version number.
    `internal/adapter/antigravity` + `internal/sqlite`, §3.8 "Adapter built"): four
    reported fields, zero new dependencies, the token identity asserted at read time and
    holding 16/16 on the live corpus. agy is now a HUD vendor; the two deferrals stand.
+5. **Cursor (Composer) is the fifth vendor and the SIXTH HUD lane** — surveyed and
+   **BUILT the same day** (§3.9, decisions/007, `internal/adapter/cursor`). It is the
+   first vendor to persist its own context percentage, and the first whose store holds
+   live credentials, so the adapter's most load-bearing property is its read allowlist.
+   Two watch items follow it and neither is blocked on effort: **Cursor Hooks**
+   (cursor.com/docs/hooks — a documented, versioned payload carrying `conversation_id`,
+   `model`, `workspace_roots`, `transcript_path`, and context numbers on `preCompact`) is
+   where item 3's needs-input signal should come from for this vendor, rather than
+   reverse-engineering `status` out of the store; and the `cursor-agent` CLI keeps a
+   separate store that is not installed on the survey machine and stays unverified and
+   out of scope until it is.
 
 Neither track discharges what verification already owes: §3.4's remaining passive-tail
 items and §3.7's first live Gemini pass stay open, and adoption work does not buy an

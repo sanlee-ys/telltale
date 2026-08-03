@@ -289,7 +289,8 @@ func vendorCounts(st State, sty Styles) string {
 	short := st.Width < compactBreak
 	var out []string
 	for _, v := range []model.VendorID{
-		model.VendorClaude, model.VendorCodex, model.VendorGemini, model.VendorAntigravity,
+		model.VendorClaude, model.VendorCodex, model.VendorGemini,
+		model.VendorAntigravity, model.VendorCursor,
 	} {
 		if counts[v] == 0 {
 			continue
@@ -523,6 +524,8 @@ func vendorTag(v model.VendorID) string {
 		return "GE"
 	case model.VendorAntigravity:
 		return "AG"
+	case model.VendorCursor:
+		return "CU"
 	default:
 		s := strings.ToUpper(string(v))
 		if len(s) > 2 {
@@ -728,7 +731,15 @@ func helpLines(st State, lay Layout, hasCtx, hasCost bool, sty Styles, g Glyphs)
 		// vendor pushed this line past the 60-column floor, and the arrow was
 		// the two cells per hop that bought nothing the chevron does not say.
 		// TestNoLineExceedsTheTerminalWidth is what caught it.
-		{"v", "vendor: all > claude > codex > gemini > agy"},
+		//
+		// The SIXTH vendor exhausted that trick, so the cycle now wraps —
+		// continued on an unkeyed line whose indent lands the hops under the
+		// first one. Shortening the vendor names instead would have made the
+		// overlay disagree with the word the footer prints, and an overlay
+		// that teaches a name the product does not use is worse than a
+		// two-line list.
+		{"v", "vendor: all > claude > codex >"},
+		{"", "        gemini > agy > cursor"},
 		{"s", "sort: activity > context > cost"},
 		{"a", "show all (include sessions idle > 8h)"},
 		{"r", "rescan now"},

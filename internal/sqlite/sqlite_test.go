@@ -135,6 +135,145 @@ func TestMissingTableIsAbsenceNotAnError(t *testing.T) {
 	}
 }
 
+// --------------------------------------------------------------- Columns
+
+// Column names come from the CREATE statement `sqlite_master` stores verbatim,
+// so an adapter can address a vendor's column by name instead of by an index
+// that keeps parsing and starts meaning something else when the vendor adds a
+// column.
+func TestColumnsFromTheCreateStatement(t *testing.T) {
+	f := open(t, "plain.db", "")
+	got, ok, err := f.Columns("kv")
+	if err != nil || !ok {
+		t.Fatalf("Columns(kv) = ok %v, err %v", ok, err)
+	}
+	want := []string{"idx", "label", "payload", "ratio", "flag"}
+	if len(got) != len(want) {
+		t.Fatalf("columns = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("column %d = %q, want %q (order is the record's storage order)", i, got[i], want[i])
+		}
+	}
+}
+
+func TestColumnsOnAMissingTableIsAbsence(t *testing.T) {
+	f := open(t, "plain.db", "")
+	cols, ok, err := f.Columns("no_such_table")
+	if err != nil {
+		t.Fatalf("a missing table must not be an error: %v", err)
+	}
+	if ok || cols != nil {
+		t.Errorf("Columns(no_such_table) = %v, ok %v", cols, ok)
+	}
+}
+
+// The splitter's edge cases, pinned directly. Each is a shape a real store has
+// used: every quoting style SQLite accepts, a type with its own parentheses, a
+// default value containing a comma, and a table-level constraint that is not a
+// column. An unreadable statement yields nothing, never a guess.
+func TestColumnListSplitting(t *testing.T) {
+	cases := []struct {
+		stmt string
+		want []string
+	}{
+		{"CREATE TABLE t (a TEXT, b INTEGER)", []string{"a", "b"}},
+		{"CREATE TABLE `t` (`a` TEXT PRIMARY KEY, `b` blob)", []string{"a", "b"}},
+		{`CREATE TABLE t ("a b" TEXT, [c d] INTEGER)`, []string{"a b", "c d"}},
+		{"CREATE TABLE t (a NUMERIC(10, 2), b TEXT)", []string{"a", "b"}},
+		{"CREATE TABLE t (a TEXT DEFAULT 'x,y', b TEXT)", []string{"a", "b"}},
+		{"CREATE TABLE t (a TEXT, b TEXT, PRIMARY KEY (a, b))", []string{"a", "b"}},
+		{"CREATE TABLE t (a TEXT, CONSTRAINT c UNIQUE (a))", []string{"a"}},
+		{"CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)",
+			[]string{"key", "value"}},
+		{"", nil},
+		{"CREATE TABLE t", nil},
+		{"CREATE TABLE t (", nil},
+	}
+	for _, c := range cases {
+		got := columnNames(c.stmt)
+		if len(got) != len(c.want) {
+			t.Errorf("columnNames(%q) = %v, want %v", c.stmt, got, c.want)
+			continue
+		}
+		for i := range c.want {
+			if got[i] != c.want[i] {
+				t.Errorf("columnNames(%q)[%d] = %q, want %q", c.stmt, i, got[i], c.want[i])
+			}
+		}
+	}
+}
+
+// ------------------------------------------------------------------ Rows
+
+// Rows is the streaming form Table is built on, so it must agree with Table
+// row for row. If it did not, an adapter filtering a large key/value table
+// would be reading a different database than one calling Table.
+func TestRowsStreamsTheSameRowsAsTable(t *testing.T) {
+	f := open(t, "plain.db", "")
+	want, ok, err := f.Table("kv")
+	if err != nil || !ok {
+		t.Fatalf("Table(kv) = ok %v, err %v", ok, err)
+	}
+	var got []Row
+	ok, err = f.Rows("kv", func(r Row) bool {
+		got = append(got, r)
+		return true
+	})
+	if err != nil || !ok {
+		t.Fatalf("Rows(kv) = ok %v, err %v", ok, err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Rows yielded %d rows, Table returned %d", len(got), len(want))
+	}
+	for i := range got {
+		if got[i].RowID != want[i].RowID {
+			t.Errorf("row %d: rowid %d, want %d", i, got[i].RowID, want[i].RowID)
+		}
+	}
+}
+
+// Returning false stops the walk. The point is not tidiness: the caller this
+// exists for reads a handful of keys out of a table whose other rows it has no
+// business decoding at all, and a scan that cannot stop is a scan that reads
+// them anyway.
+func TestRowsStopsWhenTheCallbackSaysSo(t *testing.T) {
+	// overflow.db's `blobs` table spans an interior page, so an early stop has
+	// to unwind more than one leaf.
+	f := open(t, "overflow.db", "")
+	all, _, err := f.Table("blobs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) < 3 {
+		t.Fatalf("fixture has %d rows; this test needs at least 3", len(all))
+	}
+	seen := 0
+	if _, err := f.Rows("blobs", func(Row) bool {
+		seen++
+		return seen < 2
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if seen != 2 {
+		t.Errorf("callback ran %d times after asking to stop at 2", seen)
+	}
+}
+
+// A missing table is absence for Rows too, and the callback never runs.
+func TestRowsOnAMissingTableIsAbsence(t *testing.T) {
+	f := open(t, "plain.db", "")
+	ran := false
+	ok, err := f.Rows("no_such_table", func(Row) bool { ran = true; return true })
+	if err != nil {
+		t.Fatalf("a missing table must not be an error: %v", err)
+	}
+	if ok || ran {
+		t.Errorf("Rows(no_such_table) = ok %v, callback ran %v", ok, ran)
+	}
+}
+
 // The overflow chain is the common path for the vendor data this reader was
 // written for: a 25 KiB blob against a 4 KiB page spans seven pages.
 func TestOverflowPageChain(t *testing.T) {

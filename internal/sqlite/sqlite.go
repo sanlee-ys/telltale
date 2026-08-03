@@ -1,18 +1,21 @@
 // Package sqlite is a minimal, read-only, byte-level reader for SQLite
-// database files. It exists because one vendor (Antigravity CLI) stores its
-// session state in SQLite and this repo takes zero dependencies for a read
-// path (decisions/001, decisions/006).
+// database files. It exists because two vendors (Antigravity CLI, Cursor)
+// store their session state in SQLite and this repo takes zero dependencies
+// for a read path (decisions/001, decisions/006, decisions/007).
 //
 // # Scope, deliberately small
 //
 // This is NOT a SQL engine. There is no query planner, no index use, no
-// expression evaluation, no write path of any kind. It does exactly three
+// expression evaluation, no write path of any kind. It does exactly four
 // things:
 //
 //   - parse the 100-byte database header (page size, reserved space);
-//   - walk the `sqlite_master` b-tree on page 1 to find a table's root page;
+//   - walk the `sqlite_master` b-tree on page 1 to find a table's root page,
+//     and split the column list out of the CREATE statement stored beside it;
 //   - walk that table's b-tree and hand back its rows as decoded record
-//     values, following overflow-page chains.
+//     values, following overflow-page chains;
+//   - stream those rows to a callback that may stop the walk (Rows), for a
+//     caller reading a few keys out of a large key/value table.
 //
 // A caller that wants a WHERE clause writes a Go `if`.
 //
@@ -20,9 +23,11 @@
 //
 // A live SQLite writer in WAL mode leaves the newest committed pages in the
 // `-wal` sidecar, not in the `.db` file — a sidecar LARGER than its database
-// has been observed in the wild (docs/design.md §3.8). Reading the `.db` bytes
-// alone would therefore silently report a stale snapshot as current, which is
-// the honest-gauge rule's exact failure mode.
+// has been observed in the wild (docs/design.md §3.8), and Cursor's
+// workspace-level stores were observed as a single EMPTY page with every byte
+// of content in a several-hundred-kilobyte sidecar (§3.9). Reading the `.db`
+// bytes alone would therefore report a stale snapshot as current, or nothing
+// at all — the honest-gauge rule's exact failure mode either way.
 //
 // Open takes both byte slices and applies SQLite's own recovery semantics:
 // a frame counts only when its salts match the WAL header's and its rolling
@@ -47,6 +52,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 )
 
 // Header constants from the SQLite file format spec.
@@ -329,30 +335,158 @@ func (f *File) page(n uint32) ([]byte, error) {
 // Indexes, views and triggers are skipped: this reader walks table b-trees
 // only, and returning an index root page would invite walking one.
 func (f *File) Tables() (map[string]uint32, error) {
-	rows, err := f.walkTable(1)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]uint32, len(rows))
-	for _, r := range rows {
+	out := map[string]uint32{}
+	err := f.walkTable(1, func(r Row) bool {
 		// sqlite_master: (type, name, tbl_name, rootpage, sql)
 		if len(r.Values) < 4 {
-			continue
+			return true
 		}
 		kind, ok := r.Values[0].Text()
 		if !ok || kind != "table" {
-			continue
+			return true
 		}
 		name, ok := r.Values[1].Text()
 		if !ok || name == "" {
-			continue
+			return true
 		}
 		if r.Values[3].Type != Int || r.Values[3].Int <= 0 {
-			continue
+			return true
 		}
 		out[name] = uint32(r.Values[3].Int)
+		return true
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
+}
+
+// Columns returns the named table's declared column names, in the order the
+// record format stores them.
+//
+// This is NOT the SQL parser the package doc rules out. `sqlite_master` stores
+// the CREATE statement verbatim, and this splits its column list on top-level
+// commas and takes the leading identifier of each part — no types are
+// interpreted, no expressions evaluated, no constraints understood beyond
+// recognizing a table-level one by its keyword and skipping it. A statement
+// this cannot read confidently yields no columns rather than a guess, and the
+// caller degrades.
+//
+// It exists because positional column indices are the wrong contract to hold a
+// vendor to: a store that gains a column between releases would keep parsing
+// and start meaning something else, which is the failure mode this repo cares
+// most about. It deliberately does NOT change Row: an INTEGER PRIMARY KEY
+// column is still returned as the NULL the record stores, with the value on
+// RowID, because back-filling it would be the inference Row's doc refuses.
+func (f *File) Columns(name string) ([]string, bool, error) {
+	var stmt string
+	found := false
+	err := f.walkTable(1, func(r Row) bool {
+		if len(r.Values) < 5 {
+			return true
+		}
+		if kind, ok := r.Values[0].Text(); !ok || kind != "table" {
+			return true
+		}
+		if n, ok := r.Values[1].Text(); !ok || n != name {
+			return true
+		}
+		found = true
+		stmt, _ = r.Values[4].Text()
+		return false
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if !found {
+		return nil, false, nil
+	}
+	return columnNames(stmt), true, nil
+}
+
+// tableConstraints are the keywords that open a table-level constraint in a
+// CREATE statement's parenthesized list. A part beginning with one of these is
+// not a column.
+var tableConstraints = map[string]bool{
+	"primary": true, "unique": true, "check": true,
+	"foreign": true, "constraint": true,
+}
+
+// columnNames splits a CREATE TABLE statement's column list.
+func columnNames(stmt string) []string {
+	lp := strings.IndexByte(stmt, '(')
+	rp := strings.LastIndexByte(stmt, ')')
+	if lp < 0 || rp <= lp {
+		return nil
+	}
+	body := stmt[lp+1 : rp]
+
+	var parts []string
+	depth, start := 0, 0
+	var quote byte
+	for i := 0; i < len(body); i++ {
+		c := body[i]
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch c {
+		case '\'', '"', '`':
+			quote = c
+		case '[':
+			quote = ']'
+		case '(':
+			depth++
+		case ')':
+			depth--
+		case ',':
+			if depth == 0 {
+				parts = append(parts, body[start:i])
+				start = i + 1
+			}
+		}
+	}
+	parts = append(parts, body[start:])
+
+	var out []string
+	for _, p := range parts {
+		n := leadingIdentifier(strings.TrimSpace(p))
+		if n == "" || tableConstraints[strings.ToLower(n)] {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// leadingIdentifier reads the first identifier of a column definition,
+// unwrapping whichever of SQLite's four quoting styles it uses.
+func leadingIdentifier(s string) string {
+	if s == "" {
+		return ""
+	}
+	var end byte
+	switch s[0] {
+	case '`':
+		end = '`'
+	case '"':
+		end = '"'
+	case '[':
+		end = ']'
+	}
+	if end != 0 {
+		if i := strings.IndexByte(s[1:], end); i >= 0 {
+			return s[1 : 1+i]
+		}
+		return ""
+	}
+	i := strings.IndexAny(s, " \t\r\n")
+	if i < 0 {
+		return s
+	}
+	return s[:i]
 }
 
 // Table returns every row of the named table.
@@ -360,30 +494,59 @@ func (f *File) Tables() (map[string]uint32, error) {
 // A table that does not exist is not an error here — it is absence, and the
 // caller decides what that means. The boolean says which happened.
 func (f *File) Table(name string) ([]Row, bool, error) {
+	var out []Row
+	ok, err := f.Rows(name, func(r Row) bool {
+		out = append(out, r)
+		return true
+	})
+	if err != nil {
+		return nil, ok, err
+	}
+	return out, ok, nil
+}
+
+// Rows walks the named table and hands each row to fn in rowid order. fn
+// returns false to stop the walk early — a full table scan that has already
+// found what it came for is wasted I/O, and this reader has no index to use
+// instead.
+//
+// Rows RETAINS NOTHING. That is the difference from Table and it is the point:
+// one vendor's store is a key/value table of thousands of rows out of which an
+// adapter reads eight, and materializing the other several thousand — payloads
+// this program has no business holding, some of them large — to throw them away
+// is both an allocation storm and a wider blast radius than the read needs
+// (decisions/007). A Row's Values alias buffers the reader owns and are only
+// valid for the duration of the call; a caller keeping a value must copy it,
+// which Value.Text and Value.Blob's `string(...)`/`append(...)` conversions do.
+//
+// The boolean reports whether the table exists, exactly as Table does.
+func (f *File) Rows(name string, fn func(Row) bool) (bool, error) {
 	tables, err := f.Tables()
 	if err != nil {
-		return nil, false, err
+		return false, err
 	}
 	root, ok := tables[name]
 	if !ok {
-		return nil, false, nil
+		return false, nil
 	}
-	rows, err := f.walkTable(root)
-	if err != nil {
-		return nil, true, err
+	if err := f.walkTable(root, fn); err != nil {
+		return true, err
 	}
-	return rows, true, nil
+	return true, nil
 }
 
-// walkTable walks a table b-tree depth-first, left to right, so rows come back
-// in rowid order.
-func (f *File) walkTable(root uint32) ([]Row, error) {
-	var out []Row
+// walkTable walks a table b-tree depth-first, left to right, so rows arrive in
+// rowid order. fn returning false ends the walk without an error.
+func (f *File) walkTable(root uint32, fn func(Row) bool) error {
 	visited := map[uint32]bool{}
 	cells := 0
+	stopped := false
 
 	var walk func(n uint32) error
 	walk = func(n uint32) error {
+		if stopped {
+			return nil
+		}
 		if visited[n] {
 			return fmt.Errorf("sqlite: b-tree cycle at page %d", n)
 		}
@@ -420,7 +583,10 @@ func (f *File) walkTable(root uint32) ([]Row, error) {
 				if err != nil {
 					return err
 				}
-				out = append(out, row)
+				if !fn(row) {
+					stopped = true
+					return nil
+				}
 			}
 			return nil
 
@@ -430,6 +596,9 @@ func (f *File) walkTable(root uint32) ([]Row, error) {
 				return fmt.Errorf("sqlite: page %d cell array overruns the page", n)
 			}
 			for i := 0; i < count; i++ {
+				if stopped {
+					return nil
+				}
 				off := int(binary.BigEndian.Uint16(p[ptrs+2*i : ptrs+2*i+2]))
 				if off+4 > f.usable {
 					return fmt.Errorf("sqlite: page %d interior cell out of bounds", n)
@@ -438,6 +607,9 @@ func (f *File) walkTable(root uint32) ([]Row, error) {
 				if err := walk(child); err != nil {
 					return err
 				}
+			}
+			if stopped {
+				return nil
 			}
 			right := binary.BigEndian.Uint32(p[base+8 : base+12])
 			return walk(right)
@@ -449,10 +621,7 @@ func (f *File) walkTable(root uint32) ([]Row, error) {
 		}
 	}
 
-	if err := walk(root); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return walk(root)
 }
 
 // leafCell decodes one table-leaf cell, following the overflow chain when the

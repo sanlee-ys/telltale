@@ -5,6 +5,7 @@
                        agy      not detected   %USERPROFILE%\.gemini\antigravity-cli
                        claude   unreadable     %USERPROFILE%\.claude\projects  Access is denied.
                        codex    not detected   %USERPROFILE%\.codex
+                       cursor   not detected   %APPDATA%\Cursor\User
                        gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
