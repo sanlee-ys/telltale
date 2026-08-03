@@ -61,7 +61,12 @@ tradeoffs; he chose terminal-native.
   not writing Windows-only code where a portable call exists cheaply. *Amended
   2026-08-02 (ADR-005 amendment): cross-compiled macOS/Linux binaries may ship pre-v1
   for distribution, labeled "built, not verified — Windows is the verified target."
-  The effort rule stands.*
+  The effort rule stands.* *Label amended again 2026-08-03 (ADR-005, second amendment):
+  the suite, the build, both statusline smokes, a 53-session live Claude Code read and
+  the HUD were all run on macOS at `052a9d6`, so macOS binaries ship labeled
+  "smoke-verified on macOS — Windows is the continuously verified target"; Linux keeps
+  "built, not verified." CI remains Windows-only, so the macOS claim is point-in-time.
+  The effort rule still stands — this recorded evidence, it did not commission it.*
 
 ## Downstream surfaces
 

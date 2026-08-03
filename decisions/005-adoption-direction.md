@@ -96,11 +96,13 @@ the lane's only Antigravity HUD adapter.
 3. **Sequencing: 001's order stands** — dogfood → eval + design doc → launch post. The
    activation slice runs in parallel during the dogfood window: prebuilt binaries via
    goreleaser, one-command install (scoop/winget first, per Windows-first), a README
-   hero visual, and a useful zero-config first frame. macOS/Linux binaries are
-   cross-compiled and shipped labeled **"built, not verified — Windows is the verified
-   target"** (this amends ADR-002's "no macOS/Linux work until v1" for *distribution
-   only*; the no-porting/no-verification-effort rule stands, and the label is 001's
-   flagged-limitation pattern). The launch post doubles as the hypothesis experiment,
+   hero visual, and a useful zero-config first frame. macOS binaries are cross-compiled
+   and shipped labeled **"smoke-verified on macOS — Windows is the continuously verified
+   target"**; Linux binaries remain **"built, not verified"** (this amends ADR-002's "no
+   macOS/Linux work until v1" for *distribution only*; the no-porting/no-verification-effort
+   rule stands, and both labels are 001's flagged-limitation pattern). *(Label amended
+   2026-08-03 for macOS only — see the second amendment below.)* The launch post doubles
+   as the hypothesis experiment,
    and **the hypothesis it tests is cross-harness visibility** — do multi-harness power
    users want one honest local HUD across the agents they already run? That is what the
    launched product contains. The launch does not claim to test attention routing
@@ -145,6 +147,43 @@ all three were accepted. San ruled the two product forks:
 3. *"Evidenced external users" measured engagement, not usage.* Accepted outright:
    bar tightened to run-evidenced (decision 2 as amended); 10 users / 30 days
    unchanged.
+
+## Amendment — 2026-08-03: macOS label raised to smoke-verified
+
+The "built, not verified" label was written when nothing had ever been run on macOS.
+That is no longer true, so the label is raised to match the evidence — and no further.
+
+**What was run** (2026-08-03, macOS 15 / Darwin 25.5.0, Apple Silicon, Go 1.26.5,
+at `052a9d6`):
+
+- `go vet ./...` clean; `go test ./...` green across all 13 packages, including all
+  five vendor adapters against their committed fixtures
+- `go build` succeeds; both CI statusline smokes pass through the real binary
+  (honest-gauge assertions included: no quota without `rate_limits`, no cost for a
+  vendor with no cost field)
+- the Claude Code adapter read a **live macOS corpus**: 53 sessions discovered, all 53
+  read, zero errors, zero degraded fields, zero diagnostics. POSIX workspace-path
+  decoding was exercised for the first time, including worktree dirs
+  (`-Users-…-dotfiles--claude-worktrees-…` → `/Users/…/dotfiles/.claude/worktrees/…`),
+  a shape no committed fixture covers — every fixture project dir is Windows-shaped
+- the HUD renders in a real terminal, and the absent-vendor path is confirmed on a
+  machine where four of five vendors genuinely are absent: Codex, Cursor, Gemini and
+  Antigravity hid themselves via `ErrVendorAbsent` with no rows and no error banner
+
+**What was NOT verified, and why the label says smoke and not verified:**
+
+- the Codex, Cursor, Gemini and Antigravity adapters have never met a live macOS
+  corpus — no vendor but Claude Code is installed on that machine. Their macOS
+  evidence is fixture-only, and fixtures cannot falsify a path assumption
+- this was one manual run at one commit. **CI still runs `windows-latest` only**, so
+  the macOS claim is point-in-time and decays with every subsequent commit. It is dated
+  and SHA-bearing above for exactly that reason
+- Linux remains untouched, hence the split label — Linux keeps "built, not verified"
+
+The no-porting/no-verification-effort rule of ADR-002 is **unchanged**. This amendment
+records evidence that already existed; it does not authorize macOS work, and it does
+not make macOS a target. Whether to add a `macos-latest` CI lane — which is what would
+stop the claim from decaying — is deliberately left open here rather than assumed.
 
 ## Downstream surfaces
 
