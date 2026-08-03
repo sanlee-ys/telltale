@@ -496,11 +496,43 @@ tokens or tool calls settle, so a linear last-wins pass needs no dedup map.
 (free/Pro/Ultra) on 2026-06-18; it remains live for Gemini Code Assist
 Standard/Enterprise licenses and paid API keys, with Antigravity CLI (`agy`) as the
 consumer successor (ADR-003 addendum). This adapter therefore covers the
-enterprise/API-key flavour, and the live pass below needs an API-key login to run.
+enterprise/API-key flavour. (A live session was nonetheless produced on this machine
+2026-08-03 — the auth flavour behind it was not investigated; recorded as an observed
+fact only.)
 
-**First live pass — owed, unobservable until a corpus exists** (the CLI was installed
-for this adapter; no session has been run yet, and a consumer login can no longer
-produce one — see the market note):
+**First live pass — RUN 2026-08-03 and PASSED** (gemini-cli 0.53.1, the same version
+the source read pinned; one real session, ~1.6 MB, 50 records, written live during
+the check). Adapter output against it: discovered 1; model `gemini-3.5-flash`;
+workspace `c:\users\sanle` via `projects.json` (lowercased-path registry confirmed);
+LastActivity rode the mtime side of the Q8 fold (the file was being touched after its
+newest record timestamp — the live-write pattern the fold exists for); subagents
+derived 0; zero diagnostics; Validate green. Name is absent and honestly so — the
+header carries no title field; the HUD label falls back to the workspace basename.
+The itemized checks resolve as follows (original list kept below for the record):
+
+- Metadata line is the first line: **confirmed.** Main sessions **carry
+  `kind:"main"`** — the fixture's omitted-field assumption was falsified; the adapter
+  is unaffected (only `"subagent"` branches) and the healthy fixture now carries
+  `kind:"main"` to match reality.
+- Filename shape and prompt registry entry: **confirmed** (entry present, lowercased).
+- Upserts against real traffic: **confirmed** — 27 message records, 20 distinct ids
+  (7 in-place updates). Per-message `tokens` **confirmed live** with shape
+  `{cached, input, output, thoughts, tool, total}` — unused by the adapter (context
+  stays CapNone per §4a.7's falsification), recorded for fidelity. Delete-on-exit for
+  non-resumable sessions: not observable (this session persisted).
+- Checkpoint sizes vs the read budgets: the two live `$set` messages checkpoints were
+  **7.3 KiB and 14.5 KiB — neither approached the 64 KiB scanner cap**; the "expected:
+  yes, on any long session" guess did not materialize (checkpoints snapshot compactly).
+  The budget pressure came from elsewhere: **single message lines up to 746 KiB** were
+  observed, dwarfing both budgets. The newest checkpoint sat wholly inside the 256 KiB
+  tail and the bounded read produced correct output — a tail that starts mid-line
+  resyncs at the next newline, exactly the framing design.
+- `$rewindTo`: **not exercised by this session** — remains fixture-verified only.
+
+**ADR-003's verification hold is RELEASED**: the launch post may claim the Gemini
+adapter live-verified.
+
+Original itemized list (as written before the pass):
 
 - Confirm the metadata line is the FIRST line in every live file, and whether main
   sessions carry `kind:"main"` or omit the field (the fixture assumes omitted).
@@ -2251,8 +2283,8 @@ these items are ordered by that sequence, not by version number.
    out of scope until it is.
 
 Neither track discharges what verification already owes: §3.4's remaining passive-tail
-items and §3.7's first live Gemini pass stay open, and adoption work does not buy an
-exemption from them.
+items stay open (§3.7's first live Gemini pass ran and passed 2026-08-03), and
+adoption work does not buy an exemption from them.
 
 ### v1.1 — the flagship trio (**BUILT**)
 
