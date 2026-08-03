@@ -2229,10 +2229,15 @@ these items are ordered by that sequence, not by version number.
    (ADR-002); a README hero visual; and a useful **zero-config first frame** — the
    binary's first run has to show something true without being configured, because an
    install that lands on an empty screen has spent its only attempt. macOS/Linux binaries
-   are cross-compiled and shipped labeled **"built, not verified — Windows is the
-   verified target"**: ADR-002's "no macOS/Linux work until v1" is amended for
-   *distribution only*, the no-porting/no-verification-effort rule stands, and the label
-   is ADR-001's flagged-limitation pattern applied to a platform instead of a segment.
+   are cross-compiled; macOS ships labeled **"smoke-verified on macOS — Windows is the
+   continuously verified target"** and Linux keeps **"built, not verified"**: ADR-002's
+   "no macOS/Linux work until v1" is amended for *distribution only*, the
+   no-porting/no-verification-effort rule stands, and both labels are ADR-001's
+   flagged-limitation pattern applied to a platform instead of a segment. The macOS
+   label is point-in-time and SHA-bearing — the suite, build, statusline smokes, a
+   53-session live Claude Code read and the HUD all ran on macOS at `052a9d6`
+   (ADR-005, second amendment) — while CI still runs `windows-latest` only, and four
+   of the five adapters have still never met a live macOS corpus.
    The README positioning line — *"one local HUD for every coding agent you use"* —
    lands **with** this slice and deliberately not before it: a positioning claim that
    arrives ahead of a one-command install is a promise the reader has no way to act on.
