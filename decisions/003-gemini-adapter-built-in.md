@@ -65,6 +65,16 @@ Consequences of the correction:
   vendor-reported liveness signal in this product's universe). That work is a future
   ADR once the live corpus exists; nothing about it is promised here.
 
+## Live-pass note (2026-08-03)
+
+§3.7's first live pass ran against a real gemini-cli 0.53.1 session and **passed**
+(design.md §3.7 carries the results: upserts and `$set` checkpoints observed live,
+registry mapping confirmed, one fixture assumption corrected — main sessions carry
+`kind:"main"`). **The verification hold above is released: the launch post may claim
+this adapter live-verified.** The addendum's "requires a paid API key" expectation was
+overtaken by an observed session on this consumer machine; the auth flavour behind it
+was not investigated.
+
 ## Downstream surfaces
 
 design.md (§3.3 matrix, §3.7 new, §4 intro, §4a.7 postscript, §5 eval table, §8
