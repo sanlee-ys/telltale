@@ -67,7 +67,9 @@ func TestNoTitleSuppressesTheWindowTitle(t *testing.T) {
 func TestKeysCycleFilterAndSortAndToggleHelp(t *testing.T) {
 	m := send(t, newTestModel(), tea.WindowSizeMsg{Width: 120, Height: 10})
 
-	for _, want := range []Filter{FilterClaude, FilterCodex, FilterGemini, FilterAntigravity, FilterAll} {
+	for _, want := range []Filter{
+		FilterClaude, FilterCodex, FilterGemini, FilterAntigravity, FilterCursor, FilterAll,
+	} {
 		m = send(t, m, key("v"))
 		if m.st.Filter != want {
 			t.Fatalf("filter = %v, want %v", m.st.Filter, want)

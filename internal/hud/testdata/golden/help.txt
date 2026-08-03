@@ -6,11 +6,11 @@
         enter  open the detail pane for the selected session
         /      find: narrow rows by name or path
         esc    close the pane, or cancel the find, or quit
-        v      vendor: all > claude > codex > gemini > agy
+        v      vendor: all > claude > codex >
+                       gemini > agy > cursor
         s      sort: activity > context > cost
         a      show all (include sessions idle > 8h)
         r      rescan now
         ?      close this help
-
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ? close

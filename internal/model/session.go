@@ -52,6 +52,11 @@ const (
 	// column reading "antigravity" would cost eleven cells to say what three
 	// say (decisions/006). The adapter package is named for the product.
 	VendorAntigravity VendorID = "agy"
+	// VendorCursor is Cursor's Composer agent. The id is the product's name
+	// rather than the surface's: `composer` would name a pane inside an editor
+	// most people call Cursor, and the HUD's job is to say which TOOL a row
+	// came from (decisions/007).
+	VendorCursor VendorID = "cursor"
 )
 
 // Field enumerates the optional fields of a Session: exactly those a vendor may

@@ -22,3 +22,10 @@ internal/hud/testdata/golden/*.txt -text
 # of frames would be silently dropped by the very reader under test.
 *.db binary
 *.db-wal binary
+
+# Same files, Cursor's extension for them. The `-wal` entry matters more here
+# than anywhere else in the repo: one fixture's main file is a single empty
+# page and every byte of its content is in the sidecar (decisions/007), so a
+# rewritten sidecar is not a degraded fixture, it is an empty one.
+*.vscdb binary
+*.vscdb-wal binary

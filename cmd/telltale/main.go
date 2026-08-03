@@ -26,6 +26,7 @@ import (
 	agyadapter "github.com/sanlee-ys/telltale/internal/adapter/antigravity"
 	"github.com/sanlee-ys/telltale/internal/adapter/claudecode"
 	"github.com/sanlee-ys/telltale/internal/adapter/codex"
+	"github.com/sanlee-ys/telltale/internal/adapter/cursor"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
 	"github.com/sanlee-ys/telltale/internal/antigravity"
 	"github.com/sanlee-ys/telltale/internal/claude"
@@ -103,7 +104,7 @@ func runStatusline() {
 
 func runHUD(args []string) error {
 	fs := flag.NewFlagSet("telltale hud", flag.ContinueOnError)
-	vendor := fs.String("vendor", "all", "vendor filter at startup: all, claude, codex, gemini, agy")
+	vendor := fs.String("vendor", "all", "vendor filter at startup: all, claude, codex, gemini, agy, cursor")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
 	if err := fs.Parse(args); err != nil {
@@ -126,7 +127,8 @@ func runHUD(args []string) error {
 		// installed reports ErrVendorAbsent and vanishes from the HUD; there
 		// is nothing to configure and nothing to fail.
 		Adapters: []model.Adapter{
-			claudecode.New(), codex.New(), gemini.New(), agyadapter.New(),
+			claudecode.New(), codex.New(), gemini.New(),
+			agyadapter.New(), cursor.New(),
 		},
 		Filter:   filter,
 		ASCII:    useASCII,
@@ -150,8 +152,13 @@ func parseFilter(s string) (hud.Filter, error) {
 		// everywhere else in this repo. Rejecting the name a reader just saw
 		// in the README would be a flag being clever.
 		return hud.FilterAntigravity, nil
+	case "cursor", "composer":
+		// `composer` is what Cursor calls the agent pane; `cursor` is what the
+		// footer and the header count print. Both are accepted for the same
+		// reason both agy spellings are.
+		return hud.FilterCursor, nil
 	default:
-		return hud.FilterAll, errors.New("unknown --vendor " + s + " (want all, claude, codex, gemini or agy)")
+		return hud.FilterAll, errors.New("unknown --vendor " + s + " (want all, claude, codex, gemini, agy or cursor)")
 	}
 }
 
@@ -164,7 +171,7 @@ usage:
   telltale version
 
 telltale hud flags:
-  --vendor all|claude|codex|gemini|agy   start with a vendor filter applied
+  --vendor all|claude|codex|gemini|agy|cursor   start with a vendor filter applied
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone`)
 }

@@ -15,7 +15,12 @@ against gemini-cli v0.53.1 (the writer's own persistence code, read at tag), wit
 first live-corpus pass itemized in [docs/design.md §3.7](docs/design.md). **Antigravity CLI (`agy`)** is served on both
 seams — the statusline against a live payload capture, and the HUD against its live
 on-disk corpus on agy 1.1.9 ([docs/design.md §2.1/§3.8](docs/design.md),
-[decisions/006](decisions/006-antigravity-hud-adapter.md)).
+[decisions/006](decisions/006-antigravity-hud-adapter.md)). **Cursor (Composer)** is
+live-verified against its on-disk store on Cursor 3.14.7 — the first IDE-resident agent
+here, and the first whose store also holds live credentials, which is why that adapter's
+most load-bearing property is the list of things it does not read
+([docs/design.md §3.9](docs/design.md),
+[decisions/007](decisions/007-cursor-hud-adapter.md)).
 
 Build from source:
 
@@ -54,10 +59,11 @@ telltale.exe hud
 ```
 
 ```
- telltale  │  6 sessions  │  claude 2  codex 2  gemini 1  agy 1                               5h ██████▎─ 88.4% ↻ 3h02m
+ telltale  │  7 sessions  │  claude 2  codex 2  gemini 1  agy 1  cursor 1                     5h ██████▎─ 88.4% ↻ 3h02m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                               MODEL          CONTEXT                AGE
  ● CC │ telltale  C:\src\code                                                 Opus 5                           — │  12s
+ ● CU │ multi-vendor orchestration  C:\src\code                               composer-2.5   ████▏───────    37% │   1m
  ● CX │ example-app  C:\src\code                                              gpt-5.1-codex  ███████▋──── ~69.8% │   1m
  ● AG │ 4c8b21a7  C:\src\code                                                 Gemini 3.6 F…                    — │   2m
  ◐ GE │ glossary tooltips ⑂~2  c:\src\code                                    gemini-3-pro                     — │   3m
@@ -74,9 +80,12 @@ dashes because none of those vendors writes a context-window size to disk, the C
 row's `~` marks a percentage telltale computed rather than read, the Gemini row's `⑂~2`
 chip is a sub-agent count telltale derived (and marks as derived) from the vendor's
 nested transcript tree, and the `COST` column is missing entirely because no vendor puts
-dollars on disk. None of those is rendered as a zero. The `AG` row is labelled by its
-conversation id for a different reason: Antigravity writes no session title anywhere,
-and the only free text on its disk is your prompts, which telltale will not read.
+dollars on disk. None of those is rendered as a zero. Read the `CU` row against the `CX`
+row directly above it: both show a context bar, and only the Codex one is marked an
+estimate, because Cursor writes its own percentage down and telltale reads it. The `AG`
+row is labelled by its conversation id for a different reason: Antigravity writes no
+session title anywhere, and the only free text on its disk is your prompts, which
+telltale will not read.
 
 In the HUD, `↑`/`↓` move the selection and `enter` opens a detail pane for it — quota
 windows, the vendor extras, and the session's own diagnostics and degraded-field marks,
@@ -84,7 +93,7 @@ plus a line naming the fields that vendor **cannot** source at all. That last li
 answer to "why is this cell empty?", and it is the difference between "we have no value
 right now" and "this vendor never had one". `/` narrows the rows by name or path.
 
-`telltale hud` flags: `--vendor all|claude|codex|gemini|agy`, `--ascii` (also
+`telltale hud` flags: `--vendor all|claude|codex|gemini|agy|cursor`, `--ascii` (also
 `TELLTALE_ASCII=1`), `--no-title`. `NO_COLOR` is honoured through the standard
 mechanism.
 
@@ -95,10 +104,10 @@ mechanism.
   statusline command on stdin. No network calls, no credential reads.
 - **A watch-mode HUD (TUI)** for parallel sessions — the cross-vendor surface, and a
   first-class UI investment (Go + Bubble Tea/Lipgloss; Windows Terminal is the reference
-  environment). Ships with adapters for **Claude Code**, **Codex CLI**, **Gemini CLI**
-  and **Antigravity CLI**, each reading that vendor's own native on-disk data — for
-  Antigravity that means a read-only SQLite reader written into this repo rather than a
-  9 MB dependency added to it. One binary, two
+  environment). Ships with adapters for **Claude Code**, **Codex CLI**, **Gemini CLI**,
+  **Antigravity CLI** and **Cursor (Composer)**, each reading that vendor's own native
+  on-disk data — for Antigravity and Cursor that means a read-only SQLite reader written
+  into this repo rather than a 9 MB dependency added to it. One binary, two
   modes: `telltale statusline` and `telltale hud`. The statusline code path never
   initializes the TUI framework (the single binary links it, but no Bubble Tea code runs
   on a statusline invocation).
@@ -117,7 +126,11 @@ is what made its HUD adapter buildable — see
 
 **telltale never writes.** It reads vendor files, makes no network calls, reads no
 credentials, and no keybinding can mutate vendor state or send anything to a running
-agent.
+agent. "Reads no credentials" stopped being free with the Cursor adapter — that vendor
+keeps its access tokens, refresh tokens and OAuth secrets in the *same SQLite file* as
+its session state — so it is enforced there as a read allowlist with a test that plants
+credential-shaped strings in the fixtures and asserts none of them reaches anything the
+HUD can display ([decisions/007](decisions/007-cursor-hud-adapter.md)).
 
 ## The honest-gauge rule
 

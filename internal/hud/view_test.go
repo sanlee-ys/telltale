@@ -13,6 +13,7 @@ import (
 	agyadapter "github.com/sanlee-ys/telltale/internal/adapter/antigravity"
 	"github.com/sanlee-ys/telltale/internal/adapter/claudecode"
 	"github.com/sanlee-ys/telltale/internal/adapter/codex"
+	cursoradapter "github.com/sanlee-ys/telltale/internal/adapter/cursor"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
@@ -149,6 +150,20 @@ func agySession(age time.Duration) *model.Session {
 
 func withModel(m *model.Model) sessionOpt {
 	return func(s *model.Session) { s.Model = m }
+}
+
+// cursorSession is a Cursor Composer row as the real adapter produces one, and
+// it is the only row in the capability scenes whose CONTEXT cell carries a
+// percentage with NO estimate marker: Cursor persists its own
+// `contextUsagePercent` and telltale reads it rather than computing one. Next
+// to the Codex row's `~69.8%` that contrast is the whole point of the frame.
+func cursorSession(age time.Duration) *model.Session {
+	return sess(model.VendorCursor, "00000000-eeee-4fff-8aaa-000000000001",
+		`C:\src\code\agent-ops`, "", age,
+		withName("multi-vendor orchestration"),
+		withModel(&model.Model{ID: "composer-2.5", DisplayName: "composer-2.5"}),
+		withCtx(37.05234375),
+		withExtras("ctx tokens", "94k / 256k"))
 }
 
 func watching(v model.VendorID, root string, caps model.Capabilities) VendorView {
@@ -354,11 +369,13 @@ func goldenCases() []goldenCase {
 		// with no quota, context or cost anywhere on its disk seam; Antigravity
 		// sources the same four fields as Gemini minus the sub-agent count,
 		// labelled by its conversation id because the only free text on its
-		// disk is somebody's prompt.
+		// disk is somebody's prompt; and Cursor sources a context percentage the
+		// vendor itself wrote down, which is why its CONTEXT cell carries a bar
+		// and no estimate marker beside the Codex row's computed one.
 		{name: "v1-capabilities", state: func() State {
 			st := NewState()
 			st.Now = pinned
-			st.Width, st.Height = 120, 9
+			st.Width, st.Height = 120, 10
 			st.Snap = Snapshot{
 				At: pinned,
 				Sessions: []*model.Session{
@@ -376,6 +393,7 @@ func goldenCases() []goldenCase {
 						withName("glossary tooltips"), withSubagents(2),
 						withExtras("ctx tokens", "215k")),
 					agySession(2 * time.Minute),
+					cursorSession(70 * time.Second),
 				},
 				Vendors: []VendorView{
 					watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`,
@@ -386,6 +404,8 @@ func goldenCases() []goldenCase {
 						(&gemini.Adapter{}).Capabilities()),
 					watching(model.VendorAntigravity, `%USERPROFILE%\.gemini\antigravity-cli`,
 						(&agyadapter.Adapter{}).Capabilities()),
+					watching(model.VendorCursor, `%APPDATA%\Cursor\User`,
+						(&cursoradapter.Adapter{}).Capabilities()),
 				},
 			}
 			return st
@@ -393,12 +413,12 @@ func goldenCases() []goldenCase {
 
 		// The frame pasted into README.md. Same real capability mix as
 		// "v1-capabilities", sized so every row is visible (one pad line —
-		// the row area's slot math can't land on exactly five, and the fourth
-		// vendor pushed the scene from five rows to six).
+		// the row area's slot math can't land on exactly five, and every new
+		// vendor adds a row: five at v1, six with agy, seven with Cursor).
 		{name: "readme", state: func() State {
 			st := NewState()
 			st.Now = pinned
-			st.Width, st.Height = 120, 12
+			st.Width, st.Height = 120, 13
 			st.Snap = Snapshot{
 				At: pinned,
 				Sessions: []*model.Session{
@@ -420,6 +440,7 @@ func goldenCases() []goldenCase {
 						withName("glossary tooltips"), withSubagents(2),
 						withExtras("ctx tokens", "215k")),
 					agySession(2 * time.Minute),
+					cursorSession(70 * time.Second),
 				},
 				Vendors: []VendorView{
 					watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`,
@@ -430,6 +451,8 @@ func goldenCases() []goldenCase {
 						(&gemini.Adapter{}).Capabilities()),
 					watching(model.VendorAntigravity, `%USERPROFILE%\.gemini\antigravity-cli`,
 						(&agyadapter.Adapter{}).Capabilities()),
+					watching(model.VendorCursor, `%APPDATA%\Cursor\User`,
+						(&cursoradapter.Adapter{}).Capabilities()),
 				},
 			}
 			return st
@@ -440,7 +463,7 @@ func goldenCases() []goldenCase {
 		{name: "empty-watching", state: func() State {
 			st := NewState()
 			st.Now = pinned
-			st.Width, st.Height = 120, 10
+			st.Width, st.Height = 120, 11
 			st.Snap = Snapshot{
 				At: pinned,
 				Vendors: []VendorView{
@@ -449,6 +472,7 @@ func goldenCases() []goldenCase {
 						Status: StatusNotDetected},
 					watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`, fullCaps),
 					{Vendor: model.VendorCodex, Root: `%USERPROFILE%\.codex`, Status: StatusNotDetected},
+					{Vendor: model.VendorCursor, Root: `%APPDATA%\Cursor\User`, Status: StatusNotDetected},
 					{Vendor: model.VendorGemini, Root: `%USERPROFILE%\.gemini\tmp`, Status: StatusNotDetected},
 				},
 			}
@@ -525,7 +549,7 @@ func goldenCases() []goldenCase {
 		{name: "empty-unreadable", state: func() State {
 			st := NewState()
 			st.Now = pinned
-			st.Width, st.Height = 120, 10
+			st.Width, st.Height = 120, 11
 			st.Snap = Snapshot{
 				At: pinned,
 				Vendors: []VendorView{
@@ -534,6 +558,7 @@ func goldenCases() []goldenCase {
 					{Vendor: model.VendorClaude, Root: `%USERPROFILE%\.claude\projects`,
 						Status: StatusUnreadable, Err: "Access is denied."},
 					{Vendor: model.VendorCodex, Root: `%USERPROFILE%\.codex`, Status: StatusNotDetected},
+					{Vendor: model.VendorCursor, Root: `%APPDATA%\Cursor\User`, Status: StatusNotDetected},
 					{Vendor: model.VendorGemini, Root: `%USERPROFILE%\.gemini\tmp`, Status: StatusNotDetected},
 				},
 			}
