@@ -21,4 +21,4 @@
                                         │                                       │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  › should council resume sessions or re-send the transcript?_                                                           
- COMPOSE                                          → claude  │  enter dispatch  │  ↑↓ scroll  │  ^j newline  │  ^r rebut 
+ COMPOSE                                        → everyone  │  enter dispatch  │  ↑↓ scroll  │  ^j newline  │  ^r rebut 

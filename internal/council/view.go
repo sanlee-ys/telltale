@@ -1009,7 +1009,7 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 	if st.Draft == "" && st.Mode == ModeComposing {
 		return padRows([]string{
 			" " + sty.Muted.Render(prefix) +
-				sty.Muted.Render(padRight("type a brief — goes to claude; @codex, @agy or @all to widen"+g.Caret, w, g)) + " ",
+				sty.Muted.Render(padRight("type a brief — goes to everyone; @claude or @codex to narrow"+g.Caret, w, g)) + " ",
 		}, lay, w, sty, g)
 	}
 
@@ -1210,14 +1210,14 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		"",
 		// Merged with the `enter` line it used to sit above. The two described one
 		// key in two rows, which is the cheapest row in the panel to buy back.
-		"  i / enter    compose a brief; enter dispatches — to claude, or whoever is @mentioned",
+		"  i / enter    compose a brief; enter dispatches — to everyone, or whoever is @mentioned",
 		"  ctrl+j       newline in the brief — the compose area grows to six rows",
 		// Down from three rows to two. What went is "the others are review, IDE
 		// and tiebreak lanes" — which explains why the fleet is shaped this way
 		// rather than what a key does, and it is in the README and ADR-010 where
 		// that argument belongs.
-		"  @codex       address a lane: @claude, @codex, @agy, @cursor, @all — unaddressed",
-		"               goes to claude alone. Leading mentions only: \"ask @claude\" is prose",
+		"  @codex       narrow to a lane: @claude, @codex, @agy, @cursor — unaddressed",
+		"               goes to every seat. Leading mentions only: \"ask @claude\" is prose",
 		// One line, like pgup/pgdn below and for the same reason: the panel has
 		// to fit a 24-row terminal with q and ? still on screen.
 		"  /cd <dir>    move the room to another repo — seats follow on their next turn",

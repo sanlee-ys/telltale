@@ -226,11 +226,13 @@ else changed. Every claim in the two header lines is made per vendor, never as a
 The `⚙` lines are the activity trace: what a vendor is *doing* — the tool call, and the
 command it ran — interleaved with what it says.
 
-Routing is deliberate rather than a broadcast. An unaddressed brief goes to **Claude
-alone**, the control-plane default; `@codex`, `@agy` and `@all` address seats on purpose,
-because convening the whole panel by reflex spends two deliberately constrained
-subscription pools on every "hello". Only leading mentions route, so "ask @claude about
-it" stays prose.
+The room is an operating committee, so routing defaults to convening it. An unaddressed
+brief goes to **every seated vendor**; `@claude`, `@codex`, `@agy` and `@cursor` **narrow**
+it to those seats for one turn, which is how you ask one model something without leaving
+the room. `@all` still works and is now redundant — it names the default. The cost is
+stated rather than hidden: an unaddressed brief bills every seated vendor's quota on every
+turn, and the narrow case is the one you type. Only leading mentions route, so "ask @claude
+about it" stays prose.
 
 Turn 1 is blind. Later turns ride each vendor's own native session resume rather than
 re-sending the transcript, which keeps that guarantee structural: each session holds only

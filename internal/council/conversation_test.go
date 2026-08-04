@@ -197,9 +197,9 @@ func TestASessionTotalKeepsItsWordInHistory(t *testing.T) {
 	}
 }
 
-// TestAnUnaddressedSeatRecordsNothing. Turn 2 went to Claude alone, so Codex's
-// transcript must skip from 1 to 3 rather than hold an entry for a turn it
-// never saw.
+// TestAnUnaddressedSeatRecordsNothing. Turn 2 was narrowed to @claude, so
+// Codex's transcript must skip from 1 to 3 rather than hold an entry for a turn
+// it never saw.
 func TestAnUnaddressedSeatRecordsNothing(t *testing.T) {
 	c := &Column{Vendor: model.VendorCodex, Avail: AvailInstalled}
 	c.startTurn(1, "first", false)
@@ -555,8 +555,8 @@ func TestCtrlJInsertsANewlineAndEnterStillDispatches(t *testing.T) {
 func TestADeliberateNewlineSurvivesIntoTheDispatchedBrief(t *testing.T) {
 	draft := "compare these two:\n\n1. resume\n2. re-send"
 	route, prompt := ParseRoute(draft)
-	if len(route) != 1 || route[0] != model.VendorClaude {
-		t.Fatalf("route = %v, want the default lane", route)
+	if len(route) != 0 {
+		t.Fatalf("route = %v, want the default (everyone seated)", route)
 	}
 	if prompt != draft {
 		t.Errorf("prompt = %q, want the draft unchanged", prompt)

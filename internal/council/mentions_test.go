@@ -15,13 +15,13 @@ func TestParseRoute(t *testing.T) {
 		brief string
 	}{
 		{
-			// The fleet contract, encoded: an unaddressed brief goes to the
-			// control-plane lane alone, not to all three. Broadcasting "hello"
-			// to a review lane and a tiebreak lane spends two constrained pools
-			// on nothing.
-			name:  "no mention goes to claude alone, not everyone",
+			// The committee rule, encoded: silence convenes the whole room. The
+			// old rule sent this to Claude alone to protect two constrained
+			// quota pools; that was overruled, and the bill is now every seated
+			// vendor on every unaddressed turn.
+			name:  "no mention goes to everyone, not claude alone",
 			draft: "should we resume or re-send?",
-			want:  Route{model.VendorClaude},
+			want:  nil,
 			brief: "should we resume or re-send?",
 		},
 		{
@@ -29,6 +29,16 @@ func TestParseRoute(t *testing.T) {
 			draft: "@codex is the resume flag set right?",
 			want:  Route{model.VendorCodex},
 			brief: "is the resume flag set right?",
+		},
+		{
+			// The other half of the flip, and the one a user actually reaches
+			// for: asking ONE model something without leaving the room. A
+			// mention has to cut the room down to the seat it names, or the
+			// ad-hoc case the default was inverted for does not exist.
+			name:  "@claude narrows to one seat rather than widening",
+			draft: "@claude just you on this one",
+			want:  Route{model.VendorClaude},
+			brief: "just you on this one",
 		},
 		{
 			name:  "several mentions",
@@ -61,9 +71,10 @@ func TestParseRoute(t *testing.T) {
 			brief: "go",
 		},
 		{
-			// @all is now the ONLY way to convene the panel. Silence is no
-			// longer a vote for everyone.
-			name:  "@all convenes the whole room",
+			// @all is redundant now — it names the default — and it stays
+			// accepted rather than erroring, so it has to resolve to the same
+			// nil route silence does.
+			name:  "@all is redundant and still convenes the whole room",
 			draft: "@all what do you think?",
 			want:  nil,
 			brief: "what do you think?",
@@ -74,7 +85,7 @@ func TestParseRoute(t *testing.T) {
 			// because of a word in the middle of a sentence.
 			name:  "a mention mid-sentence is prose, not routing",
 			draft: "ask @claude about the resume flag",
-			want:  Route{model.VendorClaude},
+			want:  nil,
 			brief: "ask @claude about the resume flag",
 		},
 		{
@@ -83,7 +94,7 @@ func TestParseRoute(t *testing.T) {
 			// as "going to everyone" before enter rather than after.
 			name:  "an unknown mention stays in the brief",
 			draft: "@claud fix the typo",
-			want:  Route{model.VendorClaude},
+			want:  nil,
 			brief: "@claud fix the typo",
 		},
 		{
@@ -163,8 +174,8 @@ func TestFooterShowsRoutingBeforeDispatch(t *testing.T) {
 
 	st.Draft = "an unaddressed brief"
 	st.Route, _ = ParseRoute(st.Draft)
-	if got := render(st); !strings.Contains(got, "claude") {
-		t.Error("an unaddressed brief does not name the default lane")
+	if got := render(st); !strings.Contains(got, "everyone") {
+		t.Error("an unaddressed brief does not say it is convening everyone")
 	}
 
 	st.Draft = "@all convene"
@@ -183,11 +194,12 @@ func TestFooterShowsRoutingBeforeDispatch(t *testing.T) {
 		t.Error("an addressed brief still claims it is going to everyone")
 	}
 
-	// The typo case, which is the whole reason this is on screen: it must read
-	// as going to the default lane, not silently to nobody.
+	// The typo case, which is the whole reason this is on screen: an @typo does
+	// not narrow, so it must read as going to the whole room — four quotas —
+	// while there is still time to fix it, not silently to nobody.
 	st.Draft = "@claud typo"
 	st.Route, _ = ParseRoute(st.Draft)
-	if got := render(st); !strings.Contains(got, "claude") {
-		t.Error("an unresolved mention does not read as going to the default lane")
+	if got := render(st); !strings.Contains(got, "everyone") {
+		t.Error("an unresolved mention does not read as going to everyone")
 	}
 }
