@@ -76,6 +76,15 @@ func (m *Model) dispatch() tea.Cmd {
 		return nil
 	}
 
+	// Turn 1 is blind no matter what is armed: the whole value of the room is
+	// three opinions formed without sight of each other, and a first round that
+	// quoted anything would have nothing to quote but would still establish the
+	// wrong precedent in the code.
+	quoting := m.st.Quote && m.st.Turn > 0
+	// Snapshotted BEFORE any column is reset, because the loop below clears the
+	// bodies it would otherwise be quoting.
+	priorReplies := append([]Column(nil), m.st.Columns...)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	ts := &turnState{cancel: cancel}
 	var failures []dispatchFailedMsg
@@ -104,7 +113,14 @@ func (m *Model) dispatch() tea.Cmd {
 			continue
 		}
 
-		spec, err := m.specFor(v, c, prompt)
+		// Each vendor may receive a DIFFERENT prompt on a quoting turn, since
+		// each one is shown the others' answers and not its own.
+		vendorPrompt := prompt
+		if quoting {
+			vendorPrompt = BuildRebuttalPrompt(prompt, *c, priorReplies)
+		}
+
+		spec, err := m.specFor(v, c, vendorPrompt)
 		if err != nil {
 			failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 			continue

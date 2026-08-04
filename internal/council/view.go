@@ -417,7 +417,7 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 		// thing on this line that changes what enter DOES. An @typo has to read
 		// as "this is going to everyone" while there is still time to fix it;
 		// discovering it afterwards means a wasted turn against three quotas.
-		right = "→ " + routeLabel(st) + "  " + g.Sep + "  enter dispatch  " + g.Sep + "  esc view"
+		right = "→ " + routeLabel(st) + quoteTag(st) + "  " + g.Sep + "  enter dispatch  " + g.Sep + "  ^r rebut"
 	default:
 		left = "VIEW"
 		scroll := g.Up + g.Down + " scroll  " + g.Sep + "  f expand  " + g.Sep + "  "
@@ -440,6 +440,23 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 		r = sty.Muted.Render(r)
 	}
 	return " " + l + strings.Repeat(" ", gap) + r + " "
+}
+
+// quoteTag marks an armed rebuttal turn in the footer.
+//
+// It sits beside the routing because both answer the same question — what is
+// actually about to be sent — and this one changes the content rather than the
+// destination. "(blind)" is shown rather than nothing when armed on turn 1, so
+// the user learns the rule at the moment it applies to them instead of
+// wondering why the toggle did nothing.
+func quoteTag(st State) string {
+	if !st.Quote {
+		return ""
+	}
+	if st.Turn == 0 {
+		return "  + rebuttal (turn 1 is blind)"
+	}
+	return "  + rebuttal"
 }
 
 // routeLabel names who the current draft is addressed to.
@@ -471,6 +488,8 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		"  pgup/pgdn    scroll by a screenful   (space = pgdn)",
 		"  g / G        jump to the top / back to the newest output",
 		"  f            expand the focused column to the full width",
+		"  ctrl+r       arm rebuttal: each vendor sees the others' last answers,",
+		"               fenced and labelled as untrusted. Turn 1 is always blind.",
 		"  ctrl+c       cancel the turn in flight, or quit when idle",
 		"  q            quit (in view mode only — in compose it is the letter q)",
 		"  ?            this help",

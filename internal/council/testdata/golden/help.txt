@@ -12,13 +12,13 @@
    pgup/pgdn    scroll by a screenful   (space = pgdn)                                                                  
    g / G        jump to the top / back to the newest output                                                             
    f            expand the focused column to the full width                                                             
+   ctrl+r       arm rebuttal: each vendor sees the others' last answers,                                                
+                fenced and labelled as untrusted. Turn 1 is always blind.                                               
    ctrl+c       cancel the turn in flight, or quit when idle                                                            
    q            quit (in view mode only — in compose it is the letter q)                                                
    ?            this help                                                                                               
                                                                                                                         
    council dispatches to vendor CLIs. It is the one telltale mode that                                                  
-   does, and each column states its own read-only posture rather than                                                   
-   the room making one claim on behalf of all three.                                                                    
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 

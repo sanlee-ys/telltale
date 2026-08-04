@@ -21,4 +21,4 @@
                                         │                                       │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  › should council resume sessions or re-send the transcript?_                                                           
- COMPOSE                                                                     → everyone  │  enter dispatch  │  esc view 
+ COMPOSE                                                                     → everyone  │  enter dispatch  │  ^r rebut 
