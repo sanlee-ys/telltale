@@ -2,7 +2,7 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸Claude Code                 ⠋ waiting │  Codex                           idle │  Antigravity                     idle 
  ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
- ro:tools  final only                   │ ro:requested  events                  │ ro:requested  events                  
+ ro:tools  final only                   │ ro:requested  final only              │ unsandboxed  final only               
                                         │                                       │                                       
  working. this vendor reports no        │ no turn dispatched yet.               │ no turn dispatched yet.               
  incremental output, so nothing appears │                                       │                                       

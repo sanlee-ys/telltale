@@ -135,8 +135,18 @@ func TestNoVendorClaimsUnverifiedEnforcement(t *testing.T) {
 	if got := sandboxFor(model.VendorCodex, false).Level; got != SandboxEnforced {
 		t.Errorf("codex on unix claims %v, want SandboxEnforced", got)
 	}
-	if got := sandboxFor(model.VendorAntigravity, false).Level; got != SandboxRequested {
-		t.Errorf("agy claims %v, want SandboxRequested — its flags are unverified", got)
+	// Antigravity is the strong case: not "unverified" but REFUTED. Asked to
+	// write a file under --mode plan --sandbox, it wrote the file. Anything
+	// above SandboxNone would put a read-only posture on a column measured not
+	// to have one, and `ro:requested` reads at a glance as "some read-only
+	// posture" — which is exactly the glance this badge must not survive.
+	for _, win := range []bool{true, false} {
+		if got := sandboxFor(model.VendorAntigravity, win).Level; got != SandboxNone {
+			t.Errorf("agy claims %v, want SandboxNone — its flags were measured not to restrict it", got)
+		}
+	}
+	if got := sandboxFor(model.VendorAntigravity, true).Badge(); strings.HasPrefix(got, "ro:") {
+		t.Errorf("agy badge is %q; a vendor that can write must not wear an ro: prefix", got)
 	}
 	// Claude's mechanism is real but is a tool allowlist, not an OS sandbox,
 	// and the badge must not imply otherwise.
@@ -152,15 +162,20 @@ func TestNoVendorClaimsUnverifiedEnforcement(t *testing.T) {
 	}
 }
 
-// TestGranularityIsNotOverclaimed: only Claude's token-level streaming is
-// verified. Guessing high would put a "streaming" label on a silent column.
-func TestGranularityIsNotOverclaimed(t *testing.T) {
-	if granularityFor(model.VendorClaude) != GranTokens {
-		t.Error("claude should be GranTokens — its stream-json deltas are documented")
+// TestGranularityMatchesWhatWasMeasured. All three were run; two of them are
+// worse than the provisional guess and must say so, because a column labelled
+// as streaming that sits silent for a minute is a lie the user has no way to
+// check.
+func TestGranularityMatchesWhatWasMeasured(t *testing.T) {
+	if got := granularityFor(model.VendorClaude); got != GranTokens {
+		t.Errorf("claude = %v, want GranTokens — token deltas were observed live", got)
 	}
+	// Codex emits one item per COMPLETE message; Antigravity emits a whole
+	// response as a single delta. Neither streams in any sense a user would
+	// recognise, and both must land in PhaseWaiting rather than PhaseStreaming.
 	for _, v := range []model.VendorID{model.VendorCodex, model.VendorAntigravity} {
-		if granularityFor(v) == GranTokens {
-			t.Errorf("%s claims token-level streaming, which is not verified", v)
+		if got := granularityFor(v); got != GranFinalOnly {
+			t.Errorf("%s = %v, want GranFinalOnly — measured to produce nothing until the turn ends", v, got)
 		}
 	}
 }
