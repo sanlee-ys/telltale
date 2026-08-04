@@ -48,6 +48,16 @@ const (
 	// KindMeta carries a reported cost. Only ever set from a number the vendor
 	// stated; council never derives one.
 	KindMeta
+	// KindGate is a vendor asking permission for one tool call and BLOCKING
+	// until it is answered. Gate is set.
+	//
+	// Only a persistent session can carry one: the request arrives on the
+	// process's stdout and its answer goes back on the same process's stdin, so
+	// a spawn-per-turn child — whose stdin was written and closed before the
+	// first token arrived — has no channel to answer on. That is not a Claude
+	// limitation, it is the shape of the batch CLIs, and it is why the gate is
+	// Claude-only.
+	KindGate
 	// KindDone: the process exited. ExitCode is set.
 	KindDone
 	// KindError: the turn failed. Err and Note are set.
@@ -105,12 +115,53 @@ type ActCall struct {
 	Detail string
 }
 
+// Gate is one tool call a vendor is BLOCKED on, waiting to be told yes or no.
+//
+// Captured live on 2026-08-04 against Claude Code 2.1.220, driving the process
+// with --input-format stream-json. The request, whole, minus nothing:
+//
+//	{"type":"control_request","request_id":"179ce36e-c5d1-4b95-a761-ec7aa1fd5494","request":{"subtype":"can_use_tool","tool_name":"Write","display_name":"Write","input":{"file_path":"...\\ping.txt","content":"PONG"},"description":"ping.txt","permission_suggestions":[{"type":"setMode","mode":"acceptEdits","destination":"session"}],"tool_use_id":"toolu_01MagQh7Ep8kzC1edrDr17jL"}}
+//
+// That it BLOCKS is the part that had to be measured rather than read: the
+// answer was withheld for twenty seconds and nothing else arrived on stdout in
+// that window, then the tool_result landed 0.25s after it was sent.
+type Gate struct {
+	// RequestID is the vendor's own id for this request. The answer carries it
+	// back; nothing else identifies which of several pending calls was decided.
+	RequestID string
+	// ToolUseID is the id of the tool_use block this request is about, which is
+	// the SAME id the activity trace already keys on. That correspondence is
+	// what lets an approval card and the trace entry it approves be one thing on
+	// screen rather than two.
+	//
+	// Verified: the captured request's tool_use_id matched the assistant
+	// message's tool_use id exactly.
+	ToolUseID string
+	// Tool is the tool name as the vendor named it ("Write", "Bash").
+	Tool string
+	// Text is the tool and its argument line, shortened for a narrow column and
+	// formatted like a trace entry: "Write: ...\\ping.txt". Composed by the
+	// adapter from the vendor's own fields; nothing here is invented.
+	Text string
+}
+
 // Event is one thing that happened to one vendor.
 type Event struct {
 	Vendor    model.VendorID
 	Kind      EventKind
 	Text      string
 	SessionID string
+	// Gate is set on KindGate and nowhere else.
+	Gate *Gate
+	// EndsTurn marks the vendor's own end-of-turn line.
+	//
+	// It exists because a persistent process has no process exit to end a turn
+	// with. A spawn-per-turn child says "the turn is over" by dying, which the
+	// runner reports as KindDone; a process that will take another turn says it
+	// with a line in the stream, and only the adapter can recognise which line
+	// that is. Set on Claude's `result` — one per turn, verified across two
+	// turns of one process.
+	EndsTurn bool
 	// Acts carries the tool-call news of a KindActivity: one entry per call
 	// announced or resolved on this line.
 	//

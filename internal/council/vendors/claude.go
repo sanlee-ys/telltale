@@ -76,6 +76,126 @@ func (c Claude) NextTurn(prompt, workspace, binary, sessionID string, p Posture)
 	}, nil
 }
 
+// Session is the persistent invocation: one process, many turns, fed JSONL on
+// an stdin that stays open.
+//
+// VERIFIED LIVE 2026-08-04, Claude Code 2.1.220, on Windows. Two turns were
+// sent down one stdin with a two-second pause between them; the pid was
+// unchanged, the process was alive throughout, and both turns came back under
+// the SAME session_id. Closing stdin exited it cleanly with status 0.
+//
+// The only addition to the spawn-per-turn flags is --input-format, which is
+// what puts the process into realtime streaming input. --resume is deliberately
+// absent: there is nothing to resume, because the session never ended.
+func (c Claude) Session(workspace, binary string, p Posture) (runner.Spec, error) {
+	return runner.Spec{
+		Vendor: c.ID(),
+		Binary: binary,
+		Args:   append(c.baseArgs(p), "--input-format", "stream-json"),
+		// No StdinPrompt. Every turn is a Turn() line written later, which is
+		// also why the shim refusal has nothing to catch here: no prompt text
+		// can reach argv by any path.
+		Dir: workspace,
+	}, nil
+}
+
+// userMessage is the turn envelope, and it is the shape the live probe sent.
+//
+// Captured verbatim from the run that worked:
+//
+//	{"type":"user","message":{"role":"user","content":"Reply with exactly: ONE"}}
+//
+// Marshalled rather than assembled, because a brief is arbitrary user text: it
+// contains quotes and newlines by the time anyone uses this feature seriously,
+// and string building would produce a broken line rather than a wrong one.
+type userMessage struct {
+	Type    string      `json:"type"`
+	Message userContent `json:"message"`
+}
+
+type userContent struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+func (Claude) Turn(prompt string) ([]byte, error) {
+	return json.Marshal(userMessage{
+		Type:    "user",
+		Message: userContent{Role: "user", Content: prompt},
+	})
+}
+
+// controlRequest is a message going TO the process. The same envelope carries
+// the vendor's questions in the other direction, which is why the parser has to
+// tell inbound requests from the responses to our own.
+type controlRequest struct {
+	Type      string         `json:"type"`
+	RequestID string         `json:"request_id"`
+	Request   map[string]any `json:"request"`
+}
+
+// Interrupt abandons the turn in flight without killing the process.
+//
+// VERIFIED LIVE: sent while the vendor was blocked on a permission request, it
+// came back as
+//
+//	{"type":"control_response","response":{"subtype":"success","request_id":"int-1","response":{"still_queued":[]}}}
+//
+// followed by a tool_result saying the user did not want to proceed, a
+// "[Request interrupted by user for tool use]" line, and a `result` whose
+// terminal_reason was "aborted_tools". The process stayed alive and took a
+// further turn afterwards. That is what makes cancelling a turn cheap here:
+// the room does not have to pay another session init to recover from it.
+//
+// The capability is advertised too — every system/init in the spike listed
+// "interrupt_receipt_v1" — but the advertisement is not what this rests on.
+func (Claude) Interrupt(id string) ([]byte, error) {
+	return json.Marshal(controlRequest{
+		Type:      "control_request",
+		RequestID: id,
+		Request:   map[string]any{"subtype": "interrupt"},
+	})
+}
+
+// Decide answers one permission request.
+//
+// VERIFIED LIVE, both branches, in throwaway directories:
+//
+//	allow -> {"type":"control_response","response":{"subtype":"success","request_id":"179ce36e-…","response":{"behavior":"allow","updatedInput":{"file_path":"…","content":"PONG"}}}}
+//	         the tool ran and the file was on disk.
+//	deny  -> {"type":"control_response","response":{"subtype":"success","request_id":"d006e5d8-…","response":{"behavior":"deny","message":"denied by you (telltale council gate)"}}}
+//	         the vendor turned it into
+//	         {"type":"tool_result","content":"denied by you (telltale council gate)","is_error":true,"tool_use_id":"toolu_01UWig94…"}
+//	         and the file was NOT created.
+//
+// Note the outer subtype is "success" in BOTH cases. It reports that the answer
+// itself was well-formed, not what the answer was — reading it as the decision
+// would approve every denial.
+//
+// The denial message is echoed back to the model verbatim, so it is the one
+// piece of council-authored text a vendor ever reads. It says who denied it,
+// because "denied" alone invites the model to retry a slightly different way.
+func (Claude) Decide(requestID string, allow bool, reason string, input map[string]any) ([]byte, error) {
+	resp := map[string]any{"behavior": "deny", "message": reason}
+	if allow {
+		// updatedInput is required on an allow. The bundle carries a diagnostic
+		// for a handler that returns one on a deny, so the two branches do not
+		// share a shape and must not be built as if they did.
+		if input == nil {
+			input = map[string]any{}
+		}
+		resp = map[string]any{"behavior": "allow", "updatedInput": input}
+	}
+	return json.Marshal(map[string]any{
+		"type": "control_response",
+		"response": map[string]any{
+			"subtype":    "success",
+			"request_id": requestID,
+			"response":   resp,
+		},
+	})
+}
+
 func (c Claude) baseArgs(p Posture) []string {
 	args := []string{
 		"-p",
@@ -293,6 +413,17 @@ type streamLine struct {
 		} `json:"content"`
 	} `json:"message"`
 
+	// control_request: the vendor asking permission and BLOCKING on the answer.
+	// Only ever seen on a persistent process — the request arrives on stdout and
+	// its answer goes back on the same process's stdin.
+	RequestID string `json:"request_id"`
+	Request   struct {
+		Subtype   string         `json:"subtype"`
+		ToolName  string         `json:"tool_name"`
+		Input     map[string]any `json:"input"`
+		ToolUseID string         `json:"tool_use_id"`
+	} `json:"request"`
+
 	// result
 	Result       string   `json:"result"`
 	IsError      bool     `json:"is_error"`
@@ -341,6 +472,29 @@ func (Claude) ParseEvent(line []byte) (runner.Event, bool) {
 		if res := toolResults(sl); len(res) > 0 {
 			return runner.Event{Kind: runner.KindActivity, Acts: res}, true
 		}
+	case "control_request":
+		// The vendor is asking, and it is BLOCKED until answered. Only
+		// can_use_tool is modelled: the same envelope carries other subtypes,
+		// and answering one this code does not understand would be worse than
+		// leaving it to the caller's timeout.
+		if sl.Request.Subtype != "can_use_tool" || sl.RequestID == "" {
+			return runner.Event{}, false
+		}
+		g := &runner.Gate{
+			RequestID: sl.RequestID,
+			ToolUseID: sl.Request.ToolUseID,
+			Tool:      sl.Request.ToolName,
+			Text:      sl.Request.ToolName,
+		}
+		if arg := toolArg(sl.Request.Input); arg != "" {
+			// The same formatting the activity trace uses, on purpose: the card
+			// and the trace entry it decides are the same call, so a user who
+			// approves "Bash: go test ./..." should find that exact line in the
+			// trace afterwards rather than a second phrasing of it.
+			g.Text = sl.Request.ToolName + ": " + arg
+		}
+		return runner.Event{Kind: runner.KindGate, Gate: g}, true
+
 	case "result":
 		// Text is the whole final reply. It is carried so the room has a
 		// fallback when a turn streamed nothing — a flag that stopped working,
@@ -352,6 +506,11 @@ func (Claude) ParseEvent(line []byte) (runner.Event, bool) {
 			Text:      sl.Result,
 			SessionID: sl.SessionID,
 			CostUSD:   sl.TotalCostUSD,
+			// One `result` per turn, verified across two turns of one process.
+			// On a spawn-per-turn child this is redundant with the process
+			// exit; on a persistent one it is the ONLY end-of-turn signal there
+			// is, because the process does not exit.
+			EndsTurn: true,
 		}
 		if sl.IsError {
 			// The process may still exit 0 while the turn itself failed. The

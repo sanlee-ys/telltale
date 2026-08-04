@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"io"
@@ -115,6 +116,48 @@ func TestHelperProcess(t *testing.T) {
 
 	case "sleep":
 		block()
+
+	case "session":
+		// The persistent vendor: one process, many turns, stdin never closed
+		// until the caller closes it. Each turn answers with a chunk and then an
+		// end-of-turn line, which is the shape the real stream has — a `result`
+		// per turn and no process exit between them.
+		sc := bufio.NewScanner(os.Stdin)
+		sc.Buffer(make([]byte, 0, 64<<10), 8<<20)
+		for sc.Scan() {
+			var in struct {
+				Type    string `json:"type"`
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+				Request struct {
+					Subtype string `json:"subtype"`
+				} `json:"request"`
+			}
+			if json.Unmarshal(sc.Bytes(), &in) != nil {
+				continue
+			}
+			if in.Type == "control_request" {
+				// An interrupt ends the TURN and leaves the process running,
+				// which is the behaviour the live spike measured.
+				os.Stdout.WriteString(`{"t":"` + in.Request.Subtype + `","end":true}` + "\n")
+				continue
+			}
+			os.Stdout.WriteString(`{"t":"` + in.Message.Content + `"}` + "\n")
+			os.Stdout.WriteString(`{"t":"","end":true}` + "\n")
+		}
+		os.Exit(0)
+
+	case "session-dies":
+		// Takes one turn, answers half of it, then dies. The column must end up
+		// Failed rather than waiting forever for an end-of-turn line that is
+		// never coming.
+		sc := bufio.NewScanner(os.Stdin)
+		if sc.Scan() {
+			os.Stdout.WriteString(`{"t":"partial"}` + "\n")
+		}
+		os.Stderr.WriteString("the vendor fell over\n")
+		os.Exit(4)
 	}
 	os.Exit(0)
 }

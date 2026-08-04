@@ -463,7 +463,15 @@ func badgeLine(c Column) string {
 		parts = append(parts, s)
 	}
 	if c.CostUSD != nil {
-		parts = append(parts, "$"+strconv.FormatFloat(*c.CostUSD, 'f', 4, 64))
+		cost := "$" + strconv.FormatFloat(*c.CostUSD, 'f', 4, 64)
+		if c.CostSession {
+			// A word, not a symbol, and not a colour. A seat kept alive across
+			// turns reports its running total; the cell has always meant "this
+			// turn" everywhere else in this room, and two different quantities
+			// sharing one rendering is the ambiguity §4a.1 forbids.
+			cost += " session"
+		}
+		parts = append(parts, cost)
 	}
 	if len(parts) == 0 {
 		return ""

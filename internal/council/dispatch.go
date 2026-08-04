@@ -33,9 +33,18 @@ const drainMax = 64
 type turnState struct {
 	cancel  context.CancelFunc
 	handles []*runner.Handle
-	// live counts columns that have not reached a terminal phase yet, so the
-	// turn knows when it is over without polling.
-	live int
+	// live is the set of columns that have not reached a terminal phase yet, so
+	// the turn knows when it is over without polling.
+	//
+	// A SET rather than the counter it used to be. A persistent seat can be told
+	// its turn ended by two different signals — the vendor's own end-of-turn
+	// line, and, if the process then dies, its exit — and a counter would
+	// decrement twice for one column and end the turn while another seat was
+	// still talking. Membership is idempotent; a count is not.
+	live map[model.VendorID]bool
+	// persistent names the columns driven by a long-lived process, whose child
+	// must survive this turn's teardown.
+	persistent map[model.VendorID]bool
 }
 
 type eventBatchMsg struct{ events []runner.Event }
@@ -92,7 +101,11 @@ func (m *Model) dispatch() tea.Cmd {
 	priorReplies := append([]Column(nil), m.st.Columns...)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	ts := &turnState{cancel: cancel}
+	ts := &turnState{
+		cancel:     cancel,
+		live:       map[model.VendorID]bool{},
+		persistent: map[model.VendorID]bool{},
+	}
 	var failures []dispatchFailedMsg
 
 	for i := range m.st.Columns {
@@ -126,20 +139,35 @@ func (m *Model) dispatch() tea.Cmd {
 			vendorPrompt = BuildRebuttalPrompt(prompt, *c, priorReplies)
 		}
 
-		spec, err := m.specFor(v, c, vendorPrompt)
-		if err != nil {
-			failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
-			continue
+		// A seat with a long-lived process is handed the turn on the stdin it
+		// already has open. A seat without one pays a fresh spawn, as before.
+		//
+		// note is carried past the column reset below, because that reset is
+		// what clears the PREVIOUS turn's note and this one is about THIS turn.
+		note := ""
+		if pv, ok := v.(vendors.Persistent); ok {
+			n, err := m.sendPersistentTurn(pv, c, vendorPrompt)
+			if err != nil {
+				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
+				continue
+			}
+			ts.persistent[c.Vendor] = true
+			note = n
+		} else {
+			spec, err := m.specFor(v, c, vendorPrompt)
+			if err != nil {
+				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
+				continue
+			}
+			h, err := runner.Start(ctx, spec, m.events, v.ParseEvent)
+			if err != nil {
+				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
+				continue
+			}
+			ts.handles = append(ts.handles, h)
 		}
 
-		h, err := runner.Start(ctx, spec, m.events, v.ParseEvent)
-		if err != nil {
-			failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
-			continue
-		}
-
-		ts.handles = append(ts.handles, h)
-		ts.live++
+		ts.live[c.Vendor] = true
 		c.Phase = PhaseStreaming
 		// GranUnknown lands in Waiting alongside GranFinalOnly, and the
 		// asymmetry is the point. PhaseStreaming asserts "output is arriving and
@@ -152,8 +180,15 @@ func (m *Model) dispatch() tea.Cmd {
 		}
 		c.Body = ""
 		c.Acts = nil
-		c.Note = ""
+		c.Note = note
 		c.CostUSD = nil
+		// A persistent process reports a RUNNING TOTAL, not this turn's spend.
+		// Measured: two turns of one process reported $0.1061493 then
+		// $0.1177296 while the per-turn usage block stayed at 2 input tokens
+		// both times. Rendering that as a turn cost would be a false figure, and
+		// subtracting one from the other would be council inventing a number —
+		// so the badge says which one it is instead.
+		c.CostSession = ts.persistent[c.Vendor]
 		// Re-arm the tail for the new turn. Whatever the user was reading
 		// belonged to the previous answer, which this column just cleared.
 		c.Follow = true
@@ -170,7 +205,7 @@ func (m *Model) dispatch() tea.Cmd {
 		}
 	}
 
-	if ts.live == 0 {
+	if len(ts.live) == 0 {
 		cancel()
 		m.st.Notice = "no vendor could be dispatched to — see the columns"
 		return nil
@@ -282,6 +317,9 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				m.sessions[ev.Vendor] = ev.SessionID
 			}
 
+		case runner.KindGate:
+			m.answerGate(c, ev.Gate)
+
 		case runner.KindMeta:
 			if ev.SessionID != "" {
 				m.sessions[ev.Vendor] = ev.SessionID
@@ -295,36 +333,88 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			if c.Body == "" && ev.Text != "" {
 				c.Body = m.redact(ev.Vendor, ev.Text) + m.flush(ev.Vendor)
 			}
+			// On a persistent seat this line is the ONLY end-of-turn signal:
+			// the process does not exit, so no KindDone is coming.
+			if ev.EndsTurn && m.isPersistent(ev.Vendor) {
+				m.finishColumn(c, PhaseDone)
+			}
 
 		case runner.KindDone:
+			// A persistent process reaching here has DIED — the turn's end never
+			// takes it down. Either the room is quitting, or something ended it
+			// under us; both mean the seat has no process any more.
+			persistent := m.isPersistent(ev.Vendor)
+			m.dropProcess(ev.Vendor)
 			c.Body += m.flush(ev.Vendor)
-			c.Elapsed = time.Since(c.Started)
-			if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
-				c.Phase = PhaseDone
-				if m.cancelling {
-					c.Phase = PhaseCancelled
-					c.Note = "cancelled — the output above is partial"
-				}
+			if persistent && (c.Phase == PhaseStreaming || c.Phase == PhaseWaiting) && !m.cancelling {
+				// Mid-turn death. Said as a failure rather than a clean finish,
+				// because the answer the user was waiting for is not coming and
+				// a column that simply stopped would look like one that finished.
+				c.Elapsed = time.Since(c.Started)
+				c.Note = "the vendor process ended mid-turn — the next brief starts a new session"
+				m.finishColumn(c, PhaseFailed)
+				continue
 			}
-			m.turnColumnFinished()
+			m.finishColumn(c, PhaseDone)
 
 		case runner.KindError:
 			c.Body += m.flush(ev.Vendor)
-			c.Elapsed = time.Since(c.Started)
-			c.Phase = PhaseFailed
 			if ev.Note != "" {
 				c.Note = ev.Note
 			} else if ev.Err != nil {
 				c.Note = ev.Err.Error()
 			}
+			if m.isPersistent(ev.Vendor) {
+				if ev.EndsTurn {
+					// The vendor reported the turn failed. On a persistent seat
+					// that is the end of the TURN, not of the process, so the
+					// column retires and the seat stays open for the next brief.
+					//
+					// An interrupt lands here too: cancelling produced a result
+					// with is_error true and terminal_reason "aborted_tools".
+					// The user's keystroke is not a vendor failure, so
+					// finishColumn's cancellation check re-labels it.
+					if m.cancelling {
+						c.Note = ""
+					}
+					m.finishColumn(c, PhaseFailed)
+				} else {
+					// The PROCESS failed. Nothing more is coming from it.
+					m.dropProcess(ev.Vendor)
+					c.Elapsed = time.Since(c.Started)
+					m.finishColumn(c, PhaseFailed)
+				}
+				continue
+			}
+			c.Elapsed = time.Since(c.Started)
+			c.Phase = PhaseFailed
 			// A vendor-reported failure arrives BEFORE the process exits, so
 			// this is not the end of the column's life; KindDone still follows
-			// and is what decrements the live count.
+			// and is what retires it.
 			if ev.ExitCode != 0 || ev.Err != nil {
-				m.turnColumnFinished()
+				m.finishColumn(c, PhaseFailed)
 			}
 		}
 	}
+}
+
+// finishColumn retires one column from the turn.
+//
+// Every path that ends a column goes through here, which is what keeps the
+// cancellation wording in one place: a turn the user stopped must never be
+// rendered as a vendor failure, and there are now four ways a column can end.
+func (m *Model) finishColumn(c *Column, phase Phase) {
+	if c.Elapsed == 0 && !c.Started.IsZero() {
+		c.Elapsed = time.Since(c.Started)
+	}
+	if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
+		c.Phase = phase
+		if m.cancelling {
+			c.Phase = PhaseCancelled
+			c.Note = "cancelled — the output above is partial"
+		}
+	}
+	m.turnColumnFinished(c.Vendor)
 }
 
 // recordAct folds one piece of tool-call news into a column's trace.
@@ -379,12 +469,19 @@ func (c *Column) recordAct(a runner.ActCall, clean func(string) string) {
 
 // turnColumnFinished retires one column from the turn and tears the turn down
 // when the last one lands.
-func (m *Model) turnColumnFinished() {
+//
+// Idempotent by vendor: a persistent seat can be retired by its end-of-turn
+// line and then again by its process dying, and the turn must not end early
+// because one column reported twice.
+func (m *Model) turnColumnFinished(v model.VendorID) {
 	if m.turn == nil {
 		return
 	}
-	m.turn.live--
-	if m.turn.live > 0 {
+	if !m.turn.live[v] {
+		return
+	}
+	delete(m.turn.live, v)
+	if len(m.turn.live) > 0 {
 		return
 	}
 	m.turn.cancel()
@@ -393,9 +490,24 @@ func (m *Model) turnColumnFinished() {
 	m.st.Mode = ModeComposing
 }
 
+// isPersistent reports whether this seat's turn is running on a long-lived
+// process. Read from the turn rather than from the registry, so a seat that
+// fell back to a spawn is treated as what it actually is.
+func (m *Model) isPersistent(v model.VendorID) bool {
+	return m.turn != nil && m.turn.persistent[v]
+}
+
 // cancelTurn stops everything in flight. The columns keep whatever they already
 // received: that output was really produced, and the card says it is partial
 // rather than implying the turn completed.
+//
+// A persistent seat is INTERRUPTED rather than killed. Killing it would work,
+// and it would also throw away the conversation and the session-init cost that
+// bought it — so cancelling one turn would silently make the next one expensive.
+// The vendor offers a real interrupt, it was measured, and the process was still
+// answering afterwards; if the message cannot be delivered the seat is killed
+// instead, which is the old behaviour and is stated in the column rather than
+// hidden.
 func (m *Model) cancelTurn() {
 	if m.turn == nil {
 		return
@@ -405,6 +517,9 @@ func (m *Model) cancelTurn() {
 	for _, h := range m.turn.handles {
 		h.Kill()
 	}
+	for v := range m.turn.persistent {
+		m.interruptSeat(v)
+	}
 	m.turn.cancel()
 }
 
@@ -412,8 +527,17 @@ func (m *Model) cancelTurn() {
 //
 // Without this, quitting the room would leave agents running, holding sessions
 // and spending quota, with nothing on screen to say so — the exact invisible
-// state this product exists to refuse.
+// state this product exists to refuse. The persistent seats are included, and
+// they are the reason this matters more than it did: a process that survives a
+// turn by design is exactly the process that would survive the room by accident.
 func (m *Model) teardown() {
+	for v, p := range m.procs {
+		p.sess.Kill()
+		delete(m.procs, v)
+	}
+	if m.roomCancel != nil {
+		m.roomCancel()
+	}
 	if m.turn == nil {
 		return
 	}

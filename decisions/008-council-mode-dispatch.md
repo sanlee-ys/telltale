@@ -345,6 +345,62 @@ bare `--` separator, but that is inferred from the argument parser rather than o
 getting it wrong breaks *every* brief instead of a rare one. It waits for someone with an
 authenticated CLI to run both forms once.
 
+### Amendment, 2026-08-04 (sixth): one process per Claude seat
+
+Every turn used to be a fresh `claude -p --resume`. The cost of that was not
+subtle — a one-word "gm" took about 25 seconds and $0.23, nearly all of it
+session init, paid again on every turn of every conversation. The second cost
+was structural and is the one that actually forced this: **a batch process
+cannot ask permission.** Its stdin is written and closed before the first token
+arrives, so there is no channel for it to ask on and none for an answer to come
+back on.
+
+`--input-format stream-json` puts the CLI into realtime streaming input: one
+process, stdin held open, one JSONL message per turn. Verified live against
+Claude Code 2.1.220 on Windows rather than read from documentation, which is the
+standing rule in this file and which earned its keep again below.
+
+**What the spike established, and how.**
+
+| | finding | strength |
+|---|---|---|
+| Turn envelope | `{"type":"user","message":{"role":"user","content":"…"}}`, one line. | Sent; answered |
+| Persistence | Two turns down one stdin with a pause between: same pid, alive throughout, **same `session_id`**. Closing stdin exited 0. | Measured |
+| Turn boundary | One `result` per turn. There is no process exit to infer it from, so this line is the ONLY end-of-turn signal a persistent column gets. | Measured |
+| `system/init` | **Re-emitted at the start of EVERY turn**, carrying the same `session_id`. A parser that treats init as "a new session started" would reset the seat once per turn. | Measured |
+| Interrupt | `{"type":"control_request","request_id":"…","request":{"subtype":"interrupt"}}` → `control_response` with `still_queued`, then a `result` whose `terminal_reason` is `aborted_tools`. **The process stayed alive and took a further turn.** | Measured |
+| Streaming granularity | **Unchanged.** 20 text deltas, mean 80 chars, over a 250-word reply — against a spawn-per-turn control run of 22 deltas, mean 79.9. | Measured, with a control |
+
+**Cancelling a turn no longer kills the seat.** The interrupt is what makes that
+possible, and it matters more than it sounds: killing would work, and it would
+also throw away the session init the room just paid for, so cancelling one turn
+would quietly make the next one expensive. If the interrupt cannot be delivered
+the seat is killed and restarted, and the column says the thread was lost rather
+than resuming a conversation it no longer has.
+
+**The reported cost changed meaning, and the badge had to change with it.**
+`total_cost_usd` is a RUNNING TOTAL for the process: across two turns it went
+$0.1061493 → $0.1177296 while the per-turn `usage` block stayed at 2 input
+tokens both times. The cost cell has meant "this turn" everywhere else in this
+room. Rendering a session total there would be a false reading of a true number,
+and subtracting one from the other would be council inventing a figure — which
+is on this repo's deliberately-rejected list. So the badge says
+`$0.1177 session` and neither happens.
+
+**The seat is Claude's alone, and that is a fact about the other CLIs.**
+`codex exec` and `agy -p` are batch programs: they read a prompt, answer, and
+exit. Neither exposes a mode that keeps a process alive across turns, so neither
+can be handed a second turn and neither has a channel to ask a question on
+mid-turn. Their columns keep spawn-per-turn and their badges keep saying exactly
+what they said before. A room where one seat is cheap and three are not is the
+honest shape of this; making them look uniform would be the lie.
+
+**A process that outlives a turn by design is the one that outlives the room by
+accident.** The persistent child lives in the same kill-on-close job object, and
+every quit path now tears down — including the two that previously did not,
+because "no turn in flight" used to mean "no children" and stopped meaning it
+the moment this landed.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude
