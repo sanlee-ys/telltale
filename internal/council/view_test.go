@@ -833,13 +833,13 @@ func TestActingColumnDoesNotClaimSilence(t *testing.T) {
 	st := room()
 	st.Turn = 1
 	st.Columns[2].Phase = PhaseWaiting
-	st.Columns[2].Acts = []Act{{Text: "tool"}, {Text: "checkpoint"}}
+	st.Columns[2].Acts = []Act{{Text: "list_dir: C:\\ws"}, {Text: "run_command: go test ./..."}}
 
 	got := render(st)
 	if strings.Contains(got, "no incremental output") {
 		t.Error("a column showing a live trace still claims it reports nothing")
 	}
-	if !strings.Contains(got, "checkpoint") {
+	if !strings.Contains(got, "list_dir") {
 		t.Error("the trace is missing from a waiting column — the case it matters most for")
 	}
 }
@@ -1035,9 +1035,14 @@ func TestMixedTraceGolden(t *testing.T) {
 		{ID: "item_1", Text: "go build ./...", Status: runner.ActPending},
 	}
 	st.Columns[2].Phase = PhaseWaiting
+	// The agy column, as the adapter now builds it: real tool names, and the
+	// per-step failure agy DOES report. It used to read `tool ?` / `checkpoint ?`
+	// — a gear icon per plumbing message and one indistinguishable entry per real
+	// call — which is what this golden was quietly holding in place.
 	st.Columns[2].Acts = []Act{
-		{ID: "step-3", Text: "tool", Status: runner.ActUnknown},
-		{ID: "step-4", Text: "checkpoint", Status: runner.ActUnknown},
+		{ID: "step-3", Text: "list_dir: C:\\ws", Status: runner.ActUnknown},
+		{ID: "step-8", Text: "run_command: pwsh -Command \"Get-ChildItem\"", Status: runner.ActFailed,
+			Detail: "granting access to C:\\: Access is denied."},
 	}
 	golden(t, "activity-outcomes", render(st))
 }

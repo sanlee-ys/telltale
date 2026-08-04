@@ -647,8 +647,13 @@ failure would quietly undo the feature it is part of.
 whose stock wording — "the vendor reported the turn failed", or a raw `exit status 1: No
 conversation found with session ID` — reads as *this vendor broke* and sends the user looking
 for a problem with the vendor instead of retyping a brief. The column says the saved thread was
-refused, that its history is gone, and that the next brief starts a new session with the brief
-re-applied. A dead thread emits **two** events — the vendor's failed `result`, then the process
+refused, ~~that its history is gone,~~ *— that clause is RETRACTED: `agy --conversation <id>`
+was round-tripped on 2026-08-04 and demonstrably resumed (same id, `step_index` 10 → 11,
+`num_turns` 2) on a turn that still failed, so a failed first turn is not evidence the history
+is gone; the note now claims only that the turn failed and the seat let the id go. The
+mechanism below is unchanged. See design.md §9.6b* — and that the next brief starts a new
+session with the brief re-applied. A dead thread emits **two** events — the vendor's failed
+`result`, then the process
 exit carrying its stderr — and the second must not overwrite the first, because only one of
 them tells the user what happens next.
 

@@ -531,8 +531,29 @@ func (m *Model) settleRestoredThread(c *Column) {
 		// The vendor's own words for this are about a missing session id, which
 		// reads as a broken vendor and sends the user looking for a problem
 		// with it. What they need to know is what happens to the next brief.
-		c.Note = "the saved thread was refused — this seat's history is gone, " +
-			"and the next brief starts a new session with the brief re-applied"
+		//
+		// The note used to open "the saved thread was refused — this seat's
+		// history is gone", and that second clause was a diagnosis this code
+		// cannot make. MEASURED 2026-08-04, agy 1.1.10, single trial: a
+		// conversation id was round-tripped through `agy --conversation <id>`
+		// and the thread was demonstrably ALIVE — the same conversation_id came
+		// back, step_index CONTINUED (10 → 11) instead of restarting at 0, and
+		// result.num_turns was 2 — and that same turn still ended status "ERROR"
+		// with "Agent execution terminated due to error." A separate attempt
+		// died before any thread was involved at all, on "Eligibility check
+		// failed: UNAVAILABLE (code 503)". So a first turn that fails on a
+		// restored id is not evidence that the history is gone; agy turns fail
+		// transiently for reasons that have nothing to do with the conversation.
+		//
+		// The MECHANISM is deliberately unchanged — one failed turn still drops
+		// the id, for the reasons the ninth amendment gives at length, and no
+		// new signal is invented to distinguish these cases because none was
+		// observed. Only the CLAIM is narrowed, to the three things that are
+		// actually known: the turn failed, the seat let the id go, and here is
+		// what happens next.
+		c.Note = "the first turn on the restored thread failed — this seat has " +
+			"let the saved thread go, and the next brief starts a new session " +
+			"with the brief re-applied"
 		m.threadLost[c.Vendor] = true
 	}
 }
