@@ -230,8 +230,24 @@ its own history. `ctrl+r` arms a rebuttal turn — off by default — in which e
 sees the others' last answers, fenced and labelled as untrusted material. `↑`/`↓` scroll
 the focused column, `f` expands it to the full width, `?` lists the keys.
 
+**The room remembers.** Each column keeps its whole conversation, oldest turn first: a
+separator naming the turn, the brief *you* typed as that seat received it, then what it
+answered, with the time and cost that turn reported. Dispatching a new turn files the
+finished one rather than erasing it, so `↑`/`↓` and `g` scroll back through the argument
+instead of through one reply. The compose area grows with the draft — `ctrl+j` puts a
+newline in it, `enter` still dispatches — up to six rows.
+
+A seat that is not installed, or that is installed and cannot be driven, folds out of the
+grid so the seats that answer get the width; one line under the header names what was
+folded and why.
+
 `telltale council` flags: `--cd <dir>` (the workspace turns are dispatched against),
-`--brief <file>`, `--write`, `--resume`, `--ascii`, `--no-title`.
+`--vendor <list>`, `--brief <file>`, `--write`, `--resume`, `--ascii`, `--no-title`.
+
+`--vendor <list>` decides who is in the room: `all` keeps every detected seat on screen
+including the ones that cannot be driven, and a comma list (`--vendor claude,codex`) seats
+exactly those and dispatches to nobody else. That is a different control from an
+`@mention`, which routes a single turn.
 
 `--brief <file>` (or `TELLTALE_COUNCIL_BRIEF`) hands one file of shared operating context
 to every vendor on its first turn. Without it, the room's default state is four vendors

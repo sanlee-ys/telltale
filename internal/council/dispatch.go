@@ -108,9 +108,16 @@ func (m *Model) dispatch() tea.Cmd {
 	}
 	var failures []dispatchFailedMsg
 
+	// What the transcript echoes, for every column this turn touches. The
+	// user's brief with the mentions stripped — the same text the vendors are
+	// asked about — through the one sanitize choke point everything else on
+	// State goes through. Not redacted: see promptEcho.
+	echo := sanitize(prompt)
+	next := m.st.Turn + 1
+
 	for i := range m.st.Columns {
 		c := &m.st.Columns[i]
-		if c.Avail != AvailInstalled {
+		if !m.st.seats(*c) {
 			continue
 		}
 		// Cleared for every column the loop reaches, BEFORE any of the paths
@@ -125,7 +132,13 @@ func (m *Model) dispatch() tea.Cmd {
 			// makes clear it is not participating, so a stale answer beside two
 			// fresh ones cannot be mistaken for a third opinion on the new
 			// brief.
-			c.Note = "not addressed in turn " + itoa(m.st.Turn+1)
+			//
+			// Nothing is recorded for it either: startTurn is never reached, so
+			// its transcript holds the turns it actually took and skips straight
+			// from turn 2 to turn 5 if that is what happened. A history entry
+			// for a turn this seat sat out would be the room inventing a
+			// conversation.
+			c.Note = "not addressed in turn " + itoa(next)
 			continue
 		}
 		v, ok := reg[c.Vendor]
@@ -174,6 +187,10 @@ func (m *Model) dispatch() tea.Cmd {
 		}
 
 		ts.live[c.Vendor] = true
+		// The finished turn goes to history and everything describing it is
+		// reset — the line that used to be five assignments erasing the
+		// previous answer off the screen.
+		c.startTurn(next, echo, quoting)
 		c.Phase = PhaseStreaming
 		// GranUnknown lands in Waiting alongside GranFinalOnly, and the
 		// asymmetry is the point. PhaseStreaming asserts "output is arriving and
@@ -184,10 +201,7 @@ func (m *Model) dispatch() tea.Cmd {
 		if c.Gran == GranFinalOnly || c.Gran == GranUnknown {
 			c.Phase = PhaseWaiting
 		}
-		c.Body = ""
-		c.Acts = nil
 		c.Note = note
-		c.CostUSD = nil
 		// A persistent process reports a RUNNING TOTAL, not this turn's spend.
 		// Measured: two turns of one process reported $0.1061493 then
 		// $0.1177296 while the per-turn usage block stayed at 2 input tokens
@@ -195,17 +209,18 @@ func (m *Model) dispatch() tea.Cmd {
 		// subtracting one from the other would be council inventing a number —
 		// so the badge says which one it is instead.
 		c.CostSession = ts.persistent[c.Vendor]
-		// Re-arm the tail for the new turn. Whatever the user was reading
-		// belonged to the previous answer, which this column just cleared.
-		c.Follow = true
-		c.Scroll = 0
 		c.Started = now
-		c.Elapsed = 0
 		m.redactors[c.Vendor] = &Redactor{}
 	}
 
 	for _, f := range failures {
 		if c := m.column(f.vendor); c != nil {
+			// A seat that could not be dispatched to still TOOK this turn: the
+			// brief was addressed to it and it has a failure to report. So its
+			// previous answer is filed with the turn it belongs to rather than
+			// left under the new turn's separator, where it would read as this
+			// brief's reply with someone else's failure note stapled underneath.
+			c.startTurn(next, echo, quoting)
 			c.Phase = PhaseFailed
 			c.Note = f.note
 			// This column never reaches finishColumn — it never entered a live
@@ -251,11 +266,11 @@ func (m *Model) seatPosture() vendors.Posture {
 	return m.posture()
 }
 
-// seatedIn counts how many installed columns a route actually reaches.
+// seatedIn counts how many seated columns a route actually reaches.
 func (m *Model) seatedIn(route Route) int {
 	n := 0
 	for _, c := range m.st.Columns {
-		if c.Avail == AvailInstalled && route.addresses(c.Vendor) {
+		if m.st.seats(c) && route.addresses(c.Vendor) {
 			n++
 		}
 	}

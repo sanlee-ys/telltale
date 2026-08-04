@@ -38,10 +38,21 @@ const (
 	// minColumn is the narrowest a column may be before the tier drops.
 	minColumn = 24
 
-	// promptRows is the footer: the rule, the prompt line, the mode line.
-	promptRows = 3
+	// promptChrome is the fixed part of the footer: the rule above the
+	// composer, and the mode line below it. The composer itself is variable —
+	// see Layout.Prompt.
+	promptChrome = 2
 	// headerRows is the title line plus its rule.
 	headerRows = 2
+
+	// maxComposerRows is how tall the compose area may grow.
+	//
+	// Six, because a brief worth sending to four agents is a paragraph and one
+	// elided line was not somewhere anyone could think. It is a ceiling rather
+	// than the height: the composer is as tall as the draft needs and no
+	// taller, so a room nobody is typing in looks exactly as it always did.
+	// Body pays for the difference, which is why the ceiling exists at all.
+	maxComposerRows = 6
 )
 
 // Layout is the resolved plan for one frame.
@@ -54,6 +65,36 @@ type Layout struct {
 	ColWidth int
 	// Body is how many rows the column bodies get.
 	Body int
+	// Tabs reports that a tab bar is drawn above the body.
+	//
+	// Not the same as TierTabs. A room with ONE seat on screen is the tabs tier
+	// — there is nothing to put side by side — but a bar holding a single tab
+	// selects nothing and names the column the header underneath already names.
+	// That used to be a rarity; collapsing the seats that cannot be driven made
+	// it the ordinary room on a machine with one vendor installed.
+	Tabs bool
+	// Prompt is how many rows the compose area gets, at least 1.
+	Prompt int
+	// Notice is 1 when a row under the header names the seats that were
+	// collapsed out of the grid, 0 otherwise.
+	Notice int
+}
+
+// layoutInput is everything the frame plan is computed from.
+//
+// A struct rather than a longer parameter list because the last two arguments
+// are both small integers with no natural order, and a caller that swapped them
+// would produce a plausible frame rather than a compile error.
+type layoutInput struct {
+	Width, Height int
+	// Cols is how many columns are DRAWN — the visible seats, not every
+	// detected one.
+	Cols     int
+	Expanded bool
+	// Composer is how many rows the draft wants, before the height floor.
+	Composer int
+	// Notice reports that the collapsed-seat line is on screen.
+	Notice bool
 }
 
 func tierFor(width, cols int, expanded bool) Tier {
@@ -69,49 +110,77 @@ func tierFor(width, cols int, expanded bool) Tier {
 	}
 }
 
-// resolveLayout plans the frame.
+// resolveLayout plans a frame with a one-row composer and no notice row.
 //
-// n is the number of columns to seat. The separators cost (n-1) cells plus a
+// The narrow entry point, kept because most of what asks about layout is asking
+// about widths, which the composer cannot change.
+func resolveLayout(width, height, n int, expanded bool) Layout {
+	return resolveLayoutIn(layoutInput{Width: width, Height: height, Cols: n, Expanded: expanded})
+}
+
+// resolveLayoutIn plans the frame.
+//
+// Cols is the number of columns to seat. The separators cost (n-1) cells plus a
 // gutter each side; whatever is left divides evenly, and the remainder goes to
 // the focused column rather than being scattered, so the widths are stable
 // between frames instead of shimmering by one cell as focus moves.
-func resolveLayout(width, height, n int, expanded bool) Layout {
-	l := Layout{Tier: tierFor(width, n, expanded), Width: width}
+//
+// The tier is settled BEFORE any row is budgeted, because the tab bar costs a
+// row and the fallback from columns to tabs happens on a width test. Budgeting
+// first and dropping the tier afterwards is how the old shape worked, and it
+// only survived because the composer was a constant: a taller one would have
+// overflowed the terminal by exactly the tab bar.
+func resolveLayoutIn(in layoutInput) Layout {
+	l := Layout{Tier: tierFor(in.Width, in.Cols, in.Expanded), Width: in.Width, Prompt: 1}
 	if l.Tier == TierFloor {
 		return l
 	}
 
-	l.Body = height - headerRows - promptRows
-	if l.Tier == TierTabs {
-		l.Body-- // the tab bar
+	chrome := 2 + (in.Cols-1)*(1+2*gutter)
+	if l.Tier == TierColumns && (in.Width-chrome)/in.Cols < minColumn {
+		// Every column would fall under the readability floor. Tabs.
+		l.Tier = TierTabs
 	}
+
+	l.Tabs = l.Tier == TierTabs && in.Cols > 1
+	rows := headerRows + promptChrome
+	if l.Tabs {
+		rows++
+	}
+	if in.Notice {
+		rows++
+	}
+
+	// The composer takes what it wants, then yields to the floor: at the
+	// minimum height a six-row draft would leave the columns nothing, and a
+	// room where you can type but not read is not the trade anyone asked for.
+	l.Prompt = in.Composer
+	if l.Prompt > maxComposerRows {
+		l.Prompt = maxComposerRows
+	}
+	if m := in.Height - rows - 1; l.Prompt > m {
+		l.Prompt = m
+	}
+	if l.Prompt < 1 {
+		l.Prompt = 1
+	}
+	if in.Notice {
+		l.Notice = 1
+	}
+
+	l.Body = in.Height - rows - l.Prompt
 	if l.Body < 1 {
 		l.Body = 1
 	}
 
 	if l.Tier == TierTabs {
-		l.Cols, l.ColWidth = 1, width-2 // one pad each side
+		l.Cols, l.ColWidth = 1, in.Width-2 // one pad each side
 		if l.ColWidth < 1 {
 			l.ColWidth = 1
 		}
 		return l
 	}
-
-	// chrome: a pad each side, plus per interior seam a separator and its two
-	// gutters.
-	chrome := 2 + (n-1)*(1+2*gutter)
-	avail := width - chrome
-	if avail/n < minColumn {
-		// Three columns would each fall under the readability floor. Tabs.
-		l.Tier = TierTabs
-		l.Cols, l.ColWidth = 1, width-2
-		l.Body-- // the tab bar
-		if l.Body < 1 {
-			l.Body = 1
-		}
-		return l
-	}
-	l.Cols, l.ColWidth = n, avail/n
+	l.Cols, l.ColWidth = in.Cols, (in.Width-chrome)/in.Cols
 	return l
 }
 

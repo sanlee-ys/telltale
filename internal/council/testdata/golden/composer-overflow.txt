@@ -14,11 +14,11 @@
                                         │                                       │                                       
                                         │                                       │                                       
                                         │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- › should council resume sessions or re-send the transcript?_                                                           
- COMPOSE                                                        → claude  │  enter dispatch  │  ^j newline  │  ^r rebut 
+ ↑ 16 more above                                                                                                        
+   line                                                                                                                 
+   line                                                                                                                 
+   line                                                                                                                 
+   line                                                                                                                 
+   the last line_                                                                                                       
+ COMPOSE                                                      → everyone  │  enter dispatch  │  ^j newline  │  ^r rebut 

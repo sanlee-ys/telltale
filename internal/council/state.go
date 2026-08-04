@@ -168,6 +168,53 @@ type Act struct {
 	Detail string
 }
 
+// maxHistory is how many finished turns one column keeps.
+//
+// Generous rather than tight, because the whole point of the transcript is that
+// the room remembers a conversation and a cap you can reach in an afternoon is
+// a room that forgets again. Fifty turns of four seats is a few hundred KB of
+// strings in the worst case — cheap against the thing it buys. Nothing here is
+// written to disk: the state file (#38) holds session keys and no content, and
+// scrollback is not state worth persisting.
+const maxHistory = 50
+
+// TurnRecord is one finished turn on one column.
+//
+// It carries the PROMPT as well as the reply, because a transcript that showed
+// only the answers would be half a conversation — and the prompts genuinely
+// differ per column: a turn can be routed to two seats and not a third, so what
+// this seat was asked is a fact about this seat.
+//
+// Everything the column header and badge line say about a live turn is copied
+// in here too (elapsed, cost, phase), because that chrome only ever describes
+// the CURRENT turn. Without the copy, scrolling back would show three replies
+// and no way to tell which one took two minutes or which one failed.
+type TurnRecord struct {
+	// N is the turn number, matching the header's count.
+	N int
+	// Prompt is the user's brief as this seat received it, already sanitized.
+	// Never the fully-expanded text that went down the wire: see Column.Prompt.
+	Prompt string
+	// Quoted reports that the other seats' answers rode along with this brief.
+	Quoted bool
+
+	Body string
+	Acts []Act
+	// Note is the turn's own card line — the failure reason, the cancellation,
+	// the "not addressed" — kept so a past turn that ended badly still says why
+	// instead of rendering as a silent one.
+	Note string
+
+	Elapsed time.Duration
+	// CostUSD and CostSession are the vendor's own figure and what it meant, on
+	// the same terms as Column's. A running total that lost its "session" word
+	// on the way into history would read as that turn's spend.
+	CostUSD     *float64
+	CostSession bool
+
+	Phase Phase
+}
+
 // Column is one vendor's seat at the table.
 type Column struct {
 	Vendor model.VendorID
@@ -188,6 +235,34 @@ type Column struct {
 	// sanitized. Held as a plain string: Render must be able to run over a
 	// State a test typed out by hand.
 	Body string
+
+	// History is the turns this seat has finished, OLDEST FIRST.
+	//
+	// It exists because dispatching turn N used to erase turn N-1 from the
+	// screen, which made the room a per-turn ticker rather than somewhere a
+	// conversation lives. A finished turn is pushed here instead of being
+	// cleared, and columnText renders the whole thing as one scrollable
+	// transcript.
+	History []TurnRecord
+	// Prompt is the user's brief for the CURRENT turn, as this seat received
+	// it, already sanitized. Empty until this seat is dispatched to.
+	//
+	// The user's brief and NOT the literal bytes that went down the wire, and
+	// the difference is deliberate twice over. A first turn is sent with the
+	// --brief file prepended, whose content is the user's private file and is
+	// held off State on purpose (see Model.brief); a rebuttal turn is sent with
+	// the other seats' answers fenced in front of it, which are other vendors'
+	// words rather than the principal's. Both are reported instead: Quoted
+	// below, and the header's "briefed". What is echoed here is what the user
+	// typed, which is the thing the room was failing to show at all.
+	Prompt string
+	// TurnN is which turn Body, Acts and Prompt belong to. Zero means this seat
+	// has never been dispatched to, which is what keeps an unaddressed column's
+	// history truthful — it records nothing for a turn it sat out.
+	TurnN int
+	// Quoted reports that the current turn's brief carried the other seats'
+	// previous answers.
+	Quoted bool
 	// Note carries the one-line reason for Failed/Cancelled, and the
 	// explanation on an unavailable column.
 	Note string
@@ -248,6 +323,166 @@ type Column struct {
 	// number, and subtracting to recover the turn would be council inventing a
 	// figure — so the badge names which one it is and neither happens.
 	CostSession bool
+}
+
+// startTurn moves a column onto a new turn.
+//
+// The finished turn is PUSHED to history rather than erased, which is the whole
+// of PR 4: everything that described the old turn — its reply, its trace, its
+// timing, its cost, its card — travels together into one record, so scrolling
+// back shows a turn the way it actually ended rather than a body with someone
+// else's clock beside it.
+//
+// Only a column that has actually taken a turn records one. A seat dispatched to
+// for the first time has nothing behind it, and a seat left out of a turn never
+// reaches here at all.
+func (c *Column) startTurn(n int, prompt string, quoted bool) {
+	if c.TurnN > 0 {
+		c.History = append(c.History, TurnRecord{
+			N:           c.TurnN,
+			Prompt:      c.Prompt,
+			Quoted:      c.Quoted,
+			Body:        c.Body,
+			Acts:        c.Acts,
+			Note:        c.Note,
+			Elapsed:     c.Elapsed,
+			CostUSD:     c.CostUSD,
+			CostSession: c.CostSession,
+			Phase:       c.Phase,
+		})
+		if len(c.History) > maxHistory {
+			// Oldest first out. A room this long-lived has scrolled past them,
+			// and the alternative — dropping the newest — would make the cap
+			// look like the transcript had stopped recording.
+			c.History = c.History[len(c.History)-maxHistory:]
+		}
+	}
+
+	c.TurnN = n
+	c.Prompt = prompt
+	c.Quoted = quoted
+
+	c.Body = ""
+	// Nil rather than truncated: the record above now owns that slice, and
+	// reusing the array would let the new turn's calls overwrite the old turn's
+	// trace in place.
+	c.Acts = nil
+	c.Note = ""
+	c.CostUSD = nil
+	c.CostSession = false
+	c.Started = time.Time{}
+	c.Elapsed = 0
+	// Re-arm the tail for the new turn. The history is still scrollable, but
+	// what arrives now is what the user is waiting for.
+	c.Follow = true
+	c.Scroll = 0
+}
+
+// Seats is which columns the room draws and dispatches to.
+//
+// The zero value is the default and the interesting one: every seat that can
+// actually be driven, and none of the ones that cannot. A seat that is not
+// installed used to hold a full column of the grid for the whole session —
+// 25% of the width on a four-seat machine — to display one card that never
+// changes. The card is still reachable; it just no longer costs a quarter of
+// every reply to say the same thing.
+//
+// Both fields come from --vendor, which is an explicit statement about who is
+// in the room. It is not the same control as an @mention: mentions route ONE
+// turn, this decides who is seated at all, so a seat left out here is not
+// drawn and not dispatched to. Anything else would spend a quota on a column
+// nobody can see.
+type Seats struct {
+	// All keeps every detected seat on screen, including the ones that cannot
+	// be driven. This is the pre-collapse room, available by typing for it.
+	All bool
+	// Only, when non-empty, is the exact set asked for — and asking for a seat
+	// FORCES it on screen even if it is not installed, because a user who named
+	// it is owed the card that says why it is not there.
+	Only []model.VendorID
+}
+
+// shows reports whether a column is drawn. The raw rule, without the
+// everything-collapsed fallback VisibleColumns applies.
+func (s State) shows(c Column) bool {
+	if s.Seats.All {
+		return true
+	}
+	if len(s.Seats.Only) > 0 {
+		for _, v := range s.Seats.Only {
+			if v == c.Vendor {
+				return true
+			}
+		}
+		return false
+	}
+	return c.Avail == AvailInstalled
+}
+
+// seats reports whether a column takes turns: drivable, and in the room the
+// user asked for.
+func (s State) seats(c Column) bool {
+	return c.Avail == AvailInstalled && s.shows(c)
+}
+
+// VisibleColumns is the indices of the columns this room draws, in order.
+//
+// The fallback matters: a machine with nothing installed collapses to nothing,
+// and an empty grid would be a room that says less than the four cards it
+// folded away. When every seat is collapsed the cards ARE the content, so they
+// all come back.
+func (s State) VisibleColumns() []int {
+	var vis []int
+	for i, c := range s.Columns {
+		if s.shows(c) {
+			vis = append(vis, i)
+		}
+	}
+	if len(vis) == 0 {
+		for i := range s.Columns {
+			vis = append(vis, i)
+		}
+	}
+	return vis
+}
+
+// CollapsedColumns is the seats that were folded out of the grid.
+//
+// Never silently: Render turns this into the one line under the header that
+// names each of them and why, because a failure that disappears entirely is
+// the failure §4a.1 forbids — worse here than a dropped column, since a user
+// who never saw the seat has no reason to go looking for it.
+func (s State) CollapsedColumns() []int {
+	if len(s.Columns) == 0 {
+		return nil
+	}
+	vis := s.VisibleColumns()
+	shown := make(map[int]bool, len(vis))
+	for _, i := range vis {
+		shown[i] = true
+	}
+	var out []int
+	for i := range s.Columns {
+		if !shown[i] {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// CollapseReason says why a seat is not on screen, in the words the notice
+// line uses.
+func (s State) CollapseReason(c Column) string {
+	switch c.Avail {
+	case AvailNotInstalled:
+		return "not installed"
+	case AvailUnusable:
+		// The same distinction the unavailable card draws, kept at one line:
+		// absence and unusability have different fixes.
+		return "installed but not drivable"
+	default:
+		return "left out by --vendor"
+	}
 }
 
 // PendingGate is one tool call a vendor is blocked on, waiting to be told yes
@@ -312,8 +547,15 @@ type State struct {
 	// emphasis at wide ones.
 	Focus int
 
-	Mode  InputMode
+	Mode InputMode
+	// Draft is the brief being typed. It may contain newlines — ctrl+j puts one
+	// there deliberately — so the composer is a block of rows rather than the
+	// single elided line it started as.
 	Draft string
+
+	// Seats is who is in the room. The zero value collapses the seats that
+	// cannot be driven; --vendor is how a user says otherwise.
+	Seats Seats
 
 	// Quote arms cross-agent rebuttal for the NEXT dispatch: each vendor
 	// receives the others' previous answers as fenced, labelled material.
@@ -424,10 +666,14 @@ func (s State) Busy() bool {
 func (s State) Gating() bool { return len(s.Gates) > 0 }
 
 // Seated reports the columns council will actually dispatch to.
+//
+// Drivable AND in the room: a seat excluded by --vendor is not dispatched to,
+// so counting it here would make the header's "3/4 seated" describe a room the
+// user does not have.
 func (s State) Seated() int {
 	n := 0
 	for _, c := range s.Columns {
-		if c.Avail == AvailInstalled {
+		if s.seats(c) {
 			n++
 		}
 	}
