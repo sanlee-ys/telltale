@@ -2386,13 +2386,35 @@ all three when only one had a mechanism named.
 
 | | mechanism | badge |
 |---|---|---|
-| Claude Code | `--tools "Read,Glob,Grep"` — the write tools are not in the session | `ro:tools` |
+| Claude Code | `--disallowedTools <write/exec list>` + `--strict-mcp-config` | `ro:tools` |
 | Codex | `-s read-only`, OS-enforced on macOS/Linux, unverified on Windows | `ro:enforced` / `ro:requested` |
 | Antigravity | `--mode plan --sandbox`, semantics unestablished | `ro:requested` |
 
 There is no level that renders as an unqualified "read-only". The two that are enforced
 name their mechanism; the one that is not says *requested* out loud. `TestSandboxBadges
 AreNeverBlanket` fails the build if a bare claim reappears.
+
+**The Claude row cost three attempts to get right, and the failure mode is worth recording.**
+The original ADR claimed enforcement with no mechanism named. The first correction named
+`--allowedTools "Read,Glob,Grep"`, which *sounds* exactly right and is not: it pre-approves
+tools for permission prompts, it does not remove them from the session. Running the real
+invocation and reading the `system/init` event's own `tools` array showed `Edit`, `Write` and
+`Bash` still there. Every test in the package passed at that point, because every test asserted
+the **flag** and none asserted the **effect** — which is this repo's own False Green failure,
+committed inside the feature whose entire premise is refusing it.
+
+What works is `--disallowedTools` plus `--strict-mcp-config`, and two parts of that are easy to
+miss. Deny **PowerShell**, not just Bash — denying only Bash leaves a working shell on the
+platform this product targets. And drop MCP servers, because without `--strict-mcp-config` the
+session inherits whatever the user has connected; the verification run surfaced Gmail write
+tools in a session with every built-in write tool denied, and no fixed deny list can name those
+in advance.
+
+The residual limitation is stated in the badge's own detail text rather than hidden: a deny list
+cannot cover a tool that does not exist yet. The claim is *these named tools are absent,
+verified*, not *this session cannot write*. The general rule this leaves behind: **a flag's name
+is not evidence of its effect**, and the check that matters is what the session reports about
+itself afterwards.
 
 Granularity is the same discipline applied to streaming. Claude's token-level deltas are
 documented and verified; the other two are labelled `events` until a live spike says
@@ -2444,10 +2466,16 @@ pieces — the tab bar, the help body — padding goes through `fit`, which is A
 
 ### 9.6 Status
 
-Scaffold landed: the room opens, detects vendors, renders both layouts and every degraded
-state, and accepts a typed brief. **Dispatch is not wired** — pressing enter says so in the
-footer rather than doing nothing, which would read as a bug. The runner, the per-vendor
-adapters and multi-turn follow.
+The room opens, detects vendors, renders both layouts and every degraded state, takes a brief,
+and **dispatches it to Claude Code, streaming token-level deltas into its column**. Cancellation
+kills the process tree; quitting the room kills it too.
+
+Codex and Antigravity are detected and seated but have no adapter yet, so their columns say so
+in words rather than sitting silently idle. Multi-turn resume is implemented in the Claude
+adapter (`--resume` against the session id the stream reports) and exercised by tests; it goes
+live for real once there is more than one column to hold a conversation with.
+
+Not built: the cross-agent rebuttal toggle (§9.4), per-column scrollback, per-vendor cancel.
 
 Unverified and scheduled as a live spike before the Codex and Antigravity columns ship: the
 Codex `--json` event schema and delta granularity, whether `codex -s read-only` engages on

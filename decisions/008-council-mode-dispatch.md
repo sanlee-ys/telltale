@@ -31,7 +31,7 @@ Following a live independent review by **Codex** (`codex exec`), two critical re
 
    | Vendor | Mechanism | What it actually enforces |
    |---|---|---|
-   | Claude Code | `--tools "Read,Glob,Grep"` (+ `--permission-mode plan`) | **Enforced by construction** — the write tools are not in the session. Costs the column Bash and web access; conservative by default. |
+   | Claude Code | `--disallowedTools <write/exec list>` + `--strict-mcp-config` | **Verified absent** — the named tools are not in the session, checked by reading the session's own reported tool list. A deny list cannot cover a tool a future release adds. |
    | Codex | `-s read-only` | **Enforced** at OS level on macOS/Linux. On Windows, unverified — a `codex-windows-sandbox-setup.exe` ships in the vendored package, but whether it engages is unproven. Badge downgrades to *requested* until a live spike proves it. |
    | Antigravity | `--mode plan --sandbox` | **Requested, unverified.** The flags exist; their semantics are not established. |
 
@@ -100,6 +100,35 @@ Following a live independent review by **Codex** (`codex exec`), two critical re
 - The read-only claim is now per-vendor and visible on screen, which means the UI will sometimes
   admit it does not know what a vendor's sandbox flag enforces. That is the intended behaviour;
   the alternative is the blanket claim this ADR originally made.
+
+### Amendment, 2026-08-04: the Claude mechanism named above was itself wrong
+
+The first version of this ADR claimed read-only enforcement with no mechanism at all. The
+amendment that corrected it named `--allowedTools "Read,Glob,Grep"` — and that is also wrong,
+in a way that only a live check could catch.
+
+`--allowedTools` **pre-approves** tools for permission prompts. It does not remove them from
+the session. Running the exact invocation and reading the `system/init` event's own `tools`
+array showed `Edit`, `Write` and `Bash` still present. A `ro:tools` badge on top of that flag
+would have been a third false claim, shipped with a passing test suite behind it, because
+every test asserted the *flag* and none asserted the *effect*.
+
+What actually works is `--disallowedTools` plus `--strict-mcp-config`. Two parts of that are
+easy to get wrong:
+
+- **Deny PowerShell, not just Bash.** Denying only Bash leaves a working shell on Windows,
+  which is the platform this product targets.
+- **Drop MCP servers.** Without `--strict-mcp-config` the session inherits whatever the user
+  has connected; the verification run surfaced Gmail write tools in a session that had every
+  built-in write tool denied. No fixed deny list can name those in advance.
+
+The honest limitation now stated in the badge and in design.md §9.2: a deny list cannot cover
+a tool that does not exist yet. The claim is *"these named tools are absent, verified"*, not
+*"this session cannot write"*.
+
+The general lesson, which is why this is written down rather than quietly fixed: **a flag's
+name is not evidence of its effect.** The verification that mattered was not reading `--help`,
+it was reading what the session reported about itself afterwards.
 
 ## Verification status
 

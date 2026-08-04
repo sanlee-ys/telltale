@@ -138,6 +138,12 @@ type Column struct {
 	// Note carries the one-line reason for Failed/Cancelled, and the
 	// explanation on an unavailable column.
 	Note string
+
+	// CostUSD is this turn's spend AS REPORTED BY THE VENDOR. A pointer, so
+	// "reported zero" and "reported nothing" stay distinguishable: council
+	// never derives a cost from token counts, which is on this repo's
+	// deliberately-rejected list (design.md §8).
+	CostUSD *float64
 }
 
 // State is everything Render reads. Nothing here is a clock, a file handle or

@@ -175,8 +175,15 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 	switch v {
 	case model.VendorClaude:
 		return SandboxClaim{
-			Level:  SandboxTools,
-			Detail: "tool allowlist: Read, Glob, Grep — the write tools are not in the session",
+			Level: SandboxTools,
+			// Precisely what was verified, and nothing more. --allowedTools
+			// does NOT restrict a session (it pre-approves); the enforcement is
+			// a deny list plus --strict-mcp-config, checked by reading the
+			// session's own reported tool list. A deny list cannot cover a tool
+			// that does not exist yet, and the wording says so.
+			Detail: "named write/exec tools denied and MCP servers dropped; verified " +
+				"against the session's own tool list, but a deny list cannot cover a " +
+				"tool a future release adds",
 		}
 	case model.VendorCodex:
 		if windows {
