@@ -3149,3 +3149,79 @@ invented for every case. A "role" line under each seat naming what that vendor i
 (review, IDE, tiebreak): council has no such field, ADR-010's allocation is a fleet fact
 rather than something this room measured, and a room that stated it would be asserting
 something no adapter sourced.
+
+### 9.12 The scroll keys worked; which column they moved was the thing nobody could see
+
+§9.10 fixed a room whose scroll keys were dead in the mode a finished turn drops you into.
+The room was then driven again, and reported as unable to scroll a **second** time:
+
+> "scrolling works for your window. i tried scrolling up/down in agy and cursor. could not."
+
+Every word of that is accurate, and none of it is a bug. The keys address the **focused**
+column, they have always addressed the focused column, `tab` moves focus in both modes since
+§9.10, and the second and third seats scroll exactly as the first does once the keys are
+pointed at them. `TestFocusThenScrollMovesThatColumn` says so in the product's own terms —
+two tabs, one `↑`, the third column leaves its tail and the first does not move — and it is
+kept as a test precisely so the changes below are never mistaken for a mechanism fix.
+
+**What failed is the affordance, and it failed in three places at once.** Each of them is
+individually defensible, which is why reading the code did not surface it:
+
+- **Three columns each said they were hiding something; one of them said how to look.**
+  `↑ 36 more above` appeared verbatim on every column with content off screen, and the key
+  hint rode only on the focused one — correctly, since naming `↑↓ scroll` on a seat those
+  keys do not move would be three false claims (§9.10). The result is that the *unfocused*
+  markers were the ones a reader was most likely to be staring at, and they named nothing.
+  Pressing `↑` then moves a column the user is not looking at, and a scroll key that
+  visibly does nothing is a scroll key that does not work.
+- **The focus marker was competing with three identical anchors.** §9.11 gave every seat
+  name full weight, on the correct argument that a name is what a reader scans for. The
+  cost only shows up live: with all four names at the loudest level this surface has, the
+  entire distinction between the column the keys move and the three they do not was one
+  `▸` glyph in a frame carrying four columns of prose.
+- **The compose mode line named the arrows and not the key that aims them.** §9.10 wired
+  `tab` into compose *because* the scroll keys address one column — it says so in as many
+  words — and then listed `↑↓ scroll` on that line without `tab focus` beside it. The one
+  moment the user is certain to want both is the moment four long answers land, which is
+  exactly when this line is on screen.
+
+**Three fixes, all of them words and weight, no new colour and no new key.**
+
+A marker on a column the keys do not move now names the key that would move them there:
+`↑ 36 more above  │  tab to focus`, against the focused column's `↑ 51 more above  │  ↑↓
+scroll  │  f expand`. This is the same rule the existing hint follows — *a marker states the
+key for THIS column and never a neighbour's* — applied to the case that had been left blank
+rather than a new rule bolted beside it. It needs none of `f`'s mode-awareness, because
+`tab` really does move focus in both modes; and it is empty in a room with one seat on
+screen, where there is nothing to tab to, for the same reason the mode line drops `f` there.
+
+The seat name's weight now says **which column the keys move**. Unfocused names keep the
+identity hue and give up the weight; they are still names and still legible, and they have
+stopped competing with the one fact that varies across the row. This needed a small type
+rather than a bool: `seatFocus` separates *is this column marked* from *do the keys move
+it*, because the two agree in the side-by-side tier and part company in the tabbed and
+expanded ones, where the tab bar above already carries a marker and the column beneath it is
+still the one being scrolled. Conflating them is what made a single call site pass
+`focused=false` for a column that had the keys.
+
+`tab focus` joins the compose mode line, immediately after the arrows it aims. It is offered
+whenever more than one seat is on screen and deliberately **not** gated on whether some
+column currently overflows: a hint that appeared the moment a reply grew past its column
+would be a footer cell that changes while output arrives, which §7.1 rule 4 does not budget
+for — and this line's promise is about what the mode can do, not about what the vendors
+happen to have said this turn.
+
+**What did not change**, because the rules that produced the original design are still the
+right ones. The count is never traded for a hint, in either form. No badge, no help row and
+no keybinding moved — the help panel already documented `tab … in compose too`, and its
+17-row budget (§9.11, `TestHelpFitsTheSmallestRoom`) is untouched. Every distinction added
+here is a word or an attribute: `PlainStyles` renders the focused and unfocused headers
+identically, so every layout golden is blind to the weight, and `tab to focus` is the same
+string under `--ascii`.
+
+The general lesson, in this file's own terms: §9.10 recorded a mechanism that was complete
+and unreachable. This is the same shape one level up — a mechanism that was complete,
+reachable, and **unattributed**. The room said *something is hidden here* three times and
+*here is how to see it* once, and a user reading the two-thirds of the room that named no
+key concluded, reasonably, that the feature was missing. Nothing measurable was wrong;
+what was wrong is that the honest thing and the actionable thing were on different columns.

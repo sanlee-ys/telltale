@@ -256,6 +256,14 @@ to read in. Keys that can be text stay text there — `j`, `k`, `g`, `G` and `q`
 in the composer — and the mode line says which set is live on every frame. `?` lists all of
 them.
 
+**The keys move one column, and the frame says which.** `▸` marks it, its name is the only
+one at full weight, and its overflow marker names the keys that would move it
+(`↑ 51 more above  │  ↑↓ scroll`). A column those keys do *not* reach says so instead —
+`↑ 36 more above  │  tab to focus` — rather than repeating a hint that would be false on
+that seat. That distinction is the whole of `docs/design.md` §9.12: everything scrolled
+correctly, and a reader looking at the third seat had no way to tell that the arrows were
+moving the first.
+
 Mouse wheel scrolling is deliberately absent, and the measurement is written down
 (`docs/design.md` §9.10): the terminal protocol has no wheel-only mode, so enabling the
 wheel means claiming the left button too — and that costs native click-drag selection of
