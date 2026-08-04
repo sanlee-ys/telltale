@@ -611,6 +611,68 @@ func TestTheOverflowMarkerNamesItsKeys(t *testing.T) {
 	}
 }
 
+// TestAnUnfocusedColumnNamesTheKeyThatReachesIt is the second scroll report, and
+// it is not the same bug as §9.10's.
+//
+//	"scrolling works for your window. i tried scrolling up/down in agy and
+//	cursor. could not."
+//
+// Both halves are true. The keys move the focused column, they always did, and
+// three columns with content hidden each said "↑ 36 more above" in exactly the
+// same words — one of them naming a key and two of them naming nothing. Pressing
+// ↑ while looking at the third seat moves the first, which from where the user
+// is sitting is a scroll key that does not work.
+//
+// So the marker on a column the keys do NOT move names the key that would move
+// them there. Same rule as the focused column's hint — a marker states the key
+// for THIS column and never a neighbour's — applied to the case left blank.
+func TestAnUnfocusedColumnNamesTheKeyThatReachesIt(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	for i := range st.Columns {
+		st.Columns[i].Phase = PhaseDone
+		st.Columns[i].Body = longBody(60)
+		st.Columns[i].Follow = false
+		st.Columns[i].Scroll = 20
+	}
+
+	got := render(st)
+	// The frame this concern exists to produce, pinned whole: three columns each
+	// holding something back, one of them saying how to read it and two saying
+	// how to get there.
+	golden(t, "scroll-unfocused", got)
+	// One focused column, so one scroll hint and two tab hints — never the
+	// scroll keys on a seat they do not reach.
+	if n := strings.Count(got, "more above  "+UnicodeGlyphs().Sep+"  "+UnicodeGlyphs().Up+UnicodeGlyphs().Down+" scroll"); n != 1 {
+		t.Errorf("the scroll hint appears %d times, want once — on the focused column\n%s", n, got)
+	}
+	if n := strings.Count(got, "more above  "+UnicodeGlyphs().Sep+"  tab to focus"); n != 2 {
+		t.Errorf("the tab hint appears %d times, want one per unfocused column\n%s", n, got)
+	}
+	// The count still outranks the hint, in both forms.
+	if n := strings.Count(got, "more above"); n != 3 {
+		t.Errorf("a column traded its overflow count for a hint: %d counts on screen\n%s", n, got)
+	}
+
+	// It is honest in compose too, which is why it needs no mode-awareness: tab
+	// moves focus there as well (§9.10), unlike `f`.
+	st.Mode = ModeComposing
+	if !strings.Contains(render(st), "tab to focus") {
+		t.Error("the tab hint vanished in compose mode, where tab still moves focus")
+	}
+
+	// A room with one seat on screen has nothing to tab to, and says nothing.
+	one := deadSeats()
+	one.Turn = 1
+	one.Columns[0].Phase = PhaseDone
+	one.Columns[0].Body = longBody(60)
+	one.Columns[0].Follow = false
+	one.Columns[0].Scroll = 20
+	if strings.Contains(render(one), "tab to focus") {
+		t.Error("a one-seat room offers tab, which reaches nothing there")
+	}
+}
+
 // TestFollowShowsTheTail: a streaming column pins to the newest output, so the
 // interesting line during a turn is the one arriving.
 func TestFollowShowsTheTail(t *testing.T) {

@@ -378,6 +378,80 @@ func TestTheComposeModeLineNamesTheScrollKeys(t *testing.T) {
 	if strings.Contains(line, "f expand") {
 		t.Errorf("the compose mode line advertises a view-mode key: %q", line)
 	}
+
+	// `tab` belongs on this line beside the arrows, and its absence is the
+	// concrete half of the second report: "scrolling works for your window. i
+	// tried scrolling up/down in agy and cursor. could not." The arrows move ONE
+	// column, and in the mode a finished turn drops the room into, nothing on
+	// screen said which one or how to change it.
+	if !strings.Contains(line, "tab focus") {
+		t.Errorf("the compose mode line names the scroll keys and not the key that aims them: %q", line)
+	}
+	if i, j := strings.Index(line, "scroll"), strings.Index(line, "tab focus"); i > j {
+		t.Errorf("tab is announced before the keys it aims, which reads as an unrelated binding: %q", line)
+	}
+
+	// A room with one seat on screen drops it again, for the reason it drops
+	// `f`: cycling focus around a single column does nothing, and a mode line
+	// that promises a dead key is §7.8's surprise pointing the other way.
+	one := deadSeats()
+	one.Mode = ModeComposing
+	if strings.Contains(lastLine(render(one)), "tab focus") {
+		t.Error("a one-seat room advertises tab in compose, which does nothing there")
+	}
+}
+
+// TestFocusThenScrollMovesThatColumn is the DIAGNOSIS, kept as a test because
+// the report it answers was about a mechanism that turned out to be sound.
+//
+// "scrolling works for your window. i tried scrolling up/down in agy and cursor.
+// could not." Nothing was broken: tab moves focus in both modes (§9.10), the
+// scroll keys address the focused column, and the second and third seats scroll
+// exactly as the first does once the keys are pointed at them. This test says so
+// in the product's own terms, so that the affordance changes that follow are
+// never mistaken for a bug fix — and so that a future regression in the
+// mechanism cannot hide behind them.
+func TestFocusThenScrollMovesThatColumn(t *testing.T) {
+	for _, mode := range []InputMode{ModeViewing, ModeComposing} {
+		base := room()
+		base.Mode = mode
+		base.Turn = 1
+		for i := range base.Columns {
+			base.Columns[i].Phase = PhaseDone
+			base.Columns[i].Body = longBody(60)
+			base.Columns[i].Follow = true
+		}
+		if MaxScroll(base, 2) < 4 {
+			t.Fatalf("fixture is not scrollable enough: MaxScroll(2) = %d", MaxScroll(base, 2))
+		}
+
+		m := &Model{st: base, glyphs: GlyphsFor(false)}
+		press := m.viewKey
+		if mode == ModeComposing {
+			press = m.composeKey
+		}
+
+		// Two tabs from the first seat reaches the third, in either mode.
+		press(key("tab"))
+		press(key("tab"))
+		if m.st.Focus != 2 {
+			t.Fatalf("mode %v: two tabs left focus at %d, want the third seat", mode, m.st.Focus)
+		}
+
+		press(key("up"))
+		if m.st.Columns[2].Follow {
+			t.Errorf("mode %v: up did not take the third column off the tail", mode)
+		}
+		if m.st.Columns[0].Scroll != 0 || !m.st.Columns[0].Follow {
+			t.Errorf("mode %v: the first column moved when the third was focused", mode)
+		}
+
+		// And the frame shows it: the third column is the one no longer at its end.
+		got := render(m.st)
+		if !strings.Contains(got, "more below") {
+			t.Errorf("mode %v: the scrolled column does not report content below it:\n%s", mode, got)
+		}
+	}
 }
 
 func lastLine(s string) string {

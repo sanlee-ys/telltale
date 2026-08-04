@@ -217,14 +217,19 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		// cells go to the leftmost drawn column, and a collapsed seat has no
 		// position to give them to.
 		w := lay.ColWidth + lay.extraFor(j)
-		focused := idx == st.Focus
-		// The key hint rides only on the column the keys actually address.
-		// Repeating it on all four would be three false claims.
-		var hint []string
-		if focused {
+		f := seatUnfocused
+		if idx == st.Focus {
+			f = seatFocused
+		}
+		// The SCROLL hint rides only on the column those keys actually move.
+		// Repeating it on all four would be three false claims. A column the
+		// keys do not reach gets the key that would reach it instead — see
+		// focusHint, and the report that made this necessary.
+		hint := focusHint(st, g)
+		if f == seatFocused {
 			hint = scrollHint(st, g)
 		}
-		cells[j] = columnCell(st, st.Columns[idx], focused, hint, w, lay.Body, sty, g)
+		cells[j] = columnCell(st, st.Columns[idx], f, hint, w, lay.Body, sty, g)
 	}
 
 	sep := " " + sty.Rule().Render(g.Sep) + " "
@@ -245,19 +250,43 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	return b.String()
 }
 
+// seatFocus is how a column stands in relation to the keys, which is two
+// questions rather than one — and collapsing them into a single bool is what
+// made the focus marker so easy to miss.
+//
+// The MARKER answers "which column is selected" and the WEIGHT answers "which
+// column do the scroll keys move". They agree in the side-by-side tier and part
+// company in the tabbed and expanded ones, where the tab bar above already
+// carries a marker and a second one under it would be noise — while the column
+// beneath it is still very much the one the keys address.
+type seatFocus uint8
+
+const (
+	// seatUnfocused: another column has the keys.
+	seatUnfocused seatFocus = iota
+	// seatFocused: this column has them, and says so with the marker.
+	seatFocused
+	// seatAddressed: this column has them; the tab bar above carries the marker.
+	seatAddressed
+)
+
+// marked reports whether this column draws the focus glyph.
+func (f seatFocus) marked() bool { return f == seatFocused }
+
+// hasKeys reports whether the scroll keys move this column, which is what the
+// seat name's weight now says.
+func (f seatFocus) hasKeys() bool { return f != seatUnfocused }
+
 // columnCell renders one column to exactly h lines of exactly w cells.
 //
 // Returning a fixed rectangle is what keeps the side-by-side join honest: a
 // short column pads rather than collapsing, so a vendor that has said nothing
 // yet occupies its seat instead of letting its neighbours slide left.
-// hint is the key names appended to this column's overflow marker, empty on a
-// column the scroll keys do not address. Passed in rather than derived from
-// `focused`, because the two are not the same question: the tabbed and expanded
-// tiers draw the addressed column with no focus marker on it, since the tab bar
-// above already carries one.
-func columnCell(st State, c Column, focused bool, hint []string, w, h int, sty Styles, g Glyphs) []string {
+// hint is the key names appended to this column's overflow marker: the scroll
+// keys on the column they move, and `tab` on a column they do not.
+func columnCell(st State, c Column, f seatFocus, hint []string, w, h int, sty Styles, g Glyphs) []string {
 	lines := make([]string, 0, h)
-	for _, l := range columnChrome(st, c, focused, w, sty, g) {
+	for _, l := range columnChrome(st, c, f, w, sty, g) {
 		if len(lines) >= h {
 			break
 		}
@@ -324,9 +353,9 @@ func columnCell(st State, c Column, focused bool, hint []string, w, h int, sty S
 // of the same reason: a vendor is STOPPED behind it, and during a turn every
 // column is following its own tail, so a card in the body would be pushed off
 // screen by the output of the very call it is asking about.
-func columnChrome(st State, c Column, focused bool, w int, sty Styles, g Glyphs) []string {
+func columnChrome(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) []string {
 	lines := []string{
-		fit(columnHeader(st, c, focused, w, sty, g), w),
+		fit(columnHeader(st, c, f, w, sty, g), w),
 		// The badge row is RESERVED rather than conditional. A seat with no
 		// posture to state is rare and its neighbours are not: dropping the row
 		// on one column would start its body a line above every other column's,
@@ -400,6 +429,35 @@ func scrollHint(st State, g Glyphs) []string {
 	return []string{base + "  " + g.Sep + "  f expand", base}
 }
 
+// focusHint is what an UNFOCUSED column's overflow marker offers instead.
+//
+// The room was reported as unable to scroll a second time, and this one was not
+// a dead key either: "scrolling works for your window. i tried scrolling up/down
+// in agy and cursor. could not." Both halves of that sentence are accurate.
+// The keys address the focused column, they had always addressed the focused
+// column, and every column with content hidden said `↑ 36 more above` in exactly
+// the same words — so three seats each advertised that they were holding
+// something back and only one of them named a key. A reader who presses ↑ at
+// that point moves a DIFFERENT column, sees nothing happen in the one they are
+// looking at, and correctly concludes the feature does not work.
+//
+// So a column the keys do not reach names the key that would reach it. This is
+// the same rule the scroll hint already follows — a marker states the key for
+// THIS column and never a neighbour's — applied to the case that was left blank
+// rather than to a new one.
+//
+// Honest in both modes: `tab` moves focus while composing too, which is what
+// §9.10 landed, so this hint does not need the mode-awareness `f` needs. Empty
+// in a room with one seat on screen, where there is nothing to tab to.
+func focusHint(st State, g Glyphs) []string {
+	if len(st.VisibleColumns()) < 2 {
+		return nil
+	}
+	// Longest first, like every hint list here: the widest form that fits wins,
+	// and the count is never traded for either of them.
+	return []string{"tab to focus", "tab"}
+}
+
 // scrollWindow picks the visible slice of a column's body.
 //
 // Pure, and derived from Column rather than mutating it, so Render stays a
@@ -464,7 +522,7 @@ func MaxScroll(st State, idx int) int {
 	// different height, or a column with nothing to claim, would otherwise let
 	// the tail scroll past the end of the content — and the constant that used
 	// to sit here was already wrong for the second case.
-	avail := lay.Body - len(columnChrome(st, st.Columns[idx], false, w, sty, gl))
+	avail := lay.Body - len(columnChrome(st, st.Columns[idx], seatUnfocused, w, sty, gl))
 	n := len(columnText(st, st.Columns[idx], w, sty, gl))
 	if m := n - avail; m > 0 {
 		return m
@@ -486,13 +544,32 @@ func MaxScroll(st State, idx int) int {
 // every turn in the transcript below. Using the same shape for the live turn's
 // header and for a finished turn's separator means a reader learns one line
 // form instead of two, and the header stops being able to read as two things.
-func columnHeader(st State, c Column, focused bool, w int, sty Styles, g Glyphs) string {
+func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) string {
 	// A space after the focus mark, and two cells of indent without it, so the
 	// names still line up across the row. "▸Claude Code" saved a cell and spent
 	// it looking like a typo.
 	name := "  " + c.Label
-	if focused {
+	if f.marked() {
 		name = g.Focus + " " + c.Label
+	}
+
+	// The weight now says which seat the keys move, and that is a correction
+	// rather than an addition. §9.11 gave EVERY seat name full weight because a
+	// name is the anchor a reader scans for — which is true, and it spent the
+	// room's loudest typographic signal on the one fact that is the same in all
+	// four columns. The focus marker was then a single glyph in a frame where
+	// nothing else varied, and it was reported as invisible. Unfocused names keep
+	// the identity hue and give up the weight: still names, still legible, no
+	// longer competing with the one that answers "which column do these keys
+	// move".
+	//
+	// Colour and weight are both second signals here. The `▸` still carries the
+	// distinction on its own, so --ascii, NO_COLOR and every PlainStyles golden
+	// are untouched — which is exactly the property that makes weight safe to
+	// spend (§9.11).
+	label := sty.Identity
+	if f.hasKeys() {
+		label = sty.Strong
 	}
 
 	status := columnStatus(st, c, g)
@@ -516,9 +593,9 @@ func columnHeader(st State, c Column, focused bool, w int, sty Styles, g Glyphs)
 	gap := w - lipgloss.Width(name) - lipgloss.Width(status) - 4
 	if gap < 1 {
 		keep := maxInt(1, w-lipgloss.Width(status)-1)
-		return sty.Strong.Render(truncate(name, keep, g.Ellipsis)) + " " + right
+		return label.Render(truncate(name, keep, g.Ellipsis)) + " " + right
 	}
-	return sty.Strong.Render(name) + "  " +
+	return label.Render(name) + "  " +
 		sty.Rule().Render(strings.Repeat(g.Rule, gap)) + "  " + right
 }
 
@@ -1192,11 +1269,13 @@ func tabBody(st State, lay Layout, sty Styles, g Glyphs) string {
 			break
 		}
 	}
-	// focused=false: the tab bar directly above already carries the marker, and
-	// a second one on the only visible column is noise. The scroll hint is NOT
-	// suppressed with it — this is the column the keys address, and this tier is
-	// where `f` puts a user who came here specifically to read a long reply.
-	cell := columnCell(st, st.Columns[idx], false, scrollHint(st, g), lay.ColWidth, lay.Body, sty, g)
+	// seatAddressed, not seatFocused: the tab bar directly above already carries
+	// the marker, and a second one on the only visible column is noise. What is
+	// NOT suppressed with it is the scroll hint or the name's weight — this is
+	// the column the keys address, and this tier is where `f` puts a user who
+	// came here specifically to read a long reply. Keeping those two on the same
+	// value as the marker is precisely the conflation seatFocus exists to undo.
+	cell := columnCell(st, st.Columns[idx], seatAddressed, scrollHint(st, g), lay.ColWidth, lay.Body, sty, g)
 	var b strings.Builder
 	for i, l := range cell {
 		b.WriteString(" " + l + " ")
@@ -1402,13 +1481,29 @@ func modeHints(st State, g Glyphs) []hint {
 		// routing and after enter because those two decide what is SENT, and it
 		// is stated as bare arrows because that is the subset compose has: `f`,
 		// `g`, `G`, `j` and `k` are letters here.
-		return []hint{
+		hs := []hint{
 			{key: "→ " + routeLabel(st) + quoteTag(st)},
 			{key: "enter", label: "dispatch"},
 			{key: g.Up + g.Down, label: "scroll"},
-			{key: "^j", label: "newline"},
-			{key: "^r", label: "rebut"},
 		}
+		// `tab` sits immediately after the scroll keys, and its absence here was
+		// the concrete half of "i tried scrolling up/down in agy and cursor.
+		// could not." §9.10 wired tab into compose so the scroll keys would have
+		// something to aim, then named the arrows on this line and not the key
+		// that aims them — leaving a mode line that promises scrolling and, in
+		// the mode a finished turn drops you into, never says the arrows move ONE
+		// column of four.
+		//
+		// It is offered whenever there is more than one seat on screen, and
+		// deliberately NOT gated on whether some column currently overflows. A
+		// hint that appeared the moment a reply grew past its column would be a
+		// footer cell that changes while output arrives, which §7.1 rule 4 does
+		// not budget for — and the promise this line makes is about what the mode
+		// can do, not about what the vendors happen to have said.
+		if several {
+			hs = append(hs, hint{key: "tab", label: "focus"})
+		}
+		return append(hs, hint{key: "^j", label: "newline"}, hint{key: "^r", label: "rebut"})
 	}
 
 	hs := []hint{{key: g.Up + g.Down, label: "scroll"}}

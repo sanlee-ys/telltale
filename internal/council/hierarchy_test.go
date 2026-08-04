@@ -156,12 +156,57 @@ func TestTheSeatNameAndItsStateAreOneLine(t *testing.T) {
 	// A column too narrow for a rule keeps the STATE and truncates the name: a
 	// clipped seat name is still recognisable and a clipped state word is not.
 	st := room()
-	narrow := columnHeader(st, st.Columns[0], true, 18, PlainStyles(), g)
+	narrow := columnHeader(st, st.Columns[0], seatFocused, 18, PlainStyles(), g)
 	if !strings.Contains(narrow, "idle") {
 		t.Errorf("a narrow header dropped the state rather than the name: %q", narrow)
 	}
 	if w := lipgloss.Width(narrow); w > 18 {
 		t.Errorf("a narrow header is %d cells, want at most 18: %q", w, narrow)
+	}
+}
+
+// TestTheFocusedSeatIsWeightedApartFromItsNeighbours.
+//
+// §9.11 gave every seat name full weight, correctly — a name is the anchor a
+// reader scans for. The cost was invisible until the room was driven: with all
+// four names at the loudest level the surface has, the only thing separating the
+// column the keys move from the three they do not was a single `▸`, and it was
+// reported as not being there at all.
+//
+// Weight now says which seat has the keys. Nothing else changes: the marker
+// still carries the whole distinction on its own, which is why PlainStyles
+// renders the two headers identically and every layout golden is blind to this.
+func TestTheFocusedSeatIsWeightedApartFromItsNeighbours(t *testing.T) {
+	sty, g := NewStyles(true), UnicodeGlyphs()
+	st := room()
+
+	focused := columnHeader(st, st.Columns[0], seatFocused, 37, sty, g)
+	unfocused := columnHeader(st, st.Columns[0], seatUnfocused, 37, sty, g)
+	if focused == unfocused {
+		t.Error("a focused seat header renders exactly like an unfocused one")
+	}
+	if !strings.Contains(focused, sty.Strong.Render(g.Focus+" Claude Code")) {
+		t.Errorf("the focused seat name is not at full weight: %q", focused)
+	}
+	if !strings.Contains(unfocused, sty.Identity.Render("  Claude Code")) {
+		t.Errorf("an unfocused seat name lost its identity hue rather than its weight: %q", unfocused)
+	}
+
+	// The tabbed and expanded tiers address a column the tab bar has already
+	// marked. It keeps the weight, because the weight answers "do the keys move
+	// this" and the marker answers "is this selected" — the conflation of those
+	// two is what seatFocus exists to undo.
+	if addressed := columnHeader(st, st.Columns[0], seatAddressed, 37, sty, g); addressed == unfocused {
+		t.Error("the addressed column in the tabbed tier is drawn as if the keys were elsewhere")
+	}
+
+	// The identity set is a true no-op for all three, which is the property that
+	// makes weight safe to spend here at all.
+	plain := PlainStyles()
+	a := columnHeader(st, st.Columns[0], seatUnfocused, 37, plain, g)
+	b := columnHeader(st, st.Columns[0], seatAddressed, 37, plain, g)
+	if a != b {
+		t.Errorf("the identity style set distinguishes the two:\n %q\n %q", a, b)
 	}
 }
 
@@ -177,7 +222,7 @@ func TestTheChromeIsMeasuredRatherThanCounted(t *testing.T) {
 	st.Columns[0].Follow = false
 
 	lay := layoutFor(st, GlyphsFor(false))
-	chrome := columnChrome(st, st.Columns[0], true, lay.ColWidth+lay.extraFor(0),
+	chrome := columnChrome(st, st.Columns[0], seatFocused, lay.ColWidth+lay.extraFor(0),
 		PlainStyles(), GlyphsFor(false))
 	body := columnText(st, st.Columns[0], lay.ColWidth+lay.extraFor(0),
 		PlainStyles(), GlyphsFor(false))
