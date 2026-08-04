@@ -82,13 +82,20 @@ Following a live independent review by **Codex** (`codex exec`), two critical re
 6. **Fail-Closed Fallback for Uninstalled/Unconfigured Vendors**  
    If a vendor CLI binary is absent or unauthenticated, `telltale council` does not crash. It renders a degraded explanation card in that vendor's column while allowing the active vendors to proceed normally.
 
-7. **Cursor is out of scope for v1**  
-   Council seats the vendors that expose a headless CLI. Cursor ships one as a product
+7. **Cursor takes the fourth seat** *(superseded 2026-08-04; the original text is preserved below
+   because the reason it was wrong is the point)*
+
+   ~~Council seats the vendors that expose a headless CLI. Cursor ships one as a product
    (`cursor-agent`), but it is **not installed** in this environment — the `cursor` binary on PATH
-   is the editor launcher (diff/merge/goto flags only). Cursor is therefore a fourth seat the
-   vendor interface can accept later as a drop-in adapter, not v1 code written against a binary
-   that isn't there. Note that this is the opposite situation from the HUD, where Cursor *is* a
-   built-in adapter (ADR-007) because its seam is on disk, not behind a CLI.
+   is the editor launcher (diff/merge/goto flags only).~~
+
+   The second sentence was right and is still enforced: `cursor` on PATH is the editor launcher and
+   council never claims it. The first was **false when it was written**. `cursor-agent` was
+   installed at `%LOCALAPPDATA%\cursor-agent\cursor-agent.cmd`, and had been since July. Cursor is
+   now seated, with an adapter and a detection path that cannot repeat the mistake. See the fifth
+   amendment for what the spike measured, what it could not, and why this seat's badges are the
+   weakest in the room. Note that the HUD reaches Cursor a different way entirely — a built-in
+   adapter over its on-disk seam (ADR-007), not a CLI.
 
 ## Consequences
 
@@ -262,6 +269,82 @@ briefed one until a vendor guesses out loud, which is how this was found.
 Verified live rather than inferred: with a brief instructing a specific reply, the vendor
 returned exactly that reply.
 
+### Amendment, 2026-08-04 (fifth): the fourth seat, and a claim that was simply false
+
+The three amendments above are all the same lesson learned three ways: a flag's name is not
+evidence of its effect. §7 was a fourth instance of it, in a form none of them cover — **a claim
+about the world, asserted from one failed lookup and never retested.**
+
+"cursor-agent is not installed" was not a misread flag. It was untrue. The binary was at
+`%LOCALAPPDATA%\cursor-agent\cursor-agent.cmd`, dated July, and the directory containing it is on
+this machine's user PATH — so even the lookup that produced the sentence would pass today. The
+sentence then sat in an ADR and in a test (`TestCursorIsNotSeated`) that pinned it, which is the
+part worth recording: **a test can hold a false claim in place just as firmly as a true one.** It
+asserted the absence of a seat, so the day the world changed underneath it, it went on passing.
+
+Detection now resolves a vendor in three steps rather than one — env override, PATH, then a short
+list of known install locations — and every card names *where* the binary came from. The
+knownPaths list did not turn out to be necessary here, and it stays anyway: PATH is a claim about
+the current process, not about the machine, and a shell opened before an installer ran is exactly
+the situation that produces this false negative.
+
+**What the spike established, and how.** Not the way the other three vendors were established,
+and the difference has to be stated rather than left to resemblance:
+
+> The installed `cursor-agent` reports **"Not logged in"**, and it checks authentication **before**
+> it parses flags. A deliberately invalid flag combination (`--stream-partial-output` with
+> `--output-format text`, which the CLI is coded to reject) returned the authentication error
+> instead. So no probe reached flag validation, let alone a turn. **Nothing in this seat was
+> confirmed by running it.**
+
+What replaced the live run is the CLI's own `--help` plus the shipped JavaScript bundle that
+implements print mode — weaker than a measurement, stronger than the docs this repo has twice been
+burned by, and labelled as such everywhere it is relied on.
+
+| | what the spike found | strength |
+|---|---|---|
+| Prompt channel | **argv only.** Print mode's guard is `t.trim() \|\| "No prompt provided for print mode"` against the joined argv; no code path in the bundle reads the prompt from stdin, and there is no `-` sentinel or `--prompt-file`. | Read from the shipped bundle |
+| Windows drivability | **Unusable.** argv-only + a `.cmd` shim is exactly what `runner.ErrShellShimWithArgvPrompt` refuses. The env override has nothing to point at: the install ships no native executable, only a `.cmd` that shells into PowerShell which runs a bundled `node.exe` against a 9MB `index.js`. | Measured (the install was inspected) |
+| Non-Windows | **Works.** The same install is an extensionless script elsewhere, which is `KindNative`, and argv is safe when no shell is involved. | Inferred from `kindOf`; not run |
+| Event schema | `system/init`, `user`, `assistant`, `tool_call`, `result` — each with a top-level `session_id`. Assistant text is `message.content[].text`. | Read from the bundle's own emit calls |
+| Streaming | **Unknown, and left unclaimed.** `--stream-partial-output` promises "individual text deltas" and the bundle does emit per chunk. Antigravity is why that is not enough: its schema emits a key literally named `text_delta` that carried an entire reply at once, 73 seconds late. | Not observed |
+| Resume | `--resume <chatId>` exists and the bundle turns a string value into a resume; council passes the `session_id` off the event stream. **That the two ids are the same id was never round-tripped.** | Read from the bundle |
+| Sandbox | `--mode plan` ("read-only/planning ... no edits") and `--sandbox enabled` are **requested**. Nothing more is known. | Not observed |
+| Cost | None. `usage` carries token counts and the bundle has no monetary figure anywhere, so `CostUSD` stays nil. | Read from the bundle |
+
+**Two findings are worth more than the rest, because they close doors.**
+
+First, the trick that caught `--allowedTools` — run it and read what the session reports about
+itself — **does not work on this vendor.** Its `system/init` event reports `permissionMode` as a
+hardcoded `"default"` string literal in the bundle, not a readout of the session. Even an
+authenticated run could not confirm the posture that way. Combined with the CLI's own help for
+`-p`, which says print mode "Has access to all tools, including write and shell", this seat's
+read-only claim rests entirely on `--mode plan` being honoured, unverified. Its badge is
+`ro:requested` and its detail says the claim is weaker than every other column's — which is the
+first time a badge in this room has had to rank itself against its neighbours.
+
+Second, **`GranUnknown` stopped being a placeholder.** It had no vendor and no behaviour; a column
+carrying it would have opened in `PhaseStreaming`, asserting "output is arriving and you are seeing
+it as it lands" on the strength of nothing. Unknown now opens in `PhaseWaiting` alongside
+final-only, prints no granularity word at all, and gets its own waiting card — "whether this vendor
+reports incremental output has not been established" — rather than borrowing the sentence two
+vendors earned by measurement. Promotion happens on evidence: the first chunk of real output
+upgrades the phase.
+
+Three flags are refused in **both** postures, and the reasons are not interchangeable.
+`-f/--force` and `--yolo` are the skip-permissions class, same ruling as
+`--dangerously-skip-permissions` on Antigravity. `--approve-mcps` reaches outside the directory
+council was pointed at, which is the boundary `--write` widens and not one it removes.
+`--trust` accepts a workspace-trust prompt on the user's behalf; the honest consequence — an
+untrusted workspace may stall a print-mode turn with nobody to answer — is stated rather than
+traded away for convenience.
+
+One hazard is recorded unresolved rather than guessed at: a brief whose first character is `-`
+would be read as an unknown option, since the prompt is a variadic positional. The usual fix is a
+bare `--` separator, but that is inferred from the argument parser rather than observed, and
+getting it wrong breaks *every* brief instead of a rare one. It waits for someone with an
+authenticated CLI to run both forms once.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude
@@ -270,3 +353,13 @@ before the Codex and Antigravity columns land: the Codex `--json` event schema a
 granularity, whether `codex -s read-only` actually engages on Windows, and Antigravity's
 stream-json schema, conversation-id location, stdin support and `--sandbox` semantics. Those
 columns render honest *requested* badges until the spike says otherwise.
+
+**Cursor is the standing exception and will stay one until it is signed in.** Its flags come from
+`--help` and its event schema from the shipped bundle; nothing about it was confirmed by running a
+turn, because the installed CLI is unauthenticated and checks that before it checks anything else.
+Everything unverified is listed in the fifth amendment's table. On Windows the seat is
+`AvailUnusable` regardless — argv-only prompt, `.cmd`-only entry point — so the untested paths are
+not reachable on the machine this repo is developed on. The first authenticated run should settle,
+in one turn: whether `--mode plan` restricts anything, whether `--stream-partial-output` produces
+real deltas, whether `session_id` is the id `--resume` wants, and whether a brief starting with `-`
+needs a `--` separator.
