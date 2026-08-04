@@ -157,6 +157,7 @@ func runHUD(args []string) error {
 func runCouncil(args []string) error {
 	fs := flag.NewFlagSet("telltale council", flag.ContinueOnError)
 	dir := fs.String("cd", "", "workspace directory to dispatch turns against (default: cwd)")
+	seats := fs.String("vendor", "", "who is in the room: a comma list (claude,codex,agy,cursor) or all; default seats every vendor that can be driven")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
 	write := fs.Bool("write", false, "let vendors edit and run things in the workspace, asking you first where they can (see decisions/008)")
@@ -167,8 +168,18 @@ func runCouncil(args []string) error {
 		return err
 	}
 
+	// Parsed here, where the flag lives, and rejected before the alternate
+	// screen is entered — the same discipline --brief and --resume follow: a
+	// misspelled vendor name must be a line on stderr, not a card behind a TUI
+	// the user has to quit to read.
+	room, err := council.ParseSeats(*seats)
+	if err != nil {
+		return err
+	}
+
 	return council.Run(council.Options{
 		Dir:       *dir,
+		Seats:     room,
 		ASCII:     *ascii || os.Getenv("TELLTALE_ASCII") != "",
 		NoTitle:   *noTitle,
 		Write:     *write,
@@ -220,6 +231,15 @@ telltale hud flags:
 
 telltale council flags:
   --cd <dir>                  workspace to dispatch turns against (default: cwd)
+  --vendor <list>             who is in the room: a comma list of claude, codex,
+                              agy and cursor, or "all". By default a seat that
+                              is not installed — or is installed and cannot be
+                              driven — folds out of the grid, so the seats that
+                              answer get the width, and one line under the
+                              header names what was folded and why. "all" keeps
+                              every seat on screen; a list seats exactly those
+                              and dispatches to nobody else. Different from an
+                              @mention, which routes one turn.
   --brief <file>              shared operating context handed to every vendor on
                               its first turn — who you are, what the lanes are,
                               whatever convention they would otherwise each guess

@@ -686,6 +686,62 @@ test double was the thing asserting a behaviour nothing in the product had. A te
 false claim in place just as firmly as a true one (fifth amendment); a *mock* can invent one.
 
 
+### Amendment, 2026-08-04 (tenth): the room is somewhere to talk, not a per-turn ticker
+
+Nine amendments made this a very good way to **send one turn**, and never noticed that it was
+not a place to hold a conversation. Dispatching turn N cleared turn N-1's body, trace, clock
+and cost off the screen, and the user's own words were never rendered anywhere at all — so
+the room could show four answers to a question it could not show you, and then discard them
+when you asked the next one. This was PR 4 of the original plan, ratified with the rest and
+then skipped. The complaint that reopened it was one sentence: *"I need a place to talk to
+you all without going through any of you individually."*
+
+**A finished turn is filed, not erased.** Each column keeps a per-turn record — the brief,
+the reply, the trace, the note, the elapsed, the cost, the phase — and renders the lot
+oldest-first as one scrollable transcript. Three things follow, and the first is why this
+shape was chosen over a second pane: the scrollback needed **no new mechanism**, because the
+window, the overflow markers, the tail and `MaxScroll` were already the code that walks a
+column's lines. A past turn carries its own numbers, since the header and badge line are
+chrome for the turn in flight. And a seat left out of a turn records nothing for it: routing
+means Codex's transcript can skip from turn 3 to turn 5, and filling that gap would be the
+room inventing a conversation.
+
+**What is echoed is the principal's words, and that is the one real design fork here.** The
+literal bytes a seat receives are not the user's brief: a first turn carries the `--brief`
+file, whose content this ADR deliberately keeps off `State`, and a rebuttal turn carries the
+other seats' answers, which are another model's words. Echoing "exactly what was sent" would
+have printed a private file on screen and labelled a vendor's output as the user's. So the
+brief is echoed under the composer's own `›`, and whatever rode along with it is reported on
+its own line. It is sanitized like everything else and **not redacted**: this is the user's
+typing shown back to the user, so a `«redacted»` here would hide a secret from the one person
+who has it, do nothing about the copy already sent to four vendors, and make the echo
+disagree with what was dispatched — the single thing the line exists to show.
+
+**The composer grows to six rows, and `ctrl+j` is a keystroke rather than a paste.** The
+newline goes into the draft raw, bypassing the filter that flattens newlines. That filter
+still runs on everything else, which is the point: it exists so a pasted log cannot tear the
+footer apart, not to overrule a key the user pressed on purpose. Verified against every
+transport this repo drives — stdin for Claude and Codex, a JSON-marshalled envelope for the
+persistent Claude turn, and one argv element on a native binary for agy (§9.3's rule holds:
+no shell, and Go quotes an argument containing a newline).
+
+**A seat that cannot be driven no longer costs a quarter of the width.** On the reference
+machine Cursor is permanently `AvailUnusable`, and it was holding a full column all session
+to display one card that never changes. Those seats fold out and the survivors take the
+width — but the *fact* does not fold away, because a seat nobody can see is one nobody has a
+reason to go looking for. One line under the header names each collapsed seat and which
+failure it is, preserving §4a.1's distinction between "not installed" and "installed but not
+drivable" at one line instead of one column. `--vendor` is the explicit control and it is
+deliberately stronger than the HUD's filter of the same name: a listed room is drawn **and**
+dispatched to, since spending a vendor's quota on a column nobody can see is exactly the
+hidden state this product refuses. It parses the `@mention` vocabulary rather than inventing
+a second one.
+
+The general lesson this file keeps learning, in its newest costume: every amendment above
+improved the *turn*, and the thing that was broken was the *conversation*. Nine rounds of
+making each dispatch more honest never surfaced that the surface forgot everything the moment
+you used it again — because each turn, examined alone, was correct.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude

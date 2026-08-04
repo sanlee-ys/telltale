@@ -4,15 +4,15 @@
                                                                                                                         
    i / enter    compose a brief                                                                                         
    enter        dispatch — to claude, or to whoever is @mentioned                                                       
+   ctrl+j       newline in the brief — the compose area grows to six rows                                               
    @codex       address a lane: @claude, @codex, @agy, @cursor, @all                                                    
                 unaddressed goes to claude alone; the others are review,                                                
                 IDE and tiebreak lanes. Leading mentions only: "ask @claude" is prose                                   
    y / n        approve or deny a tool call a vendor is blocked on (--write)                                            
    esc          leave compose (the draft is kept)                                                                       
    tab          move focus between columns                                                                              
-   ↑ ↓ / j k    scroll the focused column                                                                               
-   pgup/pgdn    scroll by a screenful   (space = pgdn)                                                                  
-   g / G        jump to the top / back to the newest output                                                             
+   ↑ ↓ / j k    scroll the focused column's whole transcript                                                            
+   pgup/pgdn    scroll by a screenful (space = pgdn); g / G first turn or newest                                        
    f            expand the focused column to the full width                                                             
    ctrl+r       arm rebuttal: each vendor sees the others' last answers,                                                
                 fenced and labelled as untrusted. Turn 1 is always blind.                                               

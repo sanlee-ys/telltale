@@ -1,0 +1,24 @@
+ council ~/code/telltale                                                         no turn yet  │  1/3 seated  │  no brief
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ⚠ 2 seats are not on screen: Codex (not installed), Antigravity (installed but not drivable) │ --vendor all seats them 
+  Claude Code                                                                                                      idle 
+ ro:tools  tokens                                                                                                       
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+ no turn dispatched yet.                                                                                                
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ›                                                                                                                      
+ VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 

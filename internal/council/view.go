@@ -21,7 +21,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 		return floorMessage(st, sty)
 	}
 
-	lay := resolveLayout(st.Width, st.Height, len(st.Columns), st.Expanded)
+	lay := layoutFor(st, g)
 
 	// Every assembled line goes through fit at its final width. The rule that no
 	// rendered line may exceed the terminal is enforced here, once, rather than
@@ -31,12 +31,18 @@ func Render(st State, sty Styles, g Glyphs) string {
 	b.WriteString("\n")
 	b.WriteString(rule(st.Width, sty, g))
 	b.WriteString("\n")
+	if lay.Notice > 0 {
+		b.WriteString(fit(" "+sty.Muted.Render(collapsedNotice(st, g)), st.Width))
+		b.WriteString("\n")
+	}
 
 	if st.Help {
 		b.WriteString(helpBody(st, lay, sty, g))
 	} else if lay.Tier == TierTabs {
-		b.WriteString(tabBar(st, lay, sty, g))
-		b.WriteString("\n")
+		if lay.Tabs {
+			b.WriteString(tabBar(st, lay, sty, g))
+			b.WriteString("\n")
+		}
 		b.WriteString(tabBody(st, lay, sty, g))
 	} else {
 		b.WriteString(columnsBody(st, lay, sty, g))
@@ -45,10 +51,30 @@ func Render(st State, sty Styles, g Glyphs) string {
 	b.WriteString("\n")
 	b.WriteString(rule(st.Width, sty, g))
 	b.WriteString("\n")
-	b.WriteString(fit(promptLine(st, lay, sty, g), st.Width))
-	b.WriteString("\n")
+	for _, l := range composerLines(st, lay, sty, g) {
+		b.WriteString(fit(l, st.Width))
+		b.WriteString("\n")
+	}
 	b.WriteString(fit(modeLine(st, lay, sty, g), st.Width))
 	return b.String()
+}
+
+// layoutFor resolves the frame for one State: the widths, plus the two things
+// that now vary with content — how many rows the draft needs and whether a
+// collapsed-seat notice is on screen.
+//
+// Every caller that measures the body goes through here rather than through
+// resolveLayout, so a scroll key and the renderer can never disagree about how
+// many rows there are.
+func layoutFor(st State, g Glyphs) Layout {
+	return resolveLayoutIn(layoutInput{
+		Width:    st.Width,
+		Height:   st.Height,
+		Cols:     len(st.VisibleColumns()),
+		Expanded: st.Expanded,
+		Composer: composerRows(st, g),
+		Notice:   collapsedNotice(st, g) != "",
+	})
 }
 
 // floorMessage is what a terminal too small to draw the room gets. It names the
@@ -123,25 +149,60 @@ func displayPath(st State) string {
 	return p
 }
 
+// collapsedNotice names the seats folded out of the grid, and why.
+//
+// One muted line under the header rather than a column each, and the trade is
+// the point: a seat that cannot be driven was holding a quarter of the width to
+// repeat one sentence for the whole session, while the replies it was crowding
+// are what the room exists to compare. What must NOT change is that the failure
+// stays visible — a seat that vanished with no line anywhere would be worse
+// than the column it replaced, because a user who never saw it has no reason to
+// go looking (§4a.1).
+//
+// Empty when nothing is collapsed, which is the common case and costs no row.
+func collapsedNotice(st State, g Glyphs) string {
+	gone := st.CollapsedColumns()
+	if len(gone) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(gone))
+	for _, i := range gone {
+		c := st.Columns[i]
+		parts = append(parts, c.Label+" ("+st.CollapseReason(c)+")")
+	}
+	lead := "1 seat is not on screen: "
+	if len(gone) > 1 {
+		lead = strconv.Itoa(len(gone)) + " seats are not on screen: "
+	}
+	// The remedy is last because it is the least urgent part of the sentence and
+	// the first thing a narrow terminal should drop. It is also in --help and in
+	// the help panel, so truncating here loses a convenience rather than the
+	// only copy of it.
+	return g.Warn + " " + lead + strings.Join(parts, ", ") +
+		" " + g.Sep + " --vendor all seats them anyway"
+}
+
 // columnsBody draws the seats side by side.
 func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
-	cells := make([][]string, len(st.Columns))
-	widths := make([]int, len(st.Columns))
-	for i, c := range st.Columns {
-		w := lay.ColWidth + lay.extraFor(i)
-		widths[i] = w
-		cells[i] = columnCell(st, c, i == st.Focus, w, lay.Body, sty, g)
+	vis := st.VisibleColumns()
+	cells := make([][]string, len(vis))
+	for j, idx := range vis {
+		// extraFor is indexed by POSITION in the row, not by seat: the leftover
+		// cells go to the leftmost drawn column, and a collapsed seat has no
+		// position to give them to.
+		w := lay.ColWidth + lay.extraFor(j)
+		cells[j] = columnCell(st, st.Columns[idx], idx == st.Focus, w, lay.Body, sty, g)
 	}
 
 	sep := " " + sty.Rule().Render(g.Sep) + " "
 	var b strings.Builder
 	for row := 0; row < lay.Body; row++ {
 		b.WriteString(" ")
-		for i := range st.Columns {
-			if i > 0 {
+		for j := range vis {
+			if j > 0 {
 				b.WriteString(sep)
 			}
-			b.WriteString(cells[i][row])
+			b.WriteString(cells[j][row])
 		}
 		b.WriteString(" ")
 		if row < lay.Body-1 {
@@ -254,14 +315,30 @@ func scrollWindow(c Column, body []string, avail int) (win []string, above, belo
 
 // MaxScroll is the largest useful offset for a column at the given geometry.
 // Exported for the program loop, which clamps a keystroke against it.
+//
+// It spans the WHOLE transcript, because columnText does: the history, the
+// prompts and the current turn are one list of lines, so `g` reaches the first
+// thing this seat was ever asked and there is no second scroll model to keep in
+// step with the first.
 func MaxScroll(st State, idx int) int {
 	if idx < 0 || idx >= len(st.Columns) {
 		return 0
 	}
-	lay := resolveLayout(st.Width, st.Height, len(st.Columns), st.Expanded)
+	pos := -1
+	for j, v := range st.VisibleColumns() {
+		if v == idx {
+			pos = j
+			break
+		}
+	}
+	if pos < 0 {
+		// A collapsed seat has no window to scroll.
+		return 0
+	}
+	lay := layoutFor(st, GlyphsFor(st.ASCII))
 	w := lay.ColWidth
 	if lay.Tier == TierColumns {
-		w += lay.extraFor(idx)
+		w += lay.extraFor(pos)
 	}
 	// PlainStyles because only the line COUNT is wanted here, and styling
 	// cannot change it — every style in this package is a wrapper, never a
@@ -350,14 +427,33 @@ func dur(d time.Duration) string {
 	return strconv.Itoa(s/60) + "m" + strconv.Itoa(s%60) + "s"
 }
 
-// columnText is a column's body: its output, or the card explaining why there
-// is none.
+// columnText is a column's whole transcript: every turn this seat has taken,
+// oldest first, then the one in flight — or the card explaining why there is
+// none.
+//
+// One flat list of lines rather than a scroll model per turn, which is what
+// makes the scrollback work at all: the window, the overflow markers, the tail
+// and MaxScroll are the code that was already here, and the transcript is just
+// more lines for them to move through.
 func columnText(st State, c Column, w int, sty Styles, g Glyphs) []string {
 	if c.Avail != AvailInstalled {
 		return unavailableCard(c, w, g)
 	}
 
 	var out []string
+	for _, h := range c.History {
+		out = append(out, turnHead(h.N, historyMeta(h), h.Prompt, h.Quoted, w, sty, g)...)
+		out = append(out, pastTurn(h, w, sty, g)...)
+		out = append(out, "")
+	}
+	if c.Prompt != "" {
+		// The current turn's separator carries the number and nothing else. Its
+		// clock and its cost are in the column header and the badge line, which
+		// is chrome that describes exactly this turn — repeating them a row
+		// later would be the room saying the same thing twice. A past turn has
+		// no chrome of its own, which is why the record carries them.
+		out = append(out, turnHead(c.TurnN, "", c.Prompt, c.Quoted, w, sty, g)...)
+	}
 
 	// The activity trace comes FIRST and is visually distinct, because it is
 	// chronologically first — the vendor acted, then answered. Prefixed rather
@@ -400,6 +496,141 @@ func columnText(st State, c Column, w int, sty Styles, g Glyphs) []string {
 	if c.Note != "" {
 		out = append(out, "")
 		out = append(out, wrap(g.Warn+" "+c.Note, w)...)
+	}
+	return out
+}
+
+// turnHead opens one turn: the separator naming it, then the brief that
+// produced it.
+func turnHead(n int, meta, prompt string, quoted bool, w int, sty Styles, g Glyphs) []string {
+	out := []string{sty.Muted.Render(padRight(turnRule(n, meta, w, g), w, g))}
+	return append(out, promptEcho(prompt, quoted, w, sty, g)...)
+}
+
+// turnRule is the separator line: "turn 3 ───────────  12s  $0.0123".
+//
+// The meta is dropped before the label when the column is too narrow for both.
+// Which turn this is outranks how long it took: without the number the reply
+// above and the reply below are one undifferentiated wall, which is the state
+// this whole feature exists to leave.
+func turnRule(n int, meta string, w int, g Glyphs) string {
+	label := "turn " + strconv.Itoa(n)
+	// The rule takes whatever the label and the meta leave: one space after the
+	// label always, one before the meta when there is one.
+	fill := func(m string) int {
+		if m == "" {
+			return w - lipgloss.Width(label) - 1
+		}
+		return w - lipgloss.Width(label) - lipgloss.Width(m) - 2
+	}
+	n2 := fill(meta)
+	if n2 < 1 && meta != "" {
+		meta = ""
+		n2 = fill(meta)
+	}
+	if n2 < 1 {
+		return label
+	}
+	s := label + " " + strings.Repeat(g.Rule, n2)
+	if meta != "" {
+		s += " " + meta
+	}
+	return s
+}
+
+// historyMeta is what a past turn reported: how it ended, how long it took, and
+// what it cost — on exactly the terms the live chrome states them.
+func historyMeta(h TurnRecord) string {
+	var parts []string
+	// Only a turn that ended badly names its phase. "done" on every separator
+	// would be noise on the ordinary case and would make the two that matter
+	// harder to spot, not easier.
+	if h.Phase == PhaseFailed || h.Phase == PhaseCancelled {
+		parts = append(parts, h.Phase.String())
+	}
+	if h.Elapsed > 0 {
+		parts = append(parts, dur(h.Elapsed))
+	}
+	if h.CostUSD != nil {
+		cost := "$" + strconv.FormatFloat(*h.CostUSD, 'f', 4, 64)
+		if h.CostSession {
+			cost += " session"
+		}
+		parts = append(parts, cost)
+	}
+	return strings.Join(parts, "  ")
+}
+
+// promptEcho renders the user's own brief inside the column.
+//
+// It is marked with the SAME glyph the composer uses, because that is where
+// these words were typed: the eye that learned "› means you" in the footer
+// reads it the same way in the transcript. The glyph carries the distinction
+// before the colour does, so it survives --ascii and a monochrome terminal like
+// every other distinction in this product.
+//
+// Sanitized on the way in and NOT redacted, deliberately. Everything else that
+// reaches a column is vendor-authored, arriving from a process this room
+// spawned, and redaction is the guard on that path. This is the user's own
+// typing, echoed back to the user on the user's own screen: covering it would
+// hide a secret from the one person who already knows it, while doing nothing
+// at all about the copy that was just sent to four vendors. A «redacted» here
+// would be theatre — and worse, it would make the echo disagree with what was
+// dispatched, which is the one thing this line exists to show.
+func promptEcho(prompt string, quoted bool, w int, sty Styles, g Glyphs) []string {
+	if prompt == "" {
+		return nil
+	}
+	body := wrap(prompt, maxInt(1, w-2))
+	out := make([]string, 0, len(body)+1)
+	for i, l := range body {
+		prefix := "  "
+		if i == 0 {
+			prefix = g.Prompt + " "
+		}
+		out = append(out, sty.Identity.Render(padRight(prefix+l, w, g)))
+	}
+	if quoted {
+		// What the seat ACTUALLY received on a rebuttal turn is this brief with
+		// the other seats' answers fenced in front of it. Those are not the
+		// principal's words, so they are reported rather than echoed — the line
+		// above stays the user's, and this one says what rode along with it.
+		for _, l := range wrap("+ the other seats' last answers were quoted to this one", maxInt(1, w-2)) {
+			out = append(out, sty.Muted.Render(padRight("  "+l, w, g)))
+		}
+	}
+	return out
+}
+
+// pastTurn renders a finished turn: what the seat did, what it said, and how it
+// ended.
+//
+// None of the live cards appear here. "working…" and "this vendor reports no
+// incremental output" are claims about a turn in flight, and a turn in the
+// transcript is over — rendering either would be the room describing the
+// present tense of something that finished ten minutes ago.
+func pastTurn(h TurnRecord, w int, sty Styles, g Glyphs) []string {
+	var out []string
+	for _, a := range h.Acts {
+		out = append(out, actLines(a, w, sty, g)...)
+	}
+	switch {
+	case h.Body != "":
+		if len(h.Acts) > 0 {
+			out = append(out, "")
+		}
+		out = append(out, wrap(h.Body, w)...)
+	case len(h.Acts) == 0 && h.Note == "":
+		// It was dispatched to and it said nothing, which is a fact rather than
+		// a gap. An empty run of lines here would read as the transcript
+		// dropping a turn.
+		out = append(out, sty.Muted.Render(padRight("(no reply)", w, g)))
+	}
+	if h.Note != "" {
+		if len(out) > 0 {
+			out = append(out, "")
+		}
+		out = append(out, wrap(g.Warn+" "+h.Note, w)...)
 	}
 	return out
 }
@@ -613,12 +844,13 @@ func unavailableCard(c Column, w int, g Glyphs) []string {
 // tabBar is the narrow-terminal alternative to side-by-side columns.
 func tabBar(st State, lay Layout, sty Styles, g Glyphs) string {
 	var parts []string
-	for i, c := range st.Columns {
+	for _, idx := range st.VisibleColumns() {
+		c := st.Columns[idx]
 		label := c.Label
 		if c.Avail != AvailInstalled {
 			label += " " + g.Warn
 		}
-		if i == st.Focus {
+		if idx == st.Focus {
 			parts = append(parts, sty.Identity.Render(g.Focus+label))
 		} else {
 			parts = append(parts, sty.Muted.Render(" "+label))
@@ -632,9 +864,16 @@ func tabBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	if len(st.Columns) == 0 {
 		return strings.Repeat("\n", maxInt(0, lay.Body-1))
 	}
-	idx := st.Focus
-	if idx < 0 || idx >= len(st.Columns) {
-		idx = 0
+	vis := st.VisibleColumns()
+	idx := vis[0]
+	for _, v := range vis {
+		// Focus is an index into Columns, and a collapsed seat cannot hold it —
+		// the tab bar would have no tab to mark and the body would show a column
+		// the room says is not on screen.
+		if v == st.Focus {
+			idx = v
+			break
+		}
 	}
 	// focused=false: the tab bar directly above already carries the marker, and
 	// a second one on the only visible column is noise.
@@ -649,34 +888,121 @@ func tabBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	return b.String()
 }
 
-// promptLine is the draft, with the caret at the insertion point.
+// promptWidth is the usable text width inside the compose area.
+func promptWidth(width int, g Glyphs) int {
+	// The prompt glyph plus its space. One cell in both glyph sets, but measured
+	// rather than assumed, because a set that changed it would silently shift
+	// every wrap in the composer.
+	w := width - 2 - lipgloss.Width(g.Prompt+" ")
+	if w < 1 {
+		w = 1
+	}
+	return w
+}
+
+// composerRows is how many rows the draft wants, before the height floor.
+//
+// Derived from the draft in BOTH modes. `esc` keeps the draft — a half-typed
+// brief is expensive to retype — so a four-row draft that collapsed to one
+// elided line the moment focus left compose would be the room hiding work the
+// user has not finished.
+func composerRows(st State, g Glyphs) int {
+	if st.Draft == "" {
+		return 1
+	}
+	text := st.Draft
+	if st.Mode == ModeComposing {
+		text += g.Caret
+	}
+	n := len(wrap(text, promptWidth(st.Width, g)))
+	if n < 1 {
+		n = 1
+	}
+	if n > maxComposerRows {
+		n = maxComposerRows
+	}
+	return n
+}
+
+// composerLines is the draft, with the caret at the insertion point, as exactly
+// lay.Prompt rows.
 //
 // The caret is static, never blinking: the HUD budgets exactly one moving cell
 // on screen and council keeps the same budget — here it is spent on the
 // spinner of a column that is actually working.
-func promptLine(st State, lay Layout, sty Styles, g Glyphs) string {
+func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 	prefix := g.Prompt + " "
-	w := lay.Width - 2 - lipgloss.Width(prefix)
-	if w < 1 {
-		w = 1
-	}
+	w := promptWidth(lay.Width, g)
 
 	text := st.Draft
 	if st.Mode == ModeComposing {
 		text += g.Caret
 	}
-	// Elide from the LEFT while typing: the tail is where the cursor is, and a
-	// prompt that hides the characters just typed would be unusable.
-	if lipgloss.Width(text) > w {
-		text = elideLeft(text, w, g.Ellipsis)
+
+	if st.Draft == "" && st.Mode == ModeComposing {
+		return padRows([]string{
+			" " + sty.Muted.Render(prefix) +
+				sty.Muted.Render(padRight("type a brief — goes to claude; @codex, @agy or @all to widen"+g.Caret, w, g)) + " ",
+		}, lay, w, sty, g)
 	}
 
-	// Pad the PLAIN text, then style it once — never the other way round.
-	body := sty.Text.Render(padRight(text, w, g))
-	if st.Draft == "" && st.Mode == ModeComposing {
-		body = sty.Muted.Render(padRight("type a brief — goes to claude; @codex, @agy or @all to widen"+g.Caret, w, g))
+	// One row is the old behaviour exactly: elide from the LEFT, because the
+	// tail is where the cursor is and a prompt that hides the characters just
+	// typed would be unusable. It is also what every room that is not mid-
+	// paragraph gets, which is why this frame is byte-identical to the one
+	// before the composer could grow.
+	if lay.Prompt == 1 {
+		// A paragraph cannot go in one row, so it is flattened rather than left
+		// to put a raw newline into a fixed grid. Unreachable for a real draft —
+		// any newline wraps to at least two rows, and the height floor always
+		// leaves room for two — and kept as the cheap half of that argument.
+		text = strings.ReplaceAll(text, "\n", " ")
+		if lipgloss.Width(text) > w {
+			text = elideLeft(text, w, g.Ellipsis)
+		}
+		return padRows([]string{
+			" " + sty.Muted.Render(prefix) + sty.Text.Render(padRight(text, w, g)) + " ",
+		}, lay, w, sty, g)
 	}
-	return " " + sty.Muted.Render(prefix) + body + " "
+
+	rows := wrap(text, w)
+	elided := 0
+	if len(rows) > lay.Prompt {
+		// The draft is taller than the ceiling. Keep the TAIL, where the cursor
+		// is, and spend one row saying how much is above it — the same
+		// vocabulary and the same trade the column overflow markers make, for
+		// the same reason: silently clipping is indistinguishable from having
+		// typed less than you did.
+		elided = len(rows) - (lay.Prompt - 1)
+		rows = rows[len(rows)-(lay.Prompt-1):]
+	}
+
+	out := make([]string, 0, lay.Prompt)
+	if elided > 0 {
+		// The same words the column overflow marker uses, deliberately: one
+		// vocabulary for "there is content you cannot see", wherever it appears.
+		out = append(out, " "+sty.Muted.Render(padRight(
+			g.Up+" "+strconv.Itoa(elided)+" more above", w+2, g))+" ")
+	}
+	for i, r := range rows {
+		// Continuation rows are indented to the prefix, so a wrapped brief reads
+		// as one thing rather than as several.
+		p := "  "
+		if i == 0 && elided == 0 {
+			p = prefix
+		}
+		out = append(out, " "+sty.Muted.Render(p)+sty.Text.Render(padRight(r, w, g))+" ")
+	}
+	return padRows(out, lay, w, sty, g)
+}
+
+// padRows makes the compose area exactly the height the layout budgeted, so the
+// frame is the number of lines the terminal has whatever the draft is doing.
+func padRows(rows []string, lay Layout, w int, sty Styles, g Glyphs) []string {
+	for len(rows) < lay.Prompt {
+		rows = append(rows, " "+sty.Muted.Render("  ")+sty.Text.Render(padRight("", w, g))+" ")
+	}
+	return rows[:lay.Prompt]
 }
 
 // modeLine announces which mode the room is in and what the keys mean in it.
@@ -714,7 +1040,12 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 		// thing on this line that changes what enter DOES. An @typo has to read
 		// as "this is going to everyone" while there is still time to fix it;
 		// discovering it afterwards means a wasted turn against three quotas.
-		right = "→ " + routeLabel(st) + quoteTag(st) + "  " + g.Sep + "  enter dispatch  " + g.Sep + "  ^r rebut"
+		// ^j is stated beside enter because the two are one decision: a key that
+		// adds a line and a key that spends four quotas sit next to each other on
+		// the keyboard, and a composer you can write a paragraph in is useless if
+		// nobody can find out how.
+		right = "→ " + routeLabel(st) + quoteTag(st) + "  " + g.Sep +
+			"  enter dispatch  " + g.Sep + "  ^j newline  " + g.Sep + "  ^r rebut"
 	default:
 		left = "VIEW"
 		scroll := g.Up + g.Down + " scroll  " + g.Sep + "  f expand  " + g.Sep + "  "
@@ -794,21 +1125,28 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		"",
 		"  i / enter    compose a brief",
 		"  enter        dispatch — to claude, or to whoever is @mentioned",
+		"  ctrl+j       newline in the brief — the compose area grows to six rows",
 		"  @codex       address a lane: @claude, @codex, @agy, @cursor, @all",
 		"               unaddressed goes to claude alone; the others are review,",
 		"               IDE and tiebreak lanes. Leading mentions only: \"ask @claude\" is prose",
 		"  y / n        approve or deny a tool call a vendor is blocked on (--write)",
 		"  esc          leave compose (the draft is kept)",
 		"  tab          move focus between columns",
-		"  ↑ ↓ / j k    scroll the focused column",
-		"  pgup/pgdn    scroll by a screenful   (space = pgdn)",
-		"  g / G        jump to the top / back to the newest output",
+		"  ↑ ↓ / j k    scroll the focused column's whole transcript",
+		// Two keys on one line, because this panel has to fit a 24-row terminal
+		// and the line it was competing with is "? this help" — which toggles,
+		// and is therefore the only documented way back out of here.
+		"  pgup/pgdn    scroll by a screenful (space = pgdn); g / G first turn or newest",
 		"  f            expand the focused column to the full width",
 		"  ctrl+r       arm rebuttal: each vendor sees the others' last answers,",
 		"               fenced and labelled as untrusted. Turn 1 is always blind.",
 		"  ctrl+c       cancel the turn in flight, or quit when idle",
 		"  q            quit (in view mode only — in compose it is the letter q)",
 		"  ?            this help",
+		"",
+		"  a seat that is not installed folds out of the grid and is named in one",
+		"  line under the header. --vendor all keeps every seat on screen;",
+		"  --vendor claude,codex seats exactly those.",
 		"",
 		// Below the fold at the minimum height, and left in for the same reason
 		// the help lists keys it expects you to already know: at a normal

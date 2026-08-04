@@ -36,6 +36,9 @@ type Options struct {
 	// BriefPath names a file of shared operating context handed to every
 	// vendor on its first turn. Empty falls back to TELLTALE_COUNCIL_BRIEF.
 	BriefPath string
+	// Seats is who is in the room, from --vendor. The zero value collapses the
+	// seats that cannot be driven and keeps the rest.
+	Seats Seats
 	// Resume reopens the room last saved for this workspace: the turn count and
 	// each vendor's own session id come back, so the next brief continues the
 	// conversation instead of starting four new ones.
@@ -304,6 +307,7 @@ func stateWith(opts Options, hooked bool) State {
 	st := NewState()
 	st.ASCII = opts.ASCII
 	st.Write = opts.Write
+	st.Seats = opts.Seats
 	st.Now = time.Now()
 
 	// Resolved once, here, so the render path never reads the environment.
@@ -325,6 +329,12 @@ func stateWith(opts Options, hooked bool) State {
 			Phase:   PhaseIdle,
 			Follow:  true,
 		})
+	}
+	// Focus lands on a column that is actually drawn. Left at 0 it would sit on
+	// a collapsed seat on any machine whose first vendor is not installed, and
+	// tab would appear to do nothing until it had wrapped all the way round.
+	if vis := st.VisibleColumns(); len(vis) > 0 {
+		st.Focus = vis[0]
 	}
 	return st
 }
@@ -463,6 +473,16 @@ func (m *Model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// because that is where the decision is made, and it needs a modifier
 		// because every unmodified key here is text.
 		m.toggleQuote()
+	case "ctrl+j":
+		// A deliberate newline. It goes in RAW rather than through
+		// sanitizeKeepingSpace, which is the whole change: that filter flattens
+		// every newline to a space precisely so a PASTED one cannot tear the
+		// footer apart, and it still does. What it must not do is flatten the
+		// one the user asked for by name — a keystroke is not a paste, and a
+		// composer where the newline key inserts a space is a composer nobody
+		// can write a paragraph in.
+		m.setDraft(m.st.Draft + "\n")
+		m.st.Notice = ""
 	case "enter":
 		return m, m.dispatch()
 	case "backspace":
@@ -616,7 +636,7 @@ func (m *Model) followFocused() {
 // pageSize is one screenful of the body area, less a line of overlap so a page
 // jump keeps a shared line of context rather than teleporting.
 func (m *Model) pageSize() int {
-	lay := resolveLayout(m.st.Width, m.st.Height, len(m.st.Columns), m.st.Expanded)
+	lay := layoutFor(m.st, m.glyphs)
 	if n := lay.Body - 3; n > 1 {
 		return n
 	}
@@ -634,12 +654,23 @@ func (m *Model) focused() *Column {
 // which is a fixed set resolved once at startup — unlike the HUD's cursor, it
 // cannot be invalidated by a re-sort, so there is no selection-by-key
 // machinery here.
+//
+// It steps through the columns that are DRAWN. Tabbing onto a collapsed seat
+// would leave the marker nowhere on screen and the scroll keys addressing a
+// column nobody can see.
 func (m *Model) focusBy(d int) {
-	n := len(m.st.Columns)
-	if n == 0 {
+	vis := m.st.VisibleColumns()
+	if len(vis) == 0 {
 		return
 	}
-	m.st.Focus = ((m.st.Focus+d)%n + n) % n
+	pos := 0
+	for j, v := range vis {
+		if v == m.st.Focus {
+			pos = j
+			break
+		}
+	}
+	m.st.Focus = vis[((pos+d)%len(vis)+len(vis))%len(vis)]
 }
 
 // View is a thin wrapper over the pure renderer.

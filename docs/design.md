@@ -2478,6 +2478,19 @@ state by hand, goldens live in `internal/council/testdata/golden/*.txt` and rend
 24 cells, the tier drops to a tab bar rather than shredding prose into unreadable ribbons.
 Width is measured with `lipgloss.Width`, never `len()`.
 
+Two of the frame's rows are no longer constants, and the ordering that makes that safe is
+worth stating: the **tier is settled before any row is budgeted**. The tab bar costs a row,
+and the fallback from columns to tabs is a width test — budgeting first and dropping the
+tier afterwards worked only while the footer was a fixed three rows, and a taller composer
+would have overflowed the terminal by exactly the tab bar. `resolveLayoutIn` therefore
+finishes deciding the tier, then spends rows: header, footer chrome, tab bar if any,
+collapsed-seat notice if any, then the composer up to its ceiling, and **the composer
+yields before the body does** — at the minimum height a six-row draft would leave the
+columns nothing, and a room you can type in but not read is not the trade anyone asked
+for. A tab bar holding a single tab is not drawn at all: it selects nothing and repeats
+the column header underneath it, which stopped being a rarity the moment dead seats began
+folding away (§9.9).
+
 One trap worth recording, because the golden tests could not have caught it: `padRight`
 truncates rune by rune, so on text that already carries ANSI escapes it cuts through an
 escape sequence and counts escape bytes as content. Goldens render with the identity style
@@ -2564,8 +2577,11 @@ brief, and dispatches it. Claude streams incrementally; Codex and Antigravity re
 card and fill at once. Quitting the room kills every child, including the persistent one.
 Multi-turn is native resume for the batch seats and one live process for Claude (§9.8).
 
-Cross-agent rebuttal (§9.4) and per-column scrollback are **built and shipped**. Not built:
-per-vendor cancel — `ctrl+c` still ends the whole turn.
+Cross-agent rebuttal (§9.4) and per-column scrollback are **built and shipped**, and the
+scrollback now spans the whole conversation rather than one turn (§9.9): the room keeps a
+per-column transcript, echoes the brief that produced each turn, composes in up to six rows,
+and folds the seats it cannot drive out of the grid. Not built: per-vendor cancel — `ctrl+c`
+still ends the whole turn.
 
 Known gaps, stated rather than buried. Codex's non-shell write path is untested — asked to
 create a file with its own patch tool it declined, but that was a model choice and says nothing
@@ -2687,3 +2703,79 @@ the `WRITES` badge, the user's settings left alone — and therefore no injected
 either, since a room that loads those settings natively would otherwise run every hook twice.
 Gating is the default because the room the user opened is the one they are looking at;
 unattended is the exception and has to be typed.
+
+### 9.9 The room remembers — a conversation, not a ticker
+
+Everything above builds a very good way to **send one turn**. What it did not build is
+somewhere to have a conversation, and the gap was structural rather than cosmetic:
+dispatching turn N cleared turn N-1's body, trace, clock and cost off the screen, and the
+user's own words were never rendered anywhere at all. So the room could show you four
+answers to a question it could not show you, and then throw them away when you asked the
+next one. This was PR 4 of council's original plan, ratified and then skipped.
+
+**The transcript is per column and per turn.** A finished turn is *pushed* to
+`Column.History` rather than erased: `TurnRecord` carries the brief, the reply, the trace,
+the note, the elapsed and the cost, and `columnText` renders the whole list oldest-first,
+each turn opened by a separator naming it. Three consequences fall out of it being one flat
+list of lines:
+
+- **The scrollback needed no second mechanism.** The window, the overflow markers, the tail
+  and `MaxScroll` were already the code that moved through a column's lines; a transcript is
+  just more of them. `g` reaches the first thing that seat was ever asked.
+- **Each past turn carries its own numbers.** The column header and the badge line are
+  chrome describing the turn *in flight*, so a turn scrolled back to would otherwise sit
+  under someone else's clock. A turn that ended badly names its phase on its separator; a
+  turn that ended normally does not, because "done" on every one of them is noise on the
+  common case and makes the two that matter harder to find. A running total keeps its
+  `session` word (§9.8) — losing it in history would turn a true figure into a false one.
+- **A seat that sat out a turn records nothing for it.** Routing means turn 4 can go to
+  Claude alone, and Codex's transcript then skips from 3 to 5. Filling that gap would be the
+  room inventing a conversation.
+
+**The echo is the principal's words, and that is a boundary rather than a phrasing.** What a
+seat literally receives is not what is echoed: a first turn is sent with the `--brief` file
+prepended, whose content is deliberately held off `State` (§9.8's privacy discipline), and a
+rebuttal turn is sent with the other seats' answers fenced in front of it, which are other
+vendors' words. Echoing "exactly what was sent" would have put a private file on screen and
+labelled another model's output as the user's. So the brief is echoed, marked with the same
+`›` the composer uses — the glyph carries it before the colour does — and what rode along
+with it is *reported* on its own muted line. It goes through `sanitize` like everything else
+that reaches `State` and is **not** redacted: this is the user's own typing echoed to the
+user on the user's own screen, so covering it would hide a secret from the one person who
+already has it, do nothing about the copy just sent to four vendors, and make the echo
+disagree with what was dispatched — which is the one thing the line exists to show.
+
+**Memory is capped at 50 turns per column**, oldest out first, and nothing is written to
+disk. The state file (§9.8's `--resume`) stays keys-only: it holds session ids and no
+content, and scrollback is not state worth persisting.
+
+**The composer grows to six rows.** One elided line was not somewhere anyone could compose a
+brief worth sending to four agents. `ctrl+j` inserts a newline; `enter` still dispatches, and
+the mode line says both. The newline goes into the draft **raw**, deliberately bypassing
+`sanitizeKeepingSpace` — that filter exists so a *pasted* newline cannot tear the footer
+apart, and it still does exactly that; what it must not do is flatten the one the user asked
+for by name. A deliberate newline survives to every transport this repo drives: Claude and
+Codex take the prompt on stdin, Claude's persistent turn is JSON-marshalled so the newline is
+escaped in the envelope, and agy takes it as a single argv element on a native binary with no
+shell anywhere in the path (§9.3) — Go quotes an argument containing a newline, and the
+~32K Windows command-line ceiling is unchanged. A draft taller than the ceiling keeps its
+tail, where the cursor is, and spends one row saying how much is above it, in the same words
+the column overflow markers use.
+
+**A dead seat stops eating the width.** A column whose availability is `NotInstalled` or
+`Unusable` held a quarter of the terminal for the whole session to display one card that
+never changes — on the reference machine that is Cursor, permanently. Those seats now fold
+out of the grid and the survivors take the width. What must not fold away is the *fact*:
+one muted line under the header names each collapsed seat and which failure it is, keeping
+§4a.1's distinction between "not installed" and "installed but not drivable" intact at one
+line instead of one column. A seat nobody can see is one a user has no reason to go looking
+for, which makes silent collapse worse than the column it replaced.
+
+`--vendor` is the explicit control, and it mirrors the HUD's flag while doing more than
+filter: `all` keeps every detected seat on screen, and a comma list seats exactly those —
+drawn **and** dispatched to, since drawing a seat you cannot see while spending its quota is
+the same class of hidden state this product exists to refuse. Naming a seat forces it on
+screen even when it is absent, because a user who asked for it is owed the card explaining
+why it is not there. It parses the `@mention` vocabulary rather than a second one, so
+`--vendor agy` and `@agy` are the same word, and `Seated()` counts only seats that are both
+drivable and in the room so the header's `3/4 seated` keeps meaning what it says.
