@@ -644,6 +644,22 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// One column at full width. Three columns are for comparing at a
 		// glance; one is for actually reading a long reply.
 		m.st.Expanded = !m.st.Expanded
+	case "y":
+		// The focused seat's reply. Reachable here only when nothing is gated:
+		// key() routes a pending gate to gateKey first, and gateKey answers `y`
+		// itself rather than falling through — so the approve key keeps the
+		// letter it has always had and yank simply does not exist while a vendor
+		// is blocked. That precedence is asserted rather than assumed, because
+		// it is the one collision in this keymap where losing would mean a
+		// keystroke the user believes approved a tool call quietly copying text
+		// instead.
+		return m, m.yank(m.st.YankColumn(m.st.Focus))
+	case "Y":
+		// The whole turn, every seat, labelled. A separate key rather than a
+		// modifier on the first because they produce different documents, and
+		// shift is what this room already uses for the wider version of a
+		// motion (`G` against `g`).
+		return m, m.yank(m.st.YankTurn())
 	case "k":
 		m.scrollBy(-1)
 	case "j":
@@ -656,6 +672,38 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.followFocused()
 	}
 	return m, nil
+}
+
+// yank puts text on the system clipboard and says what it took.
+//
+// The mechanism is OSC 52, through bubbletea's own tea.SetClipboard, and the
+// choice is not really a choice: council must not grow a clipboard dependency
+// for one key, and OSC 52 needs no disk, no daemon and no library. Verified by
+// reading the installed module rather than the internet — v1 answers for this
+// are wrong — charm.land/bubbletea/v2@v2.0.8 clipboard.go returns a Cmd whose
+// message tea.go turns into ansi.SetSystemClipboard, which emits
+// ESC ] 52 ; c ; <base64> BEL unconditionally: no capability probe, no terminal
+// query, nothing that can silently decline.
+//
+// WHICH IS THE HONEST LIMIT, and it is stated here rather than in a commit
+// message. That sequence is a write into the terminal with no acknowledgement
+// of any kind, so this room cannot know whether the terminal honoured it.
+// Windows Terminal accepts OSC 52 writes in current builds — INFERRED from its
+// documented behaviour, not measured, and unmeasurable from a test, since the
+// only observer that could settle it is the terminal itself. So the notice
+// claims what council DID ("copied…"), never what the machine now holds, and
+// the one-keystroke check is a person pressing y and then ctrl+v.
+//
+// A nil Cmd for an empty yank, deliberately. Writing "" through OSC 52 is the
+// documented way to CLEAR a clipboard, so a copy key that found nothing to copy
+// would silently destroy whatever the user had — the most expensive possible
+// spelling of "nothing happened".
+func (m *Model) yank(y Yank) tea.Cmd {
+	m.st.Notice = y.Notice
+	if y.Empty() {
+		return nil
+	}
+	return tea.SetClipboard(y.Text)
 }
 
 // toggleQuote arms or disarms cross-agent rebuttal, and says which.

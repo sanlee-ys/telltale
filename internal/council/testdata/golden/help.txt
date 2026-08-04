@@ -7,7 +7,7 @@
    @codex       narrow to a lane: @claude @codex @agy @cursor; -@codex excludes                                         
                 one. Unaddressed goes to every seat. Leading only: "ask @claude" is prose                               
    /cd <dir>    move the room to another repo — seats follow on their next turn                                         
-   y / n        approve or deny a tool call a vendor is blocked on (--write)                                            
+   y / Y        copy this seat's reply, or the whole turn — while a gate waits, y/n answer it                           
    esc          leave compose (the draft is kept)                                                                       
    tab          move focus between columns — in compose too                                                             
    ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too                                       

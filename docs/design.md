@@ -3506,3 +3506,97 @@ the translation was correct, and it was put in the wrong room. A sentence can be
 and still wrong to print, if the place it prints is the place someone came to read something
 else. Every earlier section here asked whether the room says the truth. This one is the first to
 ask **how much of the room the truth is allowed to take up.**
+
+### 9.15 getting an answer out of the room
+
+Council exists to put several vendors' answers where they can be compared. What it never had
+is a way to take one *away*. §9.10 already noticed the gap from the other side and refused the
+obvious fix: mouse support was rejected partly because enabling the wheel claims the left
+button too, which would cost the native click-drag selection this room's output depends on.
+That refusal protected a workaround. It did not build a feature.
+
+> *"go with your yank key suggestion"*
+
+**`y` copies the focused column's reply. `Y` copies the whole turn.** Two keys rather than one
+with a modifier meaning, because they produce different documents — and `shift` for the wider
+version of a motion is what this room already does with `g` and `G`.
+
+**What `y` takes is the sanitized `Body` the renderer is showing, and the three things it is
+not are each a rule this file already holds.** Not the raw stream: everything on `State` has
+been through the redaction and sanitize choke point, and a clipboard is a *worse* place for a
+credential than a screen because it outlives the room. Not the trace: what a seat did and what
+it said are different kinds of claim (§4a.1), and that does not stop being true because the
+destination is a document. Not a neighbour's: it addresses the **focused** column, the same
+column every scroll key addresses, because a copy key that took from somewhere other than
+where the eye is would be §9.12's failure with a clipboard attached.
+
+It falls back to the newest finished turn when the current one has produced nothing yet — "the
+last answer" is what a user means by this key, and the notice names the turn the text actually
+came from rather than the one on screen.
+
+**`Y`'s format has one job: be readable a week later.** Seat headings, and the brief at the
+top, because four answers to a question the file does not contain are unreadable. The brief is
+the user's own words, which §9.9 already echoes un-redacted on the user's own screen for the
+same reason — and what rode *along* with it does not go in, which is the same boundary §9.9
+draws: a first turn carries the `--brief` file whose content is deliberately kept off `State`,
+and a rebuttal turn carries other vendors' words. Only seats that took **this** turn are
+included; a seat that sat out still holds an older reply, and filing that under this turn's
+heading would be the room inventing a conversation into a document, where it outlives every
+chance to notice.
+
+**The key collision is the interesting part, and it was already resolved.** `y` approves a
+tool call a vendor is blocked on (§9.8). `key()` routes a pending gate to `gateKey` first and
+`gateKey` answers `y` itself rather than falling through, so the approve key keeps the letter
+it has always had and yank does not exist while a vendor is stopped. That was true before this
+landed; what is new is that it is now **asserted**, because losing that race would mean a
+keystroke the user believes approved a write quietly copying text instead — and their next
+move would be to press it again. In compose mode `y` is the letter y, the same rule that keeps
+`q` the letter q there (§9.10).
+
+**The mechanism is OSC 52, and its limit is stated rather than glossed.** Verified by reading
+the installed module rather than the internet, because v1 answers for this are wrong:
+`charm.land/bubbletea/v2@v2.0.8`'s `clipboard.go` returns a `Cmd` whose message `tea.go` turns
+into `ansi.SetSystemClipboard`, emitting `ESC ] 52 ; c ; <base64> BEL` **unconditionally** — no
+capability probe, no terminal query, nothing that can decline in a way this program could
+observe.
+
+| | claim | strength |
+|---|---|---|
+| the key produces the command, carrying the right text | asserted by a test that calls the `Cmd` | measured |
+| the sequence reaches the terminal | bubbletea writes it on the next message pump | read from the module source |
+| the terminal honours it | Windows Terminal accepts OSC 52 writes in current builds | **INFERRED** from documented behaviour, not run |
+
+That last row cannot be closed from inside this repo: the only observer that could settle it is
+the terminal, and it sends nothing back. So the notice claims what council **did** — "copied
+claude code's turn-3 reply" — and never what the machine now holds, and the honest check is a
+person pressing `y` and then `ctrl+v`. The notice is not decoration for the same reason: with
+no acknowledgement available, it is the *only* feedback that the key did anything, and a silent
+copy would be indistinguishable from a terminal that ignored the sequence — the ambiguity
+§4a.1 forbids everywhere else here.
+
+**An empty yank issues no command at all.** Writing `""` through OSC 52 is the documented way
+to *clear* a clipboard, so a copy key that found nothing to copy would silently destroy
+whatever the user had. "Nothing happened" and "your clipboard is now empty" are different
+outcomes and this key must not spell them the same way.
+
+**The help row is a merge, and the merge is the honest shape rather than a saving.** The
+panel's budget is hard (17 rows, §9.11) and a copy key documented below the fold is a copy key
+nobody finds — but the reason `y`, `Y` and the gate's `y`/`n` share one line is that they
+*collide*, and the one place a reader could learn that is the line naming all of them.
+Splitting them would have spent a row to make the collision harder to see.
+
+**Declined: writing the turn to a file as a fallback.** A `~/.telltale/council/last-turn.md`
+would work in any terminal and needs no escape sequence at all, which makes refusing it worth
+an argument rather than a sentence. ADR-008's ninth amendment ratified council writing exactly
+one file and ruled what may be in it: **keys, not content** — session ids and no transcript,
+because each vendor already stores its own history and anything copied there would be a second
+copy of a private conversation in a location the user never chose. A file of four vendors'
+answers in the state directory is precisely that, and it would break the rule in the same
+release that a mechanism needing **no disk at all** was available. The terminal-support
+residual is real and is paid in a notice, not in a contract.
+
+The general lesson, in this file's own terms: §9.10 measured a fix, refused it for a good
+reason, and recorded the refusal — which is the process working. What it did not do is ask
+what the user had actually been trying to *do* when they reached for the mouse. The answer was
+never "scroll"; it was "take this answer with me", and that want went unnamed for two sections
+because the request arrived wearing the costume of a mechanism.
