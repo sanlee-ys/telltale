@@ -212,15 +212,65 @@ func (c Claude) baseArgs(p Posture) []string {
 		// "may act on your accounts".
 		"--strict-mcp-config",
 	}
-	if p == PostureWrite {
+	switch p {
+	case PostureWrite:
 		// Verified live in a throwaway directory: with the deny list dropped
 		// and acceptEdits set, print mode creates the file. Without a
 		// permission mode it has nobody to ask and the turn stalls or refuses,
 		// so this flag is what makes write mode functional rather than merely
 		// unrestricted.
 		return append(args, "--permission-mode", "acceptEdits")
+
+	case PostureWriteGated:
+		return append(args, gateArgs...)
 	}
 	return append(args, "--disallowedTools", deniedTools)
+}
+
+// gateArgs is what makes the vendor ask before every tool call.
+//
+// THREE flags, and none of them is optional. Each was established by running
+// the CLI and reading what it did, because two of the three do nothing on their
+// own and the third is not in --help at all.
+//
+//   - --permission-prompt-tool stdio. Absent from `claude --help` in 2.1.220,
+//     and real: an invented flag is rejected with "unknown option" while this
+//     one parses. Confirmed from the shipped binary, whose own SDK spawn code
+//     reads `if(M){…G.push("--permission-prompt-tool","stdio")}` where M is a
+//     canUseTool callback. ALONE IT DOES NOTHING: passed by itself, the session
+//     reported permissionMode "auto", no request was ever emitted, and the file
+//     was written.
+//
+//   - --permission-mode manual, which the session reports back as "default".
+//     ALONE IT ALSO DOES NOTHING USEFUL: with nobody to ask, the call
+//     short-circuits to a refusal — "Claude requested permissions to write to
+//     …, but you haven't granted it yet" — and the vendor gives up rather than
+//     waiting. Together with the flag above, the request appears on stdout and
+//     the turn blocks on it.
+//
+//   - --setting-sources "" , and this one is the whole honesty of the feature.
+//     Permission ALLOW RULES in the user's settings files are consulted BEFORE
+//     the callback, so a call they cover never reaches the gate. Measured on a
+//     machine whose settings allow `Bash(mkdir:*)`: with default setting
+//     sources, `mkdir zzz` ran ungated and the directory was created; with
+//     sources dropped, the same call raised a request, the denial was honoured
+//     and nothing was created. Without this flag "nothing writes without your
+//     keystroke" is simply false, and it would be false quietly.
+//
+// The cost of the third is stated rather than buried: dropping the setting
+// sources also drops the user's own hooks and their user-level commands from
+// this seat. The gate is then the only control in front of it, which is a real
+// trade and is why it is named in design.md §9 and in the badge's detail rather
+// than only here.
+//
+// One limit that no flag closes: shell commands the CLI itself classifies as
+// read-only are approved without asking. `git status` was ungated under BOTH
+// setting-source configurations. The claim this posture supports is about
+// calls that change things, and it is worded that way everywhere it appears.
+var gateArgs = []string{
+	"--permission-prompt-tool", "stdio",
+	"--permission-mode", "manual",
+	"--setting-sources", "",
 }
 
 // toolCalls reads the tool_use blocks of one assistant message.
@@ -485,6 +535,7 @@ func (Claude) ParseEvent(line []byte) (runner.Event, bool) {
 			ToolUseID: sl.Request.ToolUseID,
 			Tool:      sl.Request.ToolName,
 			Text:      sl.Request.ToolName,
+			Input:     sl.Request.Input,
 		}
 		if arg := toolArg(sl.Request.Input); arg != "" {
 			// The same formatting the activity trace uses, on purpose: the card

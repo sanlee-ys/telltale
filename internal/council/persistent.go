@@ -2,6 +2,7 @@ package council
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/council/vendors"
@@ -64,7 +65,7 @@ func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string,
 		return existing, "", nil
 	}
 
-	spec, err := v.Session(m.st.Workspace, c.Binary, m.posture())
+	spec, err := v.Session(m.st.Workspace, c.Binary, m.seatPosture())
 	if err != nil {
 		return nil, "", err
 	}
@@ -118,35 +119,111 @@ func (m *Model) interruptSeat(v model.VendorID) {
 	m.dropProcess(v)
 }
 
-// answerGate decides one permission request.
+// queueGate puts one blocked tool call in front of the user.
 //
-// This build has no way to ask: the approval UI is the next change, and until
-// it lands the room must not be able to leave a vendor blocked forever on a
-// question nobody can see. So the answer is a denial, and it says why in the
-// words the vendor will read back.
-//
-// Denying rather than allowing is not caution for its own sake. An allow here
-// would be a gate that approves everything while looking like a gate, which is
-// the exact shape of false claim this repo exists to refuse — and it is
-// unreachable in practice, because the postures this build passes never produce
-// a request at all.
-func (m *Model) answerGate(c *Column, g *runner.Gate) {
-	if g == nil {
+// The vendor is stopped until this is answered, which is the property the whole
+// feature rests on and also the reason nothing here may quietly drop a request:
+// a gate that vanished would leave a column waiting forever with no card to
+// explain it.
+func (m *Model) queueGate(c *Column, g *runner.Gate) {
+	if g == nil || g.RequestID == "" {
 		return
 	}
-	p, ok := m.procs[c.Vendor]
+	// Redacted whole, like every other complete string a vendor produced. It
+	// matters more here than in prose: the argument line of a tool call is one
+	// of the likeliest places for a token to appear on screen, and this one is
+	// rendered in chrome that does not scroll away.
+	text := strings.TrimSpace(m.redactWhole(g.Text))
+	if text == "" {
+		text = g.Tool
+	}
+	if m.gateInputs == nil {
+		m.gateInputs = map[string]map[string]any{}
+	}
+	m.st.Gates = append(m.st.Gates, PendingGate{
+		Vendor:    c.Vendor,
+		RequestID: g.RequestID,
+		ToolUseID: g.ToolUseID,
+		Text:      text,
+	})
+	m.gateInputs[g.RequestID] = g.Input
+}
+
+// decideGate answers the OLDEST pending request.
+//
+// Oldest first because that is the one the card is showing. Answering anything
+// else would decide a call the user was not looking at, which on an approval
+// gate is not a UI wrinkle — it is approving the wrong thing.
+func (m *Model) decideGate(allow bool) {
+	if len(m.st.Gates) == 0 {
+		return
+	}
+	pending := m.st.Gates[0]
+	m.st.Gates = m.st.Gates[1:]
+	delete(m.gateInputs, pending.RequestID)
+
+	c := m.column(pending.Vendor)
+	if !allow && c != nil {
+		// Recorded NOW, from the keystroke, rather than later from the vendor's
+		// echo of it. The vendor reports a denial as an is_error tool_result
+		// carrying this refusal text back, which read off the stream alone is
+		// indistinguishable from a tool that broke.
+		c.recordAct(runner.ActCall{
+			ID:      pending.ToolUseID,
+			Text:    pending.Text,
+			Outcome: runner.ActDenied,
+		}, m.redactWhole)
+	}
+
+	m.sendDecision(pending, allow)
+
+	if len(m.st.Gates) == 0 {
+		m.st.Notice = ""
+	}
+}
+
+// denialText is what the model reads back when a call is refused.
+//
+// It names WHO refused. "Denied" alone reads to a model as an obstacle to route
+// around, and the observed behaviour of a vendor told only that much is to try
+// a slightly different spelling of the same call — which produces a second
+// request for a user who has already said no once.
+const denialText = "denied by the person running this council room. " +
+	"Do not retry this call or a variation of it; say what you wanted to do and why."
+
+func (m *Model) sendDecision(pending PendingGate, allow bool) {
+	p, ok := m.procs[pending.Vendor]
 	if !ok {
 		return
 	}
-	pv, ok := vendors.Registry()[c.Vendor].(vendors.Persistent)
+	pv, ok := vendors.Registry()[pending.Vendor].(vendors.Persistent)
 	if !ok {
 		return
 	}
-	line, err := pv.Decide(g.RequestID, false,
-		"denied: this build of telltale council has no approval gate, so there "+
-			"is nobody to ask", nil)
+	line, err := pv.Decide(pending.RequestID, allow, denialText,
+		m.gateInputs[pending.RequestID])
 	if err != nil {
 		return
 	}
-	_ = p.sess.Send(line)
+	if err := p.sess.Send(line); err != nil && m.column(pending.Vendor) != nil {
+		m.column(pending.Vendor).Note = "the decision could not be delivered: " + err.Error()
+	}
+}
+
+// dropGates discards a seat's pending requests.
+//
+// Called when the turn they belong to ends by any route — cancelled,
+// interrupted, or the process dying. A card left on screen for a vendor that is
+// no longer waiting would invite a keystroke that decides nothing, and the room
+// would keep saying it was gating.
+func (m *Model) dropGates(v model.VendorID) {
+	kept := m.st.Gates[:0]
+	for _, g := range m.st.Gates {
+		if g.Vendor == v {
+			delete(m.gateInputs, g.RequestID)
+			continue
+		}
+		kept = append(kept, g)
+	}
+	m.st.Gates = kept
 }

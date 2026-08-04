@@ -72,6 +72,79 @@ func TestSessionKeepsThePostureFlags(t *testing.T) {
 	}
 }
 
+// TestGatedPostureCarriesAllThreeFlags.
+//
+// None of the three is optional and two of them do nothing alone, which is
+// exactly the shape of thing a later edit removes as redundant. Each is pinned
+// with the measurement that justifies it.
+func TestGatedPostureCarriesAllThreeFlags(t *testing.T) {
+	spec, err := Claude{}.Session(`C:\ws`, "claude", PostureWriteGated)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Hidden from --help and real: an invented flag is rejected with "unknown
+	// option" while this one parses, and the binary's own SDK spawn code pushes
+	// exactly this pair for a canUseTool callback.
+	if i := slices.Index(spec.Args, "--permission-prompt-tool"); i < 0 || spec.Args[i+1] != "stdio" {
+		t.Errorf("--permission-prompt-tool stdio missing from %v; no request would ever be emitted", spec.Args)
+	}
+	// Without it the session runs in auto mode, which approves before the
+	// callback is consulted. Measured: the file was written, ungated.
+	if i := slices.Index(spec.Args, "--permission-mode"); i < 0 || spec.Args[i+1] != "manual" {
+		t.Errorf("--permission-mode manual missing from %v; auto mode approves before the gate", spec.Args)
+	}
+	// The honesty of the whole feature. Permission allow rules in the user's
+	// settings are consulted BEFORE the callback: measured, an allowlisted
+	// `mkdir zzz` ran ungated with default sources and raised a request with
+	// sources dropped.
+	i := slices.Index(spec.Args, "--setting-sources")
+	if i < 0 || spec.Args[i+1] != "" {
+		t.Errorf("--setting-sources \"\" missing from %v; the user's own allow rules would silently bypass the gate", spec.Args)
+	}
+
+	// acceptEdits is what the gate REPLACES. Passing both would auto-approve
+	// edits behind a badge that says the room asks first.
+	if slices.Contains(spec.Args, "acceptEdits") {
+		t.Error("the gated posture also passes acceptEdits; the gate would never be reached for an edit")
+	}
+	// A gated seat is a WRITE seat. The deny list would make the gate a prompt
+	// about tools that are not in the session.
+	if slices.Contains(spec.Args, "--disallowedTools") {
+		t.Error("the gated posture kept the read-only deny list")
+	}
+	// MCP still reaches outside the workspace, in every posture.
+	if !slices.Contains(spec.Args, "--strict-mcp-config") {
+		t.Error("--strict-mcp-config dropped in the gated posture")
+	}
+	// The skip-permissions class is refused here as everywhere: it would
+	// approve every request before the user saw it.
+	for _, banned := range []string{"--dangerously-skip-permissions", "bypassPermissions", "dontAsk"} {
+		if slices.Contains(spec.Args, banned) {
+			t.Errorf("%q would auto-approve past the gate", banned)
+		}
+	}
+}
+
+// TestAutoAndGatedAreDifferentInvocations. --write --auto is the old behaviour
+// and has to stay reachable; if the two postures produced the same argv the
+// flag would be decoration.
+func TestAutoAndGatedAreDifferentInvocations(t *testing.T) {
+	auto, _ := Claude{}.Session("", "claude", PostureWrite)
+	gated, _ := Claude{}.Session("", "claude", PostureWriteGated)
+	if slices.Equal(auto.Args, gated.Args) {
+		t.Fatal("--auto and the gate produce identical invocations")
+	}
+	if i := slices.Index(auto.Args, "--permission-mode"); i < 0 || auto.Args[i+1] != "acceptEdits" {
+		t.Errorf("--auto lost acceptEdits: %v", auto.Args)
+	}
+	// --auto must not drop the user's settings. That trade is the price of the
+	// gate, and paying it for a room that is not gating buys nothing.
+	if slices.Contains(auto.Args, "--setting-sources") {
+		t.Error("--auto drops the user's settings for no gate")
+	}
+}
+
 // TestTurnEnvelopeMatchesTheCapturedLine.
 //
 // The line below is what the working probe sent, byte for byte after

@@ -24,6 +24,13 @@ type Options struct {
 	NoTitle bool
 	// Write starts the room in write posture. See State.Write.
 	Write bool
+	// Auto restores the pre-gate behaviour: a write-mode seat approves its own
+	// tool calls instead of asking.
+	//
+	// A flag on --write rather than a mode of its own, and it only subtracts.
+	// Gating is the default because the room the user opened is the one they
+	// are watching; unattended is the exception and it has to be typed.
+	Auto bool
 	// BriefPath names a file of shared operating context handed to every
 	// vendor on its first turn. Empty falls back to TELLTALE_COUNCIL_BRIEF.
 	BriefPath string
@@ -64,6 +71,15 @@ type Model struct {
 	// carries an id that can be recognised coming back.
 	interrupts int
 
+	// gateInputs holds each pending request's tool arguments, keyed by request
+	// id, because an approval has to echo them back.
+	//
+	// On Model and NOT on State, for the same reason the brief is: it is the
+	// entire argument blob — for a Write, the whole file content — and the
+	// renderer has no business being able to reach it. Only the one-line
+	// summary crosses onto State.
+	gateInputs map[string]map[string]any
+
 	// sessions holds each vendor's own session id, which is what makes a later
 	// turn a resume rather than a transcript re-send.
 	sessions map[model.VendorID]string
@@ -97,6 +113,7 @@ func newWithBrief(opts Options, b Brief) *Model {
 		sessions:   map[model.VendorID]string{},
 		redactors:  map[model.VendorID]*Redactor{},
 		procs:      map[model.VendorID]*seatProc{},
+		gateInputs: map[string]map[string]any{},
 		roomCtx:    ctx,
 		roomCancel: cancel,
 		brief:      b,
@@ -134,7 +151,7 @@ func stateWith(opts Options) State {
 			Avail:   info.Avail,
 			Binary:  info.Binary,
 			Note:    info.Note,
-			Sandbox: postureClaim(info.Vendor, windows, opts.Write),
+			Sandbox: postureClaim(info.Vendor, windows, opts.Write, !opts.Auto),
 			Gran:    granularityFor(info.Vendor),
 			Phase:   PhaseIdle,
 			Follow:  true,
@@ -200,10 +217,43 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // key routes by mode. Compose mode is checked FIRST and swallows everything
 // that carries text, because in it `q` is the letter q — the footer says which
 // mode is active on every frame precisely so this is never a surprise.
+//
+// A pending gate outranks both, and it is the same rule rather than an
+// exception to it: something is blocked on a keystroke, the footer says which
+// keystroke, and the keymap is read from the same queue the footer is.
 func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.st.Gating() {
+		return m.gateKey(msg)
+	}
 	if m.st.Mode == ModeComposing {
 		return m.composeKey(msg)
 	}
+	return m.viewKey(msg)
+}
+
+// gateKey is the keymap while a vendor is waiting to be told yes or no.
+//
+// Only two keys are added, and neither is a modifier: a decision the user is
+// being asked to make dozens of times in a session cannot cost a chord. They
+// are unambiguous single letters that mean the same thing in every prompt
+// anyone has answered, and the footer spells both out on every frame.
+func (m *Model) gateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y":
+		m.decideGate(true)
+		return m, nil
+	case "n":
+		m.decideGate(false)
+		return m, nil
+	case "i", "enter":
+		// Composing here would swallow y and n as text while a vendor sat
+		// blocked behind a card the user could no longer answer.
+		m.st.Notice = "a vendor is waiting on you — y approves, n denies"
+		return m, nil
+	}
+	// Everything else keeps meaning what it meant: scrolling, focus, expand,
+	// help and cancel all stay available, because deciding well means being
+	// able to read the column first.
 	return m.viewKey(msg)
 }
 

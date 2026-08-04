@@ -38,6 +38,14 @@ const (
 	// PostureWrite drops those requests. The containment then is the WORKSPACE
 	// — which directory council was pointed at — not a flag.
 	PostureWrite
+	// PostureWriteGated drops them too, and puts a person in front of every
+	// tool call instead.
+	//
+	// Only a vendor that can ASK can be given this posture, which today is one
+	// of the four. It is not a middle setting between read and write: the seat
+	// may do anything write mode allows, and the difference is that it has to
+	// be told yes first.
+	PostureWriteGated
 )
 
 // Persistent is a vendor that can be driven as ONE process taking many turns,
