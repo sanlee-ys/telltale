@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -194,6 +195,87 @@ func TestAMovedRoomRespawnsThePersistentSeatOnItsOwnThread(t *testing.T) {
 	}
 	if id := m.resumeIDs[model.VendorClaude]; id != "" {
 		t.Errorf("the id survived its one attempt: %q", id)
+	}
+}
+
+// TestAStaleExitDoesNotFailTheLiveSeat is the review finding that would have
+// shipped: a killed predecessor emits one terminal KindDone naming only the
+// VENDOR, into the room-lifetime channel, and the turn that follows a /cd
+// would have drained it and attributed it to the replacement — failing the
+// live turn, dropping the live process from procs (leaving it running,
+// invisibly), and discarding the earned thread through the probation rule.
+// The guard: a process that exited cannot be Alive, so a terminal event
+// arriving while the seat's current process IS alive belongs to a
+// predecessor and is ignored. The same applies to a seat that died while
+// the room was idle, whose exit sat queued until the next turn.
+func TestAStaleExitDoesNotFailTheLiveSeat(t *testing.T) {
+	m, _, _ := cdRoom(t)
+	live := &fakeSession{alive: true}
+	m.procs[model.VendorClaude] = &seatProc{sess: live, sent: 1, dir: m.st.Workspace}
+	m.sessions[model.VendorClaude] = "claude-sess-1"
+	m.st.Columns = []Column{{
+		Vendor: model.VendorClaude, Label: "Claude Code",
+		Avail: AvailInstalled, Phase: PhaseStreaming, Body: "half an answer",
+	}}
+	m.turn = &turnState{
+		cancel:     func() {},
+		live:       map[model.VendorID]bool{model.VendorClaude: true},
+		persistent: map[model.VendorID]bool{model.VendorClaude: true},
+	}
+
+	// The predecessor's exit, and a stale process-level error for good measure.
+	m.applyEvents([]runner.Event{
+		{Vendor: model.VendorClaude, Kind: runner.KindDone},
+		{Vendor: model.VendorClaude, Kind: runner.KindError,
+			Note: "exit status 1", ExitCode: 1},
+	})
+
+	c := m.st.Columns[0]
+	if c.Phase != PhaseStreaming {
+		t.Errorf("phase = %v — a stale exit retired the live turn", c.Phase)
+	}
+	if _, ok := m.procs[model.VendorClaude]; !ok {
+		t.Error("a stale exit dropped the LIVE process from procs")
+	}
+	if m.sessions[model.VendorClaude] != "claude-sess-1" {
+		t.Error("a stale exit cost the seat its earned thread")
+	}
+	if m.turn == nil {
+		t.Error("a stale exit ended the turn")
+	}
+
+	// And the genuine death still lands: once the current process is not
+	// alive, the same event retires the column the way it always did.
+	live.alive = false
+	m.applyEvents([]runner.Event{{Vendor: model.VendorClaude, Kind: runner.KindDone}})
+	if m.st.Columns[0].Phase != PhaseFailed {
+		t.Errorf("phase = %v — a real mid-turn death was ignored", m.st.Columns[0].Phase)
+	}
+}
+
+// TestCdTildeWithNoHomeIsRefused: expanding ~ against an empty home would
+// resolve to the current workspace and report a move that never happened.
+func TestCdTildeWithNoHomeIsRefused(t *testing.T) {
+	m, a, _ := cdRoom(t)
+	m.st.Home = ""
+	m.setDraft("/cd ~/kb-agent")
+	m.roomCommand()
+	if !sameDir(m.st.Workspace, a) {
+		t.Error("a homeless ~ still moved the room")
+	}
+	if !strings.Contains(m.st.Notice, "home directory is unknown") {
+		t.Errorf("the refusal does not say why: %q", m.st.Notice)
+	}
+}
+
+// TestRunRejectsAMissingCdDirectory is the LoadBrief discipline on --cd: a
+// typed path that is not a directory is a plain error before the alternate
+// screen, not four seats failing their first turn.
+func TestRunRejectsAMissingCdDirectory(t *testing.T) {
+	tempHome(t)
+	err := Run(Options{Dir: filepath.Join(t.TempDir(), "gone")})
+	if err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("err = %v, want the --cd refusal", err)
 	}
 }
 

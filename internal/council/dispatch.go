@@ -379,6 +379,18 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			}
 
 		case runner.KindDone:
+			// A terminal event names a VENDOR, not a process. When this seat's
+			// CURRENT process is alive, this exit belongs to a predecessor — the
+			// one a /cd respawn killed, or one that died while the room was idle
+			// and whose exit sat queued until the next turn drained the channel.
+			// A process that exited cannot be Alive, so the test is exact.
+			// Acting on a stale exit would fail the live turn, drop the live
+			// process from procs (leaving it running and invisible, which is the
+			// exact state this product refuses), and discard the earned thread
+			// through the probation rule. Found in review before it shipped.
+			if p, ok := m.procs[ev.Vendor]; ok && p.sess != nil && p.sess.Alive() {
+				continue
+			}
 			// A persistent process reaching here has DIED — the turn's end never
 			// takes it down. Either the room is quitting, or something ended it
 			// under us; both mean the seat has no process any more.
@@ -402,6 +414,15 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			m.finishColumn(c, PhaseDone)
 
 		case runner.KindError:
+			// The same predecessor guard as KindDone, for the process-level
+			// half only: a vendor-REPORTED failure (EndsTurn) rides the current
+			// process's own stdout and is never stale, but a process exit can
+			// be an old process's.
+			if !ev.EndsTurn {
+				if p, ok := m.procs[ev.Vendor]; ok && p.sess != nil && p.sess.Alive() {
+					continue
+				}
+			}
 			c.Body += m.flush(ev.Vendor)
 			// A seat already told that its saved thread was refused keeps that
 			// sentence. A dead thread produces TWO events — the vendor's own

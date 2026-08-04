@@ -92,12 +92,17 @@ func (m *Model) resolveCD(arg string) (string, error) {
 	p := arg
 	// "~" is composer text, not shell input, so nothing expands it unless we
 	// do. Only the leading-tilde form; a "~user" form is not worth guessing at.
-	if p == "~" {
-		p = m.st.Home
-	} else if rest, found := strings.CutPrefix(p, "~/"); found {
-		p = filepath.Join(m.st.Home, rest)
-	} else if rest, found := strings.CutPrefix(p, `~\`); found {
-		p = filepath.Join(m.st.Home, rest)
+	if p == "~" || strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) {
+		if m.st.Home == "" {
+			// Expanding against an empty home would quietly resolve "~" to the
+			// current workspace and report a move that never happened.
+			return "", cdError("the home directory is unknown — use an absolute path")
+		}
+		if p == "~" {
+			p = m.st.Home
+		} else {
+			p = filepath.Join(m.st.Home, p[2:])
+		}
 	}
 
 	var candidates []string

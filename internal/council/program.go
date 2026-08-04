@@ -206,7 +206,11 @@ func (m *Model) reattach(re Reattachment) {
 		// then forgotten: the alternative is that the first dispatch overwrites
 		// four vendors' session ids with nothing on screen having mentioned they
 		// were there.
-		m.st.Notice = "a saved room from " + age(time.Since(re.Room.SavedAt)) +
+		saved := "a saved room"
+		if re.Adopted {
+			saved = "a saved room (old per-workspace format)"
+		}
+		m.st.Notice = saved + " from " + age(time.Since(re.Room.SavedAt)) +
 			" (turn " + itoa(re.Room.Turn) +
 			") exists — rerunning without --fresh reattaches to it; dispatching here replaces it"
 		return
@@ -752,12 +756,16 @@ func Run(opts Options) error {
 		if found, ferr := LoadRoom(); ferr == nil && found.Active() {
 			// Declined, but there is something here to lose. Carried in as an
 			// OFFER rather than a restore: nothing is applied, and the room only
-			// mentions it exists before the first dispatch replaces it.
-			re = Reattachment{Path: found.Path, Room: found.Room, Offered: true}
+			// mentions it exists before the first dispatch replaces it. Adopted
+			// rides along so the offer can name the old format like the reattach
+			// notice does.
+			re = Reattachment{Path: found.Path, Room: found.Room,
+				Offered: true, Adopted: found.Adopted}
 		}
 	} else {
 		re, err = LoadRoom()
-		if errors.Is(err, ErrNoSavedRoom) {
+		switch {
+		case errors.Is(err, ErrNoSavedRoom):
 			re, err = Reattachment{}, nil
 			if opts.Resume {
 				// Asked for explicitly, and there is nothing. Not an error — the
@@ -766,20 +774,30 @@ func Run(opts Options) error {
 				re.Ignored = "nothing has been saved yet — this is a fresh room"
 				re.Path = "-"
 			}
-		}
-		if err != nil {
-			return err
+		case err != nil:
+			// The state DIRECTORY could not even be located (no resolvable home
+			// directory). Telltale's own state being unreachable must never be
+			// the reason the room refuses to open — the same rule a corrupt
+			// file already follows — so it opens unreattached and says why.
+			re, err = Reattachment{Path: "-",
+				Ignored: "the saved room could not be looked up: " + err.Error()}, nil
 		}
 	}
 
-	// The workspace: --cd if typed, else where the room was, else here. The
-	// saved directory is verified to still exist before the room is pointed at
-	// it — a renamed repo must surface as one honest sentence in the notice,
-	// not as four seats failing their first turn against a path that is gone.
+	// The workspace: --cd if typed, else where the room was, else here. Both
+	// non-cwd sources are verified to be directories before the room is
+	// pointed at them: a typed --cd that is not one is the LoadBrief
+	// discipline — a plain error before the alternate screen — and a saved
+	// directory that is gone (a renamed repo) surfaces as one honest sentence
+	// in the notice, not as four seats failing their first turn against a
+	// path that no longer exists.
 	ws := ""
 	switch {
 	case opts.Dir != "":
 		ws = resolveWorkspace(opts.Dir)
+		if fi, serr := os.Stat(ws); serr != nil || !fi.IsDir() {
+			return errors.New("--cd " + opts.Dir + ": not a directory")
+		}
 	case re.Active() && !re.Offered:
 		ws = re.Room.Workspace
 		if fi, serr := os.Stat(ws); serr != nil || !fi.IsDir() {
