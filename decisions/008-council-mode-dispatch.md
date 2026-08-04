@@ -23,7 +23,7 @@ Following a live independent review by **Codex** (`codex exec`), two critical re
    `telltale hud` and `telltale statusline` remain 100% read-only observers without write access, credential access, or network calls. `telltale council` is explicitly defined as an opt-in interactive dispatch room.
 
 3. **Read-only posture, stated per vendor — not as a blanket claim**  
-   The first draft of this ADR claimed "enforced read-only sandboxing" for all three vendors. That
+   The first draft of this ADR claimed "enforced read-only sandboxing" for all vendors in the fleet. That
    was not true: only Codex had a named mechanism, Antigravity's was "soft-denied" (i.e. not
    enforced), and Claude Code's was labelled read-only with no mechanism at all. A repo whose
    thesis is that a gauge must never overstate what it knows cannot ship that sentence. Corrected
@@ -52,11 +52,11 @@ Following a live independent review by **Codex** (`codex exec`), two critical re
    anything reaches the state the renderer can read.
 
 4. **Blind First-Round Protocol & Multi-Turn via native resume**  
-   - **Turn 1 (Blind Dispatch)**: The opening brief is dispatched to all 3 vendors simultaneously without cross-agent context, ensuring completely independent opinions.
+   - **Turn 1 (Blind Dispatch)**: The opening brief is dispatched to all 4 vendors simultaneously without cross-agent context, ensuring completely independent opinions across the 4-vendor fleet (Claude Code, Codex, Cursor, Antigravity).
    - **Subsequent Turns**: carried by each vendor's **own session-resume mechanism**
      (`claude --resume <id>`, `codex exec resume <id>`, `agy --conversation <id>` — all verified to
      exist), not by re-sending the transcript. Re-sending grows input quadratically (roughly 30K
-     redundant input tokens per vendor by turn five, times three vendors) against metered quotas,
+     redundant input tokens per vendor by turn five, times four vendors) against metered quotas,
      and flattens native turn structure into quoted prose. Resume sends only the new turn, lets the
      vendor replay its own stored history, and keeps the blind-round guarantee *structural*: each
      session contains only its own history, so cross-contamination cannot happen by accident.
@@ -229,7 +229,7 @@ difference that does not exist.
 ### Amendment, 2026-08-04 (fourth): the room's default state was three strangers
 
 Observed in use, on turn 4 of a real session. Asked to "assume our C-level roles for this
-session", all three vendors guessed — separately and differently. Claude named its reading and
+session", all four vendors guessed — separately and differently. Claude named its reading and
 asked to confirm; Codex asked which roles it should take; Antigravity improvised a corporate
 register. The convention they were groping for was already written down, in a private repo none
 of them had been given.
@@ -288,7 +288,7 @@ knownPaths list did not turn out to be necessary here, and it stays anyway: PATH
 the current process, not about the machine, and a shell opened before an installer ran is exactly
 the situation that produces this false negative.
 
-**What the spike established, and how.** Not the way the other three vendors were established,
+**What the spike established, and how.** Not the way the other vendors in the 4-vendor fleet were established,
 and the difference has to be stated rather than left to resemblance:
 
 > The installed `cursor-agent` reports **"Not logged in"**, and it checks authentication **before**
