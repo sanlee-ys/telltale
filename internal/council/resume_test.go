@@ -901,10 +901,17 @@ func TestARestoredThreadIsSpentExactlyOnce(t *testing.T) {
 	}
 }
 
-// TestARefusedThreadSaysTheHistoryIsGone. The vendor reports a dead thread as a
+// TestARefusedThreadSaysWhatHappensNext. The vendor reports a dead thread as a
 // failed turn, whose stock wording reads as "this vendor broke" and sends the
 // user looking for a problem with the vendor instead of retyping their brief.
-func TestARefusedThreadSaysTheHistoryIsGone(t *testing.T) {
+//
+// Renamed from TestARefusedThreadSaysTheHistoryIsGone: that claim was RETRACTED
+// on 2026-08-04 when an agy conversation was round-tripped and demonstrably
+// resumed on a turn that still failed, and a test name asserting it outlived the
+// retraction by three amendments. A test can hold a false claim in place just as
+// firmly as a true one (ADR-008, fifth amendment), and a test NAME is the half of
+// it nobody reads.
+func TestARefusedThreadSaysWhatHappensNext(t *testing.T) {
 	m := turnModel(true)
 	m.st.Columns[0].Restored = true
 	m.sessions[model.VendorClaude] = "claude-sess-1"
@@ -920,11 +927,26 @@ func TestARefusedThreadSaysTheHistoryIsGone(t *testing.T) {
 	if c.Phase != PhaseFailed {
 		t.Errorf("phase = %v, want failed", c.Phase)
 	}
-	if !strings.Contains(c.Note, "saved thread") {
-		t.Errorf("note does not name the lost thread: %q", c.Note)
+	// Title first, mechanics under it. The title says the OUTCOME — a reader
+	// scanning four columns learns from one short line that this seat starts
+	// over — and the machinery that produced it is demoted to the body rather
+	// than run together into one alarming sentence.
+	if !strings.Contains(c.Note, "not restored") {
+		t.Errorf("the card title does not name the outcome: %q", c.Note)
 	}
-	if !strings.Contains(c.Note, "brief re-applied") {
-		t.Errorf("note does not say the new session gets the brief: %q", c.Note)
+	if c.NoteDetail == "" {
+		t.Fatal("the card has no body: the mechanics have to survive the restyle")
+	}
+	if !strings.Contains(c.NoteDetail, "saved thread") {
+		t.Errorf("the body does not name the lost thread: %q", c.NoteDetail)
+	}
+	if !strings.Contains(c.NoteDetail, "brief re-applied") {
+		t.Errorf("the body does not say the new session gets the brief: %q", c.NoteDetail)
+	}
+	// No warning mark. This is the same fact reattachCard states calmly when no
+	// thread came back at all, learned one turn later.
+	if !c.NoteCalm {
+		t.Error("the lost-thread card still renders as a warning")
 	}
 	if c.Restored {
 		t.Error("the column still claims a restored thread after losing it")
@@ -947,8 +969,8 @@ func TestARefusedThreadSaysTheHistoryIsGone(t *testing.T) {
 		Note:     "exit status 1: No conversation found with session ID: claude-sess-1",
 		ExitCode: 1,
 	}})
-	if note := m.st.Columns[0].Note; !strings.Contains(note, "brief re-applied") {
-		t.Errorf("the process exit overwrote the lost-thread guidance: %q", note)
+	if d := m.st.Columns[0].NoteDetail; !strings.Contains(d, "brief re-applied") {
+		t.Errorf("the process exit overwrote the lost-thread guidance: %q", d)
 	}
 }
 
@@ -1050,8 +1072,8 @@ func TestAStaleIdOnASpawnPerTurnSeatIsDroppedAfterOneTurn(t *testing.T) {
 	if id := m.sessions[model.VendorCodex]; id != "" {
 		t.Fatalf("the stale id survived its failed turn and will be retried forever: %q", id)
 	}
-	if !strings.Contains(m.st.Columns[0].Note, "saved thread") {
-		t.Errorf("the column does not say the thread was lost: %q", m.st.Columns[0].Note)
+	if !strings.Contains(m.st.Columns[0].NoteDetail, "saved thread") {
+		t.Errorf("the column does not say the thread was lost: %q", m.st.Columns[0].NoteDetail)
 	}
 
 	// And the NEXT turn is therefore a first turn, briefed, rather than another
@@ -1095,4 +1117,224 @@ func TestReattachedRoomGolden(t *testing.T) {
 		t.Error("the unrestored seat is not distinguished from the restored ones")
 	}
 	golden(t, "reattached", got)
+}
+
+// --- the transient/dead split (ADR-008, sixteenth amendment) --------------
+
+// TestATransientFailureDoesNotForfeitARestoredThread.
+//
+// One-attempt probation cannot tell "the thread is gone" from "the vendor
+// hiccuped", and the ninth amendment accepted that because nothing observable
+// told them apart. Two signals have since been captured that do, and this is the
+// first: a refusal raised BEFORE any model call. The vendor never looked at the
+// conversation, so losing it here costs the user four turns of history for a
+// login prompt.
+func TestATransientFailureDoesNotForfeitARestoredThread(t *testing.T) {
+	m := turnModel(false)
+	m.st.Columns[0].Restored = true
+	m.sessions[model.VendorClaude] = "claude-sess-1"
+	m.unproven[model.VendorClaude] = true
+
+	m.applyEvents([]runner.Event{{
+		Vendor: model.VendorClaude, Kind: runner.KindError,
+		Note:     "not signed in — authenticate this vendor in your own terminal, then dispatch again",
+		Failure:  runner.FailurePreflight,
+		ExitCode: 1,
+	}})
+
+	c := m.st.Columns[0]
+	if id := m.sessions[model.VendorClaude]; id != "claude-sess-1" {
+		t.Errorf("a pre-flight refusal cost the seat its thread: id = %q", id)
+	}
+	if !c.Restored {
+		t.Error("the column stopped claiming a restored thread over a failure that never reached it")
+	}
+	// Still on probation, deliberately. The exception is one turn's reprieve,
+	// not a promotion: the thread has still never been proven, so the NEXT
+	// unclassified failure has to cost it the id exactly as before.
+	if !m.unproven[model.VendorClaude] {
+		t.Error("a transient failure took the seat off probation — the id is now unproven forever")
+	}
+	// And the seat says nothing about threads. What the user needs is the
+	// vendor's own actionable sentence, not a reassurance stapled to it.
+	if c.NoteCalm || c.NoteDetail != "" {
+		t.Errorf("a transient failure rendered the lost-thread card: %q / %q", c.Note, c.NoteDetail)
+	}
+	if !strings.Contains(c.Note, "not signed in") {
+		t.Errorf("the vendor's own actionable note was replaced: %q", c.Note)
+	}
+}
+
+// TestTheMeasured503DoesNotForfeitARestoredThread is the second captured
+// signal, and the one San's session actually hit.
+//
+// MEASURED 2026-08-04, agy 1.1.10: a turn died on "Eligibility check failed:
+// UNAVAILABLE (code 503)" with an EMPTY conversation_id — before a thread was
+// involved at all. Under the old rule that vendor-side outage spent the whole
+// conversation.
+func TestTheMeasured503DoesNotForfeitARestoredThread(t *testing.T) {
+	m := turnModel(false)
+	m.st.Columns[0].Vendor = model.VendorAntigravity
+	m.st.Columns[0].Label = "Antigravity"
+	m.st.Columns[0].Restored = true
+	m.turn.live = map[model.VendorID]bool{model.VendorAntigravity: true}
+	m.sessions[model.VendorAntigravity] = "agy-conv-1"
+	m.unproven[model.VendorAntigravity] = true
+
+	m.applyEvents([]runner.Event{{
+		Vendor: model.VendorAntigravity, Kind: runner.KindError,
+		Note: "Eligibility check failed: UNAVAILABLE (code 503): The service is " +
+			"currently unavailable.",
+		Failure:  runner.FailureVendorUnavailable,
+		ExitCode: 1,
+	}})
+
+	if id := m.sessions[model.VendorAntigravity]; id != "agy-conv-1" {
+		t.Errorf("a vendor-side outage cost the seat its conversation: id = %q", id)
+	}
+	if !m.unproven[model.VendorAntigravity] {
+		t.Error("the seat came off probation on a turn that proved nothing")
+	}
+}
+
+// TestAnUnclassifiedFailureAfterATransientOneStillDropsTheThread.
+//
+// The reprieve must not accumulate into an exemption. A seat that survives one
+// classified failure is still on probation, so the next failure this code cannot
+// read still spends the id — which is what keeps the wedge the ninth amendment
+// closed from reopening one transient failure at a time.
+func TestAnUnclassifiedFailureAfterATransientOneStillDropsTheThread(t *testing.T) {
+	m := turnModel(false)
+	m.st.Columns[0].Restored = true
+	m.sessions[model.VendorClaude] = "claude-sess-1"
+	m.unproven[model.VendorClaude] = true
+
+	m.applyEvents([]runner.Event{{
+		Vendor: model.VendorClaude, Kind: runner.KindError,
+		Failure: runner.FailurePreflight, Note: "not signed in", ExitCode: 1,
+	}})
+	if m.sessions[model.VendorClaude] == "" {
+		t.Fatal("the transient reprieve did not apply")
+	}
+
+	// Next turn. The per-turn classification is cleared at dispatch; here the
+	// turn is re-armed directly, which is what dispatch does to it.
+	delete(m.failure, model.VendorClaude)
+	delete(m.threadLost, model.VendorClaude)
+	m.st.Columns[0].Phase = PhaseStreaming
+	m.turn = &turnState{
+		cancel:     func() {},
+		live:       map[model.VendorID]bool{model.VendorClaude: true},
+		persistent: map[model.VendorID]bool{},
+	}
+	m.applyEvents([]runner.Event{{
+		Vendor: model.VendorClaude, Kind: runner.KindError,
+		Note: "exit status 1", ExitCode: 1,
+	}})
+
+	if id := m.sessions[model.VendorClaude]; id != "" {
+		t.Errorf("an unclassified failure spared the id: %q", id)
+	}
+	if !m.st.Columns[0].NoteCalm {
+		t.Error("the seat did not render the lost-thread card after the unclassified failure")
+	}
+}
+
+// TestAStaleClassificationCannotSpareTheNextTurnsThread.
+//
+// The classification is a fact about ONE turn and is cleared with the note it
+// belongs to. Left set, a transient failure on turn 4 would spare a genuinely
+// dead thread on turn 5 — the wedge, arriving one turn late.
+func TestAStaleClassificationCannotSpareTheNextTurnsThread(t *testing.T) {
+	tempHome(t)
+	m := turnModel(false)
+	m.turn = nil
+	m.st.Columns[0].Phase = PhaseIdle
+	m.st.Columns = append(m.st.Columns, Column{
+		Vendor: model.VendorCodex, Label: "Codex",
+		Avail: AvailInstalled, Phase: PhaseIdle, Binary: "codex",
+	})
+	// Left over from a turn that failed transiently.
+	m.failure[model.VendorClaude] = runner.FailurePreflight
+
+	// Claude sits this turn out, so nothing in this dispatch can re-classify it.
+	// A stale verdict surviving here is exactly the wedge one turn late: turn
+	// N's hiccup sparing turn N+1's genuinely dead thread.
+	m.st.Draft = "-@claude next brief"
+	m.dispatch()
+
+	if _, ok := m.failure[model.VendorClaude]; ok {
+		t.Errorf("last turn's failure classification survived into this turn: %v",
+			m.failure[model.VendorClaude])
+	}
+}
+
+// TestADeadProcessExitCannotUnclassifyATransientTurn.
+//
+// A failed turn produces TWO events — the vendor's own failure, then the process
+// exit carrying its stderr — and the second one has no classification on it. The
+// ninth amendment already established that the second must not overwrite the
+// first's WORDS; the same is true of its verdict, for the same reason: only one
+// of the two events knows anything.
+func TestADeadProcessExitCannotUnclassifyATransientTurn(t *testing.T) {
+	m := turnModel(false)
+	m.st.Columns[0].Restored = true
+	m.sessions[model.VendorClaude] = "claude-sess-1"
+	m.unproven[model.VendorClaude] = true
+
+	m.applyEvents([]runner.Event{
+		{
+			Vendor: model.VendorClaude, Kind: runner.KindError, EndsTurn: true,
+			Failure: runner.FailureVendorUnavailable, Note: "the service is currently unavailable",
+		},
+		{
+			Vendor: model.VendorClaude, Kind: runner.KindError,
+			Note: "exit status 1", ExitCode: 1,
+		},
+	})
+
+	if id := m.sessions[model.VendorClaude]; id != "claude-sess-1" {
+		t.Errorf("the process exit downgraded the turn's classification and spent the id: %q", id)
+	}
+}
+
+// TestTheLostThreadCardIsACardGolden pins the shape San asked for: a short calm
+// title a reader takes in at a glance, with the mechanics demoted underneath.
+//
+// The frame is what this is about. The previous version was one sentence
+// carrying an outcome and a mechanism, opened by a ⚠, wrapping to three lines of
+// uniform weight in a 37-cell column — three columns of that is a room that
+// looks like it is on fire over a seat that simply starts a new session.
+func TestTheLostThreadCardIsACardGolden(t *testing.T) {
+	st := room()
+	st.Turn = 4
+	st.Columns[0].Phase = PhaseFailed
+	st.Columns[0].TurnN = 4
+	st.Columns[0].Prompt = "what changed in the runner?"
+	st.Columns[0].Note = "thread not restored — starting fresh"
+	st.Columns[0].NoteDetail = "the first turn on the saved thread failed, so this seat " +
+		"let it go. your next brief opens a new session, with the brief re-applied."
+	st.Columns[0].NoteCalm = true
+
+	got := render(st)
+	if !strings.Contains(got, "thread not restored") {
+		t.Error("the card lost its title")
+	}
+	// No warning mark on this card. The glyph has to keep meaning "something
+	// went wrong" for the notes where something did.
+	if strings.Contains(got, "⚠ thread not restored") {
+		t.Error("the calm card is still drawn as a warning")
+	}
+	golden(t, "thread-lost", got)
+
+	// The same distinction under --ascii, where the mark would be "!" and the
+	// weight is not rendered at all — so the words are carrying it alone, which
+	// is the case this repo's rules are actually written for.
+	a := Render(st, PlainStyles(), GlyphsFor(true))
+	if strings.Contains(a, "! thread not restored") {
+		t.Error("the calm card grew an ascii warning mark")
+	}
+	if !strings.Contains(a, "thread not restored") {
+		t.Error("the title did not survive --ascii")
+	}
 }

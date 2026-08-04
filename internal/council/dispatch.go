@@ -134,6 +134,7 @@ func (m *Model) dispatch() tea.Cmd {
 		// fails to dispatch for an unrelated reason — would suppress the next
 		// turn's genuine failure note.
 		delete(m.threadLost, c.Vendor)
+		delete(m.failure, c.Vendor)
 		if !route.addresses(c.Vendor) {
 			// Not in this turn. Its previous reply stays on screen, because
 			// that is still the last thing this vendor said — but the note
@@ -231,6 +232,13 @@ func (m *Model) dispatch() tea.Cmd {
 			c.startTurn(next, echo, quoting)
 			c.Phase = PhaseFailed
 			c.Note = f.note
+			// No process was ever started, so the vendor was never asked about
+			// the conversation. That is the pre-flight class in its strongest
+			// form — one step earlier than the stderr cases, which at least got
+			// as far as the binary — and it is why a seat that cannot be
+			// dispatched at all no longer forfeits a saved thread it was never
+			// given the chance to use.
+			m.failure[c.Vendor] = runner.FailurePreflight
 			// This column never reaches finishColumn — it never entered a live
 			// phase — so its restored thread is settled here instead. Without
 			// this, a seat that could not be dispatched at all would keep a
@@ -446,6 +454,14 @@ func (m *Model) applyEvents(batch []runner.Event) {
 					c.Note = ev.Err.Error()
 				}
 			}
+			// Recorded on the same terms the note is, and for the same reason a
+			// dead thread's two events must not overwrite each other: a turn
+			// that produced one classified failure has been classified, and a
+			// later Unclassified process exit carrying the same failure's stderr
+			// must not erase it. Only an upgrade lands.
+			if ev.Failure != runner.FailureUnclassified {
+				m.failure[ev.Vendor] = ev.Failure
+			}
 			if m.isPersistent(ev.Vendor) {
 				if ev.EndsTurn {
 					// The vendor reported the turn failed. On a persistent seat
@@ -516,11 +532,23 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 // settleRestoredThread decides the fate of a session id that came back from a
 // saved room and has now had its first turn.
 //
-// One rule for all four seats, deliberately. A restored id fails in exactly one
-// observable way — the vendor cannot find the conversation and the turn dies —
-// and no adapter reports that as anything a caller could branch on, so the only
-// honest signal available is "the first turn on this restored id did not come
-// back". Handling that per vendor would mean four copies of the same guess.
+// One rule for all four seats, deliberately. The DEFAULT is still one attempt:
+// a restored id whose first turn fails is dropped, because retrying a genuinely
+// dead id rebuilds the same doomed invocation on every turn for the life of the
+// room, and that wedge is the hole the ninth amendment closed.
+//
+// What the sixteenth amendment adds is one exception, and it is narrow on
+// purpose. The one-attempt rule was written when no adapter reported anything a
+// caller could branch on. Two signals have since been captured that say the
+// vendor never reached the conversation at all — a pre-flight refusal, and agy's
+// own 503 — and against those the rule was spending a whole conversation on a
+// hiccup. Where the failure is classified transient the id stays on probation
+// for the next turn, which is exactly the treatment a CANCELLED turn already
+// gets and for the same stated reason: nothing was learned about the thread.
+//
+// An unclassified failure is unchanged. The asymmetry is deliberate — a wedged
+// seat retrying a dead id forever is worse than a lost conversation — so the
+// exception fires only on positive evidence, never on the absence of it.
 //
 // Ids EARNED in this process are never touched here. A transient failure in the
 // middle of a working conversation must not throw the thread away; the whole
@@ -529,14 +557,27 @@ func (m *Model) settleRestoredThread(c *Column) {
 	if !m.unproven[c.Vendor] {
 		return
 	}
-	switch c.Phase {
-	case PhaseDone:
+	switch {
+	case c.Phase == PhaseDone:
 		// It answered, so the thread is real. From here this is an ordinary
 		// session and the probation is over.
 		delete(m.unproven, c.Vendor)
-	case PhaseCancelled:
+	case c.Phase == PhaseCancelled:
 		// The user stopped it. Nothing was learned about the thread either way,
 		// so it stays on probation rather than being discarded for a keystroke.
+	case m.failure[c.Vendor].Transient():
+		// The turn failed for a reason that is known not to be about the
+		// conversation: the vendor refused before any model call, or reported
+		// its own service unavailable. Treated exactly as a cancellation —
+		// nothing was learned, so nothing is forfeited — and the seat keeps its
+		// probation, so the NEXT failure still costs it the id if that one is
+		// unclassified.
+		//
+		// The seat says nothing special here. The failure already put the
+		// vendor's own actionable sentence in c.Note ("not signed in —
+		// authenticate this vendor…"), and adding "your thread survived" beside
+		// it would be the room congratulating itself in the middle of somebody
+		// else's error message.
 	default:
 		// The first turn on a restored id failed. Drop the id: retrying it would
 		// rebuild the same dead invocation on every subsequent turn, and the
@@ -562,15 +603,24 @@ func (m *Model) settleRestoredThread(c *Column) {
 		// restored id is not evidence that the history is gone; agy turns fail
 		// transiently for reasons that have nothing to do with the conversation.
 		//
-		// The MECHANISM is deliberately unchanged — one failed turn still drops
-		// the id, for the reasons the ninth amendment gives at length, and no
-		// new signal is invented to distinguish these cases because none was
-		// observed. Only the CLAIM is narrowed, to the three things that are
-		// actually known: the turn failed, the seat let the id go, and here is
-		// what happens next.
-		c.Note = "the first turn on the restored thread failed — this seat has " +
-			"let the saved thread go, and the next brief starts a new session " +
-			"with the brief re-applied"
+		// The mechanism has since been narrowed rather than left alone: the
+		// transient case above now keeps the id (sixteenth amendment). Reaching
+		// HERE means the failure was not one of the two signals that have been
+		// captured, so nothing is known and the one-attempt default stands.
+		//
+		// The claim stays exactly as narrow as it was — the turn failed, the
+		// seat let the id go, here is what happens next — and it is now SHAPED
+		// as a card rather than delivered as one long warning sentence. The
+		// title is the outcome the user cares about and the mechanics hang
+		// under it, quieter, which is the grammar every other card in a column
+		// already uses. No warning mark: this is the same fact reattachCard
+		// states calmly at idle when no thread came back, discovered a turn
+		// later, and spending the ⚠ on it blunts the mark that carries real
+		// failures.
+		c.Note = "thread not restored — starting fresh"
+		c.NoteDetail = "the first turn on the saved thread failed, so this seat let it go. " +
+			"your next brief opens a new session, with the brief re-applied."
+		c.NoteCalm = true
 		m.threadLost[c.Vendor] = true
 	}
 }

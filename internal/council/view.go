@@ -771,7 +771,7 @@ func columnText(st State, c Column, w int, sty Styles, g Glyphs) []string {
 
 	if c.Note != "" {
 		out = append(out, "")
-		out = append(out, warnBlock(c.Note, w, sty, g)...)
+		out = append(out, noteCard(c.Note, c.NoteDetail, c.NoteCalm, w, sty, g)...)
 	}
 	return out
 }
@@ -918,7 +918,7 @@ func pastTurn(h TurnRecord, w int, sty Styles, g Glyphs) []string {
 		if len(out) > 0 {
 			out = append(out, "")
 		}
-		out = append(out, warnBlock(h.Note, w, sty, g)...)
+		out = append(out, noteCard(h.Note, h.NoteDetail, h.NoteCalm, w, sty, g)...)
 	}
 	return out
 }
@@ -1216,20 +1216,42 @@ func styleAll(lines []string, s lipgloss.Style) []string {
 	return lines
 }
 
-// warnBlock is a column's note: the failure reason, the cancellation, the "not
-// addressed in turn 2".
+// noteCard is a column's note: the failure reason, the cancellation, the "not
+// addressed in turn 2" — and, where there is one, the machinery behind it on a
+// quieter line underneath.
+//
+// One card grammar, the same one every other card in a column uses: a title
+// carrying the outcome, its body hanging under it. What a note may not be is a
+// paragraph — a single sentence that opens with an outcome and runs on into the
+// mechanism wraps to three lines of uniform weight in a 37-cell column, and a
+// reader scanning four seats has to read all three to learn which one matters.
 //
 // The mark carries the hue and the words carry the fact — the same split the
 // activity trace's outcome marks make, and the reason a note is legible with
-// colour switched off.
-func warnBlock(note string, w int, sty Styles, g Glyphs) []string {
-	lines := hangWrap(g.Warn+" ", note, w)
-	if len(lines) > 0 {
-		if rest, ok := strings.CutPrefix(lines[0], g.Warn); ok {
-			lines[0] = sty.SevWarn.Render(g.Warn) + rest
+// colour switched off. A CALM note drops the mark entirely rather than
+// substituting a quieter one: ⚠ means something went wrong, an outcome that is
+// merely news is not that, and a warning glyph spent on news is a warning glyph
+// the eye stops trusting. Nothing is lost by dropping it, because the words are
+// what carry the note in every glyph set already.
+func noteCard(note, detail string, calm bool, w int, sty Styles, g Glyphs) []string {
+	var out []string
+	if calm {
+		out = styleAll(wrap(note, w), sty.bold(sty.Text))
+	} else {
+		out = hangWrap(g.Warn+" ", note, w)
+		if len(out) > 0 {
+			if rest, ok := strings.CutPrefix(out[0], g.Warn); ok {
+				out[0] = sty.SevWarn.Render(g.Warn) + rest
+			}
 		}
 	}
-	return lines
+	if detail != "" {
+		// Muted and indented, on the unavailable card's reasoning: the reader
+		// came to this card for the line above, and the body is what they read
+		// only if the title made them want to.
+		out = append(out, styleAll(indentWrap("  ", detail, w), sty.Muted)...)
+	}
+	return out
 }
 
 // tabBar is the narrow-terminal alternative to side-by-side columns.

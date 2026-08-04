@@ -515,8 +515,41 @@ func (Antigravity) ParseEvent(line []byte) (runner.Event, bool) {
 			case al.Result.Response != "":
 				ev.Note = al.Result.Response
 			}
+			ev.Failure = agyFailureClass(al.Result.Error)
 		}
 		return ev, true
 	}
 	return runner.Event{}, false
+}
+
+// agyFailureClass answers one question about a failed agy turn: does it say
+// anything about the conversation the turn was resuming? (ADR-008, sixteenth.)
+//
+// One string qualifies, and it is quoted rather than paraphrased because it is
+// the whole evidence for the case. MEASURED 2026-08-04, agy 1.1.10, Windows:
+//
+//	Eligibility check failed: UNAVAILABLE (code 503): The service is currently
+//	unavailable.
+//
+// That capture arrived as a bare `result` with an EMPTY conversation_id — the
+// turn died before a thread was involved at all — which is what makes "this
+// claims nothing about the thread" a reading of the capture rather than an
+// inference from the words. Matching is on the vendor's own sentence and not on
+// the empty id, because a 503 raised on a turn that HAD reached a conversation
+// would be exactly as transient; the empty id is the corroboration, not the
+// test.
+//
+// Everything else agy fails with stays Unclassified, and the sentence it fails
+// with most often is the reason. "Agent execution terminated due to error." was
+// captured on a turn whose thread was demonstrably ALIVE (same conversation_id
+// back, step_index 10 → 11, num_turns 2) and is also what a genuinely dead
+// thread would plausibly produce. A string that appears on both sides of the
+// distinction cannot be evidence for either, so it is not read as either.
+func agyFailureClass(errText string) runner.FailureClass {
+	low := strings.ToLower(errText)
+	if strings.Contains(low, "eligibility check failed") &&
+		strings.Contains(low, "the service is currently unavailable") {
+		return runner.FailureVendorUnavailable
+	}
+	return runner.FailureUnclassified
 }

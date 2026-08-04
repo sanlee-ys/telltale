@@ -2674,11 +2674,51 @@ failed: UNAVAILABLE (code 503): The service is currently unavailable."* So agy t
 transiently for reasons that have nothing to do with the conversation, and "the history is
 gone" is a claim the evidence does not support.
 
-The behaviour is deliberately untouched: one failed turn still drops the id, for the reasons
-ADR-008's ninth amendment gives at length, and no new signal is invented to tell the two cases
-apart because none was observed. Only the sentence is narrowed, to the three things known — the
-first turn on the restored thread failed, the seat has let the saved thread go, and the next
-brief starts a new session with the brief re-applied.
+The behaviour was deliberately untouched at the time: one failed turn still dropped the id, for
+the reasons ADR-008's ninth amendment gives at length, and no new signal was invented to tell
+the two cases apart because none had been observed. Only the sentence was narrowed, to the
+three things known — the first turn on the restored thread failed, the seat has let the saved
+thread go, and the next brief starts a new session with the brief re-applied.
+
+**That is now out of date, and the evidence above is what dated it** (ADR-008, sixteenth
+amendment). The paragraph declined to change the rule on the ground that a record is not a fix,
+which was right — and left a measurement sitting beside a rule it contradicted. The rule's
+default is unchanged: a restored id whose first turn fails is dropped, because a seat retrying
+a genuinely dead id rebuilds the same doomed invocation on every turn for the life of the room.
+What changed is that a failure which is **identifiably transient** is now treated exactly as a
+cancellation already is — nothing was learned about the thread, so nothing is forfeited, and
+the seat stays on probation so the next unclassified failure still costs it the id.
+
+Two classes qualify, and both are positive evidence that the vendor never reached the
+conversation. **Pre-flight**: the failures `failureNote` already classifies off captured stderr
+— not signed in, an untrusted workspace, a sandbox the vendor's own config demands and its own
+help refuses, a binary that vanished — each documented at its case as exiting before any model
+call; and, one step earlier, a dispatch that never started a process at all. **Vendor-reported
+outage**: the 503 quoted above, matched on agy's own sentence, with the capture's empty
+`conversation_id` as the corroboration that it died before a thread was involved.
+
+Everything else still drops, and the asymmetry is deliberate — a lost conversation costs one
+conversation, a wedged seat costs every turn of the room. Claude and Codex get nothing
+vendor-specific here: neither has a measured transient signal, only measured *dead-thread*
+strings pointing the other way, and their behaviour is unchanged. agy's commonest failure
+sentence — *"Agent execution terminated due to error."* — is deliberately **not** classified,
+because it was captured on a demonstrably live thread and is also what a dead one would
+plausibly produce, and a string on both sides of a distinction is evidence for neither.
+
+The classification is produced where the evidence is (the runner's stderr classifier, the
+adapters' result parsers) and travels on the event as a small enum. It is never re-derived by
+matching the rendered note: that note is prose written for a narrow column, and keying a
+mechanism off it would make every wording change a silent behaviour change. It lives on `Model`
+and never on `State` — a decision input the renderer has no business reaching.
+
+**The card that says this changed shape too.** One ⚠ plus a single sentence carrying an outcome
+and a mechanism wraps to three lines of uniform weight in a 37-cell column, and three of those
+side by side reads as a room on fire over a seat that will simply start a new session. It is
+now §9.11's card grammar: a short title — *thread not restored — starting fresh* — with the
+mechanics hanging under it, quieter, and **no warning mark**. That is the same fact
+`reattachCard` already states calmly at idle when no thread came back, learned a turn later;
+the ⚠ has to go on meaning *something went wrong* for the notes where something did. The words
+carry the card in every glyph set, so `--ascii` loses nothing.
 
 **A side measurement, separately labelled, with its confound stated.** Under `--mode plan
 --sandbox`, agy's `run_command` was refused with *"granting access to C:\: Access is denied."*,

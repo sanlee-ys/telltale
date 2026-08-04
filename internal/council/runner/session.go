@@ -146,7 +146,7 @@ func StartSession(ctx context.Context, spec Spec, out chan<- Event, parse ParseF
 		if waitErr != nil {
 			ev.Kind = KindError
 			ev.Err = waitErr
-			ev.Note = failureNote(waitErr, errTail.String())
+			ev.Note, ev.Failure = failureNote(waitErr, errTail.String())
 		}
 		if code := cmd.ProcessState.ExitCode(); code >= 0 {
 			ev.ExitCode = code
@@ -155,6 +155,7 @@ func StartSession(ctx context.Context, spec Spec, out chan<- Event, parse ParseF
 			ev.Kind = KindDone
 			ev.Err = nil
 			ev.Note = ""
+			ev.Failure = FailureUnclassified
 		}
 		s.markClosed()
 		select {
