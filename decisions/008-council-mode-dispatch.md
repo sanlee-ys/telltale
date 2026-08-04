@@ -195,7 +195,7 @@ So `telltale council --write` exists, and it is honest about what it is:
 | | read posture | write posture |
 |---|---|---|
 | Claude | `--disallowedTools <list>` | deny list dropped, `--permission-mode acceptEdits` |
-| Codex | `-s read-only` | `-s workspace-write` (which also un-breaks it) |
+| Codex | `-s read-only` | ~~`-s workspace-write` (which also un-breaks it)~~ *— the parenthetical is FALSE on Windows and was never run; see the twelfth amendment* |
 | Antigravity | `--mode plan --sandbox` | both dropped |
 
 Three decisions inside that table are worth stating:
@@ -931,6 +931,99 @@ was a property of the room. No measurement could have caught it, because every m
 was true; the user saying the same sentence three times is what caught it, and that is a
 measurement too.
 
+### Amendment, 2026-08-04 (twelfth): the crippled seat could not read, and the fix is to stop asking
+
+The third amendment named three seats and called them "one contained seat, one crippled seat,
+one open seat". It fixed the open one and left the crippled one described. This closes it.
+
+**The complaint, from a live room.** Asked for thoughts on the repo council was pointed at, the
+Codex column answered:
+
+> I could not inspect the repository because local command execution was denied.
+
+San's verdict on the seat, unabridged: *"codex cant inspect the repository — which is
+retarded."* He is right, and the interesting part is that every word in this ADR about that
+seat was already true. Nothing was misdescribed. The seat was accurately documented as unable
+to run anything, for four amendments, and the accuracy is what let it sit there.
+
+**The re-probe.** codex-cli 0.146.0 (unchanged from the 2026-08-04 spike — the version was
+checked first, in case the surface had moved), Windows 11, a throwaway directory, one turn per
+mode, each asked merely to LIST the directory and print a text file.
+
+| | claim | strength |
+|---|---|---|
+| `codex features list` | `experimental_windows_sandbox` and `elevated_windows_sandbox` both still `removed` | Unchanged from prior measurement |
+| `-s read-only` | Three shell attempts, three spawn failures, `exit_code -1`. Codex's own summary: *"Both shell calls failed while launching `pwsh.exe`"* | **Re-measured**, reproduces exactly |
+| `-s workspace-write` | Three attempts, three spawn failures, byte-identical error | **Newly measured — and it REFUTES this ADR** |
+| `-s danger-full-access` | `exit_code 0`, a real directory listing, and the file's real contents | **Newly measured** |
+| `-c sandbox_permissions=[…]` | "Error loading config.toml: unknown configuration field `sandbox_permissions`" | **Newly measured** — the middle setting does not exist |
+| Host-sandbox confound | The read-only probe re-run with the harness's own process sandbox disabled failed identically | **Controlled for** |
+
+The failure is one line, and it is the same line in both sandboxed modes:
+
+```
+windows sandbox: runner failed during SpawnChild: CreateProcessAsUserW failed: 5
+(Access is denied.) | cwd=… | si_flags=256 | creation_flags=525312 (Windows error 5)
+```
+
+**What this refutes.** The third amendment's write-posture table says Codex gets
+`-s workspace-write` "(which also un-breaks it)". It does not. That parenthetical was an
+inference nobody ran, and because it was never run, **`--write` was broken on Windows for this
+seat too** — silently, for as long as the flag has existed. A test named
+`TestCodexWritePostureAlsoUnbreaksIt` passed the entire time, because it asserted the argv it
+was handed rather than the sentence in its own title. This file's oldest lesson — *a flag's
+name is not evidence of its effect* — now has a sixth costume: **a flag's name was not even
+involved. A plain claim about the world sat in a table, cited by later work, checked by a test
+that could not see it.** That is the fifth amendment's "a test can hold a false claim in place"
+and the eleventh's "the object was wrong", arriving together.
+
+**The ruling.** On Windows, both postures pass `-s danger-full-access`. macOS and Linux are
+untouched: `-s read-only` is genuinely OS-enforced there and still reads `ro:enforced`.
+
+Three things make that the right call rather than a capitulation:
+
+- **There is no third option.** Not a preference between a safe mode and a fast one — the two
+  sandboxed modes cannot start a process, and the documented read-permission escalation is not
+  a field this build knows. The choice is a seat that reads or a seat that does nothing.
+- **The read-only posture was never the containment; the workspace is.** That is the third
+  amendment's own ruling, and the fleet contract settles it independently: **agent-ops ADR-012
+  rules capability parity — all vendors read and write, and guard wiring rather than lane shape
+  is the control.** A seat kept mute by a broken sandbox was never a safety property. It was a
+  defect wearing one's clothes.
+- **Read and write collapse to one flag here, on purpose.** Grading them would imply a safety
+  difference that does not exist — the same reasoning the third amendment used to give every
+  write column one uniform badge.
+
+**What the badge now claims, and what it refuses to claim.** This seat renders `unsandboxed` on
+Windows — reusing the level added for Antigravity, whose whole design point is that it breaks
+the `ro:` prefix because a reader scanning column headers takes in the prefix before the
+qualifier. The detail says: *no sandbox on Windows; `-s danger-full-access` is passed so this
+column can read at all; both sandboxed modes were measured failing every process spawn, reads
+included; the workspace above is the containment, not a flag.*
+
+It refuses to claim, in any wording: that this column is read-only, that it is restricted, or
+that council asked for anything it did not get. **The badge got worse and more true at the same
+time, which is the trade this repo exists to make.** A `ro:` prefix on a seat invoked
+`danger-full-access` would be the one false claim in this room that somebody would actually
+rely on, because it is the one they would check before pointing council at a repo they cared
+about.
+
+**Two implementation notes that are contract, not detail.** The spawn path and the resume path
+derive the mode from **one function**, because they take different flags (`-s` is rejected by
+resume, `-c` is not) and are therefore the classic place for a posture to drift — a resume
+carrying a weaker mode would change what the seat can do on turn 2 and present as a column that
+answers once and goes quiet. And the OS is a **parameter**, not a `runtime.GOOS` read inside the
+branch, so both branches are tested on either machine; the Windows branch is the measured half,
+and a test that could only run on Windows would be the half nobody checks.
+
+**The honest residuals.** Whether `-c sandbox_mode=` changes behaviour on the resume path is
+*still* unobserved — the key is accepted and its effect was never separately visible, because
+until now every mode failed identically. And `--dangerously-bypass-approvals-and-sandbox` is
+still refused in both postures: it is not a synonym for `danger-full-access`. It also skips
+approvals and hook trust, which is a larger grant than "let this column read", and the
+distinction is exactly the one the fifth and seventh amendments drew around every other
+skip-permissions flag in this file.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude
@@ -939,6 +1032,15 @@ before the Codex and Antigravity columns land: the Codex `--json` event schema a
 granularity, whether `codex -s read-only` actually engages on Windows, and Antigravity's
 stream-json schema, conversation-id location, stdin support and `--sandbox` semantics. Those
 columns render honest *requested* badges until the spike says otherwise.
+
+**"Whether `codex -s read-only` actually engages on Windows" is CLOSED, and closed the other
+way** (twelfth amendment). It does not engage in any useful sense: it fails every process
+spawn, reads included, and so does `-s workspace-write`. Codex on Windows is invoked
+`-s danger-full-access` and badged `unsandboxed` — no *requested* badge survives on that seat
+on that OS. What is still owed here is narrower than what was closed: whether the
+`-c sandbox_mode=` override changes behaviour on the **resume** path. The key is accepted;
+until this change every mode failed identically, so there was nothing an effect could have
+shown up against.
 
 **Cursor stopped being the standing exception on 2026-08-04.** It was signed in, four turns ran,
 and the tenth amendment records what each of them changed. The four questions this paragraph used

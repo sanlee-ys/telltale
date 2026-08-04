@@ -535,11 +535,21 @@ func TestCursorGranularityIsMeasuredTokens(t *testing.T) {
 // TestNoVendorClaimsUnverifiedEnforcement is the ADR-008 §3 correction, pinned.
 //
 // Codex may only claim OS-level enforcement where it has been verified. On
-// Windows it must downgrade to "requested" — claiming a sandbox we have not
-// seen engage is exactly the overstatement this repo refuses.
+// Windows it claims nothing at all: council passes -s danger-full-access there,
+// because both sandboxed modes were measured failing every process spawn, reads
+// included (ADR-008, twelfth amendment). Claiming a sandbox we have not seen
+// engage is exactly the overstatement this repo refuses — and so is claiming a
+// requested one on an invocation that requests nothing.
 func TestNoVendorClaimsUnverifiedEnforcement(t *testing.T) {
-	if got := sandboxFor(model.VendorCodex, true).Level; got != SandboxRequested {
-		t.Errorf("codex on windows claims %v, want SandboxRequested", got)
+	if got := sandboxFor(model.VendorCodex, true).Level; got != SandboxNone {
+		t.Errorf("codex on windows claims %v, want SandboxNone", got)
+	}
+	// The badge is the load-bearing half of that. This seat renders
+	// `unsandboxed` on Windows, and an ro: prefix would be a read-only claim on
+	// a column invoked with danger-full-access — the worst false badge this
+	// room could carry, since it is the one San would trust to be looking.
+	if got := sandboxFor(model.VendorCodex, true).Badge(); strings.HasPrefix(got, "ro:") {
+		t.Errorf("codex badge on windows is %q; it is invoked unsandboxed and must not wear an ro: prefix", got)
 	}
 	if got := sandboxFor(model.VendorCodex, false).Level; got != SandboxEnforced {
 		t.Errorf("codex on unix claims %v, want SandboxEnforced", got)

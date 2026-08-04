@@ -17,7 +17,10 @@ func TestCodexFlagsMatchTheInstalledCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, want := range []string{"exec", "--json", "-s", "read-only", "--skip-git-repo-check", "--cd"} {
+	// The sandbox VALUE is per-OS and is pinned by TestCodexPostureIsPerOS on
+	// both branches; asserting a literal here would pass on one machine and fail
+	// on the other while telling neither anything about the flag's shape.
+	for _, want := range []string{"exec", "--json", "-s", sandboxFor(PostureRead), "--skip-git-repo-check", "--cd"} {
 		if !slices.Contains(spec.Args, want) {
 			t.Errorf("missing %q in %v", want, spec.Args)
 		}
@@ -75,17 +78,26 @@ func TestCodexPromptNeverEntersArgv(t *testing.T) {
 	}
 }
 
-// TestCodexReadOnlySandboxIsRequested pins the posture flag. The badge this
-// backs says "requested", not "enforced" — see the sandboxMode comment for the
-// evidence — but if the flag itself vanished, even that claim would be false.
-func TestCodexReadOnlySandboxIsRequested(t *testing.T) {
-	spec := mustCodexFirst(t, "brief")
-	i := slices.Index(spec.Args, "-s")
-	if i < 0 || i+1 >= len(spec.Args) {
-		t.Fatalf("no -s sandbox flag in %v", spec.Args)
-	}
-	if spec.Args[i+1] != "read-only" {
-		t.Errorf("sandbox = %q, want read-only", spec.Args[i+1])
+// TestCodexSandboxFlagIsAlwaysPassed pins that a posture reaches the CLI at all.
+//
+// It deliberately asserts the WIRING and not the value: what the value should be
+// differs per OS and is pinned on both branches by TestCodexPostureIsPerOS. If
+// -s ever went missing, codex would fall back to its own configured default and
+// the column's badge would be describing an invocation council did not make —
+// which is the failure this whole file exists to prevent, in either direction.
+func TestCodexSandboxFlagIsAlwaysPassed(t *testing.T) {
+	for _, p := range []Posture{PostureRead, PostureWrite} {
+		spec, err := Codex{}.FirstTurn("brief", `C:\ws`, `C:\bin\codex.cmd`, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		i := slices.Index(spec.Args, "-s")
+		if i < 0 || i+1 >= len(spec.Args) {
+			t.Fatalf("no -s sandbox flag in %v", spec.Args)
+		}
+		if got, want := spec.Args[i+1], sandboxFor(p); got != want {
+			t.Errorf("posture %v sandbox = %q, want %q", p, got, want)
+		}
 	}
 }
 
@@ -110,16 +122,20 @@ func TestCodexResumeDoesNotUseFirstTurnOnlyFlags(t *testing.T) {
 }
 
 // TestCodexResumeCarriesTheSandboxPostureViaConfig: since -s is rejected, the
-// read-only posture rides on -c instead. `sandbox_mode` was confirmed to be a
-// real configuration field with --strict-config, which rejects unknown keys.
+// posture rides on -c instead. `sandbox_mode` was confirmed to be a real
+// configuration field with --strict-config, which rejects unknown keys.
+//
+// The value is again taken from the spawn path rather than written out, because
+// the thing worth pinning is that the two AGREE — see
+// TestCodexResumeCarriesTheSamePostureAsSpawn for the per-OS matrix.
 func TestCodexResumeCarriesTheSandboxPostureViaConfig(t *testing.T) {
 	spec := mustCodexNext(t, "follow up", "019fca5f-2bbd-7541-a6dc-5917f32b5567")
 	i := slices.Index(spec.Args, "-c")
 	if i < 0 || i+1 >= len(spec.Args) {
 		t.Fatalf("no -c config override in %v", spec.Args)
 	}
-	if !strings.Contains(spec.Args[i+1], "sandbox_mode") || !strings.Contains(spec.Args[i+1], "read-only") {
-		t.Errorf("config override = %q, want a read-only sandbox_mode", spec.Args[i+1])
+	if !strings.Contains(spec.Args[i+1], "sandbox_mode") || !strings.Contains(spec.Args[i+1], sandboxFor(PostureRead)) {
+		t.Errorf("config override = %q, want sandbox_mode=%q", spec.Args[i+1], sandboxFor(PostureRead))
 	}
 }
 
