@@ -20,6 +20,26 @@ import (
 // conversation continued.
 var ErrNoResume = errors.New("vendors: no session to resume")
 
+// Posture is how much the room lets a vendor do.
+//
+// Two values, and the distinction is real rather than cosmetic. Council's
+// read-only default is a per-INVOCATION choice about what this tool asks for;
+// it is not a claim about what the vendor is capable of. The fleet contract
+// (agent-ops ADR-012) rules that all four vendors read and write, and that
+// guard wiring rather than lane shape is the control — so nothing here may be
+// read as "this vendor is read-only".
+type Posture uint8
+
+const (
+	// PostureRead asks each vendor for the most read-only invocation it
+	// actually honours. What that buys differs per vendor and is stated on
+	// screen per column rather than claimed once for the room.
+	PostureRead Posture = iota
+	// PostureWrite drops those requests. The containment then is the WORKSPACE
+	// — which directory council was pointed at — not a flag.
+	PostureWrite
+)
+
 // Vendor is one seat at the table.
 type Vendor interface {
 	ID() model.VendorID
@@ -28,11 +48,11 @@ type Vendor interface {
 	// other vendor's answer in it. That isolation is what makes the three
 	// opinions independent rather than anchored, so it is a property of the
 	// interface rather than a convention callers are trusted to follow.
-	FirstTurn(prompt, workspace, binary string) (runner.Spec, error)
+	FirstTurn(prompt, workspace, binary string, p Posture) (runner.Spec, error)
 
 	// NextTurn resumes the vendor's own session. Only the new prompt is sent;
 	// the vendor replays its own history.
-	NextTurn(prompt, workspace, binary, sessionID string) (runner.Spec, error)
+	NextTurn(prompt, workspace, binary, sessionID string, p Posture) (runner.Spec, error)
 
 	// ParseEvent converts one line of stdout. Returning false drops the line,
 	// which is how a parser ignores event types it does not model instead of

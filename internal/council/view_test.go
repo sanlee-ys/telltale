@@ -595,3 +595,34 @@ func TestElapsedIsPureOverState(t *testing.T) {
 		t.Errorf("elapsed not derived from State.Now")
 	}
 }
+
+// TestWriteModeIsLoudAndPersistent. Widening what three agents may do to a
+// working tree is session state, so its marker is chrome rather than a notice:
+// a notice scrolls away and a badge can be missed while reading a column.
+func TestWriteModeIsLoudAndPersistent(t *testing.T) {
+	st := room()
+	st.Write = true
+	for i := range st.Columns {
+		st.Columns[i].Sandbox = SandboxClaim{Level: SandboxWrite, Detail: "started with --write"}
+	}
+
+	got := render(st)
+	if !strings.Contains(got, "WRITE") {
+		t.Error("write mode is not marked in the header")
+	}
+	if strings.Contains(got, "ro:") {
+		t.Error("a write-mode room still advertises a read-only posture somewhere")
+	}
+	if strings.Count(got, "WRITES") != 3 {
+		t.Error("not every column carries the write badge; grading them would imply a safety difference that does not exist")
+	}
+	golden(t, "write-mode", got)
+}
+
+// TestReadModeSaysNothingAboutWriting is the other direction: the loud marker
+// must not leak into the default room.
+func TestReadModeSaysNothingAboutWriting(t *testing.T) {
+	if got := render(room()); strings.Contains(got, "WRITE") {
+		t.Error("the default room claims write mode")
+	}
+}

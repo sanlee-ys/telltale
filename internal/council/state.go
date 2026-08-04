@@ -92,6 +92,9 @@ const (
 	// that at least attempt something would imply a posture this vendor does
 	// not have.
 	SandboxNone
+	// SandboxWrite: the room was started with --write and no read-only posture
+	// was requested at all.
+	SandboxWrite
 )
 
 // SandboxClaim is one column's posture, as a claim we are willing to defend.
@@ -234,6 +237,16 @@ type State struct {
 
 	Help bool
 
+	// Write reports that this room was started with --write: vendors are asked
+	// for their widest posture rather than their most read-only one.
+	//
+	// A session-level flag rather than a toggle, on purpose. Widening what
+	// three agents may do to a working tree is a decision about how the room
+	// was OPENED, and one that should be visible in the command the user typed
+	// and in the header for the whole session — not something reachable by a
+	// keystroke mid-conversation.
+	Write bool
+
 	// Expanded gives the focused column the whole width.
 	//
 	// Three columns are for comparing at a glance; one is for actually reading
@@ -308,6 +321,10 @@ func (c SandboxClaim) Badge() string {
 		return "ro:enforced"
 	case SandboxRequested:
 		return "ro:requested"
+	case SandboxWrite:
+		// Shouted, and without an "ro:" prefix for the same reason SandboxNone
+		// drops it: the prefix is what a hurried reader takes in first.
+		return "WRITES"
 	case SandboxNone:
 		// Deliberately not spelled with an "ro:" prefix. Every other badge
 		// begins that way, and a reader scanning three column headers reads the

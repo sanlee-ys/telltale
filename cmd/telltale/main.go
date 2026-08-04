@@ -159,6 +159,7 @@ func runCouncil(args []string) error {
 	dir := fs.String("cd", "", "workspace directory to dispatch turns against (default: cwd)")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
+	write := fs.Bool("write", false, "let vendors edit and run things in the workspace (see decisions/008)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -167,6 +168,7 @@ func runCouncil(args []string) error {
 		Dir:     *dir,
 		ASCII:   *ascii || os.Getenv("TELLTALE_ASCII") != "",
 		NoTitle: *noTitle,
+		Write:   *write,
 	})
 }
 
@@ -212,6 +214,10 @@ telltale hud flags:
 
 telltale council flags:
   --cd <dir>                  workspace to dispatch turns against (default: cwd)
+  --write                     let vendors edit files and run commands in that
+                              workspace. The workspace is the containment, not
+                              a flag — point --cd at a git worktree if that
+                              matters. The header says WRITE all session.
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
 

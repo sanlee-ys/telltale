@@ -21,6 +21,8 @@ type Options struct {
 	Dir     string
 	ASCII   bool
 	NoTitle bool
+	// Write starts the room in write posture. See State.Write.
+	Write bool
 }
 
 // Model is the Bubble Tea model. It owns State plus the things Render must not
@@ -67,6 +69,7 @@ func New(opts Options) *Model {
 func stateWith(opts Options) State {
 	st := NewState()
 	st.ASCII = opts.ASCII
+	st.Write = opts.Write
 	st.Now = time.Now()
 
 	// Resolved once, here, so the render path never reads the environment.
@@ -92,7 +95,7 @@ func stateWith(opts Options) State {
 			Avail:   info.Avail,
 			Binary:  info.Binary,
 			Note:    info.Note,
-			Sandbox: sandboxFor(info.Vendor, windows),
+			Sandbox: postureClaim(info.Vendor, windows, opts.Write),
 			Gran:    granularityFor(info.Vendor),
 			Phase:   PhaseIdle,
 			Follow:  true,

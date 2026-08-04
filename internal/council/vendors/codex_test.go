@@ -12,7 +12,7 @@ import (
 // binary's own behaviour, verified against codex-cli 0.146.0 rather than
 // remembered.
 func TestCodexFlagsMatchTheInstalledCLI(t *testing.T) {
-	spec, err := Codex{}.FirstTurn("brief", `C:\ws`, `C:\bin\codex.cmd`)
+	spec, err := Codex{}.FirstTurn("brief", `C:\ws`, `C:\bin\codex.cmd`, PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestCodexNextTurnResumesRatherThanResends(t *testing.T) {
 }
 
 func TestCodexNextTurnWithoutASessionRefuses(t *testing.T) {
-	if _, err := (Codex{}).NextTurn("p", "", "codex", ""); err != ErrNoResume {
+	if _, err := (Codex{}).NextTurn("p", "", "codex", "", PostureRead); err != ErrNoResume {
 		t.Errorf("err = %v, want ErrNoResume", err)
 	}
 }
@@ -150,7 +150,7 @@ func TestCodexNextTurnWithoutASessionRefuses(t *testing.T) {
 // TestCodexOmitsCdWhenThereIsNoWorkspace: `--cd` with an empty value would make
 // codex treat "" as a directory rather than defaulting sensibly.
 func TestCodexOmitsCdWhenThereIsNoWorkspace(t *testing.T) {
-	spec, err := Codex{}.FirstTurn("brief", "", "codex")
+	spec, err := Codex{}.FirstTurn("brief", "", "codex", PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestCodexParserSurvivesATruncatedStream(t *testing.T) {
 
 func mustCodexFirst(t *testing.T, prompt string) runner.Spec {
 	t.Helper()
-	s, err := Codex{}.FirstTurn(prompt, `C:\ws`, "codex")
+	s, err := Codex{}.FirstTurn(prompt, `C:\ws`, "codex", PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +294,7 @@ func mustCodexFirst(t *testing.T, prompt string) runner.Spec {
 
 func mustCodexNext(t *testing.T, prompt, sess string) runner.Spec {
 	t.Helper()
-	s, err := Codex{}.NextTurn(prompt, `C:\ws`, "codex", sess)
+	s, err := Codex{}.NextTurn(prompt, `C:\ws`, "codex", sess, PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}

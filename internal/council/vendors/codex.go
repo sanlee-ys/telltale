@@ -25,7 +25,7 @@ import (
 //     round, so a mistake here fails loudly rather than silently mis-parsing.
 //   - `codex exec` and `codex exec resume` do NOT take the same flags. Three
 //     flags the first turn relies on are rejected outright by resume. See
-//     resumeSandboxOverride.
+//     resumeOverrideFor(p).
 type Codex struct{}
 
 // Registry lives in vendor.go and this adapter deliberately does not edit it —
@@ -69,7 +69,24 @@ func (Codex) ID() model.VendorID { return model.VendorCodex }
 // known about whether the sandbox would have stopped it.
 const sandboxMode = "read-only"
 
-// resumeSandboxOverride carries the read-only posture onto the resume path.
+// writeSandboxMode is what write posture asks for.
+//
+// workspace-write rather than danger-full-access: the containment council
+// actually offers is the directory it was pointed at, so the vendor flag should
+// agree with that boundary instead of removing it. It also happens to UNBREAK
+// codex on Windows -- under read-only every sandboxed process spawn fails
+// outright, including one asked merely to list a directory, so the read posture
+// costs this vendor the ability to run anything at all.
+const writeSandboxMode = "workspace-write"
+
+func sandboxFor(p Posture) string {
+	if p == PostureWrite {
+		return writeSandboxMode
+	}
+	return sandboxMode
+}
+
+// resumeSandboxOverride carries the posture onto the resume path.
 //
 // This exists because `codex exec resume` rejects `-s/--sandbox` outright —
 // verified, not inferred: the CLI answers `error: unexpected argument '-s'
@@ -89,12 +106,21 @@ const sandboxMode = "read-only"
 // documented above every sandboxed spawn already fails on this machine.
 const resumeSandboxOverride = `sandbox_mode="read-only"`
 
-func (c Codex) FirstTurn(prompt, workspace, binary string) (runner.Spec, error) {
+// resumeOverrideFor mirrors sandboxFor through the -c channel, since resume
+// will not take -s.
+func resumeOverrideFor(p Posture) string {
+	if p == PostureWrite {
+		return `sandbox_mode="` + writeSandboxMode + `"`
+	}
+	return resumeSandboxOverride
+}
+
+func (c Codex) FirstTurn(prompt, workspace, binary string, p Posture) (runner.Spec, error) {
 	args := []string{
 		"exec",
 		"--json",
 		// -s is accepted here and ONLY here; resume rejects it.
-		"-s", sandboxMode,
+		"-s", sandboxFor(p),
 		// Council dispatches into whatever directory the user is sitting in,
 		// which is frequently not a git repo. Without this codex refuses to run
 		// at all rather than degrading.
@@ -119,7 +145,7 @@ func (c Codex) FirstTurn(prompt, workspace, binary string) (runner.Spec, error) 
 	}, nil
 }
 
-func (c Codex) NextTurn(prompt, workspace, binary, sessionID string) (runner.Spec, error) {
+func (c Codex) NextTurn(prompt, workspace, binary, sessionID string, p Posture) (runner.Spec, error) {
 	if sessionID == "" {
 		return runner.Spec{}, ErrNoResume
 	}
@@ -130,7 +156,7 @@ func (c Codex) NextTurn(prompt, workspace, binary, sessionID string) (runner.Spe
 	// the two positionals from being read in the wrong order.
 	args := []string{
 		"exec", "resume", sessionID,
-		"-c", resumeSandboxOverride,
+		"-c", resumeOverrideFor(p),
 		"--skip-git-repo-check",
 		"--json",
 		"-",
