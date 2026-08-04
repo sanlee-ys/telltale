@@ -21,6 +21,7 @@ type Glyphs struct {
 	Prompt   string // prompt line prefix
 	Up       string // "there is more above" marker
 	Down     string // "there is more below" marker
+	Act      string // prefixes a tool call / command in the activity trace
 
 	Spinner []string
 
@@ -45,6 +46,7 @@ func UnicodeGlyphs() Glyphs {
 		Prompt:   "›", // ›
 		Up:       "↑", // ↑
 		Down:     "↓", // ↓
+		Act:      "⚙", // ⚙
 		Spinner: []string{
 			"⠋", "⠙", "⠹", "⠸", "⠼",
 			"⠴", "⠦", "⠧", "⠇", "⠏",
@@ -63,10 +65,14 @@ func ASCIIGlyphs() Glyphs {
 		// Focus cannot be ">": that is already the ASCII ellipsis here, and a
 		// mark that also means "truncated" is not a mark. Same reasoning, and
 		// the same answer, as the HUD's cursor.
-		Focus:   "]",
-		Prompt:  ":",
-		Up:      "^",
-		Down:    "v",
+		Focus:  "]",
+		Prompt: ":",
+		Up:     "^",
+		Down:   "v",
+		// "*" for a step the vendor took. Not "#" (the HUD's ASCII gauge fill)
+		// and not ">" (the ellipsis here), because a mark that already means
+		// something else is not a mark.
+		Act:     "*",
 		Spinner: []string{"-", "\\", "|", "/"},
 	}
 }

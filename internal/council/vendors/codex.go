@@ -205,7 +205,27 @@ type codexLine struct {
 		Type   string `json:"type"`
 		Text   string `json:"text"`
 		Status string `json:"status"`
+		// command_execution carries the shell command, and this field name IS
+		// verified — a captured spike line holds
+		// `"command":"\"...pwsh.exe\" -Command Get-ChildItem"`, from the run
+		// where the Windows sandbox refused to spawn it. Parsed defensively
+		// anyway: when Command is empty the item type is shown instead, so the
+		// column still reports that the vendor did something.
+		Command string `json:"command"`
 	} `json:"item"`
+}
+
+// isCodexTool reports whether an item type represents the vendor ACTING.
+//
+// command_execution is the only one observed live; the rest are named from
+// codex's own item vocabulary and are unverified, which is safe in this
+// direction — an unlisted type is dropped rather than guessed at.
+func isCodexTool(t string) bool {
+	switch t {
+	case "command_execution", "file_change", "patch_apply", "mcp_tool_call", "web_search":
+		return true
+	}
+	return false
 }
 
 func (Codex) ParseEvent(line []byte) (runner.Event, bool) {
@@ -237,10 +257,25 @@ func (Codex) ParseEvent(line []byte) (runner.Event, bool) {
 			// would run two sentences together with no space.
 			return runner.Event{Kind: runner.KindText, Text: cl.Item.Text + "\n"}, true
 		}
-		// Every other item type is tool activity — command_execution was the one
-		// observed, carrying the shell command and its output. The room compares
-		// opinions, not tool traces, so it is dropped rather than rendered as if
-		// the vendor had said it.
+		// Every other item type is tool activity. It used to be dropped, on the
+		// reasoning that the room compares opinions rather than tool traces.
+		// That was right for a deliberation room and wrong for a command and
+		// control console: a column that runs three commands and then answers
+		// has to show both, and a vendor that reports nothing incremental is
+		// otherwise a blank panel for the whole turn.
+		//
+		// A WHITELIST rather than "anything that is not agent_message". The
+		// broad form swept up `reasoning` items (the model thinking, not
+		// acting) and empty agent_messages, both of which would render as
+		// phantom steps in the trace. An unrecognised item type is still
+		// dropped, so a future codex release cannot invent activity here.
+		if isCodexTool(cl.Item.Type) {
+			what := cl.Item.Command
+			if what == "" {
+				what = cl.Item.Type
+			}
+			return runner.Event{Kind: runner.KindActivity, Text: what}, true
+		}
 	case "turn.completed":
 		// The end-of-turn marker. It carries no text and no cost: codex reports
 		// only token counts, so unlike the Claude adapter there is no final-text

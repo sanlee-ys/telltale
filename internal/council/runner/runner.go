@@ -32,6 +32,12 @@ type EventKind uint8
 const (
 	// KindText is incremental output to append to a column.
 	KindText EventKind = iota
+	// KindActivity is what the vendor is DOING: a tool call, a shell command,
+	// a file edit. Distinct from KindText because it is not the vendor's
+	// opinion and must never be concatenated into its prose — a column that ran
+	// three commands and then answered should show both, and show which is
+	// which.
+	KindActivity
 	// KindSession carries the vendor's own session id, which is what makes the
 	// next turn a resume rather than a re-send.
 	KindSession
