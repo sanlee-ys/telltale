@@ -142,18 +142,214 @@ func TestAgyToolStepsAreNotAssistantText(t *testing.T) {
 		[]byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","step_index":0,"state":"DONE","step_type":"user_input"}}`),
 		[]byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","step_index":5,"state":"DONE","step_type":"system_message"}}`),
 	}
-	// Contract change, 2026-08-04: these steps are no longer DROPPED, they are
-	// surfaced as KindActivity so a command-and-control room can show what the
-	// vendor is doing. The invariant the original test protected is unchanged
-	// and is what is asserted here — tool chatter must never become the
-	// vendor's PROSE. It is now enforced by the event kind rather than by
-	// silence, which is stronger: the renderer draws the two differently.
+	// Contract change, 2026-08-04: the TOOL steps here are no longer DROPPED,
+	// they are surfaced as KindActivity so a command-and-control room can show
+	// what the vendor is doing. (The checkpoint, user_input and system_message
+	// lines are dropped again as of the same day, as plumbing rather than as
+	// chatter — see TestAgyPlumbingStepsNeverReachTheTrace.) The invariant the
+	// original test protected is unchanged and is what is asserted here — tool
+	// chatter must never become the vendor's PROSE. It is now enforced by the
+	// event kind rather than by silence, which is stronger: the renderer draws
+	// the two differently.
 	var a Antigravity
 	for _, l := range lines {
 		ev, ok := a.ParseEvent(l)
 		if ok && ev.Kind == runner.KindText {
 			t.Errorf("non-assistant step became assistant text: %+v: %s", ev, l)
 		}
+	}
+}
+
+// TestAgyPlumbingStepsNeverReachTheTrace.
+//
+// Every line here is verbatim from the live captures of 2026-08-04 (agy 1.1.10,
+// Windows) — the run whose room showed San `user_input ?`, `system_message ?`,
+// `checkpoint ?` and `unknown ?` and prompted "it's not something I need to see
+// from an end-user perspective".
+//
+// The suppression is an ALLOWLIST defended per kind, not a filter on what looks
+// noisy, and the asymmetry is the whole point: hiding a vendor's ACTIONS would
+// be a false gauge, hiding its plumbing is noise reduction. Note what each of
+// these lines does NOT carry — no tool_name, no tool_info, no parameters. That
+// is the evidence, and it is why this is not the same move as dropping a step
+// whose type we merely failed to recognise.
+//
+// It is asserted at the PARSER, because a step that is not an action must never
+// become one: council keeps Render pure over State, so filtering in the view
+// would leave a lie in the model.
+func TestAgyPlumbingStepsNeverReachTheTrace(t *testing.T) {
+	lines := map[string][]byte{
+		// turn 1, step 0 — the brief council itself just sent, echoed back.
+		"user_input": []byte(`{"event":"step_update","step_update":{"conversation_id":"14f3918c-ff9e-4962-81b9-357f5a658d1e","step_index":0,"state":"DONE","step_type":"user_input"}}`),
+		// turn 1, step 1 — 0.5ms, in the preamble, naming nothing.
+		"unknown": []byte(`{"event":"step_update","step_update":{"conversation_id":"14f3918c-ff9e-4962-81b9-357f5a658d1e","step_index":1,"state":"DONE","step_type":"unknown","duration_seconds":0.0005175}}`),
+		// turn 1, step 4 — a conversation bookmark, ~120 tokens, no workspace.
+		"checkpoint": []byte(`{"event":"step_update","step_update":{"conversation_id":"14f3918c-ff9e-4962-81b9-357f5a658d1e","step_index":4,"state":"DONE","step_type":"checkpoint","duration_seconds":0.553991,"usage":{"input_tokens":118,"output_tokens":5,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":123}}}`),
+		// turn 1, step 10 — an empty marker on a failing turn. Safe to drop only
+		// because the turn-level failure is reported by the result path with
+		// words; TestAgyResultErrorCarriesTheVendorsSentence is that check.
+		"error_message": []byte(`{"event":"step_update","step_update":{"conversation_id":"14f3918c-ff9e-4962-81b9-357f5a658d1e","step_index":10,"state":"DONE","step_type":"error_message"}}`),
+		// the resume turn, step 12 — agy placing its own message in the thread.
+		"system_message": []byte(`{"event":"step_update","step_update":{"conversation_id":"14f3918c-ff9e-4962-81b9-357f5a658d1e","step_index":12,"state":"DONE","step_type":"system_message"}}`),
+	}
+	var a Antigravity
+	for kind, l := range lines {
+		if ev, ok := a.ParseEvent(l); ok {
+			t.Errorf("%s reached the trace as %+v; it is conversation plumbing, "+
+				"and the room renders it as a gear icon with a shrug next to it", kind, ev)
+		}
+	}
+}
+
+// TestAgyUnknownStepCarryingAToolIsNotSuppressed is the reversal condition for
+// the one suppressed kind that had to be argued rather than listed.
+//
+// `unknown` is agy's own label, and suppressing a step merely because THIS
+// adapter does not recognise its type would be the same class of mistake as
+// inventing an outcome for it. The captured `unknown` steps are plumbing on the
+// evidence — fixed preamble slot, half a millisecond, no tool name, no
+// parameters — so they are dropped. But the decision is gated on that shape
+// rather than on the label, so if agy ever starts ACTING through this type the
+// trace shows it the same turn.
+//
+// This line is the one fixture in this file that is NOT a capture: no observed
+// `unknown` step carries a tool. It is written to pin the reversal, and it is
+// labelled so nobody later mistakes it for evidence that agy emits this.
+func TestAgyUnknownStepCarryingAToolIsNotSuppressed(t *testing.T) {
+	line := []byte(`{"event":"step_update","step_update":{"conversation_id":"14f3918c","step_index":1,"state":"ACTIVE","step_type":"unknown","tool_name":"run_command","tool_info":{"name":"run_command","parameters":{"CommandLine":"go test ./..."}}}}`)
+	ev, ok := Antigravity{}.ParseEvent(line)
+	if !ok || ev.Kind != runner.KindActivity || len(ev.Acts) != 1 {
+		t.Fatalf("an `unknown` step that named a tool was suppressed: (%+v, %v)", ev, ok)
+	}
+	if ev.Acts[0].Text != "run_command: go test ./..." {
+		t.Errorf("Text = %q, want the tool it named", ev.Acts[0].Text)
+	}
+}
+
+// TestAgyToolStepsCarryTheirRealName: agy's tool names were on the wire the
+// whole time and the adapter was rendering `al.StepUpdate.StepType` — the
+// literal string "tool" — so every real call read as a bare `tool ?`.
+//
+// This is ADR-008's tenth amendment repeating itself: Cursor's `tool_call.tool.
+// case` lookup matched nothing because the oneof arrives FLATTENED to a key, and
+// every trace entry read "tool call". Same bug, same cause — the fields the
+// vendor sends were never compared against the fields the parser reads — and the
+// same fix, which is to parse what ARRIVES.
+//
+// Both lines are verbatim from turn 1 of the 2026-08-04 capture.
+func TestAgyToolStepsCarryTheirRealName(t *testing.T) {
+	for _, tc := range []struct {
+		line []byte
+		want string
+	}{
+		{
+			[]byte(`{"event":"step_update","step_update":{"conversation_id":"14f3918c-ff9e-4962-81b9-357f5a658d1e","step_index":3,"state":"ACTIVE","step_type":"tool","tool_name":"list_dir","tool_info":{"name":"list_dir","parameters":{"DirectoryPath":"C:\\Users\\sanle\\.gemini\\antigravity-cli\\scratch"}}}}`),
+			`list_dir: C:\Users\sanle\.gemini\antigravity-cli\scratch`,
+		},
+		{
+			[]byte(`{"event":"step_update","step_update":{"conversation_id":"14f3918c-ff9e-4962-81b9-357f5a658d1e","step_index":8,"state":"ACTIVE","step_type":"tool","tool_name":"run_command","tool_info":{"name":"run_command","parameters":{"CommandLine":"pwsh -Command \"Get-Location; Get-ChildItem\""}}}}`),
+			`run_command: pwsh -Command "Get-Location; Get-ChildItem"`,
+		},
+		// A tool that sends no parameters degrades to its bare name rather than
+		// to the step type. Real captured list_permissions step.
+		{
+			[]byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","step_index":3,"state":"ACTIVE","step_type":"tool","tool_name":"list_permissions","tool_info":{"name":"list_permissions"}}}`),
+			"list_permissions",
+		},
+	} {
+		ev, ok := Antigravity{}.ParseEvent(tc.line)
+		if !ok || ev.Kind != runner.KindActivity || len(ev.Acts) != 1 {
+			t.Fatalf("got (%+v, %v), want one activity", ev, ok)
+		}
+		if got := ev.Acts[0].Text; got != tc.want {
+			t.Errorf("Text = %q, want %q", got, tc.want)
+		}
+		if ev.Acts[0].Text == "tool" {
+			t.Error("the step TYPE is being rendered again; every call reads alike")
+		}
+	}
+}
+
+// TestAgyToolArgIsDeterministic pins the property that matters about the
+// argument rule, which is not which key wins but that the SAME key always wins.
+//
+// Parameters are an arbitrary JSON object, so the candidate set comes out of a
+// Go map, and Go randomises map iteration. A rule that let that order through
+// would make a rendered trace line — and any golden containing one — flicker
+// between runs. Lowest key name by byte order, hence "CommandLine" over
+// "TargetFile" here.
+//
+// The multi-string case is not a captured shape: every observed agy tool sends
+// exactly one string parameter. The rule exists so that the first tool to send
+// two does not produce a coin flip.
+func TestAgyToolArgIsDeterministic(t *testing.T) {
+	line := []byte(`{"event":"step_update","step_update":{"step_index":9,"state":"ACTIVE","step_type":"tool","tool_name":"run_command","tool_info":{"name":"run_command","parameters":{"TargetFile":"C:\\b.txt","CommandLine":"go vet ./...","Blocking":true,"Nested":{"k":"v"}}}}}`)
+	const want = "run_command: go vet ./..."
+	for i := 0; i < 64; i++ {
+		ev, ok := Antigravity{}.ParseEvent(line)
+		if !ok || len(ev.Acts) != 1 {
+			t.Fatalf("got (%+v, %v)", ev, ok)
+		}
+		if got := ev.Acts[0].Text; got != want {
+			t.Fatalf("iteration %d rendered %q, want %q; map order is leaking into the trace", i, got, want)
+		}
+	}
+}
+
+// TestAgyErrorStateIsAFailedCallNotAPendingOne is the fifth state, which was
+// being dropped on the floor.
+//
+// The switch handled ACTIVE and DONE only, so this line matched nothing and the
+// ACTIVE entry it was meant to resolve stayed PENDING for the rest of the room's
+// life. A tool call the vendor had already refused rendered as one still
+// running — a false gauge in the direction §9.6a cares about most.
+//
+// Verbatim from turn 1 of the 2026-08-04 capture, the pair that proves it: the
+// same step_index 8 opens ACTIVE and resolves ERROR.
+func TestAgyErrorStateIsAFailedCallNotAPendingOne(t *testing.T) {
+	active := []byte(`{"event":"step_update","step_update":{"conversation_id":"14f3918c-ff9e-4962-81b9-357f5a658d1e","step_index":8,"state":"ACTIVE","step_type":"tool","tool_name":"run_command","tool_info":{"name":"run_command","parameters":{"CommandLine":"pwsh -Command \"Get-Location; Get-ChildItem\""}}}}`)
+	failed := []byte(`{"event":"step_update","step_update":{"conversation_id":"14f3918c-ff9e-4962-81b9-357f5a658d1e","step_index":8,"state":"ERROR","step_type":"tool","tool_name":"run_command","duration_seconds":0.6643425,"tool_info":{"name":"run_command","parameters":{"CommandLine":"pwsh -Command \"Get-Location; Get-ChildItem\""},"error":{"type":"TOOL_ERROR","message":"error executing cascade step: CORTEX_STEP_TYPE_RUN_COMMAND: granting access to C:\\: Access is denied."}}}}`)
+
+	var a Antigravity
+	ev, ok := a.ParseEvent(active)
+	if !ok || ev.Acts[0].Outcome != runner.ActPending {
+		t.Fatalf("ACTIVE produced (%+v, %v)", ev, ok)
+	}
+	openedAs := ev.Acts[0].ID
+
+	ev, ok = a.ParseEvent(failed)
+	if !ok || ev.Kind != runner.KindActivity || len(ev.Acts) != 1 {
+		t.Fatalf("the ERROR state was dropped: (%+v, %v); the call stays pending forever", ev, ok)
+	}
+	if ev.Acts[0].Outcome != runner.ActFailed {
+		t.Errorf("Outcome = %v, want ActFailed: the vendor said ERROR and named the reason", ev.Acts[0].Outcome)
+	}
+	if ev.Acts[0].ID != openedAs {
+		t.Errorf("ERROR id %q does not match the ACTIVE id %q, so it opens a second entry "+
+			"and leaves the first one pending", ev.Acts[0].ID, openedAs)
+	}
+	// The vendor's own first line, never a sentence composed here (§9.6a).
+	const want = "error executing cascade step: CORTEX_STEP_TYPE_RUN_COMMAND: granting access to C:\\: Access is denied."
+	if ev.Acts[0].Detail != want {
+		t.Errorf("Detail = %q, want the vendor's own words %q", ev.Acts[0].Detail, want)
+	}
+}
+
+// TestAgyResultErrorCarriesTheVendorsSentence.
+//
+// This is what makes suppressing the wordless `error_message` step honest: the
+// turn-level failure it marks is reported through the result path, with the
+// vendor's own diagnosis rather than a composed one. Verbatim from turn 1's
+// final line, which carried an EMPTY response and the sentence in `error`.
+func TestAgyResultErrorCarriesTheVendorsSentence(t *testing.T) {
+	line := []byte(`{"event":"result","result":{"conversation_id":"14f3918c-ff9e-4962-81b9-357f5a658d1e","status":"ERROR","response":"","error":"Agent execution terminated due to error.","duration_seconds":5.1746031,"num_turns":1}}`)
+	ev, ok := Antigravity{}.ParseEvent(line)
+	if !ok || ev.Kind != runner.KindError {
+		t.Fatalf("got (%+v, %v), want KindError", ev, ok)
+	}
+	if ev.Note != "Agent execution terminated due to error." {
+		t.Errorf("Note = %q; with error_message suppressed this note is the only sign "+
+			"the turn failed, so it must carry the vendor's words", ev.Note)
 	}
 }
 
@@ -205,9 +401,15 @@ func TestAgyDoneResolvesToUnknownNeverToSuccess(t *testing.T) {
 // `user_input` at step_index 0, so a plain int could not tell a real index 0
 // from a line carrying no index at all — and every indexless step would then
 // correlate with it.
+//
+// Both fixtures are the captured list_dir step with ONE field edited — the index
+// set to 0 on the first, removed on the second — because the steps that actually
+// sit at index 0 and that actually arrive without an index are all plumbing, and
+// plumbing no longer reaches the trace to be correlated. The pointer still has to
+// hold: any FUTURE step kind lands on this same path.
 func TestAgyStepZeroIsNotMistakenForAMissingIndex(t *testing.T) {
-	zero := []byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","step_index":0,"state":"DONE","step_type":"user_input"}}`)
-	none := []byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","state":"DONE","step_type":"checkpoint"}}`)
+	zero := []byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","step_index":0,"state":"DONE","step_type":"tool","tool_name":"list_dir","tool_info":{"name":"list_dir"}}}`)
+	none := []byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","state":"DONE","step_type":"tool","tool_name":"list_dir","tool_info":{"name":"list_dir"}}}`)
 
 	var a Antigravity
 	ev, _ := a.ParseEvent(zero)

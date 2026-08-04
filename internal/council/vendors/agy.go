@@ -3,6 +3,7 @@ package vendors
 import (
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -56,8 +57,23 @@ func (Antigravity) ID() model.VendorID { return model.VendorAntigravity }
 // and run_command — byte-identical to the same run without either flag. The
 // agent then called write_to_file and the file was confirmed on disk. --sandbox's
 // own help text says "terminal restrictions", which is about run_command and not
-// about the filesystem; whether it restricts the shell was NOT tested and is not
-// claimed here either.
+// about the filesystem.
+//
+// Whether it restricts the SHELL is no longer untested — first evidence, and it
+// is not good news for the flag. Captured 2026-08-04 (agy 1.1.10, Windows):
+// under `--mode plan --sandbox` a run_command step came back state ERROR with
+// "granting access to C:\: Access is denied.", the agent gave up, and the turn
+// ended status "ERROR" with an EMPTY response. The control run with both flags
+// dropped ran its shell command and ended status "SUCCESS". Evidence class:
+// measured, ONE trial per arm, with a confound stated plainly — the two turns
+// issued DIFFERENT command lines (`pwsh -Command "Get-Location; Get-ChildItem"`
+// versus `Get-ChildItem`), so this is not a clean A/B, and the refusal's mention
+// of `C:\` may be about a drive root rather than about the flag.
+//
+// What it does establish is the observed COST: with these flags on, a turn that
+// reaches for the shell can die with nothing to show for it. The flags are NOT
+// changed here — that is a posture decision, not a parser one — and design.md
+// §9.6b records the measurement with its confound.
 //
 // They are still passed, because they are the only read-only-leaning levers this
 // CLI has and they cost nothing. But the claim this adapter supports is weaker
@@ -125,6 +141,52 @@ func (a Antigravity) NextTurn(prompt, workspace, binary, sessionID string, p Pos
 	}, nil
 }
 
+// agyStep is one `step_update` payload.
+//
+// ToolName and ToolInfo were on the wire from the first capture and were not
+// being read — the adapter rendered StepType, the literal string "tool", for
+// every call agy made. That is the Cursor `tool_call.tool.case` miss in a
+// second costume (ADR-008, tenth amendment): the fields the vendor sends and
+// the fields the parser looks at were never compared against a captured line.
+type agyStep struct {
+	ConversationID string `json:"conversation_id"`
+	State          string `json:"state"`
+	StepType       string `json:"step_type"`
+	TextDelta      string `json:"text_delta"`
+	// StepIndex is what pairs a step's ACTIVE report with its DONE report:
+	// captured output shows the same index on both (step_index 2 ACTIVE
+	// carrying the reply text, step_index 2 DONE carrying the trailing
+	// newline). A POINTER because 0 is a real index — the first step of a
+	// turn is `user_input` at index 0 — and a plain int could not tell that
+	// apart from a line with no index at all.
+	StepIndex *int `json:"step_index"`
+
+	// ToolName is agy's real name for the call — `list_dir`, `run_command`,
+	// `write_to_file`. Top level on the step, and duplicated inside tool_info;
+	// both were present and agreed on every captured tool line, so the top-level
+	// one is preferred and the nested one is the fallback rather than a guess.
+	ToolName string `json:"tool_name"`
+
+	ToolInfo struct {
+		Name string `json:"name"`
+		// Parameters is an arbitrary object with vendor-specific key names.
+		// Captured: {"DirectoryPath":"…"} on list_dir, {"CommandLine":"pwsh
+		// -Command \"…\""} on run_command, {"TargetFile":"C:\\probe.txt"} on
+		// write_to_file. RawMessage per value because a parameter is not
+		// necessarily a string, and a map[string]string would fail the whole
+		// line's unmarshal and lose the activity entry over one odd field.
+		Parameters map[string]json.RawMessage `json:"parameters"`
+		// Error is present only on state ERROR. Captured:
+		// {"type":"TOOL_ERROR","message":"error executing cascade step:
+		// CORTEX_STEP_TYPE_RUN_COMMAND: granting access to C:\\: Access is
+		// denied."}
+		Error struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"error"`
+	} `json:"tool_info"`
+}
+
 // agyLine is the subset of agy's stream-json schema council models.
 //
 // The shape is its own, and notably not Claude's: the discriminator is "event"
@@ -138,28 +200,142 @@ type agyLine struct {
 	// cwd, the tool list and permission_mode.
 	ConversationID string `json:"conversation_id"`
 
-	StepUpdate struct {
-		ConversationID string `json:"conversation_id"`
-		State          string `json:"state"`
-		StepType       string `json:"step_type"`
-		TextDelta      string `json:"text_delta"`
-		// StepIndex is what pairs a step's ACTIVE report with its DONE report:
-		// captured output shows the same index on both (step_index 2 ACTIVE
-		// carrying the reply text, step_index 2 DONE carrying the trailing
-		// newline). A POINTER because 0 is a real index — the first step of a
-		// turn is `user_input` at index 0 — and a plain int could not tell that
-		// apart from a line with no index at all.
-		StepIndex *int `json:"step_index"`
-	} `json:"step_update"`
+	StepUpdate agyStep `json:"step_update"`
 
 	Result struct {
 		ConversationID string `json:"conversation_id"`
 		Status         string `json:"status"`
 		Response       string `json:"response"`
+		// Error is the vendor's own sentence about why the TURN died, and it is
+		// the field agy uses for that — `response` was empty on both captured
+		// failing turns while this carried "Agent execution terminated due to
+		// error." Load-bearing beyond the note it fills: the `error_message`
+		// step kind is suppressed from the trace (agyPlumbing) on the grounds
+		// that the turn-level failure is already reported through this path, and
+		// that argument only holds if this path says something.
+		Error string `json:"error"`
 	} `json:"result"`
 }
 
-// agyStepEvent turns one tool step into an activity event.
+// agyPlumbing reports whether a step is agy narrating its own message-passing
+// rather than the vendor ACTING.
+//
+// The honesty line this list is drawn along, because the two mistakes are not
+// symmetrical: hiding a vendor's ACTIONS would be a false gauge — the room
+// would show a quiet column for an agent that was busy editing the workspace.
+// Hiding its PLUMBING is noise reduction. So this is an allowlist of kinds each
+// defended on its own captured evidence, never a blanket "drop what looks
+// noisy". Every line cited below is from the live captures of 2026-08-04
+// (agy 1.1.10, Windows).
+//
+//   - user_input — step_index 0 of every turn, DONE, and nothing else on the
+//     line: no tool name, no parameters, no duration. It is the brief council
+//     itself just sent, echoed back. A room cannot inform a user by replaying
+//     their own keystrokes to them.
+//   - system_message — same empty shape (resume capture, step_index 12, DONE
+//     and no other field). agy placing its own message into the conversation.
+//   - checkpoint — carries duration_seconds and a ~120-token usage block and
+//     nothing else. A conversation bookmark: it touches the thread, never the
+//     workspace.
+//   - error_message — an empty marker, again with no message, no error field
+//     and no duration; it is the flag that a message of kind "error" was
+//     placed in the conversation, not the error. Dropping it is the case that
+//     needed the most care, since it appears on failing turns and losing the
+//     only sign that a turn went wrong is the OPPOSITE mistake. It is safe
+//     here for a checked reason rather than an assumed one: on both captured
+//     failing turns the `result` event carried status "ERROR" plus
+//     error "Agent execution terminated due to error.", and ParseEvent's
+//     result branch turns that into a KindError whose note is that sentence.
+//     The turn-level failure is reported, with words, by a different path. A
+//     rendered `error_message ?` is strictly less informative than that note —
+//     an ominous name with an Unknown outcome attached.
+//
+// unknown is the one that had to be argued rather than listed, because
+// suppressing a step whose type this adapter merely does not RECOGNISE would be
+// the same class of mistake as inventing an outcome for it. The captured
+// evidence says it is agy's own label, not our ignorance: both non-resume turns
+// carry exactly one, at step_index 1, immediately after user_input and before
+// any model output, with no tool_name, no tool_info, no parameters, and a
+// duration of 0.0005s (turn 1) and 0.0045s (control turn). Half a millisecond
+// is not enough to do anything, and every step in every capture that DID do
+// something carried a tool_name. So it is a fixed preamble slot agy declines to
+// name.
+//
+// What would reverse that is written as code rather than left in this comment:
+// an `unknown` step carrying a tool name — top level or nested — is NOT
+// suppressed and renders under that name. If agy ever starts acting through
+// this label, the trace shows it the same turn, without anyone re-reading this
+// paragraph.
+func agyPlumbing(su agyStep) bool {
+	switch su.StepType {
+	case "user_input", "system_message", "checkpoint", "error_message":
+		return true
+	case "unknown":
+		return su.ToolName == "" && su.ToolInfo.Name == ""
+	}
+	return false
+}
+
+// agyWhat names one step for the trace, in the grammar the other three
+// adapters already use: the tool's real name, then ": " and the one argument
+// that identifies the call (`Glob: **/*.go`, `Bash: go test ./...`).
+//
+// A step with no tool name falls back to its step_type, which is what a future
+// step kind this adapter has never seen should read as — agy's own word for it,
+// not a guess.
+func agyWhat(su agyStep) string {
+	name := su.ToolName
+	if name == "" {
+		name = su.ToolInfo.Name
+	}
+	if name == "" {
+		return su.StepType
+	}
+	if arg := agyToolArg(su.ToolInfo.Parameters); arg != "" {
+		return name + ": " + arg
+	}
+	return name
+}
+
+// agyToolArg picks the one parameter worth showing in a 37-cell column.
+//
+// The rule, in full, because it has to be defensible rather than tuned:
+//
+//  1. Only STRING values are candidates. An object or an array is not a line,
+//     and dumping a whole parameter blob into the trace would bury the thing
+//     the trace exists to make readable.
+//  2. Exactly one such parameter — which is every shape captured so far —
+//     renders it. `list_dir` sends only DirectoryPath, `run_command` only
+//     CommandLine, `write_to_file` only TargetFile.
+//  3. Several, and the LOWEST KEY NAME by byte order wins.
+//  4. None, and the entry is the bare tool name.
+//
+// Rule 3 is the one worth defending. agy's parameter keys are vendor-specific
+// PascalCase and no captured tool sends two strings at once, so any claim about
+// which key "matters" would be a guess dressed as a table — and a per-tool table
+// is exactly what this declines to become. What rule 3 does guarantee is the
+// property that actually matters: the answer never depends on Go's randomised
+// map iteration order, so a rendered line and a golden cannot flicker between
+// runs. `TestAgyToolArgIsDeterministic` pins that by parsing the same
+// multi-parameter line repeatedly and demanding one answer.
+func agyToolArg(params map[string]json.RawMessage) string {
+	best, bestKey, found := "", "", false
+	for k, raw := range params {
+		var s string
+		if json.Unmarshal(raw, &s) != nil {
+			continue
+		}
+		if s = strings.TrimSpace(s); s == "" {
+			continue
+		}
+		if !found || k < bestKey {
+			best, bestKey, found = s, k, true
+		}
+	}
+	return clipArg(best)
+}
+
+// agyStepEvent turns one step into an activity event.
 //
 // The id is the step index, which is scoped to the turn — and that is exactly
 // the scope it needs, since council clears a column's trace on every dispatch,
@@ -167,7 +343,7 @@ type agyLine struct {
 // with no index carries no id, which leaves it permanently pending rather than
 // letting it correlate with an unrelated step; no captured line is in that
 // state.
-func agyStepEvent(al agyLine, outcome runner.ActStatus) (runner.Event, bool) {
+func agyStepEvent(al agyLine, outcome runner.ActStatus, detail string) (runner.Event, bool) {
 	id := ""
 	if al.StepUpdate.StepIndex != nil {
 		id = "step-" + strconv.Itoa(*al.StepUpdate.StepIndex)
@@ -175,13 +351,10 @@ func agyStepEvent(al agyLine, outcome runner.ActStatus) (runner.Event, bool) {
 	return runner.Event{
 		Kind: runner.KindActivity,
 		Acts: []runner.ActCall{{
-			ID: id,
-			// The step TYPE is all agy offers here that fits a narrow column.
-			// tool_name and tool_info.parameters are also present on tool
-			// steps and would read far better; wiring them is a separate
-			// change from carrying outcomes, and is not smuggled in here.
-			Text:    al.StepUpdate.StepType,
+			ID:      id,
+			Text:    agyWhat(al.StepUpdate),
 			Outcome: outcome,
+			Detail:  clipArg(firstLine(detail)),
 		}},
 	}, true
 }
@@ -211,6 +384,15 @@ func (Antigravity) ParseEvent(line []byte) (runner.Event, bool) {
 			return runner.Event{Kind: runner.KindSession, SessionID: al.ConversationID}, true
 		}
 	case "step_update":
+		// Conversation plumbing never becomes an act. Done HERE rather than in
+		// the renderer on purpose: council keeps Render pure over State, so a
+		// step that is not an action must never reach State in the first place.
+		// The per-kind justification is agyPlumbing's own comment, and the line
+		// it holds is that hiding a vendor's ACTIONS would be a false gauge
+		// while hiding its plumbing is noise reduction.
+		if agyPlumbing(al.StepUpdate) {
+			return runner.Event{}, false
+		}
 		// Gated on agent_response deliberately. Other step types seen in real
 		// output (tool, checkpoint, user_input, system_message, "unknown") carry
 		// tool parameters and command output, and none of them carried a
@@ -247,7 +429,30 @@ func (Antigravity) ParseEvent(line []byte) (runner.Event, bool) {
 		if al.StepUpdate.StepType != "" && al.StepUpdate.StepType != "agent_response" {
 			switch al.StepUpdate.State {
 			case "ACTIVE":
-				return agyStepEvent(al, runner.ActPending)
+				return agyStepEvent(al, runner.ActPending, "")
+			case "ERROR":
+				// A FIFTH state, and it was being dropped on the floor. Until
+				// this landed the switch handled ACTIVE and DONE only, so a tool
+				// call agy REFUSED stayed rendered as still-pending forever —
+				// the trace claiming a command was running when the vendor had
+				// already given up on it. That is a false gauge in the direction
+				// this repo cares about most, and unlike the DONE case there is
+				// nothing weak about the evidence: the line says ERROR and
+				// carries the reason.
+				//
+				// Captured 2026-08-04 under --mode plan --sandbox:
+				//
+				//	"state":"ERROR","step_type":"tool","tool_name":"run_command",
+				//	"tool_info":{…,"error":{"type":"TOOL_ERROR","message":"error
+				//	executing cascade step: CORTEX_STEP_TYPE_RUN_COMMAND:
+				//	granting access to C:\\: Access is denied."}}
+				//
+				// ActFailed rather than ActDenied, on the same reasoning the
+				// Cursor adapter states: ActDenied is council's first-hand record
+				// of its OWN gate keystroke, and a refusal read off a vendor's
+				// stream is not that. The detail is the vendor's own first line,
+				// never a sentence composed here (§9.6a).
+				return agyStepEvent(al, runner.ActFailed, al.StepUpdate.ToolInfo.Error.Message)
 			case "DONE":
 				// UNKNOWN, not OK, and this is the whole point of that value
 				// existing. Every captured DONE line carries duration_seconds,
@@ -262,7 +467,11 @@ func (Antigravity) ParseEvent(line []byte) (runner.Event, bool) {
 				// the success mark here would be this product inventing a
 				// result on a vendor's behalf, which is the one thing it is
 				// built not to do.
-				return agyStepEvent(al, runner.ActUnknown)
+				//
+				// Narrower than it was, in one direction only: agy DOES report
+				// a per-step FAILURE, as state ERROR, handled above. Silence on
+				// DONE is still silence.
+				return agyStepEvent(al, runner.ActUnknown, "")
 			}
 			// Any other state is a value no captured run has shown. Dropped
 			// rather than mapped: an unrecognised state is not evidence of
@@ -290,8 +499,20 @@ func (Antigravity) ParseEvent(line []byte) (runner.Event, bool) {
 		// would be inventing the diagnosis.
 		if al.Result.Status != "" && al.Result.Status != "SUCCESS" {
 			ev.Kind = runner.KindError
+			// The vendor's own words, preferred in the order of how specifically
+			// they diagnose the failure. `error` is the field agy uses to say
+			// what went wrong and is the only one populated on both captured
+			// failing turns ("Agent execution terminated due to error."), while
+			// `response` on a failing turn is a partial ANSWER rather than a
+			// diagnosis. The composed status sentence is the last resort.
+			//
+			// This is the sign of a failed turn that the suppressed
+			// `error_message` step was the other, wordless half of.
 			ev.Note = "the vendor reported status " + al.Result.Status
-			if al.Result.Response != "" {
+			switch {
+			case al.Result.Error != "":
+				ev.Note = al.Result.Error
+			case al.Result.Response != "":
 				ev.Note = al.Result.Response
 			}
 		}

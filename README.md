@@ -294,8 +294,8 @@ telltale.exe council --write --cd ../telltale-council
 There is **one room**, and a bare `telltale council` reattaches to it by default. Each
 vendor is holding a conversation several turns deep — that is what the resume mechanism
 buys — and reopening the room is how you get back to it: the turn counter continues at
-N+1 and each seat picks up its own thread; a seat whose thread the vendor no longer has
-says the history is gone and starts fresh, briefed. `--fresh` starts over, and a usable
+N+1 and each seat picks up its own thread; a seat whose first turn on a restored thread
+fails lets that thread go and starts fresh, briefed. `--fresh` starts over, and a usable
 saved room is named once before the first dispatch replaces it. The workspace is a
 property of the room, not of the launch: `/cd <dir>` typed in the composer moves the room
 — absolute, relative to the current workspace, or a sibling of it — and every seat

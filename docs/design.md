@@ -2587,6 +2587,105 @@ deliberately weak mapping tightens the moment a live run shows the spelling.
 `TestActOutcomesRenderDistinctly` fails the build if any two statuses ever render alike;
 `TestOverlappingToolCallsResolveToTheRightEntries` replays the real out-of-order probe.
 
+### 9.6b The agy trace was showing its message-passing and hiding its work
+
+Driven live, the Antigravity column's trace read `user_input ?`, `system_message ?`,
+`checkpoint ?`, `unknown ?` — and, for every real thing the agent did, a bare `tool ?`. Three
+separate defects wearing one symptom, all found by reading captured stdout (agy 1.1.10,
+Windows, 2026-08-04) rather than the adapter.
+
+**1. The plumbing is suppressed, and the line that decides what counts as plumbing is not
+"noisy".** Hiding a vendor's ACTIONS would be a false gauge — a quiet column for an agent busy
+editing the workspace, which is §4a.1's failure with the sign flipped. Hiding its PLUMBING is
+noise reduction. So the suppression is an allowlist defended per kind against a captured line,
+never a filter on what looks like chatter, and it lives in the adapter (`ParseEvent` returns
+`false`) rather than in the view, because `Render` is pure over `State` and a step that is not
+an action must never become one.
+
+| kind | why it is plumbing, from the capture |
+|---|---|
+| `user_input` | step 0 of every turn, `DONE`, nothing else on the line — the brief council itself just sent, echoed back |
+| `system_message` | same empty shape; agy placing its own message into the conversation |
+| `checkpoint` | `duration_seconds` and a ~120-token usage block, nothing else — a thread bookmark, never the workspace |
+| `error_message` | an empty marker on a failing turn: no message, no error field, no duration |
+| `unknown` | one per turn at a fixed preamble slot (step 1, right after `user_input`), 0.0005s and 0.0045s across two turns, no tool name, no parameters |
+
+`error_message` needed the most care, because dropping the only visible sign that a turn went
+wrong is the opposite mistake. It is safe for a checked reason: both captured failing turns end
+`result` with `status:"ERROR"` and `error:"Agent execution terminated due to error."`, and that
+path already produces a `KindError` carrying the vendor's sentence. The turn-level failure IS
+reported, with words. A rendered `error_message ?` is strictly *less* than that — an ominous
+name with a shrug attached. The result path now prefers `result.error` over the composed status
+line precisely so that argument keeps holding.
+
+`unknown` had to be argued rather than listed, since suppressing a step whose type the adapter
+merely does not RECOGNISE is the same class of mistake as inventing an outcome for it. The
+capture says this is agy's own label and not our ignorance: fixed position, half a millisecond,
+and no tool name — while every step in every capture that did something carried one. What
+would reverse the decision is written as code, not as a promise: an `unknown` step that names a
+tool is **not** suppressed and renders under that name, so if agy ever starts acting through
+this label the trace shows it that same turn.
+
+**2. agy's real tool names were on the wire the whole time and were not being read.** A tool
+step carries `tool_name` at the top level *and* `tool_info.name` with `tool_info.parameters`
+beside it. The adapter rendered `step_update.step_type` — the literal string `"tool"` — so every
+call, whatever it was, produced one indistinguishable entry. This is ADR-008's tenth amendment
+repeating itself in a second costume: Cursor's `tool_call.tool.case` lookup matched nothing
+because the oneof arrives flattened to a key on the wire, and every Cursor trace entry read
+`tool call`. Same cause both times — the fields the vendor sends were never compared against
+the fields the parser reads — and the same fix, which is to **parse what arrives**. Observed
+names: `list_dir`, `run_command`, `write_to_file`, `list_permissions`.
+
+The entry now follows the grammar the other three adapters already use — `Glob: **/*.go`,
+`Bash: go test ./...` — so `⚙ tool ?` becomes `⚙ list_dir: C:\Users\…\antigravity-cli\scratch ?`.
+The argument rule is deliberately small, because agy's parameter keys are vendor-specific
+(`DirectoryPath`, `CommandLine`, `TargetFile`) and an arbitrary object is not a trace line: only
+string values are candidates, one such value renders (which is every captured shape), several
+resolve to the lowest key name by byte order, none degrades to the bare tool name. Rule three is
+not a claim about which key matters — it is a refusal to let Go's randomised map iteration reach
+a rendered line or a golden, pinned by `TestAgyToolArgIsDeterministic`.
+
+**3. A failed agy tool call used to render as permanently pending.** There is a fifth state,
+`ERROR`, and the switch handled `ACTIVE` and `DONE` only, so the line matched nothing and the
+entry its `ACTIVE` twin had opened stayed pending for the rest of the room's life — the trace
+claiming a command was running after the vendor had given up on it. It carries its own reason in
+`tool_info.error.message`, so it maps to Failed with the vendor's own first line, exactly as
+§9.6a specifies. Failed and not Denied: `ActDenied` is council's first-hand record of its own
+gate keystroke, and a refusal read off someone's stream is not that. The `DONE → Unknown` rule
+above is unchanged and narrows in one direction only — agy does report per-step failure, and it
+still reports no per-step success.
+
+**The resume note was a misdiagnosis, and the fix is to the claim rather than to the
+mechanism.** A seat whose restored thread failed its first turn used to say *"the saved thread
+was refused — this seat's history is gone."* **Measured**, single trial, 2026-08-04: `agy
+--conversation <id>` **does** resume in 1.1.10. The same `conversation_id` came back,
+`step_index` **continued** (10 → 11) rather than restarting at 0, and `result.num_turns` was 2.
+That demonstrably live thread's turn nevertheless ended `status:"ERROR"` /
+`"Agent execution terminated due to error."`, and a separate attempt died before any thread was
+involved at all — a bare `result` with an **empty** `conversation_id` and *"Eligibility check
+failed: UNAVAILABLE (code 503): The service is currently unavailable."* So agy turns fail
+transiently for reasons that have nothing to do with the conversation, and "the history is
+gone" is a claim the evidence does not support.
+
+The behaviour is deliberately untouched: one failed turn still drops the id, for the reasons
+ADR-008's ninth amendment gives at length, and no new signal is invented to tell the two cases
+apart because none was observed. Only the sentence is narrowed, to the three things known — the
+first turn on the restored thread failed, the seat has let the saved thread go, and the next
+brief starts a new session with the brief re-applied.
+
+**A side measurement, separately labelled, with its confound stated.** Under `--mode plan
+--sandbox`, agy's `run_command` was refused with *"granting access to C:\: Access is denied."*,
+the agent gave up, and the whole turn died `status:"ERROR"` with an empty response. The control
+run with both flags **dropped** ran a shell command and returned `status:"SUCCESS"`. ADR-008 and
+the `baseArgs` comment previously said `--sandbox`'s effect on the shell "was NOT tested and is
+not claimed"; this is the first evidence on it, and that comment no longer says so. **It is one
+trial per arm with an uncontrolled difference: the two turns issued different command lines
+(`pwsh -Command "Get-Location; Get-ChildItem"` versus `Get-ChildItem`), so it is not a clean
+A/B**, and the refusal's mention of `C:\` may be about a drive root rather than about the flag.
+What it does establish is the flag's observed cost — a dead turn, with nothing rendered. The
+posture flags are **not** changed on the strength of it; that is a decision to make deliberately
+and separately, and this is a record, not a fix.
+
 ### 9.7 Status
 
 The room opens, detects the four seats, renders both layouts and every degraded state, takes a
