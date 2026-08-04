@@ -478,6 +478,15 @@ func (m *Model) applyEvents(batch []runner.Event) {
 // cancellation wording in one place: a turn the user stopped must never be
 // rendered as a vendor failure, and there are now four ways a column can end.
 func (m *Model) finishColumn(c *Column, phase Phase) {
+	// The redactor holds the tail of the stream — everything after the last
+	// word boundary, so a secret split across two chunks cannot straddle the
+	// match. A turn that ends without flushing it EATS that tail: measured on
+	// a live persistent seat, whose end-of-turn is a `result` line rather than
+	// a process exit, so the KindDone/KindError flushes never ran and every
+	// reply lost its final word. Flushed here, at the one place every
+	// retirement passes through; the per-event flushes remain and are
+	// harmless — a flushed redactor yields "".
+	c.Body += m.flush(c.Vendor)
 	// Whatever this seat was waiting to be told, it is no longer waiting. A card
 	// left up for a vendor that has stopped asking invites a keystroke that
 	// decides nothing, and the footer would go on claiming the room is gated.
