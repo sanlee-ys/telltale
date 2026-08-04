@@ -4,9 +4,9 @@
    gated  tokens                        │   WRITES  final only                  │   WRITES  final only                  
                                         │                                       │                                       
  ⚙ Write: internal/council/gate.go ✗    │ working. this vendor reports no       │ working. this vendor reports no       
- denied by you                          │ incremental output, so nothing        │ incremental output, so nothing        
+   denied by you                        │ incremental output, so nothing        │ incremental output, so nothing        
  ⚙ Bash: go build ./... ✗               │ appears until the turn finishes.      │ appears until the turn finishes.      
-   exit 2: undefined: gateCard          │                                       │                                       
+     exit 2: undefined: gateCard        │                                       │                                       
                                         │                                       │                                       
  I need to add the card renderer.       │                                       │                                       
                                         │                                       │                                       

@@ -932,7 +932,7 @@ func pastTurn(h TurnRecord, w int, sty Styles, g Glyphs) []string {
 // harder to read than the thing it replaced.
 func actLines(a Act, w int, sty Styles, g Glyphs) []string {
 	mark, style := actMark(a.Status, sty, g)
-	text := g.Act + " " + a.Text
+	text := a.Text
 	if mark != "" {
 		text += " " + mark
 	}
@@ -940,7 +940,15 @@ func actLines(a Act, w int, sty Styles, g Glyphs) []string {
 	// Wrapped as PLAIN text and styled afterwards, never the other way round:
 	// wrap measures with lipgloss.Width but splits on spaces, and an escape
 	// sequence pushed through it would be broken across two lines.
-	lines := wrap(text, w)
+	//
+	// hangWrap rather than wrap, which is the card grammar §9.11 gave every
+	// other card in a column and never gave this one. A `run_command` carrying
+	// a Windows path is longer than 37 cells more often than not, and its
+	// continuation used to start hard against the column edge — so a wrapped
+	// command read as a second, nameless entry, and the outcome mark ended up
+	// on a line with nothing on it to say what it was the outcome OF. Hanging
+	// it under the ⚙ costs no rows and makes one call look like one call.
+	lines := hangWrap(g.Act+" ", text, w)
 	if mark != "" && len(lines) > 0 {
 		// The mark is the last thing on the last line it landed on. Matched by
 		// suffix rather than searched for, so a command that itself contains a
@@ -955,9 +963,67 @@ func actLines(a Act, w int, sty Styles, g Glyphs) []string {
 	// trace is a record of what was done, and pasting every command's stdout
 	// into a 37-cell column would bury the answer the room exists to compare.
 	if a.Status == runner.ActFailed && a.Detail != "" {
-		for _, l := range wrap(a.Detail, maxInt(1, w-2)) {
-			lines = append(lines, sty.Muted.Render("  "+l))
+		for _, l := range actDetail(a.Detail, w, g) {
+			lines = append(lines, sty.Muted.Render(l))
 		}
+	}
+	return lines
+}
+
+// actDetailMaxRows is how much of a vendor's failure reason one trace entry may
+// spend.
+//
+// Three, and the number is argued rather than picked. One is not enough for the
+// shape these actually take — "error executing cascade step: …: granting access
+// to C:\: Access is denied." is the whole diagnosis and its useful half is at
+// the END. Unbounded is what produced the complaint: a raw stderr tail is
+// whatever the vendor felt like writing, and one failed call could take the
+// column the room exists to read.
+const actDetailMaxRows = 3
+
+// actDetail formats a vendor's failure reason for one trace entry.
+//
+// Two things happen here and both are about not letting raw vendor output
+// dictate the shape of the room:
+//
+// It is FLATTENED. sanitize deliberately preserves newlines, because a vendor's
+// prose reply is prose and paragraphs are content. A tool failure's detail is
+// not prose — it is a diagnosis line, and multi-line stderr pushed through wrap
+// arrives as ragged fragments at random widths, which is the "raw wreckage"
+// reading rather than a card. Nothing is lost: the words are all still here, on
+// one flowing line the wrapper can measure.
+//
+// It is BOUNDED, with the ellipsis this product already uses for a clipped
+// string, so a clipped detail can never be mistaken for a short one. The clip is
+// a real cost and it has a real answer: `f` expands the focused column to the
+// full frame, where the same detail wraps into far fewer rows and typically
+// survives whole. What this refuses to be is a log viewer — the trace answers
+// *what did this agent do and did it work*, and the turn-level failure still
+// arrives in the column's own note with the vendor's sentence in it.
+// The indent is FOUR, not the two every other card body uses, and that is
+// forced by the line above it. Hanging a wrapped command under its ⚙ spends the
+// first two cells, so a reason indented two would land at exactly the same
+// column as the tail of the command it explains — telling them apart by colour
+// alone, which this product does not do. Two cells further is the cheapest thing
+// that keeps *what was run* and *why it broke* legible as different claims with
+// the styles switched off, and a golden rendered with PlainStyles is precisely
+// the case that proves it.
+func actDetail(detail string, w int, g Glyphs) []string {
+	const indent = "    "
+	inner := maxInt(1, w-len(indent))
+	lines := wrap(strings.Join(strings.Fields(detail), " "), inner)
+	if len(lines) > actDetailMaxRows {
+		lines = lines[:actDetailMaxRows]
+		last := len(lines) - 1
+		// Built with the ellipsis already attached and then truncated, so the
+		// mark lands whether or not the last line had room for it. Handed the
+		// glyph set rather than a literal: the ASCII ellipsis is ">" and a
+		// hardcoded "…" would be the one cell in this entry that did not
+		// survive --ascii.
+		lines[last] = truncate(lines[last]+" "+g.Ellipsis, inner, g.Ellipsis)
+	}
+	for i := range lines {
+		lines[i] = indent + lines[i]
 	}
 	return lines
 }

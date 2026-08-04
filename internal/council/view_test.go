@@ -1255,3 +1255,88 @@ func TestMixedTraceGolden(t *testing.T) {
 	}
 	golden(t, "activity-outcomes", render(st))
 }
+
+// TestAFailureReasonIsACardNotRawWreckage.
+//
+// A trace entry's detail is whatever the vendor wrote on stderr, which on
+// Windows is routinely a path longer than the column and sometimes several lines
+// of it. Both of those used to reach the renderer intact: sanitize deliberately
+// preserves newlines (a prose reply's paragraphs are content), so a multi-line
+// stderr blob arrived as ragged fragments at random widths, and nothing bounded
+// how many rows one failed call could take from the answers the room exists to
+// compare.
+func TestAFailureReasonIsACardNotRawWreckage(t *testing.T) {
+	g := GlyphsFor(false)
+	long := "error executing cascade step: CORTEX_STEP_TYPE_RUN_COMMAND:\n" +
+		`granting access to C:\Users\dev\code\telltale\internal\council: Access is denied.` + "\n" +
+		"see the vendor's own troubleshooting page for the full list of causes and remedies"
+
+	lines := actDetail(long, 37, g)
+	if len(lines) > actDetailMaxRows {
+		t.Errorf("one failed call spent %d rows of a column, cap is %d", len(lines), actDetailMaxRows)
+	}
+	for i, l := range lines {
+		if lipgloss.Width(l) > 37 {
+			t.Errorf("detail line %d is %d cells, column is 37", i, lipgloss.Width(l))
+		}
+		// Four, not two: the line above a detail is the hanging tail of the
+		// command it explains, and both at the same indent is a distinction
+		// carried by colour alone.
+		if !strings.HasPrefix(l, "    ") {
+			t.Errorf("detail line %d does not hang under its entry: %q", i, l)
+		}
+		if strings.ContainsAny(l, "\n\r\t") {
+			t.Errorf("detail line %d still carries raw whitespace: %q", i, l)
+		}
+	}
+	// A clipped detail must never be able to read as a complete one.
+	if !strings.HasSuffix(lines[len(lines)-1], g.Ellipsis) {
+		t.Errorf("a clipped reason does not say it was clipped: %q", lines[len(lines)-1])
+	}
+
+	// Same clip under --ascii, where the ellipsis is ">" — the one cell in this
+	// entry that a hardcoded "…" would have broken.
+	a := GlyphsFor(true)
+	al := actDetail(long, 37, a)
+	if !strings.HasSuffix(al[len(al)-1], a.Ellipsis) {
+		t.Errorf("the ascii clip mark is missing: %q", al[len(al)-1])
+	}
+	if strings.Contains(al[len(al)-1], "…") {
+		t.Errorf("the unicode ellipsis survived --ascii: %q", al[len(al)-1])
+	}
+
+	// A reason that fits is left exactly alone: the clip is a ceiling, not a
+	// format, and marking an unclipped line would be the opposite lie.
+	short := actDetail("FAIL council 0.3s", 37, g)
+	if len(short) != 1 || strings.Contains(short[0], g.Ellipsis) {
+		t.Errorf("a short reason was clipped anyway: %q", short)
+	}
+}
+
+// TestAWrappedTraceEntryHangsUnderItsOwnMark.
+//
+// §9.11 gave every card in a column one grammar — a title with its body hanging
+// under it — and the trace entry was the one that never got it. A `run_command`
+// carrying a Windows path wraps in a 37-cell column, and its continuation used
+// to start hard against the column edge: a wrapped command read as a second,
+// nameless entry, and the outcome mark landed on a line with nothing on it to
+// say what it was the outcome of.
+func TestAWrappedTraceEntryHangsUnderItsOwnMark(t *testing.T) {
+	g := GlyphsFor(false)
+	a := Act{Text: `run_command: pwsh -Command "Get-ChildItem C:\Users\dev\code"`, Status: runner.ActFailed}
+	lines := actLines(a, 37, PlainStyles(), g)
+	if len(lines) < 2 {
+		t.Fatal("the entry under test did not wrap")
+	}
+	if !strings.HasPrefix(lines[0], g.Act+" ") {
+		t.Errorf("the entry lost its mark: %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "  ") {
+		t.Errorf("a wrapped command does not hang under its entry: %q", lines[1])
+	}
+	// The outcome still lands on the entry's last line rather than being
+	// stranded: it is what the eye is looking for once the command is read.
+	if !strings.Contains(lines[1], g.ActFail) {
+		t.Errorf("the outcome mark is not on the entry's last line: %q", lines[1])
+	}
+}

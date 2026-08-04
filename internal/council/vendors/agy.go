@@ -46,9 +46,11 @@ func (Antigravity) ID() model.VendorID { return model.VendorAntigravity }
 
 // baseArgs is the shared invocation, minus the prompt.
 //
-// On the read-only flags, stated plainly because the alternative is a badge
-// that lies: --mode plan and --sandbox DO NOT PREVENT WRITES. This was measured,
-// not assumed. Running
+// **`--mode plan --sandbox` are NOT passed, in either posture** (ADR-008,
+// seventeenth amendment). They used to be passed in the read posture, and the
+// history of why is the whole argument for dropping them.
+//
+// They do not prevent writes, and that is measured rather than assumed. Running
 //
 //	agy --output-format stream-json --mode plan --sandbox -p "<create a file>"
 //
@@ -59,35 +61,48 @@ func (Antigravity) ID() model.VendorID { return model.VendorAntigravity }
 // own help text says "terminal restrictions", which is about run_command and not
 // about the filesystem.
 //
-// Whether it restricts the SHELL is no longer untested — first evidence, and it
-// is not good news for the flag. Captured 2026-08-04 (agy 1.1.10, Windows):
-// under `--mode plan --sandbox` a run_command step came back state ERROR with
-// "granting access to C:\: Access is denied.", the agent gave up, and the turn
-// ended status "ERROR" with an EMPTY response. The control run with both flags
-// dropped ran its shell command and ended status "SUCCESS". Evidence class:
-// measured, ONE trial per arm, with a confound stated plainly — the two turns
-// issued DIFFERENT command lines (`pwsh -Command "Get-Location; Get-ChildItem"`
-// versus `Get-ChildItem`), so this is not a clean A/B, and the refusal's mention
-// of `C:\` may be about a drive root rather than about the flag.
+// Their effect on the SHELL was measured next, and it is the only effect either
+// flag has ever been observed to have. Captured 2026-08-04 (agy 1.1.10,
+// Windows): under `--mode plan --sandbox` a run_command step came back state
+// ERROR with "granting access to C:\: Access is denied.", the agent gave up, and
+// the whole turn ended status "ERROR" with an EMPTY response. The control run
+// with both flags dropped ran its shell command and ended status "SUCCESS".
+// Evidence class: measured, ONE trial per arm, with the confound stated — the
+// two turns issued DIFFERENT command lines (`pwsh -Command "Get-Location;
+// Get-ChildItem"` versus `Get-ChildItem`), so it is not a clean A/B, and the
+// refusal's mention of `C:\` may be about a drive root rather than about the
+// flag.
 //
-// What it does establish is the observed COST: with these flags on, a turn that
-// reaches for the shell can die with nothing to show for it. The flags are NOT
-// changed here — that is a posture decision, not a parser one — and design.md
-// §9.6b records the measurement with its confound.
+// That measurement was recorded and deliberately not acted on, because changing
+// a posture flag is the owner's decision and not a parser's. The owner has now
+// made it: **the flags come off.** The ledger they came off on is one-sided —
+// on the write side, one measured dead turn; on the read side, nothing at all,
+// across every run this repo has captured. Asking for a restriction that has
+// never been observed to restrict anything, at the price of turns that die with
+// an empty column, is not caution. It is the appearance of caution paid for in
+// the vendor's actual answers.
 //
-// They are still passed, because they are the only read-only-leaning levers this
-// CLI has and they cost nothing. But the claim this adapter supports is weaker
-// than "unverified": the write LANDED, so the flags are refuted rather than
-// merely unproven, and the room badges this vendor `unsandboxed` (council.
-// SandboxNone) rather than `ro:requested`. Anything with an `ro:` prefix would
-// read as a read-only posture at a glance, and this column can edit the
-// workspace it is pointed at.
+// **No honesty claim moves with them.** The badge was already `unsandboxed`
+// (council.SandboxNone) rather than `ro:requested`, precisely because the write
+// LANDED — the flags were refuted, not unproven — and its detail already said
+// nothing restricts this column. What changes is that the detail may no longer
+// say the flags are passed, because they are not; see detect.go. The containment
+// was never these flags and is the workspace (ADR-008, third and twelfth
+// amendments), and the fleet contract rules the same way independently:
+// agent-ops ADR-012, capability parity with guard wiring as the control.
 //
-// This is the same mistake the Claude adapter made with --allowedTools, caught
-// the same way: by running the command and reading what the session said about
-// itself instead of trusting the flag's name.
-func (Antigravity) baseArgs(p Posture) []string {
-	args := []string{
+// The posture argument is now unused here, and that is itself the statement:
+// this vendor's invocation does not vary by posture. It is kept in the signature
+// because every adapter takes one and a seat that quietly stopped accepting the
+// room's posture would be harder to notice than one that accepts it and has
+// nothing to do with it. TestAgyAsksForNothingInEitherPosture pins that.
+//
+// Deliberately still absent: --dangerously-skip-permissions. Dropping a flag
+// that restricted nothing is not the same act as adding one that approves
+// everything, and ADR-008's fifth and seventh amendments refuse that whole class
+// on both seats that offer it.
+func (Antigravity) baseArgs(_ Posture) []string {
+	return []string{
 		"--output-format", "stream-json",
 		// A brief is arbitrary user text and may legitimately contain a line
 		// starting with "/". Without this, agy expands that as a slash command or
@@ -101,16 +116,6 @@ func (Antigravity) baseArgs(p Posture) []string {
 		// expires. That default is also a ceiling on a long turn; it is left at
 		// the vendor's value rather than guessed at here.
 	}
-	if p == PostureRead {
-		// Requested, NOT enforced — see above. No badge may read these as a
-		// sandbox claim. They are dropped in write posture because they were
-		// only ever a read-only-leaning nudge, and agent-ops ADR-012 records
-		// that --sandbox scopes TERMINAL access rather than writes: keeping it
-		// in write mode would restrict something the user just asked to widen,
-		// while bounding nothing they asked to bound.
-		args = append(args, "--mode", "plan", "--sandbox")
-	}
-	return args
 }
 
 func (a Antigravity) FirstTurn(prompt, workspace, binary string, p Posture) (runner.Spec, error) {
@@ -440,7 +445,12 @@ func (Antigravity) ParseEvent(line []byte) (runner.Event, bool) {
 				// nothing weak about the evidence: the line says ERROR and
 				// carries the reason.
 				//
-				// Captured 2026-08-04 under --mode plan --sandbox:
+				// Captured 2026-08-04 under `--mode plan --sandbox`, which this
+				// adapter no longer passes (seventeenth amendment). The ERROR state
+				// is not a property of those flags — it is agy's own per-step
+				// failure state, and dropping the flags removes one way of reaching
+				// it, not the state itself. This branch stays armed; what changed is
+				// that the room stops manufacturing its most likely cause.
 				//
 				//	"state":"ERROR","step_type":"tool","tool_name":"run_command",
 				//	"tool_info":{…,"error":{"type":"TOOL_ERROR","message":"error

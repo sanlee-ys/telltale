@@ -2399,7 +2399,7 @@ all seated vendors when only one had a mechanism named.
 | Claude Code | `--disallowedTools <write/exec list>` + `--strict-mcp-config` | `ro:tools` |
 | Codex (macOS/Linux) | `-s read-only`, enforced by the OS sandbox | `ro:enforced` |
 | Codex (Windows) | **no sandbox**: `-s danger-full-access`, the only mode that can spawn a process there | `unsandboxed` |
-| Antigravity | `--mode plan --sandbox` — measured **not** to restrict writes | `unsandboxed` |
+| Antigravity | **no posture flag at all**: `--mode plan --sandbox` were measured not to restrict writes, and were dropped once their only observed effect turned out to be a dead turn (§9.6b) | `unsandboxed` |
 
 There is no level that renders as an unqualified "read-only", and after the live spike there is
 one that renders as the opposite. Antigravity was asked to write a file under both of its
@@ -2408,6 +2408,14 @@ byte-identical to a run without the flags. That is refuted, not unverified, so i
 level badged `unsandboxed`. Deliberately not `ro:none`: every other badge opens with `ro:`, a
 reader scanning column headers takes in the prefix before the qualifier, and a vendor that
 can edit your working tree must not read as read-only at a glance.
+
+Council **stopped passing those two flags** on 2026-08-04 (ADR-008, seventeenth amendment).
+The badge is unchanged and so is every word behind it — it never rested on the flags being
+sent, it rested on the write having landed — and what moved is one clause of the detail, which
+used to end *"the flags are still passed; they do not restrict it"* and could not go on saying
+so. This is the second seat where a posture flag came off because it was doing nothing useful
+and one measured harm; the Codex row above is the first, and the two were decided on the same
+ledger. §9.6b carries the argument.
 
 **Codex is the seat where the OS changes the answer, and on Windows it wears that same
 `unsandboxed` badge.** Re-probed 2026-08-04 against codex-cli 0.146.0: `-s read-only` *and*
@@ -2594,6 +2602,30 @@ deliberately weak mapping tightens the moment a live run shows the spelling.
 `TestActOutcomesRenderDistinctly` fails the build if any two statuses ever render alike;
 `TestOverlappingToolCallsResolveToTheRightEntries` replays the real out-of-order probe.
 
+**A failed entry is a card now, and it was the one card §9.11 missed.** That pass gave every
+card in a column one grammar — a title with its body hanging under it — and cited the trace as
+somewhere the room *already* did it, on the strength of the failure detail's indent. The entry
+itself never got it, and a live room showed why that matters: `run_command: pwsh -Command
+"Get-ChildItem"` does not fit 37 cells, so the command wrapped to a continuation starting hard
+against the column edge, reading as a second nameless entry with the outcome mark stranded on
+it. It now hangs under its own `⚙`, which costs no rows and makes one call look like one call.
+
+Two things then had to change with it, and both are the kind of detail that only shows up
+against a real capture:
+
+- **The reason indents FOUR, not two.** Once the command hangs at two, a reason at two lands in
+  the same column as the tail of the command it explains — telling them apart by colour alone,
+  which this product does not do. Goldens render with `PlainStyles`, so that golden is exactly
+  the artifact that proves it.
+- **The reason is flattened and bounded.** `sanitize` preserves newlines on purpose, because a
+  vendor's prose reply is prose; a tool failure's detail is not prose, and multi-line stderr
+  pushed through the wrapper arrived as ragged fragments at random widths. It is now collapsed
+  to one flowing line and capped at three rows with the room's own ellipsis, so a clipped reason
+  can never read as a complete one. The clip has an answer — `f` expands the column to the full
+  frame, where the same reason typically survives whole — and a refusal behind it: the trace
+  answers *what did this agent do and did it work*, not *show me the log*, and the turn-level
+  failure still arrives in the column's note carrying the vendor's own sentence.
+
 ### 9.6b The agy trace was showing its message-passing and hiding its work
 
 Driven live, the Antigravity column's trace read `user_input ?`, `system_message ?`,
@@ -2730,8 +2762,38 @@ trial per arm with an uncontrolled difference: the two turns issued different co
 (`pwsh -Command "Get-Location; Get-ChildItem"` versus `Get-ChildItem`), so it is not a clean
 A/B**, and the refusal's mention of `C:\` may be about a drive root rather than about the flag.
 What it does establish is the flag's observed cost — a dead turn, with nothing rendered. The
-posture flags are **not** changed on the strength of it; that is a decision to make deliberately
-and separately, and this is a record, not a fix.
+posture flags were **not** changed on the strength of it; that is a decision to make
+deliberately and separately, and this was a record, not a fix.
+
+**That decision is now made: the flags come off, in both postures** (ADR-008, seventeenth
+amendment). The open question this section carried — *should council keep asking agy for
+`--mode plan --sandbox` when both are measured to do nothing?* — is closed the way the evidence
+points, and the ledger is one-sided rather than a close call:
+
+- On the **write** side, the flags were measured restricting nothing. Asked to write a file
+  under both, agy wrote it; reported permission mode and tool list were byte-identical to a run
+  without them, and `write_to_file` was still in the list. Refuted, not unproven.
+- On the **shell** side, the one and only effect either flag has ever been observed to have is
+  the paragraph above: a refused `run_command`, an agent that gave up, and a turn that ended
+  `status:"ERROR"` with an empty response. The user sees a blank column.
+- So the flags bought **no restriction that was ever observed**, at the price of turns that die
+  with nothing rendered. That is not caution; it is the appearance of caution paid for in the
+  vendor's actual answers. The confound above is unresolved and does not need to be: it concerns
+  *why* the turn died, and the decision only needs *that* it did, set against a benefit measured
+  at zero.
+
+**No honesty claim moves with them, and that separation is the point of having waited.** §9.13
+deliberately changed what the room *says* about this posture and nothing about the posture,
+because a documentation pass that quietly retunes a safety flag is exactly what this file exists
+to prevent. This is the other half, made on its own, by the owner. The badge stays
+`unsandboxed`; the detail loses the clause claiming the flags are passed, because they are not,
+and a detail describing council's own behaviour inaccurately is the one class of false claim
+this repo has no excuse for. The containment was never these flags — it is the workspace (§9.2,
+ADR-008 third and twelfth amendments), and agent-ops ADR-012 rules the same way independently.
+
+Deliberately **not** part of this: `--dangerously-skip-permissions`. Dropping a flag that
+restricted nothing and adding one that approves everything are different acts, and the second
+stays refused on both seats that offer it.
 
 ### 9.7 Status
 
@@ -3354,6 +3416,11 @@ property; it was a defect wearing one's clothes.
 --sandbox` when both are measured to do nothing is an open decision (§9.6b) and belongs to
 the owner, not to a documentation pass. This section changed what the room *says* about the
 posture and nothing about the posture.
+
+*(That decision was made the same day, separately and by the owner: the flags come off. §9.6b
+carries the ruling and ADR-008's seventeenth amendment records it. The split held — the pass
+that changed the words and the ruling that changed the behaviour are two changes with two
+arguments, which is what let each be judged on its own.)*
 
 The general lesson, in this file's own terms: §9.10 found a mechanism that was complete and
 unreachable, §9.12 found one that was complete, reachable and unattributed. This one is a
