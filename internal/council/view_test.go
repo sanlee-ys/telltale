@@ -98,11 +98,30 @@ func TestFloor(t *testing.T) {
 	golden(t, "floor-height", render(st))
 }
 
+// deadSeats is the room a real machine has: one vendor missing, one installed
+// behind a shim council refuses to drive.
+func deadSeats() State {
+	st := room()
+	st.Columns[1].Avail = AvailNotInstalled
+	st.Columns[1].Note = "not found on PATH (looked for codex)"
+	st.Columns[1].Sandbox = SandboxClaim{}
+	st.Columns[2].Avail = AvailUnusable
+	st.Columns[2].Note = "resolves to a shell shim (agy.cmd) and takes its prompt as an argument; set TELLTALE_COUNCIL_AGY_BIN to the real executable"
+	st.Columns[2].Sandbox = SandboxClaim{}
+	return st
+}
+
 // TestUnavailableColumnsSayWhichFailure is the honest-degradation case: "not
 // installed" and "installed but not drivable" are different facts and must not
 // render alike.
+//
+// Asserted with --vendor all, which is where the full cards live now. By
+// default those seats fold out of the grid — see TestDeadSeatsFoldOut — and the
+// distinction this test guards moves to the notice line, where
+// TestTheCollapsedSeatSaysWhichFailure keeps it.
 func TestUnavailableColumnsSayWhichFailure(t *testing.T) {
 	st := room()
+	st.Seats = Seats{All: true}
 	st.Columns[1].Avail = AvailNotInstalled
 	st.Columns[1].Note = "not found on PATH (looked for codex)"
 	st.Columns[1].Sandbox = SandboxClaim{}
@@ -231,6 +250,14 @@ func TestNoLineExceedsTheTerminalWidth(t *testing.T) {
 			return st
 		},
 		"help": func() State { st := room(); st.Help = true; return st },
+		// A multi-row composer over a room that is also mid-transcript: the two
+		// new variable-height surfaces competing for the same frame.
+		"talking": func() State {
+			st := talking()
+			st.Mode = ModeComposing
+			st.Draft = "and\nnow\na\nfollow-up\nspanning\nseveral rows"
+			return st
+		},
 		"busy": func() State {
 			st := room()
 			st.Turn = 1
@@ -294,13 +321,27 @@ func TestNoLineExceedsTheTerminalWidth(t *testing.T) {
 // TestFrameHeightFitsTheTerminal keeps the room from scrolling its own chrome
 // off the top, which would take the header and the mode line with it.
 func TestFrameHeightFitsTheTerminal(t *testing.T) {
-	for _, h := range []int{10, 12, 16, 24, 40} {
-		for _, w := range []int{60, 80, 120} {
+	states := map[string]func() State{
+		"empty": room,
+		// The two surfaces that can now take rows away from the body. Both have
+		// to lose that argument before the frame does.
+		"composing": func() State {
 			st := room()
-			st.Width, st.Height = w, h
-			n := len(strings.Split(Render(st, PlainStyles(), GlyphsFor(false)), "\n"))
-			if n > h {
-				t.Errorf("w=%d h=%d: frame is %d lines, terminal is %d", w, h, n, h)
+			st.Mode = ModeComposing
+			st.Draft = "one\ntwo\nthree\nfour\nfive\nsix\nseven"
+			return st
+		},
+		"collapsed": deadSeats,
+	}
+	for name, mk := range states {
+		for _, h := range []int{10, 12, 16, 24, 40} {
+			for _, w := range []int{60, 80, 120} {
+				st := mk()
+				st.Width, st.Height = w, h
+				n := len(strings.Split(Render(st, PlainStyles(), GlyphsFor(false)), "\n"))
+				if n > h {
+					t.Errorf("%s w=%d h=%d: frame is %d lines, terminal is %d", name, w, h, n, h)
+				}
 			}
 		}
 	}

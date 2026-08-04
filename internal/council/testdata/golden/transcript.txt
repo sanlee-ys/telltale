@@ -1,0 +1,24 @@
+ council ~/code/telltale                                                              turn 3  │  3/3 seated  │  no brief
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ▸Claude Code              ⠋ streaming  │  Codex                     ⠋ waiting  │  Antigravity                     idle 
+ ro:tools  tokens                       │ ro:requested  final only              │ unsandboxed  final only               
+ ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
+ ↑ 2 more above                         │ turn 3 ────────────────────────────── │ no turn dispatched yet.               
+ Resume. Re-sending grows input         │ › @all is the scrollback worth the    │                                       
+ quadratically.                         │   memory?                             │                                       
+                                        │ working. this vendor reports no       │                                       
+ turn 2 ──────────────────────────── 8s │ incremental output, so nothing        │                                       
+ › what does that cost by turn five?    │ appears until the turn finishes.      │                                       
+ ⚙ Read: dispatch.go ✓                  │                                       │                                       
+                                        │                                       │                                       
+ About 30K redundant input tokens per   │                                       │                                       
+ vendor.                                │                                       │                                       
+                                        │                                       │                                       
+ turn 3 ─────────────────────────────── │                                       │                                       
+ › @all is the scrollback worth the     │                                       │                                       
+   memory?                              │                                       │                                       
+ Fifty turns is cheap against           │                                       │                                       
+ forgetting.                            │                                       │                                       
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ›                                                                                                                      
+ VIEW                                                 ↑↓ scroll  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 
