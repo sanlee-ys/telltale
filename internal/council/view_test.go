@@ -939,7 +939,7 @@ func TestActOutcomeMarksSurviveASCII(t *testing.T) {
 	taken := map[string]string{
 		"act": a.Act, "ellipsis": a.Ellipsis, "focus": a.Focus, "warn": a.Warn,
 		"sep": a.Sep, "rule": a.Rule, "prompt": a.Prompt, "caret": a.Caret,
-		"up": a.Up, "down": a.Down,
+		"up": a.Up, "down": a.Down, "idle": a.Idle,
 	}
 	for name, m := range marks {
 		for other, t2 := range taken {

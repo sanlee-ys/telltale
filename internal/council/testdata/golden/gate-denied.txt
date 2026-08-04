@@ -1,8 +1,8 @@
- council ⚠ WRITE ~/code/telltale                                                      turn 1  │  3/3 seated  │  no brief
+ council ⚠ WRITE  │  ~/code/telltale                                                 turn 1  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸Claude Code                      done │  Codex                     ⠋ waiting  │  Antigravity               ⠋ waiting  
- gated  tokens                          │ WRITES  final only                    │ WRITES  final only                    
- ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
+ ▸ Claude Code  ───────────────  ✓ done │   Codex  ─────────────────  ⠋ waiting │   Antigravity  ───────────  ⠋ waiting 
+   gated  tokens                        │   WRITES  final only                  │   WRITES  final only                  
+                                        │                                       │                                       
  ⚙ Write: internal/council/gate.go ✗    │ working. this vendor reports no       │ working. this vendor reports no       
  denied by you                          │ incremental output, so nothing        │ incremental output, so nothing        
  ⚙ Bash: go build ./... ✗               │ appears until the turn finishes.      │ appears until the turn finishes.      

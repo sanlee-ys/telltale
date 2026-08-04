@@ -2425,6 +2425,13 @@ flag (ADR-008, third and twelfth amendments). macOS and Linux are untouched and 
 badges stay distinct — convergence on one string is how a per-vendor claim quietly becomes
 a blanket one again.
 
+What these badges *say* has not changed since; how loudly they say it has. §9.11 gives the
+two that mean "this seat can change your files" weight and the warning hue, because the room
+had been drawing `unsandboxed` at exactly the volume it drew `ro:tools` beside it. The words
+still carry the whole distinction — that is why they break the `ro:` prefix — so nothing
+here depends on colour; the weight only makes the word findable in a frame with four columns
+of prose in it.
+
 **The Claude row cost three attempts to get right, and the failure mode is worth recording.**
 The original ADR claimed enforcement with no mechanism named. The first correction named
 `--allowedTools "Read,Glob,Grep"`, which *sounds* exactly right and is not: it pre-approves
@@ -2949,6 +2956,11 @@ line exists to prevent. It is also dropped, `f` first, when the cell cannot hold
 the count is never traded for the hint, and at a three-seat room's 37 cells the short form
 is what fits.
 
+The same honesty now runs the other way as well, in §9.11: `f` and `tab` are dropped from
+the mode line *and* the marker in a room with a single seat on screen, because expanding the
+only column to the width it already has and cycling focus around one seat are both nothing
+happening. A key that does nothing is as much a false promise as a key that goes unnamed.
+
 #### Mouse wheel scrolling: rejected, with the measurement
 
 **Measured**, against the compiled `charm.land/bubbletea/v2` v2.0.8 by running a program
@@ -2981,3 +2993,159 @@ came back the same.
 
 Recorded rather than left as a gap, because "nobody tried" and "it was measured and
 refused" are different facts, and this repo does not let them render alike.
+
+### 9.11 The room was correct and it was flat
+
+§9.10 fixed the last thing that did not *work*, and the room was driven live the same day.
+The report back was three words — *"where are the UI updates?"* — and it was right. Every
+sentence in this section so far is about what the room says; none of them is about how it
+looks, and the accumulated answer was a surface with one typographic level in it. A seat's
+name, a safety claim, a key you can press and four hundred lines of vendor prose all
+arrived at the eye with exactly the same emphasis, separated by nothing but two horizontal
+rules three rows apart. Everything was true and nothing was findable.
+
+The rule this section is written under is §7.1's second: **every distinction is carried by a
+glyph, a word or a number FIRST, and colour only reinforces it.** That is what makes
+`--ascii` and `NO_COLOR` correct by construction, and it is also, read the other way, a
+budget: a surface that may not lean on hue has to earn hierarchy from shape, position,
+weight and air. Council had spent almost none of that budget. What follows is the pass that
+spent it, and the constraint every item was checked against.
+
+**No colour was added, and that was not a close call.** The palette is still exactly
+`Text / Muted / Identity / SevOK / SevWarn / SevCrit` from `internal/theme` (§7.5), and
+`internal/theme` was not touched — it is shared with the stdlib-only statusline binary
+(ADR-002), so a token added for a TUI would be a coupling paid for by a binary that cannot
+use it. What *was* added is **weight**, which is an attribute rather than a hue: `Strong` is
+Identity at full weight and `Alert` is SevWarn at full weight, and `PlainStyles` renders
+both as the identity function. That last property is the whole reason weight is safe here —
+it changes no cell's width and no line's content, so every layout golden is blind to it and
+nothing it marks is the sole carrier of anything.
+
+**The state a seat is in is now a shape.** `done` / `failed` / `cancelled` / `idle` /
+`unavailable` were five words at the far right of a 37-cell column, told apart by the word
+and by a colour behind it, in a room that holds three of them side by side. Each now leads
+with a mark, and the vocabulary is deliberately a **reuse of meanings this room already
+owns** rather than a second alphabet:
+
+| phase | mark | ascii | where the meaning comes from |
+|---|---|---|---|
+| idle | `○` | `.` | the only new glyph — the HUD's own weakest-state dot, with the HUD's own ASCII form (§7.5) |
+| waiting / streaming | spinner | `-\|/` | already sat in this slot; it is now the in-flight member of one vocabulary rather than a special case |
+| done | `✓` | `+` | the trace's own "the vendor reported this worked", said about the whole turn |
+| failed | `✗` | `x` | the trace's own "the vendor reported this broke" |
+| cancelled | `⚠` | `!` | what a note and the unavailable card already open with: *this did not complete normally* |
+| unavailable | `⚠` | `!` | same claim, and the **word** is what separates it from cancelled |
+
+Two of those share a mark, and that is the design rather than a collision. glyphs.go argues
+at length that a character already spoken for is not a mark — but that argument is about a
+character meaning two *different* things, and here it means the same thing twice. The
+distinction between "cancelled" and "unavailable" is carried by the word, which always
+renders, in both glyph sets and with colour off. `TestPhasesRenderAsDistinctMarks` fails the
+build if any two states ever render alike; `TestPhaseMarksSurviveASCII` fails it if the one
+new character collides with anything already claimed. **Rule 4 is untouched**: the spinner
+is still the room's only moving cell, because none of the other four marks move.
+
+**The column header is one line instead of two labels.** `▸Claude Code` at the far left and
+`idle` at the far right with twenty-five dead cells between them reads as two unrelated
+things, which is what it was. The name now takes full weight — it is the anchor a reader
+scans for — the state leads with its mark, and the gap between them is filled with a rule.
+The rule is not decoration: it is **this room's existing grammar for "a label and the
+numbers that belong to it"**, which is exactly what `turnRule` has always drawn for every
+turn in the transcript underneath. The live turn's header and a finished turn's separator
+are now the same line form, so a reader learns one shape rather than two, and the header
+loses the ability to read as two things at once. It degrades in the right order: below the
+width where a rule fits, the **name** is truncated and the state is kept, because a clipped
+seat name is still recognisable and a clipped state word is not.
+
+Two cells of air each side of that rule, not one, and the reason is `--ascii`. The ASCII
+rule is `-` and the ASCII spinner's first frame is also `-`, so a streaming column at one
+cell rendered `------------ - streaming` and the mark disappeared into the rule pointing at
+it. Two cells is also what this product already puts around the `│` that separates zones in
+the header and the mode line, so the fix and the convention are the same number.
+
+**One rule per column instead of two three rows apart.** The full-width rule under the room
+header stays — it is the HUD's anatomy (§7.2) and council is meant to be the same product —
+and the per-column rule under the badges is gone. It was the weaker of the two and it was
+doing almost nothing: by the time the eye reached it, it had been told nothing the two lines
+above had not already said. The header now carries a rule of its own, which separates the
+seat from its content in the same gesture that binds its name to its state. **The row was
+not reclaimed for the body; it was spent on a blank one**, because what the reading area
+needed was air between chrome and content, and a blank line separates two blocks more
+quietly than a second horizontal line does.
+
+That row is *reserved* even for a seat with no posture to state, so the bodies of three
+columns start on the same screen row. A grid whose rows do not line up is a worse trade than
+one empty claim slot — and `MaxScroll` no longer subtracts a literal 3 for the chrome. It
+measures the chrome by drawing it, from the same function the renderer uses, which fixes an
+off-by-one that was already live on a column with no badges.
+
+**The badge line looks like a claim instead of like debug output.** It is unchanged in what
+it says — `TestSandboxBadgesAreNeverBlanket` still guards that, and §9.2's argument is
+untouched — and changed in three ways in how it is shaped. It is indented to the seat name
+above it, so it reads as a property of that seat rather than as the first line of the reply;
+an unindented row of bare lowercase tokens at the top of a column is precisely what debug
+output looks like. Its cost is right-anchored, giving the two chrome rows one shape twice
+over: label on the left, value on the right. And the posture badge takes weight and the
+warning hue **when, and only when, it says this seat can change your files** — `WRITES` and
+`unsandboxed` are loud, `ro:*` stays chrome, `gated` takes the weight without the severity
+because a gated seat is the room working rather than a risk.
+
+That last one is the pass's only change with a safety argument behind it. §9.2 is emphatic
+that a claim you cannot see is not a claim, and then the room drew `unsandboxed` at exactly
+the volume it drew `ro:tools` beside it. Colour is still redundant — the words break the
+`ro:` prefix on purpose and are what actually carry it, which is why the plain style set
+renders every badge as its own bare word — but a claim a hurried reader skims past is doing
+half its job. `TestAWriteCapableBadgeDoesNotRenderLikeAReadOnlyOne` pins it.
+
+**The degraded columns are cards.** `⚠ Codex is not seated`, a blank, a reason paragraph at
+the same indent, a blank, and a closing sentence at the same indent is three fragments
+floating in a column: nothing on screen said the reason belonged to the title, so a
+three-seat room with one dead seat read as unrelated paragraphs. Every card in a column now
+has one grammar — **a title at weight, its body hanging under it** — and it costs no rows.
+The room was already doing this in the two places it needed it least (the prompt echo
+indents under its `›`, a failed call's detail indents under the call) and in none of the
+places it needed it most: the notes, the unavailable card and the approval card, where a
+wrapped second line started hard against the column edge and read as a new statement. On
+notes the mark carries the hue and the words stay plain, which is the same split the trace's
+outcome marks make.
+
+**The transcript reads as a conversation.** A brief and the answer to it arrived as
+consecutive lines at the same indent, told apart only by a glyph at the start of one of
+them — a distinction you have to *read*, on a surface built for comparing four answers at a
+glance. There is now a blank row between them, and the echoed brief takes full weight,
+because in a column of vendor prose the user's own words are the thing you scroll looking
+for. **The row is a swap, not a cost**: it came from between the turns, where a labelled
+full-width rule was already doing the separating. The transcript is exactly as tall as it
+was. What that leaves is three boundaries with three strengths, ranked: a labelled rule
+where the turn changes, a blank row where the speaker changes, a blank row where the kind of
+content changes (what the seat *did*, then what it *said*).
+
+**The footer has a figure and a ground.** Six items of identical weight separated by
+identical bars is a wall the eye slides off — which is, concretely, how a room with working
+scroll keys, page keys, `g`, `G` and a full-width expand got reported as having no way to
+scroll at all (§9.10). The key renders at full intensity and its label recedes, the same
+figure/ground split the column header makes between a seat and its state, and it costs no
+cells. Two items are dropped outright in a room with one seat on screen: `f` expands the
+only column to the width it already has and `tab` cycles focus around a single seat, and a
+mode line that promises a key which does nothing is §7.8's surprise pointing the other way.
+The gate line got the same treatment, where it matters most — the call about to be run was
+being drawn at the same faint volume as the keys that answer for it.
+
+Two smaller repairs fell out of the same reading. The room header now separates its own name
+from the workspace with the `  │  ` the HUD's header uses, instead of a bare space that made
+`council ~/code/telltale` read as one run-on label — and fixing that surfaced an off-by-one
+in the header's gap arithmetic, which had been overrunning the frame by exactly one cell and
+having `fit` quietly eat it. And the collapsed-seat notice is truncated with an ellipsis
+rather than handed to `fit`, which cuts silently: at 120 columns on the reference machine it
+had been losing the last word of its own remedy and looking like a sentence that stopped.
+
+**What was declined.** Hoisting the badges into the column header's gap at the single-column
+tiers, which would have bought a body row and killed the widest dead gulf: it makes the
+chrome height depend on content, so the body would grow a row at the moment a cost arrived
+mid-turn — a layout jump, which §7.1 rule 4 does not budget for. Giving `cancelled` a glyph
+of its own: nothing unclaimed in the ASCII set reads as "stopped", and the rule that a
+distinction may be carried by a **word** is there precisely so a glyph does not have to be
+invented for every case. A "role" line under each seat naming what that vendor is for
+(review, IDE, tiebreak): council has no such field, ADR-010's allocation is a fleet fact
+rather than something this room measured, and a room that stated it would be asserting
+something no adapter sourced.

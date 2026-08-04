@@ -198,13 +198,21 @@ func TestPersistentCostIsLabelledAsASessionTotal(t *testing.T) {
 		Sandbox: SandboxClaim{Level: SandboxWrite}, Gran: GranTokens,
 		CostUSD: &cost, CostSession: true,
 	}
-	if got := badgeLine(c); got != "WRITES  tokens  $0.1177 session" {
-		t.Errorf("badge = %q, want the cost named as a session total", got)
+	// Asserted through the rendered row rather than through a cost helper alone,
+	// so the word cannot be lost between the two: the badges are left-anchored
+	// and the figure is right-anchored, and this is the fact that has to survive
+	// that gap.
+	row := badgeRow(c, 48, PlainStyles(), UnicodeGlyphs())
+	if !strings.HasPrefix(row, "  WRITES  tokens") {
+		t.Errorf("badge row = %q, want the posture claim first", row)
+	}
+	if !strings.HasSuffix(row, "$0.1177 session") {
+		t.Errorf("badge row = %q, want the cost named as a session total", row)
 	}
 
 	c.CostSession = false
-	if got := badgeLine(c); got != "WRITES  tokens  $0.1177" {
-		t.Errorf("badge = %q, want a bare per-turn cost", got)
+	if got := badgeRow(c, 48, PlainStyles(), UnicodeGlyphs()); !strings.HasSuffix(got, "$0.1177") {
+		t.Errorf("badge row = %q, want a bare per-turn cost", got)
 	}
 }
 

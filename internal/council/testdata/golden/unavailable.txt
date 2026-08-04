@@ -1,17 +1,17 @@
- council ~/code/telltale                                                         no turn yet  │  1/3 seated  │  no brief
+ council  │  ~/code/telltale                                                    no turn yet  │  1/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸Claude Code                      idle │  Codex                    unavailable │  Antigravity              unavailable 
- ro:tools  tokens                       │ final only                            │ final only                            
- ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
+ ▸ Claude Code  ───────────────  ○ idle │   Codex  ─────────────  ⚠ unavailable │   Antigravity  ───────  ⚠ unavailable 
+   ro:tools  tokens                     │   final only                          │   final only                          
+                                        │                                       │                                       
  no turn dispatched yet.                │ ⚠ Codex is not seated                 │ ⚠ Antigravity is not seated           
+                                        │   not found on PATH (looked for       │   resolves to a shell shim (agy.cmd)  
+                                        │   codex)                              │   and takes its prompt as an          
+                                        │                                       │   argument; set                       
+                                        │   the other columns dispatch          │   TELLTALE_COUNCIL_AGY_BIN to the     
+                                        │   normally.                           │   real executable                     
                                         │                                       │                                       
-                                        │ not found on PATH (looked for codex)  │ resolves to a shell shim (agy.cmd)    
-                                        │                                       │ and takes its prompt as an argument;  
-                                        │ the other columns dispatch normally.  │ set TELLTALE_COUNCIL_AGY_BIN to the   
-                                        │                                       │ real executable                       
-                                        │                                       │                                       
-                                        │                                       │ the other columns dispatch normally.  
-                                        │                                       │                                       
+                                        │                                       │   the other columns dispatch          
+                                        │                                       │   normally.                           
                                         │                                       │                                       
                                         │                                       │                                       
                                         │                                       │                                       

@@ -1,4 +1,4 @@
- council ~/code/telltale                                                         no turn yet  │  3/3 seated  │  no brief
+ council  │  ~/code/telltale                                                    no turn yet  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  council — one brief, several agents, side by side                                                                      
                                                                                                                         
