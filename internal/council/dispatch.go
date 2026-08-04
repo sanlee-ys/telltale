@@ -3,6 +3,7 @@ package council
 import (
 	"context"
 	"strconv"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -80,6 +81,10 @@ func (m *Model) dispatch() tea.Cmd {
 	// three opinions formed without sight of each other, and a first round that
 	// quoted anything would have nothing to quote but would still establish the
 	// wrong precedent in the code.
+	// One timestamp for the whole dispatch, so the columns are measured against
+	// the same starting line. Reading the clock per column would make the
+	// vendor that happened to be constructed last look marginally faster.
+	now := time.Now()
 	quoting := m.st.Quote && m.st.Turn > 0
 	// Snapshotted BEFORE any column is reset, because the loop below clears the
 	// bodies it would otherwise be quoting.
@@ -145,6 +150,8 @@ func (m *Model) dispatch() tea.Cmd {
 		// belonged to the previous answer, which this column just cleared.
 		c.Follow = true
 		c.Scroll = 0
+		c.Started = now
+		c.Elapsed = 0
 		m.redactors[c.Vendor] = &Redactor{}
 	}
 
@@ -262,6 +269,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 
 		case runner.KindDone:
 			c.Body += m.flush(ev.Vendor)
+			c.Elapsed = time.Since(c.Started)
 			if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
 				c.Phase = PhaseDone
 				if m.cancelling {
@@ -273,6 +281,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 
 		case runner.KindError:
 			c.Body += m.flush(ev.Vendor)
+			c.Elapsed = time.Since(c.Started)
 			c.Phase = PhaseFailed
 			if ev.Note != "" {
 				c.Note = ev.Note

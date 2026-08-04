@@ -67,6 +67,7 @@ func New(opts Options) *Model {
 func stateWith(opts Options) State {
 	st := NewState()
 	st.ASCII = opts.ASCII
+	st.Now = time.Now()
 
 	// Resolved once, here, so the render path never reads the environment.
 	dir := opts.Dir
@@ -140,6 +141,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.waitEvents()
 
 	case spinMsg:
+		// Now is stamped here, on the tick, so Render never reads a clock and
+		// the elapsed counters advance on the same schedule as the spinner.
+		m.st.Now = time.Time(msg)
 		// The spinner only advances while a column is genuinely working. A
 		// motionless room is the honest render of a room where nothing is
 		// happening, and it keeps §7.1's budget of one moving cell.
