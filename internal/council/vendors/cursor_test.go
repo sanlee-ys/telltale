@@ -2,20 +2,20 @@ package vendors
 
 import (
 	"context"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 )
 
 // TestCursorFlagsMatchTheInstalledCLI pins the first-turn flags against
-// cursor-agent 2026.07.23-e383d2b's own --help rather than against memory.
+// cursor-agent 2026.07.23-e383d2b's own --help.
 //
-// Unlike the other adapters in this package, these flags were NOT confirmed by
-// a run: the installed CLI reports "Not logged in" and checks authentication
-// before it parses flags, so every probe returned the same auth error. --help
-// and the shipped bundle are the evidence; the comments in cursor.go say which
-// is which, and nothing here claims more than that.
+// These flags are now RUN flags rather than read flags: this exact combination
+// produced four live turns on 2026-08-04. The one that did not survive contact
+// is asserted separately in TestCursorDropsTheSandboxFlagOnWindows.
 func TestCursorFlagsMatchTheInstalledCLI(t *testing.T) {
 	spec := mustCursorFirst(t, "brief")
 
@@ -59,20 +59,129 @@ func TestCursorNeverPassesTheSkipPermissionsFlags(t *testing.T) {
 // TestCursorWritePostureDropsTheReadOnlyRequests: --write has to actually widen
 // the vendor rather than merely change a badge.
 func TestCursorWritePostureDropsTheReadOnlyRequests(t *testing.T) {
-	read := mustCursorFirstPosture(t, "brief", PostureRead)
-	if !slices.Contains(read.Args, "plan") || !slices.Contains(read.Args, "--sandbox") {
-		t.Errorf("read posture asks for nothing: %v", read.Args)
+	for _, windows := range []bool{true, false} {
+		read := cursorBaseArgs(PostureRead, windows)
+		if !slices.Contains(read, "plan") {
+			t.Errorf("windows=%v read posture asks for nothing: %v", windows, read)
+		}
+		write := cursorBaseArgs(PostureWrite, windows)
+		if slices.Contains(write, "plan") || slices.Contains(write, "--sandbox") {
+			t.Errorf("windows=%v write posture kept the read-only requests: %v", windows, write)
+		}
+		// Dropping the flags rather than passing --sandbox disabled: council is
+		// declining to ask for a restriction, not overriding a user's own config
+		// to remove one.
+		if slices.Contains(write, "disabled") {
+			t.Error("write posture overrides the user's sandbox config instead of leaving it alone")
+		}
+	}
+}
+
+// TestCursorDropsTheSandboxFlagOnWindows is a measurement, not a portability
+// nicety, and it is the difference between a seat that answers and one that
+// cannot.
+//
+// Captured 2026-08-04: `--sandbox enabled` on Windows does not weakly apply, it
+// aborts before any model call —
+//
+//	Error: Sandbox mode is enabled but not available on this system.
+//	Sandbox requires macOS or Linux.
+//
+// with exit 1. Passing it there would fail every read-posture turn, which is
+// how the strongest-looking half of this posture would have silently become the
+// reason the column never spoke. Off Windows it stays: the install ships a real
+// cursorsandbox.exe and the flag at least does not refuse.
+func TestCursorDropsTheSandboxFlagOnWindows(t *testing.T) {
+	if args := cursorBaseArgs(PostureRead, true); slices.Contains(args, "--sandbox") {
+		t.Errorf("windows read posture passes --sandbox: %v — the CLI exits 1 on that flag here", args)
+	}
+	args := cursorBaseArgs(PostureRead, false)
+	i := slices.Index(args, "--sandbox")
+	if i < 0 || i+1 >= len(args) || args[i+1] != "enabled" {
+		t.Errorf("non-windows read posture dropped --sandbox enabled: %v", args)
+	}
+}
+
+// TestCursorRunsTheBundleThroughNodeDirectly is the seat's whole existence on
+// Windows.
+//
+// Detection resolves this vendor to the node.exe that cursor-agent.cmd would
+// have run; the adapter has to hand that node its JavaScript entry point as the
+// FIRST argument, or it starts a REPL and the turn hangs. The bundle is derived
+// from the binary rather than passed alongside it, so the two can never
+// disagree about which install is being driven.
+func TestCursorRunsTheBundleThroughNodeDirectly(t *testing.T) {
+	node := filepath.Join(`C:\Users\dev\AppData\Local\cursor-agent\versions\2026.07.23-e383d2b`, "node.exe")
+	spec, err := Cursor{}.FirstTurn("brief", `C:\ws`, node, PostureRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(filepath.Dir(node), "index.js")
+	if len(spec.Args) == 0 || spec.Args[0] != want {
+		t.Fatalf("Args[0] = %v, want the bundle %q", spec.Args, want)
+	}
+	// Still argv, still last, still no stdin — the transport did not change,
+	// only the shell that used to be in front of it.
+	if spec.Args[len(spec.Args)-1] != "brief" {
+		t.Errorf("the prompt is no longer the final argument: %v", spec.Args)
+	}
+	if spec.StdinPrompt != "" {
+		t.Error("a stdin prompt appeared on a CLI that has no stdin path for one")
+	}
+	// The flags still have to come between the bundle and the prompt.
+	if !slices.Contains(spec.Args, "-p") || !slices.Contains(spec.Args, "stream-json") {
+		t.Errorf("flags were lost when the bundle was prepended: %v", spec.Args)
 	}
 
-	write := mustCursorFirstPosture(t, "brief", PostureWrite)
-	if slices.Contains(write.Args, "plan") || slices.Contains(write.Args, "--sandbox") {
-		t.Errorf("write posture kept the read-only requests: %v", write.Args)
+	// The resume path takes the same treatment; a bundle on turn one and not on
+	// turn two would be a seat that answers once.
+	next, err := Cursor{}.NextTurn("follow up", `C:\ws`, node, "sess-1", PostureRead)
+	if err != nil {
+		t.Fatal(err)
 	}
-	// Dropping the flags rather than passing --sandbox disabled: council is
-	// declining to ask for a restriction, not overriding a user's own config to
-	// remove one.
-	if slices.Contains(write.Args, "disabled") {
-		t.Error("write posture overrides the user's sandbox config instead of leaving it alone")
+	if len(next.Args) == 0 || next.Args[0] != want {
+		t.Errorf("NextTurn lost the bundle: %v", next.Args)
+	}
+}
+
+// TestCursorLeavesANativeEntryPointAlone: on macOS and Linux the resolved
+// binary IS cursor-agent, and prepending a JavaScript path to its argv would
+// make the first thing it sees a file it was never asked to read.
+func TestCursorLeavesANativeEntryPointAlone(t *testing.T) {
+	spec, err := Cursor{}.FirstTurn("brief", "/ws", "/usr/local/bin/cursor-agent", PostureRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.Args[0] != "-p" {
+		t.Errorf("Args[0] = %q, want the first flag — nothing should be prepended here: %v", spec.Args[0], spec.Args)
+	}
+}
+
+// TestCursorSeparatesTheBriefFromTheFlags closes the hazard ADR-008's fifth
+// amendment recorded as unresolved, with the run it asked for.
+//
+// The prompt is a variadic positional, so a brief opening with "-" is read as
+// an option. Measured 2026-08-04:
+//
+//	… --workspace <ws> "--seriously reply with OK"
+//	    → error: unknown option '--seriously reply with OK'
+//	… --workspace <ws> -- "--seriously reply with OK"
+//	    → a normal turn, result "OK"
+//
+// The separator was left out originally because getting it wrong breaks every
+// brief rather than a rare one. It is in now because both forms were run.
+func TestCursorSeparatesTheBriefFromTheFlags(t *testing.T) {
+	for _, spec := range []runner.Spec{
+		mustCursorFirst(t, "-- not a flag"),
+		mustCursorNext(t, "-- not a flag", "sess-1"),
+	} {
+		n := len(spec.Args)
+		if n < 2 || spec.Args[n-2] != "--" {
+			t.Errorf("no -- immediately before the prompt: %v", spec.Args)
+		}
+		if spec.Args[n-1] != "-- not a flag" {
+			t.Errorf("the brief was altered: %q", spec.Args[n-1])
+		}
 	}
 }
 
@@ -109,9 +218,14 @@ func TestCursorPromptGoesInArgvAndSaysSo(t *testing.T) {
 	}
 }
 
-// TestCursorShimIsRefusedByTheRunner: the belt-and-braces check that the two
-// halves of this change agree. Detection marks the Windows seat unusable; if
-// that ever regressed, the runner is the backstop that still refuses.
+// TestCursorShimIsRefusedByTheRunner: the rule that made this seat unusable is
+// still armed, and must stay armed.
+//
+// Detection no longer hands the adapter a .cmd — it resolves the bundled node
+// the .cmd would have run — but nothing about the refusal changed, and the
+// refusal is what makes the resolution matter. If detection ever regressed to
+// passing the shim through, the runner is the backstop that still says no
+// rather than putting a brief through cmd.exe.
 func TestCursorShimIsRefusedByTheRunner(t *testing.T) {
 	spec, err := Cursor{}.FirstTurn("brief", `C:\ws`, `C:\Users\dev\AppData\Local\cursor-agent\cursor-agent.cmd`, PostureRead)
 	if err != nil {
@@ -163,12 +277,19 @@ func TestCursorOmitsWorkspaceWhenThereIsNone(t *testing.T) {
 	}
 }
 
-// --- Parser tests, over lines built from the shipped bundle's own emit calls. ---
+// --- Parser tests, over lines CAPTURED from live turns on 2026-08-04. ---
 //
-// These are NOT captured from a run — no run is possible on an unauthenticated
-// CLI — and that is stated here rather than left for a reader to assume from the
-// resemblance to codex_test.go. Each line below is the object cursor-agent's
-// bundle literally constructs and JSON-stringifies to stdout in print mode.
+// The previous version of this block said the opposite: nothing below had been
+// run, because the CLI was not signed in. It is signed in now and these lines
+// are off the wire, abridged only where a field is irrelevant to the assertion.
+// The two places where the wire disagreed with the bundle — the tool_call
+// discriminator and the whole-message repeat — each have their own test, and
+// each says which is which.
+//
+// One shape here is still bundle-derived rather than captured, and it is
+// labelled at its own case: a SUCCESSFUL tool call. Every tool call on the
+// probe machine was blocked by a hook, so `result.success` has never actually
+// come down this pipe.
 
 func TestCursorParseInitCarriesTheSessionID(t *testing.T) {
 	line := []byte(`{"type":"system","subtype":"init","apiKeySource":"login","cwd":"C:\\ws","session_id":"0198c0de-1234-4321-8888-abcdefabcdef","model":"Sonnet 4","permissionMode":"default"}`)
@@ -203,23 +324,204 @@ func TestCursorDoesNotRenderTheEchoedPrompt(t *testing.T) {
 	}
 }
 
-// TestCursorToolActivityIsNotRenderedAsSpeech. `tool.case` is the discriminator
-// the bundle itself reads — it tests "shellToolCall" === e.tool.case — so the
-// field name is evidence, not a guess.
-func TestCursorToolActivityIsNotRenderedAsSpeech(t *testing.T) {
-	line := []byte(`{"type":"tool_call","subtype":"started","call_id":"c1","tool_call":{"tool":{"case":"shellToolCall"}},"session_id":"s1"}`)
+// TestCursorDoesNotRenderTheWholeMessageRepeat is the bug a live run found and
+// no amount of bundle reading would have.
+//
+// cursor-agent sends its text deltas AND then the complete message as one more
+// assistant event. Captured, in full, from a turn asked to reply "PONG":
+//
+//	…"text":"P"…,"timestamp_ms":1785855682260}
+//	…"text":"ONG"…,"timestamp_ms":1785855682264}
+//	…"text":"PONG"…}          ← no timestamp_ms
+//
+// Appending all three renders "PONGPONG". The absence of timestamp_ms is the
+// only discriminator the vendor offers, and it held on all three captured
+// turns.
+func TestCursorDoesNotRenderTheWholeMessageRepeat(t *testing.T) {
+	var body string
+	for _, line := range [][]byte{
+		[]byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"P"}]},"session_id":"s1","timestamp_ms":1785855682260}`),
+		[]byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ONG"}]},"session_id":"s1","timestamp_ms":1785855682264}`),
+		[]byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"PONG"}]},"session_id":"s1"}`),
+	} {
+		if ev, ok := (Cursor{}).ParseEvent(line); ok && ev.Kind == runner.KindText {
+			body += ev.Text
+		}
+	}
+	if body != "PONG" {
+		t.Errorf("body = %q, want %q — the whole-message repeat was concatenated onto its own deltas", body, "PONG")
+	}
+}
+
+// TestCursorFinalOnlyTurnStillRendersThroughTheResult is why the discriminator
+// above is safe to be wrong about.
+//
+// Without --stream-partial-output the vendor sends ONLY the whole message, with
+// no timestamp_ms — so the rule above drops everything. Captured that way on
+// purpose. The column is not empty, because the result event carries the entire
+// reply and the room uses it whenever a column streamed nothing: the failure
+// mode of this field changing upstream is a column that fills at the end, not
+// one that is wrong.
+func TestCursorFinalOnlyTurnStillRendersThroughTheResult(t *testing.T) {
+	whole := []byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"OK"}]},"session_id":"s1"}`)
+	if ev, ok := (Cursor{}).ParseEvent(whole); ok && ev.Kind == runner.KindText {
+		t.Fatalf("the whole-message event rendered as a delta: %q", ev.Text)
+	}
+	res := []byte(`{"type":"result","subtype":"success","is_error":false,"result":"OK","session_id":"s1"}`)
+	ev, ok := Cursor{}.ParseEvent(res)
+	if !ok || ev.Kind != runner.KindMeta || ev.Text != "OK" {
+		t.Fatalf("the result did not carry the reply as a fallback: (%v, %v)", ev, ok)
+	}
+}
+
+// TestCursorToolActivityUsesTheWireDiscriminator. The first version of this
+// adapter looked for `tool_call.tool.case`, because the bundle tests
+// `"shellToolCall" === e.tool.case` internally. On the wire the protobuf oneof
+// is FLATTENED to an object key, so that lookup matched nothing and every trace
+// entry read "tool call". This line is copied from a capture.
+func TestCursorToolActivityUsesTheWireDiscriminator(t *testing.T) {
+	line := []byte(`{"type":"tool_call","subtype":"started","call_id":"c1","tool_call":{"shellToolCall":{"args":{"command":"ls -1","workingDirectory":"C:\\ws"}},"toolCallId":"c1","startedAtMs":"1785855754954"},"session_id":"s1"}`)
 	ev, ok := Cursor{}.ParseEvent(line)
 	if !ok || ev.Kind != runner.KindActivity {
 		t.Fatalf("got (%v, %v), want a KindActivity", ev, ok)
 	}
-	if ev.Text != "shellToolCall" {
-		t.Errorf("Text = %q, want the tool discriminator", ev.Text)
+	// Acts, not Text: the room reads tool news off Acts and an adapter that set
+	// Text alone would produce a permanently empty trace. That is what the old
+	// version did.
+	if len(ev.Acts) != 1 {
+		t.Fatalf("Acts = %v, want exactly one call", ev.Acts)
 	}
-	// "completed" is the matching half of the same call. Emitting both would
-	// double every line of the trace.
-	done := []byte(`{"type":"tool_call","subtype":"completed","call_id":"c1","tool_call":{"tool":{"case":"shellToolCall"}},"session_id":"s1"}`)
-	if _, ok := (Cursor{}).ParseEvent(done); ok {
-		t.Error("the completed half of a tool call produced a second activity line")
+	if ev.Acts[0].Text != "shell: ls -1" {
+		t.Errorf("Text = %q, want the tool and its command", ev.Acts[0].Text)
+	}
+	if ev.Acts[0].ID != "c1" {
+		t.Errorf("ID = %q; without it the result cannot resolve this entry", ev.Acts[0].ID)
+	}
+	if ev.Acts[0].Outcome != runner.ActPending {
+		t.Errorf("Outcome = %v, want ActPending — an announced call has not resolved", ev.Acts[0].Outcome)
+	}
+	// The metadata keys beside the discriminator must not be mistaken for it.
+	if strings.Contains(ev.Acts[0].Text, "toolCallId") || strings.Contains(ev.Acts[0].Text, "startedAtMs") {
+		t.Errorf("a metadata key was read as the tool name: %q", ev.Acts[0].Text)
+	}
+}
+
+// TestCursorToolOutcomesLandOnTheSameEntry. Both halves of a call are taken
+// now, correlated by call_id: "started" opens the entry, "completed" resolves
+// it. Taking only the announcement was right while the trace was append-only
+// and is wrong now that a running command has to read differently from a failed
+// one.
+//
+// Every failure shape below was captured. There are two of them for `error`
+// alone — readToolCall sends {"errorMessage":…} and grepToolCall sends
+// {"error":…} — on the same stream, which is why the text is dug out rather
+// than declared.
+func TestCursorToolOutcomesLandOnTheSameEntry(t *testing.T) {
+	cases := []struct {
+		name    string
+		line    string
+		want    runner.ActStatus
+		detail  string
+		actText string
+	}{
+		{
+			name:    "rejected by a hook",
+			line:    `{"type":"tool_call","subtype":"completed","call_id":"c1","tool_call":{"shellToolCall":{"result":{"rejected":{"command":"ls -1","reason":"Hook blocked with message: nope"}}}},"session_id":"s1"}`,
+			want:    runner.ActFailed,
+			detail:  "Hook blocked with message: nope",
+			actText: "shell",
+		},
+		{
+			name:    "errorMessage shape",
+			line:    `{"type":"tool_call","subtype":"completed","call_id":"c2","tool_call":{"readToolCall":{"result":{"error":{"errorMessage":"could not open the file"}}}},"session_id":"s1"}`,
+			want:    runner.ActFailed,
+			detail:  "could not open the file",
+			actText: "read",
+		},
+		{
+			name:    "error shape",
+			line:    `{"type":"tool_call","subtype":"completed","call_id":"c3","tool_call":{"grepToolCall":{"result":{"error":{"error":"pattern was rejected"}}}},"session_id":"s1"}`,
+			want:    runner.ActFailed,
+			detail:  "pattern was rejected",
+			actText: "grep",
+		},
+		{
+			// The oneof's third case, read off the bundle's own field
+			// descriptors ({no:1,name:"success",kind:"message",oneof:"result"}).
+			// NOT captured: every tool call on the probe machine was stopped by
+			// a hook, so no success ever came down the pipe. Recorded here as
+			// the bundle-derived half of this parser.
+			name:    "success",
+			line:    `{"type":"tool_call","subtype":"completed","call_id":"c4","tool_call":{"readToolCall":{"result":{"success":{"content":"…"}}}},"session_id":"s1"}`,
+			want:    runner.ActOK,
+			actText: "read",
+		},
+		{
+			// Ended, and said nothing about how. ActUnknown rather than ActOK:
+			// inventing a success on a vendor's behalf is the one move this
+			// trace is built to refuse.
+			name:    "no result at all",
+			line:    `{"type":"tool_call","subtype":"completed","call_id":"c5","tool_call":{"someFutureToolCall":{}},"session_id":"s1"}`,
+			want:    runner.ActUnknown,
+			actText: "someFuture",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ev, ok := Cursor{}.ParseEvent([]byte(tc.line))
+			if !ok || len(ev.Acts) != 1 {
+				t.Fatalf("got (%v, %v), want one act", ev, ok)
+			}
+			got := ev.Acts[0]
+			if got.Outcome != tc.want {
+				t.Errorf("Outcome = %v, want %v", got.Outcome, tc.want)
+			}
+			if tc.detail != "" && got.Detail != tc.detail {
+				t.Errorf("Detail = %q, want the vendor's own words %q", got.Detail, tc.detail)
+			}
+			if got.Text != tc.actText {
+				t.Errorf("Text = %q, want %q", got.Text, tc.actText)
+			}
+			// ActDenied is council's record of ITS OWN gate keystroke. A refusal
+			// read off a vendor's stream is not that, and rendering it as one
+			// would claim the user was asked something they never saw.
+			if got.Outcome == runner.ActDenied {
+				t.Error("a vendor-reported refusal was rendered as a council gate denial")
+			}
+		})
+	}
+}
+
+// TestCursorCompletedWithoutAnAnnouncementStillLands: captured — a taskToolCall
+// arrived already resolved, with no "started" before it. The room appends that
+// as a finished entry, but only if the adapter names it; an act with no text is
+// dropped upstream and the step disappears.
+func TestCursorCompletedWithoutAnAnnouncementStillLands(t *testing.T) {
+	line := []byte(`{"type":"tool_call","subtype":"completed","call_id":"c9","tool_call":{"taskToolCall":{"result":{"error":{"error":"Task blocked by preToolUse hook"}}}},"session_id":"s1"}`)
+	ev, ok := Cursor{}.ParseEvent(line)
+	if !ok || len(ev.Acts) != 1 || ev.Acts[0].Text == "" {
+		t.Fatalf("an unannounced completion produced %v (%v); it must still name itself", ev, ok)
+	}
+}
+
+// TestCursorCallIDsSurviveTheirEmbeddedNewline. These ids really do contain a
+// literal \n — "call-ab9b…-0\nfc_88e2…_0" — and both halves of a call carry the
+// identical string. It looks like corruption and is not; correlation depends on
+// it being passed through untouched.
+func TestCursorCallIDsSurviveTheirEmbeddedNewline(t *testing.T) {
+	const id = "call-ab9b3fba-8b2f-4bb2-aaae-bf7d4e845eb7-0\nfc_88e24da8-008f-98fe-b3b2-16e7b20caf7b_0"
+	started := []byte(`{"type":"tool_call","subtype":"started","call_id":"call-ab9b3fba-8b2f-4bb2-aaae-bf7d4e845eb7-0\nfc_88e24da8-008f-98fe-b3b2-16e7b20caf7b_0","tool_call":{"readToolCall":{"args":{"path":"C:\\ws\\note.txt"}}},"session_id":"s1"}`)
+	ev, ok := Cursor{}.ParseEvent(started)
+	if !ok || len(ev.Acts) != 1 {
+		t.Fatalf("got (%v, %v)", ev, ok)
+	}
+	if ev.Acts[0].ID != id {
+		t.Errorf("ID = %q, want it passed through unaltered", ev.Acts[0].ID)
+	}
+	// clipArg collapses whitespace, so the newline cannot reach the column as a
+	// second trace line even though it is in the id.
+	if strings.Contains(ev.Acts[0].Text, "\n") {
+		t.Errorf("a newline reached the rendered text: %q", ev.Acts[0].Text)
 	}
 }
 
@@ -232,8 +534,8 @@ func TestCursorUnparsedToolCallStillCountsAsActivity(t *testing.T) {
 	if !ok || ev.Kind != runner.KindActivity {
 		t.Fatalf("got (%v, %v), want a KindActivity", ev, ok)
 	}
-	if ev.Text == "" {
-		t.Error("an activity line with no text renders as a blank step")
+	if len(ev.Acts) != 1 || ev.Acts[0].Text == "" {
+		t.Errorf("an activity line with no text renders as a blank step: %v", ev.Acts)
 	}
 }
 

@@ -149,9 +149,14 @@ func TestCursorIsSeatedButOnlyUnderItsAgentName(t *testing.T) {
 	}
 	// argv-only, read out of the shipped bundle: print mode's prompt is the
 	// variadic positional and no code path reads it from stdin. That is what
-	// makes the Windows shim unusable rather than merely awkward.
+	// made the Windows shim unusable rather than merely awkward — and it is
+	// still true, which is why the seat rests on the underlay below rather than
+	// on a stdin path someone hoped for.
 	if cursor.stdinPrompt {
 		t.Error("cursor is marked as taking its prompt on stdin; the bundle has no such path, and driving the .cmd on that belief would put prompt text through cmd.exe")
+	}
+	if cursor.nativeUnder == nil {
+		t.Error("cursor has no native underlay; without it the Windows seat is back to AvailUnusable behind a .cmd it never needed to go through")
 	}
 }
 
@@ -243,10 +248,249 @@ func TestUnusableCardNamesTheBinaryItFound(t *testing.T) {
 	}
 }
 
-// TestCursorClaimsNoMoreThanRequested. This is the weakest-evidence column in
-// the room and the badge has to stay at "requested": the CLI is not signed in
-// here and checks authentication before it validates flags, so no invocation
-// ever got far enough to demonstrate or refute a posture.
+// fakeCursorInstall builds the directory layout cursor-agent's own launcher
+// expects, so the resolution can be exercised on either machine.
+//
+// Nothing here is a stand-in for something that could have been tested for
+// real: the live install was verified separately (node.exe + index.js run
+// directly produce byte-identical --help output to the .cmd). What these files
+// pin is the SELECTION — which directory, which pair, and what happens when the
+// layout is not what the launcher assumed.
+func fakeCursorInstall(t *testing.T, versions ...string) (root, shim string) {
+	t.Helper()
+	root = t.TempDir()
+	shim = filepath.Join(root, "cursor-agent.cmd")
+	write := func(p string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(shim)
+	for _, v := range versions {
+		write(filepath.Join(root, "versions", v, "node.exe"))
+		write(filepath.Join(root, "versions", v, "index.js"))
+	}
+	return root, shim
+}
+
+func detectCursorAt(t *testing.T, shim string) VendorInfo {
+	t.Helper()
+	t.Setenv("PATH", t.TempDir())
+	var c candidate
+	for _, cand := range candidates() {
+		if cand.vendor == model.VendorCursor {
+			c = cand
+		}
+	}
+	c.names = []string{"nothing-by-this-name"}
+	c.knownPaths = []string{shim}
+	return detectOne(c)
+}
+
+// TestCursorShimResolvesToTheBundledNode is the whole unlock, asserted as the
+// chain it actually is rather than as a path string.
+//
+// The seat was AvailUnusable on Windows because argv-only + .cmd is what
+// runner.ErrShellShimWithArgvPrompt refuses. The .cmd turned out to be a
+// launcher that execs a bundled node — so council execs the same node, the
+// resolved binary is KindNative, no shell is in the invocation, and the seat is
+// AvailInstalled with its prompt still in argv.
+func TestCursorShimResolvesToTheBundledNode(t *testing.T) {
+	root, shim := fakeCursorInstall(t, "2026.07.23-e383d2b")
+	info := detectCursorAt(t, shim)
+
+	if info.Avail != AvailInstalled {
+		t.Fatalf("Avail = %v (%s), want AvailInstalled", info.Avail, info.Note)
+	}
+	want := filepath.Join(root, "versions", "2026.07.23-e383d2b", "node.exe")
+	if info.Binary != want {
+		t.Errorf("Binary = %q, want the bundled node %q", info.Binary, want)
+	}
+	// The link in the chain that makes the argv prompt legal. If this ever
+	// regressed to KindShim the seat would be refused by the runner instead —
+	// correctly, but the seat would be gone again.
+	if info.Kind != KindNative {
+		t.Errorf("Kind = %v, want KindNative — a shim would put prompt text through cmd.exe", info.Kind)
+	}
+	// The card has to say council stepped over something. A seat that silently
+	// swapped the binary a user pointed it at would be the same class of
+	// unfalsifiable claim as the original "not installed".
+	if !strings.Contains(info.Source, "launcher") {
+		t.Errorf("Source = %q; it does not say the launcher was stepped over", info.Source)
+	}
+}
+
+// TestCursorPicksTheNewestVersionDirectory. cursor-agent auto-updates by
+// dropping a new directory beside the old one, and its launcher sorts by the
+// date in the name. A resolution that took the first entry would run whatever
+// the filesystem happened to list first, which is a version the user has no
+// reason to expect and no way to see.
+func TestCursorPicksTheNewestVersionDirectory(t *testing.T) {
+	root, shim := fakeCursorInstall(t,
+		"2026.07.23-e383d2b",
+		"2026.11.2-aaaa111",  // single-digit month/day: the launcher zero-pads
+		"2026.9.30-bbbb222",  // later in string order, earlier in date order
+		"2025.12.31-cccc333", // an older year that sorts high on the month
+	)
+	info := detectCursorAt(t, shim)
+	want := filepath.Join(root, "versions", "2026.11.2-aaaa111", "node.exe")
+	if info.Binary != want {
+		t.Errorf("Binary = %q, want the newest by date %q", info.Binary, want)
+	}
+}
+
+// TestCursorAcceptsTheTimestampedVersionForm: upstream added a build timestamp
+// between the date and the commit hash, and its launcher accepts both forms.
+// Rejecting the new one would strand a seat on an old install directory — or,
+// once the updater deleted it, on nothing.
+func TestCursorAcceptsTheTimestampedVersionForm(t *testing.T) {
+	root, shim := fakeCursorInstall(t, "2026.07.23-e383d2b", "2026.8.4-11-30-00-f00dcafe")
+	info := detectCursorAt(t, shim)
+	want := filepath.Join(root, "versions", "2026.8.4-11-30-00-f00dcafe", "node.exe")
+	if info.Binary != want {
+		t.Errorf("Binary = %q, want the timestamped form to be accepted and win: %q", info.Binary, want)
+	}
+}
+
+// TestCursorResolutionIsNotCached. Auto-updates move the version directory, and
+// Detect runs once per room — so the answer must be re-derived, never
+// remembered. A cached path outlives the directory it names and turns a
+// detection question into a failed turn.
+func TestCursorResolutionIsNotCached(t *testing.T) {
+	root, shim := fakeCursorInstall(t, "2026.07.23-e383d2b")
+	first := detectCursorAt(t, shim)
+
+	newer := filepath.Join(root, "versions", "2026.8.4-99999aa")
+	if err := os.MkdirAll(newer, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"node.exe", "index.js"} {
+		if err := os.WriteFile(filepath.Join(newer, n), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	second := detectCursorAt(t, shim)
+	if second.Binary == first.Binary {
+		t.Errorf("resolution did not move after an update: still %q", second.Binary)
+	}
+	if second.Binary != filepath.Join(newer, "node.exe") {
+		t.Errorf("Binary = %q, want the newly installed %q", second.Binary, filepath.Join(newer, "node.exe"))
+	}
+}
+
+// TestCursorBrokenLayoutIsUnusableAndNamesWhatWasMissing. The cost of this
+// resolution is a dependency on someone else's directory layout, and the
+// mitigation is not to be clever when it changes: degrade to an honest empty
+// seat, name the path that was expected, and never fall back to driving the
+// shim — which would put prompt text through cmd.exe to avoid an empty column.
+func TestCursorBrokenLayoutIsUnusableAndNamesWhatWasMissing(t *testing.T) {
+	// A node with no bundle beside it: the launcher's own pair, broken.
+	root, shim := fakeCursorInstall(t)
+	dir := filepath.Join(root, "versions", "2026.07.23-e383d2b")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "node.exe"), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	info := detectCursorAt(t, shim)
+	if info.Avail != AvailUnusable {
+		t.Fatalf("Avail = %v, want AvailUnusable when the layout does not match", info.Avail)
+	}
+	if !strings.Contains(info.Note, "index.js") && !strings.Contains(info.Note, "node.exe") {
+		t.Errorf("the note does not name what was expected and not found: %q", info.Note)
+	}
+	if info.Kind == KindShim && info.Avail == AvailInstalled {
+		t.Error("a broken layout fell back to driving the .cmd; that is the refusal this whole chain exists to keep")
+	}
+}
+
+// TestCursorMissingVersionsDirIsUnusableNotAbsent: the install is there, so
+// "not installed" would be the original false claim again, one layer down.
+func TestCursorMissingVersionsDirIsUnusableNotAbsent(t *testing.T) {
+	_, shim := fakeCursorInstall(t)
+	info := detectCursorAt(t, shim)
+	if info.Avail != AvailUnusable {
+		t.Fatalf("Avail = %v, want AvailUnusable", info.Avail)
+	}
+	if !strings.Contains(info.Note, "versions") {
+		t.Errorf("the note does not name the directory it looked in: %q", info.Note)
+	}
+}
+
+// TestCursorOverrideAtANodeStillNeedsItsBundle. The override is documented as
+// "point it at a native exe", and a node.exe satisfies that while being useless
+// without the JavaScript beside it. Caught at detection, where a user can read
+// the reason, rather than as an exit-1 turn quoting a missing-module error.
+func TestCursorOverrideAtANodeStillNeedsItsBundle(t *testing.T) {
+	dir := t.TempDir()
+	node := filepath.Join(dir, "node.exe")
+	if err := os.WriteFile(node, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TELLTALE_COUNCIL_CURSOR_BIN", node)
+
+	var c candidate
+	for _, cand := range candidates() {
+		if cand.vendor == model.VendorCursor {
+			c = cand
+		}
+	}
+	info := detectOne(c)
+	if info.Avail != AvailUnusable {
+		t.Fatalf("Avail = %v, want AvailUnusable for a node with no bundle", info.Avail)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "index.js"), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if info := detectOne(c); info.Avail != AvailInstalled || info.Binary != node {
+		t.Errorf("a node WITH its bundle detected as %v at %q, want AvailInstalled at the override", info.Avail, info.Binary)
+	}
+}
+
+// TestCursorNativeEntryPointIsLeftAlone is the non-Windows case. The POSIX
+// install is an extensionless script, which is already native and already
+// drivable, and there is nothing under it to step over — the resolution must
+// not go looking for a node that is not part of that install's shape.
+func TestCursorNativeEntryPointIsLeftAlone(t *testing.T) {
+	dir := t.TempDir()
+	agent := filepath.Join(dir, "cursor-agent")
+	if err := os.WriteFile(agent, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TELLTALE_COUNCIL_CURSOR_BIN", agent)
+
+	var c candidate
+	for _, cand := range candidates() {
+		if cand.vendor == model.VendorCursor {
+			c = cand
+		}
+	}
+	info := detectOne(c)
+	if info.Avail != AvailInstalled {
+		t.Fatalf("Avail = %v (%s), want AvailInstalled", info.Avail, info.Note)
+	}
+	if info.Binary != agent {
+		t.Errorf("Binary = %q, want the entry point untouched %q", info.Binary, agent)
+	}
+}
+
+// TestCursorClaimsNoMoreThanRequested replaces the version of this test that
+// pinned "nothing could be measured because the CLI is not signed in".
+//
+// It IS signed in now, four turns ran, and the badge still says `ro:requested`
+// — for a better reason than before. Measuring it made the claim worse:
+// `--sandbox enabled` aborts the turn on Windows rather than restricting it, so
+// council stops asking for it there; and under `--mode plan` the agent was seen
+// dispatching shell commands, stopped by a hook rather than by the mode. A
+// badge above "requested" would now be contradicted by a capture, not merely
+// unsupported by one.
 func TestCursorClaimsNoMoreThanRequested(t *testing.T) {
 	for _, win := range []bool{true, false} {
 		claim := sandboxFor(model.VendorCursor, win)
@@ -256,25 +500,35 @@ func TestCursorClaimsNoMoreThanRequested(t *testing.T) {
 		if claim.Detail == "" {
 			t.Errorf("cursor (windows=%v) has a badge with no explanation behind it", win)
 		}
-		// The detail must carry WHY this claim is weaker than the others, not
-		// merely that a flag was passed.
-		if !strings.Contains(claim.Detail, "not signed in") {
-			t.Errorf("the detail does not say why nothing could be measured: %q", claim.Detail)
-		}
+	}
+	// The Windows detail must say the sandbox flag is NOT passed. A user reading
+	// `ro:requested` there and assuming a sandbox was asked for would be wrong in
+	// the one direction this product refuses to be wrong in.
+	if d := sandboxFor(model.VendorCursor, true).Detail; !strings.Contains(d, "NOT passed on Windows") {
+		t.Errorf("the windows detail does not say the sandbox flag is withheld: %q", d)
+	}
+	// And it must not read as a read-only promise, because plan mode was
+	// measured letting a shell command through to the permission layer.
+	if d := sandboxFor(model.VendorCursor, true).Detail; !strings.Contains(d, "shell") {
+		t.Errorf("the windows detail does not carry what plan mode failed to stop: %q", d)
 	}
 }
 
-// TestCursorGranularityIsNotClaimed. --stream-partial-output's help promises
-// "individual text deltas" and the shipped bundle does emit per chunk, but
-// neither is a measurement — and Antigravity is the standing proof that a field
-// named text_delta can carry a whole reply at once. No word is printed for this
-// column until someone watches the pipe.
-func TestCursorGranularityIsNotClaimed(t *testing.T) {
-	if got := granularityFor(model.VendorCursor); got != GranUnknown {
-		t.Errorf("cursor = %v, want GranUnknown — nothing about its streaming was observed", got)
+// TestCursorGranularityIsMeasuredTokens replaces
+// TestCursorGranularityIsNotClaimed, which held this column at GranUnknown
+// because a help string and a bundle emit path are not measurements.
+//
+// Someone watched the pipe. A one-word reply arrived as "P" then "ONG", each in
+// its own assistant event; a sentence arrived as "I", " said", " P", "ONG", ".".
+// That is token-level and the column may say so — which is also why the
+// promotion had to wait: Antigravity's `text_delta` looked exactly this
+// promising in the schema and delivered a whole reply 73 seconds late.
+func TestCursorGranularityIsMeasuredTokens(t *testing.T) {
+	if got := granularityFor(model.VendorCursor); got != GranTokens {
+		t.Errorf("cursor = %v, want GranTokens — per-chunk assistant events were captured live", got)
 	}
-	if got := granularityFor(model.VendorCursor).String(); got != "" {
-		t.Errorf("cursor prints %q in the column header; an unestablished granularity must print nothing", got)
+	if got := granularityFor(model.VendorCursor).String(); got == "" {
+		t.Error("cursor prints no granularity word; a measured one must be printed")
 	}
 }
 

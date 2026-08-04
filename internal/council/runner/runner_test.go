@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -304,6 +305,42 @@ func TestAuthFailureIsTranslated(t *testing.T) {
 	}
 	if last.ExitCode != 1 {
 		t.Errorf("exit code = %d, want 1", last.ExitCode)
+	}
+}
+
+// TestCapturedFailuresAreTranslated pins the two failures added on 2026-08-04,
+// against the stderr that actually produced them.
+//
+// Both were found the same way — by running cursor-agent for the first time —
+// and both are failures a user can fix in thirty seconds and cannot possibly
+// diagnose from the vendor's own text arriving in a narrow column. Neither is
+// invented: the strings below are copied from captured runs, which is the bar
+// for adding a case here at all.
+func TestCapturedFailuresAreTranslated(t *testing.T) {
+	trust := "\n⚠ Workspace Trust Required\n\n  Cursor Agent can execute code and access files in this directory.\n" +
+		"  Do you trust the contents of this directory?\n\n    C:\\ws\n\n  To proceed, you can either:\n" +
+		"    • Run 'agent' interactively to decide\n    • Pass --trust, --yolo, or -f if you trust this directory\n"
+	note := failureNote(errors.New("exit status 1"), trust)
+	if !strings.Contains(note, "trust this workspace") {
+		t.Errorf("note = %q, want the actionable trust message", note)
+	}
+	// The fix the VENDOR offers is --trust, and council must not quietly become
+	// the thing that passes it. The card sends the user to their own terminal.
+	if strings.Contains(note, "--trust") {
+		t.Errorf("the card suggests a flag council refuses to pass on the user's behalf: %q", note)
+	}
+
+	sandbox := "Error: Sandbox mode is enabled but not available on this system. " +
+		"Sandbox requires macOS or Linux.\nRun 'agent sandbox disable' to switch to allowlist mode.\n"
+	note = failureNote(errors.New("exit status 1"), sandbox)
+	if !strings.Contains(note, "config") {
+		t.Errorf("note = %q, want the message to point at the vendor's own config", note)
+	}
+	// Reachable only through the user's own config now — council stopped asking
+	// for a sandbox on Windows — which is exactly why it stays classified rather
+	// than being deleted as dead.
+	if note == "exit status 1" {
+		t.Error("the sandbox failure fell through to the generic quote")
 	}
 }
 

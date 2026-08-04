@@ -2,6 +2,9 @@ package vendors
 
 import (
 	"encoding/json"
+	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -15,23 +18,51 @@ import (
 // the PATH of the shell that ran the check. The detection fix is in detect.go;
 // this file is the adapter the ADR said would drop in when it turned up.
 //
-// The verification story for this vendor is DIFFERENT from every other adapter
-// here, and the difference has to be stated before any of the comments below
-// are read as equivalent to Codex's or Antigravity's:
+// This adapter was written twice, and the difference between the two versions
+// is the point of the comments below.
 //
-//	The installed cursor-agent reports "Not logged in", and it checks
-//	authentication BEFORE it parses flags. Every probe — a good invocation, a
-//	deliberately invalid flag combination, a prompt on stdin — returned the
-//	same authentication error. So nothing here was confirmed by running a
-//	turn.
+// The first version could not run the CLI at all: the install reported "Not
+// logged in", and it checks authentication BEFORE it parses flags, so every
+// probe returned the same auth error. Its facts came from `--help` and from
+// reading the shipped JavaScript bundle — better than docs, weaker than a
+// measurement, and labelled as such everywhere.
 //
-// What replaced the live run is the next best evidence available, and it is
-// better than the docs this repo has twice been burned by: the CLI's own
-// `--help`, and the shipped JavaScript bundle that implements print mode. Where
-// a fact below comes from the bundle it says so. Where nothing establishes a
-// fact, the code refuses to claim one rather than picking the likely answer:
-// the sandbox badge says "requested", the granularity says nothing at all.
+// On 2026-08-04 the install was signed in and four turns ran against
+// 2026.07.23-e383d2b. Three of the bundle-derived facts survived unchanged, and
+// three did not:
+//
+//   - The tool_call discriminator is NOT `tool_call.tool.case`. That is the
+//     bundle's internal protobuf representation; on the wire the oneof is
+//     flattened to a key, `tool_call.readToolCall` / `.shellToolCall` / etc.
+//     The old parser matched nothing and every trace entry read "tool call".
+//   - Assistant deltas are followed by a repeat of the WHOLE message. The old
+//     parser concatenated both and would have rendered "PONGPONG".
+//   - `--sandbox enabled` does not weakly apply on Windows; it kills the turn.
+//
+// Which is the actual lesson, and it is not "the bundle was wrong". The bundle
+// was right about what the program constructs. It could not be right about what
+// arrives at the other end of a pipe, and that is the only thing a parser
+// consumes. Each comment below now says which of the two it rests on.
 type Cursor struct{}
+
+// CursorNodeBundle is the JavaScript entry point a node interpreter has to be
+// handed to become cursor-agent, or "" when this path is not a node at all.
+//
+// Exported because detection and this adapter must not derive it separately.
+// Detection resolves the seat's binary to the node the vendor's own .cmd
+// launcher would have run and checks that this file sits beside it; the
+// invocation below puts that same file in argv[1]. Two copies of one
+// filepath.Join is exactly the kind of agreement that silently stops holding.
+//
+// The sibling relationship is the launcher's, not this repo's: cursor-agent.ps1
+// runs `& "$dir\node.exe" "$dir\index.js" $args` in both of its branches.
+func CursorNodeBundle(binary string) string {
+	base := strings.ToLower(filepath.Base(binary))
+	if strings.TrimSuffix(base, filepath.Ext(base)) != "node" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(binary), "index.js")
+}
 
 // Registration lives in vendor.go; this pins the interface at compile time.
 var _ Vendor = Cursor{}
@@ -43,13 +74,33 @@ func (Cursor) ID() model.VendorID { return model.VendorCursor }
 // Flag names are from `cursor-agent --help` on version 2026.07.23-e383d2b.
 //
 // Read posture is `--mode plan`, whose help reads "read-only/planning (analyze,
-// propose plans, no edits)". It is REQUESTED and nothing more. The same help
-// text says `-p` print mode "Has access to all tools, including write and
-// shell", so the vendor itself describes the mode council runs in as
-// unrestricted by default — everything rests on --mode plan being honoured, and
-// that could not be tested. `--sandbox enabled` is passed alongside it: the
-// install ships a real cursorsandbox.exe, so the mechanism at least exists, but
-// what it covers is unknown and no badge may imply otherwise.
+// propose plans, no edits)". It is REQUESTED and nothing more, and one live turn
+// weakened even that: under `--mode plan` the agent selected and dispatched
+// `cat …` and `ls -1` as shellToolCall invocations. A hook on the machine
+// stopped them, so whether the mode itself would have refused them is still
+// unobserved — but a "no edits" mode let a shell command get as far as the
+// permission layer, and the badge says so.
+//
+// `--sandbox enabled` is passed ONLY off Windows, and that is a measurement
+// rather than a portability nicety. On Windows the flag does not degrade, it
+// aborts:
+//
+//	Error: Sandbox mode is enabled but not available on this system.
+//	Sandbox requires macOS or Linux.
+//
+// exit 1, before any model call. Passing it there would have made every read
+// posture turn fail — the flag that read as the stronger half of this posture
+// was, on this OS, the reason the seat could not answer at all. Off Windows it
+// is kept: a real cursorsandbox.exe ships in the install, and unlike here the
+// flag at least does not refuse. What it covers is still unknown, and no badge
+// may imply otherwise.
+//
+// Note what is NOT done about the Windows case: council does not pass
+// `--sandbox disabled` to force its way past a user config that would fail the
+// same way. Declining to ask for a restriction is council's business; reaching
+// into someone's config to remove one is not. A user whose own config enables
+// the sandbox on Windows gets a turn that fails with the vendor's own sentence,
+// classified into an actionable card by runner.failureNote.
 //
 // Four flags are deliberately never passed, in EITHER posture:
 //
@@ -68,6 +119,14 @@ func (Cursor) ID() model.VendorID { return model.VendorCursor }
 //     column will sit there. Trusting a directory on the user's behalf is the
 //     user's call, made once in their own terminal.
 func (Cursor) baseArgs(p Posture) []string {
+	return cursorBaseArgs(p, runtime.GOOS == "windows")
+}
+
+// cursorBaseArgs is baseArgs with the OS as an argument, so both branches are
+// reachable from a test on either machine. The seat's Windows behaviour is the
+// half that was measured; a test that could only run it on Windows would be the
+// half nobody checks.
+func cursorBaseArgs(p Posture, windows bool) []string {
 	args := []string{
 		// Non-interactive. Boolean, unlike agy's -p, which is a string flag
 		// whose value is the prompt — the two CLIs use the same letter for
@@ -81,7 +140,10 @@ func (Cursor) baseArgs(p Posture) []string {
 		"--stream-partial-output",
 	}
 	if p == PostureRead {
-		args = append(args, "--mode", "plan", "--sandbox", "enabled")
+		args = append(args, "--mode", "plan")
+		if !windows {
+			args = append(args, "--sandbox", "enabled")
+		}
 	}
 	return args
 }
@@ -94,12 +156,18 @@ func (Cursor) baseArgs(p Posture) []string {
 // joined argv, and no code path anywhere in the bundle reads the prompt from
 // stdin. There is no `-` sentinel and no --prompt-file.
 //
-// UNRESOLVED, and recorded rather than guessed at: a brief whose first
-// character is "-" would be parsed as an unknown option. The framework's usual
-// answer is a bare "--" separator before the positional, but that is inferred
-// from the argument parser rather than observed, and getting it wrong breaks
-// EVERY brief instead of the rare one. Left out until someone with an
-// authenticated CLI can run both forms once.
+// The bare "--" separator in front of it is now SETTLED, and it was left open
+// as "run both forms once" precisely because getting it wrong breaks every
+// brief rather than a rare one. Both forms were run on 2026-08-04:
+//
+//	… --workspace <ws> "--seriously reply with OK"
+//	    → error: unknown option '--seriously reply with OK'
+//	… --workspace <ws> -- "--seriously reply with OK"
+//	    → a normal turn, result "OK"
+//
+// So a brief opening with "-" really would have died, the separator really is
+// the fix, and it costs an ordinary brief nothing — the second form was run on
+// dash-free prompts too and behaved identically.
 func (c Cursor) promptArgs(prompt, workspace string, p Posture) []string {
 	args := c.baseArgs(p)
 	if workspace != "" {
@@ -108,35 +176,49 @@ func (c Cursor) promptArgs(prompt, workspace string, p Posture) []string {
 		// the user's config winning instead.
 		args = append(args, "--workspace", workspace)
 	}
-	return append(args, prompt)
+	return append(args, "--", prompt)
+}
+
+// nodeArgs prepends the JavaScript entry point when the resolved binary is a
+// node interpreter rather than cursor-agent itself.
+//
+// Both cases are live. On Windows detection resolves this seat to the bundled
+// node.exe, stepping over a .cmd launcher whose only job was to do the same
+// thing; on macOS and Linux it resolves to cursor-agent, which needs no bundle.
+// The adapter reads which case it is off the path it was handed rather than
+// off runtime.GOOS, because an override (TELLTALE_COUNCIL_CURSOR_BIN) can put
+// either shape on either OS.
+func cursorArgs(binary string, rest []string) []string {
+	bundle := CursorNodeBundle(binary)
+	if bundle == "" {
+		return rest
+	}
+	return append([]string{bundle}, rest...)
 }
 
 func (c Cursor) FirstTurn(prompt, workspace, binary string, p Posture) (runner.Spec, error) {
 	return runner.Spec{
 		Vendor: c.ID(),
 		Binary: binary,
-		Args:   c.promptArgs(prompt, workspace, p),
+		Args:   cursorArgs(binary, c.promptArgs(prompt, workspace, p)),
 		// StdinPrompt stays empty: this CLI does not read the prompt from
-		// stdin. On Windows that combination is exactly what
-		// runner.ErrShellShimWithArgvPrompt refuses, which is why detection
-		// marks the seat unusable there rather than letting the refusal surface
-		// as a failed turn.
+		// stdin, and that has not changed. What changed is that it no longer
+		// costs the seat anything — runner.ErrShellShimWithArgvPrompt refuses
+		// an argv prompt on a .cmd, and detection now hands this adapter the
+		// native node.exe that .cmd would have run, so no shell is in the
+		// invocation for the rule to fire on.
 		Dir: workspace,
 	}, nil
 }
 
 // NextTurn resumes the vendor's own chat.
 //
-// `--resume [chatId]` is in `--help`, and the bundle's handling of a string
-// value is a chat id that becomes `{kind:"resume", sessionId}`. The id council
-// passes is the `session_id` every print-mode event carries.
-//
-// UNVERIFIED, and the gap is specifically this: that the `session_id` on the
-// event stream IS the id `--resume` wants back. Both come from the same
-// variable in the bundle, which is why this is implemented rather than stubbed
-// out — but the round trip was never run, because no turn can run here. If the
-// two ids turn out to differ, a follow-up turn fails visibly with the vendor's
-// own error on its card; it does not silently start a fresh conversation.
+// VERIFIED on 2026-08-04, and this was the gap most worth closing: that the
+// `session_id` on the event stream IS the id `--resume` wants back. Turn one
+// answered "PONG" on session 6164d06a-…; turn two, invoked with `--resume
+// 6164d06a-…`, was asked what word it had just said and answered "I said
+// PONG.", re-reporting the same session_id on its own init event. Round trip
+// closed: a real resume, not a re-send, and not a fresh conversation.
 //
 // One nearby trap, not hit but worth recording: --resume also accepts a
 // relative form, `-N` for the Nth most recent chat. A session id that happened
@@ -155,41 +237,69 @@ func (c Cursor) NextTurn(prompt, workspace, binary, sessionID string, p Posture)
 	return runner.Spec{
 		Vendor: c.ID(),
 		Binary: binary,
-		Args:   append(args, prompt),
+		Args:   cursorArgs(binary, append(args, "--", prompt)),
 		Dir:    workspace,
 	}, nil
 }
 
 // cursorLine is the subset of cursor-agent's stream-json schema council models.
 //
-// Read out of the shipped bundle's own emit calls rather than captured from a
-// run, since no run is possible here. Each line below is the object the bundle
-// literally constructs and JSON-stringifies to stdout:
+// CAPTURED, on 2026-08-04, from four live turns. These are lines off the wire,
+// abridged only where noted:
 //
-//	{"type":"system","subtype":"init","apiKeySource":"login","cwd":"...",
-//	 "session_id":"...","model":"...","permissionMode":"default"}
-//	{"type":"user","message":{"role":"user","content":[{"type":"text","text":"..."}]},"session_id":"..."}
-//	{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"..."}]},"session_id":"..."}
-//	{"type":"tool_call","subtype":"started","call_id":"...","tool_call":{...},"session_id":"..."}
-//	{"type":"result","subtype":"success","is_error":false,"duration_ms":0,
-//	 "result":"<full text>","session_id":"...","request_id":"...","usage":{...}}
+//	{"type":"system","subtype":"init","apiKeySource":"login","cwd":"C:\\...",
+//	 "session_id":"6164d06a-…","model":"Auto","permissionMode":"default"}
+//	{"type":"user","message":{"role":"user","content":[{"type":"text","text":"…"}]},"session_id":"…"}
+//	{"type":"thinking","subtype":"delta","text":"The response will be","session_id":"…","timestamp_ms":…}
+//	{"type":"thinking","subtype":"completed","session_id":"…","timestamp_ms":…}
+//	{"type":"assistant","message":{…,"content":[{"type":"text","text":"P"}]},"session_id":"…","timestamp_ms":…}
+//	{"type":"assistant","message":{…,"content":[{"type":"text","text":"ONG"}]},"session_id":"…","timestamp_ms":…}
+//	{"type":"assistant","message":{…,"content":[{"type":"text","text":"PONG"}]},"session_id":"…"}
+//	{"type":"tool_call","subtype":"started","call_id":"call-ab9b…","tool_call":{"readToolCall":{"args":{"path":"C:\\…"}},…},"session_id":"…"}
+//	{"type":"tool_call","subtype":"completed","call_id":"call-ab9b…","tool_call":{"readToolCall":{"result":{"error":{"errorMessage":"…"}}},…},"session_id":"…"}
+//	{"type":"result","subtype":"success","duration_ms":7827,"is_error":false,
+//	 "result":"PONG","session_id":"…","request_id":"…","usage":{"inputTokens":22862,"outputTokens":57,…}}
 //
-// Two absences are deliberate:
+// Three absences are deliberate:
 //
-//   - No cost field. `usage` carries token counts only — the bundle has no
-//     monetary figure anywhere — so CostUSD stays nil for this vendor forever.
-//     Deriving dollars from tokens is on this repo's rejected list.
+//   - No cost field. `usage` carries token counts only — measured across all
+//     four turns, and the bundle has no monetary figure anywhere — so CostUSD
+//     stays nil for this vendor forever. Deriving dollars from tokens is on
+//     this repo's rejected list.
 //   - permissionMode is parsed by nobody. It is a hardcoded "default" literal
-//     in the bundle, not a readout of the session, so reading it would produce
-//     a number-shaped nothing. This is worth naming because the technique that
-//     caught Claude's --allowedTools was exactly "run it and read what the
-//     session reports about itself", and on this vendor that technique returns
-//     a constant.
+//     in the bundle, and the capture confirms it: all four turns reported
+//     "default" regardless of the flags they were given. The technique that
+//     caught Claude's --allowedTools — run it and read what the session says
+//     about itself — returns a constant on this vendor.
+//   - `thinking` is dropped, both subtypes. It is reasoning, so it is neither
+//     the vendor's answer nor a thing the vendor DID; routing it to the body
+//     would pad the column with commentary the user did not ask for, and
+//     routing it to the trace would file it as a tool call. It was already
+//     dropped when it was a hypothesis; it is still dropped now that it has
+//     been seen.
 type cursorLine struct {
 	Type    string `json:"type"`
 	Subtype string `json:"subtype"`
 
 	SessionID string `json:"session_id"`
+
+	// TimestampMS is what separates a text delta from the whole-message repeat
+	// that follows it, and it is a POINTER because its ABSENCE is the signal.
+	//
+	// This is the trap in this schema and only a live run could have found it.
+	// With --stream-partial-output, one turn's assistant events were "P" then
+	// "ONG" — both carrying timestamp_ms — followed by a third carrying the
+	// complete "PONG" and NO timestamp_ms. Concatenating all three renders
+	// "PONGPONG". Confirmed on three separate turns; the whole-message event
+	// never carried the field, and no delta ever lacked it.
+	//
+	// It is a thin discriminator and it is the one the vendor offers. The
+	// safety net if upstream ever changes it is already in place and is not
+	// theoretical: the `result` event carries the entire reply, and the room
+	// uses it whenever a column streamed nothing — so the failure mode of this
+	// field disappearing is a column that fills at the end instead of
+	// incrementally, not a column that is wrong or empty.
+	TimestampMS *int64 `json:"timestamp_ms"`
 
 	Message struct {
 		Role    string `json:"role"`
@@ -199,19 +309,164 @@ type cursorLine struct {
 		} `json:"content"`
 	} `json:"message"`
 
-	// ToolCall's inner shape is a protobuf-style oneof. `tool.case` is the
-	// discriminator the bundle itself reads — it tests `"shellToolCall" ===
-	// e.tool.case` — so the name is evidence rather than a guess, while the
-	// value side is left unmodelled because nothing establishes its shape.
-	ToolCall struct {
-		Tool struct {
-			Case string `json:"case"`
-		} `json:"tool"`
-	} `json:"tool_call"`
+	// CallID correlates a tool call's announcement with its result.
+	//
+	// One oddity, recorded because it looks like corruption and is not: these
+	// ids contain a literal newline —
+	// "call-ab9b3fba-…-0\nfc_88e24da8-…_0". Both halves of a call carry the
+	// identical string, so correlation is unaffected, and the id is never
+	// rendered.
+	CallID string `json:"call_id"`
+
+	// ToolCall is a protobuf oneof, and the wire form is NOT what the bundle's
+	// internal representation suggested. Reading the bundle found it testing
+	// `"shellToolCall" === e.tool.case`, so the first version of this adapter
+	// looked for tool_call.tool.case; the capture shows the oneof flattened to
+	// an object KEY instead:
+	//
+	//	"tool_call":{"readToolCall":{"args":{"path":"…"}},"toolCallId":"…"}
+	//	"tool_call":{"shellToolCall":{"args":{"command":"ls -1",…}},…}
+	//
+	// Held as raw messages so the key can be found before its value is decoded.
+	// The alternative — a struct with a field per tool — would silently render
+	// nothing the first time upstream adds a tool, which for a trace is the
+	// same failure as being wrong.
+	ToolCall map[string]json.RawMessage `json:"tool_call"`
 
 	// result
 	IsError bool   `json:"is_error"`
 	Result  string `json:"result"`
+}
+
+// cursorToolCall is one tool call's payload, whichever tool it belongs to.
+//
+// The arg fields are the ones captured: `command` on shellToolCall, `path` on
+// readToolCall and grepToolCall, `pattern` on grepToolCall, `targetDirectory`
+// on globToolCall. A tool carrying none of them still names itself.
+//
+// Result is the oneof the bundle declares as {success, error, rejected} — read
+// from its own field descriptors, `{no:1,name:"success",kind:"message",
+// oneof:"result"}` — of which `error` and `rejected` were both captured live
+// and `success` was not, because every tool call on this machine was stopped by
+// a hook. All three are RAW: `error` was seen as an object in two different
+// shapes and the bundle also declares scalar-string forms of it elsewhere, and
+// a struct that guessed wrong would fail the whole line's unmarshal and lose
+// the activity entry rather than just its detail.
+type cursorToolCall struct {
+	Args struct {
+		Command         string `json:"command"`
+		Pattern         string `json:"pattern"`
+		Path            string `json:"path"`
+		TargetDirectory string `json:"targetDirectory"`
+	} `json:"args"`
+	Result *struct {
+		Success  json.RawMessage `json:"success"`
+		Error    json.RawMessage `json:"error"`
+		Rejected json.RawMessage `json:"rejected"`
+	} `json:"result"`
+}
+
+// cursorAct turns one tool_call line into a trace entry.
+//
+// The tool is found by the single key under tool_call whose name ends in
+// "ToolCall" — the oneof discriminator, as it appears on the wire. Anything
+// else there (`toolCallId`, `hookAdditionalContexts`, `startedAtMs`,
+// `completedAtMs`, all captured) is metadata about the call rather than the
+// call, and is skipped by that suffix rather than by an allow-list, so a tool
+// this repo has never seen still names itself correctly.
+func cursorAct(cl cursorLine) (runner.ActCall, bool) {
+	name, payload := "", json.RawMessage(nil)
+	for k, v := range cl.ToolCall {
+		if strings.HasSuffix(k, "ToolCall") {
+			name, payload = strings.TrimSuffix(k, "ToolCall"), v
+			break
+		}
+	}
+	if name == "" {
+		return runner.ActCall{}, false
+	}
+
+	act := runner.ActCall{ID: cl.CallID, Text: name}
+	var tc cursorToolCall
+	if err := json.Unmarshal(payload, &tc); err != nil {
+		// The tool is named and its payload is not a shape this adapter models.
+		// The entry still lands: a column that went quiet during the part of the
+		// turn it was busiest reads as hung, and "read" alone is a true and
+		// useful line.
+		return act, true
+	}
+
+	// Whichever argument this tool actually carries, most informative first.
+	// Nothing is composed here — each of these is a field the vendor sent.
+	for _, arg := range []string{
+		tc.Args.Command, tc.Args.Pattern, tc.Args.Path, tc.Args.TargetDirectory,
+	} {
+		if arg != "" {
+			act.Text = name + ": " + clipArg(arg)
+			break
+		}
+	}
+
+	if cl.Subtype != "completed" {
+		// An announcement. Outcome stays ActPending, which is what makes a
+		// running call visible before it resolves.
+		return act, true
+	}
+	if tc.Result == nil {
+		// It ended and said nothing about how. ActUnknown rather than ActOK:
+		// inventing a success on a vendor's behalf is the one thing this trace
+		// is built not to do.
+		act.Outcome = runner.ActUnknown
+		return act, true
+	}
+	switch {
+	case len(tc.Result.Rejected) > 0:
+		// A refusal by the vendor's own permission layer or by a user hook.
+		// ActFailed, deliberately NOT ActDenied: that value is council's record
+		// of ITS OWN gate keystroke, first-hand, and a refusal council merely
+		// read off a stream is not that. Captured as
+		// {"rejected":{"command":"ls -1","reason":"Hook blocked with message: …"}}.
+		act.Outcome = runner.ActFailed
+		act.Detail = clipArg(firstLine(cursorFailText(tc.Result.Rejected)))
+	case len(tc.Result.Error) > 0:
+		// Captured in two shapes on the same stream — {"errorMessage":"…"} from
+		// readToolCall and {"error":"…"} from grepToolCall and globToolCall —
+		// which is why the text is dug out rather than declared.
+		act.Outcome = runner.ActFailed
+		act.Detail = clipArg(firstLine(cursorFailText(tc.Result.Error)))
+	case len(tc.Result.Success) > 0:
+		act.Outcome = runner.ActOK
+	default:
+		act.Outcome = runner.ActUnknown
+	}
+	return act, true
+}
+
+// cursorFailText digs the vendor's own words out of a failure payload.
+//
+// Three keys, all observed: `reason` on a rejection, `errorMessage` and `error`
+// on an error. A bare string is accepted too, because the bundle declares
+// scalar forms of the same field on other tools. Anything else yields "", and
+// the entry renders as a failure with no detail rather than with a shape name.
+func cursorFailText(raw json.RawMessage) string {
+	var obj struct {
+		Reason       string `json:"reason"`
+		ErrorMessage string `json:"errorMessage"`
+		Error        string `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &obj); err == nil {
+		for _, s := range []string{obj.Reason, obj.ErrorMessage, obj.Error} {
+			if s != "" {
+				return s
+			}
+		}
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	return ""
 }
 
 // text joins the content blocks of one message.
@@ -247,12 +502,21 @@ func (Cursor) ParseEvent(line []byte) (runner.Event, bool) {
 		}
 
 	case "assistant":
-		// The vendor speaking. With --stream-partial-output this is one event
-		// per text chunk; without it, one per complete message. Emitted raw and
-		// unseparated in both cases, because the chunked form concatenates and
-		// the whole-message form is followed by the result event carrying the
-		// same text — a separator would show up as a stray newline in one of
-		// the two and there is no live capture to say which.
+		// The vendor speaking, one event per text chunk — measured token-level,
+		// which is what earns this column GranTokens.
+		//
+		// The whole-message repeat is dropped HERE, by the absence of
+		// timestamp_ms, and it has to be dropped somewhere: cursor-agent sends
+		// the deltas and then the complete message, so appending both renders
+		// every reply twice. See cursorLine.TimestampMS for the capture and for
+		// why the result event makes this safe to get wrong.
+		if cl.TimestampMS == nil {
+			return runner.Event{}, false
+		}
+		// Emitted raw and unseparated: the chunks concatenate into the reply
+		// exactly as sent ("I" + " said" + " P" + "ONG" + "."), and any
+		// separator this adapter added would be a character the vendor did not
+		// write.
 		if t := cl.text(); t != "" {
 			return runner.Event{Kind: runner.KindText, Text: t}, true
 		}
@@ -261,21 +525,33 @@ func (Cursor) ParseEvent(line []byte) (runner.Event, bool) {
 		// Dropped, deliberately and with a comment because this one is a trap:
 		// print mode echoes council's OWN prompt back as a user event on the
 		// same stream. Rendering it would put the brief into the column as
-		// though the vendor had said it.
+		// though the vendor had said it. Confirmed live — every captured turn
+		// opened with the brief coming straight back.
 
 	case "tool_call":
-		// What the vendor DID, never what it said. "started" only: the bundle
-		// emits a matching "completed" for every call, and taking both would
-		// double every line of the trace.
-		if cl.Subtype == "started" {
-			if name := cl.ToolCall.Tool.Case; name != "" {
-				return runner.Event{Kind: runner.KindActivity, Text: name}, true
-			}
-			// A tool call whose discriminator did not parse is still a thing
-			// that happened, and a silent drop would leave the column looking
-			// idle during the part of the turn it was busiest.
-			return runner.Event{Kind: runner.KindActivity, Text: "tool call"}, true
+		// What the vendor DID, never what it said.
+		//
+		// BOTH halves are taken now, where this used to take "started" only.
+		// That was right while the trace was append-only and every call would
+		// have doubled; it is wrong now that the two reports correlate by
+		// call_id — "started" opens the entry and "completed" resolves it with
+		// the vendor's own outcome, so a running command reads differently from
+		// one that failed. The same correction agy's adapter took.
+		//
+		// A "completed" with no matching "started" is real and was captured (a
+		// taskToolCall arrived resolved, with no announcement); the room's
+		// recordAct lands it as an already-finished entry rather than dropping
+		// it.
+		if act, ok := cursorAct(cl); ok {
+			return runner.Event{Kind: runner.KindActivity, Acts: []runner.ActCall{act}}, true
 		}
+		// A tool call whose discriminator is not there at all is still a thing
+		// that happened, and a silent drop would leave the column looking idle
+		// during the part of the turn it was busiest.
+		return runner.Event{
+			Kind: runner.KindActivity,
+			Acts: []runner.ActCall{{ID: cl.CallID, Text: "tool call"}},
+		}, true
 
 	case "result":
 		// End of turn. Result is the whole final reply, carried as the fallback
