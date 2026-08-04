@@ -103,25 +103,111 @@ func (c Claude) baseArgs(p Posture) []string {
 	return append(args, "--disallowedTools", deniedTools)
 }
 
-// toolCalls renders the tool_use blocks of one assistant message, one per line.
+// toolCalls reads the tool_use blocks of one assistant message.
 //
-// Newline-separated rather than one event each because ParseEvent returns a
-// single event; the consumer splits them back into separate trace entries. A
-// message really can carry several tool calls at once — a parallel batch is
-// normal — and collapsing them into one line would under-report the work.
-func toolCalls(sl streamLine) string {
-	var out []string
+// One ActCall each rather than one joined string: a message really can carry
+// several tool calls at once — a parallel batch is normal — and each one has to
+// keep its own `id`, because that id is the only thing a later tool_result can
+// be matched against.
+func toolCalls(sl streamLine) []runner.ActCall {
+	var out []runner.ActCall
 	for _, b := range sl.Message.Content {
 		if b.Type != "tool_use" || b.Name == "" {
 			continue
 		}
+		call := runner.ActCall{ID: b.ID, Text: b.Name}
 		if arg := toolArg(b.Input); arg != "" {
-			out = append(out, b.Name+": "+arg)
+			call.Text = b.Name + ": " + arg
+		}
+		out = append(out, call)
+	}
+	return out
+}
+
+// toolResults reads the tool_result blocks of one `user`-type message, which is
+// where Claude Code reports how a tool call it announced actually went.
+//
+// VERIFIED LIVE 2026-08-04, Claude Code 2.1.220, in a throwaway directory. Two
+// of the captured lines, trimmed only of their trailing envelope fields:
+//
+//	{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01A9758ERJJ2QGcKSeeDkeA1","type":"tool_result","content":"hi","is_error":false}]},...}
+//	{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"ls in '/nonexistent-xyz' was blocked. For security, ...","is_error":true,"tool_use_id":"toolu_01Uk7Xp2kguFuDtxT4ovaXE5"}]},...}
+//
+// Three things that run settled, each of which this parser depends on:
+//
+//   - The key ORDER differs between those two lines. Nothing may be inferred
+//     from position; the id is read by name.
+//   - `is_error` is ABSENT on some successes. A Read result came back as
+//     `{"tool_use_id":...,"type":"tool_result","content":"1\talpha\n..."}` with
+//     no is_error field at all, while the Bash success spelled it out as
+//     false. So absence is success, not unknown — Claude Code marks failure
+//     and stays silent about the rest.
+//   - The results arrived OUT OF ORDER: the second call's failure landed
+//     before the first call's success, on the very first probe rather than as
+//     a theoretical worry. That is why correlation is by id and never by
+//     arrival order.
+//
+// One honest limit: `is_error` is the harness's verdict on the tool call, not
+// the command's exit status. The failure above was a permission refusal, not a
+// non-zero exit. Both are "this call did not do what was asked", which is the
+// claim the trace makes, and it is the only claim this field supports.
+func toolResults(sl streamLine) []runner.ActCall {
+	var out []runner.ActCall
+	for _, b := range sl.Message.Content {
+		if b.Type != "tool_result" || b.ToolUseID == "" {
 			continue
 		}
-		out = append(out, b.Name)
+		res := runner.ActCall{ID: b.ToolUseID, Outcome: runner.ActOK}
+		if b.IsError {
+			res.Outcome = runner.ActFailed
+			res.Detail = clipArg(firstLine(resultText(b.Content)))
+		}
+		out = append(out, res)
 	}
-	return strings.Join(out, "\n")
+	return out
+}
+
+// resultText pulls displayable text out of a tool_result's content field.
+//
+// A plain string in every line captured live — shell output, a Read's numbered
+// lines, the blocked-command message. The Anthropic content-block schema also
+// allows an ARRAY of blocks, which is how an image result would arrive; that
+// shape was NOT observed here, so it is handled defensively and yields nothing
+// when it carries no text block, rather than a guess at what it held.
+func resultText(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(raw, &blocks) != nil {
+		return ""
+	}
+	for _, b := range blocks {
+		if b.Type == "text" && strings.TrimSpace(b.Text) != "" {
+			return b.Text
+		}
+	}
+	return ""
+}
+
+// firstLine is the part of a multi-line failure a narrow column can show.
+//
+// Kept local to this package rather than shared with runner's identically named
+// helper: they are the same three lines, and exporting one to reach the other
+// would couple the adapter layer to the process layer for nothing.
+func firstLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return strings.TrimSpace(s[:i])
+	}
+	return s
 }
 
 // toolArg picks the one field of a tool's input worth showing in a trace.
@@ -184,11 +270,26 @@ type streamLine struct {
 	// with an empty input — the arguments arrive afterwards as
 	// input_json_delta fragments — so a trace built from the announcement can
 	// only ever say "Bash", six times, which is what it said.
+	//
+	// user: the SAME shape carries tool_result blocks, which is where the
+	// outcome of each of those calls arrives. Modelled as one block struct
+	// rather than two because the envelope really is identical — only the
+	// message type and the populated fields differ.
 	Message struct {
 		Content []struct {
-			Type  string         `json:"type"`
+			Type string `json:"type"`
+
+			// tool_use
 			Name  string         `json:"name"`
+			ID    string         `json:"id"`
 			Input map[string]any `json:"input"`
+
+			// tool_result. Content is held raw because the field is a string in
+			// every captured line but is a block ARRAY in the schema; see
+			// resultText.
+			ToolUseID string          `json:"tool_use_id"`
+			IsError   bool            `json:"is_error"`
+			Content   json.RawMessage `json:"content"`
 		} `json:"content"`
 	} `json:"message"`
 
@@ -226,8 +327,19 @@ func (Claude) ParseEvent(line []byte) (runner.Event, bool) {
 		// here is the input populated — and a trace of bare tool names is a
 		// half-built gauge: six lines reading "Bash" say that something
 		// happened six times and nothing about what.
-		if acts := toolCalls(sl); acts != "" {
-			return runner.Event{Kind: runner.KindActivity, Text: acts}, true
+		if acts := toolCalls(sl); len(acts) > 0 {
+			return runner.Event{Kind: runner.KindActivity, Acts: acts}, true
+		}
+	case "user":
+		// A tool RESULT. Claude Code feeds each call's outcome back into the
+		// conversation as a user-role message, which is why the outcome half of
+		// the trace lives under a type that looks like it should be the human
+		// talking. It is not: no user is typing during a `-p` turn.
+		//
+		// This branch is the reason the trace can say whether anything worked.
+		// The results were in the stream all along and were being dropped.
+		if res := toolResults(sl); len(res) > 0 {
+			return runner.Event{Kind: runner.KindActivity, Acts: res}, true
 		}
 	case "result":
 		// Text is the whole final reply. It is carried so the room has a

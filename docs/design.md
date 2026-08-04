@@ -2499,6 +2499,57 @@ Each adapter hit a failure that is silent rather than loud, which is the kind wo
 The shared shape: all three failures produce a *plausible* result rather than an error. That is
 why each one is pinned by a test asserting the argv this repo actually builds.
 
+### 9.6a The activity trace carries outcomes — and says when it cannot
+
+The trace answers *what did this agent do*. Until this landed it could not answer *did it
+work*, which made it the same half-built gauge §4a.1 exists to forbid: `⚙ Bash: go test ./...`
+renders identically whether the suite passed or the build never compiled. The results were not
+missing, either — they were arriving in the same stream the commands came from and being
+dropped on the floor. A room that discards knowledge it has is the mirror image of one that
+invents knowledge it lacks, and both are the same failure.
+
+Four statuses, and **Unknown is the one that earns the type**. Pending renders as the bare
+entry, OK as `✓`, Failed as `✗` plus the vendor's own first line about why, Unknown as `?`.
+ASCII gets `+`, `x`, `?` — chosen around everything already spoken for, since `*` is the
+activity prefix, `>` the ellipsis, `]` focus and `#` the HUD's gauge fill. Every distinction is
+a glyph before it is a colour, so all four survive `--ascii` and a monochrome terminal.
+
+**Where the outcome comes from, per vendor, and how strong the claim is.**
+
+| | signal | verified |
+|---|---|---|
+| Claude Code | `user` messages carrying `tool_result` blocks with `tool_use_id` + `is_error` | **live**, 2026-08-04, Claude Code 2.1.220 |
+| Codex | `item.started` → pending; `item.completed` with `exit_code` / `status` | captured fixtures; `exit_code` and `status:"failed"` observed, `status:"completed"` **never** |
+| Antigravity | `step_update` ACTIVE → pending, DONE → **Unknown** | live capture shows DONE carries no success signal at all |
+
+Three things the Claude probe settled that a docs-first parser would have got wrong. Field
+**order** differs between captured lines, so nothing may be read from position. `is_error` is
+**absent** on some successes — a `Read` result carried only `tool_use_id`, `type` and `content`
+— so absence is success rather than unknown; Claude Code marks failure and stays quiet about
+the rest. And the results came back **out of order**, the second call's failure landing ahead
+of the first call's success, on the very first probe. That last one is why correlation is by
+id and never by arrival order: a trace zipped by position would have blamed the wrong command
+on its first real run.
+
+Antigravity is the case the Unknown status exists for. Its steps flip ACTIVE then DONE, and
+every captured DONE line carries `duration_seconds`, sometimes a `tool_info` with the call's
+parameters, and nothing whatsoever about whether the step achieved anything. agy reports
+success or failure exactly once per turn, in the final `result` event, and that verdict is
+about the *turn*. So a finished agy step renders `?` — not `✓`, and the code comment says why.
+Reusing the success mark would be council inventing a result on a vendor's behalf, which is the
+`--allowedTools` mistake (§9.2) wearing different clothes.
+
+Codex carries the same discipline in a smaller way. `exit_code` is a **pointer**, because codex
+spells "still running" as `"exit_code":null` and a plain int would flatten that to 0 — the
+spelling of success, and the most expensive confusion available on that field. And an item that
+completes with neither an exit code nor `status:"failed"` resolves **Unknown**, not OK: no
+captured line has ever carried `status:"completed"`, and guessing the success spelling from the
+observed failure one would be a success claim built on a string nobody has seen. That
+deliberately weak mapping tightens the moment a live run shows the spelling.
+
+`TestActOutcomesRenderDistinctly` fails the build if any two statuses ever render alike;
+`TestOverlappingToolCallsResolveToTheRightEntries` replays the real out-of-order probe.
+
 ### 9.7 Status
 
 The room opens, detects all three vendors, renders both layouts and every degraded state, takes

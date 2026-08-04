@@ -212,7 +212,45 @@ type codexLine struct {
 		// anyway: when Command is empty the item type is shown instead, so the
 		// column still reports that the vendor did something.
 		Command string `json:"command"`
+		// ExitCode is a POINTER because codex spells "still running" as
+		// `"exit_code":null` and a real failure as `"exit_code":-1`. A plain
+		// int would flatten the first into zero, which is the spelling of
+		// success — the single most expensive confusion available on this
+		// field.
+		ExitCode *int `json:"exit_code"`
+		// AggregatedOutput is the command's own output, and the only source of
+		// a failure line this adapter is willing to show. Council does not
+		// compose a diagnosis of its own.
+		AggregatedOutput string `json:"aggregated_output"`
 	} `json:"item"`
+}
+
+// codexOutcome maps a completed item to what is actually known about it.
+//
+// exit_code first, because it is the process's own answer and it was captured
+// live on both paths (`null` while in_progress, `-1` on the sandbox spawn
+// refusal). status is the fallback for item types that carry no exit code.
+//
+// The asymmetry here is deliberate and is the honest reading of what was
+// observed. "failed" IS a captured status value. "completed" is NOT — no
+// captured line carries it — so it is not mapped, and an item that resolves
+// with neither an exit code nor a failure status renders Unknown rather than
+// OK. Guessing the success spelling from the failure one would be a success
+// claim built on a string nobody has seen, which is the exact move that put a
+// read-only badge on a session that could write (§9.2). If a live run later
+// shows the spelling, this becomes one more case and the trace gets sharper;
+// until then Unknown is the truth and it is a survivable one.
+func codexOutcome(status string, exitCode *int) runner.ActStatus {
+	if exitCode != nil {
+		if *exitCode == 0 {
+			return runner.ActOK
+		}
+		return runner.ActFailed
+	}
+	if status == "failed" {
+		return runner.ActFailed
+	}
+	return runner.ActUnknown
 }
 
 // isCodexTool reports whether an item type represents the vendor ACTING.
@@ -226,6 +264,17 @@ func isCodexTool(t string) bool {
 		return true
 	}
 	return false
+}
+
+// codexWhat names one item for the trace: the command it ran, or failing that
+// the kind of thing it was. Clipped, because a heredoc or a generated patch can
+// run to thousands of characters and a trace that scrolls the answer off screen
+// has defeated its own purpose.
+func codexWhat(cl codexLine) string {
+	if cl.Item.Command != "" {
+		return clipArg(cl.Item.Command)
+	}
+	return cl.Item.Type
 }
 
 func (Codex) ParseEvent(line []byte) (runner.Event, bool) {
@@ -246,6 +295,22 @@ func (Codex) ParseEvent(line []byte) (runner.Event, bool) {
 		// re-send.
 		if cl.ThreadID != "" {
 			return runner.Event{Kind: runner.KindSession, SessionID: cl.ThreadID}, true
+		}
+	case "item.started":
+		// The call, announced. Captured live as
+		// `{"type":"item.started","item":{"id":"item_1","type":"command_execution",
+		// "command":"...","aggregated_output":"","exit_code":null,"status":"in_progress"}}`.
+		//
+		// It used to be dropped, and the trace only appeared once a command had
+		// already finished — so a long build showed nothing at all while it ran.
+		// Announcing here and resolving on item.completed is what makes a
+		// running step visible AND lets its outcome land on the same entry
+		// instead of below it as a second line.
+		if isCodexTool(cl.Item.Type) {
+			return runner.Event{
+				Kind: runner.KindActivity,
+				Acts: []runner.ActCall{{ID: cl.Item.ID, Text: codexWhat(cl), Outcome: runner.ActPending}},
+			}, true
 		}
 	case "item.completed":
 		if cl.Item.Type == "agent_message" && cl.Item.Text != "" {
@@ -270,11 +335,20 @@ func (Codex) ParseEvent(line []byte) (runner.Event, bool) {
 		// phantom steps in the trace. An unrecognised item type is still
 		// dropped, so a future codex release cannot invent activity here.
 		if isCodexTool(cl.Item.Type) {
-			what := cl.Item.Command
-			if what == "" {
-				what = cl.Item.Type
+			// Text is carried on the RESULT too, not just the announcement.
+			// The id normally matches an entry item.started already created and
+			// the text is then redundant — but if a codex build ever stops
+			// emitting item.started, the completion alone still names what ran
+			// rather than resolving an entry that does not exist.
+			act := runner.ActCall{
+				ID:      cl.Item.ID,
+				Text:    codexWhat(cl),
+				Outcome: codexOutcome(cl.Item.Status, cl.Item.ExitCode),
 			}
-			return runner.Event{Kind: runner.KindActivity, Text: what}, true
+			if act.Outcome == runner.ActFailed {
+				act.Detail = clipArg(firstLine(cl.Item.AggregatedOutput))
+			}
+			return runner.Event{Kind: runner.KindActivity, Acts: []runner.ActCall{act}}, true
 		}
 	case "turn.completed":
 		// The end-of-turn marker. It carries no text and no cost: codex reports

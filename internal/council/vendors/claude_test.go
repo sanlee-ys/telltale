@@ -222,29 +222,150 @@ func mustNext(t *testing.T, prompt, sess string) runner.Spec {
 // gauge: six lines reading "Bash" say that something happened six times and
 // nothing about what. This is why the trace reads completed assistant messages
 // rather than content_block_start, whose input is still empty.
+// The line is verbatim from the live probe of 2026-08-04 (Claude Code 2.1.220),
+// trimmed only of the usage/timestamp envelope. Note the `id` — it is what a
+// tool_result is later matched against, and it is the field this whole feature
+// hangs on.
 func TestToolCallsCarryTheirArgument(t *testing.T) {
-	line := []byte(`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"go test ./...","description":"run tests"}}]}}`)
+	line := []byte(`{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_01A9758ERJJ2QGcKSeeDkeA1","name":"Bash","input":{"command":"echo hi","description":"Echo hi"},"caller":{"type":"direct"}}]}}`)
 	ev, ok := Claude{}.ParseEvent(line)
 	if !ok || ev.Kind != runner.KindActivity {
 		t.Fatalf("got (%+v, %v), want a KindActivity", ev, ok)
 	}
-	if ev.Text != "Bash: go test ./..." {
-		t.Errorf("Text = %q, want the command alongside the tool name", ev.Text)
+	if len(ev.Acts) != 1 {
+		t.Fatalf("Acts = %+v, want one call", ev.Acts)
+	}
+	if ev.Acts[0].Text != "Bash: echo hi" {
+		t.Errorf("Text = %q, want the command alongside the tool name", ev.Acts[0].Text)
+	}
+	// Without the id the result arriving later has nothing to attach to, and
+	// the trace goes back to showing commands with no outcomes.
+	if ev.Acts[0].ID != "toolu_01A9758ERJJ2QGcKSeeDkeA1" {
+		t.Errorf("ID = %q, want the tool_use id the result will quote", ev.Acts[0].ID)
+	}
+	if ev.Acts[0].Outcome != runner.ActPending {
+		t.Errorf("Outcome = %v; an announced call has no outcome yet", ev.Acts[0].Outcome)
 	}
 }
 
 // TestParallelToolBatchIsNotCollapsed: one assistant message really can carry
-// several calls, and reporting them as one line would under-report the work.
+// several calls, and reporting them as one entry would under-report the work.
 func TestParallelToolBatchIsNotCollapsed(t *testing.T) {
 	line := []byte(`{"type":"assistant","message":{"content":[` +
-		`{"type":"tool_use","name":"Read","input":{"file_path":"a.go"}},` +
-		`{"type":"tool_use","name":"Grep","input":{"pattern":"func main"}}]}}`)
+		`{"type":"tool_use","id":"toolu_a","name":"Read","input":{"file_path":"a.go"}},` +
+		`{"type":"tool_use","id":"toolu_b","name":"Grep","input":{"pattern":"func main"}}]}}`)
 	ev, _ := Claude{}.ParseEvent(line)
-	if !strings.Contains(ev.Text, "Read: a.go") || !strings.Contains(ev.Text, "Grep: func main") {
-		t.Errorf("batch lost a call: %q", ev.Text)
+	if len(ev.Acts) != 2 {
+		t.Fatalf("Acts = %+v, want two calls", ev.Acts)
 	}
-	if !strings.Contains(ev.Text, "\n") {
-		t.Error("batch was collapsed onto one line; the consumer splits on newlines")
+	if ev.Acts[0].Text != "Read: a.go" || ev.Acts[1].Text != "Grep: func main" {
+		t.Errorf("batch lost a call: %+v", ev.Acts)
+	}
+	// Distinct ids, or the two results would resolve the same entry and one of
+	// the two commands would silently take the other's outcome.
+	if ev.Acts[0].ID == ev.Acts[1].ID {
+		t.Error("a parallel batch shares one id; the results could not be told apart")
+	}
+}
+
+// --- Tool RESULTS. Every line below is verbatim live capture. ---
+
+// TestClaudeToolResultsCarryOutcome uses the two lines the live probe returned
+// for a batch of one succeeding and one failing Bash call.
+//
+// The failure is a permission refusal rather than a non-zero exit, which is
+// worth keeping visible: `is_error` is the harness's verdict on the CALL, not
+// the shell's exit status. "this did not do what was asked" is the whole claim
+// it supports, and it is the whole claim the trace makes.
+func TestClaudeToolResultsCarryOutcome(t *testing.T) {
+	ok := []byte(`{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01A9758ERJJ2QGcKSeeDkeA1","type":"tool_result","content":"hi","is_error":false}]},"parent_tool_use_id":null,"session_id":"3b60c20f-99ff-4722-9f11-b42ab1149874"}`)
+	bad := []byte(`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"ls in '/nonexistent-xyz' was blocked. For security, Claude Code may only list files in the allowed working directories for this session.","is_error":true,"tool_use_id":"toolu_01Uk7Xp2kguFuDtxT4ovaXE5"}]},"session_id":"3b60c20f-99ff-4722-9f11-b42ab1149874"}`)
+
+	ev, got := Claude{}.ParseEvent(ok)
+	if !got || ev.Kind != runner.KindActivity || len(ev.Acts) != 1 {
+		t.Fatalf("got (%+v, %v), want one activity", ev, got)
+	}
+	if ev.Acts[0].Outcome != runner.ActOK {
+		t.Errorf("Outcome = %v, want ActOK", ev.Acts[0].Outcome)
+	}
+	if ev.Acts[0].ID != "toolu_01A9758ERJJ2QGcKSeeDkeA1" {
+		t.Errorf("ID = %q, want the id of the call it resolves", ev.Acts[0].ID)
+	}
+	// A success carries no detail: the trace records what was done, not the
+	// output of everything that worked.
+	if ev.Acts[0].Detail != "" {
+		t.Errorf("Detail = %q; a successful call has nothing to explain", ev.Acts[0].Detail)
+	}
+
+	ev, got = Claude{}.ParseEvent(bad)
+	if !got || len(ev.Acts) != 1 {
+		t.Fatalf("got (%+v, %v), want one activity", ev, got)
+	}
+	if ev.Acts[0].Outcome != runner.ActFailed {
+		t.Errorf("Outcome = %v, want ActFailed", ev.Acts[0].Outcome)
+	}
+	if !strings.Contains(ev.Acts[0].Detail, "was blocked") {
+		t.Errorf("Detail = %q, want the vendor's own first line", ev.Acts[0].Detail)
+	}
+	// The key ORDER differs between these two captured lines — tool_use_id
+	// leads on one and trails on the other — so nothing may be read from
+	// position. That is the whole reason this pair is asserted together.
+	if !strings.HasPrefix(string(ok), `{"type":"user","message":{"role":"user","content":[{"tool_use_id"`) ||
+		!strings.Contains(string(bad), `"is_error":true,"tool_use_id"`) {
+		t.Error("the fixtures no longer cover both captured field orders")
+	}
+}
+
+// TestClaudeSuccessOmitsIsErrorEntirely is the trap in this schema.
+//
+// Verbatim from the live probe: a successful Read result carries tool_use_id,
+// type and content, and NO is_error field at all. A parser that treated an
+// absent is_error as "unknown" would render every quiet success as an
+// unanswered call, which is the opposite failure to the one this feature fixes.
+func TestClaudeSuccessOmitsIsErrorEntirely(t *testing.T) {
+	line := []byte(`{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01G6kWADf6TWXXm2tJDc6dZS","type":"tool_result","content":"1\talpha\n2\tbeta\n3\t"}]},"session_id":"e31d5d29-309d-4e91-a041-344197046e92"}`)
+	ev, ok := Claude{}.ParseEvent(line)
+	if !ok || len(ev.Acts) != 1 {
+		t.Fatalf("got (%+v, %v), want one activity", ev, ok)
+	}
+	if ev.Acts[0].Outcome != runner.ActOK {
+		t.Errorf("Outcome = %v; Claude Code marks failure and stays silent about success", ev.Acts[0].Outcome)
+	}
+}
+
+// TestClaudeToolResultContentMayBeABlockArray: the string form is the only one
+// captured live, but the schema allows an array of blocks and Claude Code emits
+// that for image results. Handled defensively — and when the array carries no
+// text, the detail is empty rather than a guess at what it held.
+func TestClaudeToolResultContentMayBeABlockArray(t *testing.T) {
+	withText := []byte(`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_z","is_error":true,` +
+		`"content":[{"type":"text","text":"exit status 2\nsee above"}]}]}}`)
+	ev, _ := Claude{}.ParseEvent(withText)
+	if len(ev.Acts) != 1 || ev.Acts[0].Detail != "exit status 2" {
+		t.Errorf("Detail = %+v, want the first line of the text block", ev.Acts)
+	}
+
+	imageOnly := []byte(`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_z","is_error":true,` +
+		`"content":[{"type":"image","source":{"type":"base64"}}]}]}}`)
+	ev, ok := Claude{}.ParseEvent(imageOnly)
+	if !ok || len(ev.Acts) != 1 {
+		t.Fatalf("an unreadable result dropped the failure entirely: %+v", ev)
+	}
+	if ev.Acts[0].Outcome != runner.ActFailed {
+		t.Error("the failure was lost because its detail was unreadable")
+	}
+	if ev.Acts[0].Detail != "" {
+		t.Errorf("Detail = %q, want nothing rather than a guess", ev.Acts[0].Detail)
+	}
+}
+
+// TestClaudeResultWithoutAToolUseIDIsDropped: with no id there is nothing to
+// resolve, and appending it as a fresh nameless entry would put a bare mark in
+// the trace saying that something unnamed failed.
+func TestClaudeResultWithoutAToolUseIDIsDropped(t *testing.T) {
+	line := []byte(`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"orphan","is_error":true}]}}`)
+	if ev, ok := (Claude{}).ParseEvent(line); ok {
+		t.Errorf("an unattributable result produced %+v", ev)
 	}
 }
 

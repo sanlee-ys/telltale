@@ -11,6 +11,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -249,6 +250,28 @@ func TestNoLineExceedsTheTerminalWidth(t *testing.T) {
 			return st
 		},
 		"notice": func() State { st := room(); st.Notice = strings.Repeat("a notice that runs long ", 8); return st },
+		// The trace is the newest way to overflow a column: an entry carries a
+		// clipped-but-still-long command, an outcome mark appended after it,
+		// and an indented failure detail that is itself wrapped. The mark is
+		// what makes this worth its own case — it is added AFTER the text, so
+		// an entry that exactly filled the column would spill by two cells.
+		"trace": func() State {
+			st := room()
+			st.Turn = 1
+			st.Columns[0].Phase = PhaseDone
+			st.Columns[0].Acts = []Act{
+				{Text: "Bash: " + strings.Repeat("go test ./internal/council ", 4), Status: runner.ActOK},
+				{
+					Text:   "Bash: " + strings.Repeat("verylongtokenwithnobreaks", 5),
+					Status: runner.ActFailed,
+					Detail: strings.Repeat("unbreakabletokenofdoom", 6),
+				},
+				{Text: "tool", Status: runner.ActUnknown},
+				{Text: strings.Repeat("pending", 12)},
+			}
+			st.Columns[0].Body = "Summary."
+			return st
+		},
 	}
 
 	for name, mk := range states {
@@ -635,7 +658,9 @@ func TestActivityTraceIsNotProse(t *testing.T) {
 	st := room()
 	st.Turn = 1
 	st.Columns[0].Phase = PhaseDone
-	st.Columns[0].Acts = []string{"Glob", "Read", "Bash: go test ./..."}
+	st.Columns[0].Acts = []Act{
+		{Text: "Glob"}, {Text: "Read"}, {Text: "Bash: go test ./..."},
+	}
 	st.Columns[0].Body = "Tests pass."
 
 	got := render(st)
@@ -661,7 +686,7 @@ func TestActingColumnDoesNotClaimSilence(t *testing.T) {
 	st := room()
 	st.Turn = 1
 	st.Columns[2].Phase = PhaseWaiting
-	st.Columns[2].Acts = []string{"tool", "checkpoint"}
+	st.Columns[2].Acts = []Act{{Text: "tool"}, {Text: "checkpoint"}}
 
 	got := render(st)
 	if strings.Contains(got, "no incremental output") {
@@ -678,9 +703,194 @@ func TestASCIIActivityHasItsOwnMarker(t *testing.T) {
 	st := room()
 	st.Turn = 1
 	st.Columns[0].Phase = PhaseStreaming
-	st.Columns[0].Acts = []string{"Glob"}
+	st.Columns[0].Acts = []Act{{Text: "Glob"}}
 	got := Render(st, PlainStyles(), GlyphsFor(true))
 	if !strings.Contains(got, "* Glob") {
 		t.Error("ascii mode lost the activity marker")
 	}
+}
+
+// TestActOutcomesRenderDistinctly is the honest-gauge rule on the trace itself.
+//
+// Four states, four different renders. The one that matters most is Unknown
+// against OK: "the vendor said this step ended" and "the vendor said this step
+// worked" are different facts, and if they ever render alike the room is
+// claiming a result it does not have — which for Antigravity is EVERY step, not
+// an edge case.
+func TestActOutcomesRenderDistinctly(t *testing.T) {
+	mk := func(s runner.ActStatus) string {
+		st := room()
+		st.Turn = 1
+		st.Expanded = true // one column at full width, so nothing wraps
+		st.Columns[0].Phase = PhaseDone
+		st.Columns[0].Acts = []Act{{Text: "Bash: go test", Status: s}}
+		st.Columns[0].Body = "Done."
+		return render(st)
+	}
+
+	seen := map[string]runner.ActStatus{}
+	for _, s := range []runner.ActStatus{
+		runner.ActPending, runner.ActOK, runner.ActFailed, runner.ActUnknown,
+	} {
+		got := mk(s)
+		if prev, dup := seen[got]; dup {
+			t.Fatalf("status %v renders identically to %v", s, prev)
+		}
+		seen[got] = s
+	}
+
+	// And the marks are the ones the glyph set names, positioned after the
+	// command rather than in front of it.
+	g := UnicodeGlyphs()
+	if !strings.Contains(mk(runner.ActOK), "Bash: go test "+g.ActOK) {
+		t.Error("a successful call is not marked with the OK glyph")
+	}
+	if !strings.Contains(mk(runner.ActFailed), "Bash: go test "+g.ActFail) {
+		t.Error("a failed call is not marked with the failure glyph")
+	}
+	if !strings.Contains(mk(runner.ActUnknown), "Bash: go test "+g.ActUnknown) {
+		t.Error("an unresolved-outcome call is not marked as unknown")
+	}
+	// Pending renders BARE. A mark for "nothing is known yet" would be a claim.
+	pending := mk(runner.ActPending)
+	for _, mark := range []string{g.ActOK, g.ActFail, g.ActUnknown} {
+		if strings.Contains(pending, "Bash: go test "+mark) {
+			t.Errorf("a call still in flight was marked %q", mark)
+		}
+	}
+}
+
+// TestActOutcomeMarksSurviveASCII: every distinction in this product has to
+// survive --ascii and a monochrome terminal, so the marks are glyphs first and
+// colour second. The ASCII set also has to dodge every character already spoken
+// for — "*" is Act, ">" the ellipsis, "]" focus, "#" the HUD's gauge fill.
+func TestActOutcomeMarksSurviveASCII(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	st.ASCII = true
+	st.Expanded = true
+	st.Columns[0].Phase = PhaseDone
+	st.Columns[0].Acts = []Act{
+		{Text: "Bash: go build", Status: runner.ActOK},
+		{Text: "Bash: go test", Status: runner.ActFailed},
+		{Text: "tool", Status: runner.ActUnknown},
+	}
+	got := Render(st, PlainStyles(), GlyphsFor(true))
+
+	a := ASCIIGlyphs()
+	for _, want := range []string{
+		"* Bash: go build " + a.ActOK,
+		"* Bash: go test " + a.ActFail,
+		"* tool " + a.ActUnknown,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("ascii mode is missing %q", want)
+		}
+	}
+	// Distinct from each other AND from the marks already in use.
+	marks := map[string]string{"ok": a.ActOK, "fail": a.ActFail, "unknown": a.ActUnknown}
+	taken := map[string]string{
+		"act": a.Act, "ellipsis": a.Ellipsis, "focus": a.Focus, "warn": a.Warn,
+		"sep": a.Sep, "rule": a.Rule, "prompt": a.Prompt, "caret": a.Caret,
+		"up": a.Up, "down": a.Down,
+	}
+	for name, m := range marks {
+		for other, t2 := range taken {
+			if m == t2 {
+				t.Errorf("the ascii %s mark %q is already the %s glyph; a mark that means two things is not a mark", name, m, other)
+			}
+		}
+	}
+	if a.ActOK == a.ActFail || a.ActOK == a.ActUnknown || a.ActFail == a.ActUnknown {
+		t.Error("two outcome marks collide in ascii mode")
+	}
+}
+
+// TestFailureDetailIsTheVendorsOwnWords: a failed call may carry the vendor's
+// first line about why. It renders indented under the call it belongs to, so it
+// cannot be read as a separate step — and only a FAILURE gets one, because
+// pasting every successful command's stdout into a 37-cell column would bury
+// the answer the room exists to compare.
+func TestFailureDetailIsTheVendorsOwnWords(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	st.Expanded = true
+	st.Columns[0].Phase = PhaseDone
+	st.Columns[0].Acts = []Act{
+		{Text: "Bash: go test ./...", Status: runner.ActFailed, Detail: "FAIL github.com/x/y"},
+		{Text: "Bash: go vet ./...", Status: runner.ActOK, Detail: "this should never render"},
+	}
+	got := render(st)
+	if !strings.Contains(got, "FAIL github.com/x/y") {
+		t.Error("the failure detail is missing")
+	}
+	if strings.Contains(got, "this should never render") {
+		t.Error("a successful call rendered its output; the trace is a record of what was done, not a log")
+	}
+}
+
+// TestActOutcomeColors is the style half of the split, asserted with the
+// coloured set rather than the plain one. Colour is the SECOND signal — the
+// glyph test above is the first — but a failed step should still read as one at
+// a glance, and an unknown one must not read as an alarm.
+func TestActOutcomeColors(t *testing.T) {
+	sty := NewStyles(true)
+	g := UnicodeGlyphs()
+	cases := []struct {
+		status runner.ActStatus
+		style  lipgloss.Style
+	}{
+		{runner.ActOK, sty.SevOK},
+		{runner.ActFailed, sty.SevCrit},
+		// Not a severity. Not knowing how a step went is not an alarm, and
+		// colouring it as one trains the eye to ignore the real ones.
+		{runner.ActUnknown, sty.Muted},
+	}
+	for _, c := range cases {
+		mark, got := actMark(c.status, sty, g)
+		if mark == "" {
+			t.Errorf("status %v has no mark", c.status)
+		}
+		if got.Render(mark) != c.style.Render(mark) {
+			t.Errorf("status %v renders %q, want %q", c.status, got.Render(mark), c.style.Render(mark))
+		}
+	}
+	// A styled body line must survive the fixed-width cell without its escape
+	// sequence being cut — the §9.5 trap, which goldens are blind to because
+	// they render with PlainStyles.
+	st := room()
+	st.Turn = 1
+	st.Columns[0].Phase = PhaseDone
+	st.Columns[0].Acts = []Act{{Text: "Bash: " + strings.Repeat("go test ", 12), Status: runner.ActFailed}}
+	out := Render(st, sty, g)
+	for i, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > st.Width {
+			t.Errorf("styled line %d is %d cells, terminal is %d", i, w, st.Width)
+		}
+	}
+}
+
+// TestMixedTraceGolden is the whole feature in one frame: a column whose steps
+// succeeded, failed with a reason, and ended without saying how — beside a
+// column still waiting on one.
+func TestMixedTraceGolden(t *testing.T) {
+	st := room()
+	st.Turn = 2
+	st.Columns[0].Phase = PhaseDone
+	st.Columns[0].Acts = []Act{
+		{ID: "toolu_a", Text: "Glob: **/*.go", Status: runner.ActOK},
+		{ID: "toolu_b", Text: "Bash: go test ./...", Status: runner.ActFailed, Detail: "FAIL council 0.3s"},
+		{ID: "toolu_c", Text: "Read: view.go", Status: runner.ActOK},
+	}
+	st.Columns[0].Body = "One test fails."
+	st.Columns[1].Phase = PhaseStreaming
+	st.Columns[1].Acts = []Act{
+		{ID: "item_1", Text: "go build ./...", Status: runner.ActPending},
+	}
+	st.Columns[2].Phase = PhaseWaiting
+	st.Columns[2].Acts = []Act{
+		{ID: "step-3", Text: "tool", Status: runner.ActUnknown},
+		{ID: "step-4", Text: "checkpoint", Status: runner.ActUnknown},
+	}
+	golden(t, "activity-outcomes", render(st))
 }

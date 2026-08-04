@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/sanlee-ys/telltale/internal/council/runner"
 )
 
 // Render draws one frame.
@@ -173,7 +175,7 @@ func columnCell(st State, c Column, focused bool, w, h int, sty Styles, g Glyphs
 		lines = append(lines, sty.Muted.Render(strings.Repeat(g.Rule, w)))
 	}
 
-	body := columnText(c, w, g)
+	body := columnText(c, w, sty, g)
 	avail := h - len(lines)
 	win, above, below := scrollWindow(c, body, avail)
 
@@ -191,7 +193,14 @@ func columnCell(st State, c Column, focused bool, w, h int, sty Styles, g Glyphs
 			lines = append(lines, sty.Muted.Render(padRight(
 				g.Down+" "+strconv.Itoa(below)+" more below", w, g)))
 		default:
-			lines = append(lines, padRight(l, w, g))
+			// fit, not padRight, and this is the ANSI trap §9.5 records rather
+			// than a stylistic choice. Body lines can now carry style — the
+			// outcome mark on a trace entry is coloured — and padRight
+			// truncates rune by rune, so it would cut through an escape
+			// sequence and count escape bytes as width. Goldens render with
+			// PlainStyles and are blind to that, which is exactly why the rule
+			// is enforced by the function used rather than by review.
+			lines = append(lines, fit(l, w))
 		}
 	}
 
@@ -244,7 +253,10 @@ func MaxScroll(st State, idx int) int {
 	}
 	// Three lines of the cell are chrome: header, badge, rule.
 	avail := lay.Body - 3
-	n := len(columnText(st.Columns[idx], w, GlyphsFor(st.ASCII)))
+	// PlainStyles because only the line COUNT is wanted here, and styling
+	// cannot change it — every style in this package is a wrapper, never a
+	// re-wrap.
+	n := len(columnText(st.Columns[idx], w, PlainStyles(), GlyphsFor(st.ASCII)))
 	if m := n - avail; m > 0 {
 		return m
 	}
@@ -324,7 +336,7 @@ func dur(d time.Duration) string {
 
 // columnText is a column's body: its output, or the card explaining why there
 // is none.
-func columnText(c Column, w int, g Glyphs) []string {
+func columnText(c Column, w int, sty Styles, g Glyphs) []string {
 	if c.Avail != AvailInstalled {
 		return unavailableCard(c, w, g)
 	}
@@ -336,7 +348,7 @@ func columnText(c Column, w int, g Glyphs) []string {
 	// than merely dimmed: colour is the second signal in this product, never
 	// the only one, so the trace survives --ascii and a monochrome terminal.
 	for _, a := range c.Acts {
-		out = append(out, wrap(g.Act+" "+a, w)...)
+		out = append(out, actLines(a, w, sty, g)...)
 	}
 	if len(c.Acts) > 0 && (c.Body != "" || c.Phase == PhaseDone) {
 		out = append(out, "")
@@ -372,6 +384,67 @@ func columnText(c Column, w int, g Glyphs) []string {
 		out = append(out, wrap(g.Warn+" "+c.Note, w)...)
 	}
 	return out
+}
+
+// actLines renders one trace entry: what the vendor did, how it went, and — on
+// a failure only — the vendor's own first line about why.
+//
+// The mark goes at the END of the command rather than in front of it, because
+// the command is what the eye is scanning for; a leading status column would
+// push three different commands to three different indents and make the trace
+// harder to read than the thing it replaced.
+func actLines(a Act, w int, sty Styles, g Glyphs) []string {
+	mark, style := actMark(a.Status, sty, g)
+	text := g.Act + " " + a.Text
+	if mark != "" {
+		text += " " + mark
+	}
+
+	// Wrapped as PLAIN text and styled afterwards, never the other way round:
+	// wrap measures with lipgloss.Width but splits on spaces, and an escape
+	// sequence pushed through it would be broken across two lines.
+	lines := wrap(text, w)
+	if mark != "" && len(lines) > 0 {
+		// The mark is the last thing on the last line it landed on. Matched by
+		// suffix rather than searched for, so a command that itself contains a
+		// "?" or an "x" cannot have part of its own text coloured.
+		last := len(lines) - 1
+		if strings.HasSuffix(lines[last], mark) {
+			lines[last] = strings.TrimSuffix(lines[last], mark) + style.Render(mark)
+		}
+	}
+
+	// Failure detail only. A successful call's output is not shown at all: the
+	// trace is a record of what was done, and pasting every command's stdout
+	// into a 37-cell column would bury the answer the room exists to compare.
+	if a.Status == runner.ActFailed && a.Detail != "" {
+		for _, l := range wrap(a.Detail, maxInt(1, w-2)) {
+			lines = append(lines, sty.Muted.Render("  "+l))
+		}
+	}
+	return lines
+}
+
+// actMark is the outcome glyph for one trace entry, and the style it carries.
+//
+// Pending renders NOTHING, which is the honest render of a call that has not
+// come back: any mark at all would be a claim about a result nobody has. The
+// three that do render are distinct glyphs BEFORE they are distinct colours, so
+// the whole distinction survives --ascii and a monochrome terminal — colour is
+// this product's second signal and never its only one.
+func actMark(s runner.ActStatus, sty Styles, g Glyphs) (string, lipgloss.Style) {
+	switch s {
+	case runner.ActOK:
+		return g.ActOK, sty.SevOK
+	case runner.ActFailed:
+		return g.ActFail, sty.SevCrit
+	case runner.ActUnknown:
+		// Muted, not a severity. Not knowing how a step went is not an alarm,
+		// and colouring it as one would train the eye to ignore the real ones.
+		return g.ActUnknown, sty.Muted
+	default:
+		return "", sty.Text
+	}
 }
 
 // badgeLine is the sandbox claim, the streaming granularity, and the cost.

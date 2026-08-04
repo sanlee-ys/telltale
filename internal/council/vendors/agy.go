@@ -2,6 +2,7 @@ package vendors
 
 import (
 	"encoding/json"
+	"strconv"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -142,6 +143,13 @@ type agyLine struct {
 		State          string `json:"state"`
 		StepType       string `json:"step_type"`
 		TextDelta      string `json:"text_delta"`
+		// StepIndex is what pairs a step's ACTIVE report with its DONE report:
+		// captured output shows the same index on both (step_index 2 ACTIVE
+		// carrying the reply text, step_index 2 DONE carrying the trailing
+		// newline). A POINTER because 0 is a real index — the first step of a
+		// turn is `user_input` at index 0 — and a plain int could not tell that
+		// apart from a line with no index at all.
+		StepIndex *int `json:"step_index"`
 	} `json:"step_update"`
 
 	Result struct {
@@ -149,6 +157,33 @@ type agyLine struct {
 		Status         string `json:"status"`
 		Response       string `json:"response"`
 	} `json:"result"`
+}
+
+// agyStepEvent turns one tool step into an activity event.
+//
+// The id is the step index, which is scoped to the turn — and that is exactly
+// the scope it needs, since council clears a column's trace on every dispatch,
+// so index 3 of turn 2 can never collide with index 3 of turn 1. A step_update
+// with no index carries no id, which leaves it permanently pending rather than
+// letting it correlate with an unrelated step; no captured line is in that
+// state.
+func agyStepEvent(al agyLine, outcome runner.ActStatus) (runner.Event, bool) {
+	id := ""
+	if al.StepUpdate.StepIndex != nil {
+		id = "step-" + strconv.Itoa(*al.StepUpdate.StepIndex)
+	}
+	return runner.Event{
+		Kind: runner.KindActivity,
+		Acts: []runner.ActCall{{
+			ID: id,
+			// The step TYPE is all agy offers here that fits a narrow column.
+			// tool_name and tool_info.parameters are also present on tool
+			// steps and would read far better; wiring them is a separate
+			// change from carrying outcomes, and is not smuggled in here.
+			Text:    al.StepUpdate.StepType,
+			Outcome: outcome,
+		}},
+	}, true
 }
 
 // ParseEvent maps agy's observed schema. Unknown lines are dropped rather than
@@ -199,14 +234,40 @@ func (Antigravity) ParseEvent(line []byte) (runner.Event, bool) {
 		// one paint at the very end, so without activity its column is blank
 		// for the entire turn — indistinguishable from a hung process.
 		//
-		// ACTIVE only: a step reports twice (ACTIVE then DONE) and emitting
-		// both would double every line of the trace.
 		// agent_response is excluded explicitly: it is speech, handled above,
 		// and a response step carrying no delta is an empty message rather
 		// than a step the vendor took.
-		if al.StepUpdate.StepType != "" && al.StepUpdate.StepType != "agent_response" &&
-			al.StepUpdate.State == "ACTIVE" {
-			return runner.Event{Kind: runner.KindActivity, Text: al.StepUpdate.StepType}, true
+		//
+		// BOTH states are surfaced now, where this used to take ACTIVE only.
+		// That was the right call while the trace was append-only — a step
+		// reports twice and every line would have doubled — and it is the wrong
+		// one now that the two reports can be correlated by step_index: ACTIVE
+		// opens the entry, DONE resolves it, and the trace shows a step still
+		// running as different from a step that has ended.
+		if al.StepUpdate.StepType != "" && al.StepUpdate.StepType != "agent_response" {
+			switch al.StepUpdate.State {
+			case "ACTIVE":
+				return agyStepEvent(al, runner.ActPending)
+			case "DONE":
+				// UNKNOWN, not OK, and this is the whole point of that value
+				// existing. Every captured DONE line carries duration_seconds,
+				// sometimes tool_info with the call's parameters, and NOTHING
+				// that says whether the step achieved anything — no status, no
+				// exit code, no error field. agy reports success or failure
+				// exactly once per turn, in the final `result` event, and that
+				// verdict is about the TURN rather than about any one step.
+				//
+				// So a finished agy step is a step whose outcome has not been
+				// observed, and it renders with its own neutral mark. Reusing
+				// the success mark here would be this product inventing a
+				// result on a vendor's behalf, which is the one thing it is
+				// built not to do.
+				return agyStepEvent(al, runner.ActUnknown)
+			}
+			// Any other state is a value no captured run has shown. Dropped
+			// rather than mapped: an unrecognised state is not evidence of
+			// anything, and inventing an outcome for it is how a trace starts
+			// lying quietly.
 		}
 	case "result":
 		// Response is the whole final reply, carried as the fallback for a turn

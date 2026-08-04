@@ -16,6 +16,7 @@ package council
 import (
 	"time"
 
+	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -132,6 +133,31 @@ const (
 	ModeViewing
 )
 
+// Act is one thing a vendor did this turn, and what is known about how it went.
+//
+// A struct rather than the plain string it started as, because a command trace
+// without outcomes is a half-built gauge: it shows that the vendor ran the
+// tests and says nothing about whether they passed, while the answer was
+// sitting unparsed in the same stream the command came from.
+//
+// The status vocabulary lives in runner rather than here on purpose. Only an
+// adapter can know an outcome — it is a reading of a vendor's own words — and a
+// second enum on this side would be a mapping table that drifts.
+type Act struct {
+	// ID is the vendor's own id for the call, held only so a result arriving
+	// later finds the entry it belongs to. Never rendered.
+	ID string
+	// Text is the call as it will be shown: "Bash: go test ./...". Already
+	// redacted and sanitized, like everything else that reaches State.
+	Text string
+	// Status is what the vendor said about the outcome. runner.ActUnknown is a
+	// real and common value, not a placeholder — see its doc comment.
+	Status runner.ActStatus
+	// Detail is the vendor's own first line about a failure, already redacted.
+	// Empty whenever the vendor gave none, which is most of the time.
+	Detail string
+}
+
 // Column is one vendor's seat at the table.
 type Column struct {
 	Vendor model.VendorID
@@ -157,14 +183,14 @@ type Column struct {
 	Note string
 
 	// Acts is what this vendor DID this turn: tool calls, shell commands, file
-	// edits, in order.
+	// edits, in order — and what became of each one.
 	//
 	// Kept separate from Body rather than interleaved into it, because they are
 	// different kinds of claim. Body is what the vendor said; Acts is what it
 	// did. Concatenating them would let a tool name read as part of an answer,
 	// which is the same category error as rendering a quoted reply as the
 	// vendor's own words.
-	Acts []string
+	Acts []Act
 
 	// Started is when this column's current turn was dispatched. Zero when it
 	// has never run.

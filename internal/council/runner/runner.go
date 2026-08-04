@@ -32,11 +32,15 @@ type EventKind uint8
 const (
 	// KindText is incremental output to append to a column.
 	KindText EventKind = iota
-	// KindActivity is what the vendor is DOING: a tool call, a shell command,
-	// a file edit. Distinct from KindText because it is not the vendor's
-	// opinion and must never be concatenated into its prose — a column that ran
-	// three commands and then answered should show both, and show which is
-	// which.
+	// KindActivity is news about what the vendor is DOING: a tool call, a shell
+	// command, a file edit — and, later in the same stream, how that call
+	// turned out. Distinct from KindText because it is not the vendor's opinion
+	// and must never be concatenated into its prose — a column that ran three
+	// commands and then answered should show both, and show which is which.
+	//
+	// One kind rather than two, deliberately. An announcement and its result
+	// are the same fact at two moments, the consumer correlates them by id, and
+	// a second kind would only give the two paths somewhere to diverge.
 	KindActivity
 	// KindSession carries the vendor's own session id, which is what makes the
 	// next turn a resume rather than a re-send.
@@ -50,12 +54,73 @@ const (
 	KindError
 )
 
+// ActStatus is what is known about the outcome of one tool call.
+//
+// Four values, and Unknown is the one that earns the type. A vendor that
+// reports a step FINISHED without saying whether it worked is a different fact
+// from a vendor that reports success, and the two must not render alike — the
+// same rule that keeps "no data" and "zero" apart on every gauge in this
+// product (design.md §4a.1). Antigravity is exactly that case: its steps flip
+// ACTIVE then DONE and no captured line has ever carried a success signal.
+type ActStatus uint8
+
+const (
+	// ActPending: announced, not resolved. The call may still be running, or
+	// the vendor may simply never say. It renders as the bare trace entry,
+	// because that is all that is known.
+	ActPending ActStatus = iota
+	// ActOK: the vendor reported the call succeeded.
+	ActOK
+	// ActFailed: the vendor reported the call failed.
+	ActFailed
+	// ActUnknown: the vendor reported the call ENDED and said nothing about
+	// whether it worked. Neither a success nor a failure, and it must not be
+	// rendered as either.
+	ActUnknown
+)
+
+// ActCall is one tool call, as a vendor reported it.
+//
+// The same type carries an announcement and its later result. An announcement
+// sets Text and leaves Outcome at ActPending; a result sets Outcome and, where
+// the vendor offered one, Detail. Both may set Text, so a vendor that reports
+// only completions still names what it did.
+type ActCall struct {
+	// ID is the vendor's own id for this call: Claude's tool_use_id, codex's
+	// item id, agy's step index. It is what the consumer correlates on, and it
+	// is never rendered.
+	//
+	// Empty is legal and means the call can never be resolved — it stays
+	// pending forever, which is the honest outcome rather than a guess. No
+	// adapter here is currently in that position.
+	ID string
+	// Text is what the vendor did, already shortened for a narrow column:
+	// "Bash: go test ./...".
+	Text string
+	// Outcome is what the vendor said about how it went.
+	Outcome ActStatus
+	// Detail is the vendor's OWN words about a failure, first line only.
+	// Never composed here: a diagnosis council wrote itself would be
+	// indistinguishable on screen from one the vendor reported.
+	Detail string
+}
+
 // Event is one thing that happened to one vendor.
 type Event struct {
 	Vendor    model.VendorID
 	Kind      EventKind
 	Text      string
 	SessionID string
+	// Acts carries the tool-call news of a KindActivity: one entry per call
+	// announced or resolved on this line.
+	//
+	// A SLICE rather than a string, because one assistant message really can
+	// carry a parallel batch of calls and collapsing them onto one line would
+	// under-report the work. It replaced a newline-joined Text that the
+	// consumer split back apart — once each call has to carry its own id, that
+	// split-and-zip becomes positional correlation across a redaction
+	// boundary, which is exactly the kind of thing that goes wrong silently.
+	Acts []ActCall
 	// CostUSD is a pointer so "the vendor reported zero" and "the vendor
 	// reported nothing" stay distinguishable — the same rule the HUD's schema
 	// follows (design.md §4a.1).
