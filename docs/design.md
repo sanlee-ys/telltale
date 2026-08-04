@@ -1917,7 +1917,12 @@ Deliberately absent: mouse support, fuzzy/regex/embedding search (the query is d
 literally, and a syntax that can mean something other than what it looks like is a filter
 that hides rows without saying so), and configuration UI. And one invariant that outranks
 all future feature requests: **the HUD is strictly read-only. No keybinding may ever
-mutate vendor state or send anything to a running agent.** telltale is a telltale.
+mutate vendor state or send anything to a running agent.** The HUD is a telltale.
+
+That invariant is scoped to the observation surfaces — `hud` and `statusline` — and it does
+not weaken. `telltale council` (ADR-008, §9) is a separate subcommand that *does* dispatch to
+vendor CLIs; it is a dispatch room, not a gauge, it is entered deliberately, and it says so on
+screen. Nothing in §7 may reach for it.
 
 ### 7.9 Golden tests
 

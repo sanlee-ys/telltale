@@ -124,9 +124,13 @@ is what made its HUD adapter buildable — see
 [decisions/004](decisions/004-antigravity-statusline.md) for the first verdict and
 [decisions/006](decisions/006-antigravity-hud-adapter.md) for the reversal.)
 
-**telltale never writes.** It reads vendor files, makes no network calls, reads no
-credentials, and no keybinding can mutate vendor state or send anything to a running
-agent. "Reads no credentials" stopped being free with the Cursor adapter — that vendor
+**The gauges never write.** `telltale statusline` and `telltale hud` read vendor files,
+make no network calls, read no credentials, and no keybinding can mutate vendor state or
+send anything to a running agent. (One subcommand is deliberately outside that boundary:
+`telltale council` is an opt-in dispatch room that spawns vendor CLIs to broadcast one
+prompt to several agents at once — see [decisions/008](decisions/008-council-mode-dispatch.md).
+It is a separate mode, entered on purpose, and it never shares a keybinding with the HUD.)
+"Reads no credentials" stopped being free with the Cursor adapter — that vendor
 keeps its access tokens, refresh tokens and OAuth secrets in the *same SQLite file* as
 its session state — so it is enforced there as a read allowlist with a test that plants
 credential-shaped strings in the fixtures and asserts none of them reaches anything the
