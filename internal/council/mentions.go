@@ -6,9 +6,23 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
-// Route is who a brief is addressed to. A nil Route means everyone seated —
-// the default, and the only behaviour that existed before mentions.
+// Route is who a brief is addressed to. A nil Route means everyone seated,
+// which is now what `@all` asks for rather than what silence means.
 type Route []model.VendorID
+
+// defaultRoute is where an unaddressed brief goes.
+//
+// Claude alone, and this is a contract decision rather than a preference. The
+// fleet strategy is explicit that cross-vendor fan-out is NOT a default: Codex
+// is the lane for architecture challenge and consequential review, Antigravity
+// for research and a third opinion at an actual fork. Broadcasting every "hello"
+// to all three spends two deliberately constrained subscription pools on nothing,
+// and it inverts the routing San already ratified.
+//
+// So the panel became a decision instead of a reflex. @codex and @agy reach a
+// lane on purpose; @all convenes everyone. That also makes the common case the
+// fast one, since Claude is the only seat that streams.
+func defaultRoute() Route { return Route{model.VendorClaude} }
 
 // mentionAliases maps what a user might type to a vendor.
 //
@@ -90,8 +104,8 @@ func ParseRoute(draft string) (Route, string) {
 	}
 	if len(route) == 0 {
 		// No mentions consumed: the draft is unchanged, including any @token
-		// that did not resolve.
-		return nil, draft
+		// that did not resolve, and it goes to the default lane.
+		return defaultRoute(), draft
 	}
 	return route, brief
 }

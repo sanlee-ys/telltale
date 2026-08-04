@@ -195,6 +195,9 @@ func TestComposeMode(t *testing.T) {
 	st := room()
 	st.Mode = ModeComposing
 	st.Draft = "should council resume sessions or re-send the transcript?"
+	// Derived, not left zero: the program sets Route on every keystroke, so a
+	// golden with an unset Route would pin a frame the room cannot produce.
+	st.Route, _ = ParseRoute(st.Draft)
 	golden(t, "compose", render(st))
 }
 

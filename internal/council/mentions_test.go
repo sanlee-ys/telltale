@@ -15,9 +15,13 @@ func TestParseRoute(t *testing.T) {
 		brief string
 	}{
 		{
-			name:  "no mention addresses everyone",
+			// The fleet contract, encoded: an unaddressed brief goes to the
+			// control-plane lane alone, not to all three. Broadcasting "hello"
+			// to a review lane and a tiebreak lane spends two constrained pools
+			// on nothing.
+			name:  "no mention goes to claude alone, not everyone",
 			draft: "should we resume or re-send?",
-			want:  nil,
+			want:  Route{model.VendorClaude},
 			brief: "should we resume or re-send?",
 		},
 		{
@@ -57,7 +61,9 @@ func TestParseRoute(t *testing.T) {
 			brief: "go",
 		},
 		{
-			name:  "@all is everyone, which is the same as no mention",
+			// @all is now the ONLY way to convene the panel. Silence is no
+			// longer a vote for everyone.
+			name:  "@all convenes the whole room",
 			draft: "@all what do you think?",
 			want:  nil,
 			brief: "what do you think?",
@@ -68,7 +74,7 @@ func TestParseRoute(t *testing.T) {
 			// because of a word in the middle of a sentence.
 			name:  "a mention mid-sentence is prose, not routing",
 			draft: "ask @claude about the resume flag",
-			want:  nil,
+			want:  Route{model.VendorClaude},
 			brief: "ask @claude about the resume flag",
 		},
 		{
@@ -77,7 +83,7 @@ func TestParseRoute(t *testing.T) {
 			// as "going to everyone" before enter rather than after.
 			name:  "an unknown mention stays in the brief",
 			draft: "@claud fix the typo",
-			want:  nil,
+			want:  Route{model.VendorClaude},
 			brief: "@claud fix the typo",
 		},
 		{
@@ -155,10 +161,16 @@ func TestFooterShowsRoutingBeforeDispatch(t *testing.T) {
 	st := room()
 	st.Mode = ModeComposing
 
-	st.Draft = "a brief for everyone"
+	st.Draft = "an unaddressed brief"
+	st.Route, _ = ParseRoute(st.Draft)
+	if got := render(st); !strings.Contains(got, "claude") {
+		t.Error("an unaddressed brief does not name the default lane")
+	}
+
+	st.Draft = "@all convene"
 	st.Route, _ = ParseRoute(st.Draft)
 	if got := render(st); !strings.Contains(got, "everyone") {
-		t.Error("an unaddressed brief does not say it is going to everyone")
+		t.Error("@all does not say it is convening everyone")
 	}
 
 	st.Draft = "@codex just you"
@@ -172,10 +184,10 @@ func TestFooterShowsRoutingBeforeDispatch(t *testing.T) {
 	}
 
 	// The typo case, which is the whole reason this is on screen: it must read
-	// as going to everyone, not silently to nobody.
+	// as going to the default lane, not silently to nobody.
 	st.Draft = "@claud typo"
 	st.Route, _ = ParseRoute(st.Draft)
-	if got := render(st); !strings.Contains(got, "everyone") {
-		t.Error("an unresolved mention does not read as going to everyone")
+	if got := render(st); !strings.Contains(got, "claude") {
+		t.Error("an unresolved mention does not read as going to the default lane")
 	}
 }
