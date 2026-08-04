@@ -436,7 +436,7 @@ func promptLine(st State, lay Layout, sty Styles, g Glyphs) string {
 	// Pad the PLAIN text, then style it once — never the other way round.
 	body := sty.Text.Render(padRight(text, w, g))
 	if st.Draft == "" && st.Mode == ModeComposing {
-		body = sty.Muted.Render(padRight("type a brief — @claude, @codex or @agy to address one"+g.Caret, w, g))
+		body = sty.Muted.Render(padRight("type a brief — goes to claude; @codex, @agy or @all to widen"+g.Caret, w, g))
 	}
 	return " " + sty.Muted.Render(prefix) + body + " "
 }
@@ -517,8 +517,10 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		sty.Identity.Render("council") + sty.Muted.Render(" — one brief, several agents, side by side"),
 		"",
 		"  i / enter    compose a brief",
-		"  enter        dispatch — to everyone, or to whoever is @mentioned",
-		"  @claude      address one vendor: @claude, @codex, @agy, @all",
+		"  enter        dispatch — to claude, or to whoever is @mentioned",
+		"  @codex       address a lane: @claude, @codex, @agy, or @all for the panel",
+		"               unaddressed briefs go to claude alone: the other two are",
+		"               review and tiebreak lanes, not a default audience",
 		"               leading mentions only, so \"ask @claude\" is just prose",
 		"  esc          leave compose (the draft is kept)",
 		"  tab          move focus between columns",
