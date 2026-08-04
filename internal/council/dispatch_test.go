@@ -19,8 +19,11 @@ func traceModel() *Model {
 			Vendor: model.VendorClaude, Label: "Claude Code",
 			Avail: AvailInstalled, Phase: PhaseStreaming,
 		}}},
-		sessions:  map[model.VendorID]string{},
-		redactors: map[model.VendorID]*Redactor{},
+		sessions:   map[model.VendorID]string{},
+		resumeIDs:  map[model.VendorID]string{},
+		unproven:   map[model.VendorID]bool{},
+		threadLost: map[model.VendorID]bool{},
+		redactors:  map[model.VendorID]*Redactor{},
 	}
 }
 

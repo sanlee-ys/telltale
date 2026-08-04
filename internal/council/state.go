@@ -227,6 +227,16 @@ type Column struct {
 	// cost from token counts, which is on this repo's deliberately-rejected list
 	// (design.md §8).
 	CostUSD *float64
+	// Restored reports that this seat's vendor session id came back from a saved
+	// room rather than from a turn dispatched in this process.
+	//
+	// Per column and not per room, because reattaching is not all-or-nothing: a
+	// seat that never answered has no id to save, and a seat added since the
+	// room was saved has none either. Both open beside seats that DO have a
+	// thread, and a room-level flag would let either be read as continuing a
+	// conversation it is not in.
+	Restored bool
+
 	// CostSession reports that the figure above is the PROCESS's running total
 	// rather than this turn's spend.
 	//
@@ -258,6 +268,28 @@ type PendingGate struct {
 	// entry: "Write: ~/ws/ping.txt".
 	Text string
 }
+
+// Reattach is what a resumed room says about where it came from.
+//
+// The zero value is a fresh room, and a fresh room renders exactly as it always
+// did — nothing is added to the header, no card appears, and the goldens for
+// every other state are unchanged. Reattaching is the exception that announces
+// itself; opening normally is not an event.
+//
+// Like Brief, only the reportable part of the saved room crosses onto State.
+// The vendor session ids stay on Model: they are opaque handles to private
+// conversations and the renderer has no reason to be able to reach them.
+type Reattach struct {
+	// Turn is the last turn the saved room completed. Zero means no reattach.
+	Turn int
+	// SavedAt is when the state file was written. Rendered as an age against
+	// State.Now, never against a clock, so Render stays pure and the goldens
+	// stay reproducible.
+	SavedAt time.Time
+}
+
+// Active reports that this room was restored from a saved one.
+func (r Reattach) Active() bool { return r.Turn > 0 && !r.SavedAt.IsZero() }
 
 // State is everything Render reads. Nothing here is a clock, a file handle or
 // an environment lookup — those live on Model, which Render never sees.
@@ -306,7 +338,17 @@ type State struct {
 
 	// Turn counts dispatched turns, so the header can say which round this is.
 	// Turn 0 means nothing has been sent.
+	//
+	// A reattached room starts at the saved count and CONTINUES from it: the
+	// next dispatch is turn N+1, not turn 1. Restarting the count would make
+	// the header disagree with the vendors, each of which is replaying a history
+	// several turns long, and would quietly reframe a resumed conversation as a
+	// new one.
 	Turn int
+
+	// Reattached describes the saved room this one was restored from. Zero for a
+	// room opened normally.
+	Reattached Reattach
 
 	// Notice is a transient one-line message in the footer.
 	Notice string

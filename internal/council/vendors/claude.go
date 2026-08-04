@@ -113,6 +113,56 @@ func (c Claude) Session(workspace, binary, hooksFile string, p Posture) (runner.
 	}, nil
 }
 
+// SessionResume is Session started on a conversation from a previous room.
+//
+// VERIFIED LIVE 2026-08-04, Claude Code 2.1.220, on Windows. The question this
+// answers is whether `--resume` composes with `--input-format stream-json` at
+// all — the two had only ever been used apart, `--resume` on the spawn-per-turn
+// path and `--input-format` on the persistent one, and the sixth ADR-008
+// amendment says explicitly that the persistent session passes no `--resume`
+// because "there is nothing to resume". Reattaching is the case where there is.
+//
+// The probe: one turn in a throwaway directory captured a session id; a second
+// process was started with the FULL persistent flag set plus `--resume <id>`,
+// handed one turn as JSONL on stdin, and asked what word the first turn had
+// used. Four things it settled:
+//
+//   - The process starts and takes the turn. The composition is accepted.
+//   - It answered "ALPHA" — a fact only the PRIOR session's history carries. It
+//     is a real resume, not a fresh session that happened to launch.
+//   - The reported session_id is the SAME id, unchanged. That is what keeps the
+//     saved-room file valid across repeated reattaches: the key does not rotate
+//     out from under it every time the room is reopened.
+//   - Closing stdin exited 0.
+//
+// One trap recorded because it looks like a check and is not: `num_turns` came
+// back as 1, counting THIS PROCESS's turns rather than the conversation's. It
+// cannot be used to tell a resume from a fresh start.
+//
+// And the failure shape, measured rather than assumed, because it decides what
+// the room does with a thread that has aged out: a well-formed id with no
+// conversation behind it exits 1 with `No conversation found with session ID:
+// <id>` on stderr and a `result` carrying is_error and num_turns 0. It fails
+// FAST and FREE — no model turn is spent — which is why the caller may simply
+// let the seat die once and start it fresh on the next brief rather than
+// pre-flighting the id.
+// The hooks file rides along unchanged, and that is not incidental: a resumed
+// seat is a gated seat like any other, and one that came back without the
+// user's own PreToolUse screen while the badge still said the guard was wired
+// would be the quietest false claim in the room. Reattaching restores a
+// conversation, never a weaker posture.
+func (c Claude) SessionResume(workspace, binary, hooksFile, sessionID string, p Posture) (runner.Spec, error) {
+	if sessionID == "" {
+		return runner.Spec{}, ErrNoResume
+	}
+	spec, err := c.Session(workspace, binary, hooksFile, p)
+	if err != nil {
+		return runner.Spec{}, err
+	}
+	spec.Args = append(spec.Args, "--resume", sessionID)
+	return spec, nil
+}
+
 // userMessage is the turn envelope, and it is the shape the live probe sent.
 //
 // Captured verbatim from the run that worked:

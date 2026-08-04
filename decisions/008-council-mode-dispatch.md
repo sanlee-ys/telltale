@@ -541,6 +541,151 @@ attempt is made to resolve a relocated config directory, because nothing here me
 `CLAUDE_CONFIG_DIR` does. That last one fails visibly rather than quietly — a machine whose
 config lives elsewhere finds no hooks, wires nothing, and the badge says so.
 
+### Amendment, 2026-08-04 (ninth): the room survives quitting, and council writes one file
+
+Everything the room knew died with the process. Four vendors were each holding a conversation
+several turns deep — that is the entire point of the resume mechanism in §4 — and the only
+thing standing between the user and those conversations was a map of session ids in memory.
+Quitting the room, closing the terminal, or rebooting threw the ids away and left four live
+sessions stranded: the vendors still had the history, and nothing on the machine could name it.
+
+`telltale council --resume` reopens the room last saved for a workspace. **This required
+ratifying that council may write one file, and that ratification is the load-bearing part of
+this amendment rather than the feature.**
+
+**The gauges' contract is untouched.** `statusline` and `hud` still write nothing at all. The
+boundary moved once already, in the Consequences above — from "telltale never writes" to "the
+gauges never write" — and council was always the declared exception. This is the first thing
+that exception is spent on, and it is spent narrowly.
+
+**What is in the file, and the rule that decided it.** One file per workspace at
+`~/.telltale/council/<sha256-of-workspace>.json`, mode 0600 in a 0700 directory:
+
+| field | why it is there |
+|---|---|
+| `version` | a schema this build does not know is refused rather than misread |
+| `workspace` | the hash names the file; the file has to agree, or a collision hands one project's sessions to another |
+| `posture` | `read` / `write` / `write-gated` — **recorded to be displayed, never re-applied** |
+| `turn` | so the counter continues at N+1 rather than restarting and reframing a resumed conversation as a new one |
+| `sessions` | vendor id → that vendor's OWN session id. The keys the file exists for |
+| `brief_path` | the PATH of the operating brief. **Never its content** |
+| `saved_at` | so the card can say how stale the room is instead of presenting an old one as current |
+
+The rule is that this file holds **keys, not content**. No transcripts, no vendor output, no
+prompts, no brief text. Each vendor already stores its own history against its own id, so
+anything copied here would be a second copy of a private conversation in a location the user
+never chose — and `--brief` exists precisely because that content is private (fourth
+amendment). If this file leaked it would disclose which directory was worked in, when, and a
+set of opaque ids. Not a word anyone said. A test asserts that a room whose brief, reply,
+draft and shell trace all contain distinctive strings writes none of them.
+
+It lives under the home directory and not beside the workspace, which is a privacy decision
+rather than a filesystem one: a dotfile dropped into the directory council was pointed at ends
+up in someone's repo, in their `git status`, and eventually in a commit. The path is *hashed*
+for the same reason — the listing of `~/.telltale/council` should not be an inventory of what
+the user works on.
+
+**Posture is never restored, and this is the safety property of the feature.** A `--write` room
+saved to disk reopens read. Restoring it would mean a room that can edit a tree because of
+something on disk rather than something the user typed, and the whole of the third amendment is
+that a write-capable room announces itself in the command and in the header for the entire
+session. A flag that can arrive from a file is not a flag anyone typed. The saved posture is
+shown in the reattach notice when it differs, so the user learns it from the room rather than
+from a vendor refusing to edit a file.
+
+**Two failure modes, answered differently.** `--resume` with **no state file** is a plain error
+before the alternate screen, mirroring `LoadBrief`: nothing was ever saved for that workspace,
+so the user is wrong about which room they are reattaching to — usually a `--cd` pointing
+somewhere else — and a room that opened looking successful would have them typing their next
+brief into four fresh sessions believing it continued something. A file that **exists and
+cannot be used** (corrupt JSON, unknown schema, another workspace's room) is not fatal: the
+room opens unreattached and says loudly why. Telltale's own state being damaged must never be
+the reason someone cannot open their tool. The bad file is left in place rather than deleted,
+and the next completed turn overwrites it.
+
+**Written at each turn's end, not only at quit.** The failure this exists to survive is the room
+*not* getting a clean exit. Writes are atomic — temp file in the same directory, sync, rename —
+because a torn file is exactly the input the corrupt path has to refuse, so a crash mid-write
+would cost the user the reattach the feature exists to give them. Nothing is written before the
+first turn: a room with no turns has no keys, and writing anyway would drop a file for every
+launch in the wrong directory.
+
+**The composition that had to be measured.** The sixth amendment states that the persistent
+Claude session passes no `--resume` "because there is nothing to resume". Reattaching is the
+case where there is — and whether `--resume` composes with `--input-format stream-json` was
+genuinely open, since one flag had only ever been used on the spawn-per-turn path and the other
+only on the persistent one. **Probed live, 2026-08-04, Claude Code 2.1.220, Windows**, in a
+throwaway directory:
+
+| | finding | strength |
+|---|---|---|
+| Composition | The process starts with the full persistent flag set **plus** `--resume <id>`, and takes a turn on stdin. | Measured |
+| Real resume | Asked what word the *previous* process had been told to reply with, it answered `ALPHA` — a fact only the prior session's history carries. Not a fresh session that happened to launch. | Measured |
+| Id stability | The reported `session_id` is the **same id**, unchanged. This is what keeps the saved file valid across repeated reattaches: the key does not rotate out from under it. | Measured |
+| Exit | Closing stdin exited 0. | Measured |
+| Stale id | A well-formed id with no conversation behind it exits 1 with `No conversation found with session ID: <id>` and a `result` carrying `is_error` and `num_turns` 0. It fails **fast and free** — no model turn is spent. | Measured |
+| `num_turns` | Came back as **1** on a genuine resume: it counts THIS PROCESS's turns, not the conversation's. It cannot be used to tell a resume from a fresh start. | Measured — recorded as a trap |
+
+**A restored id is on probation until a turn survives it**, and this rule replaced a narrower
+one that was wrong. The first implementation handled only the persistent Claude seat, spending
+its id once at process launch. An independent review found the hole: **no adapter reports a
+stale id as such.** Every `NextTurn` returns `ErrNoResume` only for an *empty* id — a
+well-formed id whose conversation has aged out builds a perfectly valid `resume <dead-id>`
+invocation, and the failure surfaces later as a dead process. Nothing deleted the id, so the
+three spawn-per-turn seats would rebuild the same doomed invocation on **every turn for the
+life of the room**. Reattaching a room a few days later is the ordinary case that hits it, and
+the ErrNoResume fallback §4 relies on could never fire.
+
+So there is one rule for all four seats. A restored id is dropped the first time a turn on it
+fails; a turn that comes back clean takes it off probation permanently; a *cancelled* turn
+changes nothing, because a keystroke says nothing about whether the vendor still has the
+conversation. **Ids earned in this process are never touched by any of this** — the whole value
+of resume is that history survives a bad turn, and a rule that discarded a thread on any
+failure would quietly undo the feature it is part of.
+
+**A refused thread gets its own words.** The vendor reports a dead thread as a failed turn,
+whose stock wording — "the vendor reported the turn failed", or a raw `exit status 1: No
+conversation found with session ID` — reads as *this vendor broke* and sends the user looking
+for a problem with the vendor instead of retyping a brief. The column says the saved thread was
+refused, that its history is gone, and that the next brief starts a new session with the brief
+re-applied. A dead thread emits **two** events — the vendor's failed `result`, then the process
+exit carrying its stderr — and the second must not overwrite the first, because only one of
+them tells the user what happens next.
+
+**A saved room you did not ask for is named before it is replaced.** The file is keyed by
+workspace, so opening a room in a directory that already has one and dispatching a single turn
+renames a fresh file over the old keys: four conversations become unreachable, silently and
+irreversibly. Council does not refuse and does not prompt — it states once that a saved room is
+there and that `--resume` reattaches to it, which is enough to make the loss a choice.
+
+**Reattaching is per seat, not per room.** A vendor that never answered left no id; one
+installed since the room was saved was never in it. Both open beside seats that do continue, so
+each column says which it is. The header gains nothing at all when the room is fresh — this
+feature is invisible until it is used, which is what keeps every other golden in this package
+honest.
+
+**A reattached seat carries the guard.** The eighth amendment gives the gated seat the user's
+own `PreToolUse` hooks through `--settings`; a resumed session is built from the same `Session`
+spec and passes the same hooks file. Reattaching restores a *conversation*, never a weaker
+posture — a seat that came back unscreened while the badge still said the guard was wired would
+be the quietest false claim in the room, and it is asserted rather than assumed.
+
+**A brief is not re-sent to a resumed seat.** It is already in the history being replayed, and
+re-sending would spend the whole brief again against a metered quota for a vendor that has read
+it — the same reasoning §4 and the fourth amendment already apply to later turns. The saved
+`brief_path` is compared and *reported* when it differs from this room's, never loaded:
+reopening a private file this invocation did not name is the one thing `--brief` exists to keep
+deliberate. Only the paths are compared, because comparing content would need the content this
+file refuses to hold.
+
+**The one general lesson, and it is the same one this file keeps learning.** The first cut of
+this feature tested that the *fallback* worked, with a hand-written vendor double that returned
+`ErrNoResume` for a stale id. No shipped adapter does that. It was the fourth amendment's
+mistake in a new costume — asserting the flag rather than the effect — except this time the
+test double was the thing asserting a behaviour nothing in the product had. A test can hold a
+false claim in place just as firmly as a true one (fifth amendment); a *mock* can invent one.
+
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude

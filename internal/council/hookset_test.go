@@ -235,7 +235,7 @@ func TestOnlyAGatedRoomCopiesHooks(t *testing.T) {
 // out of the user's private configuration, so only the boolean crosses.
 func TestHooksPathNeverReachesState(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hooks-tell-tale-marker.json")
-	m := newWithBrief(Options{Write: true}, Brief{}, HookSet{Path: path})
+	m := newWithBrief(Options{Write: true}, Brief{}, HookSet{Path: path}, Reattachment{})
 	m.st.Width, m.st.Height = 120, 24
 
 	if strings.Contains(Render(m.st, PlainStyles(), GlyphsFor(false)), "hooks-tell-tale-marker") {

@@ -2,9 +2,11 @@ package council
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -34,6 +36,15 @@ type Options struct {
 	// BriefPath names a file of shared operating context handed to every
 	// vendor on its first turn. Empty falls back to TELLTALE_COUNCIL_BRIEF.
 	BriefPath string
+	// Resume reopens the room last saved for this workspace: the turn count and
+	// each vendor's own session id come back, so the next brief continues the
+	// conversation instead of starting four new ones.
+	//
+	// Composes with --cd, and the workspace is the KEY rather than an extra
+	// filter — one saved room per directory. Two rooms open on one directory
+	// would be two conversations claiming the same state file, and the second to
+	// quit would silently overwrite the first.
+	Resume bool
 }
 
 // Model is the Bubble Tea model. It owns State plus the things Render must not
@@ -83,9 +94,46 @@ type Model struct {
 	// sessions holds each vendor's own session id, which is what makes a later
 	// turn a resume rather than a transcript re-send.
 	sessions map[model.VendorID]string
+	// resumeIDs are the ids restored from a saved room that a PERSISTENT seat
+	// has not spent yet.
+	//
+	// Separate from sessions, and only for the persistent path. A spawn-per-turn
+	// vendor consumes its id through specFor on every turn, which already falls
+	// back to a first turn when the vendor refuses it. A persistent seat spends
+	// its id once, at process launch, and must not carry it into the replacement
+	// process — hence a map that is emptied as it is read rather than a flag.
+	resumeIDs map[model.VendorID]string
+	// unproven names seats holding a RESTORED session id that has not yet
+	// survived a turn.
+	//
+	// It exists because "the vendor refuses a stale id" is not a thing any of
+	// these CLIs reports as such. Every adapter's NextTurn returns ErrNoResume
+	// only for an EMPTY id; a well-formed id whose conversation has aged out
+	// builds a perfectly valid invocation, and the failure arrives later as a
+	// dead process. Nothing in the old code deleted the id, so a spawn-per-turn
+	// seat would rebuild the same doomed `resume <dead-id>` invocation on every
+	// turn for the life of the room — which is exactly the wedge the persistent
+	// seat's one-shot rule was written to avoid, on the three seats that never
+	// got it.
+	//
+	// So a restored id is on probation until a turn comes back clean. It is
+	// dropped the first time one fails, and after that this seat is an ordinary
+	// unrestored seat: ids EARNED in this process are never touched by any of
+	// this, because a transient failure mid-conversation must not throw away a
+	// working thread.
+	unproven map[model.VendorID]bool
+	// threadLost names seats whose reattach was refused during the current turn,
+	// so a later event about the same failure cannot overwrite the one sentence
+	// that tells the user what happens to their next brief. Cleared per turn at
+	// dispatch, because it is a fact about one turn and not about the seat.
+	threadLost map[model.VendorID]bool
 	// redactors are per vendor because each carries a partial-word buffer
 	// across the chunks of one stream.
 	redactors map[model.VendorID]*Redactor
+
+	// saveErr is the last state-file write's outcome, kept so the save on the
+	// way out can be reported after the TUI is gone.
+	saveErr error
 
 	// brief is the shared operating context. Held on Model, never on State:
 	// its content is the user's private file and the renderer has no business
@@ -107,10 +155,10 @@ type Model struct {
 // The brief is loaded by Run before this, so a bad path fails before the
 // alternate screen is entered rather than as an unreadable error behind a TUI.
 func New(opts Options) *Model {
-	return newWithBrief(opts, Brief{}, HookSet{})
+	return newWithBrief(opts, Brief{}, HookSet{}, Reattachment{})
 }
 
-func newWithBrief(opts Options, b Brief, hs HookSet) *Model {
+func newWithBrief(opts Options, b Brief, hs HookSet, re Reattachment) *Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &Model{
 		opts:       opts,
@@ -119,6 +167,9 @@ func newWithBrief(opts Options, b Brief, hs HookSet) *Model {
 		glyphs:     GlyphsFor(opts.ASCII),
 		events:     make(chan runner.Event, eventBuffer),
 		sessions:   map[model.VendorID]string{},
+		resumeIDs:  map[model.VendorID]string{},
+		unproven:   map[model.VendorID]bool{},
+		threadLost: map[model.VendorID]bool{},
 		redactors:  map[model.VendorID]*Redactor{},
 		procs:      map[model.VendorID]*seatProc{},
 		gateInputs: map[string]map[string]any{},
@@ -128,7 +179,125 @@ func newWithBrief(opts Options, b Brief, hs HookSet) *Model {
 		hooks:      hs,
 	}
 	m.st.Briefed = b.Loaded()
+	m.reattach(re)
 	return m
+}
+
+// reattach restores a saved room onto a freshly built model.
+//
+// The ids land on Model and never on State — the same boundary the brief keeps
+// — and only what the room can honestly SAY about them crosses over: a turn
+// number, a timestamp, and a per-seat flag.
+//
+// The saved posture is read and NOT applied, which is the one decision in here
+// worth arguing with. Restoring --write from a file would mean a room that can
+// edit a tree because of something on disk rather than something the user
+// typed, and the whole of ADR-008's third amendment is that a write-capable
+// room announces itself in the command and in the header for the entire
+// session. A flag that can arrive from a file is not a flag anyone typed.
+func (m *Model) reattach(re Reattachment) {
+	if re.Offered {
+		// A usable room is here and was not asked for. Said once, plainly, and
+		// then forgotten: the alternative is that the first dispatch overwrites
+		// four vendors' session ids with nothing on screen having mentioned they
+		// were there.
+		m.st.Notice = "this workspace has a saved room from " +
+			age(time.Since(re.Room.SavedAt)) + " (turn " + itoa(re.Room.Turn) +
+			") — --resume reattaches to it; dispatching here replaces it"
+		return
+	}
+	if re.Ignored != "" {
+		// A state file that exists and cannot be used. The room opens anyway —
+		// it is perfectly usable unreattached — but silence here would let a
+		// user carry on believing they are continuing a conversation that is not
+		// there. The next completed turn overwrites the bad file.
+		m.st.Notice = "the saved room was not restored: " + re.Ignored
+		return
+	}
+	if !re.Active() {
+		return
+	}
+
+	seats := 0
+	for v, id := range re.Room.Sessions {
+		if id == "" {
+			continue
+		}
+		m.sessions[v] = id
+		m.resumeIDs[v] = id
+		// On probation until it survives a turn. See Model.unproven — without
+		// this, a thread the vendor no longer has would be retried on every turn
+		// of the session instead of once.
+		m.unproven[v] = true
+		if c := m.column(v); c != nil && c.Avail == AvailInstalled {
+			// Only a SEATED column is marked restored. An id for a vendor that
+			// is not installed on this machine is dead weight rather than a
+			// thread, and a card claiming a restored conversation above an
+			// "is not seated" card would be two contradictory statements in one
+			// column.
+			c.Restored = true
+			seats++
+		}
+	}
+
+	m.st.Turn = re.Room.Turn
+	m.st.Reattached = Reattach{
+		Turn:    re.Room.Turn,
+		SavedAt: re.Room.SavedAt,
+	}
+	// Says WHERE the state came from, not merely that there was some. A room
+	// that reports a turn count it did not earn owes the user the file it read
+	// it out of.
+	//
+	// The seat count is here rather than on State because Render has no use for
+	// it — each column's own card already says whether ITS thread came back, and
+	// a field the renderer never reads is a field that can drift without
+	// anything noticing.
+	m.st.Notice = "reattached from " + abbreviate(re.Path, m.st.Home) +
+		" — turn " + itoa(re.Room.Turn) + " was the last, " +
+		itoa(seats) + "/" + itoa(m.st.Seated()) + " seats restored"
+	if re.Room.Posture != savedPosture(m.st.Write, m.opts.Auto) {
+		// Stated rather than applied. The saved room ran under a different
+		// posture, and a user who reattaches a write room without retyping
+		// --write should learn that from the room instead of from a vendor
+		// refusing to edit a file.
+		m.st.Notice += " (it ran " + re.Room.Posture + "; this room is " +
+			savedPosture(m.st.Write, m.opts.Auto) + ")"
+	}
+	if re.Room.BriefPath != m.brief.Path {
+		// Same treatment as posture, and the same reason the path is stored at
+		// all: reported, never acted on. Loading the saved path would read a
+		// private file this invocation did not name, which is the one thing
+		// --brief is built to keep deliberate. Only the PATHS are compared —
+		// a file edited since the room was saved is invisible here, and saying
+		// otherwise would need the content this file refuses to hold.
+		was, now := re.Room.BriefPath, m.brief.Path
+		if was == "" {
+			was = "no brief"
+		}
+		if now == "" {
+			now = "no brief"
+		}
+		m.st.Notice += " (it ran with " + abbreviate(was, m.st.Home) +
+			"; this room has " + abbreviate(now, m.st.Home) + ")"
+	}
+}
+
+// abbreviate shortens a home-relative path for display, matching the header's
+// treatment of the workspace.
+//
+// The prefix match is checked at a SEPARATOR boundary, unlike the header's: a
+// home of /home/dev against /home/developer/x is not a home-relative path, and
+// the naive form renders it as the nonsense "~eloper/x".
+func abbreviate(p, home string) string {
+	if home == "" || !strings.HasPrefix(p, home) {
+		return p
+	}
+	rest := p[len(home):]
+	if rest != "" && rest[0] != '/' && rest[0] != '\\' {
+		return p
+	}
+	return "~" + filepath.ToSlash(rest)
 }
 
 func stateWith(opts Options, hooked bool) State {
@@ -138,16 +307,7 @@ func stateWith(opts Options, hooked bool) State {
 	st.Now = time.Now()
 
 	// Resolved once, here, so the render path never reads the environment.
-	dir := opts.Dir
-	if dir == "" {
-		if wd, err := os.Getwd(); err == nil {
-			dir = wd
-		}
-	}
-	if abs, err := filepath.Abs(dir); err == nil {
-		dir = abs
-	}
-	st.Workspace = dir
+	st.Workspace = resolveWorkspace(opts.Dir)
 	if home, err := os.UserHomeDir(); err == nil {
 		st.Home = home
 	}
@@ -167,6 +327,25 @@ func stateWith(opts Options, hooked bool) State {
 		})
 	}
 	return st
+}
+
+// resolveWorkspace turns --cd into the absolute directory turns are dispatched
+// against.
+//
+// Extracted from stateWith because Run needs the SAME answer before the model
+// exists: the workspace is the key a saved room is filed under, so a --resume
+// that resolved the path even slightly differently would look in the wrong
+// place and report no saved room for a room that is right there.
+func resolveWorkspace(dir string) string {
+	if dir == "" {
+		if wd, err := os.Getwd(); err == nil {
+			dir = wd
+		}
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	return dir
 }
 
 type spinMsg time.Time
@@ -509,6 +688,30 @@ func Run(opts Options) error {
 		return err
 	}
 
+	// Same discipline, same reason. --resume against a workspace that has no
+	// saved room is a plain error out here, because the usual cause is a --cd
+	// pointing at a directory other than the one the room was in — and a room
+	// that opened "successfully" with a quiet note would have the user typing
+	// their next brief into four fresh sessions believing it continued
+	// something. A file that exists but cannot be read is the other case and is
+	// handled inside, as a notice: see LoadRoom.
+	//
+	// Resolved BEFORE the hooks are copied, so a bad --resume fails without
+	// having written a temporary file it would then have to clean up.
+	ws := resolveWorkspace(opts.Dir)
+	var re Reattachment
+	if opts.Resume {
+		re, err = LoadRoom(ws)
+		if err != nil {
+			return err
+		}
+	} else if found, ferr := LoadRoom(ws); ferr == nil && found.Active() {
+		// Not reattaching, but there is something here to lose. Carried in as an
+		// OFFER rather than a restore: nothing is applied, and the room only
+		// mentions it exists before the first dispatch replaces it.
+		re = Reattachment{Path: found.Path, Room: found.Room, Offered: true}
+	}
+
 	var hooks HookSet
 	if wantsHooks(opts) {
 		hooks = LoadHookSet()
@@ -518,9 +721,21 @@ func Run(opts Options) error {
 	// an error before a quit key was ever pressed.
 	defer hooks.Cleanup()
 
-	p := tea.NewProgram(newWithBrief(opts, b, hooks))
+	mdl := newWithBrief(opts, b, hooks, re)
+	p := tea.NewProgram(mdl)
 	_, err = p.Run()
-	return err
+	if err != nil {
+		return err
+	}
+	// The save on the way out has nowhere to render: the notice it sets lands on
+	// a model that will never be viewed again. Reported here instead, because a
+	// user who quits believing they can reattach and then cannot has been told
+	// something false by silence. Not an error — the room ran fine and the
+	// state from the last completed turn is still on disk.
+	if mdl.saveErr != nil {
+		fmt.Fprintln(os.Stderr, "telltale council: the room state could not be saved:", mdl.saveErr)
+	}
+	return nil
 }
 
 var _ tea.Model = (*Model)(nil)

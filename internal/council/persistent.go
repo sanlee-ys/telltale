@@ -24,6 +24,15 @@ type seatProc struct {
 	// the original was. A per-vendor flag would have remembered a briefing that
 	// happened in a session that no longer exists.
 	sent int
+	// resumed reports that this process was launched on a session id restored
+	// from a saved room, rather than opening a new conversation.
+	//
+	// Its only job is the brief: a resumed process already has the operating
+	// context in the history it is replaying, so re-sending it would spend the
+	// whole brief again for nothing. Whether the resume WORKED is not tracked
+	// here — that is settleRestoredThread's question, and it is asked the same
+	// way for all four seats rather than twice in two places.
+	resumed bool
 }
 
 // sendPersistentTurn hands one turn to a seat's process, starting one if there
@@ -38,7 +47,12 @@ func (m *Model) sendPersistentTurn(v vendors.Persistent, c *Column, prompt strin
 	// First turn for THIS process, so it gets the operating context. Per
 	// process rather than per room: a seat that respawned is unbriefed again,
 	// and would otherwise be the only one guessing.
-	if p.sent == 0 {
+	//
+	// A RESUMED process is the exception, and it is the same rule rather than a
+	// carve-out from it: the brief is already in the history it is replaying, so
+	// re-sending it would spend the whole thing again per turn against a metered
+	// quota for a vendor that has already read it (brief.Apply's own reasoning).
+	if p.sent == 0 && !p.resumed {
 		prompt = m.brief.Apply(prompt)
 	}
 
@@ -74,6 +88,24 @@ func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string,
 	if err != nil {
 		return nil, "", err
 	}
+	// A thread restored from a saved room is spent HERE, on the first process
+	// this seat opens, and forgotten whether or not it works.
+	//
+	// One attempt, never a loop, and that is the load-bearing part. A stale id
+	// makes the vendor exit immediately (measured: `No conversation found with
+	// session ID`, exit 1, no model turn spent), so a seat that retried it would
+	// refuse every brief for the rest of the session with the same error. Spent
+	// once, the next dispatch opens a new conversation and briefs it, which is
+	// the behaviour seatProcess already had for a seat whose process died.
+	resumed := false
+	if id := m.resumeIDs[c.Vendor]; id != "" {
+		delete(m.resumeIDs, c.Vendor)
+		if rs, rerr := v.SessionResume(m.st.Workspace, c.Binary, m.hooks.Path,
+			id, m.seatPosture()); rerr == nil {
+			spec = rs
+			resumed = true
+		}
+	}
 	// The ROOM's context, never the turn's. A turn that is cancelled must not
 	// take this process with it — that is the entire point of keeping it — so
 	// only quitting the room cancels this.
@@ -81,9 +113,18 @@ func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string,
 	if err != nil {
 		return nil, "", err
 	}
-	p := &seatProc{sess: sess}
+	p := &seatProc{sess: sess, resumed: resumed}
 	m.procs[c.Vendor] = p
 
+	if resumed {
+		// Deliberately NOT "reattached to the saved thread". Nothing has come
+		// back yet — the process has been launched and that is all — and a
+		// column claiming a resume it has not seen evidence of is this repo's own
+		// failure mode. The card the room opened with already says a thread was
+		// restored; if the vendor refuses it, resumeFailed replaces that with the
+		// truth.
+		return p, "", nil
+	}
 	if had {
 		// Said out loud. The thread really was lost, and a seat that quietly
 		// forgot the conversation while its neighbours remembered theirs is the

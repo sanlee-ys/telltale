@@ -162,6 +162,7 @@ func runCouncil(args []string) error {
 	write := fs.Bool("write", false, "let vendors edit and run things in the workspace, asking you first where they can (see decisions/008)")
 	auto := fs.Bool("auto", false, "with --write: let a gated seat approve its own tool calls instead of asking")
 	brief := fs.String("brief", "", "file of shared operating context handed to every vendor on its first turn (or TELLTALE_COUNCIL_BRIEF)")
+	resume := fs.Bool("resume", false, "reopen the room last saved for this workspace, continuing each vendor's own session")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -173,6 +174,7 @@ func runCouncil(args []string) error {
 		Write:     *write,
 		Auto:      *auto,
 		BriefPath: *brief,
+		Resume:    *resume,
 	})
 }
 
@@ -236,11 +238,23 @@ telltale council flags:
   --auto                      with --write: let the gated seat approve its own
                               tool calls. This is the old behaviour, and it is
                               the flag to reach for when you are not watching.
+  --resume                    reopen the room last saved for this workspace.
+                              The turn counter continues and each vendor picks
+                              up its OWN session, so the next brief carries on
+                              the conversation instead of starting four new
+                              ones. Composes with --cd, which is the key the
+                              room was filed under. A seat whose thread the
+                              vendor no longer has says so and starts fresh.
+                              Not a posture: --write is never restored from the
+                              file, it is retyped or it is not in effect.
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
 
 statusline and hud read vendor files and never write, never call the network,
 and never send anything to a running agent. council is the deliberate
 exception: it spawns vendor CLIs, and each column states its own read-only
-posture on screen (decisions/008).`)
+posture on screen (decisions/008). It is also the only mode that writes
+anything at all — one state file per workspace under ~/.telltale/council,
+holding the session ids --resume needs and no transcript, output or brief
+content.`)
 }

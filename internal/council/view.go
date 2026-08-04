@@ -187,7 +187,7 @@ func columnCell(st State, c Column, focused bool, w, h int, sty Styles, g Glyphs
 		lines = append(lines, sty.Muted.Render(strings.Repeat(g.Rule, w)))
 	}
 
-	body := columnText(c, w, sty, g)
+	body := columnText(st, c, w, sty, g)
 	avail := h - len(lines)
 	win, above, below := scrollWindow(c, body, avail)
 
@@ -272,7 +272,7 @@ func MaxScroll(st State, idx int) int {
 	// it rather than from a constant: a card of a different height would
 	// otherwise let the tail scroll past the end of the content.
 	avail := lay.Body - 3 - len(gateCard(st, st.Columns[idx], w, sty, gl))
-	n := len(columnText(st.Columns[idx], w, sty, gl))
+	n := len(columnText(st, st.Columns[idx], w, sty, gl))
 	if m := n - avail; m > 0 {
 		return m
 	}
@@ -352,7 +352,7 @@ func dur(d time.Duration) string {
 
 // columnText is a column's body: its output, or the card explaining why there
 // is none.
-func columnText(c Column, w int, sty Styles, g Glyphs) []string {
+func columnText(st State, c Column, w int, sty Styles, g Glyphs) []string {
 	if c.Avail != AvailInstalled {
 		return unavailableCard(c, w, g)
 	}
@@ -373,6 +373,8 @@ func columnText(c Column, w int, sty Styles, g Glyphs) []string {
 	switch {
 	case c.Phase == PhaseStreaming && c.Body == "" && len(c.Acts) > 0:
 		out = append(out, wrap("working…", w)...)
+	case c.Phase == PhaseIdle && c.Body == "" && st.Reattached.Active():
+		out = append(out, reattachCard(st, c, w)...)
 	case c.Phase == PhaseIdle && c.Body == "":
 		out = append(out, wrap("no turn dispatched yet.", w)...)
 	case c.Phase == PhaseWaiting && c.Body == "" && len(c.Acts) > 0:
@@ -552,6 +554,46 @@ func badgeLine(c Column) string {
 		return ""
 	}
 	return strings.Join(parts, "  ")
+}
+
+// reattachCard is what a restored seat says before its first brief.
+//
+// It replaces "no turn dispatched yet." rather than joining it, because for a
+// reattached room that sentence is simply false in the way that matters: no
+// turn has been dispatched BY THIS PROCESS, and the vendor on the other end is
+// holding a conversation several turns long. A column that opened with the
+// same words as a cold room would make the whole feature invisible — the user
+// would have no way to tell a successful reattach from a --resume that quietly
+// did nothing.
+//
+// Two versions, one per seat, and the split is the honest part. A room can
+// reattach with only some of its seats restored: a vendor that never answered
+// left no id, and a vendor installed since the room was saved was never in it.
+// Both open beside seats that DO continue, and one shared sentence would let
+// either be read as continuing something.
+//
+// No warning glyph. A reattach is the feature working, not a problem, and
+// spending the ⚠ on it would blunt the mark that carries real failures — the
+// same argument ActDenied makes for SevWarn over SevCrit.
+func reattachCard(st State, c Column, w int) []string {
+	// The age comes off State.Now, never a clock, so this stays pure and the
+	// goldens stay reproducible — the same contract elapsed() renders under.
+	when := ""
+	if !st.Now.IsZero() {
+		when = ", saved " + age(st.Now.Sub(st.Reattached.SavedAt))
+	}
+	out := wrap("reattached — turn "+strconv.Itoa(st.Reattached.Turn)+
+		" was the last"+when+".", w)
+	out = append(out, "")
+	if c.Restored {
+		// "continues it" rather than "resumes it": the resume is the vendor's
+		// own mechanism and it has not been asked yet. What the room can promise
+		// is where the next brief is addressed.
+		out = append(out, wrap("this seat's thread came back. the next brief continues it.", w)...)
+		return out
+	}
+	out = append(out, wrap("no thread came back for this seat. its next brief opens a new session, with the brief re-applied.", w)...)
+	return out
 }
 
 // unavailableCard says which failure this is and what would fix it. Absence and
