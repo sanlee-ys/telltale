@@ -237,6 +237,11 @@ type State struct {
 
 	Help bool
 
+	// Briefed reports that shared operating context was loaded. The content
+	// itself is deliberately NOT on State: it is the user's private file and
+	// the renderer has no reason to be able to reach it.
+	Briefed bool
+
 	// Write reports that this room was started with --write: vendors are asked
 	// for their widest posture rather than their most read-only one.
 	//

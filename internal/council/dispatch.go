@@ -207,12 +207,16 @@ func itoa(i int) string { return strconv.Itoa(i) }
 func (m *Model) specFor(v vendors.Vendor, c *Column, prompt string) (runner.Spec, error) {
 	p := m.posture()
 	if id := m.sessions[c.Vendor]; id != "" {
+		// Resume: the brief is already in this vendor's own history.
 		spec, err := v.NextTurn(prompt, m.st.Workspace, c.Binary, id, p)
 		if err == nil {
 			return spec, nil
 		}
 	}
-	return v.FirstTurn(prompt, m.st.Workspace, c.Binary, p)
+	// First turn for THIS vendor, so it gets the operating context. Per vendor
+	// rather than per room: a seat added to a later turn is still a stranger,
+	// and would otherwise be the only one guessing.
+	return v.FirstTurn(m.brief.Apply(prompt), m.st.Workspace, c.Binary, p)
 }
 
 // waitEvents blocks on one event, then drains what is already queued into a

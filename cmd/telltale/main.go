@@ -160,15 +160,17 @@ func runCouncil(args []string) error {
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
 	write := fs.Bool("write", false, "let vendors edit and run things in the workspace (see decisions/008)")
+	brief := fs.String("brief", "", "file of shared operating context handed to every vendor on its first turn (or TELLTALE_COUNCIL_BRIEF)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	return council.Run(council.Options{
-		Dir:     *dir,
-		ASCII:   *ascii || os.Getenv("TELLTALE_ASCII") != "",
-		NoTitle: *noTitle,
-		Write:   *write,
+		Dir:       *dir,
+		ASCII:     *ascii || os.Getenv("TELLTALE_ASCII") != "",
+		NoTitle:   *noTitle,
+		Write:     *write,
+		BriefPath: *brief,
 	})
 }
 
@@ -214,6 +216,11 @@ telltale hud flags:
 
 telltale council flags:
   --cd <dir>                  workspace to dispatch turns against (default: cwd)
+  --brief <file>              shared operating context handed to every vendor on
+                              its first turn — who you are, what the lanes are,
+                              whatever convention they would otherwise each guess
+                              at separately. Also TELLTALE_COUNCIL_BRIEF. The file
+                              is read from disk and never stored by telltale.
   --write                     let vendors edit files and run commands in that
                               workspace. The workspace is the containment, not
                               a flag — point --cd at a git worktree if that

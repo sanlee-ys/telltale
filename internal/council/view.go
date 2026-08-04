@@ -84,7 +84,16 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 		round = "turn " + strconv.Itoa(st.Turn)
 	}
 	seated := strconv.Itoa(st.Seated()) + "/" + strconv.Itoa(len(st.Columns)) + " seated"
-	right := sty.Muted.Render(round + "  " + g.Sep + "  " + seated)
+	// "no brief" is stated rather than left blank, and that asymmetry is
+	// deliberate. An unbriefed room LOOKS identical to a briefed one until a
+	// vendor guesses at a convention out loud — which is exactly how this was
+	// discovered. Absence of shared context is a fact about the room, so the
+	// room says it.
+	brief := "no brief"
+	if st.Briefed {
+		brief = "briefed"
+	}
+	right := sty.Muted.Render(round + "  " + g.Sep + "  " + seated + "  " + g.Sep + "  " + brief)
 
 	// The path takes whatever is left, elided from the left because the
 	// uninformative part of a path is its prefix.

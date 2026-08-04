@@ -23,6 +23,9 @@ type Options struct {
 	NoTitle bool
 	// Write starts the room in write posture. See State.Write.
 	Write bool
+	// BriefPath names a file of shared operating context handed to every
+	// vendor on its first turn. Empty falls back to TELLTALE_COUNCIL_BRIEF.
+	BriefPath string
 }
 
 // Model is the Bubble Tea model. It owns State plus the things Render must not
@@ -50,12 +53,24 @@ type Model struct {
 	// redactors are per vendor because each carries a partial-word buffer
 	// across the chunks of one stream.
 	redactors map[model.VendorID]*Redactor
+
+	// brief is the shared operating context. Held on Model, never on State:
+	// its content is the user's private file and the renderer has no business
+	// being able to reach it.
+	brief Brief
 }
 
 // New builds the model. Nothing renders until the first WindowSizeMsg arrives:
 // one blank frame beats one frame of wrong layout.
+//
+// The brief is loaded by Run before this, so a bad path fails before the
+// alternate screen is entered rather than as an unreadable error behind a TUI.
 func New(opts Options) *Model {
-	return &Model{
+	return newWithBrief(opts, Brief{})
+}
+
+func newWithBrief(opts Options, b Brief) *Model {
+	m := &Model{
 		opts:      opts,
 		st:        stateWith(opts),
 		styles:    NewStyles(true), // assume dark until the terminal answers
@@ -63,7 +78,10 @@ func New(opts Options) *Model {
 		events:    make(chan runner.Event, eventBuffer),
 		sessions:  map[model.VendorID]string{},
 		redactors: map[model.VendorID]*Redactor{},
+		brief:     b,
 	}
+	m.st.Briefed = b.Loaded()
+	return m
 }
 
 func stateWith(opts Options) State {
@@ -387,8 +405,15 @@ func (m *Model) View() tea.View {
 // observation surfaces — statusline and hud — keep their read-only guarantee
 // unchanged, and nothing here is reachable from either of them (ADR-008).
 func Run(opts Options) error {
-	p := tea.NewProgram(New(opts))
-	_, err := p.Run()
+	// Loaded before the program starts. A bad --brief path must surface as a
+	// plain error on stderr, not as a card inside a TUI the user then has to
+	// quit to read.
+	b, err := LoadBrief(opts.BriefPath)
+	if err != nil {
+		return err
+	}
+	p := tea.NewProgram(newWithBrief(opts, b))
+	_, err = p.Run()
 	return err
 }
 
