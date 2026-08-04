@@ -269,8 +269,15 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			// rather than buffered, because an activity line is already whole
 			// and holding its last word would strand it until the next tool
 			// call.
+			// Split: one assistant message can carry a parallel batch of tool
+			// calls, and the adapter joins them with newlines because
+			// ParseEvent returns a single event.
 			if act := strings.TrimSpace(m.redact(ev.Vendor, ev.Text) + m.flush(ev.Vendor)); act != "" {
-				c.Acts = append(c.Acts, act)
+				for _, line := range strings.Split(act, "\n") {
+					if line = strings.TrimSpace(line); line != "" {
+						c.Acts = append(c.Acts, line)
+					}
+				}
 			}
 
 		case runner.KindSession:
