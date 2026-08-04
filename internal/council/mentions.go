@@ -7,22 +7,33 @@ import (
 )
 
 // Route is who a brief is addressed to. A nil Route means everyone seated,
-// which is now what `@all` asks for rather than what silence means.
+// which is what silence means and what `@all` says out loud.
 type Route []model.VendorID
 
 // defaultRoute is where an unaddressed brief goes.
 //
-// Claude alone, and this is a contract decision rather than a preference. The
-// fleet strategy is explicit that cross-vendor fan-out is NOT a default: Codex
-// is the lane for architecture challenge and consequential review, Antigravity
-// for research and a third opinion at an actual fork. Broadcasting every "hello"
-// to all three spends two deliberately constrained subscription pools on nothing,
-// and it inverts the routing San already ratified.
+// EVERY seated vendor. The room is the owner's operating committee, and an
+// unaddressed item on a committee's agenda goes to the table, not to its chair.
+// So mentions NARROW — @claude, @codex, @agy and @cursor pick a seat for one
+// turn — and nothing widens, because nothing has to.
 //
-// So the panel became a decision instead of a reflex. @codex and @agy reach a
-// lane on purpose; @all convenes everyone. That also makes the common case the
-// fast one, since Claude is the only seat that streams.
-func defaultRoute() Route { return Route{model.VendorClaude} }
+// This inverts what this function used to do, and the old reasoning is recorded
+// rather than deleted because it was not wrong, it was overruled. It was a
+// QUOTA-COST decision: the fleet strategy is explicit that cross-vendor fan-out
+// is not a default, so an unaddressed brief went to Claude alone and @codex and
+// @agy widened the room, on the argument that broadcasting every "hello" spends
+// two deliberately constrained subscription pools on nothing. San overrode it
+// eyes open — "if I only wanted to ask one model, I can do that ad-hoc" — and
+// the price is stated here unsoftened rather than left to be discovered: an
+// unaddressed brief now bills EVERY seated vendor's quota, on every turn, and
+// the cheap case is the one that has to be typed.
+//
+// @all, @everyone and @council stay accepted and are now redundant, because
+// they name the default. Same shape `--resume` took when the room started
+// reattaching on its own (ADR-008, eleventh amendment), and kept for the same
+// reason: a word someone has typed for weeks should not start erroring, and it
+// still reads as a statement of intent rather than a shrug.
+func defaultRoute() Route { return nil }
 
 // mentionAliases maps what a user might type to a vendor.
 //
@@ -43,8 +54,10 @@ func mentionAliases() map[string]model.VendorID {
 	}
 }
 
-// allAliases address the whole room explicitly. Useful because typing @all is a
-// statement of intent, where an unprefixed brief is merely the default.
+// allAliases address the whole room explicitly. Redundant since the room became
+// the default (see defaultRoute) and kept anyway: typing @all is still a
+// statement of intent, and a word a user has typed for weeks should not turn
+// into an error the day it stops being load-bearing.
 var allAliases = map[string]bool{"all": true, "everyone": true, "council": true}
 
 // ParseRoute splits a draft into its leading @mentions and the brief itself.
@@ -108,7 +121,7 @@ func ParseRoute(draft string) (Route, string) {
 	}
 	if len(route) == 0 {
 		// No mentions consumed: the draft is unchanged, including any @token
-		// that did not resolve, and it goes to the default lane.
+		// that did not resolve, and it goes to the whole room.
 		return defaultRoute(), draft
 	}
 	return route, brief

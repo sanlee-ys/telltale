@@ -2,10 +2,10 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  council — one brief, several agents, side by side                                                                      
                                                                                                                         
-   i / enter    compose a brief; enter dispatches — to claude, or whoever is @mentioned                                 
+   i / enter    compose a brief; enter dispatches — to everyone, or whoever is @mentioned                               
    ctrl+j       newline in the brief — the compose area grows to six rows                                               
-   @codex       address a lane: @claude, @codex, @agy, @cursor, @all — unaddressed                                      
-                goes to claude alone. Leading mentions only: "ask @claude" is prose                                     
+   @codex       narrow to a lane: @claude, @codex, @agy, @cursor — unaddressed                                          
+                goes to every seat. Leading mentions only: "ask @claude" is prose                                       
    /cd <dir>    move the room to another repo — seats follow on their next turn                                         
    y / n        approve or deny a tool call a vendor is blocked on (--write)                                            
    esc          leave compose (the draft is kept)                                                                       

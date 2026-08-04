@@ -1024,6 +1024,68 @@ approvals and hook trust, which is a larger grant than "let this column read", a
 distinction is exactly the one the fifth and seventh amendments drew around every other
 skip-permissions flag in this file.
 
+### Amendment, 2026-08-04 (thirteenth): the room is a committee, so silence convenes it
+
+Routing has been backwards since the day it landed, and it was backwards for a defensible
+reason, which is why nobody caught it by reading the code. `defaultRoute()` returned
+`Route{VendorClaude}`: an unaddressed brief went to Claude alone, `@codex` and `@agy`
+**widened** the room, and `@all` was the only way to convene the panel. That was a
+**quota-cost decision**, and it is worth restating at its strongest before it is overturned.
+The fleet strategy is explicit that cross-vendor fan-out is not a default — Codex is the lane
+for challenge and consequential review, Antigravity for research and a third opinion at an
+actual fork — so broadcasting every "hello" to all four seats spends two deliberately
+constrained subscription pools on nothing. Nothing in that paragraph has become false.
+
+**San overrode it, eyes open.** The room is his *operating committee*, not a control plane
+with three consultants on call: the career-repo brief this room is launched with now opens
+with exactly that framing, and this ADR's own Context has described it as a round table since
+the first line it ever had. The question that settled it was one sentence:
+
+> *"do I still need to @all invocation? if I only wanted to ask one model, I can do that
+> ad-hoc."*
+
+Both halves are the ruling. `@all` is asking permission to convene the thing that is
+supposed to be convened. Asking one model is the *exception*, and an exception is what you
+type.
+
+**So the default inverts, and the consequence is stated rather than left to be discovered.**
+`defaultRoute()` returns `nil` — the value `Route.addresses` has always read as "everyone
+seated", so this is a flip of one contract, not a new mechanism. An unaddressed brief now
+**bills every seated vendor's quota, on every turn.** Four processes, four clocks, four cost
+cells, for "gm". That is the price of the ruling and it is not softened here: the cheap turn
+is now the one that has to be typed, and a user who wants Claude alone types `@claude`.
+Mentions **narrow**; nothing widens, because nothing has to.
+
+**`@all`, `@everyone` and `@council` stay accepted and are now redundant** — they name the
+default. This is the same shape `--resume` took in the eleventh amendment, and it is kept for
+the same two reasons. A word someone has typed for weeks should not become an error the day
+it stops being load-bearing; that is the room punishing a user for a decision the room made.
+And it still reads as a statement of intent — an author who types `@all` is saying *I mean
+all of you* to a reader who cannot tell a deliberate broadcast from a forgotten mention. A
+redundant word that is honest costs nothing; rejecting it costs a brief.
+
+**The footer is what makes this survivable, and it was already built.** Routing is re-derived
+on every keystroke and rendered before enter (§ compose mode), which under the old default was
+slightly overstated — an `@typo` fell through to Claude while the line said "everyone". It is
+now exactly true: an unresolved mention does not narrow, so the footer reads `→ everyone`
+before the four quotas are spent rather than after. A test pins that specific case.
+
+**What is explicitly untouched, restated so this cannot be read as a loosening.** Turn 1 is
+still blind (§4, and design.md §9.4): the flip changes **who a brief reaches**, never what any
+seat can see of another's answer. Rebuttal quoting is unchanged — still opt-in, still
+`ctrl+r`, still the previous turn's answers only, still fenced as untrusted material. A seat
+left out of a turn still records nothing for it, which now happens on a *narrowed* turn rather
+than a default one. And `--vendor` is still the stronger control: it decides who is **seated**,
+where a mention decides who is addressed for **one turn**, so the new default reaches every
+seated vendor and never a folded-away one.
+
+The general lesson, in this file's own terms: every earlier amendment here corrected a claim
+the product made about the world, and the eleventh corrected the *object* the product was
+modelling. This one corrects neither. The code was right about what it did and the ADR was
+right about why — the **owner's model of what the room is for** had simply never been asked.
+No measurement could have caught that either, and the same thing caught it as last time: him
+saying the sentence out loud.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude
