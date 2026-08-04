@@ -177,6 +177,16 @@ type State struct {
 	Mode  InputMode
 	Draft string
 
+	// Route is who the CURRENT draft is addressed to, re-derived on every
+	// keystroke. Nil means everyone seated.
+	//
+	// It lives on State rather than being computed inside Render because the
+	// footer has to show it while typing: the point of showing routing is that
+	// an @typo reads as "this is going to everyone" BEFORE enter, and a value
+	// the renderer derived privately could drift from the one dispatch uses.
+	// One parse, one source of truth, displayed and acted on.
+	Route Route
+
 	// Turn counts dispatched turns, so the header can say which round this is.
 	// Turn 0 means nothing has been sent.
 	Turn int

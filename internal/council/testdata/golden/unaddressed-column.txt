@@ -1,12 +1,12 @@
- council ~/code/telltale                                                                      no turn yet  │  3/3 seated
+ council ~/code/telltale                                                                           turn 2  │  3/3 seated
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸Claude Code                      idle │  Codex                           idle │  Antigravity                     idle 
+ ▸Claude Code               ⠋ streaming │  Codex                           done │  Antigravity                ⠋ waiting 
  ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
  ro:tools  tokens                       │ ro:requested  final only              │ unsandboxed  final only               
                                         │                                       │                                       
- no turn dispatched yet.                │ no turn dispatched yet.               │ no turn dispatched yet.               
-                                        │                                       │                                       
-                                        │                                       │                                       
+ Looking at the resume path now.        │ An older answer from turn 1.          │ working. this vendor reports no       
+                                        │                                       │ incremental output, so nothing        
+                                        │ ⚠ not addressed in turn 2             │ appears until the turn finishes.      
                                         │                                       │                                       
                                         │                                       │                                       
                                         │                                       │                                       
@@ -20,5 +20,5 @@
                                         │                                       │                                       
                                         │                                       │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- › should council resume sessions or re-send the transcript?_                                                           
- COMPOSE                                                                     → everyone  │  enter dispatch  │  esc view 
+ ›                                                                                                                      
+ VIEW                                                                       tab focus  │  ctrl+c cancel turn  │  ? help 

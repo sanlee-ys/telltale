@@ -2,6 +2,7 @@ package council
 
 import (
 	"context"
+	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -59,7 +60,21 @@ func (m *Model) dispatch() tea.Cmd {
 	}
 
 	reg := vendors.Registry()
-	prompt := m.st.Draft
+	// The mentions are stripped from what the vendors receive. A brief that
+	// opens "@codex @claude compare these" should reach them as "compare
+	// these" — the routing is addressing, not content, and leaving it in makes
+	// every vendor read a header about who else is in the room.
+	route, prompt := ParseRoute(m.st.Draft)
+	if prompt == "" {
+		m.st.Notice = "that is a mention with no brief after it"
+		return nil
+	}
+	if n := m.seatedIn(route); n == 0 {
+		// Addressed only to vendors that are not seated. Dispatching to nobody
+		// while the columns sat idle would look like the key did nothing.
+		m.st.Notice = "none of the vendors you addressed are seated"
+		return nil
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ts := &turnState{cancel: cancel}
@@ -68,6 +83,15 @@ func (m *Model) dispatch() tea.Cmd {
 	for i := range m.st.Columns {
 		c := &m.st.Columns[i]
 		if c.Avail != AvailInstalled {
+			continue
+		}
+		if !route.addresses(c.Vendor) {
+			// Not in this turn. Its previous reply stays on screen, because
+			// that is still the last thing this vendor said — but the note
+			// makes clear it is not participating, so a stale answer beside two
+			// fresh ones cannot be mistaken for a third opinion on the new
+			// brief.
+			c.Note = "not addressed in turn " + itoa(m.st.Turn+1)
 			continue
 		}
 		v, ok := reg[c.Vendor]
@@ -120,10 +144,25 @@ func (m *Model) dispatch() tea.Cmd {
 	m.turn = ts
 	m.st.Turn++
 	m.st.Mode = ModeViewing
-	m.st.Draft = ""
+	m.setDraft("")
 	m.st.Notice = ""
 	return m.waitEvents()
 }
+
+// seatedIn counts how many installed columns a route actually reaches.
+func (m *Model) seatedIn(route Route) int {
+	n := 0
+	for _, c := range m.st.Columns {
+		if c.Avail == AvailInstalled && route.addresses(c.Vendor) {
+			n++
+		}
+	}
+	return n
+}
+
+// itoa is strconv.Itoa under a shorter name, kept local so the dispatch path
+// reads as prose.
+func itoa(i int) string { return strconv.Itoa(i) }
 
 // specFor builds this vendor's invocation for the current turn.
 //
