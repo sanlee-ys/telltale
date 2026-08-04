@@ -141,10 +141,11 @@ no statusline hook today — see [decisions/001](decisions/001-v1-scope.md). Ant
 was statusline-only until a re-survey found the transcript its own docs advertise, which
 is what made its HUD adapter buildable — see
 [decisions/004](decisions/004-antigravity-statusline.md) for the first verdict and
-[decisions/006](decisions/006-antigravity-hud-adapter.md) for the reversal. Cursor is the
-inverse case: a built-in HUD adapter because its seam is on disk, and no council seat,
-because the `cursor` binary on PATH is the editor launcher rather than the headless agent
-— see [decisions/008](decisions/008-council-mode-dispatch.md).)
+[decisions/006](decisions/006-antigravity-hud-adapter.md) for the reversal. Cursor reaches
+telltale both ways: a built-in HUD adapter because its seam is on disk, and a council seat
+driven through `cursor-agent`'s own bundled `node.exe` — the `cursor` binary on PATH is only
+the editor launcher and council never drives it —
+see [decisions/008](decisions/008-council-mode-dispatch.md).)
 
 **The gauges never write.** `telltale statusline` and `telltale hud` read vendor files,
 make no network calls, read no credentials, and no keybinding can mutate vendor state or
@@ -152,9 +153,9 @@ send anything to a running agent. `telltale council` is the deliberate exception
 is labelled as one everywhere it can be: it spawns vendor CLIs, it is entered only by
 typing the subcommand, it is not reachable from the HUD, and it shares no keybinding with
 it ([decisions/008](decisions/008-council-mode-dispatch.md)). It is also the only mode
-that writes anything to disk — one state file per workspace under `~/.telltale/council`,
-holding the vendor session ids `--resume` needs and no transcript, output or brief
-content.
+that writes anything to disk — one room file, `~/.telltale/council/room.json`, holding
+the vendor session ids reattaching needs, the room's current workspace, and no
+transcript, output or brief content.
 "Reads no credentials" stopped being free with the Cursor adapter — that vendor
 keeps its access tokens, refresh tokens and OAuth secrets in the *same SQLite file* as
 its session state — so it is enforced there as a read allowlist with a test that plants
@@ -241,8 +242,10 @@ A seat that is not installed, or that is installed and cannot be driven, folds o
 grid so the seats that answer get the width; one line under the header names what was
 folded and why.
 
-`telltale council` flags: `--cd <dir>` (the workspace turns are dispatched against),
-`--vendor <list>`, `--brief <file>`, `--write`, `--resume`, `--ascii`, `--no-title`.
+`telltale council` flags: `--fresh` (start over instead of reattaching), `--cd <dir>`
+(launch-time override of the room's workspace — the daily path never needs it),
+`--vendor <list>`, `--brief <file>`, `--write`, `--resume` (accepted, and redundant —
+reattaching is the default), `--ascii`, `--no-title`.
 
 `--vendor <list>` decides who is in the room: `all` keeps every detected seat on screen
 including the ones that cannot be driven, and a comma list (`--vendor claude,codex`) seats
@@ -266,14 +269,18 @@ git worktree add ../telltale-council
 telltale.exe council --write --cd ../telltale-council
 ```
 
-`--resume` reopens the room last saved for that workspace. Each vendor is holding a
-conversation several turns deep — that is what the resume mechanism buys — and before
-this, quitting threw away the only thing that could name those sessions. The turn counter
-continues at N+1 and each seat picks up its own thread; a seat whose thread the vendor no
-longer has says the history is gone and starts fresh, briefed. **Posture is never
-restored**: a `--write` room reopens read, because a grant that can arrive from a file is
-not a flag anyone typed. `--resume` against a workspace with no saved room is a plain
-error, not a room that quietly opens fresh looking like it worked.
+There is **one room**, and a bare `telltale council` reattaches to it by default. Each
+vendor is holding a conversation several turns deep — that is what the resume mechanism
+buys — and reopening the room is how you get back to it: the turn counter continues at
+N+1 and each seat picks up its own thread; a seat whose thread the vendor no longer has
+says the history is gone and starts fresh, briefed. `--fresh` starts over, and a usable
+saved room is named once before the first dispatch replaces it. The workspace is a
+property of the room, not of the launch: `/cd <dir>` typed in the composer moves the room
+— absolute, relative to the current workspace, or a sibling of it — and every seat
+follows on the next dispatch. **Posture is never restored**: a `--write` room reopens
+read, because a grant that can arrive from a file is not a flag anyone typed. And one
+room shared by every terminal means two councils open at once share one state file —
+last save wins.
 
 The rest of the account — why execution is argv and never a shell, the silent invocation
 trap each vendor hid, and what is still unverified — is in

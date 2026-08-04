@@ -2377,9 +2377,12 @@ binary was at `%LOCALAPPDATA%\cursor-agent\cursor-agent.cmd` and had been for a 
 test pinned the false claim in place so the day the world changed underneath it, it went on
 passing. It is seated now (ADR-008, fifth amendment). What remains true from the original
 paragraph: the `cursor` binary on PATH is the editor launcher, and council never drives it.
-On Windows the seat is `AvailUnusable` regardless — argv-only prompt through a `.cmd` shim is
-exactly what §9.3 refuses — and its badges carry the weakest evidence in the room, because the
-installed CLI is unauthenticated and checks that before it checks anything else.
+The seat is driven on Windows too — the `.cmd` shim turned out to be a nine-line wrapper
+around a bundled `node.exe`, which detection resolves directly, so no prompt ever meets a
+shell and §9.3's refusal has nothing left to fire on (ADR-008, tenth amendment). Its posture
+badge stays `ro:requested`, now contradicted-by-capture rather than merely unobserved: under
+`--mode plan` the agent was seen dispatching shell tool calls, and `--sandbox enabled` kills
+the turn outright on Windows, so it is not passed there.
 
 This is the inverse of the HUD, where Cursor *is* a built-in adapter (ADR-007) because its seam
 is on disk rather than behind a CLI.
@@ -2574,8 +2577,12 @@ deliberately weak mapping tightens the moment a live run shows the spelling.
 
 The room opens, detects the four seats, renders both layouts and every degraded state, takes a
 brief, and dispatches it. Claude streams incrementally; Codex and Antigravity render the waiting
-card and fill at once. Quitting the room kills every child, including the persistent one.
-Multi-turn is native resume for the batch seats and one live process for Claude (§9.8).
+card and fill at once. Quitting the room kills every child, including the persistent one —
+and no longer strands the conversation: a bare `telltale council` reopens the one saved room
+by default, `--fresh` starts over, and `/cd <dir>` typed in the composer moves the room to
+another workspace between turns, with the persistent Claude seat following by respawn on its
+own session id (ADR-008, ninth and eleventh amendments). Multi-turn is native resume for the
+batch seats and one live process for Claude (§9.8).
 
 Cross-agent rebuttal (§9.4) and per-column scrollback are **built and shipped**, and the
 scrollback now spans the whole conversation rather than one turn (§9.9): the room keeps a
@@ -2746,8 +2753,9 @@ already has it, do nothing about the copy just sent to four vendors, and make th
 disagree with what was dispatched — which is the one thing the line exists to show.
 
 **Memory is capped at 50 turns per column**, oldest out first, and nothing is written to
-disk. The state file (§9.8's `--resume`) stays keys-only: it holds session ids and no
-content, and scrollback is not state worth persisting.
+disk. The room file (`~/.telltale/council/room.json` — one global room, the workspace a
+mutable field inside it; ADR-008, ninth and eleventh amendments) stays keys-only: it holds
+session ids and no content, and scrollback is not state worth persisting.
 
 **The composer grows to six rows.** One elided line was not somewhere anyone could compose a
 brief worth sending to four agents. `ctrl+j` inserts a newline; `enter` still dispatches, and

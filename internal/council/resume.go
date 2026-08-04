@@ -1,8 +1,6 @@
 package council
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -21,7 +19,22 @@ import (
 // reader that finds a version it does not know refuses the file outright, so a
 // bump costs every user their reattach. Additive fields are handled by the zero
 // value instead.
-const roomVersion = 1
+//
+// v2 is the cockpit change: ONE global room instead of one per workspace. The
+// file moved from <sha256-of-workspace>.json to room.json, and Workspace was
+// demoted from the file's key to a mutable field of the room — the directory
+// the room is currently pointed at, changeable from inside it. v1 files are
+// still read once, by adoptLegacyRoom, and never written again.
+const roomVersion = 2
+
+// legacyRoomVersion is the per-workspace schema this build can still ADOPT: the
+// newest v1 file seeds the global room on the first launch after the upgrade,
+// so the conversation the user was just having is the one the cockpit reopens.
+const legacyRoomVersion = 1
+
+// roomFile is the one global room. A fixed name rather than a hash, because
+// the hash was the per-workspace key and the key is what v2 removes.
+const roomFile = "room.json"
 
 // maxRoom bounds the state file, mirroring LoadBrief's ceiling on the brief.
 //
@@ -30,18 +43,22 @@ const roomVersion = 1
 // something else at that path cannot be read into memory before it is rejected.
 const maxRoom = 1 << 20
 
-// ErrNoSavedRoom is returned when --resume was asked for and this workspace has
-// no state file.
+// ErrNoSavedRoom is returned when there is no saved room at all — no room.json
+// and no v1 file worth adopting.
 //
-// It is an ERROR rather than a notice, and the split from a merely unreadable
-// file is deliberate (see LoadRoom). Nothing was saved here, so the user is
-// wrong about the room they think they are reattaching to — most often a --cd
-// pointing somewhere other than the room they remember. Opening a fresh room
-// and calling it a reattach would hide that.
-var ErrNoSavedRoom = errors.New("council: no saved room for this workspace")
+// It stopped being fatal when the room went global. The old error existed
+// because a per-workspace key could point at the wrong room (--cd somewhere
+// other than the room the user remembered); with one room there is no wrong
+// key, so the caller treats this as the first launch ever and opens fresh.
+var ErrNoSavedRoom = errors.New("council: no saved room")
 
 // SavedRoom is the one file council writes. It is the KEYS to reattach, and
 // nothing else.
+//
+// Since v2 there is exactly ONE of these — the room is global, and Workspace
+// below is the directory it is currently pointed at rather than the identity
+// of the file. That demotion is the whole cockpit change: a room per directory
+// was a room the user had to name to enter.
 //
 // The gauges' never-writes contract is untouched: `statusline` and `hud` still
 // write nothing at all (ADR-008 §2). Council was always the exception that
@@ -58,9 +75,9 @@ var ErrNoSavedRoom = errors.New("council: no saved room for this workspace")
 type SavedRoom struct {
 	Version int `json:"version"`
 
-	// Workspace is the absolute directory this room dispatched against. Stored
-	// as well as hashed into the filename so a load can VERIFY it landed on the
-	// right file rather than trusting a hash it cannot check.
+	// Workspace is the absolute directory the room was last pointed at. A
+	// FIELD of the room, not its key: /cd moves it, the save records where it
+	// ended up, and the next launch reopens there.
 	Workspace string `json:"workspace"`
 
 	// Posture is what the room was opened as: "read", "write" or "write-gated".
@@ -109,16 +126,21 @@ type Reattachment struct {
 	// schema this build does not know, or belonging to another workspace. Empty
 	// when the load succeeded.
 	Ignored string
-	// Offered reports a usable saved room that the user did NOT ask to reattach
-	// to, so the room can mention it before overwriting it.
+	// Offered reports a usable saved room that the user asked NOT to reattach
+	// to (--fresh), so the room can mention it before overwriting it.
 	//
-	// It exists because the destruction is otherwise silent and total: the state
-	// file is keyed by workspace, so opening a room in a directory that already
-	// has one and dispatching a single turn renames a fresh file over the old
-	// keys, and four conversations become unreachable with nothing said. The
-	// room does not refuse and does not prompt — one line naming the flag that
-	// would have reattached is enough to make the loss a choice.
+	// It exists because the destruction is otherwise silent and total: there is
+	// one room file, so opening fresh and dispatching a single turn renames a
+	// new file over the old keys, and four conversations become unreachable
+	// with nothing said. The room does not refuse and does not prompt — one
+	// line naming what rerunning without --fresh would have reattached is
+	// enough to make the loss a choice.
 	Offered bool
+	// Adopted reports that the room came from a pre-cockpit v1 per-workspace
+	// file rather than from room.json — the one-time migration. Named in the
+	// reattach notice, because state restored from a file the user has never
+	// heard of is state the room owes them the source of.
+	Adopted bool
 }
 
 // Active reports that there is a room to reattach to.
@@ -139,37 +161,19 @@ func roomDir() (string, error) {
 	return filepath.Join(home, ".telltale", "council"), nil
 }
 
-// roomKey is the filename for one workspace: the hash of its path.
+// RoomPath is the one global state file.
 //
-// Hashed rather than escaped so the name has a fixed length and reveals
-// nothing. A directory name can be long, can carry characters no filesystem
-// agrees on, and — the reason this matters here — is often the name of a
-// private project; the listing of ~/.telltale/council should not be a list of
-// what the user works on.
-//
-// Case is folded on Windows only, because that is where the same directory has
-// several spellings: `C:\Users\...` and `c:\users\...` are one directory and
-// must resolve to one room. Folding on a case-sensitive filesystem would merge
-// two genuinely different directories instead.
-func roomKey(workspace string) string {
-	k := filepath.Clean(workspace)
-	if runtime.GOOS == "windows" {
-		k = strings.ToLower(k)
-	}
-	sum := sha256.Sum256([]byte(k))
-	// Half the digest. 128 bits of a collision-resistant hash is far past what a
-	// filename needs, and the stored workspace is checked on load anyway — so
-	// even a collision is caught rather than silently reattaching the wrong room.
-	return hex.EncodeToString(sum[:16])
-}
-
-// RoomPath is the state file for one workspace.
-func RoomPath(workspace string) (string, error) {
+// v1 hashed each workspace's path into its filename so the directory listing
+// would not be an inventory of what the user works on. One fixed filename
+// holding one workspace path is a weaker version of that property — the file
+// still discloses only the CURRENT directory, never a history — and it is the
+// price of the room being singular. Stated rather than papered over.
+func RoomPath() (string, error) {
 	dir, err := roomDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, roomKey(workspace)+".json"), nil
+	return filepath.Join(dir, roomFile), nil
 }
 
 // SaveRoom writes one room's keys, atomically.
@@ -250,43 +254,42 @@ func SaveRoom(room SavedRoom) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(name, target(dir, room.Workspace))
+	return os.Rename(name, filepath.Join(dir, roomFile))
 }
 
-func target(dir, workspace string) string {
-	return filepath.Join(dir, roomKey(workspace)+".json")
-}
-
-// LoadRoom reads the saved room for one workspace.
+// LoadRoom reads the one global saved room.
 //
 // TWO failure modes, answered differently, and the split is the whole of this
 // function's judgement:
 //
-//   - No file at all -> ErrNoSavedRoom. The caller turns this into a plain
-//     error before the alternate screen is entered, exactly as LoadBrief does
-//     for a bad --brief path. Nothing was ever saved here, so the user is
-//     wrong about which room they are reattaching to, and the fix is a
-//     different --cd rather than anything council can do for them.
+//   - Nothing saved at all — no room.json AND no v1 file worth adopting ->
+//     ErrNoSavedRoom. The caller treats it as the first launch ever and opens
+//     fresh; there is no wrong-key case to protect any more.
 //
-//   - A file that exists but cannot be used -> a Reattachment carrying the
-//     reason, and NO error. Corrupt JSON, a schema version this build does not
-//     know, or a file whose stored workspace is not the one asked for. The room
-//     is still perfectly usable unreattached, so it opens, says loudly why the
-//     saved state was refused, and gets on with it. Crashing on a damaged file
-//     would make a bad byte on disk the reason someone cannot open their tool.
+//   - A room.json that exists but cannot be used -> a Reattachment carrying
+//     the reason, and NO error. Corrupt JSON, or a schema version this build
+//     does not know. The room is still perfectly usable unreattached, so it
+//     opens, says loudly why the saved state was refused, and gets on with it.
+//     Crashing on a damaged file would make a bad byte on disk the reason
+//     someone cannot open their tool. Deliberately NO legacy fallback on this
+//     path: a damaged current room must not silently resurrect an older
+//     conversation from a v1 file.
 //
 // A refused file is left in place rather than deleted. The next completed turn
 // overwrites it, which heals it without this function ever destroying something
 // it merely failed to parse.
-func LoadRoom(workspace string) (Reattachment, error) {
-	path, err := RoomPath(workspace)
+func LoadRoom() (Reattachment, error) {
+	path, err := RoomPath()
 	if err != nil {
 		return Reattachment{}, err
 	}
 
 	fi, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return Reattachment{}, ErrNoSavedRoom
+		// First launch since the room went global. The newest v1 per-workspace
+		// room, if any, IS the prior conversation — adopting it is what makes
+		// the upgrade continue what the user was doing rather than forget it.
+		return adoptLegacyRoom()
 	}
 	if err != nil {
 		// Exists, but cannot even be described — a permission problem, or a
@@ -303,28 +306,37 @@ func LoadRoom(workspace string) (Reattachment, error) {
 		return Reattachment{Path: path, Ignored: "the saved room file is implausibly large"}, nil
 	}
 
+	room, why := readRoom(path, roomVersion)
+	if why != "" {
+		return Reattachment{Path: path, Ignored: why}, nil
+	}
+	return Reattachment{Path: path, Room: room}, nil
+}
+
+// readRoom parses one state file and applies the checks every usable room has
+// to pass, at the schema version the caller expects. Returns the reason it was
+// refused, in the words the notice uses, or "".
+func readRoom(path string, version int) (SavedRoom, string) {
 	buf, err := os.ReadFile(path)
 	if err != nil {
-		return Reattachment{Path: path, Ignored: "the saved room file could not be read"}, nil
+		return SavedRoom{}, "the saved room file could not be read"
 	}
-
 	var room SavedRoom
 	if err := json.Unmarshal(buf, &room); err != nil {
-		return Reattachment{Path: path, Ignored: "the saved room file is not readable json"}, nil
+		return SavedRoom{}, "the saved room file is not readable json"
 	}
-	if room.Version != roomVersion {
-		return Reattachment{Path: path, Ignored: "the saved room was written by schema v" +
-			strconv.Itoa(room.Version) + ", this build reads v" + strconv.Itoa(roomVersion)}, nil
+	if room.Version != version {
+		return SavedRoom{}, "the saved room was written by schema v" +
+			strconv.Itoa(room.Version) + ", this build reads v" + strconv.Itoa(version)
 	}
-	// The hash said this file is this workspace's; the file itself has to agree.
-	// A mismatch means a collision or a hand-edited file, and reattaching a
-	// DIFFERENT directory's vendor sessions would silently hand one project's
-	// conversation to another.
-	if roomKey(room.Workspace) != roomKey(workspace) {
-		return Reattachment{Path: path, Ignored: "the saved room belongs to a different workspace"}, nil
+	if room.Workspace == "" {
+		// v2 removed the filename key, so the field is the only record of where
+		// the room was. A room that cannot say is a room that cannot be reopened
+		// anywhere in particular.
+		return SavedRoom{}, "the saved room records no workspace"
 	}
 	if room.SavedAt.IsZero() {
-		return Reattachment{Path: path, Ignored: "the saved room carries no timestamp"}, nil
+		return SavedRoom{}, "the saved room carries no timestamp"
 	}
 	// A room with no turns has nothing to reattach TO, and council never writes
 	// one. Checked here anyway so the loader's idea of a usable room matches
@@ -332,9 +344,58 @@ func LoadRoom(workspace string) (Reattachment, error) {
 	// every session id while the room rendered as cold, which is the worst of
 	// both — seats silently resumed and a screen that says otherwise.
 	if room.Turn <= 0 {
-		return Reattachment{Path: path, Ignored: "the saved room records no turns"}, nil
+		return SavedRoom{}, "the saved room records no turns"
 	}
-	return Reattachment{Path: path, Room: room}, nil
+	return room, ""
+}
+
+// adoptLegacyRoom seeds the global room from the newest v1 per-workspace file.
+//
+// Once, implicitly, and read-only: the v1 files are never written again and
+// never deleted, so nothing is destroyed if this choice was wrong — the other
+// v1 rooms simply stop being reachable from the daily path, and their vendors
+// still hold every conversation against ids that are still on disk. The
+// adopted room is named in the reattach notice, because state restored from a
+// file the user has never heard of is state the room owes them the source of.
+//
+// A v1 file that cannot be parsed is skipped rather than reported: this scan
+// runs on every launch until the first save writes room.json, and a corrupt
+// abandoned file should not print a warning forever for a format nothing
+// writes any more.
+func adoptLegacyRoom() (Reattachment, error) {
+	dir, err := roomDir()
+	if err != nil {
+		return Reattachment{}, err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		// Includes the directory not existing at all: nothing was ever saved.
+		return Reattachment{}, ErrNoSavedRoom
+	}
+
+	var best SavedRoom
+	var bestPath string
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || name == roomFile || !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		if fi, err := e.Info(); err != nil || fi.Size() > maxRoom {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		room, why := readRoom(path, legacyRoomVersion)
+		if why != "" {
+			continue
+		}
+		if room.SavedAt.After(best.SavedAt) {
+			best, bestPath = room, path
+		}
+	}
+	if bestPath == "" {
+		return Reattachment{}, ErrNoSavedRoom
+	}
+	return Reattachment{Path: bestPath, Room: best, Adopted: true}, nil
 }
 
 // savedPosture names the posture the room was opened with, for the record only.

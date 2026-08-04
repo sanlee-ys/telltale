@@ -828,6 +828,109 @@ the bundle's own field descriptors rather than on a capture. It is labelled as s
 and in its test. Everything else in the fifth amendment's table has now either been measured or
 been replaced by what the measurement said instead.
 
+### Amendment, 2026-08-04 (eleventh): one room, and the workspace is a field inside it
+
+The ninth amendment gave the room a file and the tenth gave it a memory, and the launch path
+still treated both as properties of a directory. Opening council meant supplying a workspace —
+by `--cd` or by standing in one — and the state file was keyed by the sha256 of that path, so
+the conversation the user wanted back was reachable only by re-naming an argument to a room
+that already existed. The complaint that forced this was restated three times in one session,
+and the load-bearing sentence survives cleanup intact: *"I should be able to just invoke the
+council and talk to you all there, and go into whatever repo I want."* The anger was aimed at
+one specific thing — naming a repo at launch — and the ruling that resolves it is a sentence
+about object identity, not about flags: **the room is the persistent object; the workspace is
+conversation state, changed from inside the room, never an invocation input.**
+
+**`telltale council`, zero arguments, opens the one global room and reattaches.** This
+deliberately flips the ninth amendment's default. That default was offer-don't-restore — name
+the saved room once, make the loss a choice — and it was right *while the file was keyed by
+workspace*, because an automatic reattach could reattach to the wrong room whenever the key
+(usually a stray `--cd`) pointed somewhere the user did not mean. With one room there is no
+wrong room to reattach to, and the P0 sentence above is the sanction for the flip: a user who
+says "invoke the council and talk" is asking for the conversation, not for a fresh one.
+`--fresh` is the opt-out and starts over; if a usable saved room exists it is named once before
+the first dispatch replaces it — the ninth amendment's "named before it is replaced" rule,
+unchanged, now standing guard on the other default. `--resume` stays accepted and is now
+redundant, because it names the default. With nothing saved, a zero-arg launch opens fresh
+silently — that is the first run ever, and a notice would be noise on an empty state. An
+*explicit* `--resume` with nothing saved gets a notice rather than the ninth amendment's
+before-the-alternate-screen error: that error existed because a per-workspace key could point
+at the wrong room and a silently-fresh room would have the user typing into four new sessions
+believing they continued something. There is no key any more, so there is nothing to be wrong
+*about* — the notice says nothing was saved, and the room opens.
+
+**Room identity is one file, and the workspace moved inside it.** `~/.telltale/council/room.json`,
+schema v2, same 0600-in-0700 discipline. The workspace is demoted from the file's KEY (the
+hashed filename) to a MUTABLE FIELD of the room. Migration is adoption, not conversion: on
+first launch with no `room.json`, the newest valid v1 per-workspace file by `saved_at` is
+adopted as the global room — which is literally "reattach to the prior conversation", the thing
+the feature exists to do — and every v1 file is left on disk untouched: never written again,
+never deleted. A `room.json` that is corrupt or version-skewed gets the same fail-closed
+Ignored-notice behaviour the ninth amendment specified, and **no legacy fallback in that case**:
+falling back would let a corrupt current room silently resurrect an older conversation and
+present it as the one just lost, which is a worse failure than the notice.
+
+**The privacy argument weakens, and it is stated as a trade rather than defended away.** The
+ninth amendment hashed the filenames precisely so a listing of `~/.telltale/council` was not an
+inventory of what the user works on. One fixed filename holding one workspace path gives that
+up: `room.json` now names, in plaintext, the single directory the room currently points at.
+That is one path, not an inventory, and the file still holds keys and no content — but it is a
+real narrowing of the ninth amendment's property and this file does not pretend otherwise.
+
+**`/cd <dir>` moves the room from inside it.** Only `/cd` is intercepted in the composer; any
+other draft — including one that merely starts with `/` — dispatches as text, because a
+composer that silently eats near-misses is a composer that loses briefs. Resolution order is
+absolute path, then relative to the current workspace, then **sibling of the current
+workspace**, so `/cd kb-agent` works from any sibling repo without telltale hardcoding anyone's
+directory layout. The target must exist and be a directory, and the command is refused mid-turn
+— a seat cannot be retargeted while a dispatch is in flight against the old target. `--cd`
+survives as an optional launch-time override of the room's current workspace; the third
+amendment's throwaway-worktree recipe is its remaining natural use, and the daily path never
+needs it.
+
+**Seat mechanics on a switch, each claim at its own strength.**
+
+| | mechanism | strength |
+|---|---|---|
+| Codex / agy / Cursor (spawn-per-turn) | `specFor` already threads the live workspace into each turn's `Spec.Dir`; the three seats follow a `/cd` with no new mechanism at all | Unchanged — the code path that ships |
+| Claude (persistent) — why it cannot follow | the stream-json input envelope has **no cwd field**, and no `control_request` subtype changes cwd; the documented mechanism for a mid-conversation workspace switch is respawn with `--resume <session_id>` | **Docs-derived** (Claude Code Agent SDK / headless docs), not measured |
+| The respawn composition itself | `--resume <id>` plus the full persistent flag set: same `session_id`, real history replayed, exit 0 | **Measured** — ninth amendment, live probe |
+| `--add-dir` | grants file *access* only; it does not move path resolution, so it is not a substitute and is not part of this design | Docs-derived |
+
+So a `/cd` marks the persistent seat's process as pointed at the wrong directory, and the next
+dispatch respawns it in the new one, spending the earned session id through the **same
+one-attempt probation rule** restored ids already carry: spent once, dropped on the first
+failed turn, proven permanently on a clean one. No second rule was invented for this. The brief
+is **not** re-sent to the respawned seat — it is in the history being replayed, which is the
+same reasoning the fourth and ninth amendments already apply to every resumed turn. The honest
+residual: "the envelope has no cwd" is read from the vendor's documentation, which is the
+weakest evidence class this file uses, and the day the envelope grows one, the respawn can be
+retired for something cheaper.
+
+**What is deliberately kept, restated so the flip cannot be misread as a loosening.** Posture
+is never restored from disk: `--write` is typed or it is not in effect, exactly as the ninth
+amendment ruled, and auto-reattach changes nothing about it — the room that reopens is a read
+room. The saved `brief_path` is reported when it differs and never auto-loaded, unchanged.
+`TELLTALE_COUNCIL_BRIEF` is how the daily path stays zero-flag *and* briefed — the environment
+carries the standing context so the command line can stay empty.
+
+**The new consequence, stated plainly rather than discovered later.** One global room means any
+two councils open at once now share one state file, and the last save wins. The hazard existed
+before — two rooms in the same directory could already trade the same per-workspace file — but
+it was bounded by the directory and is global now: two terminals, two different repos, one
+`room.json`. Council does not lock the file and does not pretend to; the second room's next
+completed turn overwrites the first's keys, and the ninth amendment's atomic-write rule is what
+keeps the loser's overwrite torn-free rather than harmless.
+
+The general lesson, in this file's own terms: nine amendments perfected the turn, the tenth
+gave the room a memory, and none of them noticed that the launch path still made the user name
+a directory to enter a room that already existed. Every earlier lesson here was about a *claim*
+being wrong — a flag asserted, an effect unverified. This one is about the *object* being
+wrong: the room was modelled as a property of a workspace, when the whole time the workspace
+was a property of the room. No measurement could have caught it, because every measured thing
+was true; the user saying the same sentence three times is what caught it, and that is a
+measurement too.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude
