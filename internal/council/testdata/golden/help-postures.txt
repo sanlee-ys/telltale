@@ -1,0 +1,44 @@
+ council  │  ~/code/telltale                                                    no turn yet  │  3/3 seated  │  no brief 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ council — what the badge on each column means                                                                          
+                                                                                                                        
+   Each column states its own posture; there is no room-wide claim.                                                     
+                                                                                                                        
+   ro:tools     the write tools are ABSENT from that session — checked                                                  
+                against what the session reported about itself, not a flag                                              
+   ro:enforced  the vendor's own OS-level sandbox does it — codex, mac/linux                                            
+   ro:requested a flag was passed and accepted; what it actually enforces                                               
+                was never observed. Weaker than the two above, and says so                                              
+   unsandboxed  nothing restricts this vendor at the OS level. MEASURED,                                                
+                not assumed — treat this column as able to change your files                                            
+   WRITES       --write: this column may edit and run things in the workspace                                           
+   gated        --write, and this seat asks first — y approves, n denies                                                
+                                                                                                                        
+   What contains this room is the WORKSPACE above, not any of these words.                                              
+   Point council at a throwaway worktree when that matters.                                                             
+   ?            close                                                                                                   
+                                                                                                                        
+   this room, seat by seat:                                                                                             
+                                                                                                                        
+   ro:tools     Claude Code                                                                                             
+       this seat has no write or shell tools in its session, so it cannot edit your files. Verified by reading what the 
+       session reported about itself, not by trusting a flag: the named write/exec tools are denied and MCP servers are 
+       dropped. The residual is that a deny list cannot cover a tool a future release adds                              
+                                                                                                                        
+   unsandboxed  Codex                                                                                                   
+       nothing at the OS level stops this column reading or writing here, and that is why: on Windows both sandboxed    
+       modes were measured failing every process spawn, reads included, so -s read-only was not a restriction, it was a 
+       seat that could not read. Council passes -s danger-full-access so this column can work at all. The workspace     
+       above is the containment, not a flag — point council at a worktree if that matters                               
+                                                                                                                        
+   unsandboxed  Antigravity                                                                                             
+       treat this column as able to change your files, and that is MEASURED rather than assumed: asked to write a file  
+       under both --mode plan and --sandbox, it wrote the file, and its reported permission mode and tool list were     
+       identical to a run without them. The flags are still passed; they do not restrict it                             
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ›                                                                                                                      
+ VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 

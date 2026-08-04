@@ -118,10 +118,55 @@ const (
 )
 
 // SandboxClaim is one column's posture, as a claim we are willing to defend.
-// Detail is shown in the degraded/help text, never abbreviated away.
+//
+// Detail is the full sentence behind the badge — what was passed, what was
+// measured, and what is therefore claimed. It is never abbreviated: the badge
+// is two words and the argument for it is a paragraph, and a badge whose
+// argument cannot be read is a badge nobody can check.
+//
+// It renders on the help panel's posture page (view.go, HelpPostures), which
+// is where it goes to be READ rather than skimmed. That is newer than this
+// field: for several amendments the detail was written, tested, quoted into
+// ADR-008 — and rendered nowhere at all, while this comment claimed it was
+// "shown in the degraded/help text". §9.2 says a claim you cannot see is not a
+// claim; the argument for a claim is under the same rule.
 type SandboxClaim struct {
 	Level  SandboxLevel
 	Detail string
+}
+
+// HelpPage is which page of the help panel is open.
+//
+// Two pages rather than one long panel, because the panel's height budget is
+// hard (17 rows, helpKeys) and the two things it has to say are different
+// kinds of thing: what the keys do, and what the words on each column MEAN.
+// Cramming the second into the first is what left the posture explanation as
+// four muted lines below the fold, which is where it was when a user asked
+// "why do i care codex and agy are 'unsandboxed'?" — a question the room had
+// an answer to and no surface for.
+type HelpPage uint8
+
+const (
+	// HelpClosed: the panel is not open and the columns are on screen.
+	HelpClosed HelpPage = iota
+	// HelpKeys: what the keys do.
+	HelpKeys
+	// HelpPostures: what the badge on each column means, in plain English,
+	// followed by this room's own seats and the claim each one is making.
+	HelpPostures
+)
+
+// next cycles the help panel: closed → keys → postures → closed.
+//
+// `?` stays one key and stays a toggle-shaped thing, which is the property that
+// matters: it is the only documented way OUT of the panel, so it must never
+// become a key that can strand a reader on a page. Three presses always return
+// the room, from anywhere.
+func (h HelpPage) next() HelpPage {
+	if h >= HelpPostures {
+		return HelpClosed
+	}
+	return h + 1
 }
 
 // Granularity is how finely a vendor reports progress. Rendered in the column
@@ -604,7 +649,8 @@ type State struct {
 	// Notice is a transient one-line message in the footer.
 	Notice string
 
-	Help bool
+	// Help is which page of the help panel is open, if any.
+	Help HelpPage
 
 	// Briefed reports that shared operating context was loaded. The content
 	// itself is deliberately NOT on State: it is the user's private file and

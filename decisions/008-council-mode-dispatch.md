@@ -1180,6 +1180,80 @@ and nobody noticed the absence while the default made it unnatural to want. A fl
 default leaves a vocabulary shaped for the old one, and the missing word shows up as a user
 describing a thing they cannot type.
 
+### Amendment, 2026-08-04 (fifteenth): the argument for a claim is under the claim's own rule
+
+§3 of this ADR exists because the first draft made a blanket read-only claim it could not
+defend. Twelve amendments since have been spent making each per-vendor badge defensible, and
+`SandboxClaim.Detail` is where that work lives: the full sentence behind each badge, written
+per vendor per OS, asserted by tests, quoted into this file. The room was driven, and the
+report back was a question rather than a defect:
+
+> *"why do i care codex and agy are 'unsandboxed'? what does this mean, why are they
+> sandboxed, and must they remain that way? i'm really confused here."*
+
+**Nothing in that is a false claim, which is what makes it worth an amendment.** The badges
+are right. What the question exposes is that they were right *to a reviewer* and opaque to
+their primary user — and, worse, that the argument backing them was unreachable.
+
+**`Detail` rendered nowhere.** Not on the degraded card, not on the unavailable card, not in
+the help panel, not anywhere. The field's own doc comment claimed it was "shown in the
+degraded/help text"; no surface read it, and none had since the badges landed. §9.2's rule
+is that *a claim you cannot see is not a claim*. **The argument for a claim is under the same
+rule**, and this file has now caught itself breaking it — an unrendered `Detail` is the same
+failure as an unstated badge, one level down, and every test that asserted the string's
+*content* went on passing because none of them asserted that anything displayed it. That is
+the fourth amendment's mistake in its newest costume: asserting the artifact rather than the
+effect, this time on the honesty machinery itself.
+
+**What ships is a second help page, and it changes no claim.** `?` cycles keys → postures →
+closed; both pages spend the same hard 17-row budget and both end with the line that leaves
+them, because `?` is the panel's only documented exit and no number of presses may strand a
+reader. Page two carries a plain-English gloss of **every** badge word this product can
+render — including `WRITES` and `gated`, so a user can learn what `--write` will say before
+typing it — followed, below the fold, by this room's own seats and each one's `Detail` in
+full. That is the first surface `Detail` has ever had.
+
+**The glosses may not soften anything, and that is asserted rather than promised.**
+`TestThePostureLegendDoesNotSoftenAnyClaim` pins the load-bearing phrases (`unsandboxed`
+keeps *nothing restricts*, *measured*, *change your files*; `ro:requested` keeps *never
+observed*) and forbids "read-only", "safe" and "cannot write" from any level that can write.
+The badges break the `ro:` prefix on purpose (second amendment); a legend that put the word
+back would reintroduce the blanket claim §3 exists to refuse, through the one surface a
+reader goes to for an explanation. `TestEveryBadgeIsExplained` walks every level and fails
+the build for a badge with nothing to say what it means, so a sixth posture cannot land
+mute.
+
+**Each `Detail` was reordered so its first clause answers "so what?".** No factual clause was
+removed, weakened or added — what moved is which end of the sentence the consequence sits at.
+The Claude seat opened on `"named write/exec tools denied and MCP servers dropped; verified
+against…"`, which is a mechanism the reader has to decode before learning anything, and now
+opens *"this seat has no write or shell tools in its session, so it cannot edit your files"*
+with the verification and the deny-list residual behind it. Codex on Windows opens on
+*"nothing at the OS level stops this column reading or writing here"* rather than on the flag
+that produced it.
+
+**The third clause of the question — *must they remain that way?* — is answered where a
+first-time reader is, and the answer is not about flags.** No badge is what keeps this room
+out of anyone's files; the workspace is, and this file has ruled that twice already (third
+and twelfth amendments). `unsandboxed` on Codex is not a switch anyone chose to leave off:
+both sandboxed modes were measured failing every process spawn there, so read-only was not a
+restriction but a seat that could not read. agent-ops ADR-012 rules the same way
+independently — capability parity, with guard wiring rather than lane shape as the control.
+The README now says so in a table beside the badges instead of leaving it to be inferred
+from an ADR.
+
+**No posture flag moved, deliberately.** Whether council should go on asking agy for
+`--mode plan --sandbox` when both are measured to do nothing is an open decision
+(design.md §9.6b) and belongs to the owner. This amendment changed what the room *says* about
+the posture and nothing about the posture — the two are separable and were kept separate on
+purpose, because a documentation pass that quietly retunes a safety flag is exactly the kind
+of change this file exists to prevent.
+
+The general lesson: every earlier amendment here asked *is this claim true?* and this one is
+the first to ask *is it legible to the person it is for?* Those are different audits, and
+passing the first perfectly is what allowed the second to go unasked for twelve rounds.
+Honesty that only survives an expert review is a claim made to the wrong audience.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude
