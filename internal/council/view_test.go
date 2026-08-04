@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -398,4 +399,124 @@ func TestUnaddressedColumnSaysSo(t *testing.T) {
 		t.Error("a column left out of the turn does not say so")
 	}
 	golden(t, "unaddressed-column", got)
+}
+
+// longBody is a reply too tall for any column at the test geometry.
+func longBody(n int) string {
+	lines := make([]string, n)
+	for i := range lines {
+		lines[i] = "line " + strconv.Itoa(i+1) + " of the reply"
+	}
+	return strings.Join(lines, "\n")
+}
+
+// TestOverflowAnnouncesItself is the point of this whole feature. Before it, a
+// reply taller than the column was silently truncated — indistinguishable from
+// a vendor that simply stopped talking, which is the exact ambiguity §4a.1
+// forbids. Scrolling is the affordance; SAYING there is more is the honesty.
+func TestOverflowAnnouncesItself(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	st.Columns[0].Phase = PhaseDone
+	st.Columns[0].Body = longBody(60)
+	st.Columns[0].Follow = false
+	st.Columns[0].Scroll = 0
+
+	got := render(st)
+	if !strings.Contains(got, "more below") {
+		t.Error("a clipped reply does not say there is more below it")
+	}
+	golden(t, "scroll-top", got)
+
+	// Scrolled into the middle: both directions must be announced.
+	st.Columns[0].Scroll = 20
+	mid := render(st)
+	if !strings.Contains(mid, "more above") || !strings.Contains(mid, "more below") {
+		t.Error("a mid-scroll column does not announce both directions")
+	}
+	golden(t, "scroll-middle", mid)
+}
+
+// TestFollowShowsTheTail: a streaming column pins to the newest output, so the
+// interesting line during a turn is the one arriving.
+func TestFollowShowsTheTail(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	st.Columns[0].Phase = PhaseStreaming
+	st.Columns[0].Body = longBody(60)
+	st.Columns[0].Follow = true
+
+	got := render(st)
+	if !strings.Contains(got, "line 60 of the reply") {
+		t.Error("a following column is not showing the newest line")
+	}
+	if strings.Contains(got, "more below") {
+		t.Error("a following column claims there is content below the tail")
+	}
+	if !strings.Contains(got, "more above") {
+		t.Error("a following column does not say it has scrolled past earlier content")
+	}
+}
+
+// TestShortRepliesGetNoScrollFurniture: the markers cost a line each, so they
+// must only appear when they are true.
+func TestShortRepliesGetNoScrollFurniture(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	st.Columns[0].Phase = PhaseDone
+	st.Columns[0].Body = "short answer"
+	got := render(st)
+	if strings.Contains(got, "more above") || strings.Contains(got, "more below") {
+		t.Error("a reply that fits still drew scroll markers")
+	}
+}
+
+// TestExpandedGivesOneColumnTheWholeWidth. Three columns compare at a glance;
+// one column is for reading.
+func TestExpandedGivesOneColumnTheWholeWidth(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	st.Expanded = true
+	st.Columns[0].Phase = PhaseDone
+	st.Columns[0].Body = "Resume beats re-sending the transcript, because input grows quadratically against metered quotas and the blind-round guarantee stops being structural."
+
+	got := render(st)
+	if strings.Contains(got, "Antigravity  ") && strings.Count(got, "ro:tools") > 1 {
+		t.Error("expanded mode still drew several columns")
+	}
+	golden(t, "expanded", got)
+
+	// Expansion outranks width: even a wide terminal shows one column.
+	if lay := resolveLayout(200, 40, 3, true); lay.Tier != TierTabs || lay.Cols != 1 {
+		t.Errorf("expanded at width 200 resolved to %v with %d cols, want one column", lay.Tier, lay.Cols)
+	}
+}
+
+// TestScrollNeverExceedsTheTerminal re-runs the width sweep with tall content
+// and a scrolled column, because the markers are new lines assembled at render
+// time and are exactly the kind of thing that overflows a narrow column.
+func TestScrollNeverExceedsTheTerminal(t *testing.T) {
+	for _, w := range []int{60, 72, 96, 120, 200} {
+		for _, ascii := range []bool{false, true} {
+			for _, expanded := range []bool{false, true} {
+				st := room()
+				st.Width, st.Height = w, 24
+				st.Expanded = expanded
+				st.Turn = 1
+				for i := range st.Columns {
+					st.Columns[i].Phase = PhaseDone
+					st.Columns[i].Body = longBody(80)
+					st.Columns[i].Follow = false
+					st.Columns[i].Scroll = 15
+				}
+				out := Render(st, PlainStyles(), GlyphsFor(ascii))
+				for i, line := range strings.Split(out, "\n") {
+					if n := lipgloss.Width(line); n > w {
+						t.Errorf("w=%d ascii=%v expanded=%v: line %d is %d cells",
+							w, ascii, expanded, i, n)
+					}
+				}
+			}
+		}
+	}
 }

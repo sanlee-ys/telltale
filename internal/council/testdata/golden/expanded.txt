@@ -1,0 +1,24 @@
+ council ~/code/telltale                                                                           turn 1  │  3/3 seated
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ▸Claude Code   Codex   Antigravity                                                                                     
+  Claude Code                                                                                                      done 
+ ro:tools  tokens                                                                                                       
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+ Resume beats re-sending the transcript, because input grows quadratically against metered quotas and the blind-round   
+ guarantee stops being structural.                                                                                      
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ›                                                                                                                      
+ VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 

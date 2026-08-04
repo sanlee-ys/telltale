@@ -22,7 +22,7 @@ func TestTierIsAPureFunctionOfWidth(t *testing.T) {
 		{200, 0, TierTabs},
 	}
 	for _, c := range cases {
-		if got := tierFor(c.width, c.cols); got != c.want {
+		if got := tierFor(c.width, c.cols, false); got != c.want {
 			t.Errorf("tierFor(%d, %d) = %v, want %v", c.width, c.cols, got, c.want)
 		}
 	}
@@ -35,7 +35,7 @@ func TestTierIsAPureFunctionOfWidth(t *testing.T) {
 func TestColumnsExactlyFillTheWidth(t *testing.T) {
 	for w := columnsBreak; w <= 220; w++ {
 		for n := 2; n <= 4; n++ {
-			lay := resolveLayout(w, 24, n)
+			lay := resolveLayout(w, 24, n, false)
 			if lay.Tier != TierColumns {
 				continue
 			}
@@ -54,7 +54,7 @@ func TestColumnsExactlyFillTheWidth(t *testing.T) {
 // columns are worse than one readable one, so the tier drops instead.
 func TestColumnsFallBackToTabsRatherThanShredding(t *testing.T) {
 	for w := MinWidth; w <= 300; w++ {
-		lay := resolveLayout(w, 24, 3)
+		lay := resolveLayout(w, 24, 3, false)
 		if lay.Tier == TierColumns && lay.ColWidth < minColumn {
 			t.Fatalf("w=%d: seated 3 columns at %d cells each, below the %d floor",
 				w, lay.ColWidth, minColumn)
@@ -65,7 +65,7 @@ func TestColumnsFallBackToTabsRatherThanShredding(t *testing.T) {
 func TestBodyRowsNeverGoNegative(t *testing.T) {
 	for h := 0; h <= 40; h++ {
 		for _, w := range []int{60, 96, 120} {
-			if got := resolveLayout(w, h, 3).Body; got < 1 {
+			if got := resolveLayout(w, h, 3, false).Body; got < 1 {
 				t.Errorf("w=%d h=%d: Body = %d", w, h, got)
 			}
 		}

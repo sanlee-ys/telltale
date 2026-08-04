@@ -125,6 +125,10 @@ func (m *Model) dispatch() tea.Cmd {
 		c.Body = ""
 		c.Note = ""
 		c.CostUSD = nil
+		// Re-arm the tail for the new turn. Whatever the user was reading
+		// belonged to the previous answer, which this column just cleared.
+		c.Follow = true
+		c.Scroll = 0
 		m.redactors[c.Vendor] = &Redactor{}
 	}
 

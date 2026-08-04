@@ -94,6 +94,7 @@ func stateWith(opts Options) State {
 			Sandbox: sandboxFor(info.Vendor, windows),
 			Gran:    granularityFor(info.Vendor),
 			Phase:   PhaseIdle,
+			Follow:  true,
 		})
 	}
 	return st
@@ -228,8 +229,90 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.focusBy(1)
 	case "shift+tab", "left", "h":
 		m.focusBy(-1)
+	case "f":
+		// One column at full width. Three columns are for comparing at a
+		// glance; one is for actually reading a long reply.
+		m.st.Expanded = !m.st.Expanded
+	case "up", "k":
+		m.scrollBy(-1)
+	case "down", "j":
+		m.scrollBy(1)
+	case "pgup":
+		m.scrollBy(-m.pageSize())
+	case "pgdown", " ":
+		m.scrollBy(m.pageSize())
+	case "home", "g":
+		m.scrollTo(0)
+	case "end", "G":
+		m.followFocused()
 	}
 	return m, nil
+}
+
+// scrollBy moves the focused column's view and takes it off the tail.
+//
+// Scrolling down INTO the bottom re-arms following, so a user who reads to the
+// end of a streaming reply keeps receiving the rest without a second keystroke.
+// Scrolling up disarms it: yanking someone back to the bottom mid-read is the
+// most irritating thing a streaming pane can do, and it hides content.
+func (m *Model) scrollBy(d int) {
+	c := m.focused()
+	if c == nil {
+		return
+	}
+	max := MaxScroll(m.st, m.st.Focus)
+	cur := c.Scroll
+	if c.Follow {
+		cur = max
+	}
+	m.applyScroll(c, cur+d, max)
+}
+
+func (m *Model) scrollTo(off int) {
+	c := m.focused()
+	if c == nil {
+		return
+	}
+	m.applyScroll(c, off, MaxScroll(m.st, m.st.Focus))
+}
+
+func (m *Model) applyScroll(c *Column, off, max int) {
+	if off < 0 {
+		off = 0
+	}
+	if off >= max {
+		off = max
+		c.Follow = true
+		c.Scroll = max
+		return
+	}
+	c.Follow = false
+	c.Scroll = off
+}
+
+// followFocused pins the focused column back to the newest output.
+func (m *Model) followFocused() {
+	if c := m.focused(); c != nil {
+		c.Follow = true
+		c.Scroll = MaxScroll(m.st, m.st.Focus)
+	}
+}
+
+// pageSize is one screenful of the body area, less a line of overlap so a page
+// jump keeps a shared line of context rather than teleporting.
+func (m *Model) pageSize() int {
+	lay := resolveLayout(m.st.Width, m.st.Height, len(m.st.Columns), m.st.Expanded)
+	if n := lay.Body - 3; n > 1 {
+		return n
+	}
+	return 1
+}
+
+func (m *Model) focused() *Column {
+	if m.st.Focus < 0 || m.st.Focus >= len(m.st.Columns) {
+		return nil
+	}
+	return &m.st.Columns[m.st.Focus]
 }
 
 // focusBy moves the focused column, wrapping. Focus is an index into Columns,

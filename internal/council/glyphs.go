@@ -19,6 +19,8 @@ type Glyphs struct {
 	Warn     string // notice and unavailable-card prefix
 	Focus    string // marks the focused column / selected tab
 	Prompt   string // prompt line prefix
+	Up       string // "there is more above" marker
+	Down     string // "there is more below" marker
 
 	Spinner []string
 
@@ -41,6 +43,8 @@ func UnicodeGlyphs() Glyphs {
 		Warn:     "⚠", // ⚠
 		Focus:    "▸", // ▸
 		Prompt:   "›", // ›
+		Up:       "↑", // ↑
+		Down:     "↓", // ↓
 		Spinner: []string{
 			"⠋", "⠙", "⠹", "⠸", "⠼",
 			"⠴", "⠦", "⠧", "⠇", "⠏",
@@ -61,6 +65,8 @@ func ASCIIGlyphs() Glyphs {
 		// the same answer, as the HUD's cursor.
 		Focus:   "]",
 		Prompt:  ":",
+		Up:      "^",
+		Down:    "v",
 		Spinner: []string{"-", "\\", "|", "/"},
 	}
 }
