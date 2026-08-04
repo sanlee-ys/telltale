@@ -63,7 +63,13 @@ type Persistent interface {
 
 	// Session builds the invocation for a process that will take many turns.
 	// No prompt appears anywhere in it: every turn arrives later, on stdin.
-	Session(workspace, binary string, p Posture) (runner.Spec, error)
+	//
+	// hooksFile is an absolute path to a settings file holding the user's own
+	// hooks and nothing else, or empty when the room could not carry any over.
+	// It is in this signature rather than in Posture because it is a path that
+	// exists for the lifetime of one room, and Posture is a value the renderer
+	// and the golden tests construct freely.
+	Session(workspace, binary, hooksFile string, p Posture) (runner.Spec, error)
 
 	// Turn encodes one turn as the line the process expects on its stdin.
 	Turn(prompt string) ([]byte, error)

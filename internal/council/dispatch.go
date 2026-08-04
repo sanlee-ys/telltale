@@ -560,6 +560,10 @@ func (m *Model) teardown() {
 		p.sess.Kill()
 		delete(m.procs, v)
 	}
+	// The children die before the file they were pointed at is removed. The
+	// other order would leave a live seat holding a path to a deleted hooks
+	// file, which is the shape of a seat that quietly stops being screened.
+	m.hooks.Cleanup()
 	if m.roomCancel != nil {
 		m.roomCancel()
 	}

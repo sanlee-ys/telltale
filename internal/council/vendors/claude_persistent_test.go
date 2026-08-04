@@ -19,7 +19,7 @@ var _ Persistent = Claude{}
 // that makes the difference is --input-format: without it the process reads a
 // single prompt and exits, which is exactly the behaviour being replaced.
 func TestSessionInvocationMatchesTheVerifiedSpike(t *testing.T) {
-	spec, err := Claude{}.Session(`C:\ws`, `C:\bin\claude.exe`, PostureRead)
+	spec, err := Claude{}.Session(`C:\ws`, `C:\bin\claude.exe`, "", PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestSessionInvocationMatchesTheVerifiedSpike(t *testing.T) {
 // badge makes, and they are per-invocation — so a persistent invocation that
 // left them off would make the badge false for the whole room, permanently.
 func TestSessionKeepsThePostureFlags(t *testing.T) {
-	read, _ := Claude{}.Session("", "claude", PostureRead)
+	read, _ := Claude{}.Session("", "claude", "", PostureRead)
 	if !slices.Contains(read.Args, "--disallowedTools") {
 		t.Error("the read posture lost its deny list when it became persistent")
 	}
@@ -61,7 +61,7 @@ func TestSessionKeepsThePostureFlags(t *testing.T) {
 		t.Error("the read posture lost --strict-mcp-config when it became persistent")
 	}
 
-	write, _ := Claude{}.Session("", "claude", PostureWrite)
+	write, _ := Claude{}.Session("", "claude", "", PostureWrite)
 	if slices.Contains(write.Args, "--disallowedTools") {
 		t.Error("the write posture kept the deny list")
 	}
@@ -78,7 +78,7 @@ func TestSessionKeepsThePostureFlags(t *testing.T) {
 // exactly the shape of thing a later edit removes as redundant. Each is pinned
 // with the measurement that justifies it.
 func TestGatedPostureCarriesAllThreeFlags(t *testing.T) {
-	spec, err := Claude{}.Session(`C:\ws`, "claude", PostureWriteGated)
+	spec, err := Claude{}.Session(`C:\ws`, "claude", "", PostureWriteGated)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,8 +130,8 @@ func TestGatedPostureCarriesAllThreeFlags(t *testing.T) {
 // and has to stay reachable; if the two postures produced the same argv the
 // flag would be decoration.
 func TestAutoAndGatedAreDifferentInvocations(t *testing.T) {
-	auto, _ := Claude{}.Session("", "claude", PostureWrite)
-	gated, _ := Claude{}.Session("", "claude", PostureWriteGated)
+	auto, _ := Claude{}.Session("", "claude", "", PostureWrite)
+	gated, _ := Claude{}.Session("", "claude", "", PostureWriteGated)
 	if slices.Equal(auto.Args, gated.Args) {
 		t.Fatal("--auto and the gate produce identical invocations")
 	}
@@ -142,6 +142,60 @@ func TestAutoAndGatedAreDifferentInvocations(t *testing.T) {
 	// gate, and paying it for a room that is not gating buys nothing.
 	if slices.Contains(auto.Args, "--setting-sources") {
 		t.Error("--auto drops the user's settings for no gate")
+	}
+}
+
+// TestGatedPostureCarriesTheHooksFile.
+//
+// The gate drops --setting-sources, which drops the user's hooks with their
+// permission rules. Only one of those two was meant to go. --settings carries
+// the hooks back, measured composing with the dropped sources: a planted
+// PreToolUse hook denied a call in exactly this configuration, and the same call
+// ran unscreened without the flag.
+func TestGatedPostureCarriesTheHooksFile(t *testing.T) {
+	spec, err := Claude{}.Session(`C:\ws`, "claude", `C:\tmp\h\hooks.json`, PostureWriteGated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.Index(spec.Args, "--settings")
+	if i < 0 || spec.Args[i+1] != `C:\tmp\h\hooks.json` {
+		t.Fatalf("--settings missing from %v; the seat would run with nothing but the gate in front of it", spec.Args)
+	}
+	// The sources stay dropped. If a future edit ever traded one for the other,
+	// the user's allow rules would come back and calls would walk past the gate.
+	if j := slices.Index(spec.Args, "--setting-sources"); j < 0 || spec.Args[j+1] != "" {
+		t.Errorf("--setting-sources \"\" was lost when --settings arrived: %v", spec.Args)
+	}
+}
+
+// TestOnlyTheGatedPostureCarriesTheHooksFile.
+//
+// The read and --auto postures load the user's settings natively, so injecting
+// the same hooks again would run every one of them twice. A guard that asks two
+// questions per call is a guard people switch off.
+func TestOnlyTheGatedPostureCarriesTheHooksFile(t *testing.T) {
+	for _, p := range []Posture{PostureRead, PostureWrite} {
+		spec, err := Claude{}.Session("", "claude", `C:\tmp\h\hooks.json`, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if slices.Contains(spec.Args, "--settings") {
+			t.Errorf("posture %v took the hooks file: %v — its settings are loaded natively, so the hooks would fire twice", p, spec.Args)
+		}
+	}
+}
+
+// TestNoHooksFileMeansNoFlag. An empty path is the room reporting that it found
+// nothing to carry over. Passing --settings with an empty value would be a flag
+// pointing at nothing, and the CLI answers that with "Settings file not found"
+// — which kills the seat instead of degrading it.
+func TestNoHooksFileMeansNoFlag(t *testing.T) {
+	spec, err := Claude{}.Session("", "claude", "", PostureWriteGated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(spec.Args, "--settings") {
+		t.Errorf("--settings passed with no file behind it: %v", spec.Args)
 	}
 }
 

@@ -476,6 +476,71 @@ behind it, and during a turn every column is following its own tail, so a card i
 would be pushed off screen by the output of the very call it is asking about. For the same
 reason the gate's mode line is the one footer state a transient notice may not displace.
 
+### Amendment, 2026-08-04 (eighth): the gated seat carries the guard again
+
+The seventh amendment closed the settings hole and named its price in one sentence: dropping
+the setting sources "also drops the user's own hooks and user-level commands from that seat".
+That sentence was accurate and it was too calm. Two different things were being dropped:
+
+- **Permission allow rules**, which the gate is *supposed* to replace. A rule that pre-approves
+  a call is precisely what a gate cannot sit behind.
+- **Hooks**, which nothing was replacing. A `PreToolUse` hook is a screen the user built — on
+  this machine, a credential guard that blocks credential-file reads and bulk env dumps — and
+  it was being removed as collateral.
+
+The second is worse than it sounds, because of *which* calls it covered. The seventh amendment
+already recorded that shell commands the CLI classifies read-only are approved without asking.
+Those calls never reach the gate. With the hooks gone they reached nothing at all, and reading
+a credential file is exactly that shape of call. The gated seat was the room's most-supervised
+column and its least-screened one at the same time.
+
+**The mechanism, established live before anything was built.** `--settings <file>` composes
+with `--setting-sources ""`. Three probes in a throwaway directory against Claude Code 2.1.220,
+driven through a stand-in for council's persistent seat, with a *planted* hook rather than the
+real guard so that "the hook ran" could be told from "the command failed":
+
+| probe | result |
+|---|---|
+| Gated posture, no `--settings`: `echo TELLTALE_HOOK_MARKER` | No permission request at all, and `"content":"TELLTALE_HOOK_MARKER"` came back. Neither gated nor screened — the hole, reproduced. |
+| Same, `--settings` at a hooks-only file with a planted `PreToolUse` hook | `"content":"SPIKE-HOOK-DENIED-TELLTALE_HOOK_MARKER","is_error":true`, `"non_execution_kind":"permission-rule"`, and the hook's own breadcrumb file recorded the call. |
+| Same file, an allowlisted `mkdir zzz-guard-probe` | `{"type":"control_request",…"subtype":"can_use_tool"…}` was raised, the denial was honoured, nothing was created. The gate is intact and the user's ~210 allow rules are still dropped. |
+
+Then the run that matters, on the shipped loader rather than a hand-written fixture: council's
+own `LoadHookSet()` was pointed at the real `~/.claude/settings.json`, and the seat it produced
+answered `cat <path>/.env` with the machine's actual credential guard — *"CREDENTIAL GUARD (v2,
+path-based default-deny)"* — on a call that raised no gate request. The guard is back in front
+of the calls the gate never sees.
+
+**A fourth probe is the reason the extraction is written the way it is.** A `--settings` file
+carrying `{"permissions":{"allow":["Bash(mkdir:*)"]}}` made the same `mkdir` run with **no
+request**, and the directory was on disk. So this flag is a live re-entry point for the exact
+rules `--setting-sources ""` exists to drop, and the room would have gone on rendering `gated`
+while calls walked past the gate. The file council writes is therefore built by **naming the
+single key `hooks`**, never by deleting keys it does not want: an allowlist of one cannot rot
+as Claude Code adds settings keys, and a denylist would rot silently.
+
+**What the seat now carries.** The gated Claude invocation gains `--settings <ephemeral file>`,
+and only that posture — `--auto` and the read posture load the user's settings natively, so
+injecting the same hooks again would fire each of them twice, and a guard that asks two
+questions per call is a guard people switch off. The file is absolute (a relative path resolves
+against the *child's* cwd, which is the workspace, and fails with "Settings file not found"),
+0600, in a per-room temp directory removed on teardown, and its content is never logged or
+rendered — the same discipline `--brief` carries, and only a boolean crosses onto `State`.
+
+**The badge is derived from the file, not from the attempt.** An unreadable settings file, an
+empty hooks section, and a temp directory that could not be created all end in the same place,
+so the gated detail has two forms and the absent one says the calls the gate is not asked about
+have nothing screening them. A claim keyed off "we tried to wire it" would have survived all
+three failures.
+
+**The honest residual.** Hooks fire as that file described them **at spawn time**. Editing
+`~/.claude/settings.json` mid-session changes nothing until the next room — and, because a
+seat's process is respawned with the same path if it dies, not even then within one room. Also
+unchanged: the user's user-level slash commands are still dropped from this seat, and no
+attempt is made to resolve a relocated config directory, because nothing here measured what
+`CLAUDE_CONFIG_DIR` does. That last one fails visibly rather than quietly — a machine whose
+config lives elsewhere finds no hooks, wires nothing, and the badge says so.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude
