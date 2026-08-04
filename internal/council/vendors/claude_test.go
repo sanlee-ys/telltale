@@ -217,3 +217,63 @@ func mustNext(t *testing.T, prompt, sess string) runner.Spec {
 	}
 	return s
 }
+
+// TestToolCallsCarryTheirArgument. A trace of bare tool names is a half-built
+// gauge: six lines reading "Bash" say that something happened six times and
+// nothing about what. This is why the trace reads completed assistant messages
+// rather than content_block_start, whose input is still empty.
+func TestToolCallsCarryTheirArgument(t *testing.T) {
+	line := []byte(`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"go test ./...","description":"run tests"}}]}}`)
+	ev, ok := Claude{}.ParseEvent(line)
+	if !ok || ev.Kind != runner.KindActivity {
+		t.Fatalf("got (%+v, %v), want a KindActivity", ev, ok)
+	}
+	if ev.Text != "Bash: go test ./..." {
+		t.Errorf("Text = %q, want the command alongside the tool name", ev.Text)
+	}
+}
+
+// TestParallelToolBatchIsNotCollapsed: one assistant message really can carry
+// several calls, and reporting them as one line would under-report the work.
+func TestParallelToolBatchIsNotCollapsed(t *testing.T) {
+	line := []byte(`{"type":"assistant","message":{"content":[` +
+		`{"type":"tool_use","name":"Read","input":{"file_path":"a.go"}},` +
+		`{"type":"tool_use","name":"Grep","input":{"pattern":"func main"}}]}}`)
+	ev, _ := Claude{}.ParseEvent(line)
+	if !strings.Contains(ev.Text, "Read: a.go") || !strings.Contains(ev.Text, "Grep: func main") {
+		t.Errorf("batch lost a call: %q", ev.Text)
+	}
+	if !strings.Contains(ev.Text, "\n") {
+		t.Error("batch was collapsed onto one line; the consumer splits on newlines")
+	}
+}
+
+// TestAssistantTextIsNotActivity: a message with no tool_use is the vendor
+// speaking, and the streaming text path already carries it. Emitting activity
+// here would put an empty step in every trace.
+func TestAssistantTextIsNotActivity(t *testing.T) {
+	line := []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}`)
+	var c Claude
+	if ev, ok := c.ParseEvent(line); ok {
+		t.Errorf("a plain assistant message produced %+v", ev)
+	}
+}
+
+// TestClipArgCutsOnRuneBoundaries. A path with a CJK or accented character
+// would otherwise be sliced mid-rune and render as a replacement glyph.
+func TestClipArgCutsOnRuneBoundaries(t *testing.T) {
+	got := clipArg(strings.Repeat("日", 400))
+	for _, r := range got {
+		if r == '\uFFFD' {
+			t.Fatal("clipArg cut through a rune")
+		}
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Error("a clipped argument is not marked as clipped")
+	}
+	// Multi-line commands collapse: the consumer splits the event on newlines,
+	// so an embedded newline would fabricate extra trace entries.
+	if strings.Contains(clipArg("line one\nline two"), "\n") {
+		t.Error("a multi-line command would become several phantom trace entries")
+	}
+}

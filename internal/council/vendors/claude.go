@@ -2,6 +2,7 @@ package vendors
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -84,9 +85,6 @@ func (c Claude) baseArgs(p Posture) []string {
 		// turn while the vendor worked normally.
 		"--verbose",
 		"--include-partial-messages",
-		// --strict-mcp-config must accompany the deny list: without it the
-		// session inherits the user's connected MCP servers, whose tools no
-		// fixed list can name in advance.
 		// --strict-mcp-config is kept in BOTH postures, deliberately. Write mode
 		// widens what the vendor may do inside the workspace it was pointed at;
 		// MCP servers reach OUTSIDE it — the verification run surfaced Gmail
@@ -103,6 +101,60 @@ func (c Claude) baseArgs(p Posture) []string {
 		return append(args, "--permission-mode", "acceptEdits")
 	}
 	return append(args, "--disallowedTools", deniedTools)
+}
+
+// toolCalls renders the tool_use blocks of one assistant message, one per line.
+//
+// Newline-separated rather than one event each because ParseEvent returns a
+// single event; the consumer splits them back into separate trace entries. A
+// message really can carry several tool calls at once — a parallel batch is
+// normal — and collapsing them into one line would under-report the work.
+func toolCalls(sl streamLine) string {
+	var out []string
+	for _, b := range sl.Message.Content {
+		if b.Type != "tool_use" || b.Name == "" {
+			continue
+		}
+		if arg := toolArg(b.Input); arg != "" {
+			out = append(out, b.Name+": "+arg)
+			continue
+		}
+		out = append(out, b.Name)
+	}
+	return strings.Join(out, "\n")
+}
+
+// toolArg picks the one field of a tool's input worth showing in a trace.
+//
+// Ordered by how much it identifies the action: the command a shell ran tells
+// you more than the file a read touched. Anything not listed renders as the
+// bare tool name rather than a guess — dumping the whole input JSON into a
+// narrow column would bury the trace it is meant to make readable.
+func toolArg(in map[string]any) string {
+	for _, k := range []string{"command", "file_path", "pattern", "path", "query", "url", "prompt"} {
+		if v, ok := in[k].(string); ok && strings.TrimSpace(v) != "" {
+			return clipArg(strings.TrimSpace(v))
+		}
+	}
+	return ""
+}
+
+// clipArg bounds one trace line. A heredoc or a generated patch can run to
+// thousands of characters, and a trace that scrolls the answer off screen has
+// defeated its own purpose.
+func clipArg(s string) string {
+	// Collapse to one line first: a multi-line command would otherwise become
+	// several trace entries when the consumer splits on newlines.
+	s = strings.Join(strings.Fields(s), " ")
+	const max = 120
+	// Counted and cut in RUNES, not bytes. A command carrying a path with an
+	// accent or a CJK character would otherwise be sliced through the middle of
+	// a rune and render as a replacement glyph.
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
 }
 
 // streamLine is the subset of Claude Code's stream-json schema council models.
@@ -125,14 +177,20 @@ type streamLine struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"delta"`
-		// content_block_start carries a tool_use block when the model reaches
-		// for a tool. Verified live: the block arrives as
-		// {"type":"content_block_start","content_block":{"type":"tool_use","name":"Glob"}}
-		ContentBlock struct {
-			Type string `json:"type"`
-			Name string `json:"name"`
-		} `json:"content_block"`
 	} `json:"event"`
+
+	// assistant: the completed message, whose content blocks carry tool calls
+	// WITH their inputs. content_block_start announces a tool_use earlier but
+	// with an empty input — the arguments arrive afterwards as
+	// input_json_delta fragments — so a trace built from the announcement can
+	// only ever say "Bash", six times, which is what it said.
+	Message struct {
+		Content []struct {
+			Type  string         `json:"type"`
+			Name  string         `json:"name"`
+			Input map[string]any `json:"input"`
+		} `json:"content"`
+	} `json:"message"`
 
 	// result
 	Result       string   `json:"result"`
@@ -162,15 +220,14 @@ func (Claude) ParseEvent(line []byte) (runner.Event, bool) {
 		if sl.Event.Delta.Type == "text_delta" && sl.Event.Delta.Text != "" {
 			return runner.Event{Kind: runner.KindText, Text: sl.Event.Delta.Text}, true
 		}
-		// A tool call is the vendor ACTING rather than answering. Surfaced as
-		// activity rather than dropped: a room built for command and control
-		// has to show work in progress, and a column that silently thinks for
-		// forty seconds while running commands is indistinguishable from one
-		// that is stuck.
-		if sl.Event.Type == "content_block_start" &&
-			sl.Event.ContentBlock.Type == "tool_use" &&
-			sl.Event.ContentBlock.Name != "" {
-			return runner.Event{Kind: runner.KindActivity, Text: sl.Event.ContentBlock.Name}, true
+	case "assistant":
+		// A tool call is the vendor ACTING rather than answering. Read from the
+		// completed message rather than from content_block_start, because only
+		// here is the input populated — and a trace of bare tool names is a
+		// half-built gauge: six lines reading "Bash" say that something
+		// happened six times and nothing about what.
+		if acts := toolCalls(sl); acts != "" {
+			return runner.Event{Kind: runner.KindActivity, Text: acts}, true
 		}
 	case "result":
 		// Text is the whole final reply. It is carried so the room has a
