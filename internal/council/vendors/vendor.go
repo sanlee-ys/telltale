@@ -68,5 +68,11 @@ func Registry() map[model.VendorID]Vendor {
 		model.VendorClaude:      Claude{},
 		model.VendorCodex:       Codex{},
 		model.VendorAntigravity: Antigravity{},
+		// Cursor is registered even though it detects as unusable on Windows,
+		// and the two facts are independent on purpose: the registry answers
+		// "is there an adapter for this seat", detection answers "can this
+		// machine drive it". Conflating them is how the same platform quirk
+		// would come back as "no adapter yet" on a Mac, where the seat works.
+		model.VendorCursor: Cursor{},
 	}
 }

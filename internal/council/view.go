@@ -363,6 +363,13 @@ func columnText(c Column, w int, sty Styles, g Glyphs) []string {
 		// It has acted but not spoken. Saying "no incremental output" here
 		// would contradict the trace directly above it.
 		out = append(out, wrap("working — the steps above are what it has done so far.", w)...)
+	case c.Phase == PhaseWaiting && c.Body == "" && c.Gran == GranUnknown:
+		// A separate sentence from the one below, because they are different
+		// claims. "Reports no incremental output" is a measurement two vendors
+		// earned; a column whose granularity was never established must not
+		// borrow it. This one says only what is true: it is running, and
+		// whether anything will appear before the end is not known.
+		out = append(out, wrap("working. whether this vendor reports incremental output has not been established, so output may not appear until the turn finishes.", w)...)
 	case c.Phase == PhaseWaiting && c.Body == "":
 		// The honest version of an empty streaming column. This vendor is
 		// working; it just does not report anything until it is done, and

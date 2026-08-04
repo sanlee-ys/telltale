@@ -1,12 +1,14 @@
 # telltale
 
 **An honest gauge for your coding agents.** A statusline and a cross-vendor HUD where
-every number is traceable to measured tool output — nothing narrated, nothing guessed.
+every number is traceable to measured tool output — nothing narrated, nothing guessed —
+and a dispatch room where several vendor CLIs answer side by side, each column claiming
+only what was measured about that vendor.
 
 > A telltale is the ribbon on a sail that shows true airflow. It doesn't interpret;
 > it just tells you what's actually happening.
 
-**Status: pre-v1, under active development.** Both modes are built. The Claude Code
+**Status: pre-v1, under active development.** All three modes are built. The Claude Code
 adapter is verified against live on-disk data; the Codex adapter had its first
 live-verification pass on 2026-08-01 (Codex Desktop corpus — including a filter for
 Desktop's imported non-Codex transcripts), with the short remainder itemized in
@@ -20,7 +22,10 @@ live-verified against its on-disk store on Cursor 3.14.7 — the first IDE-resid
 here, and the first whose store also holds live credentials, which is why that adapter's
 most load-bearing property is the list of things it does not read
 ([docs/design.md §3.9](docs/design.md),
-[decisions/007](decisions/007-cursor-hud-adapter.md)).
+[decisions/007](decisions/007-cursor-hud-adapter.md)). **`telltale council`** seats Claude
+Code, Codex and Antigravity, and every sandbox and streaming claim in it was measured
+against a live run of that CLI rather than read off its `--help`
+([docs/design.md §9](docs/design.md), [decisions/008](decisions/008-council-mode-dispatch.md)).
 
 Build from source:
 
@@ -107,34 +112,128 @@ mechanism.
   environment). Ships with adapters for **Claude Code**, **Codex CLI**, **Gemini CLI**,
   **Antigravity CLI** and **Cursor (Composer)**, each reading that vendor's own native
   on-disk data — for Antigravity and Cursor that means a read-only SQLite reader written
-  into this repo rather than a 9 MB dependency added to it. One binary, two
-  modes: `telltale statusline` and `telltale hud`. The statusline code path never
-  initializes the TUI framework (the single binary links it, but no Bubble Tea code runs
-  on a statusline invocation).
+  into this repo rather than a 9 MB dependency added to it.
+- **A dispatch room** — `telltale council`, one brief typed once and answered by Claude
+  Code, Codex and Antigravity side by side. The one mode that spawns vendor CLIs instead
+  of reading their files; it gets its own section below.
 - **A documented adapter interface** — one module per vendor — so you can wire in
   anything else that leaves session data on disk. The worked example in
   [docs/design.md §4a.7](docs/design.md) is the method the Gemini adapter was actually
   built with, kept alongside what live verification changed about its guesses.
 
+One binary, three modes: `telltale statusline`, `telltale hud` and `telltale council`.
+The statusline code path never initializes the TUI framework (the single binary links it,
+but no Bubble Tea code runs on a statusline invocation).
+
 Honest claim, stated precisely: *cross-vendor monitoring; vendor-native statusline where
-the seam exists — and it exists twice: Claude Code and Antigravity CLI.* (Codex CLI has
+the seam exists — and it exists twice: Claude Code and Antigravity CLI; dispatch across
+the three vendors that seat a headless CLI here.* (Codex CLI has
 no statusline hook today — see [decisions/001](decisions/001-v1-scope.md). Antigravity
 was statusline-only until a re-survey found the transcript its own docs advertise, which
 is what made its HUD adapter buildable — see
 [decisions/004](decisions/004-antigravity-statusline.md) for the first verdict and
-[decisions/006](decisions/006-antigravity-hud-adapter.md) for the reversal.)
+[decisions/006](decisions/006-antigravity-hud-adapter.md) for the reversal. Cursor is the
+inverse case: a built-in HUD adapter because its seam is on disk, and no council seat,
+because the `cursor` binary on PATH is the editor launcher rather than the headless agent
+— see [decisions/008](decisions/008-council-mode-dispatch.md).)
 
 **The gauges never write.** `telltale statusline` and `telltale hud` read vendor files,
 make no network calls, read no credentials, and no keybinding can mutate vendor state or
-send anything to a running agent. (One subcommand is deliberately outside that boundary:
-`telltale council` is an opt-in dispatch room that spawns vendor CLIs to broadcast one
-prompt to several agents at once — see [decisions/008](decisions/008-council-mode-dispatch.md).
-It is a separate mode, entered on purpose, and it never shares a keybinding with the HUD.)
+send anything to a running agent. `telltale council` is the deliberate exception, and it
+is labelled as one everywhere it can be: it spawns vendor CLIs, it is entered only by
+typing the subcommand, it is not reachable from the HUD, and it shares no keybinding with
+it ([decisions/008](decisions/008-council-mode-dispatch.md)).
 "Reads no credentials" stopped being free with the Cursor adapter — that vendor
 keeps its access tokens, refresh tokens and OAuth secrets in the *same SQLite file* as
 its session state — so it is enforced there as a read allowlist with a test that plants
 credential-shaped strings in the fixtures and asserts none of them reaches anything the
 HUD can display ([decisions/007](decisions/007-cursor-hud-adapter.md)).
+
+## The dispatch room
+
+`telltale council` is one brief, typed once and answered by three vendor CLIs side by
+side — **Claude Code**, **Codex** and **Antigravity**, each in its own column, in your
+terminal. It exists because the alternative is four terminals and a clipboard.
+
+```
+telltale.exe council
+```
+
+```
+ council ~/code/telltale                                                              turn 1  │  3/3 seated  │  no brief
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ▸Claude Code                      done │  Codex                           idle │  Antigravity                     idle 
+ ro:tools  tokens                       │ ro:requested  final only              │ unsandboxed  final only               
+ ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
+ ⚙ Glob                                 │ no turn dispatched yet.               │ no turn dispatched yet.               
+ ⚙ Read                                 │                                       │                                       
+ ⚙ Bash: go test ./...                  │                                       │                                       
+                                        │                                       │                                       
+ Tests pass.                            │                                       │                                       
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ›                                                                                                                      
+ VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 
+```
+
+That frame is the council test suite's `activity` golden
+(`internal/council/testdata/golden/activity.txt`) with its empty rows dropped, and nothing
+else changed. Every claim in the two header lines is made per vendor, never as a blanket:
+
+- **The sandbox badge.** `ro:tools` is Claude under `--disallowedTools` plus
+  `--strict-mcp-config`, and it claims only that *these named tools are absent, verified* —
+  a deny list cannot cover a tool a later release adds. `ro:requested` is Codex, whose
+  `-s read-only` degrades on Windows to every sandboxed spawn failing, including one asked
+  merely to list a directory. `unsandboxed` is Antigravity, which was asked to write a file
+  under both of its own read-only flags and wrote it: refuted, not unverified. That badge
+  deliberately does not open with `ro:`, because a reader scanning three headers takes in
+  the prefix before the qualifier.
+- **The streaming granularity.** Only Claude streams (`tokens`, verified live). Codex and
+  Antigravity were measured to emit nothing at all until the turn ends, so they are
+  labelled `final only` and open on a waiting card that says so, rather than on an empty
+  column that reads as slow streaming.
+- **The clock and the cost.** Each column times its own turn. Cost renders only when the
+  vendor reported one — a turn that reported `$0.0000` shows it, a turn that reported
+  nothing shows no cost cell at all, and telltale never derives a cost from token counts.
+
+The `⚙` lines are the activity trace: what a vendor is *doing* — the tool call, and the
+command it ran — interleaved with what it says.
+
+Routing is deliberate rather than a broadcast. An unaddressed brief goes to **Claude
+alone**, the control-plane default; `@codex`, `@agy` and `@all` address seats on purpose,
+because convening the whole panel by reflex spends two deliberately constrained
+subscription pools on every "hello". Only leading mentions route, so "ask @claude about
+it" stays prose.
+
+Turn 1 is blind. Later turns ride each vendor's own native session resume rather than
+re-sending the transcript, which keeps that guarantee structural: each session holds only
+its own history. `ctrl+r` arms a rebuttal turn — off by default — in which each vendor
+sees the others' last answers, fenced and labelled as untrusted material. `↑`/`↓` scroll
+the focused column, `f` expands it to the full width, `?` lists the keys.
+
+`telltale council` flags: `--cd <dir>` (the workspace turns are dispatched against),
+`--brief <file>`, `--write`, `--ascii`, `--no-title`.
+
+`--brief <file>` (or `TELLTALE_COUNCIL_BRIEF`) hands one file of shared operating context
+to every vendor on its first turn. Without it, the room's default state is three vendors
+guessing separately at a convention you already wrote down. The flag takes a **path**,
+never content: telltale is public and a briefing is not, so no default location inside a
+repo is searched, and the file is never logged, never rendered and never stored by
+telltale. The header says `briefed` or `no brief` on every frame.
+
+`--write` drops the read-only postures. **The containment is the workspace, not the flag**
+— so the room states its posture where it cannot be missed: `⚠ WRITE` in the header for
+the whole session, and the same `WRITES` badge on every column, uniform on purpose because
+grading them would imply a safety difference that does not exist.
+
+```
+git worktree add ../telltale-council
+telltale.exe council --write --cd ../telltale-council
+```
+
+The rest of the account — why execution is argv and never a shell, the silent invocation
+trap each vendor hid, and what is still unverified — is in
+[docs/design.md §9](docs/design.md) and
+[decisions/008](decisions/008-council-mode-dispatch.md), amendments included.
 
 ## The honest-gauge rule
 
