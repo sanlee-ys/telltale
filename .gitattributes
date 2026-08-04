@@ -14,8 +14,11 @@
 # rewrite fails the build rather than passing quietly. This entry is the belt.
 *.jsonl -text -diff
 
-# Golden renders are compared byte for byte at fixed terminal widths.
+# Golden renders are compared byte for byte at fixed terminal widths. Render
+# emits \n, so a CRLF checkout makes every golden differ by one byte per line —
+# on Windows, which is the reference environment AND where CI runs.
 internal/hud/testdata/golden/*.txt -text
+internal/council/testdata/golden/*.txt -text
 
 # SQLite fixtures are binary: page headers, b-tree pointers and WAL checksums.
 # A single byte rewritten in transit fails a checksum, and a checkpoint's worth
