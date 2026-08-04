@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" width="100%" height="100%">
+  <defs>
+    <style>
+      .bg { fill: #ffffff; rx: 12px; }
+      .header-bg { fill: #f6f8fa; }
+      .border { stroke: #d0d7de; stroke-width: 1px; fill: none; }
+      .text-title { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 15px; font-weight: bold; fill: #0969da; }
+      .text-dim { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 13px; fill: #57606a; }
+      .text-normal { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 13px; fill: #24292f; }
+      .text-bold { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 13px; font-weight: bold; fill: #1f2328; }
+      .text-highlight { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 13px; fill: #1a7f37; }
+      .text-warn { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 13px; fill: #9a6700; }
+      
+      /* Vendor Badge Colors */
+      .badge-cc { fill: #b45309; font-weight: bold; } /* Claude Orange */
+      .badge-cx { fill: #047857; font-weight: bold; } /* Codex Green */
+      .badge-ag { fill: #1d4ed8; font-weight: bold; } /* Antigravity Blue */
+      .badge-cu { fill: #6d28d9; font-weight: bold; } /* Cursor Purple */
+      .badge-ge { fill: #be185d; font-weight: bold; } /* Gemini Pink */
+      
+      /* Progress Bar */
+      .bar-fill { fill: #1a7f37; }
+      .bar-bg { fill: #eaeef2; }
+    </style>
+  </defs>
+
+  <!-- Background Window -->
+  <rect x="0" y="0" width="960" height="480" class="bg" />
+  <rect x="0" y="0" width="960" height="480" rx="12" class="border" />
+
+  <!-- Window Header / Title Bar -->
+  <rect x="0" y="0" width="960" height="38" class="header-bg" rx="12" />
+  <rect x="0" y="26" width="960" height="12" class="header-bg" />
+  <circle cx="20" cy="19" r="6" fill="#ff5f56" />
+  <circle cx="40" cy="19" r="6" fill="#ffbd2e" />
+  <circle cx="60" cy="19" r="6" fill="#27c93f" />
+  <text x="480" y="24" text-anchor="middle" class="text-dim">telltale hud — cross-vendor agent telemetry</text>
+  <line x1="0" y1="38" x2="960" y2="38" stroke="#d0d7de" stroke-width="1" />
+
+  <!-- Top Status Line Bar -->
+  <text x="24" y="66" class="text-title">telltale</text>
+  <text x="110" y="66" class="text-dim">│  7 sessions  │</text>
+  
+  <text x="230" y="66" class="badge-cc">claude 2</text>
+  <text x="310" y="66" class="badge-cx">codex 2</text>
+  <text x="385" y="66" class="badge-ge">gemini 1</text>
+  <text x="465" y="66" class="badge-ag">agy 1</text>
+  <text x="520" y="66" class="badge-cu">cursor 1</text>
+  
+  <text x="680" y="66" class="text-dim">5h quota:</text>
+  <rect x="750" y="55" width="100" height="12" rx="3" class="bar-bg" />
+  <rect x="750" y="55" width="88" height="12" rx="3" class="bar-fill" />
+  <text x="860" y="66" class="text-bold">88.4%</text>
+  <text x="915" y="66" class="text-dim">↻3h</text>
+
+  <line x1="24" y1="84" x2="936" y2="84" stroke="#d0d7de" stroke-width="1" />
+
+  <!-- Table Header -->
+  <text x="24" y="110" class="text-dim">  STAT  VENDOR   SESSION / WORKSPACE                          MODEL          CONTEXT WINDOW        AGE</text>
+  <line x1="24" y1="120" x2="936" y2="120" stroke="#eaeef2" stroke-width="1" />
+
+  <!-- Row 1: Claude Code (Active) -->
+  <circle cx="34" cy="143" r="4" fill="#1a7f37" />
+  <text x="48" y="147" class="badge-cc">CC</text>
+  <text x="75" y="147" class="text-dim">│</text>
+  <text x="90" y="147" class="text-bold">telltale</text>
+  <text x="170" y="147" class="text-dim">C:\Users\sanle\code\telltale</text>
+  <text x="510" y="147" class="text-normal">Claude 3.7 Sonnet</text>
+  <text x="660" y="147" class="text-highlight">████████▍─── 68%</text>
+  <text x="900" y="147" class="text-dim">12s</text>
+
+  <!-- Row 2: Cursor (Active) -->
+  <circle cx="34" cy="183" r="4" fill="#1a7f37" />
+  <text x="48" y="187" class="badge-cu">CU</text>
+  <text x="75" y="187" class="text-dim">│</text>
+  <text x="90" y="187" class="text-bold">multi-vendor</text>
+  <text x="210" y="187" class="text-dim">C:\Users\sanle\code\agent-ops</text>
+  <text x="510" y="187" class="text-normal">composer-2.5</text>
+  <text x="660" y="187" class="text-warn">████▍─────── 37%</text>
+  <text x="900" y="187" class="text-dim">1m</text>
+
+  <!-- Row 3: Codex (Active) -->
+  <circle cx="34" cy="223" r="4" fill="#1a7f37" />
+  <text x="48" y="227" class="badge-cx">CX</text>
+  <text x="75" y="227" class="text-dim">│</text>
+  <text x="90" y="227" class="text-bold">architecture</text>
+  <text x="210" y="227" class="text-dim">C:\Users\sanle\code\architecture</text>
+  <text x="510" y="227" class="text-normal">gpt-5.1-codex</text>
+  <text x="660" y="227" class="text-highlight">███████▋──── ~70%</text>
+  <text x="900" y="227" class="text-dim">1m</text>
+
+  <!-- Row 4: Antigravity (Active) -->
+  <circle cx="34" cy="263" r="4" fill="#1a7f37" />
+  <text x="48" y="267" class="badge-ag">AG</text>
+  <text x="75" y="267" class="text-dim">│</text>
+  <text x="90" y="267" class="text-bold">audit-sweep</text>
+  <text x="210" y="267" class="text-dim">C:\Users\sanle\code\portfolio</text>
+  <text x="510" y="267" class="text-normal">Gemini 3.6 Flash</text>
+  <text x="660" y="267" class="text-dim">────────────  —</text>
+  <text x="900" y="267" class="text-dim">2m</text>
+
+  <!-- Row 5: Gemini CLI (Background) -->
+  <circle cx="34" cy="303" r="4" fill="#9a6700" />
+  <text x="48" y="307" class="badge-ge">GE</text>
+  <text x="75" y="307" class="text-dim">│</text>
+  <text x="90" y="307" class="text-bold">glossary-tooltips</text>
+  <text x="250" y="307" class="text-dim">C:\Users\sanle\code\learning-notes</text>
+  <text x="510" y="307" class="text-normal">gemini-3-pro</text>
+  <text x="660" y="307" class="text-dim">────────────  —</text>
+  <text x="900" y="307" class="text-dim">3m</text>
+
+  <!-- Row 6: Claude Code (Background) -->
+  <circle cx="34" cy="343" r="4" fill="#9a6700" />
+  <text x="48" y="347" class="badge-cc">CC</text>
+  <text x="75" y="347" class="text-dim">│</text>
+  <text x="90" y="347" class="text-bold">defense-news</text>
+  <text x="210" y="347" class="text-dim">C:\Users\sanle\code\dnc</text>
+  <text x="510" y="347" class="text-normal">Sonnet 4.5</text>
+  <text x="660" y="347" class="text-highlight">██████████── 82%</text>
+  <text x="900" y="347" class="text-dim">4m</text>
+
+  <!-- Row 7: Codex (Idle) -->
+  <circle cx="34" cy="383" r="4" fill="#8c959f" />
+  <text x="48" y="387" class="badge-cx">CX</text>
+  <text x="75" y="387" class="text-dim">│</text>
+  <text x="90" y="387" class="text-bold">notes-api</text>
+  <text x="180" y="387" class="text-dim">C:\Users\sanle\code\notes-api</text>
+  <text x="510" y="387" class="text-normal">gpt-5.1-codex</text>
+  <text x="660" y="387" class="text-dim">█▍────────── ~12%</text>
+  <text x="900" y="387" class="text-dim">22m</text>
+
+  <!-- Footer Navigation Line -->
+  <line x1="24" y1="420" x2="936" y2="420" stroke="#d0d7de" stroke-width="1" />
+  <text x="24" y="448" class="text-dim">
+    <tspan fill="#0969da">q</tspan> quit   
+    <tspan fill="#0969da">/</tspan> filter   
+    <tspan fill="#0969da">enter</tspan> detail   
+    <tspan fill="#0969da">v</tspan> vendor   
+    <tspan fill="#0969da">s</tspan> sort   
+    <tspan fill="#0969da">a</tspan> all   
+    <tspan fill="#0969da">?</tspan> keys
+  </text>
+  <text x="760" y="448" class="text-highlight">● 4 active  ◐ 2 bg  ○ 1 idle</text>
+</svg>

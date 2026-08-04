@@ -8,6 +8,16 @@ only what was measured about that vendor.
 > A telltale is the ribbon on a sail that shows true airflow. It doesn't interpret;
 > it just tells you what's actually happening.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/telltale-hud-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="images/telltale-hud-light.svg">
+    <img alt="telltale TUI HUD showing cross-vendor agent telemetry" src="images/telltale-hud-dark.svg">
+  </picture>
+</p>
+
+---
+
 **Status: pre-v1, under active development.** All three modes are built. The Claude Code
 adapter is verified against live on-disk data; the Codex adapter had its first
 live-verification pass on 2026-08-01 (Codex Desktop corpus — including a filter for
