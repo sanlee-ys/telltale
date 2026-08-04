@@ -1349,6 +1349,80 @@ contradicted for as long as nobody re-read both in the same session.** The rule 
 when written and the measurement was not wrong when taken; what was missing is the pass that
 asks whether the second still permits the first.
 
+### Amendment, 2026-08-04 (seventeenth): the flags came off, and nothing honest changed
+
+The fifteenth amendment closed with a sentence held open on purpose: *"Whether council should go
+on asking agy for `--mode plan --sandbox` when both are measured to do nothing is an open
+decision (design.md §9.6b) and belongs to the owner."* It was held open because a documentation
+pass that quietly retunes a safety flag is the kind of change this file exists to prevent. The
+owner has now made it, on its own, from a live room:
+
+> *"these shell cmds fail. why? and if they are gonna fail — visually looks meh."*
+
+**The why was already written down.** §9.6b: under `--mode plan --sandbox`, agy's `run_command`
+was refused with *"granting access to C:\: Access is denied."*, the agent gave up, and the whole
+turn ended `status:"ERROR"` with an empty response. The control run with both flags dropped ran
+its shell command and returned `status:"SUCCESS"`. That was recorded as a measurement with its
+confound stated and explicitly not acted on.
+
+**The ruling: `--mode plan --sandbox` are not passed, in either posture.** The ledger is
+one-sided rather than a judgement call:
+
+| | measured | |
+|---|---|---|
+| restriction bought | **none, ever.** Asked to write a file under both flags, agy wrote it; reported permission mode and tool list byte-identical to a run without them, `write_to_file` still present. Refuted, not unproven | second amendment |
+| cost paid | **a dead turn.** The only effect either flag has ever been observed to have is a refused shell call that killed the turn and left the column empty | §9.6b |
+
+Asking for a restriction that has never been observed to restrict anything, at the price of
+turns that die with nothing rendered, is not caution. It is the appearance of caution, paid for
+in the vendor's actual answers. The confound in that measurement is unresolved and does not need
+to be: it bears on *why* the turn died, and this decision needs only *that* it did, set against a
+benefit measured at zero.
+
+**No honesty claim moves, and that is the load-bearing half.** The badge was already
+`unsandboxed`, and it was never keyed to which flags council sent — it was keyed to the write
+having landed. What changes is one clause of `SandboxClaim.Detail`, which ended *"the flags are
+still passed; they do not restrict it"* and cannot go on saying so. A detail that misdescribes
+**council's own behaviour** is the one class of false claim this repo has no excuse for: every
+other claim in this file is about a vendor, where the honest fallback is "not observed", and
+this one is about us, where there is no such fallback. The containment was never these flags and
+is the workspace (third and twelfth amendments); agent-ops ADR-012 rules the same way
+independently.
+
+**The seat's postures are now byte-identical, and that is stated rather than left to be
+noticed.** With both flags gone, agy's read and write invocations are the same argv. The badge
+still differs, because the badge reports the ROOM's posture and not the seat's flags. The
+`Posture` argument stays in the adapter's signature — a seat that quietly stopped accepting it
+would be harder to spot than one that accepts it and has nothing to do with it — and a test pins
+that neither flag reappears on the spawn path or the **resume** path, which is where a posture
+drifts if it is ever going to (the twelfth amendment records exactly that failure on Codex).
+
+**Deliberately not part of this: `--dangerously-skip-permissions`.** Dropping a flag that
+restricted nothing and adding one that approves everything are different acts. The fifth and
+seventh amendments refuse that whole class on both seats that offer it, and nothing here touches
+that.
+
+**The second half of the complaint was the trace, and it was the card §9.11 missed.** That pass
+gave every card in a column one grammar and cited the trace as somewhere the room already did
+it — on the strength of the failure *detail's* indent. The entry itself never got it, so
+`run_command: pwsh -Command "Get-ChildItem"` wrapped to a continuation starting hard against the
+column edge, reading as a second nameless entry with the outcome mark stranded on it. It now
+hangs under its own `⚙`. Two consequences, both found against a real capture rather than by
+reading the code: the reason indents **four**, because at two it would land in the same column
+as the tail of the command it explains and be told apart by colour alone; and the reason is
+**flattened and bounded** — `sanitize` preserves newlines because prose replies are prose, and a
+tool failure's detail is not prose, so a multi-line stderr blob arrived as ragged fragments at
+random widths and one failed call could take the column. Collapsed to one line, capped at three
+rows, clipped with the room's own ellipsis so a clipped reason cannot read as a complete one,
+and `f` expand is the answer to the clip rather than an excuse for it.
+
+The general lesson, in this file's own terms: the fifteenth amendment split "what the room says"
+from "what the room does" and shipped only the first, which was right — and the cost of being
+right is that the second half sits undone until someone spends a session on it. **A deliberately
+deferred decision is still a defect while it is deferred**, and this one had a user-visible
+symptom the whole time: turns that died with nothing in the column, produced by a flag the room
+was passing for a benefit it had already measured at zero.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude

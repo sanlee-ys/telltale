@@ -34,9 +34,9 @@
    unsandboxed  Antigravity                                                                                             
        treat this column as able to change your files, and that is MEASURED rather than assumed: asked to write a file  
        under both --mode plan and --sandbox, it wrote the file, and its reported permission mode and tool list were     
-       identical to a run without them. The flags are still passed; they do not restrict it                             
-                                                                                                                        
-                                                                                                                        
+       identical to a run without them. Council no longer passes either flag: their only observed effect was a turn     
+       that died with an empty column when the agent reached for a shell. The workspace above is the containment, not a 
+       flag                                                                                                             
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

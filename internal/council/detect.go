@@ -608,11 +608,21 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 			// Refuted, not unverified. Asked to write a file under both flags,
 			// it wrote the file; the reported permission mode and tool list
 			// were identical to a run without them.
+			//
+			// The last clause used to read "The flags are still passed; they do
+			// not restrict it". They are not passed any more (ADR-008,
+			// seventeenth amendment) — their only measured effect was killing a
+			// turn outright — and a detail claiming council asks for something
+			// it has stopped asking for would be a false claim about this
+			// tool's own behaviour, which is the one kind this file has no
+			// excuse for.
 			Detail: "treat this column as able to change your files, and that is " +
 				"MEASURED rather than assumed: asked to write a file under both " +
 				"--mode plan and --sandbox, it wrote the file, and its reported " +
 				"permission mode and tool list were identical to a run without them. " +
-				"The flags are still passed; they do not restrict it",
+				"Council no longer passes either flag: their only observed effect was " +
+				"a turn that died with an empty column when the agent reached for a " +
+				"shell. The workspace above is the containment, not a flag",
 		}
 	case model.VendorCursor:
 		// Still the weakest badge in the room, and now for a REASON rather than

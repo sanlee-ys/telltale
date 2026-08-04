@@ -19,7 +19,7 @@ func TestAgyFlagsMatchTheInstalledCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"--output-format", "stream-json", "--mode", "plan", "--sandbox", "--disable-slash-commands", "-p"} {
+	for _, want := range []string{"--output-format", "stream-json", "--disable-slash-commands", "-p"} {
 		if !slices.Contains(spec.Args, want) {
 			t.Errorf("missing %q in %v", want, spec.Args)
 		}

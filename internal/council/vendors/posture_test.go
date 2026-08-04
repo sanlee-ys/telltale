@@ -110,20 +110,45 @@ func TestCodexResumeCarriesTheSamePostureAsSpawn(t *testing.T) {
 	}
 }
 
-// TestAgyWritePostureDropsTheNudges: --mode plan and --sandbox were only ever a
-// read-only-leaning nudge, and ADR-012 records that --sandbox scopes TERMINAL
-// access rather than writes. Keeping them in write mode would restrict
-// something the user just asked to widen while bounding nothing they asked to
-// bound.
-func TestAgyWritePostureDropsTheNudges(t *testing.T) {
+// TestAgyAsksForNothingInEitherPosture.
+//
+// Renamed from TestAgyWritePostureDropsTheNudges, which pinned the read posture
+// as still carrying --mode plan and --sandbox. Those "nudges" were measured to
+// restrict nothing — asked to write a file under both, agy wrote it — and the
+// one effect either flag was ever observed to have was a run_command refusal
+// that killed the whole turn and left an empty column. The owner ruled them off
+// on 2026-08-04 (ADR-008, seventeenth amendment; design.md §9.6b's open
+// decision, closed).
+//
+// So this seat's invocation no longer varies by posture at all, and this test
+// pins that rather than the old asymmetry: a flag reappearing on either side is
+// council asking for a restriction it has measured to be worthless and seen kill
+// a turn. The badge is unaffected either way — it was already `unsandboxed`,
+// because a claim about what restricts this column was never a claim about which
+// flags were sent.
+func TestAgyAsksForNothingInEitherPosture(t *testing.T) {
 	read, _ := Antigravity{}.FirstTurn("brief", `C:\ws`, "agy.exe", PostureRead)
-	if !slices.Contains(read.Args, "--sandbox") {
-		t.Error("read posture dropped the nudge flags")
+	if slices.Contains(read.Args, "--sandbox") || slices.Contains(read.Args, "plan") {
+		t.Errorf("read posture still asks for a refuted restriction: %v", read.Args)
+	}
+	resume, err := Antigravity{}.NextTurn("brief", `C:\ws`, "agy.exe", "conv-1", PostureRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The resume path builds from the same baseArgs, and this is where a
+	// posture drifts if it is ever going to: ADR-008's twelfth amendment
+	// records exactly that failure on the Codex seat, where spawn and resume
+	// take different flags.
+	if slices.Contains(resume.Args, "--sandbox") || slices.Contains(resume.Args, "plan") {
+		t.Errorf("the resume path still carries the dropped flags: %v", resume.Args)
 	}
 
 	write, _ := Antigravity{}.FirstTurn("brief", `C:\ws`, "agy.exe", PostureWrite)
 	if slices.Contains(write.Args, "--sandbox") || slices.Contains(write.Args, "plan") {
 		t.Error("write posture kept flags that restrict terminals without bounding writes")
+	}
+	if !slices.Equal(read.Args, write.Args) {
+		t.Errorf("this seat's postures diverged: read %v vs write %v", read.Args, write.Args)
 	}
 	// The escape hatch stays unmade in BOTH postures. agy's print mode
 	// auto-denies approval-needing tools and points at this flag; passing it

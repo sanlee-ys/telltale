@@ -567,6 +567,16 @@ func TestNoVendorClaimsUnverifiedEnforcement(t *testing.T) {
 	if got := sandboxFor(model.VendorAntigravity, true).Badge(); strings.HasPrefix(got, "ro:") {
 		t.Errorf("agy badge is %q; a vendor that can write must not wear an ro: prefix", got)
 	}
+	// And the detail may not claim council asks for something it has stopped
+	// asking for (ADR-008, seventeenth amendment). Every other claim in this
+	// file is about a VENDOR, where the honest fallback is "not observed"; this
+	// one is about THIS TOOL's own behaviour, where there is no such fallback —
+	// so a stale sentence here is the one class of false claim the repo has no
+	// excuse for. It went stale the moment the flags came off, and nothing else
+	// in the build would have caught it.
+	if d := sandboxFor(model.VendorAntigravity, true).Detail; strings.Contains(d, "still passed") {
+		t.Errorf("the agy detail still claims council passes the dropped flags: %q", d)
+	}
 	// Claude's mechanism is real but is a tool allowlist, not an OS sandbox,
 	// and the badge must not imply otherwise.
 	if got := sandboxFor(model.VendorClaude, true).Level; got != SandboxTools {
