@@ -176,6 +176,14 @@ func (m *Model) dispatch() tea.Cmd {
 	return m.waitEvents()
 }
 
+// posture is what the room is currently asking vendors for.
+func (m *Model) posture() vendors.Posture {
+	if m.st.Write {
+		return vendors.PostureWrite
+	}
+	return vendors.PostureRead
+}
+
 // seatedIn counts how many installed columns a route actually reaches.
 func (m *Model) seatedIn(route Route) int {
 	n := 0
@@ -197,13 +205,14 @@ func itoa(i int) string { return strconv.Itoa(i) }
 // that the vendor refuses is not silently downgraded — ErrNoResume falls back
 // to a first turn, and the column says the thread was lost.
 func (m *Model) specFor(v vendors.Vendor, c *Column, prompt string) (runner.Spec, error) {
+	p := m.posture()
 	if id := m.sessions[c.Vendor]; id != "" {
-		spec, err := v.NextTurn(prompt, m.st.Workspace, c.Binary, id)
+		spec, err := v.NextTurn(prompt, m.st.Workspace, c.Binary, id, p)
 		if err == nil {
 			return spec, nil
 		}
 	}
-	return v.FirstTurn(prompt, m.st.Workspace, c.Binary)
+	return v.FirstTurn(prompt, m.st.Workspace, c.Binary, p)
 }
 
 // waitEvents blocks on one event, then drains what is already queued into a

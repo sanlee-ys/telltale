@@ -72,6 +72,12 @@ func rule(w int, sty Styles, g Glyphs) string {
 // be the same class of omission as a gauge that hid its units.
 func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	left := sty.Identity.Render("council")
+	if st.Write {
+		// Persistent, not a one-off notice. A notice scrolls away and a badge
+		// can be missed while reading a column; the state it describes lasts
+		// the whole session, so its marker does too.
+		left += " " + sty.SevCrit.Render(g.Warn+" WRITE")
+	}
 
 	round := "no turn yet"
 	if st.Turn > 0 {

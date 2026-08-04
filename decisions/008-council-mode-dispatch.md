@@ -166,6 +166,59 @@ Two invocation traps worth recording because both fail silently rather than loud
   Antigravity also does not accept a prompt on stdin, so its brief goes in argv and is subject
   to the ~32K Windows command-line limit.
 
+### Amendment, 2026-08-04 (third): `--write`, and what actually contains this room
+
+The read-only posture was never the containment, and holding three different
+almost-restrictions in the same room made that easy to miss:
+
+- Claude was genuinely restricted (deny list + no MCP).
+- Codex was *broken*-restricted: under `-s read-only` on Windows every sandboxed process
+  spawn fails, including one asked merely to list a directory. It could not run a read.
+- Antigravity was never restricted at all — measured writing a file under both of its own
+  read-only flags.
+
+One contained seat, one crippled seat, one open seat is not a safety posture. And the fleet
+contract settled the question independently: **agent-ops ADR-012 (2026-08-04) rules capability
+parity — all four vendors read and write, and guard wiring rather than lane shape is the
+control.** Nothing in council may be read as "this vendor is read-only"; the badges describe
+what *this tool asked for on this invocation*, never what a vendor is capable of.
+
+So `telltale council --write` exists, and it is honest about what it is:
+
+| | read posture | write posture |
+|---|---|---|
+| Claude | `--disallowedTools <list>` | deny list dropped, `--permission-mode acceptEdits` |
+| Codex | `-s read-only` | `-s workspace-write` (which also un-breaks it) |
+| Antigravity | `--mode plan --sandbox` | both dropped |
+
+Three decisions inside that table are worth stating:
+
+- **`--strict-mcp-config` stays in BOTH postures.** Write mode widens what a vendor may do
+  inside the directory council was pointed at. MCP servers reach *outside* it — the
+  verification run surfaced Gmail write tools — and "may edit this worktree" is a different
+  grant from "may act on your accounts".
+- **Codex gets `workspace-write`, not `danger-full-access`.** The flag should agree with the
+  boundary council actually offers rather than remove it.
+- **`--dangerously-skip-permissions` is NOT passed to Antigravity**, in either posture. ADR-012
+  records that agy's print mode auto-denies approval-needing tools and points at that flag;
+  passing it would auto-approve every tool request, which is a larger grant than `--write`
+  asks for. The consequence is stated rather than papered over: an agy turn in write mode may
+  still refuse a tool, and its column will say so.
+
+**The containment is the workspace, not the flag.** `--cd` already exists, so a write-mode
+room belongs in a throwaway worktree:
+
+```
+git worktree add ../telltale-council
+telltale council --write --cd ../telltale-council
+```
+
+Because that is the real control, the room states its posture where it cannot be missed: a
+persistent `⚠ WRITE` in the header for the whole session, and the same `WRITES` badge on every
+column. Uniform on purpose — the per-vendor gradations are all shades of "how much read-only
+did we manage to ask for", and once the answer is "none", grading them would imply a safety
+difference that does not exist.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude

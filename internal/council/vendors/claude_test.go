@@ -16,7 +16,7 @@ import (
 // would not degrade gracefully: Claude Code would reject the invocation and the
 // column would fail on every turn for a reason no card could explain.
 func TestFlagsMatchTheInstalledCLI(t *testing.T) {
-	spec, err := Claude{}.FirstTurn("brief", `C:\ws`, `C:\bin\claude.exe`)
+	spec, err := Claude{}.FirstTurn("brief", `C:\ws`, `C:\bin\claude.exe`, PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestFlagsMatchTheInstalledCLI(t *testing.T) {
 // these tools are absent from the session; if one drops off this list, the
 // badge on screen becomes a false statement.
 func TestEveryWriteOrExecToolIsDenied(t *testing.T) {
-	spec, _ := Claude{}.FirstTurn("brief", "", "claude")
+	spec, _ := Claude{}.FirstTurn("brief", "", "claude", PostureRead)
 	i := slices.Index(spec.Args, "--disallowedTools")
 	if i < 0 || i+1 >= len(spec.Args) {
 		t.Fatal("no --disallowedTools value")
@@ -70,7 +70,7 @@ func TestEveryWriteOrExecToolIsDenied(t *testing.T) {
 // MCP servers expose. The verification run surfaced Gmail write tools in a
 // session that had every built-in write tool denied.
 func TestMCPServersAreDropped(t *testing.T) {
-	spec, _ := Claude{}.FirstTurn("brief", "", "claude")
+	spec, _ := Claude{}.FirstTurn("brief", "", "claude", PostureRead)
 	if !slices.Contains(spec.Args, "--strict-mcp-config") {
 		t.Error("without --strict-mcp-config the session inherits the user's MCP servers, " +
 			"whose tools the deny list cannot know about")
@@ -110,7 +110,7 @@ func TestNextTurnResumesRatherThanResends(t *testing.T) {
 }
 
 func TestNextTurnWithoutASessionRefuses(t *testing.T) {
-	if _, err := (Claude{}).NextTurn("p", "", "claude", ""); err != ErrNoResume {
+	if _, err := (Claude{}).NextTurn("p", "", "claude", "", PostureRead); err != ErrNoResume {
 		t.Errorf("err = %v, want ErrNoResume", err)
 	}
 }
@@ -202,7 +202,7 @@ func TestParserSurvivesATruncatedStream(t *testing.T) {
 
 func mustFirst(t *testing.T, prompt string) runner.Spec {
 	t.Helper()
-	s, err := Claude{}.FirstTurn(prompt, `C:\ws`, "claude")
+	s, err := Claude{}.FirstTurn(prompt, `C:\ws`, "claude", PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func mustFirst(t *testing.T, prompt string) runner.Spec {
 
 func mustNext(t *testing.T, prompt, sess string) runner.Spec {
 	t.Helper()
-	s, err := Claude{}.NextTurn(prompt, `C:\ws`, "claude", sess)
+	s, err := Claude{}.NextTurn(prompt, `C:\ws`, "claude", sess, PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}

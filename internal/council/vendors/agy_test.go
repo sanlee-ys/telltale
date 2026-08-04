@@ -15,7 +15,7 @@ import (
 
 // TestAgyFlagsMatchTheInstalledCLI pins the flags against `agy --help`.
 func TestAgyFlagsMatchTheInstalledCLI(t *testing.T) {
-	spec, err := Antigravity{}.FirstTurn("brief", `C:\ws`, `C:\bin\agy.exe`)
+	spec, err := Antigravity{}.FirstTurn("brief", `C:\ws`, `C:\bin\agy.exe`, PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestAgyNextTurnResumesRatherThanResends(t *testing.T) {
 }
 
 func TestAgyNextTurnWithoutASessionRefuses(t *testing.T) {
-	if _, err := (Antigravity{}).NextTurn("p", "", "agy", ""); err != ErrNoResume {
+	if _, err := (Antigravity{}).NextTurn("p", "", "agy", "", PostureRead); err != ErrNoResume {
 		t.Errorf("err = %v, want ErrNoResume", err)
 	}
 }
@@ -228,7 +228,7 @@ func TestAgyParserSurvivesATruncatedStream(t *testing.T) {
 
 func mustAgyFirst(t *testing.T, prompt string) runner.Spec {
 	t.Helper()
-	s, err := Antigravity{}.FirstTurn(prompt, `C:\ws`, "agy")
+	s, err := Antigravity{}.FirstTurn(prompt, `C:\ws`, "agy", PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func mustAgyFirst(t *testing.T, prompt string) runner.Spec {
 
 func mustAgyNext(t *testing.T, prompt, sess string) runner.Spec {
 	t.Helper()
-	s, err := Antigravity{}.NextTurn(prompt, `C:\ws`, "agy", sess)
+	s, err := Antigravity{}.NextTurn(prompt, `C:\ws`, "agy", sess, PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}

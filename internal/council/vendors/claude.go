@@ -48,11 +48,11 @@ const deniedTools = "Edit,Write,NotebookEdit,Bash,PowerShell,Task,WebFetch,WebSe
 	"CronCreate,CronDelete,DesignSync,EnterWorktree,ExitWorktree," +
 	"TaskCreate,TaskUpdate,TaskStop,ScheduleWakeup,Monitor"
 
-func (c Claude) FirstTurn(prompt, workspace, binary string) (runner.Spec, error) {
+func (c Claude) FirstTurn(prompt, workspace, binary string, p Posture) (runner.Spec, error) {
 	return runner.Spec{
 		Vendor: c.ID(),
 		Binary: binary,
-		Args:   c.baseArgs(),
+		Args:   c.baseArgs(p),
 		// The prompt goes on stdin, never in argv. Claude Code resolves to a
 		// native .exe here so argv would technically be safe, but stdin also
 		// sidesteps the ~32K Windows command-line limit, which a multi-turn
@@ -62,21 +62,21 @@ func (c Claude) FirstTurn(prompt, workspace, binary string) (runner.Spec, error)
 	}, nil
 }
 
-func (c Claude) NextTurn(prompt, workspace, binary, sessionID string) (runner.Spec, error) {
+func (c Claude) NextTurn(prompt, workspace, binary, sessionID string, p Posture) (runner.Spec, error) {
 	if sessionID == "" {
 		return runner.Spec{}, ErrNoResume
 	}
 	return runner.Spec{
 		Vendor:      c.ID(),
 		Binary:      binary,
-		Args:        append(c.baseArgs(), "--resume", sessionID),
+		Args:        append(c.baseArgs(p), "--resume", sessionID),
 		StdinPrompt: prompt,
 		Dir:         workspace,
 	}, nil
 }
 
-func (c Claude) baseArgs() []string {
-	return []string{
+func (c Claude) baseArgs(p Posture) []string {
+	args := []string{
 		"-p",
 		"--output-format", "stream-json",
 		// --verbose is required with stream-json in print mode; without it the
@@ -87,9 +87,22 @@ func (c Claude) baseArgs() []string {
 		// --strict-mcp-config must accompany the deny list: without it the
 		// session inherits the user's connected MCP servers, whose tools no
 		// fixed list can name in advance.
+		// --strict-mcp-config is kept in BOTH postures, deliberately. Write mode
+		// widens what the vendor may do inside the workspace it was pointed at;
+		// MCP servers reach OUTSIDE it — the verification run surfaced Gmail
+		// write tools — and "may edit this worktree" is a different grant from
+		// "may act on your accounts".
 		"--strict-mcp-config",
-		"--disallowedTools", deniedTools,
 	}
+	if p == PostureWrite {
+		// Verified live in a throwaway directory: with the deny list dropped
+		// and acceptEdits set, print mode creates the file. Without a
+		// permission mode it has nobody to ask and the turn stalls or refuses,
+		// so this flag is what makes write mode functional rather than merely
+		// unrestricted.
+		return append(args, "--permission-mode", "acceptEdits")
+	}
+	return append(args, "--disallowedTools", deniedTools)
 }
 
 // streamLine is the subset of Claude Code's stream-json schema council models.

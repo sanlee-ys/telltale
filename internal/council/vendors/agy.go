@@ -69,13 +69,9 @@ func (Antigravity) ID() model.VendorID { return model.VendorAntigravity }
 // This is the same mistake the Claude adapter made with --allowedTools, caught
 // the same way: by running the command and reading what the session said about
 // itself instead of trusting the flag's name.
-func (Antigravity) baseArgs() []string {
-	return []string{
+func (Antigravity) baseArgs(p Posture) []string {
+	args := []string{
 		"--output-format", "stream-json",
-		// Requested, NOT enforced — see above. No badge may read these as a
-		// sandbox claim.
-		"--mode", "plan",
-		"--sandbox",
 		// A brief is arbitrary user text and may legitimately contain a line
 		// starting with "/". Without this, agy expands that as a slash command or
 		// skill. Effect not separately measured; it is a surface reduction, not a
@@ -88,19 +84,29 @@ func (Antigravity) baseArgs() []string {
 		// expires. That default is also a ceiling on a long turn; it is left at
 		// the vendor's value rather than guessed at here.
 	}
+	if p == PostureRead {
+		// Requested, NOT enforced — see above. No badge may read these as a
+		// sandbox claim. They are dropped in write posture because they were
+		// only ever a read-only-leaning nudge, and agent-ops ADR-012 records
+		// that --sandbox scopes TERMINAL access rather than writes: keeping it
+		// in write mode would restrict something the user just asked to widen,
+		// while bounding nothing they asked to bound.
+		args = append(args, "--mode", "plan", "--sandbox")
+	}
+	return args
 }
 
-func (a Antigravity) FirstTurn(prompt, workspace, binary string) (runner.Spec, error) {
+func (a Antigravity) FirstTurn(prompt, workspace, binary string, p Posture) (runner.Spec, error) {
 	return runner.Spec{
 		Vendor: a.ID(),
 		Binary: binary,
-		Args:   append(a.baseArgs(), "-p", prompt),
+		Args:   append(a.baseArgs(p), "-p", prompt),
 		// StdinPrompt stays empty: agy does not read the prompt from stdin.
 		Dir: workspace,
 	}, nil
 }
 
-func (a Antigravity) NextTurn(prompt, workspace, binary, sessionID string) (runner.Spec, error) {
+func (a Antigravity) NextTurn(prompt, workspace, binary, sessionID string, p Posture) (runner.Spec, error) {
 	if sessionID == "" {
 		return runner.Spec{}, ErrNoResume
 	}
@@ -113,7 +119,7 @@ func (a Antigravity) NextTurn(prompt, workspace, binary, sessionID string) (runn
 		// num_turns 2, continued step_index from the first turn rather than
 		// restarting at 0, and correctly answered a question that only the prior
 		// turn's content could answer.
-		Args: append(a.baseArgs(), "--conversation", sessionID, "-p", prompt),
+		Args: append(a.baseArgs(p), "--conversation", sessionID, "-p", prompt),
 		Dir:  workspace,
 	}, nil
 }

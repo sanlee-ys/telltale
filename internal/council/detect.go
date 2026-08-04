@@ -171,6 +171,26 @@ func kindOf(path string) BinaryKind {
 // Windows because `-s read-only` is OS-enforced on macOS and Linux and its
 // Windows behaviour is not yet verified — claiming enforcement we have not
 // seen would be the exact overstatement this product exists to refuse.
+// postureClaim is what a column advertises, given the room's posture.
+//
+// In write mode every column carries the SAME loud badge, and that uniformity
+// is the point: the per-vendor distinctions below are all shades of "how much
+// read-only did we manage to ask for", and once the answer is "none", grading
+// them would imply a safety difference that does not exist. What contains a
+// write-mode room is the directory it was pointed at, not a flag — so the badge
+// says the plain thing and the header repeats it.
+func postureClaim(v model.VendorID, windows, write bool) SandboxClaim {
+	if write {
+		return SandboxClaim{
+			Level: SandboxWrite,
+			Detail: "started with --write: this column may edit and run things in " +
+				"the workspace above. Containment is that directory, not a flag — " +
+				"point council at a worktree if that matters",
+		}
+	}
+	return sandboxFor(v, windows)
+}
+
 func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 	switch v {
 	case model.VendorClaude:
