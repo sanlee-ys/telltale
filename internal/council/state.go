@@ -81,17 +81,26 @@ const (
 	// SandboxRequested: the flag was passed and the vendor accepted it, but
 	// what it enforces on this platform is not established. The badge says so.
 	SandboxRequested
-	// SandboxNone: the vendor's read-only flags were passed and DEMONSTRABLY do
-	// not restrict it.
+	// SandboxNone: this column has no read-only posture, and that is MEASURED
+	// rather than merely unestablished.
+	//
+	// Two different routes arrive here, and the badge is the same word because
+	// what a reader needs to know is the same in both:
+	//
+	//   - The flags were passed and DEMONSTRABLY do not restrict the vendor.
+	//     Under `--mode plan --sandbox`, Antigravity was asked to write a file
+	//     and did: the file landed on disk, its reported permission mode was
+	//     byte-identical to a run without the flags, and its tool list still
+	//     held write_to_file. A refuted claim, not an unverified one.
+	//   - No read-only flag is passed AT ALL, because none of them work. Codex
+	//     on Windows: both sandboxed modes fail every process spawn, so the
+	//     only mode that runs is `danger-full-access`, and a seat that can read
+	//     is worth more than a flag that stops it reading (ADR-008, twelfth
+	//     amendment).
 	//
 	// This level exists because "unverified" turned out to be too generous for
-	// a real vendor. Under `--mode plan --sandbox`, Antigravity was asked to
-	// write a file and did: the file landed on disk, its reported permission
-	// mode was byte-identical to a run without the flags, and its tool list
-	// still held write_to_file. That is not an unestablished claim, it is a
-	// refuted one, and rendering it as `ro:requested` alongside two vendors
-	// that at least attempt something would imply a posture this vendor does
-	// not have.
+	// either case: rendering `ro:requested` alongside vendors that at least
+	// attempt something would imply a posture these columns do not have.
 	SandboxNone
 	// SandboxWrite: the room was started with --write and no read-only posture
 	// was requested at all.

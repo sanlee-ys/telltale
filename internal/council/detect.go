@@ -458,10 +458,11 @@ func kindOf(path string) BinaryKind {
 // per vendor rather than as a blanket promise (ADR-008 §3).
 //
 // These are the claims the scaffold renders; the flags that back them arrive
-// with each vendor's adapter. Codex reads Requested rather than Enforced on
-// Windows because `-s read-only` is OS-enforced on macOS and Linux and its
-// Windows behaviour is not yet verified — claiming enforcement we have not
-// seen would be the exact overstatement this product exists to refuse.
+// with each vendor's adapter. Codex is the seat where that split is widest:
+// `-s read-only` is OS-enforced on macOS and Linux and reads Enforced there,
+// while on Windows council passes no read-only flag at all and the badge says
+// `unsandboxed` — claiming a posture we have not seen would be the exact
+// overstatement this product exists to refuse, in either direction.
 // postureClaim is what a column advertises, given the room's posture.
 //
 // In write mode the columns that cannot ask all carry the SAME loud badge, and
@@ -557,16 +558,29 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 	case model.VendorCodex:
 		if windows {
 			return SandboxClaim{
-				Level: SandboxRequested,
-				// Measured, and the measurement is stranger than "unverified"
-				// suggests. Under -s read-only every sandboxed process spawn
-				// fails with CreateProcessAsUserW access-denied — including a
-				// spawn asked to merely LIST a directory. So no shell write can
-				// land, but the mechanism is a blanket inability to start a
-				// process, not a read/write distinction. codex's own feature
-				// list shows the Windows sandbox as removed/in flux.
-				Detail: "-s read-only passed; on Windows it degrades to a blanket " +
-					"process-spawn failure rather than a read/write distinction",
+				// NOT SandboxRequested, and the change of level is the honest
+				// part of this branch rather than a downgrade in tone. Council
+				// no longer requests a read-only sandbox from this seat on
+				// Windows: it passes -s danger-full-access, because the two
+				// sandboxed modes were BOTH re-measured on 2026-08-04 failing
+				// every process spawn with CreateProcessAsUserW access-denied —
+				// including one asked merely to list a directory. `read-only`
+				// there is not a read/write distinction, it is a seat that
+				// cannot read, which is exactly how this was found: a live
+				// council turn answered a "thoughts on this repo" brief with "I
+				// could not inspect the repository".
+				//
+				// So the badge must not say ro: anything here. It renders
+				// `unsandboxed` — the same deliberate break of the ro: prefix
+				// SandboxNone was added for, because a reader scanning column
+				// headers takes in the prefix before the qualifier, and this
+				// seat has no sandbox at all on this OS.
+				Level: SandboxNone,
+				Detail: "no sandbox on Windows: -s danger-full-access is passed so this " +
+					"column can read at all. Both sandboxed modes were measured failing " +
+					"every process spawn there, reads included, so read-only was a seat " +
+					"that could not read. The workspace above is the containment, not a " +
+					"flag — point council at a worktree if that matters",
 			}
 		}
 		return SandboxClaim{

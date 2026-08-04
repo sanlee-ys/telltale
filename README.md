@@ -202,12 +202,19 @@ else changed. Every claim in the two header lines is made per vendor, never as a
 
 - **The sandbox badge.** `ro:tools` is Claude under `--disallowedTools` plus
   `--strict-mcp-config`, and it claims only that *these named tools are absent, verified* —
-  a deny list cannot cover a tool a later release adds. `ro:requested` is Codex, whose
-  `-s read-only` degrades on Windows to every sandboxed spawn failing, including one asked
-  merely to list a directory. `unsandboxed` is Antigravity, which was asked to write a file
-  under both of its own read-only flags and wrote it: refuted, not unverified. That badge
-  deliberately does not open with `ro:`, because a reader scanning three headers takes in
-  the prefix before the qualifier.
+  a deny list cannot cover a tool a later release adds. `ro:requested` is a flag that was
+  accepted but whose effect is unestablished. `unsandboxed` is a column with no read-only
+  posture at all, and it deliberately does not open with `ro:`, because a reader scanning
+  three headers takes in the prefix before the qualifier. Antigravity wears it because it
+  was asked to write a file under both of its own read-only flags and wrote it: refuted,
+  not unverified.
+
+  **On Windows, Codex wears it too**, and the frame above is a rendering fixture rather than
+  a capture from any one machine. `-s read-only` and `-s workspace-write` were both measured
+  failing *every* process spawn there — including one asked merely to list a directory — so
+  council passes `-s danger-full-access`, the only mode that runs, and says so. A read-only
+  badge on that seat would be the one false claim in this room that someone would actually
+  rely on. On macOS and Linux the same seat is `ro:enforced` by the OS sandbox.
 - **The streaming granularity.** Only Claude streams (`tokens`, verified live). Codex and
   Antigravity were measured to emit nothing at all until the turn ends, so they are
   labelled `final only` and open on a waiting card that says so, rather than on an empty

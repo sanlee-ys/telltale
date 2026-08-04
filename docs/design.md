@@ -2397,7 +2397,8 @@ all seated vendors when only one had a mechanism named.
 | | mechanism | badge |
 |---|---|---|
 | Claude Code | `--disallowedTools <write/exec list>` + `--strict-mcp-config` | `ro:tools` |
-| Codex | `-s read-only`; on Windows it degrades to a blanket process-spawn failure | `ro:requested` |
+| Codex (macOS/Linux) | `-s read-only`, enforced by the OS sandbox | `ro:enforced` |
+| Codex (Windows) | **no sandbox**: `-s danger-full-access`, the only mode that can spawn a process there | `unsandboxed` |
 | Antigravity | `--mode plan --sandbox` — measured **not** to restrict writes | `unsandboxed` |
 
 There is no level that renders as an unqualified "read-only", and after the live spike there is
@@ -2407,6 +2408,18 @@ byte-identical to a run without the flags. That is refuted, not unverified, so i
 level badged `unsandboxed`. Deliberately not `ro:none`: every other badge opens with `ro:`, a
 reader scanning column headers takes in the prefix before the qualifier, and a vendor that
 can edit your working tree must not read as read-only at a glance.
+
+**Codex is the seat where the OS changes the answer, and on Windows it wears that same
+`unsandboxed` badge.** Re-probed 2026-08-04 against codex-cli 0.146.0: `-s read-only` *and*
+`-s workspace-write` both fail every process spawn there with `CreateProcessAsUserW failed: 5
+(Access is denied.)`, including a control asked merely to list a directory. So "read-only" on
+Windows was never a read/write distinction — it was a seat that could not read, which is
+exactly how this surfaced: a live council turn answered a "thoughts on this repo" brief with
+*"I could not inspect the repository."* Council now passes `-s danger-full-access` on Windows
+in **both** postures, because it is the only mode that runs, and the badge tells the truth
+about that rather than keeping a comfortable word. The containment is the workspace, not the
+flag (ADR-008, third and twelfth amendments). macOS and Linux are untouched and still
+`ro:enforced`.
 
 `TestSandboxBadgesAreNeverBlanket` fails the build if a bare claim reappears, and asserts the
 badges stay distinct — convergence on one string is how a per-vendor claim quietly becomes
@@ -2510,8 +2523,9 @@ Each adapter hit a failure that is silent rather than loud, which is the kind wo
 - **Codex**: `codex exec` and `codex exec resume` **do not take the same flags**. `-s` and `--cd`
   are rejected by `resume` with an argument-parsing error, and a parse error means *empty
   stdout* — a naive resume would blank the column on every follow-up turn with no card able to
-  explain it. Resume carries the posture as `-c sandbox_mode="read-only"` and takes its
-  workspace from `Spec.Dir` alone. The session id is **positional**, not a flag value.
+  explain it. Resume carries the posture as `-c sandbox_mode="<mode>"`, derived from the same
+  function as the spawn path so the two cannot drift, and takes its workspace from `Spec.Dir`
+  alone. The session id is **positional**, not a flag value.
 - **Antigravity**: `-p` is a **string flag whose value is the prompt**, not a boolean. Written in
   the natural order, `agy -p --output-format stream-json "<brief>"` exits 0 and cheerfully
   answers a question about the flag it just swallowed. `-p` must be last, brief immediately
@@ -2602,6 +2616,14 @@ Codex `--json` event schema and delta granularity, whether `codex -s read-only` 
 Windows, and Antigravity's stream-json schema, conversation-id location, stdin support and
 `--sandbox` semantics. Those columns render honest *requested* badges until it says
 otherwise.
+
+**That spike ran, and the Windows sandbox question is closed the other way.** `-s read-only`
+does not engage on Windows in any useful sense: it fails every process spawn, reads included,
+and so does `-s workspace-write`. Codex on Windows is invoked `danger-full-access` and badged
+`unsandboxed` — see the §9.2 table above and ADR-008's twelfth amendment. What remains open on
+this seat is narrower: whether the `-c sandbox_mode=` override actually changes behaviour on
+the *resume* path. The key is accepted; its effect has never been separately observed, and
+until this change every mode failed identically so there was nothing to observe.
 
 One claim in this section is looser than its measurement and is flagged rather than quietly
 corrected, because fixing it is a separate change to a separate surface. The Claude column's

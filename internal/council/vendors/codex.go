@@ -2,6 +2,7 @@ package vendors
 
 import (
 	"encoding/json"
+	"runtime"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -15,6 +16,11 @@ import (
 // `--allowedTools` was specified as the read-only mechanism on the strength of
 // its name and the official docs, and turned out to pre-approve tools rather
 // than remove them. A flag's name is not evidence of its effect.
+//
+// It earned its keep AGAIN in this file on the same date, one level subtler:
+// `-s workspace-write` was documented here as un-breaking codex on Windows. No
+// flag name was misread — the sentence was simply an inference nobody ran. It
+// is false. See windowsSandboxMode for the re-probe that caught it.
 //
 // The two traps this adapter exists to route around:
 //
@@ -36,57 +42,100 @@ var _ Vendor = Codex{}
 
 func (Codex) ID() model.VendorID { return model.VendorCodex }
 
-// sandboxMode is council's requested read-only posture for this vendor.
+// sandboxMode is council's read-only posture for this vendor OFF Windows,
+// where the OS sandbox is real and enforces the read/write distinction.
 //
-// READ THE VERIFICATION BEFORE PUTTING A BADGE ON THIS. The honest claim is
-// "requested", not "enforced", and the difference is not pedantry.
+// READ THE VERIFICATION BEFORE PUTTING A BADGE ON THIS. The Windows story is a
+// different one entirely and is carried by windowsSandboxMode below.
 //
-// What was observed on 2026-08-04, Windows 11, codex-cli 0.146.0:
-//
-//   - Asked to write a file under `-s read-only`, codex tried, and the write
-//     did not happen. The file did not exist afterwards.
-//   - But the failure was `windows sandbox: runner failed during SpawnChild:
-//     CreateProcessAsUserW failed: 5 (Access is denied.)` — a failure to LAUNCH
-//     the child process, not a refusal of a write.
-//   - The control run settles it: asked merely to LIST a directory, the exact
-//     same spawn failed with the exact same error. The sandbox is not
-//     discriminating between reads and writes on this machine. It is failing to
-//     spawn anything at all.
-//
-// So the correct statement is: under `-s read-only` no shell command runs on
-// this machine, which does mean no shell write can land, but the mechanism is a
-// blanket spawn failure rather than demonstrated read-only semantics. If a
-// future codex release fixes Windows sandbox spawning, reads would presumably
-// start working and writes would presumably still be blocked — presumably being
-// the operative word, because that has not been observed here and must not be
-// claimed. `codex features list` shows `experimental_windows_sandbox` and
-// `elevated_windows_sandbox` both as "removed", so this surface is in flux.
-//
-// One further gap, stated rather than papered over: the non-shell write path is
-// UNVERIFIED. Asked to create a file with its built-in patch/edit tool instead
-// of the shell, codex replied "REFUSED" without attempting a tool call. That is
-// a model choice, not evidence of sandbox enforcement, and it means nothing is
-// known about whether the sandbox would have stopped it.
+// One gap on the non-Windows claim, stated rather than papered over: the
+// non-shell write path is UNVERIFIED. Asked to create a file with its built-in
+// patch/edit tool instead of the shell, codex replied "REFUSED" without
+// attempting a tool call. That is a model choice, not evidence of sandbox
+// enforcement, and it means nothing is known about whether the sandbox would
+// have stopped it.
 const sandboxMode = "read-only"
 
-// writeSandboxMode is what write posture asks for.
+// writeSandboxMode is what write posture asks for OFF Windows.
 //
 // workspace-write rather than danger-full-access: the containment council
 // actually offers is the directory it was pointed at, so the vendor flag should
-// agree with that boundary instead of removing it. It also happens to UNBREAK
-// codex on Windows -- under read-only every sandboxed process spawn fails
-// outright, including one asked merely to list a directory, so the read posture
-// costs this vendor the ability to run anything at all.
+// agree with that boundary instead of removing it.
+//
+// It used to carry the parenthetical "which also un-breaks it on Windows".
+// That was never measured, and on 2026-08-04 it was measured and is FALSE. See
+// windowsSandboxMode.
 const writeSandboxMode = "workspace-write"
 
+// windowsSandboxMode is what BOTH postures pass on Windows, and it is the only
+// value under which this seat can run anything there at all.
+//
+// This is the loudest flag in the room and it is not chosen for convenience, so
+// the measurement that forces it is recorded in full. Re-probed 2026-08-04
+// against codex-cli 0.146.0 on Windows 11, in a throwaway directory, one turn
+// per mode, each asked merely to LIST the directory and read a text file:
+//
+//	-s read-only        → every spawn fails, exit_code -1
+//	-s workspace-write  → every spawn fails, exit_code -1
+//	-s danger-full-access → exit_code 0, real listing, real file contents
+//
+// The failure is identical in both sandboxed modes, and it is a failure to
+// LAUNCH rather than a refusal of an operation:
+//
+//	windows sandbox: runner failed during SpawnChild: CreateProcessAsUserW
+//	failed: 5 (Access is denied.) | ... | si_flags=256 | creation_flags=525312
+//	(Windows error 5)
+//
+// Three things follow, and each is a measurement rather than a reading:
+//
+//   - `-s read-only` on Windows is not a read/write distinction. It is a seat
+//     that cannot read. That is the whole of the complaint this constant fixes.
+//   - `-s workspace-write` does NOT un-break it. The third amendment of ADR-008
+//     said it did, in a parenthetical, and nothing had ever run it. So the
+//     WRITE posture was broken on Windows too, silently, for exactly as long.
+//   - `danger-full-access` is the only mode that skips the Windows sandbox
+//     spawn path, so it is the only one that runs. There is no middle setting:
+//     `-c sandbox_permissions=["disk-full-read-access"]`, the escalation the
+//     CLI's own `--config` help advertises, is rejected outright by this build
+//     — "unknown configuration field sandbox_permissions" — so there is no way
+//     to buy back read access while keeping a sandbox.
+//
+// The host-sandbox confound was ruled out rather than assumed: the read-only
+// probe was re-run with the harness's own process sandbox disabled and failed
+// identically, so this is codex's Windows sandbox and not something wrapped
+// around it.
+//
+// Why this is allowed to ship, in one line: **the workspace is the containment,
+// not the flag** (ADR-008 third amendment, on the fleet contract in agent-ops
+// ADR-012). The alternative on this OS is not a safer seat — it is a seat that
+// cannot read the repo it was convened to discuss, which is what San hit live.
+// The badge is what pays for it: this seat renders `unsandboxed` on Windows and
+// must never render `ro:` anything there.
+const windowsSandboxMode = "danger-full-access"
+
 func sandboxFor(p Posture) string {
+	return codexSandboxFor(p, runtime.GOOS == "windows")
+}
+
+// codexSandboxFor is sandboxFor with the OS as an argument, so both branches are
+// reachable from a test on either machine. The Windows branch is the half that
+// was measured; a test that could only run it on Windows would be the half
+// nobody checks — and this file's whole history is claims nobody checked.
+func codexSandboxFor(p Posture, windows bool) string {
+	if windows {
+		// Posture-independent ON PURPOSE. Read and write collapse to one flag
+		// here because every other value fails to spawn, and grading them would
+		// imply a safety difference that does not exist — the same reasoning
+		// ADR-008's third amendment used to give every write column one badge.
+		return windowsSandboxMode
+	}
 	if p == PostureWrite {
 		return writeSandboxMode
 	}
 	return sandboxMode
 }
 
-// resumeSandboxOverride carries the posture onto the resume path.
+// resumeOverrideFor carries the posture onto the resume path.
 //
 // This exists because `codex exec resume` rejects `-s/--sandbox` outright —
 // verified, not inferred: the CLI answers `error: unexpected argument '-s'
@@ -98,21 +147,28 @@ func sandboxFor(p Posture) string {
 // configuration field rather than a typo silently swallowed: `-c` takes
 // arbitrary keys, so the key name was checked with `--strict-config`, which
 // rejects `bogus_key_xyz` ("unknown configuration field") and accepts
-// `sandbox_mode`. The quoted form below is the one that was tested, and it is
-// what Go passes verbatim through argv since no shell is involved.
+// `sandbox_mode`. The quoted form is what Go passes verbatim through argv since
+// no shell is involved.
 //
-// What this does NOT establish: that the override changes runtime behaviour.
-// The key is recognised; its effect was not separately observable, because as
-// documented above every sandboxed spawn already fails on this machine.
-const resumeSandboxOverride = `sandbox_mode="read-only"`
-
-// resumeOverrideFor mirrors sandboxFor through the -c channel, since resume
-// will not take -s.
+// It is derived from the SAME function as the spawn path rather than repeating
+// the branch, which is the point: a resume turn carrying a different posture
+// from its spawn turn would change what the seat can do on turn 2 of a
+// conversation, and the symptom would be a column that answered once and then
+// went quiet. These two shapes have drifted before — that is the entire reason
+// resume takes -c at all — so they are wired to one source instead of kept in
+// step by hand.
+//
+// What this still does NOT establish: that the override changes runtime
+// behaviour on the resume path. The key is recognised; its effect was never
+// separately observed. Until 2026-08-04 it could not be, because every
+// sandboxed spawn failed regardless — now that the Windows value is one that
+// actually runs, this became measurable, and it has not yet been measured.
 func resumeOverrideFor(p Posture) string {
-	if p == PostureWrite {
-		return `sandbox_mode="` + writeSandboxMode + `"`
-	}
-	return resumeSandboxOverride
+	return codexResumeOverrideFor(p, runtime.GOOS == "windows")
+}
+
+func codexResumeOverrideFor(p Posture, windows bool) string {
+	return `sandbox_mode="` + codexSandboxFor(p, windows) + `"`
 }
 
 func (c Codex) FirstTurn(prompt, workspace, binary string, p Posture) (runner.Spec, error) {

@@ -39,25 +39,72 @@ func TestReadPostureStillDenies(t *testing.T) {
 	}
 }
 
-// TestCodexWritePostureAlsoUnbreaksIt: under read-only on Windows every
-// sandboxed spawn fails, including one asked merely to list a directory — so
-// the read posture costs this vendor the ability to run anything at all.
-func TestCodexWritePostureAlsoUnbreaksIt(t *testing.T) {
-	spec, _ := Codex{}.FirstTurn("brief", `C:\ws`, "codex.cmd", PostureWrite)
-	i := slices.Index(spec.Args, "-s")
-	if i < 0 || spec.Args[i+1] != "workspace-write" {
-		t.Fatalf("write posture sandbox = %v, want workspace-write", spec.Args)
+// TestCodexPostureIsPerOS pins BOTH branches, which is the whole point of
+// threading the OS in rather than reading runtime.GOOS inside the branch.
+//
+// This test replaces TestCodexWritePostureAlsoUnbreaksIt, which asserted the
+// flag `workspace-write` and named, in its own title, an effect nobody had run.
+// On 2026-08-04 the effect was run: workspace-write fails every process spawn
+// on Windows exactly as read-only does. The old test passed throughout, because
+// it checked the argv it was given rather than the sentence it was named for —
+// this file's oldest lesson, wearing the newest costume.
+func TestCodexPostureIsPerOS(t *testing.T) {
+	// Off Windows the OS sandbox is real, so the two postures stay graded.
+	if got := codexSandboxFor(PostureRead, false); got != "read-only" {
+		t.Errorf("unix read posture = %q, want read-only (enforced there)", got)
 	}
-	// workspace-write rather than danger-full-access: the flag should agree
-	// with the boundary council actually offers, not remove it.
-	if slices.Contains(spec.Args, "danger-full-access") {
-		t.Error("write posture removed the workspace boundary entirely")
+	if got := codexSandboxFor(PostureWrite, false); got != "workspace-write" {
+		t.Errorf("unix write posture = %q, want workspace-write", got)
+	}
+	// danger-full-access must never leak onto a platform where a real sandbox
+	// works. It is a Windows-only concession, not this adapter's new default.
+	for _, p := range []Posture{PostureRead, PostureWrite} {
+		if got := codexSandboxFor(p, false); got == "danger-full-access" {
+			t.Errorf("unix posture %v removed the sandbox entirely", p)
+		}
 	}
 
-	// Resume carries the posture through -c, because resume rejects -s.
+	// On Windows both collapse to the only mode that can spawn a process at
+	// all. Read is the branch San's complaint was about: a read seat that
+	// answered "I could not inspect the repository".
+	for _, p := range []Posture{PostureRead, PostureWrite} {
+		if got := codexSandboxFor(p, true); got != "danger-full-access" {
+			t.Errorf("windows posture %v = %q, want danger-full-access — every other mode fails to spawn", p, got)
+		}
+	}
+}
+
+// TestCodexResumeCarriesTheSamePostureAsSpawn: the two shapes take different
+// flags (-s is rejected by resume, -c is not), so they are the classic place
+// for a posture to drift. A resume that carried a weaker posture would give the
+// seat a different capability on turn 2 than on turn 1, and the symptom is a
+// column that answers once and then goes quiet.
+func TestCodexResumeCarriesTheSamePostureAsSpawn(t *testing.T) {
+	for _, windows := range []bool{true, false} {
+		for _, p := range []Posture{PostureRead, PostureWrite} {
+			want := `sandbox_mode="` + codexSandboxFor(p, windows) + `"`
+			if got := codexResumeOverrideFor(p, windows); got != want {
+				t.Errorf("resume override (windows=%v, posture=%v) = %q, want %q", windows, p, got, want)
+			}
+		}
+	}
+
+	// And the wiring, on whatever OS this test is running: the spec-building
+	// path has to reach those functions rather than hardcode a mode beside them.
+	spec, _ := Codex{}.FirstTurn("brief", `C:\ws`, "codex.cmd", PostureWrite)
+	i := slices.Index(spec.Args, "-s")
+	if i < 0 || spec.Args[i+1] != sandboxFor(PostureWrite) {
+		t.Fatalf("first turn sandbox = %v, want %q", spec.Args, sandboxFor(PostureWrite))
+	}
+	// Resume must never grow -s back: the CLI answers `error: unexpected
+	// argument '-s' found` and the turn dies at argument parsing with nothing
+	// on stdout, so the column blanks for a reason no card can explain.
 	res, _ := Codex{}.NextTurn("brief", `C:\ws`, "codex.cmd", "sess-1", PostureWrite)
+	if slices.Contains(res.Args, "-s") {
+		t.Error("resume passed -s, which the CLI rejects outright")
+	}
 	if !slices.ContainsFunc(res.Args, func(a string) bool {
-		return strings.Contains(a, "workspace-write")
+		return strings.Contains(a, sandboxFor(PostureWrite))
 	}) {
 		t.Errorf("resume did not carry the write posture: %v", res.Args)
 	}
