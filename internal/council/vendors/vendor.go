@@ -45,6 +45,8 @@ type Vendor interface {
 // unavailable column rather than a guess.
 func Registry() map[model.VendorID]Vendor {
 	return map[model.VendorID]Vendor{
-		model.VendorClaude: Claude{},
+		model.VendorClaude:      Claude{},
+		model.VendorCodex:       Codex{},
+		model.VendorAntigravity: Antigravity{},
 	}
 }

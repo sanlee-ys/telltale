@@ -2387,12 +2387,20 @@ all three when only one had a mechanism named.
 | | mechanism | badge |
 |---|---|---|
 | Claude Code | `--disallowedTools <write/exec list>` + `--strict-mcp-config` | `ro:tools` |
-| Codex | `-s read-only`, OS-enforced on macOS/Linux, unverified on Windows | `ro:enforced` / `ro:requested` |
-| Antigravity | `--mode plan --sandbox`, semantics unestablished | `ro:requested` |
+| Codex | `-s read-only`; on Windows it degrades to a blanket process-spawn failure | `ro:requested` |
+| Antigravity | `--mode plan --sandbox` — measured **not** to restrict writes | `unsandboxed` |
 
-There is no level that renders as an unqualified "read-only". The two that are enforced
-name their mechanism; the one that is not says *requested* out loud. `TestSandboxBadges
-AreNeverBlanket` fails the build if a bare claim reappears.
+There is no level that renders as an unqualified "read-only", and after the live spike there is
+one that renders as the opposite. Antigravity was asked to write a file under both of its
+read-only flags and wrote it — file confirmed on disk, reported permission mode and tool list
+byte-identical to a run without the flags. That is refuted, not unverified, so it gets a fourth
+level badged `unsandboxed`. Deliberately not `ro:none`: every other badge opens with `ro:`, a
+reader scanning three column headers takes in the prefix before the qualifier, and a vendor that
+can edit your working tree must not read as read-only at a glance.
+
+`TestSandboxBadgesAreNeverBlanket` fails the build if a bare claim reappears, and asserts the
+three badges stay distinct — convergence on one string is how a per-vendor claim quietly becomes
+a blanket one again.
 
 **The Claude row cost three attempts to get right, and the failure mode is worth recording.**
 The original ADR claimed enforcement with no mechanism named. The first correction named
@@ -2416,12 +2424,18 @@ verified*, not *this session cannot write*. The general rule this leaves behind:
 is not evidence of its effect**, and the check that matters is what the session reports about
 itself afterwards.
 
-Granularity is the same discipline applied to streaming. Claude's token-level deltas are
-documented and verified; the other two are labelled `events` until a live spike says
-otherwise. A vendor that turns out to emit nothing until it finishes renders `PhaseWaiting`
+Granularity is the same discipline applied to streaming, and the spike made the answer worse
+than the guess. Claude streams token-level deltas, verified live. The other two were
+provisionally labelled `events`, on the reasoning that a coarse stream is still a stream;
+neither streams at all. Codex emits one `item.completed` per complete agent message and has no
+message-delta feature even under development. Antigravity delivers an entire response as a
+single `text_delta` — a one-word reply left its column blank for 73 seconds and then painted at
+once. Both are `GranFinalOnly`. A vendor that emits nothing until it finishes renders `PhaseWaiting`
 — a first-class phase whose card says *"this vendor reports no incremental output, so
 nothing appears until the turn finishes"* — rather than an empty column that looks like
-slow streaming. `TestWaitingIsNotStreaming` asserts the two never render alike. This is
+slow streaming. `TestWaitingIsNotStreaming` asserts the two never render alike. That card was
+added on the theory that some vendor might not stream; it turns out to describe two thirds of
+the room. This is
 §4a.1's rule (a dropped column and an em dash must not read the same) applied to a surface
 where the ambiguity would otherwise be invisible.
 
@@ -2464,18 +2478,42 @@ set by design, so they are blind to it. Anywhere a line is assembled from differ
 pieces — the tab bar, the help body — padding goes through `fit`, which is ANSI-aware.
 `TestFitIsANSIAware` is the regression guard.
 
-### 9.6 Status
+### 9.6 Invocation traps, one per vendor
 
-The room opens, detects vendors, renders both layouts and every degraded state, takes a brief,
-and **dispatches it to Claude Code, streaming token-level deltas into its column**. Cancellation
-kills the process tree; quitting the room kills it too.
+Each adapter hit a failure that is silent rather than loud, which is the kind worth writing down.
 
-Codex and Antigravity are detected and seated but have no adapter yet, so their columns say so
-in words rather than sitting silently idle. Multi-turn resume is implemented in the Claude
-adapter (`--resume` against the session id the stream reports) and exercised by tests; it goes
-live for real once there is more than one column to hold a conversation with.
+- **Claude**: `--allowedTools` pre-approves, it does not restrict (§9.2). Enforcement is
+  `--disallowedTools` + `--strict-mcp-config`.
+- **Codex**: `codex exec` and `codex exec resume` **do not take the same flags**. `-s` and `--cd`
+  are rejected by `resume` with an argument-parsing error, and a parse error means *empty
+  stdout* — a naive resume would blank the column on every follow-up turn with no card able to
+  explain it. Resume carries the posture as `-c sandbox_mode="read-only"` and takes its
+  workspace from `Spec.Dir` alone. The session id is **positional**, not a flag value.
+- **Antigravity**: `-p` is a **string flag whose value is the prompt**, not a boolean. Written in
+  the natural order, `agy -p --output-format stream-json "<brief>"` exits 0 and cheerfully
+  answers a question about the flag it just swallowed. `-p` must be last, brief immediately
+  after, every other flag before it. agy also rejects a prompt on stdin, so its brief goes in
+  argv and is bounded by the ~32K Windows command-line limit — a real ceiling on a long brief,
+  with no workaround short of upstream support.
+
+The shared shape: all three failures produce a *plausible* result rather than an error. That is
+why each one is pinned by a test asserting the argv this repo actually builds.
+
+### 9.7 Status
+
+The room opens, detects all three vendors, renders both layouts and every degraded state, takes
+a brief, and dispatches it. Claude streams token-level deltas; Codex and Antigravity render the
+waiting card and fill at once. Cancellation kills the process tree; quitting the room kills it
+too. Multi-turn resume is implemented for all three against each vendor's own session id.
 
 Not built: the cross-agent rebuttal toggle (§9.4), per-column scrollback, per-vendor cancel.
+
+Known gaps, stated rather than buried. Codex's non-shell write path is untested — asked to
+create a file with its own patch tool it declined, but that was a model choice and says nothing
+about enforcement. Neither vendor was observed producing a failure event on stdout, so the error
+branches are modelled on exit code plus stderr rather than an observed schema. Antigravity's
+`--print-timeout` is left at its 5-minute default, which is a hard ceiling on a long council
+turn and a policy choice worth making deliberately later.
 
 Unverified and scheduled as a live spike before the Codex and Antigravity columns ship: the
 Codex `--json` event schema and delta granularity, whether `codex -s read-only` engages on

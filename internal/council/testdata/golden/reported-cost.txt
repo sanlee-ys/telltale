@@ -2,7 +2,7 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸Claude Code                      done │  Codex                           idle │  Antigravity                     idle 
  ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
- ro:tools  tokens  $0.0123              │ ro:requested  events                  │ ro:requested  events                  
+ ro:tools  tokens  $0.0123              │ ro:requested  final only              │ unsandboxed  final only               
                                         │                                       │                                       
  Resume beats re-sending.               │ no turn dispatched yet.               │ no turn dispatched yet.               
                                         │                                       │                                       

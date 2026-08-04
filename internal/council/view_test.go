@@ -55,17 +55,19 @@ func room() State {
 			Sandbox: SandboxClaim{Level: SandboxTools, Detail: "tool allowlist"},
 			Gran:    GranTokens, Phase: PhaseIdle,
 		},
+		// The fixture mirrors what the live vendors actually measured to, so the
+		// goldens show the room a user really sees rather than an optimistic one.
 		{
 			Vendor: model.VendorCodex, Label: "Codex",
 			Avail:   AvailInstalled,
-			Sandbox: SandboxClaim{Level: SandboxRequested, Detail: "unverified on windows"},
-			Gran:    GranEvents, Phase: PhaseIdle,
+			Sandbox: SandboxClaim{Level: SandboxRequested, Detail: "degrades to a spawn failure on windows"},
+			Gran:    GranFinalOnly, Phase: PhaseIdle,
 		},
 		{
 			Vendor: model.VendorAntigravity, Label: "Antigravity",
 			Avail:   AvailInstalled,
-			Sandbox: SandboxClaim{Level: SandboxRequested, Detail: "unverified"},
-			Gran:    GranEvents, Phase: PhaseIdle,
+			Sandbox: SandboxClaim{Level: SandboxNone, Detail: "measured not to restrict writes"},
+			Gran:    GranFinalOnly, Phase: PhaseIdle,
 		},
 	}
 	return st
@@ -148,15 +150,27 @@ func TestWaitingIsNotStreaming(t *testing.T) {
 // state a posture per vendor, and must never render an unqualified "read-only".
 func TestSandboxBadgesAreNeverBlanket(t *testing.T) {
 	got := render(room())
-	for _, want := range []string{"ro:tools", "ro:requested"} {
+	for _, want := range []string{"ro:tools", "ro:requested", "unsandboxed"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing per-vendor sandbox badge %q", want)
 		}
 	}
+	// Three vendors, three DIFFERENT badges. If they ever converge on one
+	// string the room has started making a blanket claim again, which is the
+	// specific thing ADR-008 was amended twice to stop.
+	if strings.Count(got, "ro:tools") != 1 || strings.Count(got, "unsandboxed") != 1 {
+		t.Error("the badges are no longer per-vendor")
+	}
 	// The bare claim, with no mechanism named, is the thing that was wrong in
 	// the first draft of the ADR. It must not come back.
+	//
+	// "unsandboxed" is stripped before the check rather than added to the
+	// allowed list: it is the exact OPPOSITE claim, and a substring search that
+	// cannot tell the two apart would fail the honest badge for containing the
+	// dishonest one.
+	bare := strings.ReplaceAll(got, "unsandboxed", "")
 	for _, banned := range []string{"read-only sandbox", "sandboxed", "ro:enforced"} {
-		if strings.Contains(got, banned) {
+		if strings.Contains(bare, banned) {
 			t.Errorf("frame makes an unearned blanket claim: %q", banned)
 		}
 	}

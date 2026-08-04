@@ -188,8 +188,16 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 	case model.VendorCodex:
 		if windows {
 			return SandboxClaim{
-				Level:  SandboxRequested,
-				Detail: "-s read-only passed; OS-level enforcement on Windows is unverified",
+				Level: SandboxRequested,
+				// Measured, and the measurement is stranger than "unverified"
+				// suggests. Under -s read-only every sandboxed process spawn
+				// fails with CreateProcessAsUserW access-denied — including a
+				// spawn asked to merely LIST a directory. So no shell write can
+				// land, but the mechanism is a blanket inability to start a
+				// process, not a read/write distinction. codex's own feature
+				// list shows the Windows sandbox as removed/in flux.
+				Detail: "-s read-only passed; on Windows it degrades to a blanket " +
+					"process-spawn failure rather than a read/write distinction",
 			}
 		}
 		return SandboxClaim{
@@ -198,8 +206,13 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 		}
 	case model.VendorAntigravity:
 		return SandboxClaim{
-			Level:  SandboxRequested,
-			Detail: "--mode plan --sandbox passed; what they enforce is unverified",
+			Level: SandboxNone,
+			// Refuted, not unverified. Asked to write a file under both flags,
+			// it wrote the file; the reported permission mode and tool list
+			// were identical to a run without them.
+			Detail: "--mode plan --sandbox are passed but do not restrict it: asked " +
+				"to write a file under both, it wrote the file. Treat this column " +
+				"as able to change your workspace",
 		}
 	default:
 		return SandboxClaim{}
@@ -208,16 +221,27 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 
 // granularityFor is how finely a vendor reports progress.
 //
-// Only Claude's is verified (token-level deltas, from the documented
-// stream-json event shape). The other two are stated as the weaker claim until
-// the spike says otherwise, because guessing high here would put a "streaming"
-// label on a column that is actually silent until it finishes.
+// All three are now measured rather than assumed, and the measurement was worse
+// than the guess for two of them. The provisional label for Codex and
+// Antigravity was "events", on the reasoning that a coarse stream is still a
+// stream. Live runs say otherwise:
+//
+//   - Codex emits one item.completed per COMPLETE agent message. There are no
+//     message deltas; its own feature list has none under development.
+//   - Antigravity emits a whole agent response as a single text_delta when the
+//     step goes ACTIVE. A one-word reply left the column empty for 73 seconds
+//     and then painted at once.
+//
+// Both are therefore GranFinalOnly, which starts their columns in PhaseWaiting
+// and renders the card that says no incremental output is coming. That card was
+// built for a case we hoped would not arrive; it turns out to be two thirds of
+// the room.
 func granularityFor(v model.VendorID) Granularity {
 	switch v {
 	case model.VendorClaude:
 		return GranTokens
 	case model.VendorCodex, model.VendorAntigravity:
-		return GranEvents
+		return GranFinalOnly
 	default:
 		return GranUnknown
 	}

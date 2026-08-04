@@ -78,6 +78,18 @@ const (
 	// SandboxRequested: the flag was passed and the vendor accepted it, but
 	// what it enforces on this platform is not established. The badge says so.
 	SandboxRequested
+	// SandboxNone: the vendor's read-only flags were passed and DEMONSTRABLY do
+	// not restrict it.
+	//
+	// This level exists because "unverified" turned out to be too generous for
+	// a real vendor. Under `--mode plan --sandbox`, Antigravity was asked to
+	// write a file and did: the file landed on disk, its reported permission
+	// mode was byte-identical to a run without the flags, and its tool list
+	// still held write_to_file. That is not an unestablished claim, it is a
+	// refuted one, and rendering it as `ro:requested` alongside two vendors
+	// that at least attempt something would imply a posture this vendor does
+	// not have.
+	SandboxNone
 )
 
 // SandboxClaim is one column's posture, as a claim we are willing to defend.
@@ -241,6 +253,13 @@ func (c SandboxClaim) Badge() string {
 		return "ro:enforced"
 	case SandboxRequested:
 		return "ro:requested"
+	case SandboxNone:
+		// Deliberately not spelled with an "ro:" prefix. Every other badge
+		// begins that way, and a reader scanning three column headers reads the
+		// prefix before the qualifier — so "ro:none" would land as a read-only
+		// posture at a glance. This vendor has none, and the word has to break
+		// the pattern to say so.
+		return "unsandboxed"
 	default:
 		return ""
 	}

@@ -2,7 +2,7 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸Claude Code                      done │  Codex                         failed │  Antigravity                cancelled 
  ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
- ro:tools  tokens                       │ ro:requested  events                  │ ro:requested  events                  
+ ro:tools  tokens                       │ ro:requested  final only              │ unsandboxed  final only               
                                         │                                       │                                       
  Use the native resume path. Re-sending │                                       │ Partly agree, though the              
  the transcript grows input             │                                       │                                       

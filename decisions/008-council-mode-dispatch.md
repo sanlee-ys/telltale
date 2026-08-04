@@ -32,8 +32,8 @@ Following a live independent review by **Codex** (`codex exec`), two critical re
    | Vendor | Mechanism | What it actually enforces |
    |---|---|---|
    | Claude Code | `--disallowedTools <write/exec list>` + `--strict-mcp-config` | **Verified absent** — the named tools are not in the session, checked by reading the session's own reported tool list. A deny list cannot cover a tool a future release adds. |
-   | Codex | `-s read-only` | **Enforced** at OS level on macOS/Linux. On Windows, unverified — a `codex-windows-sandbox-setup.exe` ships in the vendored package, but whether it engages is unproven. Badge downgrades to *requested* until a live spike proves it. |
-   | Antigravity | `--mode plan --sandbox` | **Requested, unverified.** The flags exist; their semantics are not established. |
+   | Codex | `-s read-only` | **Requested on Windows.** Measured: every sandboxed process spawn fails with `CreateProcessAsUserW` access-denied — including one asked merely to list a directory. No shell write can land, but the mechanism is a blanket spawn failure, not a read/write distinction. Enforced on macOS/Linux. |
+   | Antigravity | `--mode plan --sandbox` | **Refuted.** Asked to write a file under both flags, it wrote the file. Reported permission mode and tool list were identical to a run without them. Badge is `unsandboxed`, with no `ro:` prefix. |
 
    Each column renders its own badge (`ro:enforced` / `ro:tools` / `ro:requested`). There is no
    blanket read-only claim anywhere in the UI.
@@ -129,6 +129,42 @@ a tool that does not exist yet. The claim is *"these named tools are absent, ver
 The general lesson, which is why this is written down rather than quietly fixed: **a flag's
 name is not evidence of its effect.** The verification that mattered was not reading `--help`,
 it was reading what the session reported about itself afterwards.
+
+### Amendment, 2026-08-04 (second): the live spike refuted one sandbox claim outright
+
+Codex and Antigravity were both run for real before their adapters shipped. Two results
+changed what this ADR is allowed to say.
+
+**Antigravity does not enforce anything.** Under `--mode plan --sandbox` it was asked to write
+a file, and it wrote the file — confirmed on disk. Its reported `permission_mode` was byte
+identical to a run without the flags, and its tool list still held `write_to_file`,
+`replace_file_content` and `run_command`. This is not an unestablished claim, it is a refuted
+one. A fourth sandbox level (`SandboxNone`) was added for it, badged `unsandboxed` rather than
+`ro:none`: every other badge starts with `ro:`, a reader scanning three headers takes in the
+prefix before the qualifier, and this vendor must not read as read-only at a glance.
+
+**Codex's Windows sandbox degrades to something odd rather than something safe.** `-s read-only`
+does prevent a write, but only because every sandboxed process spawn fails outright — the
+control run, asked to list a directory, failed identically. `codex features list` reports the
+Windows sandbox surfaces as removed. The badge stays *requested*.
+
+**Neither vendor streams.** Codex emits one `item.completed` per complete agent message and has
+no message-delta feature. Antigravity delivers a whole response as a single `text_delta`; a
+one-word reply left its column empty for 73 seconds and then painted at once. Both are
+therefore `GranFinalOnly` and open in `PhaseWaiting`. The waiting card, added on the theory that
+some vendor might not stream, turns out to describe two thirds of the room.
+
+Two invocation traps worth recording because both fail silently rather than loudly:
+
+- `codex exec` and `codex exec resume` **do not accept the same flags.** `-s` and `--cd` are
+  rejected by `resume` with an argument-parsing error, which produces empty stdout — a naive
+  resume would blank the column every follow-up turn with nothing to explain it. Resume carries
+  the posture as `-c sandbox_mode="read-only"` instead.
+- `agy`'s `-p` is a **string flag whose value is the prompt**, not a boolean. Written in the
+  natural order, `agy -p --output-format stream-json "<brief>"` exits 0 and cheerfully answers a
+  question about the flag it swallowed. `-p` must come last, with the brief immediately after.
+  Antigravity also does not accept a prompt on stdin, so its brief goes in argv and is subject
+  to the ~32K Windows command-line limit.
 
 ## Verification status
 
