@@ -320,6 +320,20 @@ Mouse wheel scrolling is deliberately absent, and the measurement is written dow
 wheel means claiming the left button too — and that costs native click-drag selection of
 the very answers this room exists to produce.
 
+**Taking an answer out of the room.** `y` copies the focused column's reply; `Y` copies the
+whole current turn — every seat that took part, each under its own heading, with the brief
+that produced it at the top, so it pastes into a document as a readable record rather than
+as four anonymous blocks. Both take the same sanitized text the screen is showing, never the
+raw stream, and a notice says what was copied because the mechanism cannot report back:
+`y` while a vendor is waiting on a gate still means **approve**, and yank simply does not
+exist until you have answered.
+
+The mechanism is OSC 52 — an escape sequence handed to your terminal — which needs no
+clipboard library and no temp file. Its honest limit: the sequence carries no
+acknowledgement, so council cannot know whether your terminal honoured it. Windows Terminal
+accepts OSC 52 in current builds; over `ssh` or `tmux` it may be disabled by the terminal's
+own configuration. One keystroke settles it on your machine — press `y`, then paste.
+
 **The room remembers.** Each column keeps its whole conversation, oldest turn first: a
 separator naming the turn, the brief *you* typed as that seat received it, then what it
 answered, with the time and cost that turn reported. Dispatching a new turn files the

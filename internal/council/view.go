@@ -1787,7 +1787,15 @@ func helpKeys(sty Styles) []string {
 		// One line, like pgup/pgdn below and for the same reason: the panel has
 		// to fit a 24-row terminal with q and ? still on screen.
 		"  /cd <dir>    move the room to another repo — seats follow on their next turn",
-		"  y / n        approve or deny a tool call a vendor is blocked on (--write)",
+		// One row for three keys, and the merge is the honest shape rather than
+		// a saving. The panel's budget is hard (17 rows, above) and yank had to
+		// land inside it — a copy key documented below the fold is a copy key
+		// nobody finds — but the real reason these belong together is that they
+		// COLLIDE. `y` means two things depending on whether a vendor is
+		// blocked, gateKey resolves it, and the one place a reader could learn
+		// that is the line that names both. Splitting them into two rows would
+		// have spent a row to make the collision harder to see.
+		"  y / Y        copy this seat's reply, or the whole turn — while a gate waits, y/n answer it",
 		"  esc          leave compose (the draft is kept)",
 		// The "in compose too" clauses are the whole of this change on this
 		// panel. These keys always worked; what no one could find out is that

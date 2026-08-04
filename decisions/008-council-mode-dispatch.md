@@ -1488,6 +1488,76 @@ and still wrong to print, if where it prints is where someone came to read somet
 Every amendment before this asked whether the room says the truth; this is the first to ask how
 much of the room the truth is allowed to take up.
 
+### Amendment, 2026-08-04 (nineteenth): a way to take an answer out of the room
+
+Council exists to put several vendors' answers where they can be compared, and had no way to
+take one *away*. The tenth amendment's own framing names the want and then walks past it —
+answers are put side by side "so they can be read and taken away" — and the taking-away was a
+mouse selection this room had already decided not to help with (design.md §9.10 rejects mouse
+support, partly to protect native click-drag selection). That refusal protected a workaround.
+It did not build a feature. San's ruling was one line: *"go with your yank key suggestion."*
+
+**`y` copies the focused column's reply; `Y` copies the whole turn, labelled per seat.** Two
+keys rather than one with a modifier, because they produce different documents, and `shift` for
+the wider version of a motion is what this room already does with `g` and `G`.
+
+**What is copied is the sanitized `Body` the renderer shows, and the three things it is not are
+each a rule this file already holds.** Not the raw stream — everything on `State` has been
+through the redaction choke point, and a clipboard is a *worse* place for a credential than a
+screen because it outlives the room. Not the trace — what a seat did and what it said are
+different kinds of claim, and that does not stop being true because the destination is a
+document. Not a neighbour's — it addresses the **focused** column, the one every scroll key
+addresses, because a copy key that took from elsewhere would be design.md §9.12's failure with
+a clipboard attached.
+
+`Y` carries the brief at the top, because four answers to a question the file does not contain
+are unreadable a week later; it carries only the principal's words and not what rode along with
+them, which is the tenth amendment's echo boundary applied to a file; and it includes only
+seats that took **this** turn, because a seat that sat out still holds an older reply and
+filing that under this turn's heading would be the room inventing a conversation into a
+document, where it outlives every chance to notice.
+
+**The key collision was already resolved and is now asserted.** `y` approves a tool call a
+vendor is blocked on (seventh amendment). Gate mode outranks view mode — `key()` routes a
+pending gate to `gateKey`, which answers `y` itself rather than falling through — so the
+approve key keeps the letter it has always had and yank does not exist while a vendor is
+stopped. That was already true; what is new is a test pinning it, because losing that race
+would mean a keystroke the user believes approved a write quietly copying text instead, and
+their next move would be to press it again. In compose mode `y` is the letter y.
+
+**The mechanism is OSC 52 and its limit is stated rather than glossed.** Read off the installed
+module rather than the internet, because v1 answers for this are wrong:
+`charm.land/bubbletea/v2@v2.0.8` returns a `Cmd` whose message becomes
+`ansi.SetSystemClipboard`, emitting `ESC ] 52 ; c ; <base64> BEL` unconditionally — no
+capability probe and nothing that can decline observably. Three claims at three strengths: the
+key produces the command with the right text (**measured**, by calling the Cmd); the sequence
+reaches the terminal (**read from the module source**); the terminal honours it (**INFERRED**
+— Windows Terminal accepts OSC 52 in current builds, not run here). The last cannot be closed
+from inside this repo, because the only observer that could settle it sends nothing back. So
+the notice claims what council **did**, never what the machine now holds, and the check is a
+person pressing `y` and then `ctrl+v`. That same silence is why the notice is not decoration:
+it is the only feedback the key gives, and a silent copy would be indistinguishable from a
+terminal that ignored the sequence.
+
+**An empty yank issues no command.** Writing `""` through OSC 52 is the documented way to
+*clear* a clipboard, so a copy key that found nothing would silently destroy whatever the user
+had — the most expensive possible spelling of "nothing happened".
+
+**DECLINED: a `~/.telltale/council/last-turn.md` fallback.** It would work in any terminal and
+needs no escape sequence, which makes refusing it worth an argument. The **ninth amendment
+ratified council writing exactly one file and ruled what may be in it: keys, not content** —
+session ids and no transcript, because each vendor already stores its own history and anything
+copied there would be a second copy of a private conversation in a location the user never
+chose. A file of four vendors' answers in the state directory is exactly that, and it would
+break that rule in the same release as a mechanism that needs **no disk at all**. The
+terminal-support residual is real and is paid in a notice, not in a contract.
+
+The general lesson, in this file's own terms: design.md §9.10 measured a fix, refused it for a
+good reason, and wrote the refusal down — the process working. What it never asked is what the
+user had been trying to *do* when they reached for the mouse. The answer was not "scroll", it
+was "take this answer with me", and that want went unnamed for two sections because the request
+arrived wearing the costume of a mechanism.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude
