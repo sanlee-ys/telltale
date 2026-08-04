@@ -139,7 +139,7 @@ func TestARoomRecordingNoTurnsIsRefused(t *testing.T) {
 		t.Fatal("a room recording no turns was restored")
 	}
 
-	m := newWithBrief(Options{}, Brief{}, re)
+	m := newWithBrief(Options{}, Brief{}, HookSet{}, re)
 	if len(m.sessions) != 0 {
 		t.Error("a refused room restored sessions anyway")
 	}
@@ -362,7 +362,7 @@ func TestTheSavedRoomHoldsKeysAndNeverContent(t *testing.T) {
 	draft := "what should we do about the seat"
 
 	m := newWithBrief(Options{Dir: "/home/dev/code/telltale"},
-		Brief{Path: "/home/dev/private/brief.md", Text: secret}, Reattachment{})
+		Brief{Path: "/home/dev/private/brief.md", Text: secret}, HookSet{}, Reattachment{})
 	m.st.Turn = 2
 	m.st.Draft = draft
 	m.sessions[model.VendorClaude] = "claude-sess-1"
@@ -428,7 +428,7 @@ func TestTheSavedRoomHoldsKeysAndNeverContent(t *testing.T) {
 // directory and immediately quit.
 func TestNothingIsWrittenBeforeTheFirstTurn(t *testing.T) {
 	home := tempHome(t)
-	m := newWithBrief(Options{Dir: "/home/dev/code/telltale"}, Brief{}, Reattachment{})
+	m := newWithBrief(Options{Dir: "/home/dev/code/telltale"}, Brief{}, HookSet{}, Reattachment{})
 	m.saveRoom()
 
 	if _, err := os.Stat(filepath.Join(home, ".telltale", "council")); !os.IsNotExist(err) {
@@ -477,7 +477,7 @@ func TestAgeIsCoarserThanASecond(t *testing.T) {
 
 func reattachedModel(t *testing.T, room SavedRoom, opts Options) *Model {
 	t.Helper()
-	return newWithBrief(opts, Brief{}, Reattachment{
+	return newWithBrief(opts, Brief{}, HookSet{}, Reattachment{
 		Path: "/home/dev/.telltale/council/abc.json",
 		Room: room,
 	})
@@ -564,7 +564,7 @@ func TestOnlyASeatedColumnIsMarkedRestored(t *testing.T) {
 func TestASavedRoomYouDidNotAskForIsMentionedBeforeItIsReplaced(t *testing.T) {
 	tempHome(t)
 	ws := resolveWorkspace("")
-	m := newWithBrief(Options{}, Brief{}, Reattachment{
+	m := newWithBrief(Options{}, Brief{}, HookSet{}, Reattachment{
 		Path:    "/home/dev/.telltale/council/abc.json",
 		Room:    savedRoom(ws),
 		Offered: true,
@@ -586,7 +586,7 @@ func TestASavedRoomYouDidNotAskForIsMentionedBeforeItIsReplaced(t *testing.T) {
 
 func TestAnIgnoredSavedRoomSaysSoAndStartsFresh(t *testing.T) {
 	tempHome(t)
-	m := newWithBrief(Options{}, Brief{}, Reattachment{
+	m := newWithBrief(Options{}, Brief{}, HookSet{}, Reattachment{
 		Path:    "/home/dev/.telltale/council/abc.json",
 		Ignored: "the saved room file is not readable json",
 	})
@@ -630,7 +630,7 @@ func TestAFreshRoomGainsNothing(t *testing.T) {
 // NOT re-send the brief: that context is already in the history being replayed.
 func TestFirstDispatchAfterReattachResumesTheThread(t *testing.T) {
 	tempHome(t)
-	m := newWithBrief(Options{}, Brief{Path: "p", Text: "OPERATING CONTEXT"}, Reattachment{
+	m := newWithBrief(Options{}, Brief{Path: "p", Text: "OPERATING CONTEXT"}, HookSet{}, Reattachment{
 		Room: SavedRoom{
 			Workspace: resolveWorkspace(""),
 			Turn:      3,
@@ -676,7 +676,7 @@ func (refusingVendor) NextTurn(prompt, workspace, binary, sessionID string, p ve
 // TestAStaleIdOnASpawnPerTurnSeatIsDroppedAfterOneTurn.
 func TestAVendorThatCannotBuildAResumeStartsFreshAndIsBriefed(t *testing.T) {
 	tempHome(t)
-	m := newWithBrief(Options{}, Brief{Path: "p", Text: "OPERATING CONTEXT"}, Reattachment{
+	m := newWithBrief(Options{}, Brief{Path: "p", Text: "OPERATING CONTEXT"}, HookSet{}, Reattachment{
 		Room: SavedRoom{
 			Workspace: resolveWorkspace(""),
 			Turn:      3,
@@ -704,17 +704,19 @@ type recordingSeat struct {
 	resumeCalls  int
 	sessionCalls int
 	lastID       string
+	lastHooks    string
 }
 
-func (r *recordingSeat) Session(workspace, binary string, p vendors.Posture) (runner.Spec, error) {
+func (r *recordingSeat) Session(workspace, binary, hooksFile string, p vendors.Posture) (runner.Spec, error) {
 	r.sessionCalls++
-	return r.Claude.Session(workspace, binary, p)
+	return r.Claude.Session(workspace, binary, hooksFile, p)
 }
 
-func (r *recordingSeat) SessionResume(workspace, binary, sessionID string, p vendors.Posture) (runner.Spec, error) {
+func (r *recordingSeat) SessionResume(workspace, binary, hooksFile, sessionID string, p vendors.Posture) (runner.Spec, error) {
 	r.resumeCalls++
 	r.lastID = sessionID
-	return r.Claude.SessionResume(workspace, binary, sessionID, p)
+	r.lastHooks = hooksFile
+	return r.Claude.SessionResume(workspace, binary, hooksFile, sessionID, p)
 }
 
 // TestARestoredThreadIsSpentExactlyOnce is the property that keeps a stale id
@@ -727,7 +729,10 @@ func (r *recordingSeat) SessionResume(workspace, binary, sessionID string, p ven
 // on a binary that does not exist, and the id is gone regardless.
 func TestARestoredThreadIsSpentExactlyOnce(t *testing.T) {
 	tempHome(t)
-	m := newWithBrief(Options{}, Brief{}, Reattachment{
+	// A real hooks path, so the guard assertion below is a claim rather than
+	// two empty strings agreeing with each other.
+	hooksPath := filepath.Join(t.TempDir(), "council-hooks.json")
+	m := newWithBrief(Options{Write: true}, Brief{}, HookSet{Path: hooksPath}, Reattachment{
 		Room: SavedRoom{
 			Workspace: resolveWorkspace(""),
 			Turn:      1,
@@ -750,6 +755,13 @@ func TestARestoredThreadIsSpentExactlyOnce(t *testing.T) {
 	}
 	if seat.lastID != "claude-sess-1" {
 		t.Errorf("resumed with %q, want the restored id", seat.lastID)
+	}
+	// The reattached seat carries the user's own hook guard, like every other
+	// seat. Reattaching restores a CONVERSATION; a seat that came back without
+	// the guard while the badge still claimed it was wired would be the
+	// quietest false claim in the room.
+	if seat.lastHooks != hooksPath {
+		t.Errorf("resumed seat got hooks %q, want %q", seat.lastHooks, hooksPath)
 	}
 	if id := m.resumeIDs[model.VendorClaude]; id != "" {
 		t.Errorf("the restored id survived its one attempt: %q", id)
@@ -890,7 +902,7 @@ func TestACancelledTurnKeepsTheThreadOnProbation(t *testing.T) {
 // the four seats, on the ordinary path of reattaching a room a few days later.
 func TestAStaleIdOnASpawnPerTurnSeatIsDroppedAfterOneTurn(t *testing.T) {
 	tempHome(t)
-	m := newWithBrief(Options{}, Brief{Path: "p", Text: "OPERATING CONTEXT"}, Reattachment{
+	m := newWithBrief(Options{}, Brief{Path: "p", Text: "OPERATING CONTEXT"}, HookSet{}, Reattachment{
 		Room: SavedRoom{
 			Workspace: resolveWorkspace(""),
 			Turn:      3,

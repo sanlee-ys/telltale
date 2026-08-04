@@ -29,7 +29,7 @@ func argAfter(args []string, flag string) (string, bool) {
 // about: the process started, took a turn on stdin, answered from the PRIOR
 // session's content, and reported the same session_id back.
 func TestSessionResumeMatchesTheVerifiedProbe(t *testing.T) {
-	spec, err := Claude{}.SessionResume("/ws", "claude", "sess-1", PostureRead)
+	spec, err := Claude{}.SessionResume("/ws", "claude", "", "sess-1", PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestSessionResumeMatchesTheVerifiedProbe(t *testing.T) {
 	// Every flag the persistent session carries has to survive. A resume that
 	// quietly dropped --input-format would spawn a batch process that read its
 	// stdin once and closed it, which is the shape that cannot be gated at all.
-	base, err := Claude{}.Session("/ws", "claude", PostureRead)
+	base, err := Claude{}.Session("/ws", "claude", "", PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestSessionResumeMatchesTheVerifiedProbe(t *testing.T) {
 // open a NEW conversation while the caller believed it had resumed one — the
 // seat would answer normally with no history and nothing would say so.
 func TestSessionResumeWithoutAnIdRefuses(t *testing.T) {
-	if _, err := (Claude{}).SessionResume("/ws", "claude", "", PostureRead); err != ErrNoResume {
+	if _, err := (Claude{}).SessionResume("/ws", "claude", "", "", PostureRead); err != ErrNoResume {
 		t.Fatalf("err = %v, want ErrNoResume", err)
 	}
 }
@@ -86,7 +86,7 @@ func TestSessionResumeWithoutAnIdRefuses(t *testing.T) {
 // first; a reattached seat that silently dropped them would act unasked in a
 // room whose header still promised every call would be gated.
 func TestSessionResumeKeepsThePosture(t *testing.T) {
-	spec, err := Claude{}.SessionResume("/ws", "claude", "sess-1", PostureWriteGated)
+	spec, err := Claude{}.SessionResume("/ws", "claude", "", "sess-1", PostureWriteGated)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestOnlyClaudeCanResumeASession(t *testing.T) {
 		if id != model.VendorClaude {
 			t.Errorf("%s implements Persistent; the ADR says only claude can", id)
 		}
-		if _, err := p.SessionResume("/ws", "bin", "", PostureRead); err != ErrNoResume {
+		if _, err := p.SessionResume("/ws", "bin", "", "", PostureRead); err != ErrNoResume {
 			t.Errorf("%s does not refuse an empty resume id", id)
 		}
 	}

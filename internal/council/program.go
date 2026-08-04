@@ -139,6 +139,14 @@ type Model struct {
 	// its content is the user's private file and the renderer has no business
 	// being able to reach it.
 	brief Brief
+
+	// hooks is the user's own hook configuration, copied into a file of its
+	// own so the gated seat can be pointed at it.
+	//
+	// On Model for the same reason the brief is, and it is the same rule rather
+	// than a resemblance: it names a path into the user's private configuration,
+	// and only the boolean "is anything wired" crosses onto State.
+	hooks HookSet
 }
 
 // New builds the model. Nothing renders until the first WindowSizeMsg arrives:
@@ -147,14 +155,14 @@ type Model struct {
 // The brief is loaded by Run before this, so a bad path fails before the
 // alternate screen is entered rather than as an unreadable error behind a TUI.
 func New(opts Options) *Model {
-	return newWithBrief(opts, Brief{}, Reattachment{})
+	return newWithBrief(opts, Brief{}, HookSet{}, Reattachment{})
 }
 
-func newWithBrief(opts Options, b Brief, re Reattachment) *Model {
+func newWithBrief(opts Options, b Brief, hs HookSet, re Reattachment) *Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &Model{
 		opts:       opts,
-		st:         stateWith(opts),
+		st:         stateWith(opts, hs.Wired()),
 		styles:     NewStyles(true), // assume dark until the terminal answers
 		glyphs:     GlyphsFor(opts.ASCII),
 		events:     make(chan runner.Event, eventBuffer),
@@ -168,6 +176,7 @@ func newWithBrief(opts Options, b Brief, re Reattachment) *Model {
 		roomCtx:    ctx,
 		roomCancel: cancel,
 		brief:      b,
+		hooks:      hs,
 	}
 	m.st.Briefed = b.Loaded()
 	m.reattach(re)
@@ -291,7 +300,7 @@ func abbreviate(p, home string) string {
 	return "~" + filepath.ToSlash(rest)
 }
 
-func stateWith(opts Options) State {
+func stateWith(opts Options, hooked bool) State {
 	st := NewState()
 	st.ASCII = opts.ASCII
 	st.Write = opts.Write
@@ -311,7 +320,7 @@ func stateWith(opts Options) State {
 			Avail:   info.Avail,
 			Binary:  info.Binary,
 			Note:    info.Note,
-			Sandbox: postureClaim(info.Vendor, windows, opts.Write, !opts.Auto),
+			Sandbox: postureClaim(info.Vendor, windows, opts.Write, !opts.Auto, hooked),
 			Gran:    granularityFor(info.Vendor),
 			Phase:   PhaseIdle,
 			Follow:  true,
@@ -655,6 +664,16 @@ func (m *Model) View() tea.View {
 	return v
 }
 
+// wantsHooks reports whether this room is the one that needs its hooks copied.
+//
+// Exactly the room that passes --setting-sources "", and it is written as the
+// same condition as seatPosture's rather than as "a write room" so the two
+// cannot drift apart. A read-only or --auto room loads the user's settings
+// natively: there is nothing to repair there, no reason to leave a temporary
+// file on disk for it, and injecting the hooks anyway would fire each of them
+// twice.
+func wantsHooks(opts Options) bool { return opts.Write && !opts.Auto }
+
 // Run starts the room.
 //
 // Council is the one telltale mode that dispatches to vendor CLIs. The
@@ -676,6 +695,9 @@ func Run(opts Options) error {
 	// their next brief into four fresh sessions believing it continued
 	// something. A file that exists but cannot be read is the other case and is
 	// handled inside, as a notice: see LoadRoom.
+	//
+	// Resolved BEFORE the hooks are copied, so a bad --resume fails without
+	// having written a temporary file it would then have to clean up.
 	ws := resolveWorkspace(opts.Dir)
 	var re Reattachment
 	if opts.Resume {
@@ -690,7 +712,16 @@ func Run(opts Options) error {
 		re = Reattachment{Path: found.Path, Room: found.Room, Offered: true}
 	}
 
-	mdl := newWithBrief(opts, b, re)
+	var hooks HookSet
+	if wantsHooks(opts) {
+		hooks = LoadHookSet()
+	}
+	// Cleaned up here as well as in teardown. teardown covers the quit paths;
+	// this covers every other way out of a program, including one that returns
+	// an error before a quit key was ever pressed.
+	defer hooks.Cleanup()
+
+	mdl := newWithBrief(opts, b, hooks, re)
 	p := tea.NewProgram(mdl)
 	_, err = p.Run()
 	if err != nil {

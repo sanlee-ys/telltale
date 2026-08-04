@@ -87,11 +87,25 @@ func (c Claude) NextTurn(prompt, workspace, binary, sessionID string, p Posture)
 // The only addition to the spawn-per-turn flags is --input-format, which is
 // what puts the process into realtime streaming input. --resume is deliberately
 // absent: there is nothing to resume, because the session never ended.
-func (c Claude) Session(workspace, binary string, p Posture) (runner.Spec, error) {
+//
+// hooksFile is an ABSOLUTE path to a settings file containing the user's hooks
+// and nothing else, or empty. See gateArgs for why it is only ever applied to
+// the gated posture, and internal/council/hookset.go for what is in it.
+func (c Claude) Session(workspace, binary, hooksFile string, p Posture) (runner.Spec, error) {
+	args := append(c.baseArgs(p), "--input-format", "stream-json")
+	// Gated posture ONLY, and the condition is the point rather than a
+	// precaution. --settings is repair for a hole --setting-sources "" opens,
+	// and --setting-sources "" is passed in exactly one posture. In the other
+	// two the user's settings are loaded natively, so injecting the same hooks
+	// again would run each of them twice — a guard that asks the user two
+	// questions per call is a guard people turn off.
+	if p == PostureWriteGated && hooksFile != "" {
+		args = append(args, "--settings", hooksFile)
+	}
 	return runner.Spec{
 		Vendor: c.ID(),
 		Binary: binary,
-		Args:   append(c.baseArgs(p), "--input-format", "stream-json"),
+		Args:   args,
 		// No StdinPrompt. Every turn is a Turn() line written later, which is
 		// also why the shim refusal has nothing to catch here: no prompt text
 		// can reach argv by any path.
@@ -132,11 +146,16 @@ func (c Claude) Session(workspace, binary string, p Posture) (runner.Spec, error
 // FAST and FREE — no model turn is spent — which is why the caller may simply
 // let the seat die once and start it fresh on the next brief rather than
 // pre-flighting the id.
-func (c Claude) SessionResume(workspace, binary, sessionID string, p Posture) (runner.Spec, error) {
+// The hooks file rides along unchanged, and that is not incidental: a resumed
+// seat is a gated seat like any other, and one that came back without the
+// user's own PreToolUse screen while the badge still said the guard was wired
+// would be the quietest false claim in the room. Reattaching restores a
+// conversation, never a weaker posture.
+func (c Claude) SessionResume(workspace, binary, hooksFile, sessionID string, p Posture) (runner.Spec, error) {
 	if sessionID == "" {
 		return runner.Spec{}, ErrNoResume
 	}
-	spec, err := c.Session(workspace, binary, p)
+	spec, err := c.Session(workspace, binary, hooksFile, p)
 	if err != nil {
 		return runner.Spec{}, err
 	}
@@ -302,11 +321,24 @@ func (c Claude) baseArgs(p Posture) []string {
 //     and nothing was created. Without this flag "nothing writes without your
 //     keystroke" is simply false, and it would be false quietly.
 //
-// The cost of the third is stated rather than buried: dropping the setting
-// sources also drops the user's own hooks and their user-level commands from
-// this seat. The gate is then the only control in front of it, which is a real
-// trade and is why it is named in design.md §9 and in the badge's detail rather
-// than only here.
+// The cost of the third was stated rather than buried, and then it was PAID
+// rather than left standing: dropping the setting sources also drops the user's
+// own hooks and their user-level commands from this seat. Half of that is
+// deliberate — the allow rules are what the gate is replacing — and half was
+// collateral. A PreToolUse hook is a screen the user built, nothing was
+// replacing it, and the calls it covered are disproportionately the ones the
+// gate never sees, because a shell command the CLI classifies read-only is
+// approved without asking.
+//
+// The hooks are now carried back in on --settings, which composes with
+// --setting-sources "" (measured; see hookset.go for the two verbatim lines).
+// The allow rules are NOT, and that separation is enforced by construction
+// rather than by care: the file council writes is built by naming the single
+// key `hooks`, because the same spike showed a permissions block in that file
+// re-admits the rules and puts calls straight past the gate.
+//
+// What is still dropped, and stays dropped: the user's user-level slash
+// commands, and their permission rules. Only the hooks come back.
 //
 // One limit that no flag closes: shell commands the CLI itself classifies as
 // read-only are approved without asking. `git status` was ungated under BOTH
