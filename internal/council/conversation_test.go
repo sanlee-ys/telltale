@@ -460,7 +460,7 @@ func lastLine(s string) string {
 }
 
 // TestTheTranscriptDoesNotDescribeAPastTurnInThePresentTense. "working…" and
-// "reports no incremental output" are claims about a turn in flight.
+// "the reply arrives whole" are claims about a turn in flight.
 func TestTheTranscriptDoesNotDescribeAPastTurnInThePresentTense(t *testing.T) {
 	c := &Column{Vendor: model.VendorClaude, Label: "Claude Code", Avail: AvailInstalled, Gran: GranFinalOnly}
 	c.startTurn(1, "first", false)
@@ -474,7 +474,7 @@ func TestTheTranscriptDoesNotDescribeAPastTurnInThePresentTense(t *testing.T) {
 	st.Columns[0] = *c
 
 	got := render(st)
-	if n := strings.Count(got, "no incremental output"); n != 1 {
+	if n := strings.Count(got, "the reply arrives whole"); n != 1 {
 		t.Errorf("the waiting card appears %d times, want only on the live turn", n)
 	}
 }

@@ -7,9 +7,9 @@
  › should council resume sessions or    │ › @all is the scrollback worth the    │                                       
    re-send the transcript?              │   memory?                             │                                       
                                         │                                       │                                       
- Resume. Re-sending grows input         │ working. this vendor reports no       │                                       
- quadratically.                         │ incremental output, so nothing        │                                       
- turn 2  ──────────────────────────  8s │ appears until the turn finishes.      │                                       
+ Resume. Re-sending grows input         │ working — the reply arrives whole.    │                                       
+ quadratically.                         │                                       │                                       
+ turn 2  ──────────────────────────  8s │                                       │                                       
  › what does that cost by turn five?    │                                       │                                       
                                         │                                       │                                       
  ⚙ Read: dispatch.go ✓                  │                                       │                                       

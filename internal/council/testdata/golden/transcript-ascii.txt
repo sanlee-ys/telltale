@@ -7,9 +7,9 @@
  Resume. Re-sending grows input         | : @all is the scrollback worth the    |                                       
  quadratically.                         |   memory?                             |                                       
  turn 2  --------------------------  8s |                                       |                                       
- : what does that cost by turn five?    | working. this vendor reports no       |                                       
-                                        | incremental output, so nothing        |                                       
- * Read: dispatch.go +                  | appears until the turn finishes.      |                                       
+ : what does that cost by turn five?    | working — the reply arrives whole.    |                                       
+                                        |                                       |                                       
+ * Read: dispatch.go +                  |                                       |                                       
                                         |                                       |                                       
  About 30K redundant input tokens per   |                                       |                                       
  vendor.                                |                                       |                                       

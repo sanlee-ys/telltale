@@ -160,12 +160,70 @@ func TestWaitingIsNotStreaming(t *testing.T) {
 	if a == b {
 		t.Fatal("a waiting column renders identically to a streaming one")
 	}
-	// A single word, because the sentence is wrapped into a 37-cell column and
-	// any longer phrase would be split across lines by the renderer under test.
-	if !strings.Contains(a, "incremental") {
-		t.Error("the waiting column does not explain that this vendor cannot stream")
+	// The distinction has to be carried by a WORD somewhere visible, never by
+	// the absence of motion — a spinner that is not spinning and a column that
+	// has nothing to say look identical in a screenshot, and identical to a user
+	// glancing at three of them.
+	//
+	// It is checked in two places on purpose, because §9.14 moved which one does
+	// the work. The BODY no longer recites the mechanism; what it says is that
+	// the seat is working and what to expect. The HEADER is what names the state,
+	// and it is drawn on every frame, above the scroll, in both glyph sets — so
+	// it is the carrier that cannot be scrolled away from.
+	if !strings.Contains(a, "arrives whole") {
+		t.Error("the waiting column does not say what to expect")
+	}
+	if !strings.Contains(a, "waiting") {
+		t.Error("no word on the frame names the waiting state")
+	}
+	if strings.Contains(b, "waiting") {
+		t.Error("a streaming column claims to be waiting")
+	}
+	// And the vendor-internals vocabulary is gone from the reading area. This is
+	// the assertion that keeps the explanation on the help page rather than
+	// creeping back into the body of every waiting turn.
+	if strings.Contains(a, "incremental") {
+		t.Error("the waiting body is explaining council's plumbing again")
 	}
 	golden(t, "waiting-vs-streaming", a)
+}
+
+// TestEveryGranularityIsExplained mirrors TestEveryBadgeIsExplained, one badge
+// column over.
+//
+// §9.13 gave the sandbox words a legend and left the granularity word beside
+// them undefined, which was survivable only because the waiting card was
+// reciting the whole explanation in the body of every waiting turn. §9.14 took
+// that out of the reading area, which makes the legend owed rather than nice —
+// so this fails the build when a Granularity value can render on a column with
+// nothing on the help page to say what it means.
+func TestEveryGranularityIsExplained(t *testing.T) {
+	gloss := helpGranGloss()
+	for _, gr := range []Granularity{GranUnknown, GranTokens, GranEvents, GranFinalOnly} {
+		if strings.TrimSpace(gloss[gr]) == "" {
+			t.Errorf("granularity %v renders %q on a column and is explained nowhere", gr, gr.String())
+		}
+	}
+	// GranUnknown is the one a reader cannot decode by reading the header,
+	// because its whole point is that the header says nothing there.
+	if !strings.Contains(gloss[GranUnknown], "never been established") {
+		t.Errorf("the no-word case does not say why the column is blank: %q", gloss[GranUnknown])
+	}
+
+	// And it has to reach the screen, or it is the same failure §9.13 found in
+	// SandboxClaim.Detail: written, tested, and rendered by nothing.
+	st := room()
+	st.Help = HelpPostures
+	st.Height = 60 // tall enough to reach below the 24-row fold
+	got := render(st)
+	if !strings.Contains(got, "sends nothing at all until its turn is done") {
+		t.Error("the granularity gloss renders nowhere — the same gap §9.13 found in Detail")
+	}
+	// A seat whose granularity was never established still gets its sentence.
+	st.Columns[0].Gran = GranUnknown
+	if !strings.Contains(render(st), "never been established") {
+		t.Error("a seat with no granularity word is left with nothing to explain the blank")
+	}
 }
 
 // TestSandboxBadgesAreNeverBlanket guards ADR-008's correction: the UI must
@@ -1045,8 +1103,8 @@ func TestActingColumnDoesNotClaimSilence(t *testing.T) {
 	st.Columns[2].Acts = []Act{{Text: "list_dir: C:\\ws"}, {Text: "run_command: go test ./..."}}
 
 	got := render(st)
-	if strings.Contains(got, "no incremental output") {
-		t.Error("a column showing a live trace still claims it reports nothing")
+	if strings.Contains(got, "the reply arrives whole") {
+		t.Error("a column showing a live trace still claims nothing arrives before the end")
 	}
 	if !strings.Contains(got, "list_dir") {
 		t.Error("the trace is missing from a waiting column — the case it matters most for")

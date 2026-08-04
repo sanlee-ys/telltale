@@ -3,9 +3,9 @@
  ▸ Claude Code  ───────────────  ○ idle │   Codex  ────────────────────  ○ idle │   Antigravity  ─────  ⠋ waiting 1m13s 
    ro:tools  tokens                     │   ro:requested  final only            │   unsandboxed  final only             
                                         │                                       │                                       
- no turn dispatched yet.                │ no turn dispatched yet.               │ working. this vendor reports no       
-                                        │                                       │ incremental output, so nothing        
-                                        │                                       │ appears until the turn finishes.      
+ no turn dispatched yet.                │ no turn dispatched yet.               │ working — the reply arrives whole.    
+                                        │                                       │                                       
+                                        │                                       │                                       
                                         │                                       │                                       
                                         │                                       │                                       
                                         │                                       │                                       
