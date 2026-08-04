@@ -171,6 +171,18 @@ func columnCell(st State, c Column, focused bool, w, h int, sty Styles, g Glyphs
 			lines = append(lines, sty.Muted.Render(padRight(b, w, g)))
 		}
 	}
+	// The approval card is CHROME too, and for a stronger version of the badge
+	// line's reason. The badge must not scroll away because a claim you cannot
+	// see is not a claim; this must not scroll away because a vendor is STOPPED
+	// behind it. During a turn every column is following its own tail, so a card
+	// in the body would be pushed off screen by the output of the very call it
+	// is asking about.
+	for _, l := range gateCard(st, c, w, sty, g) {
+		if len(lines) >= h {
+			break
+		}
+		lines = append(lines, fit(l, w))
+	}
 	if len(lines) < h {
 		lines = append(lines, sty.Muted.Render(strings.Repeat(g.Rule, w)))
 	}
@@ -251,12 +263,16 @@ func MaxScroll(st State, idx int) int {
 	if lay.Tier == TierColumns {
 		w += lay.extraFor(idx)
 	}
-	// Three lines of the cell are chrome: header, badge, rule.
-	avail := lay.Body - 3
 	// PlainStyles because only the line COUNT is wanted here, and styling
 	// cannot change it — every style in this package is a wrapper, never a
 	// re-wrap.
-	n := len(columnText(st.Columns[idx], w, PlainStyles(), GlyphsFor(st.ASCII)))
+	sty, gl := PlainStyles(), GlyphsFor(st.ASCII)
+	// Three lines of the cell are chrome — header, badge, rule — plus the
+	// approval card when one is up. Counted from the same function that draws
+	// it rather than from a constant: a card of a different height would
+	// otherwise let the tail scroll past the end of the content.
+	avail := lay.Body - 3 - len(gateCard(st, st.Columns[idx], w, sty, gl))
+	n := len(columnText(st.Columns[idx], w, sty, gl))
 	if m := n - avail; m > 0 {
 		return m
 	}
@@ -442,9 +458,68 @@ func actMark(s runner.ActStatus, sty Styles, g Glyphs) (string, lipgloss.Style) 
 		// Muted, not a severity. Not knowing how a step went is not an alarm,
 		// and colouring it as one would train the eye to ignore the real ones.
 		return g.ActUnknown, sty.Muted
+	case runner.ActDenied:
+		// The cross, plus the WORDS — and the words are the distinction, not
+		// decoration on it. The vendor echoes a denial back as an is_error
+		// tool_result, so a bare cross here would be identical to a tool that
+		// broke, and the trace would report the command failing when what
+		// happened is that it was refused. "by you" is carried because this is
+		// the one line in the trace that is not a reading of a vendor's words:
+		// it is the record of a keystroke.
+		//
+		// SevWarn rather than SevCrit: a refusal is the room working, not
+		// something going wrong, and colouring it like a failure would teach the
+		// eye to skip the real ones.
+		return g.ActFail + " denied by you", sty.SevWarn
 	default:
 		return "", sty.Text
 	}
+}
+
+// gateCard is the approval prompt for one column: what is about to happen, and
+// the two keys that decide it.
+//
+// It names the call rather than the tool alone. "Approve Bash?" is not a
+// question anybody can answer — the argument line is the entire content of the
+// decision, and it is formatted exactly as the activity trace formats it so the
+// entry that appears afterwards is recognisably the same call.
+//
+// Only the OLDEST pending request is shown, with a count of what is behind it.
+// Rendering the queue would put several decisions under one pair of keys.
+func gateCard(st State, c Column, w int, sty Styles, g Glyphs) []string {
+	if w < 12 {
+		// Below this the keys and the call cannot both be read, and a card that
+		// asks a question nobody can make out is worse than the mode line
+		// carrying the whole burden — which it does at every width.
+		return nil
+	}
+	var mine []PendingGate
+	for _, p := range st.Gates {
+		if p.Vendor == c.Vendor {
+			mine = append(mine, p)
+		}
+	}
+	if len(mine) == 0 {
+		return nil
+	}
+
+	out := wrap(g.Warn+" waiting on you: "+mine[0].Text, w)
+	for i := range out {
+		out[i] = sty.SevWarn.Render(padRight(out[i], w, g))
+	}
+
+	keys := "y approve   n deny"
+	if n := len(mine) - 1; n > 0 {
+		keys += "   +" + strconv.Itoa(n) + " queued"
+	}
+	// The keys are repeated here AND in the mode line on purpose. The mode line
+	// is the contract — it announces what every key means on every frame — and
+	// this is the copy that sits next to the thing being decided, where the eye
+	// already is.
+	for _, l := range wrap(keys, w) {
+		out = append(out, sty.Identity.Render(padRight(l, w, g)))
+	}
+	return out
 }
 
 // badgeLine is the sandbox claim, the streaming granularity, and the cost.
@@ -569,6 +644,27 @@ func promptLine(st State, lay Layout, sty Styles, g Glyphs) string {
 // council has a mode where `q` is the letter q.
 func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 	var left, right string
+	switch {
+	case st.Gating():
+		// Outranks both other modes, because it is the only state in this room
+		// where something is STOPPED until a key is pressed. The notice is not
+		// allowed to overwrite this line the way it overwrites the others: a
+		// transient message displacing the two keys that unblock a vendor is
+		// exactly the surprise §7.8 exists to forbid.
+		left = "GATE"
+		right = gateLabel(st) + "  " + g.Sep + "  y approve  " + g.Sep +
+			"  n deny  " + g.Sep + "  ctrl+c cancel the turn"
+		l := sty.SevWarn.Render(left)
+		r := sty.Muted.Render(right)
+		gap := lay.Width - lipgloss.Width(l) - lipgloss.Width(r) - 2
+		if gap < 1 {
+			gap = 1
+			r = sty.Muted.Render(truncate(right,
+				maxInt(1, lay.Width-lipgloss.Width(l)-3), g.Ellipsis))
+		}
+		return " " + l + strings.Repeat(" ", gap) + r + " "
+	}
+
 	switch st.Mode {
 	case ModeComposing:
 		left = "COMPOSE"
@@ -599,6 +695,23 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 		r = sty.Muted.Render(r)
 	}
 	return " " + l + strings.Repeat(" ", gap) + r + " "
+}
+
+// gateLabel names what is waiting, and how much else is behind it.
+//
+// The count is stated rather than left to the card, because at narrow widths the
+// card is the only place a queue is visible and the card lives in one column —
+// a user tabbed to a different one would otherwise see "GATE" with no idea how
+// many decisions are stacked up.
+func gateLabel(st State) string {
+	if len(st.Gates) == 0 {
+		return ""
+	}
+	s := st.Gates[0].Text
+	if n := len(st.Gates) - 1; n > 0 {
+		s += " (+" + strconv.Itoa(n) + " queued)"
+	}
+	return s
 }
 
 // quoteTag marks an armed rebuttal turn in the footer.
@@ -639,10 +752,10 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		"",
 		"  i / enter    compose a brief",
 		"  enter        dispatch — to claude, or to whoever is @mentioned",
-		"  @codex       address a lane: @claude, @codex, @agy, or @all for the panel",
-		"               unaddressed briefs go to claude alone: the other two are",
-		"               review and tiebreak lanes, not a default audience",
-		"               leading mentions only, so \"ask @claude\" is just prose",
+		"  @codex       address a lane: @claude, @codex, @agy, @cursor, @all",
+		"               unaddressed goes to claude alone; the others are review,",
+		"               IDE and tiebreak lanes. Leading mentions only: \"ask @claude\" is prose",
+		"  y / n        approve or deny a tool call a vendor is blocked on (--write)",
 		"  esc          leave compose (the draft is kept)",
 		"  tab          move focus between columns",
 		"  ↑ ↓ / j k    scroll the focused column",
@@ -655,9 +768,13 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		"  q            quit (in view mode only — in compose it is the letter q)",
 		"  ?            this help",
 		"",
+		// Below the fold at the minimum height, and left in for the same reason
+		// the help lists keys it expects you to already know: at a normal
+		// terminal size it is the paragraph that explains why the badges differ.
 		sty.Muted.Render("  council dispatches to vendor CLIs. It is the one telltale mode that"),
-		sty.Muted.Render("  does, and each column states its own read-only posture rather than"),
-		sty.Muted.Render("  the room making one claim on behalf of all three."),
+		sty.Muted.Render("  does, and each column states its own posture rather than the room"),
+		sty.Muted.Render("  claiming one on behalf of every seat. Only one seat can be asked"),
+		sty.Muted.Render("  before it acts; the rest say so instead of implying otherwise."),
 	}
 
 	var b strings.Builder

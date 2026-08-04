@@ -159,7 +159,8 @@ func runCouncil(args []string) error {
 	dir := fs.String("cd", "", "workspace directory to dispatch turns against (default: cwd)")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
-	write := fs.Bool("write", false, "let vendors edit and run things in the workspace (see decisions/008)")
+	write := fs.Bool("write", false, "let vendors edit and run things in the workspace, asking you first where they can (see decisions/008)")
+	auto := fs.Bool("auto", false, "with --write: let a gated seat approve its own tool calls instead of asking")
 	brief := fs.String("brief", "", "file of shared operating context handed to every vendor on its first turn (or TELLTALE_COUNCIL_BRIEF)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -170,6 +171,7 @@ func runCouncil(args []string) error {
 		ASCII:     *ascii || os.Getenv("TELLTALE_ASCII") != "",
 		NoTitle:   *noTitle,
 		Write:     *write,
+		Auto:      *auto,
 		BriefPath: *brief,
 	})
 }
@@ -222,9 +224,18 @@ telltale council flags:
                               at separately. Also TELLTALE_COUNCIL_BRIEF. The file
                               is read from disk and never stored by telltale.
   --write                     let vendors edit files and run commands in that
-                              workspace. The workspace is the containment, not
-                              a flag — point --cd at a git worktree if that
-                              matters. The header says WRITE all session.
+                              workspace. The seat that can be asked (claude)
+                              asks first: every tool call that changes anything
+                              raises an approval card, y approves and n denies,
+                              and nothing runs until you answer. The other three
+                              are batch CLIs with no channel to ask on, so they
+                              act unasked and their columns say so. The
+                              workspace is still the containment — point --cd at
+                              a git worktree if that matters. The header says
+                              WRITE all session.
+  --auto                      with --write: let the gated seat approve its own
+                              tool calls. This is the old behaviour, and it is
+                              the flag to reach for when you are not watching.
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
 

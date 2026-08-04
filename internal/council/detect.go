@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/sanlee-ys/telltale/internal/council/vendors"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -280,13 +281,31 @@ func kindOf(path string) BinaryKind {
 // seen would be the exact overstatement this product exists to refuse.
 // postureClaim is what a column advertises, given the room's posture.
 //
-// In write mode every column carries the SAME loud badge, and that uniformity
-// is the point: the per-vendor distinctions below are all shades of "how much
-// read-only did we manage to ask for", and once the answer is "none", grading
-// them would imply a safety difference that does not exist. What contains a
-// write-mode room is the directory it was pointed at, not a flag — so the badge
-// says the plain thing and the header repeats it.
-func postureClaim(v model.VendorID, windows, write bool) SandboxClaim {
+// In write mode the columns that cannot ask all carry the SAME loud badge, and
+// that uniformity is the point: the per-vendor distinctions below are all
+// shades of "how much read-only did we manage to ask for", and once the answer
+// is "none", grading them would imply a safety difference that does not exist.
+// What contains such a room is the directory it was pointed at, not a flag — so
+// the badge says the plain thing and the header repeats it.
+//
+// One column breaks that uniformity, and only because it earned a real
+// difference rather than a nicer word: it asks first. gated is given to exactly
+// the seat that can be driven as a live process, because that is what a
+// permission request needs — somewhere to arrive and somewhere for the answer
+// to go back. The other three are batch CLIs and get the badge that describes
+// what they actually do.
+func postureClaim(v model.VendorID, windows, write, gated bool) SandboxClaim {
+	if write && gated && canGate(v) {
+		return SandboxClaim{
+			Level: SandboxGated,
+			Detail: "started with --write, and this column asks before every tool " +
+				"call that changes anything: y approves, n denies, and nothing " +
+				"runs until you answer. Two limits are real — shell commands the " +
+				"CLI itself classifies read-only are approved without asking, and " +
+				"the gate replaces your own settings' permission rules and hooks " +
+				"for this seat rather than sitting behind them",
+		}
+	}
 	if write {
 		return SandboxClaim{
 			Level: SandboxWrite,
@@ -296,6 +315,16 @@ func postureClaim(v model.VendorID, windows, write bool) SandboxClaim {
 		}
 	}
 	return sandboxFor(v, windows)
+}
+
+// canGate reports whether a seat can be asked to ask.
+//
+// Read from the registry rather than from a list here, so the badge and the
+// invocation can never disagree about which seats gate: both answer the
+// question "is this vendor drivable as a live process".
+func canGate(v model.VendorID) bool {
+	_, ok := vendors.Registry()[v].(vendors.Persistent)
+	return ok
 }
 
 func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
