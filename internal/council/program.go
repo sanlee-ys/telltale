@@ -132,6 +132,17 @@ type Model struct {
 	// that tells the user what happens to their next brief. Cleared per turn at
 	// dispatch, because it is a fact about one turn and not about the seat.
 	threadLost map[model.VendorID]bool
+	// failure is what this turn's failure said about the seat's CONVERSATION, as
+	// classified where the evidence was — the runner's stderr classifier and the
+	// adapters' own result parsers — rather than re-derived here from a rendered
+	// note. Cleared per turn at dispatch, beside threadLost, for the same reason:
+	// it is a fact about one turn.
+	//
+	// On Model and not on State. It is a decision input, never rendered, and
+	// State is what the renderer can reach; a classification the view could read
+	// is one a card could start quoting, which is how a conservative internal
+	// judgement turns into a claim on screen.
+	failure map[model.VendorID]runner.FailureClass
 	// redactors are per vendor because each carries a partial-word buffer
 	// across the chunks of one stream.
 	redactors map[model.VendorID]*Redactor
@@ -175,6 +186,7 @@ func newWithBrief(opts Options, b Brief, hs HookSet, re Reattachment) *Model {
 		resumeIDs:  map[model.VendorID]string{},
 		unproven:   map[model.VendorID]bool{},
 		threadLost: map[model.VendorID]bool{},
+		failure:    map[model.VendorID]runner.FailureClass{},
 		redactors:  map[model.VendorID]*Redactor{},
 		procs:      map[model.VendorID]*seatProc{},
 		gateInputs: map[string]map[string]any{},

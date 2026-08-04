@@ -351,6 +351,54 @@ func TestAgyResultErrorCarriesTheVendorsSentence(t *testing.T) {
 		t.Errorf("Note = %q; with error_message suppressed this note is the only sign "+
 			"the turn failed, so it must carry the vendor's words", ev.Note)
 	}
+	// And it says NOTHING about the conversation. This exact sentence was
+	// captured on a turn whose thread was demonstrably alive (conversation_id
+	// back, step_index 10 → 11, num_turns 2) and is also what a dead thread
+	// would plausibly produce. A string on both sides of a distinction is
+	// evidence for neither side of it.
+	if ev.Failure != runner.FailureUnclassified {
+		t.Errorf("Failure = %v, want Unclassified — this sentence was measured on a LIVE thread",
+			ev.Failure)
+	}
+}
+
+// TestAgyClassifiesItsMeasured503AndNothingElse.
+//
+// The one agy failure that is known not to be about the conversation, quoted
+// verbatim off a capture (agy 1.1.10, Windows, 2026-08-04). Note the EMPTY
+// conversation_id on the captured line: the turn died before a thread was
+// involved at all, which is the corroboration that makes the classification a
+// reading rather than an inference.
+//
+// It is paired with a near-miss on purpose. This classifier's whole job is to
+// stay narrow — a false transient wedges a seat retrying a dead id forever —
+// so the test that matters is the one that does NOT match.
+func TestAgyClassifiesItsMeasured503AndNothingElse(t *testing.T) {
+	line := []byte(`{"event":"result","result":{"conversation_id":"","status":"ERROR","response":"","error":"Eligibility check failed: UNAVAILABLE (code 503): The service is currently unavailable.","duration_seconds":1.2,"num_turns":0}}`)
+	ev, ok := Antigravity{}.ParseEvent(line)
+	if !ok || ev.Kind != runner.KindError {
+		t.Fatalf("got (%+v, %v), want KindError", ev, ok)
+	}
+	if ev.Failure != runner.FailureVendorUnavailable {
+		t.Errorf("Failure = %v, want FailureVendorUnavailable", ev.Failure)
+	}
+	// The vendor's own sentence still reaches the card. Classifying a failure
+	// must never be a reason to stop quoting it.
+	if !strings.Contains(ev.Note, "503") {
+		t.Errorf("Note = %q, want the vendor's own words", ev.Note)
+	}
+
+	// A different outage-flavoured sentence nobody has captured. Reading
+	// "unavailable" alone as a service outage is how a narrow classifier turns
+	// into a guess.
+	near := []byte(`{"event":"result","result":{"conversation_id":"abc","status":"ERROR","response":"","error":"The requested model is unavailable for this account.","num_turns":1}}`)
+	ev, ok = Antigravity{}.ParseEvent(near)
+	if !ok {
+		t.Fatal("the near-miss line did not parse")
+	}
+	if ev.Failure != runner.FailureUnclassified {
+		t.Errorf("Failure = %v on an uncaptured sentence, want Unclassified", ev.Failure)
+	}
 }
 
 // TestAgyDoneResolvesToUnknownNeverToSuccess is the honest-gauge rule applied

@@ -320,7 +320,11 @@ func TestCapturedFailuresAreTranslated(t *testing.T) {
 	trust := "\n⚠ Workspace Trust Required\n\n  Cursor Agent can execute code and access files in this directory.\n" +
 		"  Do you trust the contents of this directory?\n\n    C:\\ws\n\n  To proceed, you can either:\n" +
 		"    • Run 'agent' interactively to decide\n    • Pass --trust, --yolo, or -f if you trust this directory\n"
-	note := failureNote(errors.New("exit status 1"), trust)
+	note, class := failureNote(errors.New("exit status 1"), trust)
+	if class != FailurePreflight {
+		t.Errorf("trust refusal classified %v, want FailurePreflight — cursor-agent "+
+			"exits before any model call, so it says nothing about a conversation", class)
+	}
 	if !strings.Contains(note, "trust this workspace") {
 		t.Errorf("note = %q, want the actionable trust message", note)
 	}
@@ -332,7 +336,10 @@ func TestCapturedFailuresAreTranslated(t *testing.T) {
 
 	sandbox := "Error: Sandbox mode is enabled but not available on this system. " +
 		"Sandbox requires macOS or Linux.\nRun 'agent sandbox disable' to switch to allowlist mode.\n"
-	note = failureNote(errors.New("exit status 1"), sandbox)
+	note, class = failureNote(errors.New("exit status 1"), sandbox)
+	if class != FailurePreflight {
+		t.Errorf("sandbox refusal classified %v, want FailurePreflight", class)
+	}
 	if !strings.Contains(note, "config") {
 		t.Errorf("note = %q, want the message to point at the vendor's own config", note)
 	}

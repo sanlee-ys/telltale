@@ -257,7 +257,14 @@ type TurnRecord struct {
 	// Note is the turn's own card line — the failure reason, the cancellation,
 	// the "not addressed" — kept so a past turn that ended badly still says why
 	// instead of rendering as a silent one.
-	Note string
+	//
+	// NoteDetail and NoteCalm ride with it for the same reason the note does: a
+	// turn scrolled back to must render as it did when it was live, and a card
+	// that lost its body or grew a warning mark on the way into history would be
+	// the transcript disagreeing with what the user saw.
+	Note       string
+	NoteDetail string
+	NoteCalm   bool
 
 	Elapsed time.Duration
 	// CostUSD and CostSession are the vendor's own figure and what it meant, on
@@ -320,6 +327,22 @@ type Column struct {
 	// Note carries the one-line reason for Failed/Cancelled, and the
 	// explanation on an unavailable column.
 	Note string
+	// NoteDetail is the note's body: the mechanics, demoted below the title.
+	//
+	// Empty for most notes, which are one sentence and are the whole story. It
+	// exists for the ones where the outcome and the machinery are different
+	// facts of different urgency — the restored thread that was let go being the
+	// case that earned it, where a single sentence carrying both read as one
+	// long alarm about something the user cannot act on.
+	NoteDetail string
+	// NoteCalm drops the warning mark from the note.
+	//
+	// It selects the SHAPE, never the words: what a card says is decided where
+	// the fact is known, and this only says how loudly to draw it. Set where a
+	// note reports an outcome rather than a problem — the same judgement
+	// reattachCard already makes by carrying no ⚠ at all — so the mark keeps
+	// meaning "something went wrong" on the notes that do.
+	NoteCalm bool
 
 	// Acts is what this vendor DID this turn: tool calls, shell commands, file
 	// edits, in order — and what became of each one.
@@ -399,6 +422,8 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 			Body:        c.Body,
 			Acts:        c.Acts,
 			Note:        c.Note,
+			NoteDetail:  c.NoteDetail,
+			NoteCalm:    c.NoteCalm,
 			Elapsed:     c.Elapsed,
 			CostUSD:     c.CostUSD,
 			CostSession: c.CostSession,
@@ -422,6 +447,8 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	// trace in place.
 	c.Acts = nil
 	c.Note = ""
+	c.NoteDetail = ""
+	c.NoteCalm = false
 	c.CostUSD = nil
 	c.CostSession = false
 	c.Started = time.Time{}

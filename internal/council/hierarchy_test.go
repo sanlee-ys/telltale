@@ -268,7 +268,7 @@ func TestACardsBodyHangsUnderItsTitle(t *testing.T) {
 
 	// The same grammar on a note, whose second line used to start hard against
 	// the column edge and read as a new statement rather than as a continuation.
-	n := warnBlock("exit 1: not signed in, and the login command is the one named in the card", 30, PlainStyles(), g)
+	n := noteCard("exit 1: not signed in, and the login command is the one named in the card", "", false, 30, PlainStyles(), g)
 	if len(n) < 2 {
 		t.Fatal("the note under test did not wrap")
 	}

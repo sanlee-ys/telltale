@@ -64,6 +64,52 @@ const (
 	KindError
 )
 
+// FailureClass is what is known about WHY a turn failed, in the one dimension a
+// caller can act on: does this failure say anything about the vendor-side
+// conversation the turn was resuming?
+//
+// It exists for exactly one decision — whether a restored session id is dropped
+// (ADR-008, sixteenth amendment). It is deliberately NOT a general taxonomy of
+// failure: every value below is grounded in a string this repo has captured off
+// a real run, and a failure that does not match one stays Unclassified and is
+// treated exactly as it was before this type existed.
+//
+// The direction of caution is fixed by which mistake is worse. Mis-classifying
+// a dead thread as transient wedges a seat: it rebuilds the same doomed resume
+// on every turn for the life of the room, which is the hole the ninth amendment
+// closed. Mis-classifying a hiccup as dead costs one conversation. So a value
+// other than Unclassified is only ever returned on POSITIVE evidence that the
+// vendor never reached the conversation at all.
+type FailureClass uint8
+
+const (
+	// FailureUnclassified is the default and the honest one: the turn failed and
+	// nothing captured says why in a way this code may act on. Treated as
+	// possibly-dead.
+	FailureUnclassified FailureClass = iota
+	// FailurePreflight is a refusal that happened BEFORE any model call — the
+	// vendor never looked at the conversation, so the failure is zero evidence
+	// about it. Every string that produces this value is copied off a captured
+	// stderr, and each one is documented at its case in failureNote: not signed
+	// in, an untrusted workspace, a sandbox the vendor's own config demands and
+	// its own help says it cannot provide, and a binary that vanished between
+	// detection and dispatch. A dispatch that never started a process is the
+	// same fact one step earlier and is classified here too.
+	FailurePreflight
+	// FailureVendorUnavailable is the vendor reporting its own service down.
+	// MEASURED 2026-08-04, agy 1.1.10: "Eligibility check failed: UNAVAILABLE
+	// (code 503): The service is currently unavailable." That capture came back
+	// with an EMPTY conversation_id, i.e. the turn died before a thread was
+	// involved — which is why it is safe to say it claims nothing about one.
+	FailureVendorUnavailable
+)
+
+// Transient reports whether this failure is known not to be about the
+// conversation. Only these two classes qualify; Unclassified never does.
+func (f FailureClass) Transient() bool {
+	return f == FailurePreflight || f == FailureVendorUnavailable
+}
+
 // ActStatus is what is known about the outcome of one tool call.
 //
 // Four values, and Unknown is the one that earns the type. A vendor that
@@ -199,6 +245,10 @@ type Event struct {
 	Err      error
 	// Note is a human-readable reason, already assembled, for a column card.
 	Note string
+	// Failure classifies a KindError in the one dimension a caller can act on:
+	// whether it says anything about the vendor-side conversation. Set nowhere
+	// else, and Unclassified unless a captured signal says otherwise.
+	Failure FailureClass
 }
 
 // Spec is one invocation, fully resolved. Nothing in it is interpolated into a
@@ -325,7 +375,7 @@ func Start(ctx context.Context, spec Spec, out chan<- Event, parse ParseFunc) (*
 		if waitErr != nil {
 			ev.Kind = KindError
 			ev.Err = waitErr
-			ev.Note = failureNote(waitErr, errTail.String())
+			ev.Note, ev.Failure = failureNote(waitErr, errTail.String())
 		}
 		if code := cmd.ProcessState.ExitCode(); code >= 0 {
 			ev.ExitCode = code
@@ -336,6 +386,7 @@ func Start(ctx context.Context, spec Spec, out chan<- Event, parse ParseFunc) (*
 			ev.Kind = KindDone
 			ev.Err = nil
 			ev.Note = ""
+			ev.Failure = FailureUnclassified
 		}
 		select {
 		case out <- ev:
@@ -422,13 +473,22 @@ func trimSuffixByte(b []byte, c byte) []byte {
 	return b
 }
 
-// failureNote turns an exit error plus stderr into one line for a column card.
+// failureNote turns an exit error plus stderr into one line for a column card,
+// and classifies it for the restored-thread decision (ADR-008, sixteenth).
 //
 // It classifies the failures a user can actually act on and otherwise quotes
 // the vendor. Guessing beyond that would be inventing a diagnosis, so a case is
 // only added here once a real run has produced the text it matches on — every
 // pattern below was copied off a captured stderr rather than imagined.
-func failureNote(err error, stderrText string) string {
+//
+// The FailureClass returned is that same discipline applied to a second
+// question. Every case already classified here is one the vendor raised BEFORE
+// any model call — that is not a new claim, it is what the comments below have
+// said since each case landed — so each one is also positive evidence that the
+// vendor never reached the conversation. An unmatched failure returns
+// Unclassified: the quoted-vendor fallback is exactly the case where nothing is
+// known, and it must not be read as a diagnosis.
+func failureNote(err error, stderrText string) (string, FailureClass) {
 	s := strings.TrimSpace(stderrText)
 	low := strings.ToLower(s)
 	switch {
@@ -437,7 +497,11 @@ func failureNote(err error, stderrText string) string {
 		strings.Contains(low, "unauthorized"),
 		strings.Contains(low, "authentication"),
 		strings.Contains(low, "please run") && strings.Contains(low, "login"):
-		return "not signed in — authenticate this vendor in your own terminal, then dispatch again"
+		// cursor-agent checks authentication BEFORE it parses flags (ADR-008,
+		// fifth amendment): a deliberately invalid flag combination came back
+		// with the auth error instead. Nothing downstream of that ran.
+		return "not signed in — authenticate this vendor in your own terminal, then dispatch again",
+			FailurePreflight
 	case strings.Contains(low, "workspace trust"),
 		strings.Contains(low, "do you trust the contents of this directory"):
 		// Captured 2026-08-04 from cursor-agent, which refuses a print-mode turn
@@ -449,7 +513,7 @@ func failureNote(err error, stderrText string) string {
 		// their own terminal where they can see what they are agreeing to.
 		return "this vendor has not been told to trust this workspace — it refuses to run " +
 			"until you approve the directory in your own terminal; council will not accept " +
-			"that prompt for you"
+			"that prompt for you", FailurePreflight
 	case strings.Contains(low, "sandbox requires macos or linux"),
 		strings.Contains(low, "sandbox mode is enabled but not available"):
 		// Also captured 2026-08-04. Council itself no longer asks for a sandbox
@@ -457,16 +521,16 @@ func failureNote(err error, stderrText string) string {
 		// the user's OWN vendor config enables it, and every turn will die the
 		// same way until that config changes. Left classified rather than
 		// removed as unreachable for exactly that reason.
-		return "this vendor's own config asks for a sandbox its help says needs macOS or " +
-			"Linux, and it refuses to run without one — disable it in the vendor's config"
+		return "this vendor's own config asks for a sandbox its help says needs macOS or Linux, " +
+			"and it refuses to run without one — disable it in the vendor's config", FailurePreflight
 	case strings.Contains(low, "command not found"),
 		strings.Contains(low, "is not recognized"):
-		return "the vendor binary vanished between detection and dispatch"
+		return "the vendor binary vanished between detection and dispatch", FailurePreflight
 	}
 	if s == "" {
-		return err.Error()
+		return err.Error(), FailureUnclassified
 	}
-	return err.Error() + ": " + firstLine(s)
+	return err.Error() + ": " + firstLine(s), FailureUnclassified
 }
 
 func firstLine(s string) string {

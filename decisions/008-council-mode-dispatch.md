@@ -1254,6 +1254,101 @@ the first to ask *is it legible to the person it is for?* Those are different au
 passing the first perfectly is what allowed the second to go unasked for twelve rounds.
 Honesty that only survives an expert review is a claim made to the wrong audience.
 
+### Amendment, 2026-08-04 (sixteenth): a hiccup was costing the whole conversation
+
+The ninth amendment put a restored session id on **one-attempt probation**: dropped the first
+time a turn on it fails. That rule is right and it is kept. What this amendment fixes is that
+it was the *only* rule, applied to a signal that could not tell two very different things
+apart. It surfaced from a live room in one sentence:
+
+> *"the first turn on the restored thread failed. why? no retry and if it must be let go — do
+> i need this warning here?"*
+
+**The rule was written when nothing could tell them apart, and that stopped being true.** The
+ninth amendment's own words: "no adapter reports that as anything a caller could branch on, so
+the only honest signal available is *the first turn on this restored id did not come back*."
+That was accurate then. Since then §9.6b measured two things that contradict it — agy resume
+**works** (a conversation round-tripped, `step_index` 10 → 11, `num_turns` 2, on a turn that
+still failed) and agy separately fails for reasons that have nothing to do with any
+conversation, including a bare `result` carrying *"Eligibility check failed: UNAVAILABLE (code
+503): The service is currently unavailable."* with an **empty** `conversation_id`. §9.6b
+recorded both and deliberately changed nothing, because it was a record and not a fix. This is
+the fix.
+
+**The ruling: one attempt stays the default; an *identifiably transient* failure is treated as
+a cancellation instead.** The ninth amendment already carves that exception for a cancelled
+turn — *"nothing was learned about the thread either way, so it stays on probation rather than
+being discarded for a keystroke"* — and a failure that never reached the conversation is the
+same sentence with a different cause. So the transient case joins the existing branch rather
+than inventing a second policy.
+
+**"Identifiably transient" is grounded in captured strings, and there are exactly two
+classes.** Both are positive evidence that the vendor never consulted the conversation:
+
+| class | evidence | strength |
+|---|---|---|
+| **pre-flight** | the four families `failureNote` already classifies — not signed in, an untrusted workspace, a sandbox the vendor's own config demands and its own help refuses, a binary that vanished between detection and dispatch. Every one is documented at its case as exiting **before any model call**; cursor-agent's auth check runs before it even parses flags (fifth amendment) | captured stderr, one case per real run |
+| **pre-flight, one step earlier** | a dispatch that never started a process at all — a spec that would not build, a `Start` that failed | structural: there is no process, so there is no turn |
+| **vendor-reported outage** | agy's 503, quoted verbatim, matched on the vendor's own sentence. The capture's empty `conversation_id` is the corroboration that it died before a thread was involved | measured, single trial, agy 1.1.10 |
+
+**Everything else is unchanged, and the asymmetry is the point.** An unclassified failure drops
+the id exactly as before. The two mistakes are not symmetric: mis-reading a hiccup as death
+costs one conversation, while mis-reading death as a hiccup **wedges the seat** — it rebuilds
+the same doomed resume on every turn for the life of the room, which is precisely the hole the
+ninth amendment closed and which no user can diagnose from a column. So the exception fires
+only on positive evidence and never on the absence of it, and the seat stays **on probation**
+after a reprieve: one classified failure buys one turn, not an exemption.
+
+**Two vendors get nothing here, and that is recorded rather than papered over.** Claude and
+Codex have no measured *transient* signal at all — only the shared pre-flight class, which is
+about the launcher rather than about them. What they do have is the opposite: measured
+**dead-thread** strings (`No conversation found with session ID: <id>`, `no rollout found`).
+No class was added for those, because they change no behaviour — an unclassified failure and a
+known-dead thread both drop the id — and a value that exists only to be true would be a
+taxonomy rather than a decision. Their behaviour today is exactly their behaviour yesterday.
+
+**agy's commonest failure sentence is deliberately NOT classified**, and it is the most
+important line in this amendment. *"Agent execution terminated due to error."* was captured on
+a turn whose thread was **demonstrably alive**, and it is also exactly what a genuinely dead
+thread would plausibly produce. A string that appears on both sides of a distinction is
+evidence for neither side of it. Reading it as transient would have been the fourth amendment's
+mistake once more — asserting the artifact rather than the effect — with the wedge as the
+prize.
+
+**Where the classification is made is a contract, not a detail.** It is produced where the
+evidence is: in the runner's stderr classifier and in the adapters' own result parsers,
+travelling on `runner.Event` as a small enum. It is **not** re-derived at the decision point by
+string-matching the rendered note. That note is a sentence written for a human in a 37-cell
+column; keying a mechanism off it would make every future wording change a silent behaviour
+change, which is this file's oldest lesson pointed at our own prose. It lives on `Model` and
+never on `State`: it is a decision input, never rendered, and a classification the view could
+reach is one a card would eventually start quoting.
+
+**A failed turn's two events cannot argue with each other.** A dead thread emits the vendor's
+own failed `result` and then the process exit carrying its stderr; the ninth amendment already
+rules that the second must not overwrite the first's *words*. The same now holds for its
+*verdict* — only a classified event upgrades the record, an unclassified one never downgrades
+it — for the identical reason: only one of the two knows anything.
+
+**The second half of the complaint was about the card, and it was a fair hit.** *"just visually
+looks meh."* What a seat that lost its thread rendered was a ⚠ followed by one sentence
+carrying an outcome and a mechanism run together, wrapping to three lines of uniform weight in
+a narrow column. Three of those side by side is a room that looks like it is on fire over a
+seat that will simply start a new session. It is now the card grammar §9.11 gave every other
+card: **a short title carrying the outcome — *thread not restored — starting fresh* — with the
+mechanics hanging under it, quieter.** And it carries **no warning mark**, which is the one
+judgement here worth defending: this is the same fact `reattachCard` already states calmly at
+idle when no thread came back, learned one turn later, and ⚠ has to go on meaning *something
+went wrong* for the notes where something did. The words carry the whole card in every glyph
+set, so `--ascii` loses nothing — the mark was never what said it.
+
+The general lesson, in this file's own terms: §9.6b measured the thing that refuted a rule and
+then explicitly declined to change the rule, on the correct ground that a record is not a fix.
+That is a good instinct and it has a failure mode — **the evidence sat next to the behaviour it
+contradicted for as long as nobody re-read both in the same session.** The rule was not wrong
+when written and the measurement was not wrong when taken; what was missing is the pass that
+asks whether the second still permits the first.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude
