@@ -226,7 +226,13 @@ func columnText(c Column, w int, g Glyphs) []string {
 	return out
 }
 
-// badgeLine is the sandbox + granularity claim, as words.
+// badgeLine is the sandbox claim, the streaming granularity, and the cost.
+//
+// Cost renders only when the vendor REPORTED one. A turn that reported zero
+// shows $0.0000; a turn that reported nothing shows no cost cell at all. Those
+// are different facts, and deriving a figure from token counts is on this
+// repo's deliberately-rejected list (design.md §8) — council does not get to
+// invent dollars either.
 func badgeLine(c Column) string {
 	parts := []string{}
 	if b := c.Sandbox.Badge(); b != "" {
@@ -234,6 +240,9 @@ func badgeLine(c Column) string {
 	}
 	if s := c.Gran.String(); s != "" {
 		parts = append(parts, s)
+	}
+	if c.CostUSD != nil {
+		parts = append(parts, "$"+strconv.FormatFloat(*c.CostUSD, 'f', 4, 64))
 	}
 	if len(parts) == 0 {
 		return ""

@@ -324,3 +324,34 @@ func TestSanitizeKeepsParagraphsAndKillsLineBreakers(t *testing.T) {
 		t.Error("sanitizeKeepingSpace kept a newline in a single-line draft")
 	}
 }
+
+// TestReportedCostRendersAndAbsentCostDoesNot is the honest-gauge rule on the
+// one number council can show. A vendor that reported zero and a vendor that
+// reported nothing must not render alike — and council never derives a cost
+// from token counts, so "nothing" is a real and common state.
+func TestReportedCostRendersAndAbsentCostDoesNot(t *testing.T) {
+	zero := 0.0
+	real := 0.0123
+
+	absent := room()
+	if strings.Contains(render(absent), "$") {
+		t.Error("a column with no reported cost rendered a dollar figure")
+	}
+
+	reportedZero := room()
+	reportedZero.Columns[0].CostUSD = &zero
+	if !strings.Contains(render(reportedZero), "$0.0000") {
+		t.Error("a vendor that reported zero did not render $0.0000")
+	}
+
+	reported := room()
+	reported.Turn = 1
+	reported.Columns[0].Phase = PhaseDone
+	reported.Columns[0].Body = "Resume beats re-sending."
+	reported.Columns[0].CostUSD = &real
+	got := render(reported)
+	if !strings.Contains(got, "$0.0123") {
+		t.Error("a reported cost was not rendered")
+	}
+	golden(t, "reported-cost", got)
+}

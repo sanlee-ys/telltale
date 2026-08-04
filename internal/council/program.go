@@ -7,6 +7,9 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/sanlee-ys/telltale/internal/council/runner"
+	"github.com/sanlee-ys/telltale/internal/model"
 )
 
 const spinnerInterval = 100 * time.Millisecond
@@ -28,16 +31,36 @@ type Model struct {
 	st     State
 	styles Styles
 	glyphs Glyphs
+
+	// events is shared by every vendor in a turn. Bounded, so a slow consumer
+	// stalls the vendors rather than losing their output (see dispatch.go).
+	events chan runner.Event
+
+	// turn is the dispatch in flight, or nil when the room is idle.
+	turn *turnState
+	// cancelling distinguishes "the user stopped this" from "the vendor
+	// failed", which are different words on a column card.
+	cancelling bool
+
+	// sessions holds each vendor's own session id, which is what makes a later
+	// turn a resume rather than a transcript re-send.
+	sessions map[model.VendorID]string
+	// redactors are per vendor because each carries a partial-word buffer
+	// across the chunks of one stream.
+	redactors map[model.VendorID]*Redactor
 }
 
 // New builds the model. Nothing renders until the first WindowSizeMsg arrives:
 // one blank frame beats one frame of wrong layout.
 func New(opts Options) *Model {
 	return &Model{
-		opts:   opts,
-		st:     stateWith(opts),
-		styles: NewStyles(true), // assume dark until the terminal answers
-		glyphs: GlyphsFor(opts.ASCII),
+		opts:      opts,
+		st:        stateWith(opts),
+		styles:    NewStyles(true), // assume dark until the terminal answers
+		glyphs:    GlyphsFor(opts.ASCII),
+		events:    make(chan runner.Event, eventBuffer),
+		sessions:  map[model.VendorID]string{},
+		redactors: map[model.VendorID]*Redactor{},
 	}
 }
 
@@ -105,13 +128,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		return m.key(msg)
 
+	case eventBatchMsg:
+		m.applyEvents(msg.events)
+		if m.turn == nil {
+			// The turn is over. Stop waiting on the channel: re-arming would
+			// park a goroutine on a channel nothing will write to until the
+			// next dispatch.
+			return m, nil
+		}
+		return m, m.waitEvents()
+
 	case spinMsg:
 		// The spinner only advances while a column is genuinely working. A
 		// motionless room is the honest render of a room where nothing is
 		// happening, and it keeps §7.1's budget of one moving cell.
 		if m.st.Busy() {
 			m.st.Spinner++
-			return m, spin()
 		}
 		return m, spin()
 	}
@@ -131,7 +163,9 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *Model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
-		// The one key that always means the same thing.
+		// The one key that always means the same thing. Children die with the
+		// room; quitting must never leave an agent running invisibly.
+		m.teardown()
 		return m, tea.Quit
 	case "esc":
 		// esc leaves compose but KEEPS the draft. Unlike the HUD's find query,
@@ -158,12 +192,20 @@ func (m *Model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
-		// Cancels the turn in flight if there is one, quits if there is not.
-		// Wiring the cancel half is PR 2's job; until dispatch exists there is
-		// never a turn in flight, so this is quit today and the help text does
-		// not promise otherwise.
+		// Cancels the turn in flight; quits when there is none. Two meanings
+		// for one key is a compromise, but the alternative is a quit key that
+		// silently abandons three running agents, and the mode line states
+		// which meaning is live on every frame.
+		if m.turn != nil {
+			m.cancelTurn()
+			return m, nil
+		}
 		return m, tea.Quit
 	case "q":
+		if m.turn != nil {
+			m.st.Notice = "a turn is in flight — ctrl+c cancels it first"
+			return m, nil
+		}
 		return m, tea.Quit
 	case "?":
 		m.st.Help = !m.st.Help
@@ -189,24 +231,6 @@ func (m *Model) focusBy(d int) {
 		return
 	}
 	m.st.Focus = ((m.st.Focus+d)%n + n) % n
-}
-
-// dispatch is the seam PR 2 fills in.
-//
-// It is a stub on purpose rather than an absent keybinding: pressing enter and
-// having nothing at all happen would read as a bug. The room says what it can
-// and cannot do yet, in the same footer that carries every other notice.
-func (m *Model) dispatch() tea.Cmd {
-	if m.st.Seated() == 0 {
-		m.st.Notice = "no vendor is seated — nothing to dispatch to"
-		return nil
-	}
-	if m.st.Draft == "" {
-		m.st.Notice = "nothing to dispatch: the brief is empty"
-		return nil
-	}
-	m.st.Notice = "dispatch is not wired yet (council v0) — the brief is kept"
-	return nil
 }
 
 // View is a thin wrapper over the pure renderer.
