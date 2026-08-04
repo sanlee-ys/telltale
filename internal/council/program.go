@@ -1,6 +1,7 @@
 package council
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -47,6 +48,22 @@ type Model struct {
 	// failed", which are different words on a column card.
 	cancelling bool
 
+	// procs holds the long-lived vendor processes, one per seat that supports
+	// being kept alive. Empty until the first dispatch: council never starts a
+	// vendor to see whether it answers.
+	procs map[model.VendorID]*seatProc
+	// roomCtx bounds those processes and is cancelled only by teardown.
+	//
+	// Deliberately NOT a turn's context. The whole value of a persistent seat is
+	// that cancelling one turn does not cost the next one a session init, and
+	// hanging the process off the turn would have quietly undone that the first
+	// time anyone pressed ctrl+c.
+	roomCtx    context.Context
+	roomCancel context.CancelFunc
+	// interrupts numbers the control messages sent to vendors, so each one
+	// carries an id that can be recognised coming back.
+	interrupts int
+
 	// sessions holds each vendor's own session id, which is what makes a later
 	// turn a resume rather than a transcript re-send.
 	sessions map[model.VendorID]string
@@ -70,15 +87,19 @@ func New(opts Options) *Model {
 }
 
 func newWithBrief(opts Options, b Brief) *Model {
+	ctx, cancel := context.WithCancel(context.Background())
 	m := &Model{
-		opts:      opts,
-		st:        stateWith(opts),
-		styles:    NewStyles(true), // assume dark until the terminal answers
-		glyphs:    GlyphsFor(opts.ASCII),
-		events:    make(chan runner.Event, eventBuffer),
-		sessions:  map[model.VendorID]string{},
-		redactors: map[model.VendorID]*Redactor{},
-		brief:     b,
+		opts:       opts,
+		st:         stateWith(opts),
+		styles:     NewStyles(true), // assume dark until the terminal answers
+		glyphs:     GlyphsFor(opts.ASCII),
+		events:     make(chan runner.Event, eventBuffer),
+		sessions:   map[model.VendorID]string{},
+		redactors:  map[model.VendorID]*Redactor{},
+		procs:      map[model.VendorID]*seatProc{},
+		roomCtx:    ctx,
+		roomCancel: cancel,
+		brief:      b,
 	}
 	m.st.Briefed = b.Loaded()
 	return m
@@ -242,12 +263,18 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.cancelTurn()
 			return m, nil
 		}
+		// teardown even with no turn in flight. A persistent seat's process
+		// outlives its turn by design, so "no turn" stopped meaning "no
+		// children" the moment that landed — and an idle room quit this way
+		// would have leaked exactly the invisible agent this product refuses.
+		m.teardown()
 		return m, tea.Quit
 	case "q":
 		if m.turn != nil {
 			m.st.Notice = "a turn is in flight — ctrl+c cancels it first"
 			return m, nil
 		}
+		m.teardown()
 		return m, tea.Quit
 	case "?":
 		m.st.Help = !m.st.Help

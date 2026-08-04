@@ -40,6 +40,35 @@ const (
 	PostureWrite
 )
 
+// Persistent is a vendor that can be driven as ONE process taking many turns,
+// rather than a fresh child per turn.
+//
+// Exactly one vendor implements it, and that is a fact about the CLIs rather
+// than a gap in this code. `codex exec` and `agy -p` are batch programs: they
+// read a prompt, answer, and exit. Neither documents nor exposes a mode that
+// keeps a process alive across turns, so neither can be handed a second turn
+// and neither has a channel on which to ask a question mid-turn. Their columns
+// keep spawn-per-turn, and their badges keep saying exactly what they did
+// before — the honest alternative to pretending the room is uniform.
+type Persistent interface {
+	Vendor
+
+	// Session builds the invocation for a process that will take many turns.
+	// No prompt appears anywhere in it: every turn arrives later, on stdin.
+	Session(workspace, binary string, p Posture) (runner.Spec, error)
+
+	// Turn encodes one turn as the line the process expects on its stdin.
+	Turn(prompt string) ([]byte, error)
+
+	// Interrupt encodes a request to abandon the turn in flight WITHOUT killing
+	// the process. id is any string the caller can recognise coming back.
+	Interrupt(id string) ([]byte, error)
+
+	// Decide encodes the answer to one Gate. allow=false carries reason back to
+	// the vendor as the tool's error text.
+	Decide(requestID string, allow bool, reason string, input map[string]any) ([]byte, error)
+}
+
 // Vendor is one seat at the table.
 type Vendor interface {
 	ID() model.VendorID

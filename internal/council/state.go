@@ -212,11 +212,22 @@ type Column struct {
 	// hides content, which is the failure this whole surface is built to avoid.
 	Follow bool
 
-	// CostUSD is this turn's spend AS REPORTED BY THE VENDOR. A pointer, so
-	// "reported zero" and "reported nothing" stay distinguishable: council
-	// never derives a cost from token counts, which is on this repo's
-	// deliberately-rejected list (design.md §8).
+	// CostUSD is the spend AS REPORTED BY THE VENDOR. A pointer, so "reported
+	// zero" and "reported nothing" stay distinguishable: council never derives a
+	// cost from token counts, which is on this repo's deliberately-rejected list
+	// (design.md §8).
 	CostUSD *float64
+	// CostSession reports that the figure above is the PROCESS's running total
+	// rather than this turn's spend.
+	//
+	// It exists because keeping one process alive changed what the vendor's own
+	// number means. Measured across two turns of one Claude process: the
+	// reported total went $0.1061493 -> $0.1177296 while the per-turn usage
+	// block stayed at 2 input tokens both times. Rendering a running total in a
+	// cell that has always meant "this turn" would be a false reading of a true
+	// number, and subtracting to recover the turn would be council inventing a
+	// figure — so the badge names which one it is and neither happens.
+	CostSession bool
 }
 
 // State is everything Render reads. Nothing here is a clock, a file handle or
