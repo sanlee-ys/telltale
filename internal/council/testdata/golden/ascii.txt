@@ -1,0 +1,24 @@
+ council ~/code/telltale                                                                           turn 1  |  3/3 seated
+------------------------------------------------------------------------------------------------------------------------
+ ]Claude Code               - streaming |  Codex                           idle |  Antigravity                     idle 
+ -------------------------------------- | ------------------------------------- | ------------------------------------- 
+ ro:tools  tokens                       | ro:requested  events                  | ro:requested  events                  
+                                        |                                       |                                       
+ Reading the adapter interface.         | no turn dispatched yet.               | no turn dispatched yet.               
+                                        |                                       |                                       
+                                        |                                       |                                       
+                                        |                                       |                                       
+                                        |                                       |                                       
+                                        |                                       |                                       
+                                        |                                       |                                       
+                                        |                                       |                                       
+                                        |                                       |                                       
+                                        |                                       |                                       
+                                        |                                       |                                       
+                                        |                                       |                                       
+                                        |                                       |                                       
+                                        |                                       |                                       
+                                        |                                       |                                       
+------------------------------------------------------------------------------------------------------------------------
+ :                                                                                                                      
+ VIEW                                                                       tab focus  |  ctrl+c cancel turn  |  ? help 

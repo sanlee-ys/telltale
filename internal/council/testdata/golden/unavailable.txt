@@ -1,0 +1,24 @@
+ council ~/code/telltale                                                                      no turn yet  │  1/3 seated
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ▸Claude Code                      idle │  Codex                    unavailable │  Antigravity              unavailable 
+ ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
+ ro:tools  tokens                       │ ⚠ Codex is not seated                 │ ⚠ Antigravity is not seated           
+                                        │                                       │                                       
+ no turn dispatched yet.                │ not found on PATH (looked for codex)  │ resolves to a shell shim (agy.cmd)    
+                                        │                                       │ and takes its prompt as an argument;  
+                                        │ the other columns dispatch normally.  │ set TELLTALE_COUNCIL_AGY_BIN to the   
+                                        │                                       │ real executable                       
+                                        │                                       │                                       
+                                        │                                       │ the other columns dispatch normally.  
+                                        │                                       │                                       
+                                        │                                       │                                       
+                                        │                                       │                                       
+                                        │                                       │                                       
+                                        │                                       │                                       
+                                        │                                       │                                       
+                                        │                                       │                                       
+                                        │                                       │                                       
+                                        │                                       │                                       
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ›                                                                                                                      
+ VIEW                                                                     tab focus  │  i compose  │  ? help  │  q quit 
