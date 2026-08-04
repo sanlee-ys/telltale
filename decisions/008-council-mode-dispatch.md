@@ -219,6 +219,49 @@ column. Uniform on purpose — the per-vendor gradations are all shades of "how 
 did we manage to ask for", and once the answer is "none", grading them would imply a safety
 difference that does not exist.
 
+### Amendment, 2026-08-04 (fourth): the room's default state was three strangers
+
+Observed in use, on turn 4 of a real session. Asked to "assume our C-level roles for this
+session", all three vendors guessed — separately and differently. Claude named its reading and
+asked to confirm; Codex asked which roles it should take; Antigravity improvised a corporate
+register. The convention they were groping for was already written down, in a private repo none
+of them had been given.
+
+That is council's default state, not a one-off: every vendor starts a fresh session with no
+shared history, so anything the user has already established is invisible to all of them.
+
+`--brief <file>` (or `TELLTALE_COUNCIL_BRIEF`) hands one file of operating context to every
+vendor on its **first turn**. Later turns resume each vendor's own session, so the context is
+already in its history — re-sending it per turn per vendor would spend the whole brief again
+against metered quotas for nothing.
+
+**Why the prompt rather than a system-prompt flag.** Only Claude has one (`--append-system-prompt`);
+`codex exec` has none and neither does `agy`. Even for Claude it takes the content in **argv**,
+which is the wrong channel twice over: a command line is visible in process listings, and the
+brief this feature exists to carry is private. Prompt-on-stdin is uniform across vendors and
+keeps the content off the command line — except for Antigravity, which does not accept stdin at
+all, and whose argv path is why the brief is capped at 24K.
+
+**The fence is worded UNLIKE the rebuttal fence, deliberately.** Quoted vendor replies are
+another model's words, marked as untrusted data that must not be followed (§ rebuttal).
+The brief is the user's own file, handed over on purpose, and is exactly what the vendor should
+follow. Inheriting the untrusted warning would teach the model to discount its own principal.
+
+**Privacy is a structural constraint, not a note.** telltale is public and the briefing is not,
+so the flag takes a PATH: nothing is baked into this repo, no default location inside a repo is
+searched, the content is never logged and never rendered. It lives on `Model`, never on `State`
+— the renderer has no business being able to reach it — and only a boolean crosses the boundary.
+
+**A bad path stops the room.** Running unbriefed after the user explicitly asked for a briefing
+reproduces the exact failure this removes, except now the user believes it is fixed. Missing,
+empty and oversize all fail before the alternate screen is entered.
+
+The header states `briefed` or `no brief` on every frame. An unbriefed room looks identical to a
+briefed one until a vendor guesses out loud, which is how this was found.
+
+Verified live rather than inferred: with a brief instructing a specific reply, the vendor
+returned exactly that reply.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude

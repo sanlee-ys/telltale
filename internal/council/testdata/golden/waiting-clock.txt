@@ -1,4 +1,4 @@
- council ~/code/telltale                                                                           turn 1  │  3/3 seated
+ council ~/code/telltale                                                              turn 1  │  3/3 seated  │  no brief
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸Claude Code                      idle │  Codex                           idle │  Antigravity          ⠋ waiting 1m13s 
  ro:tools  tokens                       │ ro:requested  final only              │ unsandboxed  final only               
