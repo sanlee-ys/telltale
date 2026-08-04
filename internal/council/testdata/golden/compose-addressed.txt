@@ -20,5 +20,5 @@
                                         │                                       │                                       
                                         │                                       │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- › should council resume sessions or re-send the transcript?_                                                           
- COMPOSE                                                                     → everyone  │  enter dispatch  │  esc view 
+ › @codex @agy is the resume flag right?_                                                                               
+ COMPOSE                                                                   → codex, agy  │  enter dispatch  │  esc view 

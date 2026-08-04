@@ -177,16 +177,27 @@ func (m *Model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.dispatch()
 	case "backspace":
 		if d := []rune(m.st.Draft); len(d) > 0 {
-			m.st.Draft = string(d[:len(d)-1])
+			m.setDraft(string(d[:len(d)-1]))
 		}
 		m.st.Notice = ""
 	default:
 		if t := msg.Text; t != "" {
-			m.st.Draft += sanitizeKeepingSpace(t)
+			m.setDraft(m.st.Draft + sanitizeKeepingSpace(t))
 			m.st.Notice = ""
 		}
 	}
 	return m, nil
+}
+
+// setDraft changes the brief and re-derives its routing.
+//
+// Routing is recomputed on every keystroke rather than at dispatch so the
+// footer can show it as it is typed. Deleting the "x" from "@codex" has to move
+// the indicator back to everyone at the moment it stops being a mention, not
+// after enter.
+func (m *Model) setDraft(s string) {
+	m.st.Draft = s
+	m.st.Route, _ = ParseRoute(s)
 }
 
 func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

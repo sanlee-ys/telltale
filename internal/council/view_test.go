@@ -369,3 +369,33 @@ func TestReportedCostRendersAndAbsentCostDoesNot(t *testing.T) {
 	}
 	golden(t, "reported-cost", got)
 }
+
+// TestAddressedTurnGolden shows the routed compose state: two vendors named,
+// the footer saying so.
+func TestAddressedTurnGolden(t *testing.T) {
+	st := room()
+	st.Mode = ModeComposing
+	st.Draft = "@codex @agy is the resume flag right?"
+	st.Route, _ = ParseRoute(st.Draft)
+	golden(t, "compose-addressed", render(st))
+}
+
+// TestUnaddressedColumnSaysSo: a vendor left out of a turn keeps its previous
+// reply on screen, because that is still the last thing it said — but it must
+// not read as a third opinion on the new brief.
+func TestUnaddressedColumnSaysSo(t *testing.T) {
+	st := room()
+	st.Turn = 2
+	st.Columns[0].Phase = PhaseStreaming
+	st.Columns[0].Body = "Looking at the resume path now."
+	st.Columns[1].Phase = PhaseDone
+	st.Columns[1].Body = "An older answer from turn 1."
+	st.Columns[1].Note = "not addressed in turn 2"
+	st.Columns[2].Phase = PhaseWaiting
+
+	got := render(st)
+	if !strings.Contains(got, "not addressed in turn 2") {
+		t.Error("a column left out of the turn does not say so")
+	}
+	golden(t, "unaddressed-column", got)
+}

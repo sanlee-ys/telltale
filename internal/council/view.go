@@ -328,7 +328,7 @@ func promptLine(st State, lay Layout, sty Styles, g Glyphs) string {
 	// Pad the PLAIN text, then style it once — never the other way round.
 	body := sty.Text.Render(padRight(text, w, g))
 	if st.Draft == "" && st.Mode == ModeComposing {
-		body = sty.Muted.Render(padRight("type a brief for the council"+g.Caret, w, g))
+		body = sty.Muted.Render(padRight("type a brief — @claude, @codex or @agy to address one"+g.Caret, w, g))
 	}
 	return " " + sty.Muted.Render(prefix) + body + " "
 }
@@ -343,7 +343,11 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 	switch st.Mode {
 	case ModeComposing:
 		left = "COMPOSE"
-		right = "enter dispatch  " + g.Sep + "  esc view  " + g.Sep + "  ctrl+c quit"
+		// The routing is stated before the keybindings because it is the one
+		// thing on this line that changes what enter DOES. An @typo has to read
+		// as "this is going to everyone" while there is still time to fix it;
+		// discovering it afterwards means a wasted turn against three quotas.
+		right = "→ " + routeLabel(st) + "  " + g.Sep + "  enter dispatch  " + g.Sep + "  esc view"
 	default:
 		left = "VIEW"
 		if st.Busy() {
@@ -367,6 +371,18 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 	return " " + l + strings.Repeat(" ", gap) + r + " "
 }
 
+// routeLabel names who the current draft is addressed to.
+//
+// "everyone" rather than a blank or an em dash: this cell always has an answer,
+// because a brief with no mention is not an absent routing, it is a routing to
+// the whole room. The em dash is reserved for facts the product does not have.
+func routeLabel(st State) string {
+	if len(st.Route) == 0 {
+		return "everyone"
+	}
+	return strings.Join(st.Route.labels(), ", ")
+}
+
 // helpBody replaces the column area, rather than floating over it, for the same
 // reason the HUD's overlay does: a panel that covers live output hides the
 // thing the user is watching.
@@ -375,7 +391,9 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		sty.Identity.Render("council") + sty.Muted.Render(" — one brief, several agents, side by side"),
 		"",
 		"  i / enter    compose a brief",
-		"  enter        dispatch to every seated vendor",
+		"  enter        dispatch — to everyone, or to whoever is @mentioned",
+		"  @claude      address one vendor: @claude, @codex, @agy, @all",
+		"               leading mentions only, so \"ask @claude\" is just prose",
 		"  esc          leave compose (the draft is kept)",
 		"  tab          move focus between columns",
 		"  ctrl+c       cancel the turn in flight, or quit when idle",
