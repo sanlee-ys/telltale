@@ -76,6 +76,14 @@ func (m *Model) dispatch() tea.Cmd {
 	// these" — the routing is addressing, not content, and leaving it in makes
 	// every vendor read a header about who else is in the room.
 	route, prompt := ParseRoute(m.st.Draft)
+	if route.Mixed {
+		// Checked before the empty-brief case on purpose. A draft that mixes
+		// the two forms cannot be routed at all, so telling the user to add a
+		// brief would send them back to a line that is going to be refused for
+		// a second reason the moment they do.
+		m.st.Notice = "@ narrows and -@ excludes — use one form, not both"
+		return nil
+	}
 	if prompt == "" {
 		m.st.Notice = "that is a mention with no brief after it"
 		return nil

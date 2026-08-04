@@ -629,7 +629,7 @@ func TestCtrlJInsertsANewlineAndEnterStillDispatches(t *testing.T) {
 func TestADeliberateNewlineSurvivesIntoTheDispatchedBrief(t *testing.T) {
 	draft := "compare these two:\n\n1. resume\n2. re-send"
 	route, prompt := ParseRoute(draft)
-	if len(route) != 0 {
+	if len(route.Vendors) != 0 || route.Mixed {
 		t.Fatalf("route = %v, want the default (everyone seated)", route)
 	}
 	if prompt != draft {

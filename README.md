@@ -241,6 +241,21 @@ stated rather than hidden: an unaddressed brief bills every seated vendor's quot
 turn, and the narrow case is the one you type. Only leading mentions route, so "ask @claude
 about it" stays prose.
 
+**`-@claude` goes the other way: everyone seated *except* that seat.** Same position, same
+aliases, same case-insensitivity — it is the mention grammar with a minus in front, not a
+second vocabulary. `-@codex -@agy` subtracts two. The footer names the result before you
+press enter: `→ everyone but claude`.
+
+The two forms may not be **mixed**. `@claude -@codex` is refused with a notice rather than
+reconciled, because it is over-specified rather than under-specified: `@` starts from
+nobody and adds, `-@` starts from everyone and subtracts, and a line that does both states
+two contradictory theories of who is in the room. Picking one silently is exactly the
+hidden decision the live routing indicator exists to prevent, so the room does not.
+`@all -@claude` is *not* that case and is accepted — `@all` names the default rather than
+adding a seat, so it names the set the exclusion subtracts from. An exclusion that leaves
+nobody (`-@all`, or naming every seat you have) gets the same "none of the vendors you
+addressed are seated" notice a mention of an unseated vendor already gets.
+
 Turn 1 is blind. Later turns ride each vendor's own native session resume rather than
 re-sending the transcript, which keeps that guarantee structural: each session holds only
 its own history. `ctrl+r` arms a rebuttal turn — off by default — in which each vendor
