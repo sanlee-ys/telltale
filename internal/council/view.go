@@ -1606,12 +1606,11 @@ func quoteTag(st State) string {
 // "everyone" rather than a blank or an em dash: this cell always has an answer,
 // because a brief with no mention is not an absent routing, it is a routing to
 // the whole room. The em dash is reserved for facts the product does not have.
-func routeLabel(st State) string {
-	if len(st.Route) == 0 {
-		return "everyone"
-	}
-	return strings.Join(st.Route.labels(), ", ")
-}
+//
+// An exclusion renders as "everyone but claude" — the negative form said in the
+// positive direction, because what the user needs to check before enter is who
+// is about to be BILLED, and "-claude" states the one seat that is not.
+func routeLabel(st State) string { return st.Route.label() }
 
 // helpBody replaces the column area, rather than floating over it, for the same
 // reason the HUD's overlay does: a panel that covers live output hides the
@@ -1636,8 +1635,18 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		// and tiebreak lanes" — which explains why the fleet is shaped this way
 		// rather than what a key does, and it is in the README and ADR-010 where
 		// that argument belongs.
-		"  @codex       narrow to a lane: @claude, @codex, @agy, @cursor — unaddressed",
-		"               goes to every seat. Leading mentions only: \"ask @claude\" is prose",
+		//
+		// The exclusion form was folded into the SAME two rows rather than given
+		// a third: this panel's budget is hard (17 rows, above), and a feature
+		// that pushed the `?` line off a 24-row terminal would have bought
+		// discoverability for one thing by taking away the way out of the panel.
+		// The commas between the aliases went to pay for it — they were never
+		// typed anyway. What is deliberately NOT here is the mixing refusal:
+		// that one announces itself in the footer while the line is still being
+		// typed, and again as a notice on enter, so it is the one rule on this
+		// list that does not need a row to be discovered.
+		"  @codex       narrow to a lane: @claude @codex @agy @cursor; -@codex excludes",
+		"               one. Unaddressed goes to every seat. Leading only: \"ask @claude\" is prose",
 		// One line, like pgup/pgdn below and for the same reason: the panel has
 		// to fit a 24-row terminal with q and ? still on screen.
 		"  /cd <dir>    move the room to another repo — seats follow on their next turn",

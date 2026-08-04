@@ -4,8 +4,8 @@
                                                                                                                         
    i / enter    compose a brief; enter dispatches — to everyone, or whoever is @mentioned                               
    ctrl+j       newline in the brief — the compose area grows to six rows                                               
-   @codex       narrow to a lane: @claude, @codex, @agy, @cursor — unaddressed                                          
-                goes to every seat. Leading mentions only: "ask @claude" is prose                                       
+   @codex       narrow to a lane: @claude @codex @agy @cursor; -@codex excludes                                         
+                one. Unaddressed goes to every seat. Leading only: "ask @claude" is prose                               
    /cd <dir>    move the room to another repo — seats follow on their next turn                                         
    y / n        approve or deny a tool call a vendor is blocked on (--write)                                            
    esc          leave compose (the draft is kept)                                                                       

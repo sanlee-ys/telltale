@@ -1091,6 +1091,95 @@ right about why — the **owner's model of what the room is for** had simply nev
 No measurement could have caught that either, and the same thing caught it as last time: him
 saying the sentence out loud.
 
+### Amendment, 2026-08-04 (fourteenth): a committee you can convene needs a way to excuse one member
+
+The thirteenth amendment made silence convene the room and left the vocabulary with one
+verb. `@claude` narrows to a seat; nothing subtracts one. The gap surfaced as a sentence
+about what the room could not say:
+
+> *"i'd eventually like the ability to say something like 'everyone except claude' and have
+> agy, cursor, codex respond."*
+
+Under the old default that sentence had no shape at all — the room started at one seat and
+mentions added to it, so "everyone except" was three mentions typed out by hand and kept in
+step with the seating by the user rather than by the room. Under the new default it is
+exactly one word short. **This amendment adds the word and nothing else.**
+
+**The grammar is the mention grammar with a minus in front.** A leading `-@vendor` excludes;
+`-@claude go` reaches every seated vendor but Claude. Leading position only, the same
+aliases (`agy`/`antigravity`, `cursor`), the same case-insensitivity, the same trailing-comma
+tolerance, the same dedupe, and the same treatment of a token that does not resolve — left
+in the brief as prose rather than raised as an error. That is a deliberate refusal to invent
+a second routing vocabulary: a user who has learned when `@` routes and when it is prose has
+already learned everything `-@` does, and the two rules could not drift because they are one
+parser. A brief that merely *starts* with a dash is untouched, because only `-@` is routing.
+
+**Mixing the two forms is REFUSED, and this is the one real decision in here.** `@claude
+-@codex` is not ambiguous through under-specification; it is over-specified. The positive
+form starts from nobody and adds. The negative form starts from everyone and subtracts.
+A line carrying both states two contradictory theories of who is in the room, and any
+reconciliation — union, intersection, last-one-wins, positive-wins — is the room silently
+picking one. That is precisely the class of hidden decision the thirteenth amendment's
+footer indicator exists to prevent: routing is re-derived on every keystroke *so that*
+nothing about where a brief is going is settled out of sight. A parser that resolved this
+would be spending four metered quotas on a guess about a sentence the user can restate in
+one keystroke. So the room declines and says which form to keep. The refusal appears in the
+footer **while the line is still being typed** — `→ mixed @ and -@`, in the same cell that
+already reads `→ everyone` for an `@typo` — and again as a notice if enter is pressed
+anyway.
+
+**`@all -@claude` is accepted, and it is not an exception to that rule.** `@all` does not
+add a seat; it *names the default*, which the thirteenth amendment kept precisely because
+it still reads as a statement of intent. So it names the set the exclusion subtracts from,
+and the two agree rather than contradict. It falls out of the grammar with no special case:
+`@all` resolves to the same everyone the negative form starts from. `-@all @claude` is
+still a mix, and is still refused.
+
+**Excluding everyone gets the notice that situation already had.** `-@all`, or naming every
+seat a given machine actually has, reaches nobody — the same place a mention of an unseated
+vendor lands, and it gets the same *"none of the vendors you addressed are seated"* rather
+than a second notice for an identical predicament. Mechanically, `-@all` is expanded to the
+whole addressable set at parse time instead of becoming a fourth route shape, which is what
+keeps that one notice covering both cases and keeps `addresses()` one rule. A test pins the
+addressable set against the mention vocabulary, so a fifth seat cannot be added while
+`-@all` goes on quietly meaning the four that existed when it was written — the fifth
+amendment's *"a test can hold a false claim in place"* aimed, for once, at a claim that has
+not been made yet.
+
+**The footer says the negative form in the positive direction.** `→ everyone but claude`,
+not `→ -claude`. The cell exists to answer *who is about to be billed*, and a leading minus
+is a character a reader scanning a footer at speed can miss in a way they cannot miss the
+word "but". It is also the longest this cell gets, so it is the form checked against the
+narrow tier's elision: the route is stated FIRST on the compose mode line, ahead of every
+keybinding, so the two-copy truncation eats keys — recoverable from the help panel — before
+it eats the destination, which is not recoverable at all once a turn is spent. A test pins
+that at 60 columns.
+
+**The help panel gained no rows.** Its budget is hard (17, §9.11) and the `?` line is the
+only documented way back out of it, so the exclusion form was folded into the two rows the
+mention form already had rather than given a third; the commas between the aliases paid for
+it. What is deliberately *not* on that panel is the mixing refusal, and the reason is a
+rule rather than a shortage: that one announces itself in the footer at the moment it
+applies, so it is the only rule in this vocabulary that does not need a row to be
+discovered.
+
+**What is untouched, restated so this cannot be read as more than it is.** Turn 1 is still
+blind (§4, design.md §9.4) — this changes *who a brief reaches*, never what any seat can see
+of another's answer. Rebuttal quoting is unchanged: still opt-in, still `ctrl+r`, still the
+previous turn's answers only, still fenced as untrusted material. A seat left out of a turn
+still records nothing for it, which now happens by subtraction as well as by narrowing.
+`--vendor` is still the stronger control, deciding who is **seated** where a mention decides
+who is addressed for **one turn** — so an exclusion subtracts from the seated room and can
+never reach a folded-away seat.
+
+The general lesson, in this file's own terms: the thirteenth amendment corrected the owner's
+model of what the room is *for*, and this one is what that correction cost. Inverting a
+default does not merely change an outcome, it changes which sentences are **sayable** — the
+old room could not express "everyone except" because it had no "everyone" to except from,
+and nobody noticed the absence while the default made it unnatural to want. A flipped
+default leaves a vocabulary shaped for the old one, and the missing word shows up as a user
+describing a thing they cannot type.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude
