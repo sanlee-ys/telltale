@@ -1,9 +1,8 @@
  council ~/code/telltale                                                                           turn 2  │  3/3 seated
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸Claude Code               ⠋ streaming │  Codex                           done │  Antigravity                ⠋ waiting 
- ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
  ro:tools  tokens                       │ ro:requested  final only              │ unsandboxed  final only               
-                                        │                                       │                                       
+ ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
  Looking at the resume path now.        │ An older answer from turn 1.          │ working. this vendor reports no       
                                         │                                       │ incremental output, so nothing        
                                         │ ⚠ not addressed in turn 2             │ appears until the turn finishes.      
@@ -19,6 +18,7 @@
                                         │                                       │                                       
                                         │                                       │                                       
                                         │                                       │                                       
+                                        │                                       │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
- VIEW                                                                       tab focus  │  ctrl+c cancel turn  │  ? help 
+ VIEW                                                 ↑↓ scroll  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 

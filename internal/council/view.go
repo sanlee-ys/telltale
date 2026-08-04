@@ -18,7 +18,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 		return floorMessage(st, sty)
 	}
 
-	lay := resolveLayout(st.Width, st.Height, len(st.Columns))
+	lay := resolveLayout(st.Width, st.Height, len(st.Columns), st.Expanded)
 
 	// Every assembled line goes through fit at its final width. The rule that no
 	// rendered line may exceed the terminal is enforced here, once, rather than
@@ -142,15 +142,41 @@ func columnCell(st State, c Column, focused bool, w, h int, sty Styles, g Glyphs
 	lines := make([]string, 0, h)
 
 	lines = append(lines, fit(columnHeader(st, c, focused, w, sty, g), w))
+	// The badge line is CHROME, not body, and that is a safety decision rather
+	// than a layout one. It carries the sandbox claim, and the first version of
+	// this scrolled it away with the text — so a user reading the middle of a
+	// long reply from the unsandboxed column had nothing on screen telling them
+	// that column can write to their tree. A claim that disappears when you
+	// read is not a claim.
+	if len(lines) < h {
+		if b := badgeLine(c); b != "" {
+			lines = append(lines, sty.Muted.Render(padRight(b, w, g)))
+		}
+	}
 	if len(lines) < h {
 		lines = append(lines, sty.Muted.Render(strings.Repeat(g.Rule, w)))
 	}
 
-	for _, l := range columnText(c, w, g) {
-		if len(lines) >= h {
-			break
+	body := columnText(c, w, g)
+	avail := h - len(lines)
+	win, above, below := scrollWindow(c, body, avail)
+
+	for i, l := range win {
+		// The overflow markers replace the first and last visible lines rather
+		// than sitting outside the body, because the body area is the whole
+		// budget. Spending a line to say "there is more" is worth it: silent
+		// clipping is indistinguishable from a vendor that stopped talking,
+		// which is exactly the ambiguity §4a.1 forbids.
+		switch {
+		case i == 0 && above > 0:
+			lines = append(lines, sty.Muted.Render(padRight(
+				g.Up+" "+strconv.Itoa(above)+" more above", w, g)))
+		case i == len(win)-1 && below > 0:
+			lines = append(lines, sty.Muted.Render(padRight(
+				g.Down+" "+strconv.Itoa(below)+" more below", w, g)))
+		default:
+			lines = append(lines, padRight(l, w, g))
 		}
-		lines = append(lines, padRight(l, w, g))
 	}
 
 	blank := strings.Repeat(" ", w)
@@ -158,6 +184,55 @@ func columnCell(st State, c Column, focused bool, w, h int, sty Styles, g Glyphs
 		lines = append(lines, blank)
 	}
 	return lines[:h]
+}
+
+// scrollWindow picks the visible slice of a column's body.
+//
+// Pure, and derived from Column rather than mutating it, so Render stays a
+// function of State: a column that is following computes its offset from the
+// content it currently has, which means the tail cannot drift out of sync with
+// what arrived. A column the user has scrolled uses its stored offset, clamped
+// here so a resize or a shorter reply can never strand the view past the end.
+func scrollWindow(c Column, body []string, avail int) (win []string, above, below int) {
+	if avail <= 0 {
+		return nil, 0, 0
+	}
+	if len(body) <= avail {
+		return body, 0, 0
+	}
+
+	max := len(body) - avail
+	off := c.Scroll
+	if c.Follow {
+		off = max
+	}
+	if off < 0 {
+		off = 0
+	}
+	if off > max {
+		off = max
+	}
+	return body[off : off+avail], off, max - off
+}
+
+// MaxScroll is the largest useful offset for a column at the given geometry.
+// Exported for the program loop, which clamps a keystroke against it.
+func MaxScroll(st State, idx int) int {
+	if idx < 0 || idx >= len(st.Columns) {
+		return 0
+	}
+	lay := resolveLayout(st.Width, st.Height, len(st.Columns), st.Expanded)
+	w := lay.ColWidth
+	if lay.Tier == TierColumns {
+		w += lay.extraFor(idx)
+	}
+	// Three lines of the cell are chrome: header, badge, rule.
+	avail := lay.Body - 3
+	n := len(columnText(st.Columns[idx], w, GlyphsFor(st.ASCII)))
+	if m := n - avail; m > 0 {
+		return m
+	}
+	return 0
 }
 
 // columnHeader is the vendor name plus the two claims this product refuses to
@@ -202,11 +277,6 @@ func columnText(c Column, w int, g Glyphs) []string {
 	}
 
 	var out []string
-	if b := badgeLine(c); b != "" {
-		out = append(out, wrap(b, w)...)
-		out = append(out, "")
-	}
-
 	switch {
 	case c.Phase == PhaseIdle && c.Body == "":
 		out = append(out, wrap("no turn dispatched yet.", w)...)
@@ -350,10 +420,11 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 		right = "→ " + routeLabel(st) + "  " + g.Sep + "  enter dispatch  " + g.Sep + "  esc view"
 	default:
 		left = "VIEW"
+		scroll := g.Up + g.Down + " scroll  " + g.Sep + "  f expand  " + g.Sep + "  "
 		if st.Busy() {
-			right = "tab focus  " + g.Sep + "  ctrl+c cancel turn  " + g.Sep + "  ? help"
+			right = scroll + "tab focus  " + g.Sep + "  ctrl+c cancel  " + g.Sep + "  ? help"
 		} else {
-			right = "tab focus  " + g.Sep + "  i compose  " + g.Sep + "  ? help  " + g.Sep + "  q quit"
+			right = scroll + "tab focus  " + g.Sep + "  i compose  " + g.Sep + "  ? help  " + g.Sep + "  q quit"
 		}
 	}
 	if st.Notice != "" {
@@ -396,6 +467,10 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		"               leading mentions only, so \"ask @claude\" is just prose",
 		"  esc          leave compose (the draft is kept)",
 		"  tab          move focus between columns",
+		"  ↑ ↓ / j k    scroll the focused column",
+		"  pgup/pgdn    scroll by a screenful   (space = pgdn)",
+		"  g / G        jump to the top / back to the newest output",
+		"  f            expand the focused column to the full width",
 		"  ctrl+c       cancel the turn in flight, or quit when idle",
 		"  q            quit (in view mode only — in compose it is the letter q)",
 		"  ?            this help",

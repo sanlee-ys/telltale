@@ -151,6 +151,19 @@ type Column struct {
 	// explanation on an unavailable column.
 	Note string
 
+	// Scroll is the first visible body line. Only consulted when Follow is
+	// false — a column that is tailing derives its offset from the content, so
+	// the two can never disagree about where the bottom is.
+	Scroll int
+	// Follow pins the column to the newest output.
+	//
+	// True by default and reset to true on dispatch, because during a turn the
+	// interesting line is the one arriving. It goes false the moment the user
+	// scrolls up: yanking someone back to the bottom while they are reading is
+	// the single most irritating thing a streaming pane can do, and it also
+	// hides content, which is the failure this whole surface is built to avoid.
+	Follow bool
+
 	// CostUSD is this turn's spend AS REPORTED BY THE VENDOR. A pointer, so
 	// "reported zero" and "reported nothing" stay distinguishable: council
 	// never derives a cost from token counts, which is on this repo's
@@ -195,6 +208,13 @@ type State struct {
 	Notice string
 
 	Help bool
+
+	// Expanded gives the focused column the whole width.
+	//
+	// Three columns are for comparing at a glance; one is for actually reading
+	// a long reply. Both are the same renderer — expanding reuses the tabbed
+	// path — so there is no second layout to keep in sync.
+	Expanded bool
 
 	// Spinner advances only while something is genuinely in flight.
 	Spinner int

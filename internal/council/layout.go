@@ -56,11 +56,13 @@ type Layout struct {
 	Body int
 }
 
-func tierFor(width, cols int) Tier {
+func tierFor(width, cols int, expanded bool) Tier {
 	switch {
 	case width < MinWidth:
 		return TierFloor
-	case cols <= 1 || width < columnsBreak:
+	// Expanded is a deliberate request for one column at full width, so it
+	// outranks the width breakpoint rather than competing with it.
+	case expanded || cols <= 1 || width < columnsBreak:
 		return TierTabs
 	default:
 		return TierColumns
@@ -73,8 +75,8 @@ func tierFor(width, cols int) Tier {
 // gutter each side; whatever is left divides evenly, and the remainder goes to
 // the focused column rather than being scattered, so the widths are stable
 // between frames instead of shimmering by one cell as focus moves.
-func resolveLayout(width, height, n int) Layout {
-	l := Layout{Tier: tierFor(width, n), Width: width}
+func resolveLayout(width, height, n int, expanded bool) Layout {
+	l := Layout{Tier: tierFor(width, n, expanded), Width: width}
 	if l.Tier == TierFloor {
 		return l
 	}
