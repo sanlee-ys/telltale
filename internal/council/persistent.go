@@ -65,7 +65,12 @@ func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string,
 		return existing, "", nil
 	}
 
-	spec, err := v.Session(m.st.Workspace, c.Binary, m.seatPosture())
+	// The hooks file is handed over on every spawn rather than only the first.
+	// A seat whose process died and was replaced is a stranger again — it is
+	// already re-briefed for that reason — and a replacement that came back
+	// unscreened while the badge still said the guard was wired would be the
+	// quietest false claim in the room.
+	spec, err := v.Session(m.st.Workspace, c.Binary, m.hooks.Path, m.seatPosture())
 	if err != nil {
 		return nil, "", err
 	}

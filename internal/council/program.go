@@ -91,6 +91,14 @@ type Model struct {
 	// its content is the user's private file and the renderer has no business
 	// being able to reach it.
 	brief Brief
+
+	// hooks is the user's own hook configuration, copied into a file of its
+	// own so the gated seat can be pointed at it.
+	//
+	// On Model for the same reason the brief is, and it is the same rule rather
+	// than a resemblance: it names a path into the user's private configuration,
+	// and only the boolean "is anything wired" crosses onto State.
+	hooks HookSet
 }
 
 // New builds the model. Nothing renders until the first WindowSizeMsg arrives:
@@ -99,14 +107,14 @@ type Model struct {
 // The brief is loaded by Run before this, so a bad path fails before the
 // alternate screen is entered rather than as an unreadable error behind a TUI.
 func New(opts Options) *Model {
-	return newWithBrief(opts, Brief{})
+	return newWithBrief(opts, Brief{}, HookSet{})
 }
 
-func newWithBrief(opts Options, b Brief) *Model {
+func newWithBrief(opts Options, b Brief, hs HookSet) *Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &Model{
 		opts:       opts,
-		st:         stateWith(opts),
+		st:         stateWith(opts, hs.Wired()),
 		styles:     NewStyles(true), // assume dark until the terminal answers
 		glyphs:     GlyphsFor(opts.ASCII),
 		events:     make(chan runner.Event, eventBuffer),
@@ -117,12 +125,13 @@ func newWithBrief(opts Options, b Brief) *Model {
 		roomCtx:    ctx,
 		roomCancel: cancel,
 		brief:      b,
+		hooks:      hs,
 	}
 	m.st.Briefed = b.Loaded()
 	return m
 }
 
-func stateWith(opts Options) State {
+func stateWith(opts Options, hooked bool) State {
 	st := NewState()
 	st.ASCII = opts.ASCII
 	st.Write = opts.Write
@@ -151,7 +160,7 @@ func stateWith(opts Options) State {
 			Avail:   info.Avail,
 			Binary:  info.Binary,
 			Note:    info.Note,
-			Sandbox: postureClaim(info.Vendor, windows, opts.Write, !opts.Auto),
+			Sandbox: postureClaim(info.Vendor, windows, opts.Write, !opts.Auto, hooked),
 			Gran:    granularityFor(info.Vendor),
 			Phase:   PhaseIdle,
 			Follow:  true,
@@ -476,6 +485,16 @@ func (m *Model) View() tea.View {
 	return v
 }
 
+// wantsHooks reports whether this room is the one that needs its hooks copied.
+//
+// Exactly the room that passes --setting-sources "", and it is written as the
+// same condition as seatPosture's rather than as "a write room" so the two
+// cannot drift apart. A read-only or --auto room loads the user's settings
+// natively: there is nothing to repair there, no reason to leave a temporary
+// file on disk for it, and injecting the hooks anyway would fire each of them
+// twice.
+func wantsHooks(opts Options) bool { return opts.Write && !opts.Auto }
+
 // Run starts the room.
 //
 // Council is the one telltale mode that dispatches to vendor CLIs. The
@@ -489,7 +508,17 @@ func Run(opts Options) error {
 	if err != nil {
 		return err
 	}
-	p := tea.NewProgram(newWithBrief(opts, b))
+
+	var hooks HookSet
+	if wantsHooks(opts) {
+		hooks = LoadHookSet()
+	}
+	// Cleaned up here as well as in teardown. teardown covers the quit paths;
+	// this covers every other way out of a program, including one that returns
+	// an error before a quit key was ever pressed.
+	defer hooks.Cleanup()
+
+	p := tea.NewProgram(newWithBrief(opts, b, hooks))
 	_, err = p.Run()
 	return err
 }

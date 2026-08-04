@@ -294,16 +294,17 @@ func kindOf(path string) BinaryKind {
 // permission request needs — somewhere to arrive and somewhere for the answer
 // to go back. The other three are batch CLIs and get the badge that describes
 // what they actually do.
-func postureClaim(v model.VendorID, windows, write, gated bool) SandboxClaim {
+// The gate's detail takes one more argument than the rest, and it is not a
+// stylistic wrinkle: hooked is read from whether a hooks file actually exists,
+// so the sentence about the guard cannot outlive the thing it describes. A
+// claim keyed off "we tried to wire it" would survive an unreadable settings
+// file, an empty hooks section, and a temp directory that could not be created
+// — three ways to end up unscreened while the column says otherwise.
+func postureClaim(v model.VendorID, windows, write, gated, hooked bool) SandboxClaim {
 	if write && gated && canGate(v) {
 		return SandboxClaim{
-			Level: SandboxGated,
-			Detail: "started with --write, and this column asks before every tool " +
-				"call that changes anything: y approves, n denies, and nothing " +
-				"runs until you answer. Two limits are real — shell commands the " +
-				"CLI itself classifies read-only are approved without asking, and " +
-				"the gate replaces your own settings' permission rules and hooks " +
-				"for this seat rather than sitting behind them",
+			Level:  SandboxGated,
+			Detail: gatedDetail(hooked),
 		}
 	}
 	if write {
@@ -315,6 +316,35 @@ func postureClaim(v model.VendorID, windows, write, gated bool) SandboxClaim {
 		}
 	}
 	return sandboxFor(v, windows)
+}
+
+// gatedDetail is what the gated column defends, and the two branches differ in
+// what they CLAIM rather than in tone.
+//
+// The shared half is the gate itself. The half that varies is the seat's other
+// screen: this posture passes --setting-sources "", which drops the user's
+// permission allow rules on purpose — a rule that pre-approves a call is
+// exactly what a gate cannot sit behind — and used to drop their hooks with
+// them, as collateral. Whether the hooks came back is a fact about a file on
+// disk, so it is read from that file and not from an intention.
+//
+// The read-only carve-out is stated in both branches and matters more in the
+// absent one: a shell command the CLI itself classifies read-only is approved
+// without asking, so with no hook wired those calls have nothing at all in
+// front of them. That is precisely the case the wired branch closes, and it is
+// why "the guard is absent" is worth a sentence rather than a shrug.
+func gatedDetail(hooked bool) string {
+	const shared = "started with --write, and this column asks before every tool " +
+		"call that changes anything: y approves, n denies, and nothing runs " +
+		"until you answer. Your settings' permission allow rules are dropped " +
+		"for this seat on purpose, and shell commands the CLI itself classifies " +
+		"read-only are approved without asking"
+	if hooked {
+		return shared + ". Your own hooks are carried into this seat and do run " +
+			"in front of it, including on the calls the gate is not asked about"
+	}
+	return shared + ". No hooks were carried into this seat — none were found to " +
+		"copy — so the calls the gate is not asked about have nothing screening them"
 }
 
 // canGate reports whether a seat can be asked to ask.

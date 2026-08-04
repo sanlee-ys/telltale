@@ -2636,13 +2636,38 @@ call they cover never reaches the gate at all. Without that flag, "nothing write
 keystroke" is simply false — and false quietly, on a machine whose owner wrote those rules
 years ago for a different purpose.
 
-**Two limits are stated on the badge rather than buried here.** Shell commands the CLI itself
+**One limit is stated on the badge rather than buried here.** Shell commands the CLI itself
 classifies as read-only are approved without asking — `git status` was ungated under both
-setting-source configurations — so the claim is about calls that *change* things and is worded
-that way everywhere. And dropping the setting sources also drops the user's own hooks and
-user-level commands from that seat: the gate replaces their permission layer rather than
-sitting behind it. That is a real trade, and a room where a person is watching every call is
-the context in which it is worth making.
+setting-source configurations, and so is `echo` — so the claim is about calls that *change*
+things and is worded that way everywhere.
+
+**The second limit was a hole, and it is now closed.** Dropping the setting sources also
+dropped the user's own hooks and user-level commands from that seat. Half of that is the
+feature working: the allow rules are what the gate replaces. The other half was collateral — a
+`PreToolUse` hook is a screen the user built, nothing was replacing it, and the calls it
+covered are disproportionately the ones the gate never sees. Measured: in the gated posture,
+`echo <marker>` raised no request and simply ran.
+
+`--settings <file>` composes with `--setting-sources ""` — the sources stay dropped and the
+named file is still read — so council copies the user's `hooks` section into an ephemeral file
+of its own and points the gated seat at it. Two properties of that file are load-bearing:
+
+- **It is built by naming one key, never by deleting others.** The same spike showed a
+  `permissions` block inside a `--settings` file re-admits the allow rules: an allowlisted
+  `mkdir` ran with no request and the directory landed on disk. An allowlist of exactly `hooks`
+  cannot rot as Claude Code adds settings keys; a denylist would.
+- **The badge is derived from whether the file exists**, not from whether council tried. An
+  unreadable settings file, an empty hooks section and a temp directory that could not be
+  created all end in the same place, and the column says the guard is absent rather than
+  claiming one.
+
+The file is absolute (a relative `--settings` path resolves against the *child's* working
+directory, which is the workspace, and fails), 0600, removed on teardown, never logged and
+never rendered — the same privacy discipline `--brief` carries, for the same reason: only a
+boolean crosses onto `State`.
+
+The honest residual: hooks fire as that file described them at spawn time. Editing the real
+settings mid-session does not propagate until the next room.
 
 **A denial is not a failure, and the difference took a fifth outcome value to keep.** The vendor
 reports a refusal as an `is_error` tool_result carrying council's own refusal text back — so
@@ -2658,5 +2683,7 @@ on. Their columns keep `WRITES`; only the seat that asks carries `gated`. Giving
 same badge would be the blanket claim §9.2 exists to refuse, one level up.
 
 `--write --auto` restores the old behaviour for the times nobody is watching: `acceptEdits`,
-the `WRITES` badge, the user's settings left alone. Gating is the default because the room the
-user opened is the one they are looking at; unattended is the exception and has to be typed.
+the `WRITES` badge, the user's settings left alone — and therefore no injected hooks file
+either, since a room that loads those settings natively would otherwise run every hook twice.
+Gating is the default because the room the user opened is the one they are looking at;
+unattended is the exception and has to be typed.
