@@ -36,6 +36,10 @@ func mentionAliases() map[string]model.VendorID {
 		"codex":       model.VendorCodex,
 		"agy":         model.VendorAntigravity,
 		"antigravity": model.VendorAntigravity,
+		// A seat nobody can address is only half seated: without this, @cursor
+		// falls through as an unrecognised token, stays in the brief as prose,
+		// and the turn silently goes to the default lane instead.
+		"cursor": model.VendorCursor,
 	}
 }
 

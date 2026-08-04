@@ -141,7 +141,13 @@ func (m *Model) dispatch() tea.Cmd {
 		ts.handles = append(ts.handles, h)
 		ts.live++
 		c.Phase = PhaseStreaming
-		if c.Gran == GranFinalOnly {
+		// GranUnknown lands in Waiting alongside GranFinalOnly, and the
+		// asymmetry is the point. PhaseStreaming asserts "output is arriving and
+		// you are seeing it as it lands" — a claim an unestablished vendor has
+		// not earned. Opening in Waiting and upgrading on the first chunk
+		// (applyEvents) is honest in that direction only, so an unknown vendor
+		// gets the modest claim and is promoted by evidence.
+		if c.Gran == GranFinalOnly || c.Gran == GranUnknown {
 			c.Phase = PhaseWaiting
 		}
 		c.Body = ""
