@@ -23,6 +23,18 @@ type Glyphs struct {
 	Down     string // "there is more below" marker
 	Act      string // prefixes a tool call / command in the activity trace
 
+	// Idle is the one mark the phase vocabulary needed that nothing else in this
+	// package already carried: a seat that has not been asked anything yet.
+	//
+	// Every other phase is spelled with a mark this room already owns — the
+	// spinner for a turn in flight, ActOK for one that finished, ActFail for one
+	// that broke, Warn for one that did not complete normally — so the phase
+	// glyphs are a REUSE of meanings rather than a second alphabet. This one has
+	// no existing owner, and it is deliberately the HUD's own "weakest state"
+	// dot with the HUD's own ASCII form (design.md §7.5), because the two
+	// surfaces are meant to read as one product.
+	Idle string
+
 	// The three outcome marks that follow a trace entry. There is deliberately
 	// no mark for a call still pending: an unresolved entry renders bare,
 	// because a mark for "nothing is known yet" would be a claim.
@@ -59,6 +71,7 @@ func UnicodeGlyphs() Glyphs {
 		Up:       "↑", // ↑
 		Down:     "↓", // ↓
 		Act:      "⚙", // ⚙
+		Idle:     "○", // ○
 		// ✓ / ✗ / ? — the third is an ordinary question mark on purpose. It is
 		// the one character that reads as "not known" to everybody without a
 		// legend, and unlike a middle dot or an em dash it cannot be mistaken
@@ -92,6 +105,11 @@ func ASCIIGlyphs() Glyphs {
 		// and not ">" (the ellipsis here), because a mark that already means
 		// something else is not a mark.
 		Act: "*",
+		// "." for a seat nothing has been asked of. Unclaimed here, and it is
+		// exactly what the HUD's ASCII table already maps "○" to (design.md
+		// §7.5) — so the two surfaces spell the same state the same way in both
+		// glyph modes rather than only in the pretty one.
+		Idle: ".",
 		// The outcome marks have to dodge everything already spoken for here:
 		// "*" is Act, ">" the ellipsis, "]" focus, "!" the warning prefix, "^"
 		// and "v" the overflow markers, "|" the separator, "-" the rule and the

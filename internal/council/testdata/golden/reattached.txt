@@ -1,14 +1,14 @@
- council ~/code/telltale                                                              turn 3  │  3/3 seated  │  no brief
+ council  │  ~/code/telltale                                                         turn 3  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸Claude Code                      idle │  Codex                           idle │  Antigravity                     idle 
- ro:tools  tokens                       │ ro:requested  final only              │ unsandboxed  final only               
- ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
+ ▸ Claude Code  ───────────────  ○ idle │   Codex  ────────────────────  ○ idle │   Antigravity  ──────────────  ○ idle 
+   ro:tools  tokens                     │   ro:requested  final only            │   unsandboxed  final only             
+                                        │                                       │                                       
  reattached — turn 3 was the last,      │ reattached — turn 3 was the last,     │ reattached — turn 3 was the last,     
  saved 2h ago.                          │ saved 2h ago.                         │ saved 2h ago.                         
+   this seat's thread came back. the    │   this seat's thread came back. the   │   no thread came back for this seat.  
+   next brief continues it.             │   next brief continues it.            │   its next brief opens a new session, 
+                                        │                                       │   with the brief re-applied.          
                                         │                                       │                                       
- this seat's thread came back. the next │ this seat's thread came back. the     │ no thread came back for this seat.    
- brief continues it.                    │ next brief continues it.              │ its next brief opens a new session,   
-                                        │                                       │ with the brief re-applied.            
                                         │                                       │                                       
                                         │                                       │                                       
                                         │                                       │                                       

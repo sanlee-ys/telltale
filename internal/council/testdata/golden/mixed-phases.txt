@@ -1,12 +1,12 @@
- council ~/code/telltale                                                              turn 2  │  3/3 seated  │  no brief
+ council  │  ~/code/telltale                                                         turn 2  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸Claude Code                      done │  Codex                         failed │  Antigravity                cancelled 
- ro:tools  tokens                       │ ro:requested  final only              │ unsandboxed  final only               
- ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
+ ▸ Claude Code  ───────────────  ✓ done │   Codex  ──────────────────  ✗ failed │   Antigravity  ─────────  ⚠ cancelled 
+   ro:tools  tokens                     │   ro:requested  final only            │   unsandboxed  final only             
+                                        │                                       │                                       
  Use the native resume path. Re-sending │                                       │ Partly agree, though the              
  the transcript grows input             │                                       │                                       
  quadratically.                         │ ⚠ exit 1: not signed in — run `codex  │ ⚠ cancelled — output above is partial 
-                                        │ login`                                │                                       
+                                        │   login`                              │                                       
                                         │                                       │                                       
                                         │                                       │                                       
                                         │                                       │                                       

@@ -32,7 +32,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 	b.WriteString(rule(st.Width, sty, g))
 	b.WriteString("\n")
 	if lay.Notice > 0 {
-		b.WriteString(fit(" "+sty.Muted.Render(collapsedNotice(st, g)), st.Width))
+		b.WriteString(fit(" "+noticeLine(st, sty, g, st.Width-2), st.Width))
 		b.WriteString("\n")
 	}
 
@@ -99,7 +99,11 @@ func rule(w int, sty Styles, g Glyphs) string {
 // changes what the agents can see. A dispatch room that hid its own cwd would
 // be the same class of omission as a gauge that hid its units.
 func header(st State, lay Layout, sty Styles, g Glyphs) string {
-	left := sty.Identity.Render("council")
+	// Full weight, because this is the one word on screen that says which
+	// telltale surface you are looking at, and the HUD's header opens the same
+	// way. The two headers now share a shape as well as a palette: product name,
+	// separator, subject, then the counts right-anchored.
+	left := sty.Strong.Render("council")
 	if st.Write {
 		// Persistent, not a one-off notice. A notice scrolls away and a badge
 		// can be missed while reading a column; the state it describes lasts
@@ -124,19 +128,41 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	right := sty.Muted.Render(round + "  " + g.Sep + "  " + seated + "  " + g.Sep + "  " + brief)
 
 	// The path takes whatever is left, elided from the left because the
-	// uninformative part of a path is its prefix.
-	used := lipgloss.Width(left) + lipgloss.Width(right) + 4
+	// uninformative part of a path is its prefix. It is introduced by the same
+	// "  │  " the HUD's header uses between its own zones, so the room's name
+	// and the directory it dispatches into read as two facts rather than as one
+	// run-on label — which is what a bare space made them.
+	sep := "  " + sty.Rule().Render(g.Sep) + "  "
+	used := lipgloss.Width(left) + lipgloss.Width(right) + 2 + lipgloss.Width(sep)
 	pathw := lay.Width - used
 	mid := ""
 	if pathw > 3 {
-		mid = sty.Muted.Render(elideLeft(displayPath(st), pathw, g.Ellipsis))
+		mid = sep + sty.Muted.Render(elideLeft(displayPath(st), pathw, g.Ellipsis))
 	}
 
 	gap := lay.Width - lipgloss.Width(left) - lipgloss.Width(mid) - lipgloss.Width(right) - 2
 	if gap < 1 {
 		gap = 1
 	}
-	return " " + left + " " + mid + strings.Repeat(" ", gap) + right + " "
+	return " " + left + mid + strings.Repeat(" ", gap) + right + " "
+}
+
+// noticeLine is the collapsed-seat notice, truncated honestly.
+//
+// It used to be handed to fit, which cuts without saying so: at 120 columns the
+// reference machine's notice lost the last word of "--vendor all seats them
+// anyway" and looked like a sentence that simply stopped. Everywhere else in
+// this room a clipped string says it was clipped, and a line about seats you
+// cannot see is a poor place to start making exceptions.
+//
+// The warning mark carries the hue and the words carry the fact, the same split
+// the activity trace's outcome marks use.
+func noticeLine(st State, sty Styles, g Glyphs, w int) string {
+	n := truncate(collapsedNotice(st, g), w, g.Ellipsis)
+	if rest, ok := strings.CutPrefix(n, g.Warn); ok {
+		return sty.SevWarn.Render(g.Warn) + sty.Muted.Render(rest)
+	}
+	return sty.Muted.Render(n)
 }
 
 // displayPath abbreviates the home prefix. Display only — the dispatched
@@ -231,33 +257,11 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 // above already carries one.
 func columnCell(st State, c Column, focused bool, hint []string, w, h int, sty Styles, g Glyphs) []string {
 	lines := make([]string, 0, h)
-
-	lines = append(lines, fit(columnHeader(st, c, focused, w, sty, g), w))
-	// The badge line is CHROME, not body, and that is a safety decision rather
-	// than a layout one. It carries the sandbox claim, and the first version of
-	// this scrolled it away with the text — so a user reading the middle of a
-	// long reply from the unsandboxed column had nothing on screen telling them
-	// that column can write to their tree. A claim that disappears when you
-	// read is not a claim.
-	if len(lines) < h {
-		if b := badgeLine(c); b != "" {
-			lines = append(lines, sty.Muted.Render(padRight(b, w, g)))
-		}
-	}
-	// The approval card is CHROME too, and for a stronger version of the badge
-	// line's reason. The badge must not scroll away because a claim you cannot
-	// see is not a claim; this must not scroll away because a vendor is STOPPED
-	// behind it. During a turn every column is following its own tail, so a card
-	// in the body would be pushed off screen by the output of the very call it
-	// is asking about.
-	for _, l := range gateCard(st, c, w, sty, g) {
+	for _, l := range columnChrome(st, c, focused, w, sty, g) {
 		if len(lines) >= h {
 			break
 		}
-		lines = append(lines, fit(l, w))
-	}
-	if len(lines) < h {
-		lines = append(lines, sty.Muted.Render(strings.Repeat(g.Rule, w)))
+		lines = append(lines, l)
 	}
 
 	body := columnText(st, c, w, sty, g)
@@ -303,6 +307,49 @@ func columnCell(st State, c Column, focused bool, hint []string, w, h int, sty S
 	return lines[:h]
 }
 
+// columnChrome is the fixed top of a column: who this seat is, what it may do,
+// anything it is blocked on, and one empty row before the reading starts.
+//
+// Factored out of columnCell because MaxScroll has to subtract exactly this
+// many rows, and it used to subtract the literal 3 — which was wrong for a
+// column with no badges at all and would have gone wrong again the moment the
+// chrome changed shape. One function, two callers, no constant to keep in step.
+//
+// Everything here is CHROME, not body, and that is a safety decision rather
+// than a layout one. The badge line carries the sandbox claim, and the first
+// version of this scrolled it away with the text — so a user reading the middle
+// of a long reply from the unsandboxed column had nothing on screen telling
+// them that column can write to their tree. A claim that disappears when you
+// read is not a claim. The approval card earns its place for a stronger version
+// of the same reason: a vendor is STOPPED behind it, and during a turn every
+// column is following its own tail, so a card in the body would be pushed off
+// screen by the output of the very call it is asking about.
+func columnChrome(st State, c Column, focused bool, w int, sty Styles, g Glyphs) []string {
+	lines := []string{
+		fit(columnHeader(st, c, focused, w, sty, g), w),
+		// The badge row is RESERVED rather than conditional. A seat with no
+		// posture to state is rare and its neighbours are not: dropping the row
+		// on one column would start its body a line above every other column's,
+		// and a grid whose rows do not line up is a worse trade than one empty
+		// claim slot.
+		fit(badgeRow(c, w, sty, g), w),
+	}
+	for _, l := range gateCard(st, c, w, sty, g) {
+		lines = append(lines, fit(l, w))
+	}
+	// One blank row, where a full-width per-column rule used to be.
+	//
+	// The rule was the second horizontal line in three rows — one under the room
+	// header, another under every column's badges — and the lower one was doing
+	// almost nothing: the header above it already reads as a heading, and by the
+	// time a reader reaches the rule they have not been told anything the two
+	// lines above did not say. The column header now carries a rule of its own
+	// (see columnHeader), which separates the seat from its content in the same
+	// gesture that binds the seat's name to its state. What the body actually
+	// needed here was air, so that is what the row is spent on.
+	return append(lines, strings.Repeat(" ", maxInt(0, w)))
+}
+
 // overflowMarker is the "there is more" line, plus the keys that would reach it.
 //
 // The count alone was a marker that told a reader something was hidden and
@@ -343,7 +390,11 @@ func overflowMarker(mark string, n int, where string, hints []string, w int, g G
 // mode where it always fits.
 func scrollHint(st State, g Glyphs) []string {
 	base := g.Up + g.Down + " scroll"
-	if st.Mode == ModeComposing {
+	// `f` expands the focused column to the full width, which is the width the
+	// only column already has. In a room with one seat on screen the key does
+	// nothing, so the marker does not offer it — the same reason the mode line
+	// drops it there.
+	if st.Mode == ModeComposing || len(st.VisibleColumns()) < 2 {
 		return []string{base}
 	}
 	return []string{base + "  " + g.Sep + "  f expand", base}
@@ -409,11 +460,11 @@ func MaxScroll(st State, idx int) int {
 	// cannot change it — every style in this package is a wrapper, never a
 	// re-wrap.
 	sty, gl := PlainStyles(), GlyphsFor(st.ASCII)
-	// Three lines of the cell are chrome — header, badge, rule — plus the
-	// approval card when one is up. Counted from the same function that draws
-	// it rather than from a constant: a card of a different height would
-	// otherwise let the tail scroll past the end of the content.
-	avail := lay.Body - 3 - len(gateCard(st, st.Columns[idx], w, sty, gl))
+	// The chrome is measured by drawing it, never by a constant. A card of a
+	// different height, or a column with nothing to claim, would otherwise let
+	// the tail scroll past the end of the content — and the constant that used
+	// to sit here was already wrong for the second case.
+	avail := lay.Body - len(columnChrome(st, st.Columns[idx], false, w, sty, gl))
 	n := len(columnText(st, st.Columns[idx], w, sty, gl))
 	if m := n - avail; m > 0 {
 		return m
@@ -421,49 +472,126 @@ func MaxScroll(st State, idx int) int {
 	return 0
 }
 
-// columnHeader is the vendor name plus the two claims this product refuses to
-// leave implicit: what its sandbox actually is, and how finely it reports.
+// columnHeader is one seat and what it is doing: "▸ Claude Code ──── ✓ done 8s".
+//
+// It used to be a name at the far left and a bare word at the far right with
+// twenty-five dead cells between them, which reads as two unrelated labels
+// rather than as a seat with a state. Three things changed and they are one
+// idea: the name takes full weight because it is the anchor, the state takes a
+// mark before its word (see phaseMark) because a shape is legible at a glance
+// where a five-letter word is not, and the gap is filled with a rule.
+//
+// The rule is not decoration — it is this room's EXISTING grammar for "a label
+// and the numbers that belong to it", which is exactly what turnRule draws for
+// every turn in the transcript below. Using the same shape for the live turn's
+// header and for a finished turn's separator means a reader learns one line
+// form instead of two, and the header stops being able to read as two things.
 func columnHeader(st State, c Column, focused bool, w int, sty Styles, g Glyphs) string {
-	name := c.Label
+	// A space after the focus mark, and two cells of indent without it, so the
+	// names still line up across the row. "▸Claude Code" saved a cell and spent
+	// it looking like a typo.
+	name := "  " + c.Label
 	if focused {
-		name = g.Focus + name
-	} else {
-		name = " " + name
+		name = g.Focus + " " + c.Label
 	}
 
-	status := c.Phase.String()
+	status := columnStatus(st, c, g)
+	style := sty.ForPhase(c.Phase)
 	if c.Avail != AvailInstalled {
-		status = "unavailable"
-	} else if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
+		style = sty.SevWarn
+	}
+	right := style.Render(status)
+
+	// The rule takes what the name and the state leave, with TWO cells of air
+	// each side — the same gap this product puts around the "  │  " that
+	// separates zones in the header and the mode line. One cell was enough
+	// everywhere except the case that matters: in --ascii the rule is "-" and
+	// the spinner's first frame is also "-", so a streaming column rendered
+	// "------------ - streaming" and the state mark disappeared into the rule
+	// that was supposed to point at it.
+	//
+	// If there is no room for a rule the name gives way — a truncated seat name
+	// is still recognisable and a truncated state word is not, and the state is
+	// the thing that changed.
+	gap := w - lipgloss.Width(name) - lipgloss.Width(status) - 4
+	if gap < 1 {
+		keep := maxInt(1, w-lipgloss.Width(status)-1)
+		return sty.Strong.Render(truncate(name, keep, g.Ellipsis)) + " " + right
+	}
+	return sty.Strong.Render(name) + "  " +
+		sty.Rule().Render(strings.Repeat(g.Rule, gap)) + "  " + right
+}
+
+// columnStatus is the state word with its mark and, where there is one, the
+// clock that says how long it took or has taken.
+func columnStatus(st State, c Column, g Glyphs) string {
+	if c.Avail != AvailInstalled {
+		return g.Warn + " unavailable"
+	}
+	status := c.Phase.String()
+	if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
 		// The clock is the answer to "why is this one taking so long".
 		// Without it a final-only vendor is a blank column and a spinner,
 		// which reads as broken rather than slow — and two of the three
 		// vendors here are final-only, so that ambiguity is the common case
 		// rather than an edge one.
-		status = status + " " + elapsed(st, c)
-		if len(g.Spinner) > 0 {
-			status = g.Spinner[st.Spinner%len(g.Spinner)] + " " + status
+		//
+		// Appended only when there IS one: the old code always added the space
+		// and left a trailing cell on every column that had not started, which
+		// pushed the state word one cell off the right edge it was aligned to.
+		if e := elapsed(st, c); e != "" {
+			status += " " + e
 		}
-	} else if c.Elapsed > 0 {
+		return phaseMark(c.Phase, st, g) + " " + status
+	}
+	if c.Elapsed > 0 {
 		// Kept after the turn ends. A finished column should still be able to
 		// say how long it made you wait, which is the only way the asymmetry
 		// between a streaming vendor and a final-only one is ever legible.
-		status = status + " " + dur(c.Elapsed)
+		status += " " + dur(c.Elapsed)
 	}
+	return phaseMark(c.Phase, st, g) + " " + status
+}
 
-	left := sty.Identity.Render(padRight(name, maxInt(1, w-lipgloss.Width(status)-1), g))
-	right := sty.ForPhase(c.Phase).Render(status)
-	if c.Avail != AvailInstalled {
-		right = sty.SevWarn.Render(status)
+// phaseMark is the glyph in front of a column's state word.
+//
+// The five phase words were distinguished by the word and by colour and by
+// nothing else, which is a thin way to render the single fact a reader scans
+// four columns for. The marks fix that, and every one of them is a meaning this
+// room already owns rather than a new alphabet:
+//
+//   - a turn IN FLIGHT is the spinner, which already sat in this slot. Making
+//     it the in-flight member of one vocabulary rather than a special case is
+//     what makes the rest coherent — and it stays the room's ONLY moving cell
+//     (§7.1 rule 4), because none of the others move.
+//   - a turn that FINISHED is ActOK, and one that BROKE is ActFail. Those are
+//     the same claims the activity trace makes about a single step, made about
+//     the whole turn; reusing the mark is reusing the meaning, which is the
+//     opposite of the collision glyphs.go argues against.
+//   - a turn that did NOT COMPLETE NORMALLY — cancelled by the user, or a seat
+//     that is not there at all — is Warn, which is already what the note and
+//     the unavailable card open with. The word after the mark is what separates
+//     those two, and it always renders.
+//   - a seat NOTHING HAS BEEN ASKED OF is Idle, the one new glyph.
+//
+// Colour stays redundant throughout: every phase still renders its own word, so
+// --ascii and a monochrome terminal lose nothing (§7.1 rule 2).
+func phaseMark(p Phase, st State, g Glyphs) string {
+	switch p {
+	case PhaseStreaming, PhaseWaiting:
+		if len(g.Spinner) == 0 {
+			return g.Idle
+		}
+		return g.Spinner[st.Spinner%len(g.Spinner)]
+	case PhaseDone:
+		return g.ActOK
+	case PhaseFailed:
+		return g.ActFail
+	case PhaseCancelled:
+		return g.Warn
+	default:
+		return g.Idle
 	}
-	head := left + " " + right
-
-	// The badges get their own line when there is room; below that they are the
-	// first thing dropped, because a claim nobody can read is not a claim.
-	if w < 20 {
-		return truncate(head, w, g.Ellipsis)
-	}
-	return head
 }
 
 // elapsed is how long the current turn has been running, from State.Now rather
@@ -502,14 +630,20 @@ func dur(d time.Duration) string {
 // more lines for them to move through.
 func columnText(st State, c Column, w int, sty Styles, g Glyphs) []string {
 	if c.Avail != AvailInstalled {
-		return unavailableCard(c, w, g)
+		return unavailableCard(c, w, sty, g)
 	}
 
 	var out []string
 	for _, h := range c.History {
+		// No blank BETWEEN turns any more, and that is a swap rather than a cut:
+		// the row it used to spend now sits between the brief and the answer
+		// (see turnHead). A turn boundary already has the loudest divider this
+		// column owns — a labelled full-width rule — while the moment the
+		// speaker changes had nothing at all, and one blank per turn buys more
+		// where nothing was than where a rule already is. The transcript is
+		// therefore exactly as tall as it was before.
 		out = append(out, turnHead(h.N, historyMeta(h), h.Prompt, h.Quoted, w, sty, g)...)
 		out = append(out, pastTurn(h, w, sty, g)...)
-		out = append(out, "")
 	}
 	if c.Prompt != "" {
 		// The current turn's separator carries the number and nothing else. Its
@@ -535,7 +669,7 @@ func columnText(st State, c Column, w int, sty Styles, g Glyphs) []string {
 	case c.Phase == PhaseStreaming && c.Body == "" && len(c.Acts) > 0:
 		out = append(out, wrap("working…", w)...)
 	case c.Phase == PhaseIdle && c.Body == "" && st.Reattached.Active():
-		out = append(out, reattachCard(st, c, w)...)
+		out = append(out, reattachCard(st, c, w, sty)...)
 	case c.Phase == PhaseIdle && c.Body == "":
 		out = append(out, wrap("no turn dispatched yet.", w)...)
 	case c.Phase == PhaseWaiting && c.Body == "" && len(c.Acts) > 0:
@@ -560,16 +694,29 @@ func columnText(st State, c Column, w int, sty Styles, g Glyphs) []string {
 
 	if c.Note != "" {
 		out = append(out, "")
-		out = append(out, wrap(g.Warn+" "+c.Note, w)...)
+		out = append(out, warnBlock(c.Note, w, sty, g)...)
 	}
 	return out
 }
 
 // turnHead opens one turn: the separator naming it, then the brief that
-// produced it.
+// produced it, then a blank row before the seat answers.
+//
+// The blank is what turns a log into a conversation. Without it the user's
+// question and the vendor's reply arrive as consecutive lines at the same
+// indent and are told apart only by a "›" at the start of one of them — which
+// is a distinction you have to READ, on a surface whose whole purpose is
+// putting four answers where they can be compared at a glance. It costs one row
+// per turn, paid out of the scrollback rather than out of the live turn, and
+// the scrollback is the part with rows to spare.
 func turnHead(n int, meta, prompt string, quoted bool, w int, sty Styles, g Glyphs) []string {
 	out := []string{sty.Muted.Render(padRight(turnRule(n, meta, w, g), w, g))}
-	return append(out, promptEcho(prompt, quoted, w, sty, g)...)
+	echo := promptEcho(prompt, quoted, w, sty, g)
+	out = append(out, echo...)
+	if len(echo) > 0 {
+		out = append(out, "")
+	}
+	return out
 }
 
 // turnRule is the separator line: "turn 3 ───────────  12s  $0.0123".
@@ -578,15 +725,18 @@ func turnHead(n int, meta, prompt string, quoted bool, w int, sty Styles, g Glyp
 // Which turn this is outranks how long it took: without the number the reply
 // above and the reply below are one undifferentiated wall, which is the state
 // this whole feature exists to leave.
+//
+// Two cells of air each side of the rule, matching the column header — the two
+// lines are the same grammar (a label, a rule, the numbers that belong to it)
+// applied to the turn in flight and to a turn in the transcript, and a reader
+// should not have to notice they are different lines.
 func turnRule(n int, meta string, w int, g Glyphs) string {
 	label := "turn " + strconv.Itoa(n)
-	// The rule takes whatever the label and the meta leave: one space after the
-	// label always, one before the meta when there is one.
 	fill := func(m string) int {
 		if m == "" {
-			return w - lipgloss.Width(label) - 1
+			return w - lipgloss.Width(label) - 2
 		}
-		return w - lipgloss.Width(label) - lipgloss.Width(m) - 2
+		return w - lipgloss.Width(label) - lipgloss.Width(m) - 4
 	}
 	n2 := fill(meta)
 	if n2 < 1 && meta != "" {
@@ -596,9 +746,9 @@ func turnRule(n int, meta string, w int, g Glyphs) string {
 	if n2 < 1 {
 		return label
 	}
-	s := label + " " + strings.Repeat(g.Rule, n2)
+	s := label + "  " + strings.Repeat(g.Rule, n2)
 	if meta != "" {
-		s += " " + meta
+		s += "  " + meta
 	}
 	return s
 }
@@ -646,23 +796,19 @@ func promptEcho(prompt string, quoted bool, w int, sty Styles, g Glyphs) []strin
 	if prompt == "" {
 		return nil
 	}
-	body := wrap(prompt, maxInt(1, w-2))
-	out := make([]string, 0, len(body)+1)
-	for i, l := range body {
-		prefix := "  "
-		if i == 0 {
-			prefix = g.Prompt + " "
-		}
-		out = append(out, sty.Identity.Render(padRight(prefix+l, w, g)))
-	}
+	// Full weight, because in a column of vendor prose the user's own words are
+	// the anchor a reader navigates by — the thing you scroll looking for when
+	// you want to know what a seat was actually asked. Same treatment as a seat
+	// name, for the same reason: both are identity rather than content.
+	out := styleAll(hangWrap(g.Prompt+" ", prompt, w), sty.Strong)
 	if quoted {
 		// What the seat ACTUALLY received on a rebuttal turn is this brief with
 		// the other seats' answers fenced in front of it. Those are not the
 		// principal's words, so they are reported rather than echoed — the line
 		// above stays the user's, and this one says what rode along with it.
-		for _, l := range wrap("+ the other seats' last answers were quoted to this one", maxInt(1, w-2)) {
-			out = append(out, sty.Muted.Render(padRight("  "+l, w, g)))
-		}
+		out = append(out, styleAll(
+			indentWrap("  ", "+ the other seats' last answers were quoted to this one", w),
+			sty.Muted)...)
 	}
 	return out
 }
@@ -695,7 +841,7 @@ func pastTurn(h TurnRecord, w int, sty Styles, g Glyphs) []string {
 		if len(out) > 0 {
 			out = append(out, "")
 		}
-		out = append(out, wrap(g.Warn+" "+h.Note, w)...)
+		out = append(out, warnBlock(h.Note, w, sty, g)...)
 	}
 	return out
 }
@@ -801,10 +947,11 @@ func gateCard(st State, c Column, w int, sty Styles, g Glyphs) []string {
 		return nil
 	}
 
-	out := wrap(g.Warn+" waiting on you: "+mine[0].Text, w)
-	for i := range out {
-		out[i] = sty.SevWarn.Render(padRight(out[i], w, g))
-	}
+	// Same card grammar as every other card in this column: a title at weight,
+	// its body hanging under it. The call being decided used to wrap back to the
+	// column edge, so the second line of a long path sat flush against the frame
+	// and read as a new statement rather than as the rest of the question.
+	out := styleAll(hangWrap(g.Warn+" ", "waiting on you: "+mine[0].Text, w), sty.Alert)
 
 	keys := "y approve   n deny"
 	if n := len(mine) - 1; n > 0 {
@@ -813,43 +960,75 @@ func gateCard(st State, c Column, w int, sty Styles, g Glyphs) []string {
 	// The keys are repeated here AND in the mode line on purpose. The mode line
 	// is the contract — it announces what every key means on every frame — and
 	// this is the copy that sits next to the thing being decided, where the eye
-	// already is.
-	for _, l := range wrap(keys, w) {
-		out = append(out, sty.Identity.Render(padRight(l, w, g)))
-	}
-	return out
+	// already is. Indented with the rest of the card's body, because they belong
+	// to the question above rather than to the reply below.
+	return append(out, styleAll(indentWrap("  ", keys, w), sty.Identity)...)
 }
 
-// badgeLine is the sandbox claim, the streaming granularity, and the cost.
+// badgeRow is the seat's claim about itself: what its sandbox actually is, how
+// finely it reports, and what it has cost.
+//
+// Three things about how it is SHAPED, none of which touch what it says. It is
+// indented to the seat name above it, so it reads as a property of that seat
+// rather than as the first line of the reply — the complaint that started this
+// was that these badges looked like debug output, and an unindented row of bare
+// lowercase tokens at the top of a column is exactly what debug output looks
+// like. The posture badge carries weight when it says this seat can change your
+// files (see Styles.ForSandbox). And the cost is right-anchored, because it is
+// a number and every other number in this product is right-anchored — which
+// also gives the two chrome rows one shape, label on the left and value on the
+// right, twice.
 //
 // Cost renders only when the vendor REPORTED one. A turn that reported zero
 // shows $0.0000; a turn that reported nothing shows no cost cell at all. Those
 // are different facts, and deriving a figure from token counts is on this
 // repo's deliberately-rejected list (design.md §8) — council does not get to
 // invent dollars either.
-func badgeLine(c Column) string {
-	parts := []string{}
+func badgeRow(c Column, w int, sty Styles, g Glyphs) string {
+	var plain, styled []string
 	if b := c.Sandbox.Badge(); b != "" {
-		parts = append(parts, b)
+		plain = append(plain, b)
+		styled = append(styled, sty.ForSandbox(c.Sandbox.Level).Render(b))
 	}
 	if s := c.Gran.String(); s != "" {
-		parts = append(parts, s)
+		plain = append(plain, s)
+		styled = append(styled, sty.Muted.Render(s))
 	}
-	if c.CostUSD != nil {
-		cost := "$" + strconv.FormatFloat(*c.CostUSD, 'f', 4, 64)
-		if c.CostSession {
-			// A word, not a symbol, and not a colour. A seat kept alive across
-			// turns reports its running total; the cell has always meant "this
-			// turn" everywhere else in this room, and two different quantities
-			// sharing one rendering is the ambiguity §4a.1 forbids.
-			cost += " session"
-		}
-		parts = append(parts, cost)
+
+	left := strings.Join(plain, "  ")
+	leftS := strings.Join(styled, "  ")
+	if left != "" {
+		left, leftS = "  "+left, "  "+leftS
 	}
-	if len(parts) == 0 {
+
+	cost := costCell(c)
+	if cost == "" {
+		return leftS
+	}
+	// Right-anchored when it fits; back to trailing the badges when it does
+	// not. What must never happen is the posture claim giving way to the
+	// number: §9.2 is emphatic that a claim you cannot see is not a claim, and
+	// the cost is the one thing on this line the transcript also records.
+	if gap := w - lipgloss.Width(left) - lipgloss.Width(cost); gap >= 1 {
+		return leftS + strings.Repeat(" ", gap) + sty.Muted.Render(cost)
+	}
+	return leftS + sty.Muted.Render("  "+cost)
+}
+
+// costCell is the vendor's own figure, and the word that says what it counted.
+func costCell(c Column) string {
+	if c.CostUSD == nil {
 		return ""
 	}
-	return strings.Join(parts, "  ")
+	cost := "$" + strconv.FormatFloat(*c.CostUSD, 'f', 4, 64)
+	if c.CostSession {
+		// A word, not a symbol, and not a colour. A seat kept alive across
+		// turns reports its running total; the cell has always meant "this
+		// turn" everywhere else in this room, and two different quantities
+		// sharing one rendering is the ambiguity §4a.1 forbids.
+		cost += " session"
+	}
+	return cost
 }
 
 // reattachCard is what a restored seat says before its first brief.
@@ -871,39 +1050,109 @@ func badgeLine(c Column) string {
 // No warning glyph. A reattach is the feature working, not a problem, and
 // spending the ⚠ on it would blunt the mark that carries real failures — the
 // same argument ActDenied makes for SevWarn over SevCrit.
-func reattachCard(st State, c Column, w int) []string {
+func reattachCard(st State, c Column, w int, sty Styles) []string {
 	// The age comes off State.Now, never a clock, so this stays pure and the
 	// goldens stay reproducible — the same contract elapsed() renders under.
 	when := ""
 	if !st.Now.IsZero() {
 		when = ", saved " + age(st.Now.Sub(st.Reattached.SavedAt))
 	}
-	out := wrap("reattached — turn "+strconv.Itoa(st.Reattached.Turn)+
-		" was the last"+when+".", w)
-	out = append(out, "")
+	// Same card grammar as the unavailable one — title, then an indented body —
+	// but at plain weight rather than the warning colour, because a reattach is
+	// the feature working. Spending the alarm palette on it would blunt the mark
+	// that carries real failures, which is the argument ActDenied already makes
+	// for SevWarn over SevCrit.
+	out := styleAll(wrap("reattached — turn "+strconv.Itoa(st.Reattached.Turn)+
+		" was the last"+when+".", w), sty.bold(sty.Text))
 	if c.Restored {
 		// "continues it" rather than "resumes it": the resume is the vendor's
 		// own mechanism and it has not been asked yet. What the room can promise
 		// is where the next brief is addressed.
-		out = append(out, wrap("this seat's thread came back. the next brief continues it.", w)...)
-		return out
+		return append(out, indentWrap("  ", "this seat's thread came back. the next brief continues it.", w)...)
 	}
-	out = append(out, wrap("no thread came back for this seat. its next brief opens a new session, with the brief re-applied.", w)...)
-	return out
+	return append(out, indentWrap("  ", "no thread came back for this seat. its next brief opens a new session, with the brief re-applied.", w)...)
 }
 
 // unavailableCard says which failure this is and what would fix it. Absence and
 // unusability are different facts and get different words — the HUD's rule that
 // a dropped column and an em dash must not read alike (§4a.1), applied here.
-func unavailableCard(c Column, w int, g Glyphs) []string {
-	out := wrap(g.Warn+" "+c.Label+" is not seated", w)
+//
+// It is a CARD now rather than three fragments floating in a column. What was
+// there — a warning line, a blank, a wrapped reason at the same indent, a
+// blank, a closing sentence at the same indent — had no shape at all: nothing
+// on screen said the reason belonged to the title, so a reader scanning a
+// three-seat room saw three unrelated paragraphs where one seat had failed. A
+// title at full weight with its body hanging under it is the cheapest structure
+// a fixed-width column can carry, and it costs no rows.
+func unavailableCard(c Column, w int, sty Styles, g Glyphs) []string {
+	out := styleAll(hangWrap(g.Warn+" ", c.Label+" is not seated", w), sty.Alert)
 	if c.Note != "" {
-		out = append(out, "")
-		out = append(out, wrap(c.Note, w)...)
+		out = append(out, styleAll(indentWrap("  ", c.Note, w), sty.Text)...)
 	}
 	out = append(out, "")
-	out = append(out, wrap("the other columns dispatch normally.", w)...)
+	// Muted, because this is reassurance rather than news: what the reader came
+	// to this card for is the line above it.
+	out = append(out, styleAll(indentWrap("  ", "the other columns dispatch normally.", w), sty.Muted)...)
 	return out
+}
+
+// hangWrap wraps text under a leading mark, indenting every continuation line to
+// the mark's width so the block reads as one thing hanging off its opener.
+//
+// The room already did this in two places — the prompt echo indents under its
+// "›", a failed call's detail indents under the call — and did not do it in the
+// two places a reader most needs it: the warning notes and the unavailable
+// card, where a wrapped second line started hard against the column edge and
+// looked like a new statement.
+func hangWrap(lead, text string, w int) []string {
+	inner := maxInt(1, w-lipgloss.Width(lead))
+	lines := wrap(text, inner)
+	pad := strings.Repeat(" ", lipgloss.Width(lead))
+	for i := range lines {
+		if i == 0 {
+			lines[i] = lead + lines[i]
+			continue
+		}
+		lines[i] = pad + lines[i]
+	}
+	return lines
+}
+
+// indentWrap wraps text at a fixed indent — a card's body under its title.
+func indentWrap(indent, text string, w int) []string {
+	lines := wrap(text, maxInt(1, w-lipgloss.Width(indent)))
+	for i := range lines {
+		lines[i] = indent + lines[i]
+	}
+	return lines
+}
+
+// styleAll applies one style to a block of already-wrapped PLAIN lines.
+//
+// Wrapping first and styling second is the rule everywhere in this file: wrap
+// measures with lipgloss.Width but splits on spaces, so an escape sequence
+// pushed through it would be broken across two lines.
+func styleAll(lines []string, s lipgloss.Style) []string {
+	for i := range lines {
+		lines[i] = s.Render(lines[i])
+	}
+	return lines
+}
+
+// warnBlock is a column's note: the failure reason, the cancellation, the "not
+// addressed in turn 2".
+//
+// The mark carries the hue and the words carry the fact — the same split the
+// activity trace's outcome marks make, and the reason a note is legible with
+// colour switched off.
+func warnBlock(note string, w int, sty Styles, g Glyphs) []string {
+	lines := hangWrap(g.Warn+" ", note, w)
+	if len(lines) > 0 {
+		if rest, ok := strings.CutPrefix(lines[0], g.Warn); ok {
+			lines[0] = sty.SevWarn.Render(g.Warn) + rest
+		}
+	}
+	return lines
 }
 
 // tabBar is the narrow-terminal alternative to side-by-side columns.
@@ -915,10 +1164,13 @@ func tabBar(st State, lay Layout, sty Styles, g Glyphs) string {
 		if c.Avail != AvailInstalled {
 			label += " " + g.Warn
 		}
+		// Same two-cell prefix and the same weight the column header gives a seat
+		// name, so the tab bar and the header underneath it agree about how a
+		// selected seat is drawn rather than each having its own spelling.
 		if idx == st.Focus {
-			parts = append(parts, sty.Identity.Render(g.Focus+label))
+			parts = append(parts, sty.Strong.Render(g.Focus+" "+label))
 		} else {
-			parts = append(parts, sty.Muted.Render(" "+label))
+			parts = append(parts, sty.Muted.Render("  "+label))
 		}
 	}
 	// fit, not padRight: parts are already styled per tab.
@@ -1077,32 +1329,62 @@ func padRows(rows []string, lay Layout, w int, sty Styles, g Glyphs) []string {
 // Always visible, never inferred: a mode that changes what an unmodified key
 // means without saying so is the failure design.md §7.8 names by name, and
 // council has a mode where `q` is the letter q.
-func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
-	var left, right string
-	switch {
-	case st.Gating():
-		// Outranks both other modes, because it is the only state in this room
-		// where something is STOPPED until a key is pressed. The notice is not
-		// allowed to overwrite this line the way it overwrites the others: a
-		// transient message displacing the two keys that unblock a vendor is
-		// exactly the surprise §7.8 exists to forbid.
-		left = "GATE"
-		right = gateLabel(st) + "  " + g.Sep + "  y approve  " + g.Sep +
-			"  n deny  " + g.Sep + "  ctrl+c cancel the turn"
-		l := sty.SevWarn.Render(left)
-		r := sty.Muted.Render(right)
-		gap := lay.Width - lipgloss.Width(l) - lipgloss.Width(r) - 2
-		if gap < 1 {
-			gap = 1
-			r = sty.Muted.Render(truncate(right,
-				maxInt(1, lay.Width-lipgloss.Width(l)-3), g.Ellipsis))
-		}
-		return " " + l + strings.Repeat(" ", gap) + r + " "
-	}
+// hint is one item on the mode line: a key, and what pressing it does.
+//
+// Split into two fields so the two can be weighted differently. The footer used
+// to be six items of identical weight separated by identical bars — a wall the
+// eye slides off, which is why the scroll keys could sit in it for a whole
+// release and still be reported as missing. The KEY is what a reader is hunting
+// for, so it renders at full intensity and its label recedes; that is the same
+// figure/ground split the column header now makes between a seat's name and its
+// state, and it costs no cells at all.
+//
+// A hint with no label is a whole statement rather than a binding — the compose
+// line's routing is one — and renders undimmed in full.
+type hint struct {
+	key, label string
+	// alarm puts the key at severity rather than at plain intensity. Exactly one
+	// thing uses it: the warning mark in front of a transient notice, which is
+	// the same mark-carries-the-hue split the notes and the trace marks make.
+	alarm bool
+}
 
-	switch st.Mode {
-	case ModeComposing:
-		left = "COMPOSE"
+// hints renders the mode line's right-hand side twice: once styled, once plain.
+//
+// The plain copy is not a fallback for want of effort — it is what truncation
+// needs. Cutting a string that already carries escapes would cut through one
+// (§9.5's trap), and the ellipsis is not optional here: a key list that silently
+// lost its tail is a mode line making a promise about keys it no longer names.
+func hints(sty Styles, g Glyphs, hs []hint) (styled, plain string) {
+	sep := "  " + g.Sep + "  "
+	var s, p []string
+	for _, h := range hs {
+		key := sty.Text
+		if h.alarm {
+			key = sty.SevWarn
+		}
+		if h.label == "" {
+			s = append(s, key.Render(h.key))
+			p = append(p, h.key)
+			continue
+		}
+		s = append(s, key.Render(h.key)+" "+sty.Muted.Render(h.label))
+		p = append(p, h.key+" "+h.label)
+	}
+	return strings.Join(s, sty.Muted.Render(sep)), strings.Join(p, sep)
+}
+
+// modeHints is what the keys mean in the mode the room is currently in.
+//
+// Two of them are dropped in a room with a single seat on screen, and that is
+// honesty rather than tidying: `tab` cycles focus between columns and `f`
+// expands one column to the width the only column already has, so on a machine
+// where three of four seats folded away both keys do exactly nothing. A mode
+// line that promises a key which does nothing is the same failure as one that
+// hides a key that does — §7.8 forbids the surprise, in both directions.
+func modeHints(st State, g Glyphs) []hint {
+	several := len(st.VisibleColumns()) > 1
+	if st.Mode == ModeComposing {
 		// The routing is stated before the keybindings because it is the one
 		// thing on this line that changes what enter DOES. An @typo has to read
 		// as "this is going to everyone" while there is still time to fix it;
@@ -1120,31 +1402,74 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 		// routing and after enter because those two decide what is SENT, and it
 		// is stated as bare arrows because that is the subset compose has: `f`,
 		// `g`, `G`, `j` and `k` are letters here.
-		right = "→ " + routeLabel(st) + quoteTag(st) + "  " + g.Sep +
-			"  enter dispatch  " + g.Sep + "  " + g.Up + g.Down + " scroll  " +
-			g.Sep + "  ^j newline  " + g.Sep + "  ^r rebut"
-	default:
-		left = "VIEW"
-		scroll := g.Up + g.Down + " scroll  " + g.Sep + "  f expand  " + g.Sep + "  "
-		if st.Busy() {
-			right = scroll + "tab focus  " + g.Sep + "  ctrl+c cancel  " + g.Sep + "  ? help"
-		} else {
-			right = scroll + "tab focus  " + g.Sep + "  i compose  " + g.Sep + "  ? help  " + g.Sep + "  q quit"
+		return []hint{
+			{key: "→ " + routeLabel(st) + quoteTag(st)},
+			{key: "enter", label: "dispatch"},
+			{key: g.Up + g.Down, label: "scroll"},
+			{key: "^j", label: "newline"},
+			{key: "^r", label: "rebut"},
 		}
 	}
-	if st.Notice != "" {
-		right = g.Warn + " " + st.Notice
+
+	hs := []hint{{key: g.Up + g.Down, label: "scroll"}}
+	if several {
+		hs = append(hs, hint{key: "f", label: "expand"}, hint{key: "tab", label: "focus"})
+	}
+	if st.Busy() {
+		return append(hs, hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
+	}
+	return append(hs, hint{key: "i", label: "compose"},
+		hint{key: "?", label: "help"}, hint{key: "q", label: "quit"})
+}
+
+func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
+	var left string
+	switch {
+	case st.Gating():
+		// Outranks both other modes, because it is the only state in this room
+		// where something is STOPPED until a key is pressed. The notice is not
+		// allowed to overwrite this line the way it overwrites the others: a
+		// transient message displacing the two keys that unblock a vendor is
+		// exactly the surprise §7.8 exists to forbid.
+		// The call being decided is the CONTENT of this line, not chrome on it,
+		// so it renders at full intensity while the keys that answer it recede
+		// to their labels' weight. Everything on this line used to be equally
+		// faint, including the path a vendor is about to write to.
+		return statusLine(sty.Alert.Render("GATE"),
+			[]hint{
+				{key: gateLabel(st)},
+				{key: "y", label: "approve"},
+				{key: "n", label: "deny"},
+				{key: "ctrl+c", label: "cancel the turn"},
+			},
+			lay, sty, g)
 	}
 
-	l := sty.Identity.Render(left)
-	r := sty.Muted.Render(right)
-	gap := lay.Width - lipgloss.Width(l) - lipgloss.Width(r) - 2
+	left = "VIEW"
+	if st.Mode == ModeComposing {
+		left = "COMPOSE"
+	}
+	if st.Notice != "" {
+		// A notice replaces the keys rather than joining them, and keeps the
+		// warning mark at severity while its words stay plain — the same split
+		// every other note in this room makes.
+		return statusLine(sty.Strong.Render(left),
+			[]hint{{key: g.Warn, label: st.Notice, alarm: true}}, lay, sty, g)
+	}
+	return statusLine(sty.Strong.Render(left), modeHints(st, g), lay, sty, g)
+}
+
+// statusLine lays the mode name against its right-anchored hints, and is the one
+// place the two-copy truncation rule lives.
+func statusLine(left string, hs []hint, lay Layout, sty Styles, g Glyphs) string {
+	styled, plain := hints(sty, g, hs)
+	gap := lay.Width - lipgloss.Width(left) - lipgloss.Width(plain) - 2
 	if gap < 1 {
 		gap = 1
-		r = truncate(right, maxInt(1, lay.Width-lipgloss.Width(l)-3), g.Ellipsis)
-		r = sty.Muted.Render(r)
+		styled = sty.Muted.Render(truncate(plain,
+			maxInt(1, lay.Width-lipgloss.Width(left)-3), g.Ellipsis))
 	}
-	return " " + l + strings.Repeat(" ", gap) + r + " "
+	return " " + left + strings.Repeat(" ", gap) + styled + " "
 }
 
 // gateLabel names what is waiting, and how much else is behind it.

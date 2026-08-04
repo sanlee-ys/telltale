@@ -1,9 +1,9 @@
- council ~/code/telltale                                                              turn 1  │  3/3 seated  │  no brief
+ council  │  ~/code/telltale                                                         turn 1  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸Claude Code   Codex   Antigravity                                                                                     
-  Claude Code                                                                                                      done 
- ro:tools  tokens                                                                                                       
- ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+ ▸ Claude Code    Codex    Antigravity                                                                                  
+   Claude Code  ───────────────────────────────────────────────────────────────────────────────────────────────  ✓ done 
+   ro:tools  tokens                                                                                                     
+                                                                                                                        
  Resume beats re-sending the transcript, because input grows quadratically against metered quotas and the blind-round   
  guarantee stops being structural.                                                                                      
                                                                                                                         
