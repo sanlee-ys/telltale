@@ -4,10 +4,10 @@
                                                                                                                         
    i / enter    compose a brief                                                                                         
    enter        dispatch — to claude, or to whoever is @mentioned                                                       
-   @codex       address a lane: @claude, @codex, @agy, or @all for the panel                                            
-                unaddressed briefs go to claude alone: the other two are                                                
-                review and tiebreak lanes, not a default audience                                                       
-                leading mentions only, so "ask @claude" is just prose                                                   
+   @codex       address a lane: @claude, @codex, @agy, @cursor, @all                                                    
+                unaddressed goes to claude alone; the others are review,                                                
+                IDE and tiebreak lanes. Leading mentions only: "ask @claude" is prose                                   
+   y / n        approve or deny a tool call a vendor is blocked on (--write)                                            
    esc          leave compose (the draft is kept)                                                                       
    tab          move focus between columns                                                                              
    ↑ ↓ / j k    scroll the focused column                                                                               

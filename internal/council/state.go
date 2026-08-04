@@ -96,6 +96,16 @@ const (
 	// SandboxWrite: the room was started with --write and no read-only posture
 	// was requested at all.
 	SandboxWrite
+	// SandboxGated: the room was started with --write, and this seat asks
+	// before every tool call that changes anything.
+	//
+	// Not a level of read-only. The seat may do everything SandboxWrite allows;
+	// what differs is that it has to be told yes first. It renders as its own
+	// word rather than a qualifier on WRITES because the room header already
+	// carries the persistent WRITE marker — so "gated" is read in a context
+	// that has already said this room can write, and cannot be mistaken for a
+	// column that cannot.
+	SandboxGated
 )
 
 // SandboxClaim is one column's posture, as a claim we are willing to defend.
@@ -230,6 +240,25 @@ type Column struct {
 	CostSession bool
 }
 
+// PendingGate is one tool call a vendor is blocked on, waiting to be told yes
+// or no.
+//
+// A plain value on State like everything else here, so the approval card and
+// the mode line can be rendered by a test that types one out by hand. The text
+// is already redacted: it is vendor-authored and a shell command is one of the
+// likeliest places for a token to appear on screen.
+type PendingGate struct {
+	Vendor model.VendorID
+	// RequestID is the vendor's own id for the request. Never rendered; it is
+	// what the answer carries back.
+	RequestID string
+	// ToolUseID ties the decision to the trace entry it decides.
+	ToolUseID string
+	// Text is the call as it will be shown, formatted exactly like a trace
+	// entry: "Write: ~/ws/ping.txt".
+	Text string
+}
+
 // State is everything Render reads. Nothing here is a clock, a file handle or
 // an environment lookup — those live on Model, which Render never sees.
 type State struct {
@@ -299,6 +328,19 @@ type State struct {
 	// keystroke mid-conversation.
 	Write bool
 
+	// Gates are the tool calls waiting on a decision, OLDEST FIRST.
+	//
+	// A queue rather than a single value, because one assistant message really
+	// can ask for a parallel batch of calls and each one blocks separately.
+	// Answering them in arrival order is the only ordering a person can follow:
+	// the card names the call it is asking about, and a queue that reordered
+	// itself would move the card under the keystroke.
+	//
+	// Its emptiness is the single source of truth for whether the room is
+	// gating — the mode line and the keymap both read it, so they cannot
+	// disagree about what `y` means.
+	Gates []PendingGate
+
 	// Expanded gives the focused column the whole width.
 	//
 	// Three columns are for comparing at a glance; one is for actually reading
@@ -329,6 +371,15 @@ func (s State) Busy() bool {
 	}
 	return false
 }
+
+// Gating reports that a vendor is blocked on a decision.
+//
+// Derived from the queue rather than stored beside it. A third InputMode would
+// have been a second place for the same fact to live, and the two would drift
+// the first time a gate was answered on a path that forgot to reset it — at
+// which point `y` would still mean approve while the footer said something
+// else, which is the exact surprise §7.8 forbids.
+func (s State) Gating() bool { return len(s.Gates) > 0 }
 
 // Seated reports the columns council will actually dispatch to.
 func (s State) Seated() int {
@@ -377,6 +428,8 @@ func (c SandboxClaim) Badge() string {
 		// Shouted, and without an "ro:" prefix for the same reason SandboxNone
 		// drops it: the prefix is what a hurried reader takes in first.
 		return "WRITES"
+	case SandboxGated:
+		return "gated"
 	case SandboxNone:
 		// Deliberately not spelled with an "ro:" prefix. Every other badge
 		// begins that way, and a reader scanning three column headers reads the

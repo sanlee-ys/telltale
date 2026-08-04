@@ -2369,13 +2369,20 @@ docs contradict is worse than either option on its own.
 
 ### 9.1 What v1 seats, and what it does not
 
-Three columns: **Claude Code**, **Codex**, **Antigravity**. Cursor is deliberately absent.
-It ships a headless CLI as a product (`cursor-agent`), but the `cursor` binary on PATH is
-the editor launcher, and a column driven against a binary that answers to a different
-command fails confusingly instead of sitting honestly empty. This is the inverse of the
-HUD, where Cursor *is* a built-in adapter (ADR-007) because its seam is on disk rather than
-behind a CLI. When `cursor-agent` is installed it is one entry in `candidates()` plus one
-adapter.
+Four columns: **Claude Code**, **Codex**, **Antigravity**, **Cursor**.
+
+Cursor was originally written up here as deliberately absent, on the grounds that
+`cursor-agent` was not installed. **That was not a judgement call, it was untrue** — the
+binary was at `%LOCALAPPDATA%\cursor-agent\cursor-agent.cmd` and had been for a month, and a
+test pinned the false claim in place so the day the world changed underneath it, it went on
+passing. It is seated now (ADR-008, fifth amendment). What remains true from the original
+paragraph: the `cursor` binary on PATH is the editor launcher, and council never drives it.
+On Windows the seat is `AvailUnusable` regardless — argv-only prompt through a `.cmd` shim is
+exactly what §9.3 refuses — and its badges carry the weakest evidence in the room, because the
+installed CLI is unauthenticated and checks that before it checks anything else.
+
+This is the inverse of the HUD, where Cursor *is* a built-in adapter (ADR-007) because its seam
+is on disk rather than behind a CLI.
 
 ### 9.2 Two claims the room refuses to leave implicit
 
@@ -2552,12 +2559,13 @@ deliberately weak mapping tightens the moment a live run shows the spelling.
 
 ### 9.7 Status
 
-The room opens, detects all three vendors, renders both layouts and every degraded state, takes
-a brief, and dispatches it. Claude streams token-level deltas; Codex and Antigravity render the
-waiting card and fill at once. Cancellation kills the process tree; quitting the room kills it
-too. Multi-turn resume is implemented for all three against each vendor's own session id.
+The room opens, detects the four seats, renders both layouts and every degraded state, takes a
+brief, and dispatches it. Claude streams incrementally; Codex and Antigravity render the waiting
+card and fill at once. Quitting the room kills every child, including the persistent one.
+Multi-turn is native resume for the batch seats and one live process for Claude (§9.8).
 
-Not built: the cross-agent rebuttal toggle (§9.4), per-column scrollback, per-vendor cancel.
+Cross-agent rebuttal (§9.4) and per-column scrollback are **built and shipped**. Not built:
+per-vendor cancel — `ctrl+c` still ends the whole turn.
 
 Known gaps, stated rather than buried. Codex's non-shell write path is untested — asked to
 create a file with its own patch tool it declined, but that was a model choice and says nothing
@@ -2571,3 +2579,84 @@ Codex `--json` event schema and delta granularity, whether `codex -s read-only` 
 Windows, and Antigravity's stream-json schema, conversation-id location, stdin support and
 `--sandbox` semantics. Those columns render honest *requested* badges until it says
 otherwise.
+
+One claim in this section is looser than its measurement and is flagged rather than quietly
+corrected, because fixing it is a separate change to a separate surface. The Claude column's
+granularity word is `tokens`. Measured over a 250-word reply the deltas are **~80 characters
+each, about three a second** — genuinely incremental, and not tokens. Measured identically
+under the persistent invocation and under a spawn-per-turn control, so it is a pre-existing
+overstatement rather than something §9.8 introduced.
+
+### 9.8 One live process, and the gate it makes possible
+
+Every Claude turn used to be a fresh `claude -p --resume`. A one-word "gm" cost about 25
+seconds and $0.23, nearly all of it session init, paid again on every turn. That was the
+visible cost. The structural one is what forced the change: **a batch process cannot ask
+permission.** Its stdin is written and closed before the first token arrives, so it has no
+channel to ask on and none for an answer to come back on.
+
+`--input-format stream-json` keeps one process alive taking one JSONL message per turn on an
+open stdin. Verified live against Claude Code 2.1.220 rather than read from documentation: two
+turns down one stdin came back under the same `session_id` with the same pid, `system/init` is
+re-emitted at the *start of every turn* (a parser reading it as "a new session" would reset the
+seat once per turn), and one `result` per turn is the only end-of-turn signal there is, because
+there is no exit to infer one from.
+
+Cancelling a turn now **interrupts** rather than kills — `{"subtype":"interrupt"}` on the
+control channel, measured to end the turn and leave the process answering a further one.
+Killing would also work, and would throw away the session init the room just paid for, so
+cancelling one turn would quietly make the next one expensive.
+
+**The reported cost changed meaning and the badge changed with it.** `total_cost_usd` is a
+running total for the process: $0.1061493 → $0.1177296 across two turns while the per-turn
+`usage` block stayed at 2 input tokens both times. That cell has meant "this turn" everywhere
+else in the room, so it now reads `$0.1177 session`. Rendering a session total unlabelled would
+be a false reading of a true number; subtracting to recover the turn would be council inventing
+a figure, which §8 rejects.
+
+#### The gate
+
+With `--write`, the seat that can ask **does** ask. Every tool call raises an approval card in
+its column — the tool and its argument line, formatted exactly as the activity trace formats it
+— and the room enters a gate state: `y` approves, `n` denies, and the vendor is stopped until
+one of them is pressed. Blocking was measured, not assumed: the answer was withheld for twenty
+seconds and nothing else arrived on stdout in that window.
+
+Three flags turn it on, none is optional, and **two of them do nothing alone**:
+
+| flag | what it does | what happens without it |
+|---|---|---|
+| `--permission-prompt-tool stdio` | routes the request onto the stream | **absent from `--help`** and real; alone, the session runs in auto mode, no request is ever emitted and the file is written |
+| `--permission-mode manual` | makes the call ask rather than assume | alone, there is nobody to ask, so the call short-circuits to *"you haven't granted it yet"* and the vendor gives up |
+| `--setting-sources ""` | stops the user's own permission rules pre-approving the call | measured on a machine allowing `Bash(mkdir:*)`: `mkdir zzz` **ran ungated** and the directory was created |
+
+The third is the honesty of the whole feature, and it is the one nobody would have thought to
+test. Permission *allow rules* in settings files are consulted **before** the callback, so a
+call they cover never reaches the gate at all. Without that flag, "nothing writes without your
+keystroke" is simply false — and false quietly, on a machine whose owner wrote those rules
+years ago for a different purpose.
+
+**Two limits are stated on the badge rather than buried here.** Shell commands the CLI itself
+classifies as read-only are approved without asking — `git status` was ungated under both
+setting-source configurations — so the claim is about calls that *change* things and is worded
+that way everywhere. And dropping the setting sources also drops the user's own hooks and
+user-level commands from that seat: the gate replaces their permission layer rather than
+sitting behind it. That is a real trade, and a room where a person is watching every call is
+the context in which it is worth making.
+
+**A denial is not a failure, and the difference took a fifth outcome value to keep.** The vendor
+reports a refusal as an `is_error` tool_result carrying council's own refusal text back — so
+read off the stream alone it is indistinguishable from a tool that broke, and the trace would
+say the command *failed* when what happened is that it was *not allowed to run*. `ActDenied` is
+recorded from the keystroke, before the echo arrives, and the echo cannot overwrite it. It
+renders `✗ denied by you`: the words carry the distinction, colour only seconds it, and it is
+the one line in the trace that is not a reading of a vendor's words.
+
+**The gate is Claude-only, and that is a fact about the other CLIs.** `codex exec` and `agy -p`
+are batch programs — read a prompt, answer, exit. Neither has a channel a question could arrive
+on. Their columns keep `WRITES`; only the seat that asks carries `gated`. Giving all four the
+same badge would be the blanket claim §9.2 exists to refuse, one level up.
+
+`--write --auto` restores the old behaviour for the times nobody is watching: `acceptEdits`,
+the `WRITES` badge, the user's settings left alone. Gating is the default because the room the
+user opened is the one they are looking at; unattended is the exception and has to be typed.

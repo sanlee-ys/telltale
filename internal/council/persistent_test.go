@@ -2,6 +2,7 @@ package council
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ func turnModel(persistent bool) *Model {
 		sessions:   map[model.VendorID]string{},
 		redactors:  map[model.VendorID]*Redactor{},
 		procs:      map[model.VendorID]*seatProc{},
+		gateInputs: map[string]map[string]any{},
 		roomCtx:    ctx,
 		roomCancel: cancel,
 	}
@@ -203,23 +205,153 @@ func TestPersistentCostIsLabelledAsASessionTotal(t *testing.T) {
 	}
 }
 
-// TestGateWithNoUIIsDeniedNotAllowed.
-//
-// This build has no way to ask, so the only two options are to deny or to
-// approve silently. Approving would be a gate that approves everything while
-// looking like a gate, which is the exact false claim this repo exists to
-// refuse. Unreachable in practice — the postures here never produce a request —
-// and pinned anyway, because "unreachable" is how the last three false claims
-// in this room survived review.
-func TestGateWithNoUIIsDeniedNotAllowed(t *testing.T) {
+// TestGatesQueueInArrivalOrder. One assistant message can ask for a parallel
+// batch, and each call blocks separately. Arrival order is the only order a
+// person can follow: the card names the call it is asking about, and a queue
+// that reordered itself would move the card under the keystroke.
+func TestGatesQueueInArrivalOrder(t *testing.T) {
 	m := turnModel(true)
-	// No process registered, so the answer cannot be sent; the assertion is that
-	// nothing panics and nothing is approved.
+	m.applyEvents([]runner.Event{
+		{Vendor: model.VendorClaude, Kind: runner.KindGate,
+			Gate: &runner.Gate{RequestID: "r1", ToolUseID: "t1", Tool: "Write", Text: "Write: a.txt"}},
+		{Vendor: model.VendorClaude, Kind: runner.KindGate,
+			Gate: &runner.Gate{RequestID: "r2", ToolUseID: "t2", Tool: "Bash", Text: "Bash: rm -rf b"}},
+	})
+
+	if !m.st.Gating() {
+		t.Fatal("two blocked calls and the room is not gating")
+	}
+	if len(m.st.Gates) != 2 {
+		t.Fatalf("queue = %d, want both requests kept", len(m.st.Gates))
+	}
+	if m.st.Gates[0].Text != "Write: a.txt" {
+		t.Errorf("head = %q, want the first to arrive", m.st.Gates[0].Text)
+	}
+
+	m.decideGate(true)
+	if len(m.st.Gates) != 1 || m.st.Gates[0].RequestID != "r2" {
+		t.Errorf("after one decision the queue is %+v, want only r2", m.st.Gates)
+	}
+	m.decideGate(false)
+	if m.st.Gating() {
+		t.Error("the room is still gating with an empty queue")
+	}
+}
+
+// TestDenialIsRecordedAsADenialNotAFailure.
+//
+// The substitution this prevents is the whole point of the gate. The vendor
+// reports a denial as an is_error tool_result carrying council's own refusal
+// text back, so read off the stream alone it is indistinguishable from a tool
+// that broke — and the trace would say the command failed when what happened is
+// that it was not allowed to run.
+func TestDenialIsRecordedAsADenialNotAFailure(t *testing.T) {
+	m := turnModel(true)
+	// The call is announced first, exactly as the live stream does it: the
+	// assistant tool_use block arrived 0.05s before the permission request.
+	m.applyEvents([]runner.Event{
+		{Vendor: model.VendorClaude, Kind: runner.KindActivity,
+			Acts: []runner.ActCall{{ID: "toolu_1", Text: "Bash: rm -rf ."}}},
+		{Vendor: model.VendorClaude, Kind: runner.KindGate,
+			Gate: &runner.Gate{RequestID: "r1", ToolUseID: "toolu_1",
+				Tool: "Bash", Text: "Bash: rm -rf ."}},
+	})
+	m.decideGate(false)
+
+	acts := m.st.Columns[0].Acts
+	if len(acts) != 1 {
+		t.Fatalf("acts = %+v, want the announced call carrying the decision", acts)
+	}
+	if acts[0].Status != runner.ActDenied {
+		t.Errorf("status = %v, want ActDenied", acts[0].Status)
+	}
+
+	// Now the vendor echoes our refusal back as a failed tool_result. It must
+	// not overwrite the record of the keystroke.
+	m.applyEvents([]runner.Event{{
+		Vendor: model.VendorClaude, Kind: runner.KindActivity,
+		Acts: []runner.ActCall{{
+			ID: "toolu_1", Outcome: runner.ActFailed, Detail: denialText,
+		}},
+	}})
+	if got := m.st.Columns[0].Acts[0].Status; got != runner.ActDenied {
+		t.Errorf("status = %v after the vendor echoed the denial back, want ActDenied still", got)
+	}
+}
+
+// TestApprovalLeavesTheTraceToTheVendor. A call the user allowed is one the
+// vendor then runs, and how it went is the vendor's fact to report — council
+// must not pre-empt it with a mark of its own.
+func TestApprovalLeavesTheTraceToTheVendor(t *testing.T) {
+	m := turnModel(true)
+	m.applyEvents([]runner.Event{
+		{Vendor: model.VendorClaude, Kind: runner.KindActivity,
+			Acts: []runner.ActCall{{ID: "toolu_1", Text: "Write: a.txt"}}},
+		{Vendor: model.VendorClaude, Kind: runner.KindGate,
+			Gate: &runner.Gate{RequestID: "r1", ToolUseID: "toolu_1",
+				Tool: "Write", Text: "Write: a.txt"}},
+	})
+	m.decideGate(true)
+
+	if got := m.st.Columns[0].Acts[0].Status; got != runner.ActPending {
+		t.Errorf("status = %v, want pending: the call has not come back yet", got)
+	}
+
+	m.applyEvents([]runner.Event{{
+		Vendor: model.VendorClaude, Kind: runner.KindActivity,
+		Acts: []runner.ActCall{{ID: "toolu_1", Outcome: runner.ActOK}},
+	}})
+	if got := m.st.Columns[0].Acts[0].Status; got != runner.ActOK {
+		t.Errorf("status = %v, want the vendor's own outcome", got)
+	}
+}
+
+// TestEndingATurnClearsItsGates.
+//
+// A card left up for a vendor that has stopped waiting invites a keystroke that
+// decides nothing, and the footer would go on announcing keys that no longer do
+// anything. Cancelling is the common way in: the interrupt ends the turn while
+// a request is still on screen.
+func TestEndingATurnClearsItsGates(t *testing.T) {
+	m := turnModel(true)
 	m.applyEvents([]runner.Event{{
 		Vendor: model.VendorClaude, Kind: runner.KindGate,
-		Gate: &runner.Gate{RequestID: "r1", Tool: "Write", Text: "Write: x.txt"},
+		Gate: &runner.Gate{RequestID: "r1", ToolUseID: "t1", Tool: "Write", Text: "Write: a.txt"},
 	}})
-	if m.turn == nil {
-		t.Error("a gate request ended the turn")
+	if !m.st.Gating() {
+		t.Fatal("the gate was not queued")
+	}
+
+	m.cancelling = true
+	m.applyEvents([]runner.Event{{
+		Vendor: model.VendorClaude, Kind: runner.KindError, EndsTurn: true,
+	}})
+
+	if m.st.Gating() {
+		t.Error("a cancelled turn left its approval card on screen")
+	}
+	if len(m.gateInputs) != 0 {
+		t.Error("the tool arguments of a discarded request were kept")
+	}
+}
+
+// TestGateTextIsRedacted. The argument line of a tool call is one of the
+// likeliest places for a credential to appear, and this one is rendered in
+// chrome that does not scroll away.
+func TestGateTextIsRedacted(t *testing.T) {
+	m := turnModel(true)
+	m.applyEvents([]runner.Event{{
+		Vendor: model.VendorClaude, Kind: runner.KindGate,
+		Gate: &runner.Gate{
+			RequestID: "r1", ToolUseID: "t1", Tool: "Bash",
+			Text: "Bash: curl -H 'Authorization: Bearer sk-ant-api03-" +
+				"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'",
+		},
+	}})
+	if len(m.st.Gates) != 1 {
+		t.Fatal("the gate was not queued")
+	}
+	if strings.Contains(m.st.Gates[0].Text, "sk-ant-api03-AAAA") {
+		t.Errorf("the approval card carries an unredacted secret: %q", m.st.Gates[0].Text)
 	}
 }

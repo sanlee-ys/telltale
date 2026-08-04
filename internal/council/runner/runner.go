@@ -87,6 +87,16 @@ const (
 	// whether it worked. Neither a success nor a failure, and it must not be
 	// rendered as either.
 	ActUnknown
+	// ActDenied: the USER refused it at the gate. The call never ran.
+	//
+	// A fifth value rather than reusing ActFailed, and the distinction is the
+	// whole point of the gate. The vendor reports a denial as an is_error
+	// tool_result carrying council's own refusal text back — so read off the
+	// stream alone it is indistinguishable from a tool that broke, and the
+	// trace would say the command failed when what happened is that it was not
+	// allowed to run. This is the only outcome council knows FIRST HAND: it is
+	// the record of a keystroke, not a reading of a vendor's words.
+	ActDenied
 )
 
 // ActCall is one tool call, as a vendor reported it.
@@ -143,6 +153,15 @@ type Gate struct {
 	// formatted like a trace entry: "Write: ...\\ping.txt". Composed by the
 	// adapter from the vendor's own fields; nothing here is invented.
 	Text string
+	// Input is the tool's arguments exactly as the vendor sent them, held only
+	// to be handed straight back on an approval — the protocol requires the
+	// input to be echoed in the answer.
+	//
+	// NEVER rendered, and deliberately not carried onto State. It is the whole
+	// argument blob, which for a Write is the entire file content; the card
+	// shows Text. Keeping it off the renderer's side of the boundary means
+	// there is no way for it to reach the screen by accident.
+	Input map[string]any
 }
 
 // Event is one thing that happened to one vendor.

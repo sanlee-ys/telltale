@@ -401,6 +401,81 @@ every quit path now tears down — including the two that previously did not,
 because "no turn in flight" used to mean "no children" and stopped meaning it
 the moment this landed.
 
+### Amendment, 2026-08-04 (seventh): `--write` asks first
+
+The third amendment settled that the read-only posture was never the containment and that
+the workspace is. That is still true, and it is a coarse control: it says *where* three
+agents may act, never *what* they are about to do. With one seat now driven as a live
+process (sixth amendment), a finer one became possible for the first time — the process can
+ask, and wait.
+
+**`telltale council --write` is now gated by default. `--write --auto` restores the old
+behaviour.** The default is the attended one because the room the user opened is the room
+they are looking at; unattended has to be typed.
+
+**Three flags turn the gate on, and two of them do nothing alone.** This is recorded in
+detail because the failure mode of each is silence rather than an error:
+
+| flag | alone |
+|---|---|
+| `--permission-prompt-tool stdio` | **Not in `--help`** for 2.1.220, and real — an invented flag is rejected with "unknown option" while this one parses, and the shipped binary's own SDK spawn code pushes exactly this pair for a `canUseTool` callback. Passed by itself the session ran in `auto` mode, emitted no request, and wrote the file. |
+| `--permission-mode manual` | Reported back as `permissionMode: "default"`. Passed by itself there is nobody to ask, so the call short-circuits to *"Claude requested permissions to write to …, but you haven't granted it yet"* and the vendor gives up rather than waiting. |
+| `--setting-sources ""` | See below. This is the one that decides whether the feature's headline sentence is true. |
+
+Together, the request appears on stdout and the turn blocks on it. Blocking was measured
+rather than assumed: the answer was withheld for twenty seconds, nothing else arrived in
+that window, and the tool result landed 0.25s after it was sent. Both branches were driven
+live — an allow ran the tool and put the file on disk; a deny came back as an `is_error`
+tool_result carrying council's own refusal text, and the file was never created.
+
+**The settings hole, which is the finding worth the whole spike.** Permission *allow rules*
+in the user's settings files are consulted **before** the permission callback, so any call
+they cover never reaches the gate at all. Measured on a machine whose global settings allow
+`Bash(mkdir:*)`:
+
+- default setting sources, `mkdir zzz` → **no request, directory created**
+- `--setting-sources ""`, same call → request raised, denial honoured, nothing created
+
+Without that flag, *"nothing writes without your keystroke"* is false — and false quietly,
+on a machine whose owner wrote those rules long ago for a different purpose. A first pass
+tested this with `git status`, which is ungated under **both** configurations; that nearly
+produced the opposite conclusion, and the control that settled it was picking a command that
+is both allowlisted and genuinely mutating.
+
+**Two limits are stated on the badge rather than buried in this file.** Shell commands the
+CLI itself classifies as read-only are approved without asking, so every claim is worded
+about calls that *change* things. And dropping the setting sources also drops the user's own
+hooks and user-level commands from that seat: the gate **replaces** their permission layer
+rather than sitting behind it. That is a real trade, and the reason it is acceptable is
+precisely that someone is watching every call — which is why `--auto` does not pay it.
+
+**A denial is not a failure, and keeping them apart needed a fifth outcome value.** The
+vendor reports a refusal as an `is_error` tool_result whose content is council's own refusal
+text echoed back. Read off the stream alone that is indistinguishable from a tool that broke,
+and the trace would report the command *failing* when what happened is that it was *not
+allowed to run*. `ActDenied` is recorded from the keystroke, before the echo arrives, and the
+echo is not permitted to overwrite it. It renders `✗ denied by you` — words first, colour
+second, and `SevWarn` rather than `SevCrit` because a refusal is the room working, not
+something going wrong. It is the only line in the trace that is not a reading of a vendor's
+words; it is the record of a keystroke.
+
+**The refusal text names who refused.** A model told only "denied" treats it as an obstacle
+to route around, and the next thing it does is a slightly different spelling of the same
+call — which is a second request for a user who has already said no once.
+
+**The gate is Claude-only, and the badge says so per column.** `codex exec` and `agy -p` are
+batch programs with no channel a question could arrive on, so they keep `WRITES` and only the
+seat that asks carries `gated`. Giving all four the same word would be exactly the blanket
+claim §3 of this ADR exists to refuse, one level up. `gated` is safe to read as a plain word
+only because the header still carries the persistent `⚠ WRITE` marker for the whole session —
+the badge is read in a context that has already said this room can write.
+
+**The approval card is chrome, not body.** The badge line earned that place because a claim
+you cannot see is not a claim; this earns it for a stronger reason — a vendor is *stopped*
+behind it, and during a turn every column is following its own tail, so a card in the body
+would be pushed off screen by the output of the very call it is asking about. For the same
+reason the gate's mode line is the one footer state a transient notice may not displace.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude

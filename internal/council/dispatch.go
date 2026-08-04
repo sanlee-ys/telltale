@@ -227,6 +227,19 @@ func (m *Model) posture() vendors.Posture {
 	return vendors.PostureRead
 }
 
+// seatPosture is what a seat that can ASK is invoked with.
+//
+// Split from posture() rather than folded into it, because the gate is not a
+// room-wide property and must never render as one. Three of the four vendors
+// are batch CLIs with no channel to ask on; giving them a gated posture would
+// be a flag that does nothing behind a badge that claims something.
+func (m *Model) seatPosture() vendors.Posture {
+	if m.st.Write && !m.opts.Auto {
+		return vendors.PostureWriteGated
+	}
+	return m.posture()
+}
+
 // seatedIn counts how many installed columns a route actually reaches.
 func (m *Model) seatedIn(route Route) int {
 	n := 0
@@ -318,7 +331,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			}
 
 		case runner.KindGate:
-			m.answerGate(c, ev.Gate)
+			m.queueGate(c, ev.Gate)
 
 		case runner.KindMeta:
 			if ev.SessionID != "" {
@@ -404,6 +417,10 @@ func (m *Model) applyEvents(batch []runner.Event) {
 // cancellation wording in one place: a turn the user stopped must never be
 // rendered as a vendor failure, and there are now four ways a column can end.
 func (m *Model) finishColumn(c *Column, phase Phase) {
+	// Whatever this seat was waiting to be told, it is no longer waiting. A card
+	// left up for a vendor that has stopped asking invites a keystroke that
+	// decides nothing, and the footer would go on claiming the room is gated.
+	m.dropGates(c.Vendor)
 	if c.Elapsed == 0 && !c.Started.IsZero() {
 		c.Elapsed = time.Since(c.Started)
 	}
@@ -436,6 +453,14 @@ func (c *Column) recordAct(a runner.ActCall, clean func(string) string) {
 		for i := range c.Acts {
 			if c.Acts[i].ID != a.ID {
 				continue
+			}
+			if c.Acts[i].Status == runner.ActDenied {
+				// A denial is council's own record of a keystroke, and the
+				// vendor is about to echo it back as an is_error tool_result
+				// carrying our refusal text. Letting that overwrite the entry
+				// would turn "you did not allow this" into "this failed" — the
+				// one substitution the gate exists to prevent.
+				return
 			}
 			if text != "" {
 				c.Acts[i].Text = text
