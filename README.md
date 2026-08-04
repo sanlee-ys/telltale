@@ -171,6 +171,14 @@ terminal. It exists because the alternative is four terminals and a clipboard.
 telltale.exe council
 ```
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/telltale-council-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="images/telltale-council-light.svg">
+    <img alt="telltale council dispatch room showing multi-agent panel" src="images/telltale-council-dark.svg">
+  </picture>
+</p>
+
 ```
  council ~/code/telltale                                                              turn 1  │  3/3 seated  │  no brief
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
