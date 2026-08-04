@@ -3225,3 +3225,99 @@ reachable, and **unattributed**. The room said *something is hidden here* three 
 *here is how to see it* once, and a user reading the two-thirds of the room that named no
 key concluded, reasonably, that the feature was missing. Nothing measurable was wrong;
 what was wrong is that the honest thing and the actionable thing were on different columns.
+
+### 9.13 The badges were honest and nobody knew what they meant
+
+§9.2 argues that every column states its own posture, §9.11 gave the two that mean "this
+seat can change your files" weight and the warning hue, and twelve amendments of ADR-008
+made each word behind them defensible. The room was then driven, and the report back was
+a question:
+
+> *"why do i care codex and agy are 'unsandboxed'? what does this mean, why are they
+> sandboxed, and must they remain that way? i'm really confused here."*
+
+Every previous complaint in this section was about something being wrong. This one is not.
+The badges are correct, they are the most carefully-argued strings in the product, and to
+their primary user they were **three lowercase tokens with no reachable explanation.**
+`unsandboxed` reads as jargon-with-a-negation, which invites exactly the two wrong
+readings the question contains: that the sandbox is something council switched off, and
+that a sandbox is what was keeping the room safe.
+
+**Two things were missing, and only one of them is a legend.**
+
+The first is the vocabulary. There was no plain-English gloss of the badge words anywhere
+a user could reach without reading an ADR. What existed was four muted lines at the bottom
+of the help panel, below the fold at a 24-row terminal, saying that each column states its
+own posture — a sentence about the *policy* rather than about any of the words.
+
+The second is worse and was found by grep. **`SandboxClaim.Detail` rendered nowhere at
+all.** It is the full argument behind each badge — what was passed, what was measured,
+what is therefore claimed — it is written per vendor per OS, it is asserted by tests, it is
+quoted into ADR-008, and no surface read it. The field's own doc comment said it was "shown
+in the degraded/help text". It was not shown anywhere. §9.2's rule is that a claim you
+cannot see is not a claim; **the argument for a claim is under the same rule**, and this
+one had been invisible since the badges landed.
+
+**The fix is a second help page, and the split is by kind rather than by length.** `?` now
+cycles: keys, postures, closed. Both pages spend the same hard 17-row budget (§9.11), both
+end with the `?` line that leaves them, and three presses always return the room from
+anywhere — the panel's one non-negotiable property, since `?` is the only documented way
+out of it. Page one's closing paragraph became the pointer to page two, which is what makes
+a second page a feature rather than a place.
+
+Page two is a legend of **every** badge this product can render, not only the ones the
+current room shows. A user who has never typed `--write` should be able to find out what
+`WRITES` means before they type it, and a room-specific legend could only ever explain the
+room you are already in. Each entry renders its badge through `Styles.ForSandbox`, the same
+function the column header uses, so the legend cannot teach one weight and the room show
+another; `TestEveryBadgeIsExplained` walks every `SandboxLevel` and fails the build when a
+badge exists with nothing here to say what it means.
+
+**Nothing was softened, and that is asserted rather than promised.** These are glosses on
+the badge words, never replacements for them.
+`TestThePostureLegendDoesNotSoftenAnyClaim` pins the load-bearing phrases — `unsandboxed`
+still says *nothing restricts*, *measured*, *change your files*; `ro:requested` still says
+*never observed* — and forbids "read-only", "safe" and "cannot write" from appearing in the
+gloss for any level that can write. The badges break the `ro:` prefix on purpose; a legend
+that put the word back would undo that in the one place a reader goes to have it explained.
+
+Below the legend, and below the fold at the 24-row floor, is this room's own seats with
+each one's `Detail` in full — the first time that field has rendered. The ordering is
+deliberate: the detail is unreadable without the vocabulary, and the vocabulary fits the
+budget where four paragraphs of measured prose never could. It is the same trade page one
+already makes with its closing paragraph, and the residual is stated rather than discovered:
+at the shortest terminal this room will draw in, the per-seat half is scrolled past rather
+than absent.
+
+**Every `Detail` was reordered so its first clause answers "so what?".** Not one factual
+clause was removed, weakened or added; what changed is which end of the sentence the
+consequence sits at. `"named write/exec tools denied and MCP servers dropped; verified
+against..."` opens on a mechanism a user has to decode before they learn anything, and now
+opens *"this seat has no write or shell tools in its session, so it cannot edit your
+files"* with the verification and the deny-list residual behind it. Codex on Windows opens
+on *"nothing at the OS level stops this column reading or writing here"* rather than on the
+flag that produced it. This is §7.1's rule about glyph-word-number ordering applied to
+prose: the distinction goes first and the evidence reinforces it.
+
+**The question's third clause got an answer too, and it is the one that mattered.** *Must
+they remain that way?* The README's new badge table answers it where a first-time reader
+is, and the answer is not about flags: **no badge is what keeps this room out of your
+files — the workspace is.** `unsandboxed` on Codex is not a setting anyone chose to leave
+off; both sandboxed modes were measured failing every process spawn there, so read-only was
+a seat that could not read (ADR-008, twelfth amendment). The control that holds is `--cd`
+into a throwaway worktree, and the fleet contract rules the same way independently:
+`agent-ops` ADR-012 rules capability parity, with guard wiring rather than lane shape as the
+control. A column that looked read-only because of a broken sandbox was never a safety
+property; it was a defect wearing one's clothes.
+
+**No posture flag moved.** Whether council should keep asking agy for `--mode plan
+--sandbox` when both are measured to do nothing is an open decision (§9.6b) and belongs to
+the owner, not to a documentation pass. This section changed what the room *says* about the
+posture and nothing about the posture.
+
+The general lesson, in this file's own terms: §9.10 found a mechanism that was complete and
+unreachable, §9.12 found one that was complete, reachable and unattributed. This one is a
+claim that was complete, visible, attributed — and **untranslated**. Twelve amendments of
+adversarial care went into making three words defensible to a reviewer, and none of them
+asked whether the person the words are *for* could read them. Honesty that only survives
+an expert audit is a claim made to the wrong audience.

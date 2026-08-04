@@ -223,8 +223,141 @@ func TestComposeMode(t *testing.T) {
 
 func TestHelp(t *testing.T) {
 	st := room()
-	st.Help = true
+	st.Help = HelpKeys
 	golden(t, "help", render(st))
+}
+
+// postureRoom is room() with every seat carrying the claim it REALLY ships,
+// read from sandboxFor, rather than the short stand-ins the layout fixture
+// uses. The posture page renders that prose verbatim, so a golden built on the
+// fixture would review a sentence no user ever sees. Windows, because that is
+// the reference machine and the OS on which two of these seats have no sandbox
+// at all.
+func postureRoom() State {
+	st := room()
+	for i := range st.Columns {
+		st.Columns[i].Sandbox = sandboxFor(st.Columns[i].Vendor, true)
+	}
+	st.Help = HelpPostures
+	st.Height = 44
+	return st
+}
+
+// TestHelpPostures renders page two at a terminal tall enough to reach the
+// per-seat half. The golden is deliberately NOT 24 rows: the legend fits the
+// minimum room and this room's own measured claims sit below the fold, so a
+// 24-row golden would review the half nobody had to write carefully and skip
+// the paragraphs that are the whole reason the page exists.
+func TestHelpPostures(t *testing.T) {
+	golden(t, "help-postures", render(postureRoom()))
+}
+
+// TestQuestionMarkCyclesAndAlwaysLeaves. `?` stopped being a toggle when the
+// panel grew a second page, and the property that must survive that is the one
+// the panel depends on: it is the only documented way out, so no number of
+// presses may strand a reader on a page.
+func TestQuestionMarkCyclesAndAlwaysLeaves(t *testing.T) {
+	h := HelpClosed
+	for _, want := range []HelpPage{HelpKeys, HelpPostures, HelpClosed, HelpKeys} {
+		if h = h.next(); h != want {
+			t.Fatalf("? cycled to %v, want %v", h, want)
+		}
+	}
+}
+
+// TestEveryBadgeIsExplained. A badge word with nothing on the legend page to
+// say what it means is the exact state this page was added to fix — a two-word
+// safety claim on screen and no reachable explanation of it — and it is the
+// state a sixth posture level would silently restore.
+func TestEveryBadgeIsExplained(t *testing.T) {
+	explained := map[SandboxLevel]bool{}
+	for _, e := range helpBadgeGloss() {
+		if explained[e.level] {
+			t.Errorf("%v is glossed twice", e.level)
+		}
+		explained[e.level] = true
+		if len(e.gloss) == 0 {
+			t.Errorf("%v has an empty gloss", e.level)
+		}
+	}
+	for l := SandboxUnknown; l <= SandboxGated; l++ {
+		b := SandboxClaim{Level: l}.Badge()
+		if b == "" {
+			// SandboxUnknown renders no badge, so there is nothing to explain.
+			continue
+		}
+		if !explained[l] {
+			t.Errorf("the badge %q renders on a column and the help page does not "+
+				"say what it means", b)
+		}
+	}
+}
+
+// TestThePostureLegendDoesNotSoftenAnyClaim. This page is a gloss on the badge
+// words, never a replacement for them (ADR-008 §3 and its amendments). The two
+// words that mean "this seat can change your files" have to keep meaning that
+// in plain English, and the weakest badge has to keep admitting it is weak —
+// a legend that made either sit more comfortably would be the blanket claim
+// this whole vocabulary exists to refuse, re-entering through the help panel.
+func TestThePostureLegendDoesNotSoftenAnyClaim(t *testing.T) {
+	byLevel := map[SandboxLevel]string{}
+	for _, e := range helpBadgeGloss() {
+		byLevel[e.level] = strings.ToLower(strings.Join(e.gloss, " "))
+	}
+
+	for _, tc := range []struct {
+		level SandboxLevel
+		want  []string
+	}{
+		{SandboxNone, []string{"nothing restricts", "measured", "change your files"}},
+		{SandboxRequested, []string{"never observed"}},
+		{SandboxTools, []string{"absent"}},
+		{SandboxWrite, []string{"edit and run"}},
+		{SandboxGated, []string{"asks first"}},
+	} {
+		for _, w := range tc.want {
+			if !strings.Contains(byLevel[tc.level], strings.ToLower(w)) {
+				t.Errorf("the gloss for %q dropped %q: %q",
+					SandboxClaim{Level: tc.level}.Badge(), w, byLevel[tc.level])
+			}
+		}
+	}
+
+	// No gloss may claim a posture is safe, restricted or read-only. The badges
+	// break the `ro:` prefix on purpose; a legend that put the word back would
+	// undo that in the one place a reader goes to have it explained.
+	for l, g := range byLevel {
+		if l == SandboxNone || l == SandboxWrite || l == SandboxGated {
+			for _, forbidden := range []string{"read-only", "safe", "cannot write"} {
+				if strings.Contains(g, forbidden) {
+					t.Errorf("the gloss for %q says %q: %q",
+						SandboxClaim{Level: l}.Badge(), forbidden, g)
+				}
+			}
+		}
+	}
+}
+
+// TestThePosturePageRendersEachSeatsOwnClaim. SandboxClaim.Detail was written,
+// tested and quoted into ADR-008 for several amendments while rendering
+// NOWHERE — the field's own comment said it was "shown in the degraded/help
+// text" and no surface read it. §9.2's rule is that a claim you cannot see is
+// not a claim, and the argument behind a claim is under the same rule.
+func TestThePosturePageRendersEachSeatsOwnClaim(t *testing.T) {
+	st := postureRoom()
+	got := render(st)
+
+	for _, c := range st.Columns {
+		// The detail is wrapped, so the whole sentence is not on one line. Its
+		// opening clause is enough to prove the field reached the screen.
+		head := strings.SplitN(c.Sandbox.Detail, " ", 5)
+		if len(head) < 5 {
+			t.Fatalf("%s has a suspiciously short posture detail: %q", c.Label, c.Sandbox.Detail)
+		}
+		if !strings.Contains(got, strings.Join(head[:4], " ")) {
+			t.Errorf("%s's own posture claim is not on the page:\n%s", c.Label, got)
+		}
+	}
 }
 
 // TestHelpFitsTheSmallestRoom is the panel's hard budget, asserted rather than
@@ -264,7 +397,6 @@ func TestHelpFitsTheSmallestRoom(t *testing.T) {
 		{name: "tabs+notice", st: withDeadSeat, w: 80, wantNotice: true, wantTabs: true},
 	} {
 		st := tc.st()
-		st.Help = true
 		st.Width, st.Height = tc.w, MinHeight+14 // 24 rows
 		// Assert the fixture really produces the geometry it is named for, so a
 		// future change that stops collapsing seats cannot turn this into three
@@ -276,11 +408,25 @@ func TestHelpFitsTheSmallestRoom(t *testing.T) {
 			t.Fatalf("%s: tab bar %v, want %v", tc.name, got, tc.wantTabs)
 		}
 
-		got := render(st)
-		for _, want := range []string{"ctrl+c / q", "?            this help"} {
-			if !strings.Contains(got, want) {
-				t.Errorf("%s (%dx%d): the help panel dropped %q\n%s",
-					tc.name, st.Width, st.Height, want, got)
+		// BOTH pages spend the same budget and both have to survive it. The
+		// second page is the one carrying a safety vocabulary, so a page whose
+		// closing lines fell off the bottom would leave a reader looking at
+		// "unsandboxed" with the sentence about what actually contains the room
+		// scrolled away — and no visible way back to the keys.
+		for _, pg := range []struct {
+			page HelpPage
+			want []string
+		}{
+			{HelpKeys, []string{"ctrl+c / q", "?            next page"}},
+			{HelpPostures, []string{"unsandboxed", "WORKSPACE above", "?            close"}},
+		} {
+			st.Help = pg.page
+			got := render(st)
+			for _, want := range pg.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("%s (%dx%d) page %v: the help panel dropped %q\n%s",
+						tc.name, st.Width, st.Height, pg.page, want, got)
+				}
 			}
 		}
 	}
@@ -308,7 +454,8 @@ func TestNoLineExceedsTheTerminalWidth(t *testing.T) {
 			st.Draft = strings.Repeat("brief ", 40)
 			return st
 		},
-		"help": func() State { st := room(); st.Help = true; return st },
+		"help":          func() State { st := room(); st.Help = HelpKeys; return st },
+		"help-postures": func() State { st := room(); st.Help = HelpPostures; return st },
 		// A multi-row composer over a room that is also mid-transcript: the two
 		// new variable-height surfaces competing for the same frame.
 		"talking": func() State {

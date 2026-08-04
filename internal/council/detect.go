@@ -551,9 +551,16 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 			// a deny list plus --strict-mcp-config, checked by reading the
 			// session's own reported tool list. A deny list cannot cover a tool
 			// that does not exist yet, and the wording says so.
-			Detail: "named write/exec tools denied and MCP servers dropped; verified " +
-				"against the session's own tool list, but a deny list cannot cover a " +
-				"tool a future release adds",
+			// Reordered 2026-08-04 so the first clause answers "so what?" rather
+			// than naming a mechanism. Every factual clause is unchanged and none
+			// is softened: the verification is still stated as reading the
+			// session's own tool list, and the residual — a deny list cannot
+			// cover a tool that does not exist yet — is still the last word.
+			Detail: "this seat has no write or shell tools in its session, so it cannot " +
+				"edit your files. Verified by reading what the session reported about " +
+				"itself, not by trusting a flag: the named write/exec tools are denied " +
+				"and MCP servers are dropped. The residual is that a deny list cannot " +
+				"cover a tool a future release adds",
 		}
 	case model.VendorCodex:
 		if windows {
@@ -576,16 +583,24 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 				// headers takes in the prefix before the qualifier, and this
 				// seat has no sandbox at all on this OS.
 				Level: SandboxNone,
-				Detail: "no sandbox on Windows: -s danger-full-access is passed so this " +
-					"column can read at all. Both sandboxed modes were measured failing " +
-					"every process spawn there, reads included, so read-only was a seat " +
-					"that could not read. The workspace above is the containment, not a " +
-					"flag — point council at a worktree if that matters",
+				Detail: "nothing at the OS level stops this column reading or writing " +
+					"here, and that is why: on Windows both sandboxed modes were measured " +
+					"failing every process spawn, reads included, so -s read-only was not " +
+					"a restriction, it was a seat that could not read. Council passes " +
+					"-s danger-full-access so this column can work at all. The workspace " +
+					"above is the containment, not a flag — point council at a worktree " +
+					"if that matters",
 			}
 		}
 		return SandboxClaim{
-			Level:  SandboxEnforced,
-			Detail: "-s read-only, enforced by the OS sandbox",
+			Level: SandboxEnforced,
+			// The one posture in this room an operating system is behind rather
+			// than a flag. Stated as what it is and no further: this repo has
+			// measured the Windows branch, not this one, so it does not add a
+			// "cannot write" it did not run.
+			Detail: "-s read-only, applied by the vendor's own OS-level sandbox on macOS " +
+				"and Linux — the one posture in this room that an operating system rather " +
+				"than a flag is behind",
 		}
 	case model.VendorAntigravity:
 		return SandboxClaim{
@@ -593,9 +608,11 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 			// Refuted, not unverified. Asked to write a file under both flags,
 			// it wrote the file; the reported permission mode and tool list
 			// were identical to a run without them.
-			Detail: "--mode plan --sandbox are passed but do not restrict it: asked " +
-				"to write a file under both, it wrote the file. Treat this column " +
-				"as able to change your workspace",
+			Detail: "treat this column as able to change your files, and that is " +
+				"MEASURED rather than assumed: asked to write a file under both " +
+				"--mode plan and --sandbox, it wrote the file, and its reported " +
+				"permission mode and tool list were identical to a run without them. " +
+				"The flags are still passed; they do not restrict it",
 		}
 	case model.VendorCursor:
 		// Still the weakest badge in the room, and now for a REASON rather than
@@ -627,19 +644,21 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 		if windows {
 			return SandboxClaim{
 				Level: SandboxRequested,
-				Detail: "--mode plan is requested and nothing is enforced. --sandbox is " +
+				Detail: "treat this column as able to run things: --mode plan is requested " +
+					"and nothing is enforced. Under plan mode this vendor was still measured " +
+					"issuing shell commands — a hook stopped them, not the mode. --sandbox is " +
 					"deliberately NOT passed on Windows: the CLI rejects it outright there " +
-					"(\"Sandbox requires macOS or Linux\") and the turn dies. Under plan mode " +
-					"this vendor was still measured issuing shell commands — a hook stopped " +
-					"them, not the mode. Treat this column as able to run things",
+					"(\"Sandbox requires macOS or Linux\") and the turn dies before any model " +
+					"call, so passing it would kill the seat rather than restrict it",
 			}
 		}
 		return SandboxClaim{
 			Level: SandboxRequested,
-			Detail: "--mode plan --sandbox enabled are requested. The install ships a real " +
-				"cursorsandbox.exe, but what it covers was never observed here — every live " +
-				"turn behind this claim ran on Windows, where the sandbox does not exist. Its " +
-				"own help says print mode has access to write and shell tools",
+			Detail: "asked for, never proven: --mode plan --sandbox enabled are requested " +
+				"and what they actually enforce was not observed. The install ships a real " +
+				"cursorsandbox.exe, but every live turn behind this claim ran on Windows, " +
+				"where that sandbox does not exist. Cursor's own help says print mode has " +
+				"access to write and shell tools, so treat this column as able to run things",
 		}
 	default:
 		return SandboxClaim{}

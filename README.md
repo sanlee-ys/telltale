@@ -230,6 +230,41 @@ the two header lines is made per vendor, never as a blanket:
   vendor reported one — a turn that reported `$0.0000` shows it, a turn that reported
   nothing shows no cost cell at all, and telltale never derives a cost from token counts.
 
+### Reading the badges
+
+The badge is the one thing on a column header where misreading it has consequences, so
+here is the whole vocabulary in one place. **`?` twice inside the room** shows the same
+table, followed by the full claim each of your own seats is making.
+
+| badge | what it means for you |
+|---|---|
+| `ro:tools` | The write and shell tools are **absent** from that session, so it cannot edit your files. Verified by reading what the session reported about itself, not by trusting a flag. Residual: a deny list cannot cover a tool a future release adds. |
+| `ro:enforced` | The vendor's own **OS-level sandbox** is applying it — `codex -s read-only` on macOS and Linux. The one posture here that an operating system rather than a flag is behind. |
+| `ro:requested` | A read-only flag was passed and accepted, and **what it actually enforces was never observed**. Weaker than the two above, and it says so rather than borrowing their word. |
+| `unsandboxed` | **Nothing restricts this vendor at the OS level** — measured, not assumed. Treat the column as able to change your files. It deliberately does not open with `ro:`, because a reader scanning four headers takes in the prefix before the qualifier. |
+| `WRITES` | The room was started with `--write`. This column may edit and run things in the workspace. |
+| `gated` | `--write`, and this seat **asks first**: `y` approves, `n` denies, and nothing runs until you answer. Only the seat driven as a live process can be asked; the others say `WRITES` rather than implying they can. |
+
+Two of those need the same answer to the obvious follow-up — *must they stay that way?*
+
+**No badge is what keeps this room out of your files. The workspace is.** `unsandboxed` is
+not a setting anyone chose to leave on: on Windows both of Codex's sandboxed modes were
+measured failing *every* process spawn, reads included, so `-s read-only` was not a
+restriction but a seat that could not read its own repo. Antigravity was asked to write a
+file under both of its own read-only flags and wrote it. Those are measurements, and the
+badge reports them. The control that actually holds is the directory council was pointed
+at — so if a room should not be able to touch something, point it somewhere else:
+
+```
+git worktree add ../telltale-council
+telltale council --cd ../telltale-council
+```
+
+That is also the fleet's own ruling rather than a local convenience: `agent-ops` ADR-012
+rules capability parity — every vendor reads and writes, and guard wiring rather than lane
+shape is the control. A column that looked read-only because of a broken sandbox was never
+a safety property; it was a defect wearing one's clothes.
+
 The `⚙` lines are the activity trace: what a vendor is *doing* — the tool call, and the
 command it ran — interleaved with what it says.
 
@@ -269,7 +304,8 @@ composing** as well as in view mode, which is the point: a finished turn drops t
 back into compose, so the mode you are in when four long answers land is the mode you need
 to read in. Keys that can be text stay text there — `j`, `k`, `g`, `G` and `q` are letters
 in the composer — and the mode line says which set is live on every frame. `?` lists all of
-them.
+them; `?` again explains what the posture badge on each column means, with your own seats'
+full claims underneath; `?` a third time closes the panel.
 
 **The keys move one column, and the frame says which.** `▸` marks it, its name is the only
 one at full weight, and its overflow marker names the keys that would move it

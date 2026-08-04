@@ -36,7 +36,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 		b.WriteString("\n")
 	}
 
-	if st.Help {
+	if st.Help != HelpClosed {
 		b.WriteString(helpBody(st, lay, sty, g))
 	} else if lay.Tier == TierTabs {
 		if lay.Tabs {
@@ -1615,7 +1615,36 @@ func routeLabel(st State) string { return st.Route.label() }
 // helpBody replaces the column area, rather than floating over it, for the same
 // reason the HUD's overlay does: a panel that covers live output hides the
 // thing the user is watching.
+//
+// It has two pages, and the split is by KIND rather than by length: page one is
+// what the keys do, page two is what the words on each column mean. They were
+// one panel, and the second one lost — it was four muted lines under the fold,
+// which is where the posture explanation was standing when a user asked "why do
+// I care that codex and agy are 'unsandboxed'?". Both pages spend the same hard
+// 17-row budget, and each ends with the `?` line that leaves it.
 func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
+	lines := helpKeys(sty)
+	if st.Help == HelpPostures {
+		lines = helpPostures(st, lay, sty)
+	}
+
+	var b strings.Builder
+	for i := 0; i < lay.Body; i++ {
+		if i < len(lines) {
+			// fit, not padRight: some help lines are pre-styled.
+			b.WriteString(" " + fit(lines[i], lay.Width-2) + " ")
+		} else {
+			b.WriteString(strings.Repeat(" ", lay.Width))
+		}
+		if i < lay.Body-1 {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+// helpKeys is page one: what every key does.
+func helpKeys(sty Styles) []string {
 	// The budget is HARD, and it is 17 rows rather than the 19 this panel used
 	// to spend. Body at a 24-row terminal is 19 with nothing else on screen, but
 	// the collapsed-seat notice costs a row and the narrow tier's tab bar costs
@@ -1624,7 +1653,7 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	// documented way back out of this panel, fell off the bottom in exactly that
 	// room. Anything added here has to be merged into a line that is already
 	// present; two were, to buy the two rows back.
-	lines := []string{
+	return []string{
 		sty.Identity.Render("council") + sty.Muted.Render(" — one brief, several agents, side by side"),
 		"",
 		// Merged with the `enter` line it used to sit above. The two described one
@@ -1666,7 +1695,11 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		// and the line they were competing with is "? this help" — which toggles,
 		// and is therefore the only documented way back out of here.
 		"  ctrl+c / q   ctrl+c cancels the turn, or quits when idle; q quits (in compose it is text)",
-		"  ?            this help",
+		// `?` no longer toggles, it CYCLES, so this line has to say where the
+		// next press goes or the second page is a feature nobody finds. It is
+		// still the only documented way out of the panel — three presses always
+		// return the room — which is why it keeps this row on both pages.
+		"  ?            next page: what the badge on each column means",
 		"",
 		// One complete sentence per line, because the two rows freed above land
 		// exactly here at a 24-row terminal: a paragraph that wrapped would show
@@ -1675,28 +1708,134 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		"  a seat that cannot be driven folds out of the grid, named in one line above.",
 		"  --vendor all keeps every seat on screen; --vendor claude,codex seats those.",
 		"",
-		// Below the fold at the minimum height, and left in for the same reason
-		// the help lists keys it expects you to already know: at a normal
-		// terminal size it is the paragraph that explains why the badges differ.
-		sty.Muted.Render("  council dispatches to vendor CLIs. It is the one telltale mode that"),
-		sty.Muted.Render("  does, and each column states its own posture rather than the room"),
-		sty.Muted.Render("  claiming one on behalf of every seat. Only one seat can be asked"),
-		sty.Muted.Render("  before it acts; the rest say so instead of implying otherwise."),
+		// What used to be here was four muted lines trying to explain the posture
+		// badges below the fold, and it was the wrong shape for the job: a
+		// paragraph nobody scrolls to, on the one subject in this room where a
+		// misreading has consequences. It moved to its own page, which had the
+		// room to say it in plain English, and this is the pointer that makes
+		// that page findable from the panel people actually open.
+		sty.Muted.Render("  council dispatches to vendor CLIs — the one telltale mode that does, and"),
+		sty.Muted.Render("  each column states its OWN posture rather than the room claiming one for"),
+		sty.Muted.Render("  every seat. Press ? for what those posture badges mean."),
+	}
+}
+
+// helpBadgeGloss is one plain-English sentence per badge, keyed by the level
+// that renders it.
+//
+// It is a table rather than prose so that TestEveryBadgeIsExplained can walk
+// every SandboxLevel and fail the build when a badge exists with nothing here
+// to say what it means — which is the failure this page was added to fix, and
+// the kind that comes back the day a sixth posture lands.
+//
+// NOTHING HERE MAY WEAKEN A CLAIM. These are glosses on the badge words, not
+// replacements for them: `unsandboxed` still says nothing restricts the vendor,
+// `ro:requested` still admits it was never observed, and the gloss's job is to
+// answer "so what?" rather than to make either sit more comfortably. The
+// detailed, per-seat, measured version is below on the same page.
+func helpBadgeGloss() []struct {
+	level SandboxLevel
+	gloss []string
+} {
+	return []struct {
+		level SandboxLevel
+		gloss []string
+	}{
+		{SandboxTools, []string{
+			"the write tools are ABSENT from that session — checked",
+			"against what the session reported about itself, not a flag",
+		}},
+		{SandboxEnforced, []string{
+			"the vendor's own OS-level sandbox does it — codex, mac/linux",
+		}},
+		{SandboxRequested, []string{
+			"a flag was passed and accepted; what it actually enforces",
+			"was never observed. Weaker than the two above, and says so",
+		}},
+		{SandboxNone, []string{
+			"nothing restricts this vendor at the OS level. MEASURED,",
+			"not assumed — treat this column as able to change your files",
+		}},
+		{SandboxWrite, []string{
+			"--write: this column may edit and run things in the workspace",
+		}},
+		{SandboxGated, []string{
+			"--write, and this seat asks first — y approves, n denies",
+		}},
+	}
+}
+
+// helpPostures is page two: what the badge on each column means.
+//
+// The top of the page is a legend of every badge word this product can render,
+// not only the ones this room happens to show. A user who has never typed
+// --write should be able to find out what WRITES means BEFORE they type it, and
+// a room-specific legend could only ever explain the room you are already in.
+//
+// Below the legend, and below the fold at a 24-row terminal, is this room's own
+// seats with the full claim each one is making — the first time SandboxClaim
+// .Detail has been rendered anywhere. That ordering is deliberate: the detail is
+// unreadable without the vocabulary, and the vocabulary fits the budget while
+// four paragraphs of measured prose never could. It is the same trade page one
+// makes with its closing paragraph, and the honest residual is the same: at the
+// shortest terminal this room will draw in, the per-seat half is scrolled past
+// rather than absent.
+func helpPostures(st State, lay Layout, sty Styles) []string {
+	lines := []string{
+		sty.Identity.Render("council") + sty.Muted.Render(" — what the badge on each column means"),
+		"",
+		"  Each column states its own posture; there is no room-wide claim.",
+		"",
 	}
 
-	var b strings.Builder
-	for i := 0; i < lay.Body; i++ {
-		if i < len(lines) {
-			// fit, not padRight: some help lines are pre-styled.
-			b.WriteString(" " + fit(lines[i], lay.Width-2) + " ")
-		} else {
-			b.WriteString(strings.Repeat(" ", lay.Width))
-		}
-		if i < lay.Body-1 {
-			b.WriteString("\n")
+	for _, e := range helpBadgeGloss() {
+		b := SandboxClaim{Level: e.level}.Badge()
+		// The badge renders in the SAME style it wears on a column, from the
+		// same function, so the legend cannot teach one weight and the room
+		// show another. `unsandboxed` and `WRITES` are loud here too.
+		head := sty.ForSandbox(e.level).Render(b) + strings.Repeat(" ", maxInt(1, 13-len(b)))
+		lines = append(lines, "  "+head+sty.Text.Render(e.gloss[0]))
+		for _, g := range e.gloss[1:] {
+			lines = append(lines, "               "+sty.Text.Render(g))
 		}
 	}
-	return b.String()
+
+	lines = append(lines,
+		"",
+		// The load-bearing sentence on this page, and the reason the page is not
+		// just a glossary. Every badge above is a claim about a FLAG; none of
+		// them is what keeps this room from touching something it should not.
+		"  What contains this room is the WORKSPACE above, not any of these words.",
+		"  Point council at a throwaway worktree when that matters.",
+		"  ?            close",
+	)
+
+	// Below the fold at the minimum height. Same reasoning as page one's closing
+	// paragraph, and it buys something page one's did not: this is the measured,
+	// per-seat argument behind each badge, which is what answers "why is THIS
+	// column unsandboxed" rather than "what does the word mean".
+	var seats []string
+	for _, c := range st.Columns {
+		b := c.Sandbox.Badge()
+		if !st.seats(c) || b == "" || c.Sandbox.Detail == "" {
+			continue
+		}
+		// Padded to the legend's own column so the seat names line up under one
+		// another and the badges line up with the words they were just defined
+		// by. Two lists of the same vocabulary that do not share a left edge
+		// read as two unrelated lists.
+		seats = append(seats, "",
+			"  "+sty.ForSandbox(c.Sandbox.Level).Render(b)+
+				strings.Repeat(" ", maxInt(1, 13-len(b)))+sty.Muted.Render(c.Label))
+		for _, l := range wrap(c.Sandbox.Detail, maxInt(20, lay.Width-8)) {
+			seats = append(seats, sty.Muted.Render("      "+l))
+		}
+	}
+	if len(seats) > 0 {
+		lines = append(lines, "", sty.Text.Render("  this room, seat by seat:"))
+		lines = append(lines, seats...)
+	}
+	return lines
 }
 
 func maxInt(a, b int) int {

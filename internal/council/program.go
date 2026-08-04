@@ -617,10 +617,10 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.teardown()
 		return m, tea.Quit
 	case "?":
-		m.st.Help = !m.st.Help
+		m.st.Help = m.st.Help.next()
 	case "i", "enter":
 		m.st.Mode = ModeComposing
-		m.st.Help = false
+		m.st.Help = HelpClosed
 		m.st.Notice = ""
 	case "right", "l":
 		m.focusBy(1)

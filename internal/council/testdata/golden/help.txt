@@ -16,7 +16,7 @@
    f            expand the focused column to the full width (in compose, f is text)                                     
    ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted                                      
    ctrl+c / q   ctrl+c cancels the turn, or quits when idle; q quits (in compose it is text)                            
-   ?            this help                                                                                               
+   ?            next page: what the badge on each column means                                                          
                                                                                                                         
    a seat that cannot be driven folds out of the grid, named in one line above.                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
