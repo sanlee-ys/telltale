@@ -21,4 +21,4 @@
                                         │                                       │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  › @codex @agy is the resume flag right?_                                                                               
- COMPOSE                                                    → codex, agy  │  enter dispatch  │  ^j newline  │  ^r rebut 
+ COMPOSE                                      → codex, agy  │  enter dispatch  │  ↑↓ scroll  │  ^j newline  │  ^r rebut 

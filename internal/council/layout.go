@@ -122,8 +122,11 @@ func resolveLayout(width, height, n int, expanded bool) Layout {
 //
 // Cols is the number of columns to seat. The separators cost (n-1) cells plus a
 // gutter each side; whatever is left divides evenly, and the remainder goes to
-// the focused column rather than being scattered, so the widths are stable
-// between frames instead of shimmering by one cell as focus moves.
+// the LEFTMOST drawn column rather than being scattered — see extraFor, which
+// this comment used to describe as giving it to the focused one. It does not,
+// and must not: a remainder that followed focus would re-wrap two columns'
+// worth of prose on every tab press, which is both a moving cell §7.1 does not
+// budget for and a worse way to compare two answers than a stable grid.
 //
 // The tier is settled BEFORE any row is budgeted, because the tab bar costs a
 // row and the fallback from columns to tabs happens on a width test. Budgeting

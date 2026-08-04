@@ -18,7 +18,7 @@
                                         │                                       │                                       
  turn 3 ─────────────────────────────── │                                       │                                       
  › @all is the scrollback worth the     │                                       │                                       
- ↓ 2 more below                         │                                       │                                       
+ ↓ 2 more below  │  ↑↓ scroll           │                                       │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                                 ↑↓ scroll  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 

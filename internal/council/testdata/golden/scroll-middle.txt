@@ -3,7 +3,7 @@
  ▸Claude Code                      done │  Codex                           idle │  Antigravity                     idle 
  ro:tools  tokens                       │ ro:requested  final only              │ unsandboxed  final only               
  ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
- ↑ 20 more above                        │ no turn dispatched yet.               │ no turn dispatched yet.               
+ ↑ 20 more above  │  ↑↓ scroll          │ no turn dispatched yet.               │ no turn dispatched yet.               
  line 22 of the reply                   │                                       │                                       
  line 23 of the reply                   │                                       │                                       
  line 24 of the reply                   │                                       │                                       
