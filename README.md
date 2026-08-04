@@ -181,11 +181,11 @@ telltale.exe council
 </p>
 
 ```
- council ~/code/telltale                                                              turn 1  │  3/3 seated  │  no brief
+ council  │  ~/code/telltale                                                         turn 1  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸Claude Code                      done │  Codex                           idle │  Antigravity                     idle 
- ro:tools  tokens                       │ ro:requested  final only              │ unsandboxed  final only               
- ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
+ ▸ Claude Code  ───────────────  ✓ done │   Codex  ────────────────────  ○ idle │   Antigravity  ──────────────  ○ idle 
+   ro:tools  tokens                     │   ro:requested  final only            │   unsandboxed  final only             
+                                        │                                       │                                       
  ⚙ Glob                                 │ no turn dispatched yet.               │ no turn dispatched yet.               
  ⚙ Read                                 │                                       │                                       
  ⚙ Bash: go test ./...                  │                                       │                                       
@@ -198,7 +198,14 @@ telltale.exe council
 
 That frame is the council test suite's `activity` golden
 (`internal/council/testdata/golden/activity.txt`) with its empty rows dropped, and nothing
-else changed. Every claim in the two header lines is made per vendor, never as a blanket:
+else changed.
+
+Each seat's name is bound to the state it is in by a leader rule — the same `label ───
+value` shape the turn separators use further down the transcript — and the state leads
+with a mark: `✓ done`, `✗ failed`, `○ idle`, `⚠ cancelled`, a spinner while a turn is in
+flight. The mark is always a second signal; the word carries the distinction on its own, so
+`--ascii` and a monochrome terminal lose nothing (`docs/design.md` §9.11). Every claim in
+the two header lines is made per vendor, never as a blanket:
 
 - **The sandbox badge.** `ro:tools` is Claude under `--disallowedTools` plus
   `--strict-mcp-config`, and it claims only that *these named tools are absent, verified* —
