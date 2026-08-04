@@ -1129,6 +1129,9 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		"  @codex       address a lane: @claude, @codex, @agy, @cursor, @all",
 		"               unaddressed goes to claude alone; the others are review,",
 		"               IDE and tiebreak lanes. Leading mentions only: \"ask @claude\" is prose",
+		// One line, like pgup/pgdn below and for the same reason: the panel has
+		// to fit a 24-row terminal with q and ? still on screen.
+		"  /cd <dir>    move the room to another repo — seats follow on their next turn",
 		"  y / n        approve or deny a tool call a vendor is blocked on (--write)",
 		"  esc          leave compose (the draft is kept)",
 		"  tab          move focus between columns",
@@ -1138,8 +1141,7 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		// and is therefore the only documented way back out of here.
 		"  pgup/pgdn    scroll by a screenful (space = pgdn); g / G first turn or newest",
 		"  f            expand the focused column to the full width",
-		"  ctrl+r       arm rebuttal: each vendor sees the others' last answers,",
-		"               fenced and labelled as untrusted. Turn 1 is always blind.",
+		"  ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted",
 		"  ctrl+c       cancel the turn in flight, or quit when idle",
 		"  q            quit (in view mode only — in compose it is the letter q)",
 		"  ?            this help",

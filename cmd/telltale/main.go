@@ -156,14 +156,15 @@ func runHUD(args []string) error {
 // reachable from it — the only way in is typing this subcommand (ADR-008).
 func runCouncil(args []string) error {
 	fs := flag.NewFlagSet("telltale council", flag.ContinueOnError)
-	dir := fs.String("cd", "", "workspace directory to dispatch turns against (default: cwd)")
+	dir := fs.String("cd", "", "move the room's workspace for this launch (default: where the saved room was, or cwd) — /cd inside the room does the same")
 	seats := fs.String("vendor", "", "who is in the room: a comma list (claude,codex,agy,cursor) or all; default seats every vendor that can be driven")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
 	write := fs.Bool("write", false, "let vendors edit and run things in the workspace, asking you first where they can (see decisions/008)")
 	auto := fs.Bool("auto", false, "with --write: let a gated seat approve its own tool calls instead of asking")
 	brief := fs.String("brief", "", "file of shared operating context handed to every vendor on its first turn (or TELLTALE_COUNCIL_BRIEF)")
-	resume := fs.Bool("resume", false, "reopen the room last saved for this workspace, continuing each vendor's own session")
+	resume := fs.Bool("resume", false, "reattach to the saved room (this is the default; the flag is kept for muscle memory)")
+	fresh := fs.Bool("fresh", false, "start a new room instead of reattaching to the saved one")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -186,6 +187,7 @@ func runCouncil(args []string) error {
 		Auto:      *auto,
 		BriefPath: *brief,
 		Resume:    *resume,
+		Fresh:     *fresh,
 	})
 }
 
@@ -229,8 +231,18 @@ telltale hud flags:
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
 
+telltale council is ONE persistent room. Run it with no arguments: it reopens
+the saved room, reattaches every vendor's own session, and continues the
+conversation. Change what repo it works in from INSIDE the room — type
+/cd <dir> in the composer — never with a flag. Seats move on their next turn.
+
 telltale council flags:
-  --cd <dir>                  workspace to dispatch turns against (default: cwd)
+  --cd <dir>                  move the room's workspace at launch (default:
+                              where the saved room was, or cwd). The daily path
+                              never needs it; /cd inside the room does the same
+  --fresh                     start a new room instead of reattaching. If a
+                              saved room exists it is named once before the
+                              first dispatch replaces it
   --vendor <list>             who is in the room: a comma list of claude, codex,
                               agy and cursor, or "all". By default a seat that
                               is not installed — or is installed and cannot be
@@ -258,15 +270,14 @@ telltale council flags:
   --auto                      with --write: let the gated seat approve its own
                               tool calls. This is the old behaviour, and it is
                               the flag to reach for when you are not watching.
-  --resume                    reopen the room last saved for this workspace.
-                              The turn counter continues and each vendor picks
-                              up its OWN session, so the next brief carries on
-                              the conversation instead of starting four new
-                              ones. Composes with --cd, which is the key the
-                              room was filed under. A seat whose thread the
-                              vendor no longer has says so and starts fresh.
-                              Not a posture: --write is never restored from the
-                              file, it is retyped or it is not in effect.
+  --resume                    reattach to the saved room. This is the DEFAULT —
+                              the flag is kept for muscle memory and does the
+                              same thing. The turn counter continues and each
+                              vendor picks up its OWN session; a seat whose
+                              thread the vendor no longer has says so and
+                              starts fresh. Not a posture: --write is never
+                              restored from the file, it is retyped or it is
+                              not in effect.
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
 
@@ -274,7 +285,6 @@ statusline and hud read vendor files and never write, never call the network,
 and never send anything to a running agent. council is the deliberate
 exception: it spawns vendor CLIs, and each column states its own read-only
 posture on screen (decisions/008). It is also the only mode that writes
-anything at all — one state file per workspace under ~/.telltale/council,
-holding the session ids --resume needs and no transcript, output or brief
-content.`)
+anything at all — one room file, ~/.telltale/council/room.json, holding the
+session ids reattaching needs and no transcript, output or brief content.`)
 }

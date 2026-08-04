@@ -2,6 +2,7 @@ package council
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,15 +40,16 @@ type Options struct {
 	// Seats is who is in the room, from --vendor. The zero value collapses the
 	// seats that cannot be driven and keeps the rest.
 	Seats Seats
-	// Resume reopens the room last saved for this workspace: the turn count and
-	// each vendor's own session id come back, so the next brief continues the
-	// conversation instead of starting four new ones.
-	//
-	// Composes with --cd, and the workspace is the KEY rather than an extra
-	// filter — one saved room per directory. Two rooms open on one directory
-	// would be two conversations claiming the same state file, and the second to
-	// quit would silently overwrite the first.
+	// Resume is accepted and redundant: reattaching to the one saved room is
+	// what a zero-argument launch does now. Kept so the muscle memory and the
+	// scripts that grew around it keep working, and so an explicit --resume
+	// against a machine with nothing saved can be told so instead of silently
+	// opening fresh.
 	Resume bool
+	// Fresh opts OUT of the reattach: the room opens with no history, and the
+	// saved room — if one exists — is named once before the first dispatch
+	// replaces it.
+	Fresh bool
 }
 
 // Model is the Bubble Tea model. It owns State plus the things Render must not
@@ -200,13 +202,17 @@ func newWithBrief(opts Options, b Brief, hs HookSet, re Reattachment) *Model {
 // session. A flag that can arrive from a file is not a flag anyone typed.
 func (m *Model) reattach(re Reattachment) {
 	if re.Offered {
-		// A usable room is here and was not asked for. Said once, plainly, and
+		// A usable room is here and --fresh declined it. Said once, plainly, and
 		// then forgotten: the alternative is that the first dispatch overwrites
 		// four vendors' session ids with nothing on screen having mentioned they
 		// were there.
-		m.st.Notice = "this workspace has a saved room from " +
-			age(time.Since(re.Room.SavedAt)) + " (turn " + itoa(re.Room.Turn) +
-			") — --resume reattaches to it; dispatching here replaces it"
+		saved := "a saved room"
+		if re.Adopted {
+			saved = "a saved room (old per-workspace format)"
+		}
+		m.st.Notice = saved + " from " + age(time.Since(re.Room.SavedAt)) +
+			" (turn " + itoa(re.Room.Turn) +
+			") exists — rerunning without --fresh reattaches to it; dispatching here replaces it"
 		return
 	}
 	if re.Ignored != "" {
@@ -256,9 +262,24 @@ func (m *Model) reattach(re Reattachment) {
 	// it — each column's own card already says whether ITS thread came back, and
 	// a field the renderer never reads is a field that can drift without
 	// anything noticing.
-	m.st.Notice = "reattached from " + abbreviate(re.Path, m.st.Home) +
+	source := abbreviate(re.Path, m.st.Home)
+	if re.Adopted {
+		// State restored from a file the user has never heard of is state the
+		// room owes them the source of: the pre-cockpit format kept one room per
+		// workspace, and this is the newest of those, adopted once.
+		source += " (adopted from the old per-workspace format)"
+	}
+	m.st.Notice = "reattached from " + source +
 		" — turn " + itoa(re.Room.Turn) + " was the last, " +
 		itoa(seats) + "/" + itoa(m.st.Seated()) + " seats restored"
+	if !sameDir(re.Room.Workspace, m.st.Workspace) {
+		// The room reopened somewhere other than where it was saved — a --cd
+		// override, or a saved directory that no longer exists. The seats'
+		// conversations came back either way; only where they act moved, and
+		// the mechanics are the same as an in-room /cd.
+		m.st.Notice += " (the room was in " + abbreviate(re.Room.Workspace, m.st.Home) +
+			"; it is now in " + abbreviate(m.st.Workspace, m.st.Home) + ")"
+	}
 	if re.Room.Posture != savedPosture(m.st.Write, m.opts.Auto) {
 		// Stated rather than applied. The saved room ran under a different
 		// posture, and a user who reattaches a write room without retyping
@@ -484,6 +505,11 @@ func (m *Model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.setDraft(m.st.Draft + "\n")
 		m.st.Notice = ""
 	case "enter":
+		// A draft addressed to the room itself — /cd — is handled here and
+		// never reaches a vendor. Everything else dispatches.
+		if m.roomCommand() {
+			return m, nil
+		}
 		return m, m.dispatch()
 	case "backspace":
 		if d := []rune(m.st.Draft); len(d) > 0 {
@@ -719,29 +745,69 @@ func Run(opts Options) error {
 		return err
 	}
 
-	// Same discipline, same reason. --resume against a workspace that has no
-	// saved room is a plain error out here, because the usual cause is a --cd
-	// pointing at a directory other than the one the room was in — and a room
-	// that opened "successfully" with a quiet note would have the user typing
-	// their next brief into four fresh sessions believing it continued
-	// something. A file that exists but cannot be read is the other case and is
-	// handled inside, as a notice: see LoadRoom.
-	//
-	// Resolved BEFORE the hooks are copied, so a bad --resume fails without
-	// having written a temporary file it would then have to clean up.
-	ws := resolveWorkspace(opts.Dir)
+	// The room is the persistent object, so reattaching is the DEFAULT: a
+	// zero-argument launch reopens the one saved room, and --fresh is the way
+	// to decline it. Nothing saved yet is not an error any more — with one
+	// global room there is no wrong-key case for an error to catch, so a first
+	// launch simply opens fresh. A file that exists but cannot be used is
+	// still a notice: see LoadRoom.
 	var re Reattachment
-	if opts.Resume {
-		re, err = LoadRoom(ws)
-		if err != nil {
-			return err
+	if opts.Fresh {
+		if found, ferr := LoadRoom(); ferr == nil && found.Active() {
+			// Declined, but there is something here to lose. Carried in as an
+			// OFFER rather than a restore: nothing is applied, and the room only
+			// mentions it exists before the first dispatch replaces it. Adopted
+			// rides along so the offer can name the old format like the reattach
+			// notice does.
+			re = Reattachment{Path: found.Path, Room: found.Room,
+				Offered: true, Adopted: found.Adopted}
 		}
-	} else if found, ferr := LoadRoom(ws); ferr == nil && found.Active() {
-		// Not reattaching, but there is something here to lose. Carried in as an
-		// OFFER rather than a restore: nothing is applied, and the room only
-		// mentions it exists before the first dispatch replaces it.
-		re = Reattachment{Path: found.Path, Room: found.Room, Offered: true}
+	} else {
+		re, err = LoadRoom()
+		switch {
+		case errors.Is(err, ErrNoSavedRoom):
+			re, err = Reattachment{}, nil
+			if opts.Resume {
+				// Asked for explicitly, and there is nothing. Not an error — the
+				// flag now names the default — but silence would let a first-run
+				// machine masquerade as a continued conversation.
+				re.Ignored = "nothing has been saved yet — this is a fresh room"
+				re.Path = "-"
+			}
+		case err != nil:
+			// The state DIRECTORY could not even be located (no resolvable home
+			// directory). Telltale's own state being unreachable must never be
+			// the reason the room refuses to open — the same rule a corrupt
+			// file already follows — so it opens unreattached and says why.
+			re, err = Reattachment{Path: "-",
+				Ignored: "the saved room could not be looked up: " + err.Error()}, nil
+		}
 	}
+
+	// The workspace: --cd if typed, else where the room was, else here. Both
+	// non-cwd sources are verified to be directories before the room is
+	// pointed at them: a typed --cd that is not one is the LoadBrief
+	// discipline — a plain error before the alternate screen — and a saved
+	// directory that is gone (a renamed repo) surfaces as one honest sentence
+	// in the notice, not as four seats failing their first turn against a
+	// path that no longer exists.
+	ws := ""
+	switch {
+	case opts.Dir != "":
+		ws = resolveWorkspace(opts.Dir)
+		if fi, serr := os.Stat(ws); serr != nil || !fi.IsDir() {
+			return errors.New("--cd " + opts.Dir + ": not a directory")
+		}
+	case re.Active() && !re.Offered:
+		ws = re.Room.Workspace
+		if fi, serr := os.Stat(ws); serr != nil || !fi.IsDir() {
+			ws = resolveWorkspace("")
+		}
+	default:
+		ws = resolveWorkspace("")
+	}
+	// Threaded through Options so stateWith and the model see the one answer.
+	opts.Dir = ws
 
 	var hooks HookSet
 	if wantsHooks(opts) {

@@ -9,12 +9,24 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
+// seatSession is the slice of runner.Session the seat logic drives.
+//
+// An interface for exactly one reason: the /cd respawn path kills a LIVE
+// process, and a test that needed a real child just to watch it be killed
+// would be spawning processes to check a branch. runner.Session is the only
+// production implementation.
+type seatSession interface {
+	Send(line []byte) error
+	Kill()
+	Alive() bool
+}
+
 // seatProc is one seat's long-lived vendor process.
 //
 // It outlives a turn on purpose and outlives the room never: teardown kills it,
 // and the job object kills it again if telltale itself dies first.
 type seatProc struct {
-	sess *runner.Session
+	sess seatSession
 	// sent counts turns handed to THIS process. Zero means the next one is its
 	// first, which is what decides whether the shared brief goes with it.
 	//
@@ -33,6 +45,12 @@ type seatProc struct {
 	// here — that is settleRestoredThread's question, and it is asked the same
 	// way for all four seats rather than twice in two places.
 	resumed bool
+	// dir is the workspace this process was spawned in. cwd is fixed at spawn
+	// — verified against the live headless docs: the stream-json envelope has
+	// no cwd field and nothing changes it mid-session — so when the room's
+	// workspace moves (/cd), a mismatch here is what tells seatProcess the
+	// process cannot follow and has to be respawned where the room now is.
+	dir string
 }
 
 // sendPersistentTurn hands one turn to a seat's process, starting one if there
@@ -75,8 +93,24 @@ func (m *Model) sendPersistentTurn(v vendors.Persistent, c *Column, prompt strin
 // the one it had has gone.
 func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string, error) {
 	existing, had := m.procs[c.Vendor]
+	moved := false
 	if had && existing.sess.Alive() {
-		return existing, "", nil
+		if sameDir(existing.dir, m.st.Workspace) {
+			return existing, "", nil
+		}
+		// The room moved (/cd) and this process is pinned to the old directory
+		// — cwd is fixed at spawn, so the documented way to move a conversation
+		// is the one the ninth amendment measured: respawn with --resume. The
+		// earned id goes through the SAME one-attempt probation the restored
+		// ids use, because a resume that fails here would otherwise be rebuilt
+		// on every turn for the life of the room.
+		moved = true
+		existing.sess.Kill()
+		m.dropProcess(c.Vendor)
+		if id := m.sessions[c.Vendor]; id != "" && m.resumeIDs[c.Vendor] == "" {
+			m.resumeIDs[c.Vendor] = id
+			m.unproven[c.Vendor] = true
+		}
 	}
 
 	// The hooks file is handed over on every spawn rather than only the first.
@@ -113,7 +147,7 @@ func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string,
 	if err != nil {
 		return nil, "", err
 	}
-	p := &seatProc{sess: sess, resumed: resumed}
+	p := &seatProc{sess: sess, resumed: resumed, dir: m.st.Workspace}
 	m.procs[c.Vendor] = p
 
 	if resumed {
@@ -124,6 +158,11 @@ func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string,
 		// restored; if the vendor refuses it, resumeFailed replaces that with the
 		// truth.
 		return p, "", nil
+	}
+	if moved {
+		// The move itself was announced by /cd; what needs saying is that THIS
+		// seat had no thread to carry across, so its history starts here.
+		return p, "the room moved — this seat is starting a new session there", nil
 	}
 	if had {
 		// Said out loud. The thread really was lost, and a seat that quietly

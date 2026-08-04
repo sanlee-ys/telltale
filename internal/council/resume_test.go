@@ -50,7 +50,7 @@ func TestSavedRoomRoundTrips(t *testing.T) {
 	if err := SaveRoom(want); err != nil {
 		t.Fatal(err)
 	}
-	re, err := LoadRoom(ws)
+	re, err := LoadRoom()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,13 +77,13 @@ func TestSavedRoomRoundTrips(t *testing.T) {
 	}
 }
 
-// TestNoSavedRoomIsAnError is the LoadBrief discipline applied to --resume: the
-// user is wrong about which room they are reattaching to, usually because --cd
-// points somewhere else, and that has to be a plain error before the alternate
-// screen rather than a room that opens looking successful.
-func TestNoSavedRoomIsAnError(t *testing.T) {
+// TestNothingSavedIsErrNoSavedRoom: no room.json and no v1 file to adopt is the
+// first-launch case. The caller opens fresh on it; what matters here is that
+// the loader says so distinctly rather than inventing an Ignored notice for a
+// file that never existed.
+func TestNothingSavedIsErrNoSavedRoom(t *testing.T) {
 	tempHome(t)
-	if _, err := LoadRoom("/home/dev/code/never-opened"); err != ErrNoSavedRoom {
+	if _, err := LoadRoom(); err != ErrNoSavedRoom {
 		t.Fatalf("err = %v, want ErrNoSavedRoom", err)
 	}
 }
@@ -98,7 +98,7 @@ func TestCorruptSavedRoomIsIgnoredNotFatal(t *testing.T) {
 	if err := SaveRoom(savedRoom(ws)); err != nil {
 		t.Fatal(err)
 	}
-	path, err := RoomPath(ws)
+	path, err := RoomPath()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestCorruptSavedRoomIsIgnoredNotFatal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	re, err := LoadRoom(ws)
+	re, err := LoadRoom()
 	if err != nil {
 		t.Fatalf("a corrupt file must not be fatal, got %v", err)
 	}
@@ -131,7 +131,7 @@ func TestARoomRecordingNoTurnsIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	re, err := LoadRoom(ws)
+	re, err := LoadRoom()
 	if err != nil {
 		t.Fatalf("a turn-less room must not be fatal, got %v", err)
 	}
@@ -154,7 +154,7 @@ func TestAnOversizeSavedRoomIsRefusedWithoutBeingRead(t *testing.T) {
 	if err := SaveRoom(savedRoom(ws)); err != nil {
 		t.Fatal(err)
 	}
-	path, err := RoomPath(ws)
+	path, err := RoomPath()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestAnOversizeSavedRoomIsRefusedWithoutBeingRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	re, err := LoadRoom(ws)
+	re, err := LoadRoom()
 	if err != nil {
 		t.Fatalf("an oversize file must not be fatal, got %v", err)
 	}
@@ -179,8 +179,7 @@ func TestAnOversizeSavedRoomIsRefusedWithoutBeingRead(t *testing.T) {
 // never be the reason the room refuses to open.
 func TestADirectoryWhereTheRoomShouldBeIsNotFatal(t *testing.T) {
 	tempHome(t)
-	ws := "/home/dev/code/telltale"
-	path, err := RoomPath(ws)
+	path, err := RoomPath()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +187,7 @@ func TestADirectoryWhereTheRoomShouldBeIsNotFatal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	re, err := LoadRoom(ws)
+	re, err := LoadRoom()
 	if err != nil {
 		t.Fatalf("a directory at the room path must not be fatal, got %v", err)
 	}
@@ -207,7 +206,7 @@ func TestVersionSkewIsIgnored(t *testing.T) {
 	if err := SaveRoom(room); err != nil {
 		t.Fatal(err)
 	}
-	path, err := RoomPath(ws)
+	path, err := RoomPath()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +221,7 @@ func TestVersionSkewIsIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	re, err := LoadRoom(ws)
+	re, err := LoadRoom()
 	if err != nil {
 		t.Fatalf("version skew must not be fatal, got %v", err)
 	}
@@ -234,44 +233,165 @@ func TestVersionSkewIsIgnored(t *testing.T) {
 	}
 }
 
-// TestASavedRoomForAnotherWorkspaceIsRefused guards the one failure a hash
-// alone cannot catch. The filename says which workspace this is; the file has
-// to agree, or a collision would hand one project's vendor sessions to another.
-func TestASavedRoomForAnotherWorkspaceIsRefused(t *testing.T) {
+// TestARoomRecordingNoWorkspaceIsRefused: v2 removed the filename key, so the
+// field is the only record of where the room was. A room that cannot say
+// cannot be reopened anywhere in particular, and guessing (cwd, say) would
+// silently reattach four conversations to a directory they never saw.
+func TestARoomRecordingNoWorkspaceIsRefused(t *testing.T) {
 	tempHome(t)
-	ws := "/home/dev/code/telltale"
-	room := savedRoom(ws)
-	room.Workspace = "/home/dev/code/somewhere-else"
+	room := savedRoom("/home/dev/code/telltale")
+	room.Workspace = ""
 	if err := SaveRoom(room); err != nil {
 		t.Fatal(err)
 	}
-	// SaveRoom files by the room's OWN workspace, so read that file back under
-	// the name the other workspace would look up.
-	path, err := RoomPath(room.Workspace)
+
+	re, err := LoadRoom()
+	if err != nil {
+		t.Fatalf("a workspace-less file must not be fatal, got %v", err)
+	}
+	if re.Active() {
+		t.Fatal("a room with no workspace was restored")
+	}
+	if !strings.Contains(re.Ignored, "workspace") {
+		t.Errorf("reason = %q, want it to name the missing workspace", re.Ignored)
+	}
+}
+
+// --- adopting the pre-cockpit per-workspace files -------------------------
+
+// legacyFile writes a v1 per-workspace room the way the old build did: hashed
+// filename, version 1. The hash itself no longer matters — adoption scans by
+// content — so an abbreviated stand-in name is used.
+func legacyFile(t *testing.T, home, name string, room SavedRoom) string {
+	t.Helper()
+	dir := filepath.Join(home, ".telltale", "council")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	room.Version = 1
+	buf, err := json.Marshal(room)
 	if err != nil {
 		t.Fatal(err)
 	}
-	buf, err := os.ReadFile(path)
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, buf, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TestTheNewestLegacyRoomIsAdopted is the migration: the first launch after
+// the room went global continues the conversation the user was most recently
+// having, which is the P0 sentence — reattach to the PRIOR conversation.
+func TestTheNewestLegacyRoomIsAdopted(t *testing.T) {
+	home := tempHome(t)
+	older := savedRoom("/home/dev/code/older")
+	older.SavedAt = time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	newer := savedRoom("/home/dev/code/newer")
+	newer.Turn = 7
+	newer.SavedAt = time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC)
+	legacyFile(t, home, "aaaa.json", older)
+	newPath := legacyFile(t, home, "bbbb.json", newer)
+
+	re, err := LoadRoom()
 	if err != nil {
 		t.Fatal(err)
 	}
-	wanted, err := RoomPath(ws)
-	if err != nil {
-		t.Fatal(err)
+	if !re.Active() {
+		t.Fatalf("nothing was adopted: %q", re.Ignored)
 	}
-	if err := os.WriteFile(wanted, buf, 0o600); err != nil {
+	if !re.Adopted {
+		t.Error("the reattachment does not say it came from the old format")
+	}
+	if re.Room.Workspace != "/home/dev/code/newer" || re.Room.Turn != 7 {
+		t.Errorf("adopted %q turn %d, want the newest file's room", re.Room.Workspace, re.Room.Turn)
+	}
+	if re.Path != newPath {
+		t.Errorf("path = %q, want the legacy file it came from", re.Path)
+	}
+}
+
+// TestAdoptionSkipsWhatItCannotReadAndTouchesNothing. The scan runs on every
+// launch until the first save writes room.json, so a corrupt abandoned v1 file
+// must be skipped silently rather than reported forever — and adoption is
+// READ-ONLY: the v1 files are never rewritten, renamed or deleted, so a wrong
+// adoption destroys nothing.
+func TestAdoptionSkipsWhatItCannotReadAndTouchesNothing(t *testing.T) {
+	home := tempHome(t)
+	good := savedRoom("/home/dev/code/telltale")
+	goodPath := legacyFile(t, home, "aaaa.json", good)
+	dir := filepath.Join(home, ".telltale", "council")
+	if err := os.WriteFile(filepath.Join(dir, "bbbb.json"), []byte("{torn"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	re, err := LoadRoom(ws)
+	re, err := LoadRoom()
 	if err != nil {
-		t.Fatalf("a mismatched file must not be fatal, got %v", err)
+		t.Fatal(err)
+	}
+	if !re.Active() || re.Path != goodPath {
+		t.Fatalf("the readable v1 room was not adopted: %+v", re)
+	}
+	if re.Ignored != "" {
+		t.Errorf("a corrupt sibling produced a notice: %q", re.Ignored)
+	}
+
+	before, err := os.ReadFile(goodPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveRoom(re.Room); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(goodPath)
+	if err != nil {
+		t.Fatalf("the v1 file is gone after a save: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Error("adoption rewrote the v1 file it read")
+	}
+	// And from here on room.json wins: the legacy scan is a one-time seed, not
+	// a second source of truth.
+	re2, err := LoadRoom()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if re2.Adopted {
+		t.Error("room.json exists and the loader still adopted a legacy file")
+	}
+	roomJSON, err := RoomPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if re2.Path != roomJSON {
+		t.Errorf("path = %q, want room.json once it exists", re2.Path)
+	}
+}
+
+// TestACorruptGlobalRoomDoesNotResurrectALegacyOne. A damaged room.json is the
+// Ignored-notice case, and it must NOT fall back to the v1 scan: the newest
+// legacy room is an OLDER conversation, and reattaching it because the current
+// one's file tore would silently rewind the user days without a word.
+func TestACorruptGlobalRoomDoesNotResurrectALegacyOne(t *testing.T) {
+	home := tempHome(t)
+	legacyFile(t, home, "aaaa.json", savedRoom("/home/dev/code/older"))
+	path, err := RoomPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not json at all"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	re, err := LoadRoom()
+	if err != nil {
+		t.Fatalf("a corrupt room.json must not be fatal, got %v", err)
 	}
 	if re.Active() {
-		t.Fatal("a different workspace's room was restored")
+		t.Fatal("a corrupt room.json restored something anyway")
 	}
-	if !strings.Contains(re.Ignored, "workspace") {
-		t.Errorf("reason = %q, want it to name the workspace mismatch", re.Ignored)
+	if re.Ignored == "" {
+		t.Error("the refusal gave no reason")
 	}
 }
 
@@ -292,7 +412,7 @@ func TestSavingTwiceReplacesCleanly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	re, err := LoadRoom(ws)
+	re, err := LoadRoom()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -330,7 +450,7 @@ func TestSavedRoomIsNotWorldReadable(t *testing.T) {
 	if err := SaveRoom(savedRoom(ws)); err != nil {
 		t.Fatal(err)
 	}
-	path, err := RoomPath(ws)
+	path, err := RoomPath()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +493,7 @@ func TestTheSavedRoomHoldsKeysAndNeverContent(t *testing.T) {
 	}}
 	m.saveRoom()
 
-	path, err := RoomPath(m.st.Workspace)
+	path, err := RoomPath()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -436,20 +556,20 @@ func TestNothingIsWrittenBeforeTheFirstTurn(t *testing.T) {
 	}
 }
 
-// TestWorkspaceKeyFoldsCaseOnWindowsOnly. `C:\Users\...` and `c:\users\...` are
-// one directory on Windows and must be one room; on a case-sensitive filesystem
-// they are two directories and folding them would merge unrelated rooms.
-func TestWorkspaceKeyFoldsCaseOnWindowsOnly(t *testing.T) {
-	a := roomKey(`C:\Users\dev\code\Telltale`)
-	b := roomKey(`c:\users\dev\code\telltale`)
+// TestSameDirFoldsCaseOnWindowsOnly. `C:\Users\...` and `c:\users\...` are one
+// directory on Windows and /cd between them must be a no-op; on a
+// case-sensitive filesystem they are two directories and folding them would
+// treat a real move as staying put.
+func TestSameDirFoldsCaseOnWindowsOnly(t *testing.T) {
+	a, b := `C:\Users\dev\code\Telltale`, `c:\users\dev\code\telltale`
 	if runtime.GOOS == "windows" {
-		if a != b {
-			t.Error("two spellings of one windows directory keyed to different rooms")
+		if !sameDir(a, b) {
+			t.Error("two spellings of one windows directory read as different rooms")
 		}
 		return
 	}
-	if a == b {
-		t.Error("two different directories keyed to the same room on a case-sensitive filesystem")
+	if sameDir(a, b) {
+		t.Error("two different directories read as one on a case-sensitive filesystem")
 	}
 }
 
@@ -554,18 +674,18 @@ func TestOnlyASeatedColumnIsMarkedRestored(t *testing.T) {
 	}
 }
 
-// TestASavedRoomYouDidNotAskForIsMentionedBeforeItIsReplaced.
+// TestASavedRoomDeclinedByFreshIsMentionedBeforeItIsReplaced.
 //
-// The state file is keyed by workspace, so opening a room in a directory that
-// already has one and dispatching a single turn renames a fresh file over the
-// old keys — four conversations become unreachable with nothing said. The room
-// does not refuse and does not prompt; naming the flag that would have
-// reattached is enough to make the loss a choice rather than an accident.
-func TestASavedRoomYouDidNotAskForIsMentionedBeforeItIsReplaced(t *testing.T) {
+// There is one room file, so opening --fresh and dispatching a single turn
+// renames a new file over the old keys — four conversations become unreachable
+// with nothing said. The room does not refuse and does not prompt; naming what
+// rerunning without --fresh would have reattached is enough to make the loss a
+// choice rather than an accident.
+func TestASavedRoomDeclinedByFreshIsMentionedBeforeItIsReplaced(t *testing.T) {
 	tempHome(t)
 	ws := resolveWorkspace("")
-	m := newWithBrief(Options{}, Brief{}, HookSet{}, Reattachment{
-		Path:    "/home/dev/.telltale/council/abc.json",
+	m := newWithBrief(Options{Fresh: true}, Brief{}, HookSet{}, Reattachment{
+		Path:    "/home/dev/.telltale/council/room.json",
 		Room:    savedRoom(ws),
 		Offered: true,
 	})
@@ -579,8 +699,8 @@ func TestASavedRoomYouDidNotAskForIsMentionedBeforeItIsReplaced(t *testing.T) {
 	if m.st.Reattached.Active() {
 		t.Error("an offer was reported as a reattach")
 	}
-	if !strings.Contains(m.st.Notice, "--resume") {
-		t.Errorf("the notice does not name the flag that would reattach: %q", m.st.Notice)
+	if !strings.Contains(m.st.Notice, "--fresh") {
+		t.Errorf("the notice does not name the flag that declined the room: %q", m.st.Notice)
 	}
 }
 
