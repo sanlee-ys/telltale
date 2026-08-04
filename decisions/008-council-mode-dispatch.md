@@ -686,6 +686,92 @@ test double was the thing asserting a behaviour nothing in the product had. A te
 false claim in place just as firmly as a true one (fifth amendment); a *mock* can invent one.
 
 
+### Amendment, 2026-08-04 (tenth): the shim was a wrapper, and node underneath is native
+
+The fifth amendment seated Cursor and then declared it `AvailUnusable` on Windows, on a chain of
+three facts each of which was true:
+
+> The prompt is argv-only. The only entry point is `cursor-agent.cmd`. `runner.
+> ErrShellShimWithArgvPrompt` refuses an argv prompt on a shim, because cmd.exe's quoting cannot
+> be made safe for arbitrary text.
+
+Every step held. The conclusion did not, and the reason is worth more than the fix: **the third
+fact is about a shell being involved, and the second fact was never checked against it.** "The
+entry point is a `.cmd`" was treated as "a shell will process this prompt", and those are only
+the same sentence when the `.cmd` does something. This one does not. It is nine lines that hand
+its argv to `cursor-agent.ps1`, whose entire body picks a directory and execs a bundled
+`node.exe` against `index.js`. The shell was a doorway, not a room — and the refusal was aimed
+at a room.
+
+So council does what the launcher does. Detection resolves this seat to
+`…\cursor-agent\versions\<version>\node.exe` and the adapter passes `index.js` as `argv[1]`.
+`node.exe` is a real executable, Go's `os/exec` quotes its own arguments, cmd.exe and
+powershell.exe are both gone from the invocation, and the seat is `AvailInstalled` with its
+prompt still in argv — the same argv transport that already makes agy safe, not an exception
+carved for this vendor. The refusal itself is untouched and still armed; it simply has nothing
+left to fire on.
+
+**Then it was signed in, and that is where the real work was.** Four live turns ran against
+2026.07.23-e383d2b on 2026-08-04. Three of the fifth amendment's bundle-derived rows survived;
+three did not, and every one of the three would have shipped as a visible defect.
+
+| | fifth amendment said | what running it showed |
+|---|---|---|
+| Windows drivability | **Unusable**, no native executable to point at | **Installed.** `node.exe index.js --help` is byte-identical to `cursor-agent.cmd --help` (86 lines, diff clean), needs no cwd and no environment |
+| Streaming | **Unknown**, left unclaimed | **Token-level.** `"P"` then `"ONG"`; a sentence as `"I"`, `" said"`, `" P"`, `"ONG"`, `"."`. Promoted to `GranTokens` |
+| Resume | id correspondence **never round-tripped** | **Verified.** Turn two on `--resume <session_id>` answered a question only turn one could answer, and re-reported the same id |
+| Assistant events | one event per chunk | **plus a repeat of the whole message.** Concatenating both rendered `PONGPONG` |
+| `tool_call` discriminator | `tool_call.tool.case`, read from the bundle | **`tool_call.readToolCall` / `.shellToolCall`.** The oneof is flattened to a key on the wire; the old lookup matched nothing and every trace entry read "tool call" |
+| `--sandbox enabled` | **requested**, mechanism exists | **Refused on Windows.** `Sandbox requires macOS or Linux`, exit 1, before any model call |
+| `-` prefixed brief | hazard **recorded unresolved** | **Settled.** Without `--`: `error: unknown option`. With it: a normal turn. The separator is now passed |
+
+The lesson is not "the bundle was wrong". The bundle was right about what the program
+*constructs*. It could not be right about what arrives at the other end of a pipe, and a parser
+consumes nothing else. **Reading the source of a thing and reading its output are different
+measurements, and the second one is the only one a parser can be tested against.** Two of the
+three misses were invisible failures — a doubled reply and an empty trace — that no exit code
+would have flagged.
+
+**The posture got worse, not better, and the badge says so.** `--sandbox enabled` is no longer
+passed on Windows: it does not weakly apply there, it kills the turn, so the flag that read as
+the stronger half of this posture was the reason the seat could never have answered. And under
+`--mode plan` the agent was seen selecting and dispatching `cat …` and `ls -1` as
+`shellToolCall` invocations. A hook stopped them, not the mode — so whether plan mode would have
+refused them on its own is *still* unobserved, but a "no edits" mode let a shell command reach
+the permission layer. The badge stays `ro:requested` for a better reason than before: it is now
+contradicted by a capture rather than merely unsupported by one.
+
+Council does **not** answer the Windows sandbox failure by passing `--sandbox disabled`.
+Declining to ask for a restriction is council's business; reaching into someone's config to
+remove one is not. A user whose own config enables it gets the vendor's sentence classified into
+an actionable card instead.
+
+**Two new failures are classified, and both were found by running the thing once.** An untrusted
+workspace refuses a print-mode turn outright — `Workspace Trust Required`, exit 1, before any
+model call — and it is not a rare state: no directory on this machine was trusted for the CLI.
+The vendor's own fix is `--trust`, which council still refuses in both postures on the fifth
+amendment's reasoning, so the card sends the user to their own terminal where they can see what
+they are agreeing to. The sandbox refusal above gets the second card. Neither pattern was
+invented; both strings are copied off captured stderr, which is the bar for adding a case to
+`failureNote` at all.
+
+**The cost of this unlock is a dependency on someone else's directory layout, and it is paid
+explicitly.** `cursor-agent` auto-updates by dropping a new `versions/<version>/` beside the old
+one, so the resolution is re-derived on **every** room startup and never cached — a remembered
+path outlives the directory it names and would turn a detection question into a failed turn.
+The version-name pattern and the date sort are transcribed from the vendor's own launcher rather
+than inferred from the one directory on this machine, and both of its accepted forms are pinned
+by tests. When the layout stops matching, the seat degrades to `AvailUnusable` with a note naming
+the path it expected and did not find. It never falls back to driving the `.cmd`: an empty column
+is a cost, and prompt text through cmd.exe is a defect.
+
+**Still owed, and it is one specific thing.** A tool call that *succeeds*. Every tool call across
+all four turns was blocked by broken hook wiring on the probe machine, so `result.success` has
+never come down this pipe — the `ActOK` branch is the one part of this parser still resting on
+the bundle's own field descriptors rather than on a capture. It is labelled as such in the code
+and in its test. Everything else in the fifth amendment's table has now either been measured or
+been replaced by what the measurement said instead.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude
@@ -695,12 +781,16 @@ granularity, whether `codex -s read-only` actually engages on Windows, and Antig
 stream-json schema, conversation-id location, stdin support and `--sandbox` semantics. Those
 columns render honest *requested* badges until the spike says otherwise.
 
-**Cursor is the standing exception and will stay one until it is signed in.** Its flags come from
-`--help` and its event schema from the shipped bundle; nothing about it was confirmed by running a
-turn, because the installed CLI is unauthenticated and checks that before it checks anything else.
-Everything unverified is listed in the fifth amendment's table. On Windows the seat is
-`AvailUnusable` regardless — argv-only prompt, `.cmd`-only entry point — so the untested paths are
-not reachable on the machine this repo is developed on. The first authenticated run should settle,
-in one turn: whether `--mode plan` restricts anything, whether `--stream-partial-output` produces
-real deltas, whether `session_id` is the id `--resume` wants, and whether a brief starting with `-`
-needs a `--` separator.
+**Cursor stopped being the standing exception on 2026-08-04.** It was signed in, four turns ran,
+and the tenth amendment records what each of them changed. The four questions this paragraph used
+to list as owed are all answered — `--mode plan` restricts less than its name suggests,
+`--stream-partial-output` produces real token-level deltas, `session_id` *is* the id `--resume`
+wants, and a brief starting with `-` *does* need the `--` separator, which is now passed. Its
+posture badge is still `ro:requested`, now because a capture contradicts anything stronger rather
+than because nothing could be observed.
+
+One item is owed on this seat and one only: **a tool call that succeeds.** Every call across those
+four turns was blocked by broken hook wiring on the probe machine, so the parser's `ActOK` branch
+still rests on the shipped bundle's field descriptors rather than on a captured line. It is
+labelled as bundle-derived in `vendors/cursor.go` and in its test, and one clean tool call on any
+machine closes it.

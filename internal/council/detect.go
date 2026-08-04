@@ -4,7 +4,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/sanlee-ys/telltale/internal/council/vendors"
@@ -75,6 +77,23 @@ type candidate struct {
 	// stdinPrompt reports that this vendor accepts its prompt on stdin, which
 	// is what makes a shim safe to drive.
 	stdinPrompt bool
+	// nativeUnder is asked, for every path this candidate resolves to, whether
+	// there is a NATIVE executable underneath it that would do the same job.
+	//
+	// It exists because "the entry point is a shim" and "this vendor cannot be
+	// driven" turned out to be different claims. A shim that is a thin launcher
+	// — one that picks a path and execs a real binary — can be stepped over,
+	// and stepping over it removes the shell from the invocation entirely, which
+	// is the whole of what the argv rule cares about. cursor-agent is exactly
+	// that shape and was marked unusable on Windows for a shell it only ever
+	// passed through.
+	//
+	// The contract is deliberately narrow: it returns the path to run, or ""
+	// plus a sentence naming what it expected and did not find. It may never
+	// return a path it has not stat'd — a resolved-but-absent binary would turn
+	// a detection question into a failed turn, which is the trade this whole
+	// file exists to refuse.
+	nativeUnder func(found string) (binary, missing string)
 	// unusableHint is what to tell a user whose only entry point is a shim.
 	// Empty falls back to the generic advice, which is right wherever a native
 	// executable actually exists to point envVar at.
@@ -129,21 +148,20 @@ func candidates() []candidate {
 			// a tool the agent itself spawns. There is no `-` sentinel, no
 			// --prompt-file, nothing.
 			//
-			// The consequence is the whole story of this seat on Windows, where
-			// the only entry point is cursor-agent.cmd: argv + shim is exactly
-			// what runner.ErrShellShimWithArgvPrompt refuses, so the column is
-			// AvailUnusable here. On macOS and Linux the same install is an
-			// extensionless script, which is KindNative, and the seat works.
+			// That fact has not changed. What changed is what follows from it —
+			// see nativeUnder below. argv + shim is still refused; the Windows
+			// install simply turned out not to need the shim.
 			stdinPrompt: false,
-			// The generic advice does not apply: there is no native executable
-			// to point the override at. The Windows install is a .cmd that
-			// shells into PowerShell, which runs a bundled node.exe against a
-			// 9MB index.js. Driving node directly would mean this adapter owning
-			// a version-pinned path into someone else's install directory, which
-			// is a worse failure than an honest empty seat.
-			unusableHint: "this install ships no native executable — the .cmd shells into " +
-				"a bundled node — so TELLTALE_COUNCIL_CURSOR_BIN has nothing to point at " +
-				"on Windows. The seat works where cursor-agent is not a .cmd",
+			// The unlock. cursor-agent.cmd is a launcher and nothing else, so
+			// council runs what the launcher would have run.
+			nativeUnder: cursorNodeUnderlay,
+			// Reachable again only if the layout stops matching what the
+			// launcher itself expects, and in that case the advice is real
+			// rather than a shrug: the node the .cmd runs is a genuine
+			// executable sitting in the install, and pointing the override at it
+			// is exactly what nativeUnder would have done automatically.
+			unusableHint: "point TELLTALE_COUNCIL_CURSOR_BIN at the bundled node.exe " +
+				"beside this install's index.js — the .cmd runs nothing else",
 		},
 	}
 }
@@ -167,6 +185,143 @@ func cursorKnownPaths() []string {
 		filepath.Join(home, ".local", "bin", "cursor-agent"),
 		filepath.Join(home, ".cursor", "bin", "cursor-agent"),
 	}
+}
+
+// cursorVersionDir matches the version directory names cursor-agent's own
+// launcher is willing to run, and it is copied from that launcher rather than
+// inferred from the one directory on this machine.
+//
+// Both forms are the vendor's: the legacy `YYYY.M.D-<commit>` and the newer
+// `YYYY.M.D-HH-MM-SS-<commit>` that adds a build timestamp. Go's regexp has no
+// PowerShell-ism to translate here; this is the same pattern, verbatim.
+var cursorVersionDir = regexp.MustCompile(`^(\d{4})\.(\d{1,2})\.(\d{1,2})(-\d{2}-\d{2}-\d{2})?-[a-f0-9]+$`)
+
+// cursorNodeUnderlay finds the native executable that a cursor-agent shim would
+// have run, so council can run it instead.
+//
+// This is NOT this repo guessing at someone else's install layout. It is the
+// algorithm the vendor's own launcher performs, transcribed. `cursor-agent.cmd`
+// contains no logic at all — it hands its argv to `cursor-agent.ps1` — and that
+// script's entire body is:
+//
+//	if (Test-Path "$scriptPath\node.exe") {
+//	    & "$scriptPath\node.exe" "$scriptPath\index.js" $args; exit $LASTEXITCODE
+//	}
+//	$versionDir = Get-ChildItem -Path "$scriptPath\versions" -Directory |
+//	    Where-Object { $_.Name -match '^\d{4}\.\d{1,2}\.\d{1,2}(-\d{2}-\d{2}-\d{2})?-[a-f0-9]+$' } |
+//	    Sort-Object { Parse-VersionString $_.Name } -Descending | Select-Object -First 1
+//	& "$scriptPath\versions\$versionName\node.exe" "$scriptPath\versions\$versionName\index.js" $args
+//
+// So the shim's whole job is to pick a directory and exec a bundled node
+// against a JavaScript entry point. Doing that selection here deletes both
+// cmd.exe and powershell.exe from the invocation, which is the only thing the
+// argv rule ever cared about: `node.exe` is a real executable, Go's os/exec
+// quotes its arguments itself, and a prompt containing a quote or an ampersand
+// stops being a shell's problem. It is the same reason agy's argv transport is
+// safe — not a new exception carved for this vendor.
+//
+// VERIFIED, on 2026-08-04 against 2026.07.23-e383d2b: run directly, from a
+// directory unrelated to the install and with none of the environment the .ps1
+// sets, `node.exe index.js --help` produced output byte-identical to
+// `cursor-agent.cmd --help` (86 lines, diff clean), and `node.exe index.js
+// status` reported the signed-in account. The bundle needs no cwd and no env.
+//
+// The version directory is re-resolved on every call, and Detect() is called
+// once per room, so a room started after an auto-update picks up the new
+// directory. A cached path is the failure this shape exists to avoid: it would
+// go on pointing at a version directory the updater had already deleted, and
+// the seat would fail at dispatch rather than at detection.
+func cursorNodeUnderlay(found string) (binary, missing string) {
+	// Already a node interpreter — an override pointing straight at one, or a
+	// second pass. All it needs is its bundle beside it.
+	if isNodeInterpreter(found) {
+		bundle := vendors.CursorNodeBundle(found)
+		if _, err := os.Stat(bundle); err != nil {
+			return "", "found the node interpreter " + found +
+				", but not the bundle it has to run: expected " + bundle
+		}
+		return found, ""
+	}
+	if kindOf(found) != KindShim {
+		// The POSIX install is an extensionless script, which is already native
+		// and already drivable. Nothing to step over.
+		return found, ""
+	}
+
+	dir := filepath.Dir(found)
+	// The launcher's own first branch: an install flattened into one directory.
+	if b, ok := cursorNodePair(dir); ok {
+		return b, ""
+	}
+
+	versions := filepath.Join(dir, "versions")
+	entries, err := os.ReadDir(versions)
+	if err != nil {
+		return "", "found " + found + ", a shell shim whose launcher runs a bundled node, " +
+			"but " + versions + " could not be read: " + err.Error()
+	}
+	newest := ""
+	newestKey := 0
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		m := cursorVersionDir.FindStringSubmatch(e.Name())
+		if m == nil {
+			continue
+		}
+		// Parse-VersionString's arithmetic: zero-pad month and day, concatenate
+		// with the year, compare as an integer. The build timestamp and the
+		// commit hash take no part in the ordering upstream, and they take none
+		// here either.
+		key := atoi(m[1])*10000 + atoi(m[2])*100 + atoi(m[3])
+		// Ties are broken by name, descending. The launcher leaves them to
+		// Sort-Object's stability, which is to say to directory order — fine for
+		// a script run once, not fine for a detection whose answer must be the
+		// same twice in a row.
+		if key > newestKey || (key == newestKey && e.Name() > newest) {
+			newest, newestKey = e.Name(), key
+		}
+	}
+	if newest == "" {
+		return "", "found " + found + ", a shell shim whose launcher runs a bundled node, " +
+			"but no version directory under " + versions + " matches the layout that launcher expects"
+	}
+	b, ok := cursorNodePair(filepath.Join(versions, newest))
+	if !ok {
+		return "", "found " + found + ", a shell shim whose launcher runs a bundled node, " +
+			"but " + filepath.Join(versions, newest) + " holds no node.exe beside an index.js"
+	}
+	return b, ""
+}
+
+// cursorNodePair reports the node interpreter in dir, but only when the bundle
+// it would be given is there too. Half a pair is not a resolution: a node with
+// no index.js beside it would start and immediately fail to find its entry
+// point, on every turn, with an error about a JavaScript file the user never
+// asked about.
+func cursorNodePair(dir string) (string, bool) {
+	node := filepath.Join(dir, "node.exe")
+	if _, err := os.Stat(node); err != nil {
+		return "", false
+	}
+	if _, err := os.Stat(vendors.CursorNodeBundle(node)); err != nil {
+		return "", false
+	}
+	return node, true
+}
+
+// isNodeInterpreter is the same test the vendor's launcher makes, by name.
+func isNodeInterpreter(path string) bool {
+	base := strings.ToLower(filepath.Base(path))
+	return strings.TrimSuffix(base, filepath.Ext(base)) == "node"
+}
+
+// atoi is strconv.Atoi with the error dropped, which is safe here and only here:
+// every string it sees came out of a regexp group of the form \d{1,4}.
+func atoi(s string) int {
+	n, _ := strconv.Atoi(s)
+	return n
 }
 
 // Detect resolves every candidate against PATH.
@@ -233,6 +388,34 @@ func detectOne(c candidate) VendorInfo {
 
 // classify decides whether a resolved binary is one council will drive.
 func classify(info VendorInfo, c candidate) VendorInfo {
+	// Asked BEFORE the shim refusal, because it is the question the refusal was
+	// missing: not "is this path a shim" but "is a shell actually going to be
+	// involved". A launcher that only picks a path and execs a real binary
+	// answers no, and council steps over it.
+	//
+	// A vendor with no underlay is unaffected — codex's .cmd is npm's wrapper
+	// with real work in it, not a two-line launcher, and it stays on the stdin
+	// transport that made it safe.
+	if c.nativeUnder != nil {
+		under, missing := c.nativeUnder(info.Binary)
+		if under == "" {
+			// The layout stopped matching what the vendor's own launcher
+			// expects. Named rather than guessed around: a resolution that
+			// silently fell back to the shim would put prompt text through
+			// cmd.exe, and one that fell back to a stale path would fail at
+			// dispatch instead of here.
+			info.Avail = AvailUnusable
+			info.Note = missing + " — " + c.hint()
+			return info
+		}
+		if under != info.Binary {
+			info.Source = info.Source + ", stepping over its launcher to the bundled " +
+				filepath.Base(under) + " it runs"
+			info.Binary = under
+			info.Kind = kindOf(under)
+		}
+	}
+
 	if info.Kind == KindShim && !c.stdinPrompt {
 		// The refusal is the point. Driving this would mean handing a prompt to
 		// cmd.exe, and a prompt containing a quote or an ampersand would either
@@ -401,38 +584,48 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 				"as able to change your workspace",
 		}
 	case model.VendorCursor:
+		// Still the weakest badge in the room, and now for a REASON rather than
+		// for an absence of evidence. The seat was signed in on 2026-08-04 and
+		// four live turns ran; what they measured made the claim worse, not
+		// better, and the detail has to carry that.
+		//
+		// What was learned, and could only be learned by running it:
+		//
+		//   - `--sandbox enabled` does not weakly apply on Windows. It KILLS
+		//     the turn, before any model call: "Sandbox mode is enabled but not
+		//     available on this system. Sandbox requires macOS or Linux",
+		//     exit 1. So the flag that looked like the stronger half of this
+		//     posture was, on this OS, the reason the seat could never have
+		//     answered. It is not passed here — see vendors.Cursor.baseArgs.
+		//   - `--mode plan` did not stop the agent from DISPATCHING a shell
+		//     command. Asked to read a file, it issued `cat …` and then `ls -1`
+		//     as shellToolCall invocations; both were stopped by a hook on this
+		//     machine rather than by the mode. Whether plan mode would have
+		//     refused them on its own is therefore still unobserved — but the
+		//     tool was selected and sent, which is further than a "no edits"
+		//     mode reads like it would allow.
+		//
+		// The one thing that has not changed: the self-report cannot settle it
+		// later either. system/init's permissionMode is a hardcoded "default"
+		// literal in the bundle, confirmed against captured output — every one
+		// of the four turns reported "default" regardless of flags. The trick
+		// that caught Claude's --allowedTools does not work on this vendor.
+		if windows {
+			return SandboxClaim{
+				Level: SandboxRequested,
+				Detail: "--mode plan is requested and nothing is enforced. --sandbox is " +
+					"deliberately NOT passed on Windows: the CLI rejects it outright there " +
+					"(\"Sandbox requires macOS or Linux\") and the turn dies. Under plan mode " +
+					"this vendor was still measured issuing shell commands — a hook stopped " +
+					"them, not the mode. Treat this column as able to run things",
+			}
+		}
 		return SandboxClaim{
 			Level: SandboxRequested,
-			// The weakest evidence behind any badge in this room, and the detail
-			// has to say so out loud.
-			//
-			// `--mode plan` is documented by the CLI's own help as
-			// "read-only/planning (analyze, propose plans, no edits)", and
-			// `--sandbox enabled` exists beside a real cursorsandbox.exe in the
-			// install. Neither was seen to engage, and could not be: the
-			// installed cursor-agent reports "Not logged in", and it checks
-			// authentication BEFORE it validates flags, so no invocation gets
-			// far enough to demonstrate — or refute — anything.
-			//
-			// Two facts push this claim further down than Codex's, which wears
-			// the same badge on the strength of an actual measurement:
-			//
-			//   - The CLI's own help for -p says print mode "Has access to all
-			//     tools, including write and shell". That is the vendor stating
-			//     that the mode council runs in is unrestricted by default, so
-			//     everything rests on --mode plan being honoured.
-			//   - The self-report cannot settle it later either. The
-			//     system/init event's permissionMode is a hardcoded "default"
-			//     literal in the shipped bundle, not a readout of the session.
-			//     The trick that caught Claude's --allowedTools — run it and
-			//     read what the session says about itself — does not work on
-			//     this vendor.
-			Detail: "--mode plan --sandbox enabled are requested, and nothing more is " +
-				"known: this CLI is not signed in here, so no run could test them. Its " +
-				"own help says print mode has access to write and shell tools, and its " +
-				"init event reports a hardcoded permission mode, so the posture cannot " +
-				"be confirmed by asking the session either. Weaker than every other " +
-				"column's claim",
+			Detail: "--mode plan --sandbox enabled are requested. The install ships a real " +
+				"cursorsandbox.exe, but what it covers was never observed here — every live " +
+				"turn behind this claim ran on Windows, where the sandbox does not exist. Its " +
+				"own help says print mode has access to write and shell tools",
 		}
 	default:
 		return SandboxClaim{}
@@ -457,23 +650,28 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 // built for a case we hoped would not arrive; it turns out to be two thirds of
 // the room.
 //
-// Cursor is the first vendor to land on GranUnknown, and that is a deliberate
-// refusal rather than an oversight. It has `--stream-partial-output`, whose help
-// says "Stream partial output as individual text deltas", and the shipped
-// bundle does write one assistant event per text chunk when it is set. Neither
-// is a measurement. Antigravity is the standing warning here: its schema emits
-// an event whose key is literally `text_delta`, and the whole reply arrived in
-// one of them after 73 seconds of empty column. A name in a help string and an
-// emit path in a bundle are both upstream of the thing that matters, which is
-// what actually comes down the pipe — and that could not be observed, because
-// the installed cursor-agent is not signed in.
+// Cursor was the first vendor to land on GranUnknown, and it has now been
+// promoted the only way this repo promotes anything: someone watched the pipe.
 //
-// So no granularity word is printed for this column, and dispatch opens it in
-// PhaseWaiting: if output does arrive incrementally the phase upgrades on the
-// first chunk, which is honest in that direction only.
+// It was held at Unknown because `--stream-partial-output`'s help says
+// "individual text deltas" and the bundle emits per chunk — neither of which is
+// a measurement, with Antigravity standing as the warning that a field named
+// text_delta can carry a whole reply at once. On 2026-08-04, signed in, a
+// one-word reply came down as
+//
+//	{"type":"assistant",...,"text":"P","timestamp_ms":…}
+//	{"type":"assistant",...,"text":"ONG","timestamp_ms":…}
+//
+// and a sentence came down as "I", " said", " P", "ONG", ".". That is
+// token-level, so this column claims GranTokens and opens in PhaseStreaming
+// alongside Claude.
+//
+// The same capture is what put the delta trap in the parser: cursor-agent
+// repeats the COMPLETE message as one more assistant event after the deltas,
+// and concatenating it would have rendered "PONGPONG". See vendors/cursor.go.
 func granularityFor(v model.VendorID) Granularity {
 	switch v {
-	case model.VendorClaude:
+	case model.VendorClaude, model.VendorCursor:
 		return GranTokens
 	case model.VendorCodex, model.VendorAntigravity:
 		return GranFinalOnly

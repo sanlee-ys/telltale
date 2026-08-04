@@ -424,9 +424,10 @@ func trimSuffixByte(b []byte, c byte) []byte {
 
 // failureNote turns an exit error plus stderr into one line for a column card.
 //
-// It classifies the two failures a user can actually act on — not signed in,
-// and binary missing — and otherwise quotes the vendor. Guessing beyond that
-// would be inventing a diagnosis.
+// It classifies the failures a user can actually act on and otherwise quotes
+// the vendor. Guessing beyond that would be inventing a diagnosis, so a case is
+// only added here once a real run has produced the text it matches on — every
+// pattern below was copied off a captured stderr rather than imagined.
 func failureNote(err error, stderrText string) string {
 	s := strings.TrimSpace(stderrText)
 	low := strings.ToLower(s)
@@ -437,6 +438,27 @@ func failureNote(err error, stderrText string) string {
 		strings.Contains(low, "authentication"),
 		strings.Contains(low, "please run") && strings.Contains(low, "login"):
 		return "not signed in — authenticate this vendor in your own terminal, then dispatch again"
+	case strings.Contains(low, "workspace trust"),
+		strings.Contains(low, "do you trust the contents of this directory"):
+		// Captured 2026-08-04 from cursor-agent, which refuses a print-mode turn
+		// in a directory it has not been told to trust and exits 1 before any
+		// model call. It offers `--trust` as the fix; council does not pass it,
+		// in either posture, because accepting a trust prompt is a consent
+		// decision and this tool does not make those on someone's behalf. So the
+		// card says what the user can do instead, which is the same thing in
+		// their own terminal where they can see what they are agreeing to.
+		return "this vendor has not been told to trust this workspace — it refuses to run " +
+			"until you approve the directory in your own terminal; council will not accept " +
+			"that prompt for you"
+	case strings.Contains(low, "sandbox requires macos or linux"),
+		strings.Contains(low, "sandbox mode is enabled but not available"):
+		// Also captured 2026-08-04. Council itself no longer asks for a sandbox
+		// on Windows — the adapter drops the flag there — so reaching this means
+		// the user's OWN vendor config enables it, and every turn will die the
+		// same way until that config changes. Left classified rather than
+		// removed as unreachable for exactly that reason.
+		return "this vendor's own config asks for a sandbox its help says needs macOS or " +
+			"Linux, and it refuses to run without one — disable it in the vendor's config"
 	case strings.Contains(low, "command not found"),
 		strings.Contains(low, "is not recognized"):
 		return "the vendor binary vanished between detection and dispatch"
