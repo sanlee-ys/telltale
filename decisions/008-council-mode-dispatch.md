@@ -1423,6 +1423,71 @@ deferred decision is still a defect while it is deferred**, and this one had a u
 symptom the whole time: turns that died with nothing in the column, produced by a flag the room
 was passing for a benefit it had already measured at zero.
 
+### Amendment, 2026-08-04 (eighteenth): the honest sentence was in the wrong room
+
+The second amendment added a waiting card so a vendor that streams nothing could not be
+mistaken for one that was streaming slowly, and noted drily that the card "turns out to
+describe two thirds of the room". It described what the card *said* and never asked what it
+**cost**. Reported from a live room:
+
+> *"'working. this vendor reports no incremental output..' looks ugly as fuck. i get why you
+> put it there but yuck — you can hide the wiring underneath the floor of our council room."*
+
+**The distinction stays; the argument for it moves.** Those are separable and had never been
+separated. `PhaseWaiting` must not read as streaming — that is §9.2's rule and nothing here
+weakens it. What does not belong in the body of every waiting turn is the *explanation*: "this
+vendor reports no incremental output, so nothing appears until the turn finishes" is council's
+plumbing, in council's vocabulary, in the space someone opened this room to read an answer in.
+With two thirds of the seats `GranFinalOnly`, that was not an occasional card — on an ordinary
+turn it was most of what was on screen, three columns wide, until the vendors came back.
+
+**What carries the distinction was already on screen.** The column header names the phase —
+`waiting` against `streaming`, every frame, both glyph sets, above the scroll where it cannot be
+read past — with the granularity badge beside it saying why. The body sentence was never the
+claim. It was a *paraphrase of the badge*, printed a row under the badge.
+
+**So the body is one line, and there are three of them because they are three different
+claims.** Final-only says `working — the reply arrives whole.`; a seat whose granularity was
+never established says `working — nothing has arrived yet.` and may **not** borrow the first
+line, which is the fifth amendment's rule that an unestablished claim does not get to wear a
+measured one's words; a seat that has acted but not spoken points at its trace instead. None of
+them uses a word about incremental output, deltas or granularity, and the test asserts that
+absence — which is what stops the explanation creeping back one clause at a time.
+
+**Under the floor is the help panel's posture page**, which the fifteenth amendment built for
+exactly this shape: the claim on the column, the argument somewhere it can be read properly.
+That page had no gloss of the granularity word at all — the fifteenth amendment gave the sandbox
+badges a legend and left the badge beside them undefined, survivable only because the waiting
+card was reciting the explanation in the reading area. Removing that turned the gap into a debt,
+and this pays it.
+
+**The gloss goes inside each seat's block rather than into a room-independent legend, and that
+is a deliberate departure from the section above it.** The fifteenth amendment's reason for
+explaining badges this room does not show is that a user who has never typed `--write` should
+learn what `WRITES` means before typing it. There is no equivalent here: **nobody chooses a
+granularity.** It is a property of whichever vendors are installed, so the only words a reader
+can meet are the ones their own room already displays, and a sentence beside the word it defines
+beats matching two lists. `TestEveryGranularityIsExplained` walks the type so a fifth value
+cannot land mute, and `GranUnknown` gets an entry precisely because it prints no word — the
+blank is the claim, and it is the one case a reader cannot decode by reading the header.
+
+**Two things are deliberately unchanged.** The panel's hard 17-row budget, which nothing here
+spends: the gloss lands below the fold with the per-seat details, and `TestHelpFitsTheSmallestRoom`
+still holds both pages. And `--ascii`, where the whole distinction is words and marks that were
+never colour-dependent — the phase word is the same string in both glyph sets, which is why it
+was safe to make it the carrier.
+
+The residual, stated rather than left to be found: each seat's block grew a line, so at the
+24-row floor the last seat's paragraph is cut slightly earlier than before. That is the
+fifteenth amendment's own stated trade one line deeper, and nothing above the fold moved.
+
+The general lesson, in this file's own terms: the fifteenth amendment found a claim that was
+true and untranslated, and translated it. This is that same audit run on the *result* — the
+translation was correct, and it was put in the wrong room. **A sentence can be honest, legible,
+and still wrong to print, if where it prints is where someone came to read something else.**
+Every amendment before this asked whether the room says the truth; this is the first to ask how
+much of the room the truth is allowed to take up.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude

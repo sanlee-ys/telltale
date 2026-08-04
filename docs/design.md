@@ -2469,13 +2469,18 @@ neither streams at all. Codex emits one `item.completed` per complete agent mess
 message-delta feature even under development. Antigravity delivers an entire response as a
 single `text_delta` — a one-word reply left its column blank for 73 seconds and then painted at
 once. Both are `GranFinalOnly`. A vendor that emits nothing until it finishes renders `PhaseWaiting`
-— a first-class phase whose card says *"this vendor reports no incremental output, so
-nothing appears until the turn finishes"* — rather than an empty column that looks like
-slow streaming. `TestWaitingIsNotStreaming` asserts the two never render alike. That card was
-added on the theory that some vendor might not stream; it turns out to describe two thirds of
-the room. This is
-§4a.1's rule (a dropped column and an em dash must not read the same) applied to a surface
-where the ambiguity would otherwise be invisible.
+— a first-class phase, named as such in its column header — rather than an empty column that
+looks like slow streaming. `TestWaitingIsNotStreaming` asserts the two never render alike. That
+distinction was added on the theory that some vendor might not stream; it turns out to describe
+two thirds of the room. This is §4a.1's rule (a dropped column and an em dash must not read the
+same) applied to a surface where the ambiguity would otherwise be invisible.
+
+The card's WORDING is not what carries it, and §9.14 is why that matters: the body used to
+recite *"this vendor reports no incremental output, so nothing appears until the turn
+finishes"* on every waiting turn, which is council's plumbing described in council's vocabulary
+in the space a user came to read an answer. The distinction is carried by the header's own
+phase word and the granularity badge beside it; the body says only `working — the reply
+arrives whole.`
 
 ### 9.3 Execution: argv, never a shell
 
@@ -3428,3 +3433,76 @@ claim that was complete, visible, attributed — and **untranslated**. Twelve am
 adversarial care went into making three words defensible to a reviewer, and none of them
 asked whether the person the words are *for* could read them. Honesty that only survives
 an expert audit is a claim made to the wrong audience.
+
+### 9.14 the honest sentence was in the wrong room
+
+§9.2 rules that `PhaseWaiting` must never be mistaken for streaming, and it is right. The
+card that enforced it was reported from a live room in the bluntest terms this project has
+had yet:
+
+> *"'working. this vendor reports no incremental output..' looks ugly as fuck. i get why you
+> put it there but yuck — you can hide the wiring underneath the floor of our council room."*
+
+**Both halves of that are correct, and they are about different things.** The distinction is
+load-bearing and stays. What does not belong in the body of every waiting turn is the
+*argument* for it. Read it as a user rather than as its author: "this vendor reports no
+incremental output" is a sentence about council's own plumbing, in council's own vocabulary,
+occupying the space someone opened this room to read an answer in. And because two thirds of
+the seats are `GranFinalOnly`, it was not an occasional card — on an ordinary turn it was most
+of what was on screen, three columns wide, until the vendors came back.
+
+**What carries the distinction now was already there, and had been all along.** The column
+header names the phase: `waiting` against `streaming`, on every frame, in both glyph sets,
+above the scroll where it cannot be read past. Beside it the granularity badge says why —
+`final only`, or a deliberate blank. That word is the claim; the body sentence was never the
+claim, it was a *paraphrase of the badge*, printed where the badge could already be seen.
+
+So the body is one line. Three of them, because they are three different claims and collapsing
+them would be the failure §9.2 exists to prevent one level down:
+
+| when | line | why not the others |
+|---|---|---|
+| final-only, nothing yet | `working — the reply arrives whole.` | states what to expect, from a measurement two vendors earned |
+| granularity never established | `working — nothing has arrived yet.` | must NOT borrow the sentence above — the fifth amendment's rule that an unestablished claim may not wear a measured one's words |
+| it has acted but not spoken | `working — the steps above are what it has done so far.` | there IS something on screen; pointing at it beats describing the seat |
+
+None of them uses a word about incremental output, deltas or granularity. `TestWaitingIsNotStreaming`
+now asserts that in both directions: the body says what to expect, the frame carries the word
+`waiting`, a streaming frame does not, and the vendor-internals vocabulary is **absent** — which
+is the assertion that stops the explanation creeping back in one clause at a time.
+
+**The wiring went under the floor, and the floor is the help panel's posture page.** That page
+already exists (§9.13) and already had the shape for this: a claim on the column, its argument
+somewhere it can be read properly. What it did not have is any gloss of the granularity word at
+all — §9.13 gave the sandbox badges a legend and left the badge beside them undefined, which was
+survivable only because the waiting card was reciting the explanation in the reading area.
+Taking that out is what turned the gap into a debt.
+
+**The gloss sits inside each seat's own block rather than in a room-independent legend, and that
+is a deliberate departure from how the sandbox words above it are presented.** §9.13's argument
+for a legend covering badges this room does not show is that a user who has never typed
+`--write` should learn what `WRITES` means *before* they type it. There is no equivalent here:
+**nobody chooses a granularity.** It is a property of whichever vendors are installed, so the
+only granularity words a reader can ever meet are the ones their own room is already displaying
+— and a sentence beside the word it defines beats making someone match two lists. It goes under
+the posture rather than beside it, because the two answer different questions about one seat and
+only one of them has consequences.
+
+`TestEveryGranularityIsExplained` walks the type and fails the build for a value that can render
+on a column with nothing to say what it means — the guard `TestEveryBadgeIsExplained` gives the
+sandbox levels, for the same reason. `GranUnknown` gets an entry precisely because it prints no
+word: the blank is the claim, and it is the one case a reader cannot decode by reading the
+header.
+
+**The residual, stated rather than discovered.** Each seat's block grew a line, so at the 24-row
+floor the last seat's paragraph is cut a little earlier than it was. That is §9.13's own stated
+trade, one line deeper — the per-seat half is what a taller terminal gets, and nothing above the
+fold moved. The panel's hard 17-row budget is untouched and `TestHelpFitsTheSmallestRoom` still
+holds it.
+
+The general lesson, in this file's own terms: §9.13 found a claim that was true and
+untranslated, and translated it. This is the same audit run once more on the *result* — because
+the translation was correct, and it was put in the wrong room. A sentence can be honest, legible,
+and still wrong to print, if the place it prints is the place someone came to read something
+else. Every earlier section here asked whether the room says the truth. This one is the first to
+ask **how much of the room the truth is allowed to take up.**

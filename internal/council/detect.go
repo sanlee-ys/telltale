@@ -689,9 +689,11 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 //     and then painted at once.
 //
 // Both are therefore GranFinalOnly, which starts their columns in PhaseWaiting
-// and renders the card that says no incremental output is coming. That card was
-// built for a case we hoped would not arrive; it turns out to be two thirds of
-// the room.
+// — named in the column header, with `final only` beside it, and one calm line
+// in the body saying the reply arrives whole. That phase was built for a case we
+// hoped would not arrive; it turns out to be two thirds of the room, which is
+// exactly why its explanation lives on the help page rather than in the body of
+// every waiting turn (§9.14).
 //
 // Cursor was the first vendor to land on GranUnknown, and it has now been
 // promoted the only way this repo promotes anything: someone watched the pipe.

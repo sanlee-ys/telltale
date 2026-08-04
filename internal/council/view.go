@@ -749,22 +749,42 @@ func columnText(st State, c Column, w int, sty Styles, g Glyphs) []string {
 		out = append(out, reattachCard(st, c, w, sty)...)
 	case c.Phase == PhaseIdle && c.Body == "":
 		out = append(out, wrap("no turn dispatched yet.", w)...)
+	// The three waiting lines below are one row each, on purpose, and what they
+	// used to be is the point.
+	//
+	// This card exists because PhaseWaiting must never be mistaken for streaming
+	// — a genuine honesty distinction (§9.2), and it is kept. What did not
+	// belong is the ARGUMENT for it, restated in full in the body of every
+	// waiting turn: "this vendor reports no incremental output, so nothing
+	// appears until the turn finishes" is a sentence about council's plumbing,
+	// written in council's vocabulary, in the space where a user came to read an
+	// answer. Two thirds of the room renders this card, so on a normal turn it
+	// was most of what was on screen.
+	//
+	// What carries the distinction now is the word already in the column header
+	// — `waiting` against `streaming`, always drawn, in both glyph sets, beside
+	// the granularity badge that says WHY. The body says only that the seat is
+	// working and what to expect, and the wiring moved to the help panel's
+	// posture page, where a reader who wants it can go and get it. That is the
+	// same trade §9.13 made for the sandbox badges: the claim stays on the
+	// column, the argument moves somewhere it can be read properly.
 	case c.Phase == PhaseWaiting && c.Body == "" && len(c.Acts) > 0:
-		// It has acted but not spoken. Saying "no incremental output" here
-		// would contradict the trace directly above it.
+		// It has acted but not spoken. This one keeps its own sentence because
+		// it is a different claim from the two below — there IS something on
+		// screen, and pointing at it beats describing the seat.
 		out = append(out, wrap("working — the steps above are what it has done so far.", w)...)
 	case c.Phase == PhaseWaiting && c.Body == "" && c.Gran == GranUnknown:
-		// A separate sentence from the one below, because they are different
-		// claims. "Reports no incremental output" is a measurement two vendors
-		// earned; a column whose granularity was never established must not
-		// borrow it. This one says only what is true: it is running, and
-		// whether anything will appear before the end is not known.
-		out = append(out, wrap("working. whether this vendor reports incremental output has not been established, so output may not appear until the turn finishes.", w)...)
+		// Deliberately NOT the line below. "The reply arrives whole" is a
+		// measurement two vendors earned; a column whose granularity was never
+		// established must not borrow it. This says only what is observed —
+		// nothing has arrived — and claims nothing about whether anything will
+		// before the end. The header carries the rest: this is the one seat that
+		// prints no granularity word at all.
+		out = append(out, wrap("working — nothing has arrived yet.", w)...)
 	case c.Phase == PhaseWaiting && c.Body == "":
-		// The honest version of an empty streaming column. This vendor is
-		// working; it just does not report anything until it is done, and
-		// pretending otherwise would be a fabricated progress signal.
-		out = append(out, wrap("working. this vendor reports no incremental output, so nothing appears until the turn finishes.", w)...)
+		// The honest version of an empty streaming column, in one line. This
+		// vendor is working; it just does not report anything until it is done.
+		out = append(out, wrap("working — the reply arrives whole.", w)...)
 	default:
 		out = append(out, wrap(c.Body, w)...)
 	}
@@ -1853,6 +1873,51 @@ func helpBadgeGloss() []struct {
 	}
 }
 
+// helpGranGloss is the other half of a column's badge line, in plain English.
+//
+// The sandbox badge got a legend in §9.13 and the granularity word beside it did
+// not, which left the room saying `final only` on two of three columns with
+// nothing anywhere to say what that means. It was covered for a while by the
+// waiting card reciting the whole explanation in the body of every waiting turn
+// — which is exactly the wiring §9.14 pulled out of the reading area, and pulling
+// it out is what made this legend owed rather than merely nice.
+//
+// Keyed by Granularity, so TestEveryGranularityIsExplained can walk the type and
+// fail the build when a value renders a word with nothing here to define it —
+// the same guard TestEveryBadgeIsExplained gives the sandbox levels, for the
+// same reason: the gap it closes is the kind that comes back the day a fifth
+// value lands.
+//
+// It renders inside each SEAT's block rather than as a room-independent legend,
+// and that is a deliberate departure from how the sandbox words are presented
+// one section above. §9.13's argument for a legend covering badges this room
+// does not show is that a user who has never typed --write should be able to
+// learn what WRITES means BEFORE they type it. There is no equivalent here:
+// nobody chooses a granularity. It is a property of whichever vendors are
+// installed, so the only granularity words a reader can ever meet are the ones
+// their own room is already displaying — and putting the sentence beside the
+// word it defines beats making them match two lists.
+//
+// GranUnknown is included and prints NO badge word, which is not an oversight —
+// it is the fifth amendment's ruling that a column whose granularity was never
+// established must not borrow the word two vendors earned by measurement. It
+// needs an entry precisely because of that: "this column has a blank where the
+// others have a word" is the one case a reader cannot look up by reading the
+// word.
+func helpGranGloss() map[Granularity]string {
+	return map[Granularity]string{
+		GranTokens: `"tokens" — text arrives as the vendor writes it, so you are watching ` +
+			`it land rather than waiting for it`,
+		GranEvents: `"events" — progress arrives as whole messages or steps rather than as ` +
+			`text, so this column moves in jumps`,
+		GranFinalOnly: `"final only" — MEASURED: this vendor sends nothing at all until its ` +
+			`turn is done, so a quiet column here is a working one and not a stalled one`,
+		GranUnknown: `no granularity word — whether this vendor reports anything before it ` +
+			`finishes has never been established, so the column opens waiting and the first ` +
+			`real output promotes it. A claim earned rather than assumed`,
+	}
+}
+
 // helpPostures is page two: what the badge on each column means.
 //
 // The top of the page is a legend of every badge word this product can render,
@@ -1915,8 +1980,25 @@ func helpPostures(st State, lay Layout, sty Styles) []string {
 		seats = append(seats, "",
 			"  "+sty.ForSandbox(c.Sandbox.Level).Render(b)+
 				strings.Repeat(" ", maxInt(1, 13-len(b)))+sty.Muted.Render(c.Label))
-		for _, l := range wrap(c.Sandbox.Detail, maxInt(20, lay.Width-8)) {
+		body := maxInt(20, lay.Width-8)
+		for _, l := range wrap(c.Sandbox.Detail, body) {
 			seats = append(seats, sty.Muted.Render("      "+l))
+		}
+		// The other half of that seat's badge line, and the reason this section
+		// grew: §9.14 took the granularity explanation out of the body of every
+		// waiting turn, where it had been standing in for a legend that did not
+		// exist. The claim stays on the column — `waiting` and `final only` are
+		// drawn on every frame — and the argument for it moved here.
+		//
+		// Under the posture rather than beside it, because they answer different
+		// questions about the same seat and the posture is the one with
+		// consequences. A seat is never skipped for having no granularity word:
+		// the blank IS the claim (fifth amendment), and it is the one a reader
+		// cannot decode by reading the header.
+		if g, ok := helpGranGloss()[c.Gran]; ok {
+			for _, l := range wrap(g, body) {
+				seats = append(seats, sty.Muted.Render("      "+l))
+			}
 		}
 	}
 	if len(seats) > 0 {
