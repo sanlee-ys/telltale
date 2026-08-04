@@ -156,6 +156,16 @@ type Column struct {
 	// explanation on an unavailable column.
 	Note string
 
+	// Acts is what this vendor DID this turn: tool calls, shell commands, file
+	// edits, in order.
+	//
+	// Kept separate from Body rather than interleaved into it, because they are
+	// different kinds of claim. Body is what the vendor said; Acts is what it
+	// did. Concatenating them would let a tool name read as part of an answer,
+	// which is the same category error as rendering a quoted reply as the
+	// vendor's own words.
+	Acts []string
+
 	// Started is when this column's current turn was dispatched. Zero when it
 	// has never run.
 	Started time.Time

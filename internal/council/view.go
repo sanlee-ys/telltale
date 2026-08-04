@@ -330,9 +330,27 @@ func columnText(c Column, w int, g Glyphs) []string {
 	}
 
 	var out []string
+
+	// The activity trace comes FIRST and is visually distinct, because it is
+	// chronologically first — the vendor acted, then answered. Prefixed rather
+	// than merely dimmed: colour is the second signal in this product, never
+	// the only one, so the trace survives --ascii and a monochrome terminal.
+	for _, a := range c.Acts {
+		out = append(out, wrap(g.Act+" "+a, w)...)
+	}
+	if len(c.Acts) > 0 && (c.Body != "" || c.Phase == PhaseDone) {
+		out = append(out, "")
+	}
+
 	switch {
+	case c.Phase == PhaseStreaming && c.Body == "" && len(c.Acts) > 0:
+		out = append(out, wrap("working…", w)...)
 	case c.Phase == PhaseIdle && c.Body == "":
 		out = append(out, wrap("no turn dispatched yet.", w)...)
+	case c.Phase == PhaseWaiting && c.Body == "" && len(c.Acts) > 0:
+		// It has acted but not spoken. Saying "no incremental output" here
+		// would contradict the trace directly above it.
+		out = append(out, wrap("working — the steps above are what it has done so far.", w)...)
 	case c.Phase == PhaseWaiting && c.Body == "":
 		// The honest version of an empty streaming column. This vendor is
 		// working; it just does not report anything until it is done, and

@@ -3,6 +3,7 @@ package council
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -144,6 +145,7 @@ func (m *Model) dispatch() tea.Cmd {
 			c.Phase = PhaseWaiting
 		}
 		c.Body = ""
+		c.Acts = nil
 		c.Note = ""
 		c.CostUSD = nil
 		// Re-arm the tail for the new turn. Whatever the user was reading
@@ -259,6 +261,16 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				// It streamed after all. Upgrading the phase is honest in this
 				// direction only: the column now IS showing incremental output.
 				c.Phase = PhaseStreaming
+			}
+
+		case runner.KindActivity:
+			// Redacted like everything else: a shell command is a prime place
+			// for a token to appear on a command line. Flushed immediately
+			// rather than buffered, because an activity line is already whole
+			// and holding its last word would strand it until the next tool
+			// call.
+			if act := strings.TrimSpace(m.redact(ev.Vendor, ev.Text) + m.flush(ev.Vendor)); act != "" {
+				c.Acts = append(c.Acts, act)
 			}
 
 		case runner.KindSession:

@@ -626,3 +626,61 @@ func TestReadModeSaysNothingAboutWriting(t *testing.T) {
 		t.Error("the default room claims write mode")
 	}
 }
+
+// TestActivityTraceIsNotProse is the core distinction this feature rests on.
+// Body is what a vendor SAID; Acts is what it DID. Concatenating them would let
+// a tool name read as part of an answer — the same category error as rendering
+// a quoted reply as the vendor's own words.
+func TestActivityTraceIsNotProse(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	st.Columns[0].Phase = PhaseDone
+	st.Columns[0].Acts = []string{"Glob", "Read", "Bash: go test ./..."}
+	st.Columns[0].Body = "Tests pass."
+
+	got := render(st)
+	for _, want := range []string{"Glob", "Read", "go test", "Tests pass."} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	// The marker is a glyph, not colour: this product's rule is that every
+	// distinction survives --ascii and a monochrome terminal.
+	if !strings.Contains(got, "⚙ Glob") {
+		t.Error("activity is not visually marked as activity")
+	}
+	if strings.Contains(got, "GlobTests pass.") || strings.Contains(got, "Glob Tests pass.") {
+		t.Error("activity ran together with prose")
+	}
+	golden(t, "activity", got)
+}
+
+// TestActingColumnDoesNotClaimSilence: the waiting card says "no incremental
+// output", which would flatly contradict a trace rendered directly above it.
+func TestActingColumnDoesNotClaimSilence(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	st.Columns[2].Phase = PhaseWaiting
+	st.Columns[2].Acts = []string{"tool", "checkpoint"}
+
+	got := render(st)
+	if strings.Contains(got, "no incremental output") {
+		t.Error("a column showing a live trace still claims it reports nothing")
+	}
+	if !strings.Contains(got, "checkpoint") {
+		t.Error("the trace is missing from a waiting column — the case it matters most for")
+	}
+}
+
+// TestASCIIActivityHasItsOwnMarker guards the fallback: "*" rather than a
+// glyph a legacy console renders as a tofu box.
+func TestASCIIActivityHasItsOwnMarker(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	st.Columns[0].Phase = PhaseStreaming
+	st.Columns[0].Acts = []string{"Glob"}
+	got := Render(st, PlainStyles(), GlyphsFor(true))
+	if !strings.Contains(got, "* Glob") {
+		t.Error("ascii mode lost the activity marker")
+	}
+}

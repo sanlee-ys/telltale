@@ -118,13 +118,20 @@ type streamLine struct {
 	// system/init
 	Model string `json:"model"`
 
-	// stream_event: the token-level delta
+	// stream_event: the token-level delta, and the tool-call announcement.
 	Event struct {
 		Type  string `json:"type"`
 		Delta struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"delta"`
+		// content_block_start carries a tool_use block when the model reaches
+		// for a tool. Verified live: the block arrives as
+		// {"type":"content_block_start","content_block":{"type":"tool_use","name":"Glob"}}
+		ContentBlock struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+		} `json:"content_block"`
 	} `json:"event"`
 
 	// result
@@ -154,6 +161,16 @@ func (Claude) ParseEvent(line []byte) (runner.Event, bool) {
 	case "stream_event":
 		if sl.Event.Delta.Type == "text_delta" && sl.Event.Delta.Text != "" {
 			return runner.Event{Kind: runner.KindText, Text: sl.Event.Delta.Text}, true
+		}
+		// A tool call is the vendor ACTING rather than answering. Surfaced as
+		// activity rather than dropped: a room built for command and control
+		// has to show work in progress, and a column that silently thinks for
+		// forty seconds while running commands is indistinguishable from one
+		// that is stuck.
+		if sl.Event.Type == "content_block_start" &&
+			sl.Event.ContentBlock.Type == "tool_use" &&
+			sl.Event.ContentBlock.Name != "" {
+			return runner.Event{Kind: runner.KindActivity, Text: sl.Event.ContentBlock.Name}, true
 		}
 	case "result":
 		// Text is the whole final reply. It is carried so the room has a

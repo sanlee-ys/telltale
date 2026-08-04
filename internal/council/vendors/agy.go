@@ -190,6 +190,24 @@ func (Antigravity) ParseEvent(line []byte) (runner.Event, bool) {
 		if al.StepUpdate.StepType == "agent_response" && al.StepUpdate.TextDelta != "" {
 			return runner.Event{Kind: runner.KindText, Text: al.StepUpdate.TextDelta}, true
 		}
+		// Every other step type is the vendor ACTING. It is surfaced as
+		// activity rather than dropped, and the strict gate above is what makes
+		// that safe: tool chatter cannot leak into the column's prose, because
+		// the two are different event kinds the renderer draws differently.
+		//
+		// This matters more for agy than for anyone else. Its reply arrives in
+		// one paint at the very end, so without activity its column is blank
+		// for the entire turn — indistinguishable from a hung process.
+		//
+		// ACTIVE only: a step reports twice (ACTIVE then DONE) and emitting
+		// both would double every line of the trace.
+		// agent_response is excluded explicitly: it is speech, handled above,
+		// and a response step carrying no delta is an empty message rather
+		// than a step the vendor took.
+		if al.StepUpdate.StepType != "" && al.StepUpdate.StepType != "agent_response" &&
+			al.StepUpdate.State == "ACTIVE" {
+			return runner.Event{Kind: runner.KindActivity, Text: al.StepUpdate.StepType}, true
+		}
 	case "result":
 		// Response is the whole final reply, carried as the fallback for a turn
 		// that streamed nothing. For this vendor that fallback is load-bearing

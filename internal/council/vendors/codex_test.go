@@ -237,10 +237,18 @@ func TestCodexToolActivityIsNotRenderedAsSpeech(t *testing.T) {
 		[]byte(`{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"\"C:\\\\Users\\\\sanle\\\\pwsh.exe\" -Command Get-ChildItem","aggregated_output":"","exit_code":null,"status":"in_progress"}}`),
 		[]byte(`{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"\"C:\\\\Users\\\\sanle\\\\pwsh.exe\" -Command Get-ChildItem","aggregated_output":"execution error","exit_code":-1,"status":"failed"}}`),
 	}
+	// Contract change, 2026-08-04: command_execution is now surfaced as
+	// KindActivity rather than dropped — a room built for command and control
+	// has to show the commands. The original invariant still holds and is what
+	// is asserted: this must never arrive as the vendor's prose.
 	var c Codex
 	for _, l := range lines {
-		if ev, ok := c.ParseEvent(l); ok {
-			t.Errorf("tool activity surfaced as %v: %s", ev.Kind, l)
+		ev, ok := c.ParseEvent(l)
+		if ok && ev.Kind == runner.KindText {
+			t.Errorf("tool activity became assistant text: %s", l)
+		}
+		if ok && ev.Kind == runner.KindActivity && !strings.Contains(ev.Text, "pwsh") {
+			t.Errorf("activity dropped the command it was carrying: %+v", ev)
 		}
 	}
 }

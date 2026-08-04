@@ -142,10 +142,17 @@ func TestAgyToolStepsAreNotAssistantText(t *testing.T) {
 		[]byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","step_index":0,"state":"DONE","step_type":"user_input"}}`),
 		[]byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","step_index":5,"state":"DONE","step_type":"system_message"}}`),
 	}
+	// Contract change, 2026-08-04: these steps are no longer DROPPED, they are
+	// surfaced as KindActivity so a command-and-control room can show what the
+	// vendor is doing. The invariant the original test protected is unchanged
+	// and is what is asserted here — tool chatter must never become the
+	// vendor's PROSE. It is now enforced by the event kind rather than by
+	// silence, which is stronger: the renderer draws the two differently.
 	var a Antigravity
 	for _, l := range lines {
-		if ev, ok := a.ParseEvent(l); ok {
-			t.Errorf("non-assistant step produced %+v: %s", ev, l)
+		ev, ok := a.ParseEvent(l)
+		if ok && ev.Kind == runner.KindText {
+			t.Errorf("non-assistant step became assistant text: %+v: %s", ev, l)
 		}
 	}
 }
