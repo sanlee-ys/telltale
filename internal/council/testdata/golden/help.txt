@@ -1,0 +1,24 @@
+ council ~/code/telltale                                                                      no turn yet  │  3/3 seated
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ council — one brief, several agents, side by side                                                                      
+                                                                                                                        
+   i / enter    compose a brief                                                                                         
+   enter        dispatch to every seated vendor                                                                         
+   esc          leave compose (the draft is kept)                                                                       
+   tab          move focus between columns                                                                              
+   ctrl+c       cancel the turn in flight, or quit when idle                                                            
+   q            quit (in view mode only — in compose it is the letter q)                                                
+   ?            this help                                                                                               
+                                                                                                                        
+   council dispatches to vendor CLIs. It is the one telltale mode that                                                  
+   does, and each column states its own read-only posture rather than                                                   
+   the room making one claim on behalf of all three.                                                                    
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ›                                                                                                                      
+ VIEW                                                                     tab focus  │  i compose  │  ? help  │  q quit 

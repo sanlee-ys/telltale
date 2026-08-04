@@ -2351,3 +2351,106 @@ in the schema moved.
 - Plan-budget "% of plan" spend meters: the budget is a guess — the exact fabrication
   this product exists to refuse.
 - On-disk cost estimation via price tables: inventing dollars from token counts.
+
+## 9. Council (ADR-008)
+
+`telltale council` is the dispatch room: one brief typed once, broadcast to every seated
+vendor CLI, replies streaming side by side. It exists because the alternative is four
+terminals and a clipboard.
+
+It is the one subcommand that is not a gauge, and the boundary is worth stating precisely
+rather than hand-waving. §7.8's invariant — no keybinding may mutate vendor state or send
+anything to a running agent — is **unchanged and unweakened**; it is a rule about the
+observation surfaces, and council is not one of them. Nothing in the HUD reaches council.
+The only way in is typing the subcommand. What moved is the *scope* of the sentence in
+`README.md`, from "telltale never writes" to "the gauges never write", because the old
+phrasing had become false the moment ADR-008 was accepted and an accepted decision the
+docs contradict is worse than either option on its own.
+
+### 9.1 What v1 seats, and what it does not
+
+Three columns: **Claude Code**, **Codex**, **Antigravity**. Cursor is deliberately absent.
+It ships a headless CLI as a product (`cursor-agent`), but the `cursor` binary on PATH is
+the editor launcher, and a column driven against a binary that answers to a different
+command fails confusingly instead of sitting honestly empty. This is the inverse of the
+HUD, where Cursor *is* a built-in adapter (ADR-007) because its seam is on disk rather than
+behind a CLI. When `cursor-agent` is installed it is one entry in `candidates()` plus one
+adapter.
+
+### 9.2 Two claims the room refuses to leave implicit
+
+Every column header carries its own **sandbox badge** and its own **streaming
+granularity**, because the three vendors differ on both and the first draft of ADR-008 got
+this wrong in the direction that matters — it claimed "enforced read-only sandboxing" for
+all three when only one had a mechanism named.
+
+| | mechanism | badge |
+|---|---|---|
+| Claude Code | `--tools "Read,Glob,Grep"` — the write tools are not in the session | `ro:tools` |
+| Codex | `-s read-only`, OS-enforced on macOS/Linux, unverified on Windows | `ro:enforced` / `ro:requested` |
+| Antigravity | `--mode plan --sandbox`, semantics unestablished | `ro:requested` |
+
+There is no level that renders as an unqualified "read-only". The two that are enforced
+name their mechanism; the one that is not says *requested* out loud. `TestSandboxBadges
+AreNeverBlanket` fails the build if a bare claim reappears.
+
+Granularity is the same discipline applied to streaming. Claude's token-level deltas are
+documented and verified; the other two are labelled `events` until a live spike says
+otherwise. A vendor that turns out to emit nothing until it finishes renders `PhaseWaiting`
+— a first-class phase whose card says *"this vendor reports no incremental output, so
+nothing appears until the turn finishes"* — rather than an empty column that looks like
+slow streaming. `TestWaitingIsNotStreaming` asserts the two never render alike. This is
+§4a.1's rule (a dropped column and an em dash must not read the same) applied to a surface
+where the ambiguity would otherwise be invisible.
+
+### 9.3 Execution: argv, never a shell
+
+Prompts are arbitrary text — quotes, ampersands, whatever was typed — so no prompt is ever
+interpolated into a command string. Specs are `{Binary, Args []string, StdinPrompt, Dir}`
+through `exec.CommandContext`.
+
+This is load-bearing on Windows specifically. `LookPath("codex")` resolves to `codex.cmd`,
+an npm shim, and Go's `os/exec` runs `.cmd` and `.bat` through `cmd.exe`, whose argument
+parsing cannot be safely quoted for arbitrary text. So `detect.go` classifies every
+resolved path as `KindNative` or `KindShim`, Codex and Claude take their prompt on **stdin**
+(Codex via its verified `-` sentinel), and a vendor that is *both* a shim and argv-only is
+marked `AvailUnusable` and not driven at all. The refusal is the feature; the card tells the
+user which env override fixes it.
+
+### 9.4 Multi-turn is native resume, not transcript re-send
+
+Turn 1 is blind: no vendor sees another's answer, which is what makes the three opinions
+independent rather than anchored. Later turns ride each vendor's own session-resume
+(`claude --resume`, `codex exec resume`, `agy --conversation`). Re-sending the transcript
+would grow input quadratically against metered quotas and flatten native turn structure into
+quoted prose; resume sends only the new turn and makes the blind-round guarantee
+*structural*, since each session holds only its own history. Cross-agent rebuttal is an
+explicit opt-in toggle that quotes the previous turn's finals as labelled untrusted material.
+
+### 9.5 Layout and testing
+
+Same contract as §7.9, for the same reason: `Render` is pure over `State`, tests construct
+state by hand, goldens live in `internal/council/testdata/golden/*.txt` and render with
+`PlainStyles()`. Three columns at ≥96 cells; below that, or when a column would fall under
+24 cells, the tier drops to a tab bar rather than shredding prose into unreadable ribbons.
+Width is measured with `lipgloss.Width`, never `len()`.
+
+One trap worth recording, because the golden tests could not have caught it: `padRight`
+truncates rune by rune, so on text that already carries ANSI escapes it cuts through an
+escape sequence and counts escape bytes as content. Goldens render with the identity style
+set by design, so they are blind to it. Anywhere a line is assembled from differently-styled
+pieces — the tab bar, the help body — padding goes through `fit`, which is ANSI-aware.
+`TestFitIsANSIAware` is the regression guard.
+
+### 9.6 Status
+
+Scaffold landed: the room opens, detects vendors, renders both layouts and every degraded
+state, and accepts a typed brief. **Dispatch is not wired** — pressing enter says so in the
+footer rather than doing nothing, which would read as a bug. The runner, the per-vendor
+adapters and multi-turn follow.
+
+Unverified and scheduled as a live spike before the Codex and Antigravity columns ship: the
+Codex `--json` event schema and delta granularity, whether `codex -s read-only` engages on
+Windows, and Antigravity's stream-json schema, conversation-id location, stdin support and
+`--sandbox` semantics. Those columns render honest *requested* badges until it says
+otherwise.

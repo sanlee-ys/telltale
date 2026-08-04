@@ -1,0 +1,24 @@
+ council ~/code/telltale                              no turn yet  │  3/3 seated
+────────────────────────────────────────────────────────────────────────────────
+ ▸Claude Code   Codex   Antigravity                                             
+  Claude Code                                                              idle 
+ ────────────────────────────────────────────────────────────────────────────── 
+ ro:tools  tokens                                                               
+                                                                                
+ no turn dispatched yet.                                                        
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+ ›                                                                              
+ VIEW                             tab focus  │  i compose  │  ? help  │  q quit 
