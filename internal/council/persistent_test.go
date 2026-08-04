@@ -67,6 +67,28 @@ func TestPersistentTurnEndsOnTheVendorsOwnLine(t *testing.T) {
 	}
 }
 
+// TestPersistentEndOfTurnFlushesTheStreamTail is a live defect: the redactor
+// holds everything after the last word boundary (so a secret split across two
+// chunks cannot straddle the match), and the persistent seat's end-of-turn is
+// a `result` line rather than a process exit — so the KindDone/KindError
+// flushes never ran and the reply's final word was silently eaten. Observed by
+// the owner on a real turn: "Afternoon, San. Seat".
+func TestPersistentEndOfTurnFlushesTheStreamTail(t *testing.T) {
+	m := turnModel(true)
+	m.applyEvents([]runner.Event{
+		{Vendor: model.VendorClaude, Kind: runner.KindText, Text: "Afternoon, San. Seat"},
+		{Vendor: model.VendorClaude, Kind: runner.KindText, Text: "ed."},
+		{Vendor: model.VendorClaude, Kind: runner.KindMeta, EndsTurn: true},
+	})
+
+	if got := m.st.Columns[0].Body; got != "Afternoon, San. Seated." {
+		t.Errorf("body = %q — the stream tail was dropped at end of turn", got)
+	}
+	if got := m.st.Columns[0].Phase; got != PhaseDone {
+		t.Errorf("phase = %v, want done", got)
+	}
+}
+
 // TestSpawnPerTurnIgnoresTheEndOfTurnLine.
 //
 // The same `result` line carries EndsTurn for every vendor, but a spawn-per-turn
