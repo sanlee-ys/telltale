@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -518,5 +519,76 @@ func TestScrollNeverExceedsTheTerminal(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestWaitingColumnShowsItsClock is the answer to "why is that one taking so
+// long". Two of the three vendors are final-only, so a blank column plus a
+// spinner is the COMMON case, and without a clock it reads as broken rather
+// than slow.
+func TestWaitingColumnShowsItsClock(t *testing.T) {
+	base := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	st := room()
+	st.Turn = 1
+	st.Now = base.Add(73 * time.Second)
+	st.Columns[2].Phase = PhaseWaiting
+	st.Columns[2].Started = base
+
+	// 73 seconds reads as 1m13s. Past a minute, minutes are what a person
+	// actually wants — "73s" makes you do arithmetic to answer "is this stuck".
+	got := render(st)
+	if !strings.Contains(got, "1m13s") {
+		t.Error("a waiting column does not say how long it has been waiting")
+	}
+	golden(t, "waiting-clock", got)
+}
+
+// TestFinishedColumnKeepsItsTime: the asymmetry between a streaming vendor and
+// a final-only one is only legible if the finished column still says what it
+// cost in wall time.
+func TestFinishedColumnKeepsItsTime(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	st.Columns[0].Phase = PhaseDone
+	st.Columns[0].Body = "OK"
+	st.Columns[0].Elapsed = 4 * time.Second
+	st.Columns[1].Phase = PhaseDone
+	st.Columns[1].Body = "OK"
+	st.Columns[1].Elapsed = 96 * time.Second
+
+	got := render(st)
+	if !strings.Contains(got, "4s") {
+		t.Error("the fast column lost its timing")
+	}
+	if !strings.Contains(got, "1m36s") {
+		t.Error("the slow column lost its timing, or does not render minutes")
+	}
+}
+
+// TestIdleColumnsHaveNoClock: a column that never ran has no duration, and
+// rendering "0s" would be a measurement it never made.
+func TestIdleColumnsHaveNoClock(t *testing.T) {
+	if got := render(room()); strings.Contains(got, "0s") {
+		t.Error("an idle column rendered a duration it never measured")
+	}
+}
+
+// TestElapsedIsPureOverState guards the contract the goldens rest on: the
+// duration comes from State.Now, never from the clock, so two renders of one
+// State are identical no matter how much time passes between them.
+func TestElapsedIsPureOverState(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	st.Now = time.Date(2026, 8, 4, 12, 1, 0, 0, time.UTC)
+	st.Columns[0].Phase = PhaseStreaming
+	st.Columns[0].Started = st.Now.Add(-30 * time.Second)
+
+	first := render(st)
+	time.Sleep(15 * time.Millisecond)
+	if render(st) != first {
+		t.Fatal("Render read a clock; the elapsed counter must come from State.Now")
+	}
+	if !strings.Contains(first, "30s") {
+		t.Errorf("elapsed not derived from State.Now")
 	}
 }

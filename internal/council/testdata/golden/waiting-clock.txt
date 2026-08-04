@@ -1,11 +1,11 @@
- council ~/code/telltale                                                                           turn 2  │  3/3 seated
+ council ~/code/telltale                                                                           turn 1  │  3/3 seated
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸Claude Code              ⠋ streaming  │  Codex                           done │  Antigravity               ⠋ waiting  
+ ▸Claude Code                      idle │  Codex                           idle │  Antigravity          ⠋ waiting 1m13s 
  ro:tools  tokens                       │ ro:requested  final only              │ unsandboxed  final only               
  ────────────────────────────────────── │ ───────────────────────────────────── │ ───────────────────────────────────── 
- Looking at the resume path now.        │ An older answer from turn 1.          │ working. this vendor reports no       
+ no turn dispatched yet.                │ no turn dispatched yet.               │ working. this vendor reports no       
                                         │                                       │ incremental output, so nothing        
-                                        │ ⚠ not addressed in turn 2             │ appears until the turn finishes.      
+                                        │                                       │ appears until the turn finishes.      
                                         │                                       │                                       
                                         │                                       │                                       
                                         │                                       │                                       

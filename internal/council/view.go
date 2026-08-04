@@ -3,6 +3,7 @@ package council
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 )
@@ -249,9 +250,20 @@ func columnHeader(st State, c Column, focused bool, w int, sty Styles, g Glyphs)
 	if c.Avail != AvailInstalled {
 		status = "unavailable"
 	} else if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
+		// The clock is the answer to "why is this one taking so long".
+		// Without it a final-only vendor is a blank column and a spinner,
+		// which reads as broken rather than slow — and two of the three
+		// vendors here are final-only, so that ambiguity is the common case
+		// rather than an edge one.
+		status = status + " " + elapsed(st, c)
 		if len(g.Spinner) > 0 {
 			status = g.Spinner[st.Spinner%len(g.Spinner)] + " " + status
 		}
+	} else if c.Elapsed > 0 {
+		// Kept after the turn ends. A finished column should still be able to
+		// say how long it made you wait, which is the only way the asymmetry
+		// between a streaming vendor and a final-only one is ever legible.
+		status = status + " " + dur(c.Elapsed)
 	}
 
 	left := sty.Identity.Render(padRight(name, maxInt(1, w-lipgloss.Width(status)-1), g))
@@ -267,6 +279,32 @@ func columnHeader(st State, c Column, focused bool, w int, sty Styles, g Glyphs)
 		return truncate(head, w, g.Ellipsis)
 	}
 	return head
+}
+
+// elapsed is how long the current turn has been running, from State.Now rather
+// than the clock, so Render stays pure.
+func elapsed(st State, c Column) string {
+	if c.Started.IsZero() || st.Now.IsZero() {
+		return ""
+	}
+	d := st.Now.Sub(c.Started)
+	if d < 0 {
+		return ""
+	}
+	return dur(d)
+}
+
+// dur renders a duration at one-second resolution.
+//
+// Seconds, not milliseconds: this measures how long a language model took to
+// think, where a hundred milliseconds is noise and pretending otherwise would
+// be precision the number does not carry.
+func dur(d time.Duration) string {
+	s := int(d.Seconds())
+	if s < 60 {
+		return strconv.Itoa(s) + "s"
+	}
+	return strconv.Itoa(s/60) + "m" + strconv.Itoa(s%60) + "s"
 }
 
 // columnText is a column's body: its output, or the card explaining why there

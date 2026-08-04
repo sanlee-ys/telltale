@@ -14,6 +14,8 @@
 package council
 
 import (
+	"time"
+
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -151,6 +153,13 @@ type Column struct {
 	// explanation on an unavailable column.
 	Note string
 
+	// Started is when this column's current turn was dispatched. Zero when it
+	// has never run.
+	Started time.Time
+	// Elapsed is how long the LAST completed turn took, kept after the turn
+	// ends so a finished column can still say how long it made you wait.
+	Elapsed time.Duration
+
 	// Scroll is the first visible body line. Only consulted when Follow is
 	// false — a column that is tailing derives its offset from the content, so
 	// the two can never disagree about where the bottom is.
@@ -175,6 +184,11 @@ type Column struct {
 // an environment lookup — those live on Model, which Render never sees.
 type State struct {
 	Width, Height int
+
+	// Now is stamped when a tick arrives, never read from the clock inside
+	// Render. That is what keeps the renderer pure and its goldens
+	// reproducible — the same discipline internal/hud uses for ages.
+	Now time.Time
 
 	// Workspace is the directory turns are dispatched against, already resolved
 	// to an absolute path.
