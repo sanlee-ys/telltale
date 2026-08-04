@@ -31,8 +31,25 @@ func (g *windowsGroup) prepare(cmd *exec.Cmd) {
 	// CREATE_NEW_PROCESS_GROUP stops a console Ctrl+C from reaching the child
 	// on its own. Cancellation goes through the job object instead, so that one
 	// path handles both the keystroke and a context deadline.
+	//
+	// CREATE_NO_WINDOW is why the room does not flash a console at you. Without
+	// it, dispatching to Codex pops a visible cmd.exe window for as long as the
+	// turn runs: `codex` resolves to an npm .cmd shim, so the process we start
+	// IS a console application, and Windows gives a console application a
+	// console unless told otherwise. Bubble Tea is holding the alternate screen
+	// at that moment, so the flash lands on top of the room.
+	//
+	// HideWindow is set alongside it rather than instead of it. They act on
+	// different mechanisms — HideWindow fills in STARTUPINFO's wShowWindow,
+	// CREATE_NO_WINDOW suppresses console allocation outright — and a shim that
+	// chains through another launcher can slip past either one alone.
+	//
+	// Nothing is lost by hiding it: the child's stdout and stderr are pipes this
+	// process already reads, so the console window never carried information the
+	// room does not have.
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NEW_PROCESS_GROUP,
+		CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_NO_WINDOW,
+		HideWindow:    true,
 	}
 }
 
