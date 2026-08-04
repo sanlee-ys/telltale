@@ -190,6 +190,17 @@ type State struct {
 	Mode  InputMode
 	Draft string
 
+	// Quote arms cross-agent rebuttal for the NEXT dispatch: each vendor
+	// receives the others' previous answers as fenced, labelled material.
+	//
+	// Per-turn and off by default, deliberately. It is the one control here
+	// that puts one model's output into another model's input, which is a
+	// prompt-injection path; the blast radius of a hostile reply should cost a
+	// keystroke rather than be inherited from a mode set once and forgotten.
+	// Turn 1 is always blind regardless (ADR-008 §4) — independent opinions are
+	// the reason the room exists.
+	Quote bool
+
 	// Route is who the CURRENT draft is addressed to, re-derived on every
 	// keystroke. Nil means everyone seated.
 	//

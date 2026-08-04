@@ -174,6 +174,11 @@ func (m *Model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// safety property — nothing has been dispatched.
 		m.st.Mode = ModeViewing
 		m.st.Notice = ""
+	case "ctrl+r":
+		// Arms rebuttal for the next dispatch. Available in compose mode
+		// because that is where the decision is made, and it needs a modifier
+		// because every unmodified key here is text.
+		m.toggleQuote()
 	case "enter":
 		return m, m.dispatch()
 	case "backspace":
@@ -229,6 +234,8 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.focusBy(1)
 	case "shift+tab", "left", "h":
 		m.focusBy(-1)
+	case "ctrl+r", "r":
+		m.toggleQuote()
 	case "f":
 		// One column at full width. Three columns are for comparing at a
 		// glance; one is for actually reading a long reply.
@@ -247,6 +254,24 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.followFocused()
 	}
 	return m, nil
+}
+
+// toggleQuote arms or disarms cross-agent rebuttal, and says which.
+//
+// The notice is not decoration: this is the one toggle that changes what the
+// vendors SEE rather than how the room looks, so flipping it silently would
+// mean a user could arm it by mistake and never learn that three agents read
+// each other.
+func (m *Model) toggleQuote() {
+	m.st.Quote = !m.st.Quote
+	switch {
+	case !m.st.Quote:
+		m.st.Notice = "rebuttal off — each vendor sees only its own thread"
+	case m.st.Turn == 0:
+		m.st.Notice = "rebuttal armed — but turn 1 is always blind, so it starts from turn 2"
+	default:
+		m.st.Notice = "rebuttal armed — each vendor will see the others' last answers, quoted"
+	}
 }
 
 // scrollBy moves the focused column's view and takes it off the tail.
