@@ -12,6 +12,13 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
+// key builds a keypress the way a terminal delivers one.
+//
+// Text is the load-bearing field and not a convenience: compose mode decides
+// what is a letter and what is a command by asking whether the key carries any
+// text at all, so a navigation key constructed with Text set would test a
+// keyboard nobody has. Every entry below leaves Text empty, matching what the
+// decoder actually produces for these codes.
 func key(s string) tea.KeyPressMsg {
 	switch s {
 	case "enter":
@@ -20,6 +27,18 @@ func key(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyBackspace}
 	case "ctrl+j":
 		return tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl}
+	case "up":
+		return tea.KeyPressMsg{Code: tea.KeyUp}
+	case "down":
+		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "pgup":
+		return tea.KeyPressMsg{Code: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyPressMsg{Code: tea.KeyPgDown}
+	case "tab":
+		return tea.KeyPressMsg{Code: tea.KeyTab}
+	case "shift+tab":
+		return tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
 	default:
 		r := []rune(s)[0]
 		return tea.KeyPressMsg{Code: r, Text: s}
@@ -272,6 +291,98 @@ func TestScrollbackSpansTheWholeTranscript(t *testing.T) {
 	if !strings.Contains(render(st), "Fifty turns is cheap") {
 		t.Error("a following column is not showing the newest turn")
 	}
+}
+
+// TestScrollKeysWorkInComposeMode is the reported bug, and the report was that
+// there is "no way to scroll up or down if the output that each agent provides
+// is long".
+//
+// Everything needed to scroll was already here — per-column offsets, Follow,
+// MaxScroll, page keys, `g` and `G`. What was not here was any way to REACH
+// them: a finished turn puts the room in compose (turnColumnFinished), compose
+// forwarded only the keys it recognised, and every arrow fell through to a text
+// branch that had no text to add. So the keys went dead at the exact moment four
+// long answers landed, which is the only moment anyone wants them.
+func TestScrollKeysWorkInComposeMode(t *testing.T) {
+	base := talking()
+	base.Mode = ModeComposing
+	// A reply far taller than the column, which is the case in the report: the
+	// user asked four agents for their thoughts on the whole project.
+	base.Columns[0].Body = longBody(60)
+	if MaxScroll(base, 0) < 4 {
+		t.Fatalf("fixture is not scrollable enough to test: MaxScroll = %d", MaxScroll(base, 0))
+	}
+
+	m := &Model{st: base, glyphs: GlyphsFor(false)}
+	m.st.Columns[0].Follow = true
+
+	// Up leaves the tail, which is the whole affordance: a user reading back
+	// through four long answers must not be yanked to the bottom.
+	m.composeKey(key("up"))
+	if m.st.Columns[0].Follow {
+		t.Error("up in compose mode did not take the column off the tail")
+	}
+	first := m.st.Columns[0].Scroll
+	m.composeKey(key("pgup"))
+	if m.st.Columns[0].Scroll >= first {
+		t.Errorf("pgup in compose mode moved to %d, want above %d",
+			m.st.Columns[0].Scroll, first)
+	}
+	m.composeKey(key("down"))
+	if m.st.Columns[0].Scroll <= 0 && first > 1 {
+		t.Error("down in compose mode did not move back toward the tail")
+	}
+
+	// tab has to come with them. The scroll keys address the FOCUSED column, so
+	// a mode that can scroll but cannot change which column it scrolls can only
+	// read whichever seat happened to be focused when the turn ended.
+	before := m.st.Focus
+	m.composeKey(key("tab"))
+	if m.st.Focus == before {
+		t.Error("tab in compose mode did not move focus")
+	}
+	m.composeKey(key("shift+tab"))
+	if m.st.Focus != before {
+		t.Errorf("shift+tab in compose mode left focus at %d, want %d", m.st.Focus, before)
+	}
+
+	// And none of them may have become text. This is the other half of the
+	// contract: `q` is still the letter q in here, and a navigation key that
+	// leaked a character into the draft would be a worse bug than the one fixed.
+	if m.st.Draft != "" {
+		t.Errorf("Draft = %q, want the navigation keys to add nothing", m.st.Draft)
+	}
+
+	// The letters are untouched: j and k scroll in view mode and are text here.
+	m.composeKey(key("j"))
+	m.composeKey(key("k"))
+	if m.st.Draft != "jk" {
+		t.Errorf("Draft = %q, want the letters j and k typed as text", m.st.Draft)
+	}
+}
+
+// TestTheComposeModeLineNamesTheScrollKeys. A key that works and is not
+// announced is a key nobody has: the mode line is this room's standing promise
+// about what every key means right now (design.md §7.8), and it is the line on
+// screen at the moment a turn finishes.
+func TestTheComposeModeLineNamesTheScrollKeys(t *testing.T) {
+	st := room()
+	st.Mode = ModeComposing
+	if got := render(st); !strings.Contains(got, "↑↓ scroll") {
+		t.Errorf("the compose mode line does not name the scroll keys:\n%s", got)
+	}
+
+	// And it must not name `f`, which is the letter f in this mode. An honest
+	// mode line is the only reason `q` meaning two different things is tolerable.
+	line := lastLine(render(st))
+	if strings.Contains(line, "f expand") {
+		t.Errorf("the compose mode line advertises a view-mode key: %q", line)
+	}
+}
+
+func lastLine(s string) string {
+	lines := strings.Split(s, "\n")
+	return lines[len(lines)-1]
 }
 
 // TestTheTranscriptDoesNotDescribeAPastTurnInThePresentTense. "working…" and

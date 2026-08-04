@@ -191,7 +191,14 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		// cells go to the leftmost drawn column, and a collapsed seat has no
 		// position to give them to.
 		w := lay.ColWidth + lay.extraFor(j)
-		cells[j] = columnCell(st, st.Columns[idx], idx == st.Focus, w, lay.Body, sty, g)
+		focused := idx == st.Focus
+		// The key hint rides only on the column the keys actually address.
+		// Repeating it on all four would be three false claims.
+		var hint []string
+		if focused {
+			hint = scrollHint(st, g)
+		}
+		cells[j] = columnCell(st, st.Columns[idx], focused, hint, w, lay.Body, sty, g)
 	}
 
 	sep := " " + sty.Rule().Render(g.Sep) + " "
@@ -217,7 +224,12 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 // Returning a fixed rectangle is what keeps the side-by-side join honest: a
 // short column pads rather than collapsing, so a vendor that has said nothing
 // yet occupies its seat instead of letting its neighbours slide left.
-func columnCell(st State, c Column, focused bool, w, h int, sty Styles, g Glyphs) []string {
+// hint is the key names appended to this column's overflow marker, empty on a
+// column the scroll keys do not address. Passed in rather than derived from
+// `focused`, because the two are not the same question: the tabbed and expanded
+// tiers draw the addressed column with no focus marker on it, since the tab bar
+// above already carries one.
+func columnCell(st State, c Column, focused bool, hint []string, w, h int, sty Styles, g Glyphs) []string {
 	lines := make([]string, 0, h)
 
 	lines = append(lines, fit(columnHeader(st, c, focused, w, sty, g), w))
@@ -261,10 +273,17 @@ func columnCell(st State, c Column, focused bool, w, h int, sty Styles, g Glyphs
 		switch {
 		case i == 0 && above > 0:
 			lines = append(lines, sty.Muted.Render(padRight(
-				g.Up+" "+strconv.Itoa(above)+" more above", w, g)))
+				overflowMarker(g.Up, above, "above", hint, w, g), w, g)))
 		case i == len(win)-1 && below > 0:
+			// The hint is named once per column. On a column with content hidden
+			// both ways it has already been said above, and saying it twice in
+			// one cell is the kind of noise that makes the count harder to find.
+			h := hint
+			if above > 0 {
+				h = nil
+			}
 			lines = append(lines, sty.Muted.Render(padRight(
-				g.Down+" "+strconv.Itoa(below)+" more below", w, g)))
+				overflowMarker(g.Down, below, "below", h, w, g), w, g)))
 		default:
 			// fit, not padRight, and this is the ANSI trap §9.5 records rather
 			// than a stylistic choice. Body lines can now carry style — the
@@ -282,6 +301,52 @@ func columnCell(st State, c Column, focused bool, w, h int, sty Styles, g Glyphs
 		lines = append(lines, blank)
 	}
 	return lines[:h]
+}
+
+// overflowMarker is the "there is more" line, plus the keys that would reach it.
+//
+// The count alone was a marker that told a reader something was hidden and
+// nothing at all about how to see it — which is how a room with working
+// scrollback, page keys, `g`, `G` and a full-width expand got reported as
+// having "no way to scroll". The keys are named where the eye already is,
+// rather than only in a footer that is scanned once and then ignored.
+//
+// The hints arrive longest-first and the widest one that fits is used, because
+// a three-seat room at 120 columns gives each column 37 cells and the full hint
+// wants 42 — an all-or-nothing test would have dropped the whole thing in
+// exactly the room this was written for. The count itself is never traded away:
+// how much is hidden outranks how to reach it, the same order turnRule keeps.
+func overflowMarker(mark string, n int, where string, hints []string, w int, g Glyphs) string {
+	s := mark + " " + strconv.Itoa(n) + " more " + where
+	sep := "  " + g.Sep + "  "
+	for _, h := range hints {
+		if lipgloss.Width(s)+lipgloss.Width(sep)+lipgloss.Width(h) <= w {
+			return s + sep + h
+		}
+	}
+	return s
+}
+
+// scrollHint is the keys that move the focused column, as the CURRENT mode has
+// them, widest first.
+//
+// Mode-aware because `f` is the letter f while composing, and a marker that
+// advertised it there would be the room telling the user a key does something
+// it does not — the precise failure the always-on mode line exists to prevent
+// (design.md §7.8). The arrows are unqualified because they now mean the same
+// thing in both modes, which is the change this whole branch is about.
+//
+// `f` is the part that gets dropped on a narrow column, and that is the right
+// way round twice over: the arrows are what the user was reaching for, and `f`
+// is already named in the view mode line at every width. Compose has one form
+// only, which is also the short one — so the mode that needed this most is the
+// mode where it always fits.
+func scrollHint(st State, g Glyphs) []string {
+	base := g.Up + g.Down + " scroll"
+	if st.Mode == ModeComposing {
+		return []string{base}
+	}
+	return []string{base + "  " + g.Sep + "  f expand", base}
 }
 
 // scrollWindow picks the visible slice of a column's body.
@@ -876,8 +941,10 @@ func tabBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		}
 	}
 	// focused=false: the tab bar directly above already carries the marker, and
-	// a second one on the only visible column is noise.
-	cell := columnCell(st, st.Columns[idx], false, lay.ColWidth, lay.Body, sty, g)
+	// a second one on the only visible column is noise. The scroll hint is NOT
+	// suppressed with it — this is the column the keys address, and this tier is
+	// where `f` puts a user who came here specifically to read a long reply.
+	cell := columnCell(st, st.Columns[idx], false, scrollHint(st, g), lay.ColWidth, lay.Body, sty, g)
 	var b strings.Builder
 	for i, l := range cell {
 		b.WriteString(" " + l + " ")
@@ -1044,8 +1111,18 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 		// adds a line and a key that spends four quotas sit next to each other on
 		// the keyboard, and a composer you can write a paragraph in is useless if
 		// nobody can find out how.
+		//
+		// Scrolling is named third, ahead of ^j and ^r, and the position is the
+		// fix rather than decoration on it. A finished turn drops the room into
+		// this mode, so this is the line on screen at the moment four long
+		// answers land — the one moment the user is certain to want to scroll,
+		// and the mode where the keys used to do nothing. It goes after the
+		// routing and after enter because those two decide what is SENT, and it
+		// is stated as bare arrows because that is the subset compose has: `f`,
+		// `g`, `G`, `j` and `k` are letters here.
 		right = "→ " + routeLabel(st) + quoteTag(st) + "  " + g.Sep +
-			"  enter dispatch  " + g.Sep + "  ^j newline  " + g.Sep + "  ^r rebut"
+			"  enter dispatch  " + g.Sep + "  " + g.Up + g.Down + " scroll  " +
+			g.Sep + "  ^j newline  " + g.Sep + "  ^r rebut"
 	default:
 		left = "VIEW"
 		scroll := g.Up + g.Down + " scroll  " + g.Sep + "  f expand  " + g.Sep + "  "
@@ -1120,35 +1197,54 @@ func routeLabel(st State) string {
 // reason the HUD's overlay does: a panel that covers live output hides the
 // thing the user is watching.
 func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
+	// The budget is HARD, and it is 17 rows rather than the 19 this panel used
+	// to spend. Body at a 24-row terminal is 19 with nothing else on screen, but
+	// the collapsed-seat notice costs a row and the narrow tier's tab bar costs
+	// another — and a machine with a seat that will not run is the ordinary
+	// machine, not the edge case. At 19 entries the `?` line, the only
+	// documented way back out of this panel, fell off the bottom in exactly that
+	// room. Anything added here has to be merged into a line that is already
+	// present; two were, to buy the two rows back.
 	lines := []string{
 		sty.Identity.Render("council") + sty.Muted.Render(" — one brief, several agents, side by side"),
 		"",
-		"  i / enter    compose a brief",
-		"  enter        dispatch — to claude, or to whoever is @mentioned",
+		// Merged with the `enter` line it used to sit above. The two described one
+		// key in two rows, which is the cheapest row in the panel to buy back.
+		"  i / enter    compose a brief; enter dispatches — to claude, or whoever is @mentioned",
 		"  ctrl+j       newline in the brief — the compose area grows to six rows",
-		"  @codex       address a lane: @claude, @codex, @agy, @cursor, @all",
-		"               unaddressed goes to claude alone; the others are review,",
-		"               IDE and tiebreak lanes. Leading mentions only: \"ask @claude\" is prose",
+		// Down from three rows to two. What went is "the others are review, IDE
+		// and tiebreak lanes" — which explains why the fleet is shaped this way
+		// rather than what a key does, and it is in the README and ADR-010 where
+		// that argument belongs.
+		"  @codex       address a lane: @claude, @codex, @agy, @cursor, @all — unaddressed",
+		"               goes to claude alone. Leading mentions only: \"ask @claude\" is prose",
 		// One line, like pgup/pgdn below and for the same reason: the panel has
 		// to fit a 24-row terminal with q and ? still on screen.
 		"  /cd <dir>    move the room to another repo — seats follow on their next turn",
 		"  y / n        approve or deny a tool call a vendor is blocked on (--write)",
 		"  esc          leave compose (the draft is kept)",
-		"  tab          move focus between columns",
-		"  ↑ ↓ / j k    scroll the focused column's whole transcript",
-		// Two keys on one line, because this panel has to fit a 24-row terminal
-		// and the line it was competing with is "? this help" — which toggles,
-		// and is therefore the only documented way back out of here.
-		"  pgup/pgdn    scroll by a screenful (space = pgdn); g / G first turn or newest",
-		"  f            expand the focused column to the full width",
+		// The "in compose too" clauses are the whole of this change on this
+		// panel. These keys always worked; what no one could find out is that
+		// they now work in the mode a finished turn drops you into — which is
+		// the mode you are in when there is finally something long to read.
+		"  tab          move focus between columns — in compose too",
+		"  ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too",
+		"  pgup/pgdn    scroll by a screenful, in compose too (space = pgdn in view mode);",
+		"               g / G jump to the first turn or the newest",
+		"  f            expand the focused column to the full width (in compose, f is text)",
 		"  ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted",
-		"  ctrl+c       cancel the turn in flight, or quit when idle",
-		"  q            quit (in view mode only — in compose it is the letter q)",
+		// Two keys on one line, because this panel has to fit a 24-row terminal
+		// and the line they were competing with is "? this help" — which toggles,
+		// and is therefore the only documented way back out of here.
+		"  ctrl+c / q   ctrl+c cancels the turn, or quits when idle; q quits (in compose it is text)",
 		"  ?            this help",
 		"",
-		"  a seat that is not installed folds out of the grid and is named in one",
-		"  line under the header. --vendor all keeps every seat on screen;",
-		"  --vendor claude,codex seats exactly those.",
+		// One complete sentence per line, because the two rows freed above land
+		// exactly here at a 24-row terminal: a paragraph that wrapped would show
+		// its first half and cut mid-clause, which reads as the panel being
+		// broken rather than as it having more to say further down.
+		"  a seat that cannot be driven folds out of the grid, named in one line above.",
+		"  --vendor all keeps every seat on screen; --vendor claude,codex seats those.",
 		"",
 		// Below the fold at the minimum height, and left in for the same reason
 		// the help lists keys it expects you to already know: at a normal

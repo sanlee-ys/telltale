@@ -227,6 +227,65 @@ func TestHelp(t *testing.T) {
 	golden(t, "help", render(st))
 }
 
+// TestHelpFitsTheSmallestRoom is the panel's hard budget, asserted rather than
+// counted by hand.
+//
+// The `?` line is the only documented way back OUT of this panel and `q` is the
+// only way out of the room, so both have to survive the shortest terminal the
+// room will draw in at all. That is not the 120x24 the golden renders: the
+// collapsed-seat notice costs a row and the narrow tier's tab bar costs another,
+// and a machine with a seat that will not run is the ordinary machine here —
+// Cursor, permanently, on the reference box. Every geometry below was a real
+// room in which the last two lines of the help had silently fallen off the
+// bottom, which is how a panel that promises to list the keys ends up hiding
+// the two that matter most.
+func TestHelpFitsTheSmallestRoom(t *testing.T) {
+	// A fourth seat that is not installed: it collapses out of the grid, which
+	// is what puts the notice row on screen. This is the reference machine's
+	// actual room.
+	withDeadSeat := func() State {
+		st := room()
+		st.Columns = append(st.Columns, Column{
+			Vendor: model.VendorCursor, Label: "Cursor",
+			Avail: AvailNotInstalled, Note: "not found on PATH",
+		})
+		return st
+	}
+
+	for _, tc := range []struct {
+		name       string
+		st         func() State
+		w          int
+		wantNotice bool
+		wantTabs   bool
+	}{
+		{name: "wide", st: room, w: 120},
+		{name: "wide+notice", st: withDeadSeat, w: 120, wantNotice: true},
+		{name: "tabs+notice", st: withDeadSeat, w: 80, wantNotice: true, wantTabs: true},
+	} {
+		st := tc.st()
+		st.Help = true
+		st.Width, st.Height = tc.w, MinHeight+14 // 24 rows
+		// Assert the fixture really produces the geometry it is named for, so a
+		// future change that stops collapsing seats cannot turn this into three
+		// copies of the easy case.
+		if got := collapsedNotice(st, GlyphsFor(false)) != ""; got != tc.wantNotice {
+			t.Fatalf("%s: notice row %v, want %v", tc.name, got, tc.wantNotice)
+		}
+		if got := layoutFor(st, GlyphsFor(false)).Tabs; got != tc.wantTabs {
+			t.Fatalf("%s: tab bar %v, want %v", tc.name, got, tc.wantTabs)
+		}
+
+		got := render(st)
+		for _, want := range []string{"ctrl+c / q", "?            this help"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("%s (%dx%d): the help panel dropped %q\n%s",
+					tc.name, st.Width, st.Height, want, got)
+			}
+		}
+	}
+}
+
 func TestASCII(t *testing.T) {
 	st := room()
 	st.ASCII = true
@@ -503,6 +562,53 @@ func TestOverflowAnnouncesItself(t *testing.T) {
 		t.Error("a mid-scroll column does not announce both directions")
 	}
 	golden(t, "scroll-middle", mid)
+}
+
+// TestTheOverflowMarkerNamesItsKeys. The count said content was hidden and
+// nothing about how to reach it, which is how a room with scrollback, page keys
+// and a full-width expand got reported as having no way to scroll.
+func TestTheOverflowMarkerNamesItsKeys(t *testing.T) {
+	st := room()
+	st.Turn = 1
+	st.Columns[0].Phase = PhaseDone
+	st.Columns[0].Body = longBody(60)
+	st.Columns[0].Follow = false
+	st.Columns[0].Scroll = 20
+	st.Columns[1].Phase = PhaseDone
+	st.Columns[1].Body = longBody(60)
+	st.Columns[1].Follow = false
+	st.Columns[1].Scroll = 20
+
+	got := render(st)
+	// Exactly once, and matched joined to the count so the mode line's own copy
+	// of the same keys is not what satisfies this. The keys address the focused
+	// column, so a hint on the seat beside it would be a claim about a column
+	// those keys do not move — and twice within one column (above AND below) is
+	// noise on top of the number the marker exists to carry.
+	if n := strings.Count(got, "more above  │  ↑↓ scroll"); n != 1 {
+		t.Errorf("the hinted marker appears %d times, want once — on the focused column's first marker\n%s", n, got)
+	}
+	if strings.Contains(got, "more below  │  ↑↓ scroll") {
+		t.Errorf("the hint is repeated on the same column's second marker\n%s", got)
+	}
+	// The count is never traded for the hint.
+	if !strings.Contains(got, "more above") || !strings.Contains(got, "more below") {
+		t.Error("the hint displaced the overflow count")
+	}
+
+	// In compose mode the hint drops `f`, which is the letter f there.
+	st.Mode = ModeComposing
+	if strings.Contains(render(st), "f expand") {
+		t.Error("the overflow marker advertises f while composing, where f is text")
+	}
+
+	// A column too narrow for both keeps the count and drops the hint entirely.
+	narrow := st
+	narrow.Mode = ModeViewing
+	narrow.Width = 96
+	if n := strings.Count(render(narrow), "more above"); n == 0 {
+		t.Error("the narrow room lost its overflow count")
+	}
 }
 
 // TestFollowShowsTheTail: a streaming column pins to the newest output, so the

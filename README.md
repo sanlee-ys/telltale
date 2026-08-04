@@ -228,14 +228,29 @@ it" stays prose.
 Turn 1 is blind. Later turns ride each vendor's own native session resume rather than
 re-sending the transcript, which keeps that guarantee structural: each session holds only
 its own history. `ctrl+r` arms a rebuttal turn — off by default — in which each vendor
-sees the others' last answers, fenced and labelled as untrusted material. `↑`/`↓` scroll
-the focused column, `f` expands it to the full width, `?` lists the keys.
+sees the others' last answers, fenced and labelled as untrusted material.
+
+**Reading is a first-class mode.** `↑`/`↓` scroll the focused column, `pgup`/`pgdn` move by
+a screenful, `g` and `G` reach the first turn or the newest, `tab` moves between columns,
+and `f` expands one column to the full width — which is what you want when an answer is
+long rather than when four of them are being compared. All of that works **while
+composing** as well as in view mode, which is the point: a finished turn drops the room
+back into compose, so the mode you are in when four long answers land is the mode you need
+to read in. Keys that can be text stay text there — `j`, `k`, `g`, `G` and `q` are letters
+in the composer — and the mode line says which set is live on every frame. `?` lists all of
+them.
+
+Mouse wheel scrolling is deliberately absent, and the measurement is written down
+(`docs/design.md` §9.10): the terminal protocol has no wheel-only mode, so enabling the
+wheel means claiming the left button too — and that costs native click-drag selection of
+the very answers this room exists to produce.
 
 **The room remembers.** Each column keeps its whole conversation, oldest turn first: a
 separator naming the turn, the brief *you* typed as that seat received it, then what it
 answered, with the time and cost that turn reported. Dispatching a new turn files the
-finished one rather than erasing it, so `↑`/`↓` and `g` scroll back through the argument
-instead of through one reply. The compose area grows with the draft — `ctrl+j` puts a
+finished one rather than erasing it, so `↑`/`↓` and `g` scroll back through the whole
+argument instead of through one reply — and the overflow marker names those keys where
+the eye already is, next to the count of what is hidden. The compose area grows with the draft — `ctrl+j` puts a
 newline in it, `enter` still dispatches — up to six rows.
 
 A seat that is not installed, or that is installed and cannot be driven, folds out of the

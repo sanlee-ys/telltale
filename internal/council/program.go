@@ -517,12 +517,64 @@ func (m *Model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.st.Notice = ""
 	default:
+		// A key that carries NO text is not text, so it keeps the meaning it has
+		// in view mode. The test is msg.Text rather than a hand-kept list of
+		// exceptions, which is the whole point: compose mode swallows keys
+		// because they are letters, and a key that cannot be a letter was only
+		// ever being swallowed by accident.
+		//
+		// It was a bad accident. A finished turn drops the room back into
+		// compose (turnColumnFinished), which is exactly the moment four long
+		// answers land — so every scroll key died at the instant the user most
+		// needed one, and stayed dead until they guessed at `esc`. Scrolling had
+		// existed since the first version; it was unreachable from the mode the
+		// room puts you in.
+		if msg.Text == "" && m.navKey(msg.String()) {
+			return m, nil
+		}
 		if t := msg.Text; t != "" {
 			m.setDraft(m.st.Draft + sanitizeKeepingSpace(t))
 			m.st.Notice = ""
 		}
 	}
 	return m, nil
+}
+
+// navKey handles the keys that move the VIEW rather than the draft, and reports
+// whether it consumed one.
+//
+// Shared by both modes so they cannot drift: a key routed here means the same
+// thing whichever mode is live, which is what lets the mode line keep promising
+// scrolling in compose without a second implementation to keep in step.
+//
+// Only the unambiguous keys are here. The letter aliases (`j`, `k`, `h`, `l`,
+// `g`, `G`, space) stay in viewKey, because in compose they are the letters
+// j, k, h, l, g, G and a space — the same rule that keeps `q` the letter q.
+//
+// `left`, `right`, `home` and `end` are deliberately NOT here even though they
+// are dead in compose today. They are where an in-draft cursor goes if the
+// composer ever grows one, and binding them to focus now would make that a
+// breaking change to muscle memory rather than an addition. `tab` carries focus
+// instead, and it has to carry it: scroll keys that address the focused column
+// are useless in a mode with no way to change which column that is.
+func (m *Model) navKey(name string) bool {
+	switch name {
+	case "up":
+		m.scrollBy(-1)
+	case "down":
+		m.scrollBy(1)
+	case "pgup":
+		m.scrollBy(-m.pageSize())
+	case "pgdown":
+		m.scrollBy(m.pageSize())
+	case "tab":
+		m.focusBy(1)
+	case "shift+tab":
+		m.focusBy(-1)
+	default:
+		return false
+	}
+	return true
 }
 
 // setDraft changes the brief and re-derives its routing.
@@ -537,6 +589,10 @@ func (m *Model) setDraft(s string) {
 }
 
 func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// The keys that mean the same thing in both modes, resolved from one place.
+	if m.navKey(msg.String()) {
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		// Cancels the turn in flight; quits when there is none. Two meanings
@@ -566,9 +622,9 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.st.Mode = ModeComposing
 		m.st.Help = false
 		m.st.Notice = ""
-	case "tab", "right", "l":
+	case "right", "l":
 		m.focusBy(1)
-	case "shift+tab", "left", "h":
+	case "left", "h":
 		m.focusBy(-1)
 	case "ctrl+r", "r":
 		m.toggleQuote()
@@ -576,13 +632,11 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// One column at full width. Three columns are for comparing at a
 		// glance; one is for actually reading a long reply.
 		m.st.Expanded = !m.st.Expanded
-	case "up", "k":
+	case "k":
 		m.scrollBy(-1)
-	case "down", "j":
+	case "j":
 		m.scrollBy(1)
-	case "pgup":
-		m.scrollBy(-m.pageSize())
-	case "pgdown", " ":
+	case " ":
 		m.scrollBy(m.pageSize())
 	case "home", "g":
 		m.scrollTo(0)

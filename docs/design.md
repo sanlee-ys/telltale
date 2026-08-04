@@ -2787,3 +2787,76 @@ screen even when it is absent, because a user who asked for it is owed the card 
 why it is not there. It parses the `@mention` vocabulary rather than a second one, so
 `--vendor agy` and `@agy` are the same word, and `Seated()` counts only seats that are both
 drivable and in the room so the header's `3/4 seated` keeps meaning what it says.
+
+### 9.10 A mode that could not scroll, and the mouse it did not get
+
+The room shipped with a per-column scrollback, page keys, `g`, `G`, overflow markers that
+count what is hidden, and a full-width expand — and was reported as having **"no way to
+scroll up or down if the output that each agent provides is long."** The report was
+correct about the experience and wrong about the cause, which is the interesting part:
+none of that machinery was missing, and all of it was unreachable.
+
+`turnColumnFinished` puts the room in **compose** when the last column lands, so the mode
+the user is in at the moment four long answers arrive is the mode that reads keys as text.
+`composeKey` forwarded the six keys it recognised and dropped everything else into a
+branch that appends `msg.Text` — and an arrow key carries no text, so every scroll key did
+nothing at all, silently, from the one moment they were wanted until the user guessed at
+`esc`. The keys were not absent; they were being swallowed by a rule written for letters.
+
+**The rule is now the test rather than a list.** A key that carries no text cannot *be*
+composer text, so it keeps the meaning it has in view mode: `↑`, `↓`, `pgup`, `pgdown`,
+`tab` and `shift+tab` are shared between the modes through one function, which is what
+lets the mode line promise them without a second implementation to keep in step. The
+letter aliases stay view-only, because in compose `j`, `k`, `g`, `G` and space are the
+letters j, k, g, G and a space — the same rule that keeps `q` the letter q here.
+
+`tab` had to come with the scroll keys rather than after them. They address the *focused*
+column, so a mode that can scroll and cannot change which column it scrolls can only ever
+read whichever seat happened to be focused when the turn ended.
+
+`left`, `right`, `home` and `end` are deliberately still dead in compose. They are where
+an in-draft cursor goes if the composer ever grows one, and spending them on focus now
+would make that a change to muscle memory rather than an addition.
+
+**The overflow marker names its keys, on the focused column only.** `↑ 53 more above` told
+a reader that something was hidden and nothing about how to see it. It now carries the
+keys that would move it — but only on the column those keys address, because the same
+hint on the three seats beside it would be three false claims. The hint is mode-aware:
+`f expand` is dropped while composing, where `f` is the letter f. A marker that advertised
+a key the current mode does not have is precisely the dishonesty §7.8's always-on mode
+line exists to prevent. It is also dropped, `f` first, when the cell cannot hold both —
+the count is never traded for the hint, and at a three-seat room's 37 cells the short form
+is what fits.
+
+#### Mouse wheel scrolling: rejected, with the measurement
+
+**Measured**, against the compiled `charm.land/bubbletea/v2` v2.0.8 by running a program
+per mode and reading the bytes it wrote:
+
+| `View.MouseMode` | emitted on enter |
+|---|---|
+| `MouseModeNone` | nothing |
+| `MouseModeCellMotion` | `ESC[?1002h` `ESC[?1006h` |
+| `MouseModeAllMotion` | `ESC[?1003h` `ESC[?1006h` |
+
+Those three are the whole enum. **There is no wheel-only mode**, and there is no DEC mode
+that would provide one: under 1000, 1002 and 1003 alike the wheel is reported *as buttons
+4 and 5 inside button reporting*, so a program cannot ask for the wheel without also
+claiming the left button. 1002 is button-event tracking — press, release, and motion while
+a button is held.
+
+**Inferred** from that, and from Windows Terminal's documented behaviour rather than from a
+run: while 1002 is set, a left-press and drag belongs to the application, so the terminal's
+own text selection is suppressed unless the user holds the bypass modifier (shift).
+
+That is the trade, and it is a bad one **for this room specifically**. Council exists to
+put four vendors' answers side by side so they can be read and taken away; making the
+answers harder to select with a mouse in order to make them easier to scroll with a mouse
+spends the product's output to buy a convenience for its input. The keyboard path is
+complete — it is what the rest of this section fixed — so the wheel would add no capability
+at all. §7.8 already records "deliberately absent: mouse support" for the gauges; council
+is a different surface and got the question asked again on its own terms, and the answer
+came back the same.
+
+Recorded rather than left as a gap, because "nobody tried" and "it was measured and
+refused" are different facts, and this repo does not let them render alike.

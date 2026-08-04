@@ -2,23 +2,23 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  council — one brief, several agents, side by side                                                                      
                                                                                                                         
-   i / enter    compose a brief                                                                                         
-   enter        dispatch — to claude, or to whoever is @mentioned                                                       
+   i / enter    compose a brief; enter dispatches — to claude, or whoever is @mentioned                                 
    ctrl+j       newline in the brief — the compose area grows to six rows                                               
-   @codex       address a lane: @claude, @codex, @agy, @cursor, @all                                                    
-                unaddressed goes to claude alone; the others are review,                                                
-                IDE and tiebreak lanes. Leading mentions only: "ask @claude" is prose                                   
+   @codex       address a lane: @claude, @codex, @agy, @cursor, @all — unaddressed                                      
+                goes to claude alone. Leading mentions only: "ask @claude" is prose                                     
    /cd <dir>    move the room to another repo — seats follow on their next turn                                         
    y / n        approve or deny a tool call a vendor is blocked on (--write)                                            
    esc          leave compose (the draft is kept)                                                                       
-   tab          move focus between columns                                                                              
-   ↑ ↓ / j k    scroll the focused column's whole transcript                                                            
-   pgup/pgdn    scroll by a screenful (space = pgdn); g / G first turn or newest                                        
-   f            expand the focused column to the full width                                                             
+   tab          move focus between columns — in compose too                                                             
+   ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too                                       
+   pgup/pgdn    scroll by a screenful, in compose too (space = pgdn in view mode);                                      
+                g / G jump to the first turn or the newest                                                              
+   f            expand the focused column to the full width (in compose, f is text)                                     
    ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted                                      
-   ctrl+c       cancel the turn in flight, or quit when idle                                                            
-   q            quit (in view mode only — in compose it is the letter q)                                                
+   ctrl+c / q   ctrl+c cancels the turn, or quits when idle; q quits (in compose it is text)                            
    ?            this help                                                                                               
+                                                                                                                        
+   a seat that cannot be driven folds out of the grid, named in one line above.                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 
