@@ -113,6 +113,12 @@ func (m *Model) dispatch() tea.Cmd {
 		if c.Avail != AvailInstalled {
 			continue
 		}
+		// Cleared for every column the loop reaches, BEFORE any of the paths
+		// below can skip one. A refused thread belongs to the turn that refused
+		// it, and a flag left set on a seat that is merely unaddressed — or that
+		// fails to dispatch for an unrelated reason — would suppress the next
+		// turn's genuine failure note.
+		delete(m.threadLost, c.Vendor)
 		if !route.addresses(c.Vendor) {
 			// Not in this turn. Its previous reply stays on screen, because
 			// that is still the last thing this vendor said — but the note
@@ -202,6 +208,11 @@ func (m *Model) dispatch() tea.Cmd {
 		if c := m.column(f.vendor); c != nil {
 			c.Phase = PhaseFailed
 			c.Note = f.note
+			// This column never reaches finishColumn — it never entered a live
+			// phase — so its restored thread is settled here instead. Without
+			// this, a seat that could not be dispatched at all would keep a
+			// restored id on probation forever.
+			m.settleRestoredThread(c)
 		}
 	}
 
@@ -363,6 +374,11 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				// Mid-turn death. Said as a failure rather than a clean finish,
 				// because the answer the user was waiting for is not coming and
 				// a column that simply stopped would look like one that finished.
+				//
+				// A seat on a restored thread has this note replaced by
+				// settleRestoredThread, inside finishColumn: for that seat the
+				// death IS the reattach being refused, and "the process ended"
+				// would describe the symptom rather than the cause.
 				c.Elapsed = time.Since(c.Started)
 				c.Note = "the vendor process ended mid-turn — the next brief starts a new session"
 				m.finishColumn(c, PhaseFailed)
@@ -372,10 +388,19 @@ func (m *Model) applyEvents(batch []runner.Event) {
 
 		case runner.KindError:
 			c.Body += m.flush(ev.Vendor)
-			if ev.Note != "" {
-				c.Note = ev.Note
-			} else if ev.Err != nil {
-				c.Note = ev.Err.Error()
+			// A seat already told that its saved thread was refused keeps that
+			// sentence. A dead thread produces TWO events — the vendor's own
+			// failed `result`, then the process exit carrying its stderr — and
+			// the second one arriving last would replace "here is what happens
+			// to your next brief" with a bare `exit status 1: No conversation
+			// found with session ID`. Both are true; only one of them tells the
+			// user what to do, and the raw one reads as a broken vendor.
+			if !m.threadLost[ev.Vendor] {
+				if ev.Note != "" {
+					c.Note = ev.Note
+				} else if ev.Err != nil {
+					c.Note = ev.Err.Error()
+				}
 			}
 			if m.isPersistent(ev.Vendor) {
 				if ev.EndsTurn {
@@ -431,7 +456,49 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 			c.Note = "cancelled — the output above is partial"
 		}
 	}
+	m.settleRestoredThread(c)
 	m.turnColumnFinished(c.Vendor)
+}
+
+// settleRestoredThread decides the fate of a session id that came back from a
+// saved room and has now had its first turn.
+//
+// One rule for all four seats, deliberately. A restored id fails in exactly one
+// observable way — the vendor cannot find the conversation and the turn dies —
+// and no adapter reports that as anything a caller could branch on, so the only
+// honest signal available is "the first turn on this restored id did not come
+// back". Handling that per vendor would mean four copies of the same guess.
+//
+// Ids EARNED in this process are never touched here. A transient failure in the
+// middle of a working conversation must not throw the thread away; the whole
+// point of resume is that the history survives a bad turn.
+func (m *Model) settleRestoredThread(c *Column) {
+	if !m.unproven[c.Vendor] {
+		return
+	}
+	switch c.Phase {
+	case PhaseDone:
+		// It answered, so the thread is real. From here this is an ordinary
+		// session and the probation is over.
+		delete(m.unproven, c.Vendor)
+	case PhaseCancelled:
+		// The user stopped it. Nothing was learned about the thread either way,
+		// so it stays on probation rather than being discarded for a keystroke.
+	default:
+		// The first turn on a restored id failed. Drop the id: retrying it would
+		// rebuild the same dead invocation on every subsequent turn, and the
+		// vendor would keep reporting a failure the user cannot act on.
+		delete(m.unproven, c.Vendor)
+		delete(m.sessions, c.Vendor)
+		delete(m.resumeIDs, c.Vendor)
+		c.Restored = false
+		// The vendor's own words for this are about a missing session id, which
+		// reads as a broken vendor and sends the user looking for a problem
+		// with it. What they need to know is what happens to the next brief.
+		c.Note = "the saved thread was refused — this seat's history is gone, " +
+			"and the next brief starts a new session with the brief re-applied"
+		m.threadLost[c.Vendor] = true
+	}
 }
 
 // recordAct folds one piece of tool-call news into a column's trace.
@@ -513,6 +580,52 @@ func (m *Model) turnColumnFinished(v model.VendorID) {
 	m.turn = nil
 	m.cancelling = false
 	m.st.Mode = ModeComposing
+	// The turn is over, so the ids it produced are worth keeping. Saved HERE
+	// rather than only on the way out, because the failure this exists to
+	// survive is the room not getting a clean exit — a crash, a closed terminal,
+	// a machine that went down. State written only at quit would be missing in
+	// exactly those cases.
+	m.saveRoom()
+}
+
+// saveRoom writes the keys needed to reattach this room later.
+//
+// Best effort by design: a room that cannot write its state file is still a
+// working room, and refusing to continue over it would trade the whole session
+// for a convenience. The failure is stated in the footer rather than swallowed,
+// because a user who quits believing they can reattach and then cannot has been
+// told something false by silence.
+//
+// Nothing is written before the first turn. A room with no turns has no keys to
+// save, and writing one anyway would drop a file into ~/.telltale/council for
+// every accidental launch — including one opened in the wrong directory and
+// immediately quit.
+func (m *Model) saveRoom() {
+	if m.st.Turn == 0 {
+		return
+	}
+	sessions := make(map[model.VendorID]string, len(m.sessions))
+	for v, id := range m.sessions {
+		if id != "" {
+			sessions[v] = id
+		}
+	}
+	err := SaveRoom(SavedRoom{
+		Workspace: m.st.Workspace,
+		Posture:   savedPosture(m.st.Write, m.opts.Auto),
+		Turn:      m.st.Turn,
+		Sessions:  sessions,
+		// The PATH only. Never the content — see SavedRoom and Brief.
+		BriefPath: m.brief.Path,
+		SavedAt:   time.Now(),
+	})
+	// Held as well as announced. The footer serves a room that is still running;
+	// the field serves the save on the way out, whose notice would be set on a
+	// model nobody will ever see again — Run prints that one to stderr.
+	m.saveErr = err
+	if err != nil {
+		m.st.Notice = "the room state could not be saved: " + err.Error()
+	}
 }
 
 // isPersistent reports whether this seat's turn is running on a long-lived
@@ -556,6 +669,12 @@ func (m *Model) cancelTurn() {
 // they are the reason this matters more than it did: a process that survives a
 // turn by design is exactly the process that would survive the room by accident.
 func (m *Model) teardown() {
+	// Written before anything is killed, so the last thing the room does with
+	// its state is preserve it. Redundant with the per-turn save in the common
+	// case and deliberately kept: it refreshes saved-at, which is what the
+	// reattach card ages, so "saved 2h ago" means the room was last OPEN two
+	// hours ago rather than merely last answered then.
+	m.saveRoom()
 	for v, p := range m.procs {
 		p.sess.Kill()
 		delete(m.procs, v)

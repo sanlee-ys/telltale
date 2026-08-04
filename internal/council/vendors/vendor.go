@@ -65,6 +65,16 @@ type Persistent interface {
 	// No prompt appears anywhere in it: every turn arrives later, on stdin.
 	Session(workspace, binary string, p Posture) (runner.Spec, error)
 
+	// SessionResume is Session, started on a conversation the vendor already
+	// holds. Returns ErrNoResume when there is no id to resume.
+	//
+	// It is a separate method rather than an optional argument to Session
+	// because the two are different claims. Session opens a NEW conversation and
+	// the caller owes the vendor a brief; this one continues an existing one and
+	// must not re-send it. Folding them together behind an empty-string check
+	// would put that decision in the caller's hands on every call site.
+	SessionResume(workspace, binary, sessionID string, p Posture) (runner.Spec, error)
+
 	// Turn encodes one turn as the line the process expects on its stdin.
 	Turn(prompt string) ([]byte, error)
 

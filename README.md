@@ -142,7 +142,10 @@ make no network calls, read no credentials, and no keybinding can mutate vendor 
 send anything to a running agent. `telltale council` is the deliberate exception, and it
 is labelled as one everywhere it can be: it spawns vendor CLIs, it is entered only by
 typing the subcommand, it is not reachable from the HUD, and it shares no keybinding with
-it ([decisions/008](decisions/008-council-mode-dispatch.md)).
+it ([decisions/008](decisions/008-council-mode-dispatch.md)). It is also the only mode
+that writes anything to disk — one state file per workspace under `~/.telltale/council`,
+holding the vendor session ids `--resume` needs and no transcript, output or brief
+content.
 "Reads no credentials" stopped being free with the Cursor adapter — that vendor
 keeps its access tokens, refresh tokens and OAuth secrets in the *same SQLite file* as
 its session state — so it is enforced there as a read allowlist with a test that plants
@@ -211,7 +214,7 @@ sees the others' last answers, fenced and labelled as untrusted material. `↑`/
 the focused column, `f` expands it to the full width, `?` lists the keys.
 
 `telltale council` flags: `--cd <dir>` (the workspace turns are dispatched against),
-`--brief <file>`, `--write`, `--ascii`, `--no-title`.
+`--brief <file>`, `--write`, `--resume`, `--ascii`, `--no-title`.
 
 `--brief <file>` (or `TELLTALE_COUNCIL_BRIEF`) hands one file of shared operating context
 to every vendor on its first turn. Without it, the room's default state is three vendors
@@ -229,6 +232,15 @@ grading them would imply a safety difference that does not exist.
 git worktree add ../telltale-council
 telltale.exe council --write --cd ../telltale-council
 ```
+
+`--resume` reopens the room last saved for that workspace. Each vendor is holding a
+conversation several turns deep — that is what the resume mechanism buys — and before
+this, quitting threw away the only thing that could name those sessions. The turn counter
+continues at N+1 and each seat picks up its own thread; a seat whose thread the vendor no
+longer has says the history is gone and starts fresh, briefed. **Posture is never
+restored**: a `--write` room reopens read, because a grant that can arrive from a file is
+not a flag anyone typed. `--resume` against a workspace with no saved room is a plain
+error, not a room that quietly opens fresh looking like it worked.
 
 The rest of the account — why execution is argv and never a shell, the silent invocation
 trap each vendor hid, and what is still unverified — is in
