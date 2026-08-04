@@ -22,8 +22,7 @@ live-verified against its on-disk store on Cursor 3.14.7 — the first IDE-resid
 here, and the first whose store also holds live credentials, which is why that adapter's
 most load-bearing property is the list of things it does not read
 ([docs/design.md §3.9](docs/design.md),
-[decisions/007](decisions/007-cursor-hud-adapter.md)). **`telltale council`** seats Claude
-Code, Codex and Antigravity, and every sandbox and streaming claim in it was measured
+[decisions/007](decisions/007-cursor-hud-adapter.md)). **`telltale council`** seats the 4-vendor fleet (Claude Code, Codex, Cursor, Antigravity), and every sandbox and streaming claim in it was measured
 against a live run of that CLI rather than read off its `--help`
 ([docs/design.md §9](docs/design.md), [decisions/008](decisions/008-council-mode-dispatch.md)).
 
@@ -127,7 +126,7 @@ but no Bubble Tea code runs on a statusline invocation).
 
 Honest claim, stated precisely: *cross-vendor monitoring; vendor-native statusline where
 the seam exists — and it exists twice: Claude Code and Antigravity CLI; dispatch across
-the three vendors that seat a headless CLI here.* (Codex CLI has
+the 4-vendor fleet (Claude Code, Codex, Cursor, Antigravity).* (Codex CLI has
 no statusline hook today — see [decisions/001](decisions/001-v1-scope.md). Antigravity
 was statusline-only until a re-survey found the transcript its own docs advertise, which
 is what made its HUD adapter buildable — see
@@ -154,8 +153,8 @@ HUD can display ([decisions/007](decisions/007-cursor-hud-adapter.md)).
 
 ## The dispatch room
 
-`telltale council` is one brief, typed once and answered by three vendor CLIs side by
-side — **Claude Code**, **Codex** and **Antigravity**, each in its own column, in your
+`telltale council` is one brief, typed once and answered by the 4-vendor fleet side by
+side — **Claude Code**, **Codex**, **Antigravity**, and **Cursor**, each in its own column, in your
 terminal. It exists because the alternative is four terminals and a clipboard.
 
 ```
@@ -217,7 +216,7 @@ the focused column, `f` expands it to the full width, `?` lists the keys.
 `--brief <file>`, `--write`, `--resume`, `--ascii`, `--no-title`.
 
 `--brief <file>` (or `TELLTALE_COUNCIL_BRIEF`) hands one file of shared operating context
-to every vendor on its first turn. Without it, the room's default state is three vendors
+to every vendor on its first turn. Without it, the room's default state is four vendors
 guessing separately at a convention you already wrote down. The flag takes a **path**,
 never content: telltale is public and a briefing is not, so no default location inside a
 repo is searched, and the file is never logged, never rendered and never stored by

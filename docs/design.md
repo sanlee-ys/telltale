@@ -2387,9 +2387,9 @@ is on disk rather than behind a CLI.
 ### 9.2 Two claims the room refuses to leave implicit
 
 Every column header carries its own **sandbox badge** and its own **streaming
-granularity**, because the three vendors differ on both and the first draft of ADR-008 got
+granularity**, because vendors across the 4-vendor fleet differ on both and the first draft of ADR-008 got
 this wrong in the direction that matters — it claimed "enforced read-only sandboxing" for
-all three when only one had a mechanism named.
+all seated vendors when only one had a mechanism named.
 
 | | mechanism | badge |
 |---|---|---|
@@ -2402,11 +2402,11 @@ one that renders as the opposite. Antigravity was asked to write a file under bo
 read-only flags and wrote it — file confirmed on disk, reported permission mode and tool list
 byte-identical to a run without the flags. That is refuted, not unverified, so it gets a fourth
 level badged `unsandboxed`. Deliberately not `ro:none`: every other badge opens with `ro:`, a
-reader scanning three column headers takes in the prefix before the qualifier, and a vendor that
+reader scanning column headers takes in the prefix before the qualifier, and a vendor that
 can edit your working tree must not read as read-only at a glance.
 
 `TestSandboxBadgesAreNeverBlanket` fails the build if a bare claim reappears, and asserts the
-three badges stay distinct — convergence on one string is how a per-vendor claim quietly becomes
+badges stay distinct — convergence on one string is how a per-vendor claim quietly becomes
 a blanket one again.
 
 **The Claude row cost three attempts to get right, and the failure mode is worth recording.**
@@ -2462,7 +2462,7 @@ user which env override fixes it.
 
 ### 9.4 Multi-turn is native resume, not transcript re-send
 
-Turn 1 is blind: no vendor sees another's answer, which is what makes the three opinions
+Turn 1 is blind: no vendor sees another's answer, which is what makes opinions across the 4-vendor fleet
 independent rather than anchored. Later turns ride each vendor's own session-resume
 (`claude --resume`, `codex exec resume`, `agy --conversation`). Re-sending the transcript
 would grow input quadratically against metered quotas and flatten native turn structure into

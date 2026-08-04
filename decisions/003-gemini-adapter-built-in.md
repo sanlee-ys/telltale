@@ -10,8 +10,7 @@ the *worked documentation example* (design.md §4a.7), not built. San's directio
 breath as renaming his operating-layer repo claude-ops → agent-ops, i.e. the
 multi-vendor framing is hardening across the whole system, and telltale is its
 observation instrument. The market picture backs the pick: among terminal-native agent
-CLIs that leave inspectable session artifacts on disk, Claude Code / Codex CLI /
-Gemini CLI are the three vendor-native seats, and Gemini CLI was already this repo's
+CLIs that leave inspectable session artifacts on disk, Claude Code, Codex CLI, Cursor, and Antigravity CLI form the 4-vendor fleet, and Gemini CLI was already this repo's
 own "obvious third" (it is why §4a.7 used it as the example).
 
 ## Decision
@@ -36,10 +35,10 @@ own "obvious third" (it is why §4a.7 used it as the example).
 - The §4a.7 worked example's subject is now a built-in. The sketch is kept as written,
   wrong guess included, with a postscript naming what Step 0 changed — the example is
   stronger as evidence than it was as hypothesis.
-- "Cross-vendor" in public wording now means three vendors on the disk seam;
+- "Cross-vendor" in public wording now reflects the 4-vendor fleet on the disk seam;
   the statusline remains Claude-only (the only vendor with a statusline hook).
-- The empty-state vendor table, README hero frame, and capability goldens all show
-  three vendors; doc-sync tests pin them.
+- The empty-state vendor table, README hero frame, and capability goldens all reflect the
+  4-vendor fleet; doc-sync tests pin them.
 
 ## Addendum (2026-08-02, same day, hours later)
 
