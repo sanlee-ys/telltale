@@ -247,9 +247,92 @@ func TestCodexToolActivityIsNotRenderedAsSpeech(t *testing.T) {
 		if ok && ev.Kind == runner.KindText {
 			t.Errorf("tool activity became assistant text: %s", l)
 		}
-		if ok && ev.Kind == runner.KindActivity && !strings.Contains(ev.Text, "pwsh") {
-			t.Errorf("activity dropped the command it was carrying: %+v", ev)
+		if ok && ev.Kind == runner.KindActivity {
+			if len(ev.Acts) != 1 || !strings.Contains(ev.Acts[0].Text, "pwsh") {
+				t.Errorf("activity dropped the command it was carrying: %+v", ev)
+			}
 		}
+	}
+}
+
+// TestCodexStartedIsPendingAndCompletedResolvesIt, over the same two real lines.
+//
+// The pair is the point: `item.started` opens the entry so a long command is
+// visible WHILE it runs, and `item.completed` resolves that same entry by id
+// rather than appending a second one below it. Before this, the trace showed
+// nothing until a command had already finished.
+func TestCodexStartedIsPendingAndCompletedResolvesIt(t *testing.T) {
+	started := []byte(`{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"\"C:\\\\Users\\\\sanle\\\\pwsh.exe\" -Command Get-ChildItem","aggregated_output":"","exit_code":null,"status":"in_progress"}}`)
+	completed := []byte(`{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"\"C:\\\\Users\\\\sanle\\\\pwsh.exe\" -Command Get-ChildItem","aggregated_output":"execution error","exit_code":-1,"status":"failed"}}`)
+
+	var c Codex
+	ev, ok := c.ParseEvent(started)
+	if !ok || ev.Kind != runner.KindActivity || len(ev.Acts) != 1 {
+		t.Fatalf("item.started produced (%+v, %v), want one pending activity", ev, ok)
+	}
+	if ev.Acts[0].Outcome != runner.ActPending {
+		t.Errorf("Outcome = %v; a started command has not finished", ev.Acts[0].Outcome)
+	}
+
+	ev, ok = c.ParseEvent(completed)
+	if !ok || len(ev.Acts) != 1 {
+		t.Fatalf("item.completed produced (%+v, %v)", ev, ok)
+	}
+	if ev.Acts[0].ID != "item_1" {
+		t.Errorf("ID = %q, want the id item.started opened", ev.Acts[0].ID)
+	}
+	if ev.Acts[0].Outcome != runner.ActFailed {
+		t.Errorf("Outcome = %v, want ActFailed for exit_code -1 / status failed", ev.Acts[0].Outcome)
+	}
+	if ev.Acts[0].Detail != "execution error" {
+		t.Errorf("Detail = %q, want codex's own aggregated_output", ev.Acts[0].Detail)
+	}
+}
+
+// TestCodexNullExitCodeIsNotSuccess is the single most expensive confusion
+// available on this field, pinned.
+//
+// codex spells "still running" as `"exit_code":null`. Unmarshalled into a plain
+// int that becomes 0, which is the spelling of SUCCESS — so a running command
+// would render with a tick. The field is a pointer for exactly this reason.
+func TestCodexNullExitCodeIsNotSuccess(t *testing.T) {
+	line := []byte(`{"type":"item.started","item":{"id":"item_9","type":"command_execution","command":"go build ./...","exit_code":null,"status":"in_progress"}}`)
+	ev, _ := Codex{}.ParseEvent(line)
+	if len(ev.Acts) != 1 || ev.Acts[0].Outcome == runner.ActOK {
+		t.Fatalf("a running command reported success: %+v", ev.Acts)
+	}
+}
+
+// TestCodexZeroExitIsSuccess: the other half, so the mapping is not merely
+// "never claim OK".
+func TestCodexZeroExitIsSuccess(t *testing.T) {
+	line := []byte(`{"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"go test ./...","aggregated_output":"ok","exit_code":0,"status":"completed"}}`)
+	ev, _ := Codex{}.ParseEvent(line)
+	if len(ev.Acts) != 1 || ev.Acts[0].Outcome != runner.ActOK {
+		t.Fatalf("exit 0 did not resolve to success: %+v", ev.Acts)
+	}
+	if ev.Acts[0].Detail != "" {
+		t.Errorf("Detail = %q; only a failure carries one", ev.Acts[0].Detail)
+	}
+}
+
+// TestCodexCompletionWithNoExitCodeIsUnknownNotOK is the deliberately weak
+// claim, and it is weak on purpose.
+//
+// No captured codex line has ever carried `"status":"completed"` — the observed
+// values are "in_progress" and "failed". So an item that finishes with neither
+// an exit code nor a failure status resolves UNKNOWN. Guessing the success
+// spelling from the failure one would be a success claim built on a string
+// nobody has seen, which is precisely how a read-only badge once ended up on a
+// session that could write.
+func TestCodexCompletionWithNoExitCodeIsUnknownNotOK(t *testing.T) {
+	line := []byte(`{"type":"item.completed","item":{"id":"item_4","type":"patch_apply","status":"completed"}}`)
+	ev, ok := Codex{}.ParseEvent(line)
+	if !ok || len(ev.Acts) != 1 {
+		t.Fatalf("got (%+v, %v), want one activity", ev, ok)
+	}
+	if ev.Acts[0].Outcome != runner.ActUnknown {
+		t.Errorf("Outcome = %v, want ActUnknown for a status this adapter has never observed", ev.Acts[0].Outcome)
 	}
 }
 

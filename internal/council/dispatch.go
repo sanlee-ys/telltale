@@ -264,20 +264,11 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			}
 
 		case runner.KindActivity:
-			// Redacted like everything else: a shell command is a prime place
-			// for a token to appear on a command line. Flushed immediately
-			// rather than buffered, because an activity line is already whole
-			// and holding its last word would strand it until the next tool
-			// call.
-			// Split: one assistant message can carry a parallel batch of tool
-			// calls, and the adapter joins them with newlines because
-			// ParseEvent returns a single event.
-			if act := strings.TrimSpace(m.redact(ev.Vendor, ev.Text) + m.flush(ev.Vendor)); act != "" {
-				for _, line := range strings.Split(act, "\n") {
-					if line = strings.TrimSpace(line); line != "" {
-						c.Acts = append(c.Acts, line)
-					}
-				}
+			// One event can carry a parallel batch of calls, or a batch of
+			// results, or both — the adapter decides, and the column folds each
+			// entry in by id.
+			for _, a := range ev.Acts {
+				c.recordAct(a, m.redactWhole)
 			}
 
 		case runner.KindSession:
@@ -328,6 +319,56 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			}
 		}
 	}
+}
+
+// recordAct folds one piece of tool-call news into a column's trace.
+//
+// Update-or-append, correlated by the vendor's own id rather than by arrival
+// order — which is not defensive programming. The very FIRST live Claude probe
+// came back with the second call's failure ahead of the first call's success,
+// so a trace zipped by position would have blamed the wrong command on its
+// first real run.
+//
+// A result whose id matches nothing still lands, as an entry that is already
+// resolved. That is what keeps the trace honest for a vendor that reports only
+// completions: the step shows up with its outcome rather than being dropped for
+// having missed its own announcement.
+func (c *Column) recordAct(a runner.ActCall, clean func(string) string) {
+	text := strings.TrimSpace(clean(a.Text))
+
+	if a.ID != "" {
+		for i := range c.Acts {
+			if c.Acts[i].ID != a.ID {
+				continue
+			}
+			if text != "" {
+				c.Acts[i].Text = text
+			}
+			// A second announcement never un-resolves an entry. Downgrading a
+			// known outcome back to pending would make a finished call look
+			// like a running one, which is the one direction this trace must
+			// not move.
+			if a.Outcome != runner.ActPending {
+				c.Acts[i].Status = a.Outcome
+				c.Acts[i].Detail = strings.TrimSpace(clean(a.Detail))
+			}
+			return
+		}
+	}
+
+	if text == "" {
+		// A result for a call that was never announced and that carries no
+		// text of its own. There is nothing to name it by, so there is nothing
+		// worth rendering — an entry reading only "✗" would say a nameless
+		// something failed.
+		return
+	}
+	c.Acts = append(c.Acts, Act{
+		ID:     a.ID,
+		Text:   text,
+		Status: a.Outcome,
+		Detail: strings.TrimSpace(clean(a.Detail)),
+	})
 }
 
 // turnColumnFinished retires one column from the turn and tears the turn down
@@ -394,6 +435,20 @@ func (m *Model) redact(v model.VendorID, s string) string {
 	}
 	return sanitize(r.Feed(s))
 }
+
+// redactWhole redacts a string that is already COMPLETE.
+//
+// Deliberately NOT the streaming redactor. That one holds a partial word across
+// the chunks of a token stream, and routing an activity line through it did two
+// wrong things at once: it stranded the line's own last word until the next
+// tool call, and — because the fix for that was to flush — it spliced whatever
+// prose was buffered for the BODY onto the end of a command. A tool call
+// arrives whole, so it can be redacted whole, and the body's buffer is left
+// alone.
+//
+// Redaction still applies, and matters more here than in prose: a shell command
+// is one of the likeliest places for a token to appear on screen.
+func (m *Model) redactWhole(s string) string { return sanitize(Redact(s)) }
 
 func (m *Model) flush(v model.VendorID) string {
 	r, ok := m.redactors[v]

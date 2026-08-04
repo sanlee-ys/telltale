@@ -157,6 +157,69 @@ func TestAgyToolStepsAreNotAssistantText(t *testing.T) {
 	}
 }
 
+// TestAgyDoneResolvesToUnknownNeverToSuccess is the honest-gauge rule applied
+// to the one vendor whose outcome genuinely cannot be read.
+//
+// Every captured DONE line carries duration_seconds, sometimes a tool_info with
+// the call's parameters, and NOTHING that says whether the step achieved
+// anything — no status, no exit code, no error field. agy reports success or
+// failure exactly once per turn, in the final `result` event, and that verdict
+// is about the TURN rather than about any one step.
+//
+// So a finished agy step is a step whose outcome has not been observed. If this
+// ever resolves to ActOK, the room has started inventing results on a vendor's
+// behalf, which is the single thing this product exists not to do.
+func TestAgyDoneResolvesToUnknownNeverToSuccess(t *testing.T) {
+	// Both lines are real captured output, and they are a matched pair: the
+	// same step_index is what lets DONE resolve the entry ACTIVE opened.
+	active := []byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","step_index":6,"state":"ACTIVE","step_type":"tool","tool_name":"write_to_file","tool_info":{"name":"write_to_file"}}}`)
+	done := []byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","step_index":6,"state":"DONE","step_type":"tool","tool_name":"write_to_file","duration_seconds":0.0604336,"tool_info":{"name":"write_to_file","parameters":{"TargetFile":"C:\\probe.txt"}}}}`)
+
+	var a Antigravity
+	ev, ok := a.ParseEvent(active)
+	if !ok || ev.Kind != runner.KindActivity || len(ev.Acts) != 1 {
+		t.Fatalf("ACTIVE produced (%+v, %v), want one activity", ev, ok)
+	}
+	if ev.Acts[0].Outcome != runner.ActPending {
+		t.Errorf("Outcome = %v; a step that just started has not ended", ev.Acts[0].Outcome)
+	}
+	openedAs := ev.Acts[0].ID
+
+	ev, ok = a.ParseEvent(done)
+	if !ok || len(ev.Acts) != 1 {
+		t.Fatalf("DONE produced (%+v, %v)", ev, ok)
+	}
+	if ev.Acts[0].Outcome != runner.ActUnknown {
+		t.Errorf("Outcome = %v, want ActUnknown: agy reports no per-step success signal", ev.Acts[0].Outcome)
+	}
+	if ev.Acts[0].ID != openedAs || openedAs == "" {
+		t.Errorf("DONE id %q does not match the ACTIVE id %q; the two would render as separate steps",
+			ev.Acts[0].ID, openedAs)
+	}
+	if ev.Acts[0].Detail != "" {
+		t.Errorf("Detail = %q; agy offers none, so none may be shown", ev.Acts[0].Detail)
+	}
+}
+
+// TestAgyStepZeroIsNotMistakenForAMissingIndex: the first step of a turn is
+// `user_input` at step_index 0, so a plain int could not tell a real index 0
+// from a line carrying no index at all — and every indexless step would then
+// correlate with it.
+func TestAgyStepZeroIsNotMistakenForAMissingIndex(t *testing.T) {
+	zero := []byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","step_index":0,"state":"DONE","step_type":"user_input"}}`)
+	none := []byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","state":"DONE","step_type":"checkpoint"}}`)
+
+	var a Antigravity
+	ev, _ := a.ParseEvent(zero)
+	if len(ev.Acts) != 1 || ev.Acts[0].ID != "step-0" {
+		t.Fatalf("index 0 lost its id: %+v", ev.Acts)
+	}
+	ev, _ = a.ParseEvent(none)
+	if len(ev.Acts) != 1 || ev.Acts[0].ID != "" {
+		t.Errorf("a step with no index was given the id %q; it would resolve someone else's entry", ev.Acts[0].ID)
+	}
+}
+
 // TestAgyParseResultCarriesFinalTextAndNoCost.
 //
 // The fallback text matters more for this vendor than for Claude: agy streams at
@@ -208,8 +271,13 @@ func TestAgyUnknownEventsAreIgnoredNotFatal(t *testing.T) {
 	lines := [][]byte{
 		[]byte(`{"event":"some_future_thing","payload":{"a":1}}`),
 		[]byte(`{"event":"init"}`), // no conversation id
-		[]byte(`{"event":"step_update","step_update":{"step_index":1,"state":"DONE","step_type":"unknown","duration_seconds":0.0017754}}`),
-		[]byte(`{"event":"step_update","step_update":{"state":"ACTIVE","step_type":"agent_response"}}`), // no text
+		// An agent_response step carrying no text_delta: an empty message
+		// rather than a step the vendor took.
+		[]byte(`{"event":"step_update","step_update":{"state":"ACTIVE","step_type":"agent_response"}}`),
+		// A state no captured run has produced. Dropped rather than mapped: an
+		// unrecognised state is not evidence of anything, and inventing an
+		// outcome for it is how a trace starts lying quietly.
+		[]byte(`{"event":"step_update","step_update":{"step_index":1,"state":"QUEUED","step_type":"tool"}}`),
 		[]byte(`{"type":"stream_event","event":"not-agy-shaped"}`),
 		[]byte(`not json at all`),
 		[]byte(``),

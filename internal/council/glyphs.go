@@ -23,6 +23,18 @@ type Glyphs struct {
 	Down     string // "there is more below" marker
 	Act      string // prefixes a tool call / command in the activity trace
 
+	// The three outcome marks that follow a trace entry. There is deliberately
+	// no mark for a call still pending: an unresolved entry renders bare,
+	// because a mark for "nothing is known yet" would be a claim.
+	//
+	// ActUnknown is not a degraded ActOK and must never share its glyph. "the
+	// vendor said this step ended" and "the vendor said this step worked" are
+	// different facts, and §4a.1's rule is that different facts do not render
+	// alike — the same reason a dropped column and an em dash are kept apart.
+	ActOK      string // the vendor reported the call succeeded
+	ActFail    string // the vendor reported the call failed
+	ActUnknown string // the call ended and the vendor said nothing about how
+
 	Spinner []string
 
 	// ASCII reports whether this is the reduced set.
@@ -47,6 +59,13 @@ func UnicodeGlyphs() Glyphs {
 		Up:       "↑", // ↑
 		Down:     "↓", // ↓
 		Act:      "⚙", // ⚙
+		// ✓ / ✗ / ? — the third is an ordinary question mark on purpose. It is
+		// the one character that reads as "not known" to everybody without a
+		// legend, and unlike a middle dot or an em dash it cannot be mistaken
+		// for decoration or for a missing value.
+		ActOK:      "✓", // ✓
+		ActFail:    "✗", // ✗
+		ActUnknown: "?",
 		Spinner: []string{
 			"⠋", "⠙", "⠹", "⠸", "⠼",
 			"⠴", "⠦", "⠧", "⠇", "⠏",
@@ -72,8 +91,19 @@ func ASCIIGlyphs() Glyphs {
 		// "*" for a step the vendor took. Not "#" (the HUD's ASCII gauge fill)
 		// and not ">" (the ellipsis here), because a mark that already means
 		// something else is not a mark.
-		Act:     "*",
-		Spinner: []string{"-", "\\", "|", "/"},
+		Act: "*",
+		// The outcome marks have to dodge everything already spoken for here:
+		// "*" is Act, ">" the ellipsis, "]" focus, "!" the warning prefix, "^"
+		// and "v" the overflow markers, "|" the separator, "-" the rule and the
+		// first spinner frame, "/" and "\" the others, ":" the prompt, "_" the
+		// caret, and "#" is the HUD's gauge fill. That leaves "+" and "x",
+		// which carry the tick/cross meaning in every ASCII checklist anyone
+		// has ever read, and "?" which is unclaimed and means the same thing in
+		// both sets.
+		ActOK:      "+",
+		ActFail:    "x",
+		ActUnknown: "?",
+		Spinner:    []string{"-", "\\", "|", "/"},
 	}
 }
 
