@@ -94,3 +94,57 @@ func TestRoutineDevLoopIsNotCarded(t *testing.T) {
 		}
 	}
 }
+
+// TestPipelinesOfRoutineCommandsAreNotCarded.
+//
+// The widened list still carded, because the guard refused the PUNCTUATION
+// rather than the command: `go build ./... && echo OK` and `grep -rn x internal
+// | head` are reads in every stage, and both raised a card. That is the same
+// failure as carding `go test` — a gate firing on the shape of the line instead
+// of what it does.
+//
+// The safety argument is not that pipes are harmless. It is that every segment
+// must independently classify, and nothing in the routine set writes.
+func TestPipelinesOfRoutineCommandsAreNotCarded(t *testing.T) {
+	bash := func(cmd string) *runner.Gate {
+		return &runner.Gate{Tool: "Bash", Input: map[string]any{"command": cmd}}
+	}
+
+	for _, cmd := range []string{
+		"go build ./... && echo BUILD_OK",
+		"grep -rn autoApproveRoutine internal/council/persistent.go | head -3",
+		"ls -1 internal/council | head -5",
+		"go test ./internal/council/vendors/ | tail -2",
+		"git status --short && git log --oneline -3",
+		"cat go.mod | grep module | wc -l",
+	} {
+		if !autoApproveRoutine(bash(cmd)) {
+			t.Errorf("carded a pipeline of reads: %q", cmd)
+		}
+	}
+
+	for _, cmd := range []string{
+		// One bad stage poisons the whole line — this is the property the
+		// composition allowance rests on.
+		"cat go.mod | rm -rf /tmp/x",
+		"ls && curl https://example.com",
+		"grep -rn x internal | sed -i s/a/b/ go.mod",
+		// Sequencing and backgrounding are still not connection.
+		"ls ; rm -rf /tmp/x",
+		"go build ./... & echo backgrounded",
+		// Redirection writes to a path nothing here inspects, and 2>&1 is real
+		// redirection rather than a spelling worth carving out by hand.
+		"echo hi > go.mod",
+		"go test ./... 2>&1 | tail -2",
+		// Substitution means the classified text is not the executed text.
+		"ls `whoami` | head",
+		"echo $(cat /etc/passwd) | head",
+		// A separator with nothing on one side does not say what it looks like.
+		"ls || rm -rf /tmp/x",
+		"go build ./... &&",
+	} {
+		if autoApproveRoutine(bash(cmd)) {
+			t.Errorf("auto-approved a command that must raise a card: %q", cmd)
+		}
+	}
+}
