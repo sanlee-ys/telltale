@@ -2,6 +2,7 @@ package vendors
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"runtime"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
@@ -171,6 +172,39 @@ func codexResumeOverrideFor(p Posture, windows bool) string {
 	return `sandbox_mode="` + codexSandboxFor(p, windows) + `"`
 }
 
+// gitWritableOverride makes the workspace's own .git writable in write posture.
+//
+// MEASURED 2026-08-05, codex-cli 0.146.0, macOS, with a control:
+//
+//	codex sandbox -c sandbox_mode="workspace-write" -- touch .git/probe
+//	  → touch: .git/telltale-probe: Operation not permitted
+//	codex sandbox -c sandbox_mode="workspace-write" -- touch ./probe
+//	  → OK
+//	same, plus -c sandbox_workspace_write.writable_roots=["<ws>/.git"]
+//	  → OK
+//
+// So codex's seatbelt carves .git out of the writable workspace by default.
+// Every commit writes .git/index, COMMIT_EDITMSG, refs and objects, which is why
+// this seat could edit files all session and never land one — it reported the
+// failure as an inability to commit, which reads like a git problem and is a
+// sandbox one.
+//
+// This is a real widening and is stated rather than slipped in: a seat that can
+// write .git can rewrite history, not merely change tracked files. It is scoped
+// to the workspace's OWN .git — not a blanket writable root, not the parent, and
+// never in read posture, where the seat has nothing to land in the first place.
+// The containment remains the directory council was pointed at, which is the
+// same sentence as everywhere else in this room; .git is inside that directory
+// and the default was the anomaly.
+//
+// Carried as -c rather than --add-dir because `codex exec resume` rejects flags
+// that `exec` accepts — the trap already recorded for -s and --cd — and -c is
+// the channel resume already carries posture on. The dotted form was the one
+// probed; both spellings worked, and this is the one that composes.
+func gitWritableOverride(workspace string) string {
+	return `sandbox_workspace_write.writable_roots=["` + filepath.ToSlash(filepath.Join(workspace, ".git")) + `"]`
+}
+
 func (c Codex) FirstTurn(prompt, workspace, binary string, p Posture) (runner.Spec, error) {
 	args := []string{
 		"exec",
@@ -186,6 +220,9 @@ func (c Codex) FirstTurn(prompt, workspace, binary string, p Posture) (runner.Sp
 		// --cd is also first-turn-only; resume rejects it too. Dir below is set
 		// regardless, so the resume path still lands in the right directory.
 		args = append(args, "--cd", workspace)
+		if p == PostureWrite {
+			args = append(args, "-c", gitWritableOverride(workspace))
+		}
 	}
 	// "-" is codex's documented sentinel for "read the prompt from stdin", and
 	// it must be the final argument. This is the shim safety rule: the prompt
@@ -213,10 +250,20 @@ func (c Codex) NextTurn(prompt, workspace, binary, sessionID string, p Posture) 
 	args := []string{
 		"exec", "resume", sessionID,
 		"-c", resumeOverrideFor(p),
+	}
+	// The same widening as the spawn path, for the same reason it is derived from
+	// one function there: a resume that dropped it would let the seat commit on
+	// turn 1 and refuse on turn 2, and the symptom — a column that lands work
+	// once and then reports it cannot — is the posture drift this file already
+	// exists to prevent.
+	if p == PostureWrite && workspace != "" {
+		args = append(args, "-c", gitWritableOverride(workspace))
+	}
+	args = append(args,
 		"--skip-git-repo-check",
 		"--json",
 		"-",
-	}
+	)
 	return runner.Spec{
 		Vendor: c.ID(),
 		Binary: binary,
