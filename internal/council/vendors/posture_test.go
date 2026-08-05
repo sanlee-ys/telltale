@@ -220,3 +220,49 @@ func TestPromptStaysOffArgvInBothPostures(t *testing.T) {
 		}
 	}
 }
+
+// TestCodexWritePostureCanReachDotGit.
+//
+// MEASURED 2026-08-05, codex-cli 0.146.0, macOS, with a control: under
+// `-s workspace-write` a write to .git/ came back "Operation not permitted"
+// while a write to the workspace root succeeded, and adding
+// sandbox_workspace_write.writable_roots=["<ws>/.git"] made the .git write
+// succeed. Codex's seatbelt carves .git out of the writable workspace, so the
+// seat could edit files all session and never commit one.
+//
+// Asserted on BOTH shapes, because spawn and resume take different flags and
+// this file's recorded failure mode is a posture that drifts between them: a
+// seat that lands work on turn 1 and refuses on turn 2.
+func TestCodexWritePostureCanReachDotGit(t *testing.T) {
+	const ws = "/home/dev/ws"
+
+	spawn, err := Codex{}.FirstTurn("brief", ws, "codex", PostureWrite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(spawn.Args, gitWritableOverride(ws)) {
+		t.Errorf("spawn cannot write .git, so it can build and never land:\n%v", spawn.Args)
+	}
+
+	res, err := Codex{}.NextTurn("brief", ws, "codex", "sess-1", PostureWrite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(res.Args, gitWritableOverride(ws)) {
+		t.Errorf("resume dropped the .git widening: the seat commits on turn 1 and refuses on turn 2:\n%v", res.Args)
+	}
+
+	// Read posture never gets it. A seat with nothing to land has no reason to
+	// reach the one directory that holds history rather than working files.
+	ro, _ := Codex{}.FirstTurn("brief", ws, "codex", PostureRead)
+	for _, a := range ro.Args {
+		if strings.Contains(a, "writable_roots") {
+			t.Errorf("read posture widened the sandbox: %q", a)
+		}
+	}
+
+	// Scoped to THIS workspace's .git, never a bare directory name or a parent.
+	if got := gitWritableOverride(ws); !strings.Contains(got, ws+"/.git") {
+		t.Errorf("override is not anchored to the workspace: %q", got)
+	}
+}
