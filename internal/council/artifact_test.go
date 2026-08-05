@@ -89,3 +89,53 @@ func TestArtifactRefuseOverwrite(t *testing.T) {
 		t.Fatal("expected overwrite refusal")
 	}
 }
+
+// TestArtifactBodyDropsProvenanceButTheFileKeepsIt.
+//
+// The header is council's bookkeeping. It reached a live vendor once — codex
+// replied "AUDITED ALPHA. 573732eb6aa61068", quoting the PromptSHA256-8 of the
+// artifact it was handed — because the fence carried the file verbatim and a
+// model cannot tell a harness stamp from the previous seat's words.
+func TestArtifactBodyDropsProvenanceButTheFileKeepsIt(t *testing.T) {
+	store, err := NewArtifactStoreWithBaseDir(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveArtifact("sess-1", 1, model.VendorCursor, "ALPHA", "brief"); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := store.LoadArtifactBody("sess-1", 1, model.VendorCursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(body) != "ALPHA" {
+		t.Errorf("body = %q, want just the seat's reply", body)
+	}
+	for _, leaked := range []string{"PROVENANCE", "SessionID", "PromptSHA256-8", "sess-1"} {
+		if strings.Contains(body, leaked) {
+			t.Errorf("%q reached the next hop's prompt", leaked)
+		}
+	}
+
+	// The receipt on disk is unchanged. Stripping is for the consumer that must
+	// not see it, not a decision to stop recording provenance.
+	raw, err := store.LoadArtifact("sess-1", 1, model.VendorCursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, "PromptSHA256-8") {
+		t.Error("the saved artifact lost its provenance header")
+	}
+}
+
+// A file with no header is returned whole rather than emptied: an older build's
+// artifact, or a stray file, must still reach the next seat.
+func TestArtifactBodyPassesThroughAHeaderlessFile(t *testing.T) {
+	if got := stripProvenance("just a body\n"); got != "just a body\n" {
+		t.Errorf("got %q, want the input unchanged", got)
+	}
+	if got := stripProvenance(provenanceStart + "\ntruncated, no rule"); !strings.Contains(got, "truncated") {
+		t.Errorf("a header with no terminator lost its content: %q", got)
+	}
+}
