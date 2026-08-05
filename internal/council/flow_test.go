@@ -105,6 +105,60 @@ func TestFlowReturnedNotApproved(t *testing.T) {
 	}
 }
 
+// TestMarkFailedCannotRewriteAFinishedHop pins the guard that keeps a late
+// failure from denying work that already happened.
+//
+// finishFlowHop reads the artifact back AFTER the hop has been marked, so an
+// unguarded MarkFailed would flip a Published step — one holding a verified
+// receipt for a mutation still sitting in the tree — to Failed{Verified:false}.
+// The room would then report that a write the user authorized had failed.
+func TestMarkFailedCannotRewriteAFinishedHop(t *testing.T) {
+	// Running is a legitimate source: that is where the save/receipt failures
+	// this method exists for are detected.
+	chain, err := ParseFlowChain("@claude draft -> @codex review")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := chain.Start(""); err != nil {
+		t.Fatal(err)
+	}
+	if err := chain.MarkFailed("artifact save exploded"); err != nil {
+		t.Fatalf("MarkFailed from Running must succeed: %v", err)
+	}
+	if chain.Current().State != FlowStateFailed {
+		t.Fatalf("got %s", chain.Current().State)
+	}
+
+	// Returned is terminal. A later failure stops the chain instead.
+	returned, _ := ParseFlowChain("@claude draft -> @codex review")
+	_ = returned.Start("")
+	if err := returned.MarkReturned(); err != nil {
+		t.Fatal(err)
+	}
+	if err := returned.MarkFailed("artifact load: disk gone"); err == nil {
+		t.Fatal("MarkFailed from Returned must be refused")
+	}
+	if returned.Current().State != FlowStateReturned {
+		t.Fatalf("Returned was overwritten: got %s", returned.Current().State)
+	}
+
+	// Published is the case that costs something: the receipt must survive.
+	published, _ := ParseFlowChain("@agy publish write:out.md -> @codex review")
+	_ = published.Start(t.TempDir())
+	if err := published.MarkPublished(Receipt{Verified: true, Detail: "created out.md"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := published.MarkFailed("artifact load: disk gone"); err == nil {
+		t.Fatal("MarkFailed from Published must be refused")
+	}
+	if published.Current().State != FlowStatePublished {
+		t.Fatalf("Published was overwritten: got %s", published.Current().State)
+	}
+	if !published.Current().Receipt.Verified {
+		t.Fatal("verified receipt was destroyed by a late failure")
+	}
+}
+
 func TestWriteGateBeforeStart(t *testing.T) {
 	chain, _ := ParseFlowChain("@agy publish write:docs/x.md -> @codex review")
 	if err := chain.MarkAwaitingWrite("awaiting auth"); err != nil {

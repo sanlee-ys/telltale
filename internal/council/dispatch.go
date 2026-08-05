@@ -68,7 +68,8 @@ func (m *Model) dispatch() tea.Cmd {
 		m.st.Notice = "a turn is already in flight — ctrl+c cancels it"
 		return nil
 	}
-	if m.st.Draft == "" {
+	activeFlow := m.flowChain != nil && m.flowChain.Current() != nil && m.flowDraft != ""
+	if m.st.Draft == "" && !activeFlow {
 		m.st.Notice = "nothing to dispatch: the brief is empty"
 		return nil
 	}
@@ -79,10 +80,10 @@ func (m *Model) dispatch() tea.Cmd {
 	// never become a chain — that would turn ordinary briefs into orchestrations.
 	var route Route
 	var prompt string
-	if strings.HasPrefix(strings.TrimSpace(m.st.Draft), "/flow") {
+	if activeFlow || strings.HasPrefix(strings.TrimSpace(m.st.Draft), "/flow") {
 		// Reuse an in-progress chain when the user just authorized a write gate
 		// against the same draft; otherwise parse fresh.
-		if m.flowChain == nil || m.flowDraft != m.st.Draft {
+		if !activeFlow {
 			fc, err := ParseFlowChain(m.st.Draft)
 			if err != nil {
 				m.st.Notice = "flow syntax error: " + err.Error()
@@ -151,12 +152,18 @@ func (m *Model) dispatch() tea.Cmd {
 		if prompt == "" {
 			prompt = curr.Verb
 		}
+		if m.flowCarry != "" {
+			prompt += "\n\n" + m.flowCarry
+			m.flowCarry = ""
+		}
 	} else {
 		m.flowChain = nil
 		m.flowDraft = ""
 		m.flowWriteArmed = false
 		m.flowWritePending = false
 		m.flowReadHop = false
+		m.flowCarry = ""
+		m.flowAdvancePending = false
 		route, prompt = ParseRoute(m.st.Draft)
 	}
 	if route.Mixed {
@@ -675,14 +682,33 @@ func (m *Model) finishFlowHop(c *Column) {
 			return
 		}
 		m.st.Notice = joinNotice(m.st.Notice, "flow hop published ("+receipt.Detail+")")
-		return
+	} else {
+		if err := m.flowChain.MarkReturned(); err != nil {
+			m.st.Notice = joinNotice(m.st.Notice, err.Error())
+			return
+		}
+		m.st.Notice = joinNotice(m.st.Notice, fmt.Sprintf("flow hop %d returned (@%s %s) — not an approval", m.flowChain.CurrentIndex+1, curr.Vendor, curr.Verb))
 	}
 
-	if err := m.flowChain.MarkReturned(); err != nil {
-		m.st.Notice = joinNotice(m.st.Notice, err.Error())
+	// This hop is already finished — Returned or Published — so a failure reading
+	// its own artifact back stops the CHAIN and leaves the hop's record alone. The
+	// previous spelling called MarkFailed here, which on a published hop would
+	// overwrite a verified receipt: the write had landed, the workspace still held
+	// it, and the room would have reported that it failed.
+	artifact, err := store.LoadArtifact(sessID, c.TurnN, c.Vendor)
+	if err != nil {
+		m.st.Notice = joinNotice(m.st.Notice, "flow stopped: cannot read this hop's artifact back: "+err.Error())
 		return
 	}
-	m.st.Notice = joinNotice(m.st.Notice, fmt.Sprintf("flow hop %d returned (@%s %s) — not an approval", m.flowChain.CurrentIndex+1, curr.Vendor, curr.Verb))
+	hasNext, err := m.flowChain.Advance()
+	if err != nil {
+		m.st.Notice = joinNotice(m.st.Notice, "flow stopped: "+err.Error())
+		return
+	}
+	if hasNext {
+		m.flowCarry = FormatFencedArtifact(c.Label, c.TurnN, artifact)
+		m.flowAdvancePending = true
+	}
 }
 
 func flowSessionID(workspace string) string {

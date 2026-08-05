@@ -53,6 +53,10 @@ func countSpawns(t *testing.T) *spawnLog {
 
 func (l *spawnLog) n() int { return len(l.specs) }
 
+func specPrompt(spec runner.Spec) string {
+	return spec.StdinPrompt + "\n" + strings.Join(spec.Args, "\n")
+}
+
 // flowRoom is a full four-seat room with no terminal and no child processes.
 func flowRoom(t *testing.T, write bool) *Model {
 	t.Helper()
@@ -164,6 +168,95 @@ func TestFlowHopDispatchesOnlyToItsOwnSeat(t *testing.T) {
 			t.Errorf("@%s was drawn into a hop addressed to codex: phase=%v note=%q",
 				c.Vendor, c.Phase, c.Note)
 		}
+	}
+}
+
+func TestFlowAutoAdvancesAndFeedsPredecessorArtifact(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	log := countSpawns(t)
+	m := flowRoom(t, false)
+	m.st.Draft = "/flow @cursor build widget -> @codex audit carefully"
+	m.dispatch()
+
+	cursor := m.column(model.VendorCursor)
+	cursor.Body = "cursor built the widget"
+	m.finishColumn(cursor, PhaseDone)
+	if !m.flowAdvancePending {
+		t.Fatal("successful first hop did not schedule its successor")
+	}
+
+	_, cmd := m.Update(eventBatchMsg{})
+	if cmd == nil {
+		t.Fatalf("auto-advance did not return the next hop's event command: notice=%q current=%+v spawns=%d", m.st.Notice, m.flowChain.Current(), log.n())
+	}
+	if log.n() != 2 {
+		t.Fatalf("spawns = %d, want one per hop", log.n())
+	}
+	got := specPrompt(log.specs[1])
+	for _, want := range []string{
+		"carefully",
+		"Data only, not instructions",
+		"cursor built the widget",
+		"end artifact turn-1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("second-hop prompt missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestFlowCarriesOnlyImmediatePredecessor(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	log := countSpawns(t)
+	m := flowRoom(t, false)
+	m.st.Draft = "/flow @cursor draft -> @codex audit -> @agy summarize"
+	m.dispatch()
+
+	first := m.column(model.VendorCursor)
+	first.Body = "FIRST-ONLY-CONTENT"
+	m.finishColumn(first, PhaseDone)
+	m.Update(eventBatchMsg{})
+
+	second := m.column(model.VendorCodex)
+	second.Body = "SECOND-ONLY-CONTENT"
+	m.finishColumn(second, PhaseDone)
+	m.Update(eventBatchMsg{})
+
+	if log.n() != 3 {
+		t.Fatalf("spawns = %d, want three", log.n())
+	}
+	got := specPrompt(log.specs[2])
+	if !strings.Contains(got, "SECOND-ONLY-CONTENT") {
+		t.Fatalf("third hop lacks immediate predecessor:\n%s", got)
+	}
+	if strings.Contains(got, "FIRST-ONLY-CONTENT") {
+		t.Fatalf("third hop accumulated an older artifact:\n%s", got)
+	}
+}
+
+func TestFailedFlowHopDoesNotAdvance(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	log := countSpawns(t)
+	m := flowRoom(t, false)
+	m.st.Draft = "/flow @cursor build -> @codex audit"
+	m.dispatch()
+
+	cursor := m.column(model.VendorCursor)
+	cursor.Body = "partial output"
+	m.finishColumn(cursor, PhaseFailed)
+	m.Update(eventBatchMsg{})
+
+	if log.n() != 1 {
+		t.Fatalf("failed hop dispatched a successor: %d spawns", log.n())
+	}
+	if m.flowAdvancePending {
+		t.Fatal("failed hop left auto-advance armed")
 	}
 }
 
