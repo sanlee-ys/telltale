@@ -72,6 +72,13 @@ func (s *ArtifactStore) SaveArtifact(sessionID string, turnN int, vendor model.V
 		return "", fmt.Errorf("creating session artifact dir: %w", err)
 	}
 
+	// Refuse overwrite: a receipt that can be replaced silently is not a receipt.
+	if _, err := os.Stat(path); err == nil {
+		return "", fmt.Errorf("artifact already exists at %s — refuse overwrite", path)
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("stat artifact path: %w", err)
+	}
+
 	// Provenance metadata header
 	header := fmt.Sprintf("--- TELLTALE ARTIFACT PROVENANCE ---\nSessionID: %s\nTurn: %d\nVendor: %s\nTimestamp: %s\nPrompt: %s\n------------------------------------\n\n",
 		sessionID, turnN, vendor, time.Now().Format(time.RFC3339), cleanPrompt)

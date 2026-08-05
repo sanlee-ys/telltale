@@ -70,3 +70,19 @@ func TestDefaultArtifactStorePath(t *testing.T) {
 		t.Errorf("expected default baseDir %s, got %s", expected, store.baseDir)
 	}
 }
+
+func TestArtifactRefuseOverwrite(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := NewArtifactStoreWithBaseDir(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.SaveArtifact("s", 1, model.VendorClaude, "once", "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.SaveArtifact("s", 1, model.VendorClaude, "twice", "p")
+	if err == nil {
+		t.Fatal("expected overwrite refusal")
+	}
+}

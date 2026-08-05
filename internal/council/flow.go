@@ -12,6 +12,8 @@ import (
 )
 
 // FlowStepState represents the empirical, measured status of a workflow step.
+// Column PhaseDone is turn state; these values are flow state — never derived
+// from a model claiming it finished.
 type FlowStepState uint8
 
 const (
@@ -42,7 +44,8 @@ func (s FlowStepState) String() string {
 	}
 }
 
-// Receipt holds empirical evidence verifying a step's completion.
+// Receipt holds empirical evidence verifying a publish/write hop.
+// Verified is never true merely because State says so.
 type Receipt struct {
 	Verified bool
 	Detail   string
@@ -52,11 +55,18 @@ type Receipt struct {
 type FlowStep struct {
 	Vendor    model.VendorID
 	Verb      string
-	Task      string // Full preserved task instruction text
+	Task      string
 	State     FlowStepState
 	Path      string // Optional target file path for write/publish steps
 	StartedAt time.Time
 	Receipt   Receipt
+
+	// Baseline* captured when the hop enters Running. Publish receipts require
+	// the target to appear or change relative to this snapshot — existence alone
+	// of a pre-existing file is not evidence.
+	BaselineExists bool
+	BaselineSize   int64
+	BaselineMod    time.Time
 }
 
 // FlowChain is an ordered pipeline of steps.
@@ -65,16 +75,11 @@ type FlowChain struct {
 	CurrentIndex int
 }
 
-var validSeats = map[model.VendorID]bool{
-	"claude": true,
-	"codex":  true,
-	"agy":    true,
-	"cursor": true,
-}
-
 // ParseFlowChain parses arrow-delimited workflow instructions.
+// Requires at least two hops. The "/flow " prefix is optional here; dispatch
+// requires it so ordinary prose containing "->" never becomes a chain.
+//
 // Example: "@claude draft feature spec -> @codex review security -> @agy publish docs/spec.md"
-// or "/flow @claude draft -> @codex review -> @agy publish"
 func ParseFlowChain(input string) (*FlowChain, error) {
 	input = strings.TrimSpace(input)
 	if strings.HasPrefix(input, "/flow") {
@@ -93,6 +98,7 @@ func ParseFlowChain(input string) (*FlowChain, error) {
 		return nil, errors.New("flow chain must contain at least 2 hops separated by '->'")
 	}
 
+	aliases := mentionAliases()
 	var steps []FlowStep
 	for _, raw := range rawHops {
 		raw = strings.TrimSpace(raw)
@@ -106,20 +112,20 @@ func ParseFlowChain(input string) (*FlowChain, error) {
 			return nil, fmt.Errorf("invalid seat %q in hop: seat must start with '@'", seatStr)
 		}
 
-		vendorID := model.VendorID(strings.TrimPrefix(seatStr, "@"))
-		if !validSeats[vendorID] {
-			return nil, fmt.Errorf("unknown vendor seat @%s in flow chain (valid seats: @claude, @codex, @agy, @cursor)", vendorID)
+		name := strings.ToLower(strings.TrimPrefix(seatStr, "@"))
+		vendorID, ok := aliases[name]
+		if !ok || allAliases[name] {
+			return nil, fmt.Errorf("unknown vendor seat @%s in flow chain (valid seats: @claude, @codex, @agy, @cursor)", name)
 		}
 
 		verb := strings.ToLower(parts[1])
 
-		// Preserve all remaining text after seat and verb as task/path
 		task := ""
 		path := ""
 		if len(parts) >= 3 {
 			task = strings.Join(parts[2:], " ")
 			lastToken := parts[len(parts)-1]
-			if strings.Contains(lastToken, ".") || strings.Contains(lastToken, "/") || strings.Contains(lastToken, "\\") {
+			if strings.ContainsAny(lastToken, "./\\") {
 				path = lastToken
 			}
 		}
@@ -141,13 +147,74 @@ func ParseFlowChain(input string) (*FlowChain, error) {
 
 // Current returns the step currently active or queued.
 func (fc *FlowChain) Current() *FlowStep {
-	if fc.CurrentIndex < 0 || fc.CurrentIndex >= len(fc.Steps) {
+	if fc == nil || fc.CurrentIndex < 0 || fc.CurrentIndex >= len(fc.Steps) {
 		return nil
 	}
 	return &fc.Steps[fc.CurrentIndex]
 }
 
-// Advance strictly validates state transitions before moving to the next hop.
+// Start moves the current Queued hop to Running and captures a path baseline.
+func (fc *FlowChain) Start(workspace string) error {
+	curr := fc.Current()
+	if curr == nil {
+		return errors.New("no active step to start")
+	}
+	if curr.State != FlowStateQueued {
+		return fmt.Errorf("cannot start step in state %s", curr.State)
+	}
+	curr.State = FlowStateRunning
+	curr.StartedAt = time.Now()
+	captureBaseline(workspace, curr)
+	return nil
+}
+
+// MarkApproved records that the current hop finished in a way the harness observed
+// (seat PhaseDone for draft/review). It does not verify disk publication.
+func (fc *FlowChain) MarkApproved() error {
+	curr := fc.Current()
+	if curr == nil {
+		return errors.New("no active step")
+	}
+	if curr.State != FlowStateRunning && curr.State != FlowStateBlocked {
+		return fmt.Errorf("cannot approve step in state %s", curr.State)
+	}
+	curr.State = FlowStateApproved
+	return nil
+}
+
+// MarkBlocked parks a write/publish hop awaiting a user gate or a disk receipt.
+func (fc *FlowChain) MarkBlocked(detail string) error {
+	curr := fc.Current()
+	if curr == nil {
+		return errors.New("no active step")
+	}
+	if curr.State != FlowStateRunning {
+		return fmt.Errorf("cannot block step in state %s", curr.State)
+	}
+	curr.State = FlowStateBlocked
+	curr.Receipt = Receipt{Verified: false, Detail: detail}
+	return nil
+}
+
+// MarkPublished sets Published only when VerifyReceipt already succeeded.
+func (fc *FlowChain) MarkPublished(receipt Receipt) error {
+	curr := fc.Current()
+	if curr == nil {
+		return errors.New("no active step")
+	}
+	if !receipt.Verified {
+		return errors.New("cannot mark published without a verified receipt")
+	}
+	if curr.State != FlowStateBlocked && curr.State != FlowStateRunning {
+		return fmt.Errorf("cannot publish step in state %s", curr.State)
+	}
+	curr.Receipt = receipt
+	curr.State = FlowStatePublished
+	return nil
+}
+
+// Advance moves to the next hop only from Approved or Published.
+// Running/Blocked/Failed/Queued cannot skip forward — that was the narrated-status bug.
 func (fc *FlowChain) Advance() (bool, error) {
 	curr := fc.Current()
 	if curr == nil {
@@ -156,38 +223,58 @@ func (fc *FlowChain) Advance() (bool, error) {
 
 	switch curr.State {
 	case FlowStateFailed:
-		return false, fmt.Errorf("cannot advance flow chain: step %d (@%s %s) failed", fc.CurrentIndex+1, curr.Vendor, curr.Verb)
+		return false, fmt.Errorf("cannot advance: step %d (@%s %s) failed", fc.CurrentIndex+1, curr.Vendor, curr.Verb)
 	case FlowStateBlocked:
-		return false, fmt.Errorf("cannot advance flow chain: step %d (@%s %s) is blocked awaiting user approval", fc.CurrentIndex+1, curr.Vendor, curr.Verb)
-	case FlowStateQueued:
-		curr.State = FlowStateRunning
-		curr.StartedAt = time.Now()
-		return true, nil
-	case FlowStateRunning, FlowStateApproved, FlowStatePublished:
-		if fc.CurrentIndex < len(fc.Steps)-1 {
-			fc.CurrentIndex++
-			fc.Steps[fc.CurrentIndex].State = FlowStateRunning
-			fc.Steps[fc.CurrentIndex].StartedAt = time.Now()
-			return true, nil
+		return false, fmt.Errorf("cannot advance: step %d (@%s %s) is blocked", fc.CurrentIndex+1, curr.Vendor, curr.Verb)
+	case FlowStateQueued, FlowStateRunning:
+		return false, fmt.Errorf("cannot advance: step %d (@%s %s) is still %s — approve or publish first", fc.CurrentIndex+1, curr.Vendor, curr.Verb, curr.State)
+	case FlowStateApproved, FlowStatePublished:
+		if fc.CurrentIndex >= len(fc.Steps)-1 {
+			return false, nil
 		}
-		return false, nil
+		fc.CurrentIndex++
+		return true, nil
 	default:
 		return false, fmt.Errorf("invalid step state %v", curr.State)
 	}
 }
 
-// VerifyReceipt checks for empirical evidence on disk before declaring a step published/done.
-// Refuses self-verification: steps without a target path return unverified unless backed by file evidence.
+func captureBaseline(workspace string, step *FlowStep) {
+	if step.Path == "" || workspace == "" {
+		return
+	}
+	target := step.Path
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(workspace, target)
+	}
+	eval, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		step.BaselineExists = false
+		return
+	}
+	info, err := os.Stat(eval)
+	if err != nil {
+		step.BaselineExists = false
+		return
+	}
+	step.BaselineExists = true
+	step.BaselineSize = info.Size()
+	step.BaselineMod = info.ModTime()
+}
+
+// VerifyReceipt checks disk evidence for a write/publish hop.
+// Never returns Verified for a pathless step. Never treats State as evidence.
+// A pre-existing unchanged file does not verify; the file must be new or changed
+// relative to the Running baseline.
 func VerifyReceipt(workspace string, step *FlowStep) Receipt {
 	if step == nil {
 		return Receipt{Verified: false, Detail: "nil step"}
 	}
-
 	if step.Path == "" {
-		return Receipt{
-			Verified: false,
-			Detail:   "step has no target path specified; cannot verify disk receipt",
-		}
+		return Receipt{Verified: false, Detail: "step has no target path; cannot verify disk receipt"}
+	}
+	if step.StartedAt.IsZero() {
+		return Receipt{Verified: false, Detail: "step was never started; no baseline"}
 	}
 
 	targetPath := step.Path
@@ -195,7 +282,6 @@ func VerifyReceipt(workspace string, step *FlowStep) Receipt {
 		targetPath = filepath.Join(workspace, targetPath)
 	}
 
-	// Symlink and boundary evaluation
 	evalWorkspace, err := filepath.EvalSymlinks(workspace)
 	if err != nil {
 		evalWorkspace = workspace
@@ -208,30 +294,45 @@ func VerifyReceipt(workspace string, step *FlowStep) Receipt {
 
 	rel, err := filepath.Rel(evalWorkspace, evalTarget)
 	if err != nil || strings.HasPrefix(rel, "..") {
-		return Receipt{Verified: false, Detail: fmt.Sprintf("target path %s resolves outside workspace boundary (%s)", step.Path, evalTarget)}
+		return Receipt{Verified: false, Detail: fmt.Sprintf("target path %s resolves outside workspace (%s)", step.Path, evalTarget)}
 	}
 
 	info, err := os.Stat(evalTarget)
 	if err != nil {
 		return Receipt{Verified: false, Detail: fmt.Sprintf("file %s not found on disk", step.Path)}
 	}
-
 	if info.Size() == 0 {
 		return Receipt{Verified: false, Detail: fmt.Sprintf("file %s exists but is 0 bytes", step.Path)}
 	}
 
-	// Verify file modification time is on or after step start time (with 1-second margin for filesystem clock granularity)
-	if !step.StartedAt.IsZero() {
-		if info.ModTime().Before(step.StartedAt.Add(-1 * time.Second)) {
-			return Receipt{
-				Verified: false,
-				Detail:   fmt.Sprintf("file %s modtime (%s) predates step start time (%s)", step.Path, info.ModTime().Format(time.RFC3339), step.StartedAt.Format(time.RFC3339)),
-			}
+	if !step.BaselineExists {
+		// File appeared after start — acceptable creation receipt.
+		return Receipt{
+			Verified: true,
+			Detail:   fmt.Sprintf("verified new file %s (%d bytes)", step.Path, info.Size()),
+		}
+	}
+
+	changed := info.Size() != step.BaselineSize || !info.ModTime().Equal(step.BaselineMod)
+	if !changed {
+		return Receipt{
+			Verified: false,
+			Detail:   fmt.Sprintf("file %s unchanged since step start — pre-existing content is not a publish receipt", step.Path),
 		}
 	}
 
 	return Receipt{
 		Verified: true,
-		Detail:   fmt.Sprintf("verified file %s on disk (%d bytes, modtime %s)", step.Path, info.Size(), info.ModTime().Format(time.RFC3339)),
+		Detail:   fmt.Sprintf("verified changed file %s (%d bytes, modtime %s)", step.Path, info.Size(), info.ModTime().Format(time.RFC3339)),
+	}
+}
+
+// IsWriteVerb reports hops that require a disk receipt and user gate.
+func IsWriteVerb(verb string) bool {
+	switch strings.ToLower(verb) {
+	case "publish", "write", "land", "merge":
+		return true
+	default:
+		return false
 	}
 }

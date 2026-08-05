@@ -2,6 +2,7 @@ package council
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -72,26 +73,32 @@ func (m *Model) dispatch() tea.Cmd {
 
 	reg := vendors.Registry()
 
-	if strings.HasPrefix(m.st.Draft, "/flow") || strings.Contains(m.st.Draft, "->") {
+	// Flows start only with an explicit /flow prefix. Bare "->" in prose must
+	// never become a chain — that would turn ordinary briefs into orchestrations.
+	var route Route
+	var prompt string
+	if strings.HasPrefix(strings.TrimSpace(m.st.Draft), "/flow") {
 		fc, err := ParseFlowChain(m.st.Draft)
 		if err != nil {
 			m.st.Notice = "flow syntax error: " + err.Error()
 			return nil
 		}
 		m.flowChain = fc
-		if curr := m.flowChain.Current(); curr != nil {
-			curr.State = FlowStateRunning
-			curr.StartedAt = time.Now()
+		if err := m.flowChain.Start(m.st.Workspace); err != nil {
+			m.st.Notice = "flow start error: " + err.Error()
+			m.flowChain = nil
+			return nil
 		}
-	}
-
-	route, prompt := ParseRoute(m.st.Draft)
-
-	if m.flowChain != nil {
-		if curr := m.flowChain.Current(); curr != nil {
-			// Override route to target ONLY the active flow step vendor
-			route = Route{Vendors: []model.VendorID{curr.Vendor}}
+		curr := m.flowChain.Current()
+		route = Route{Vendors: []model.VendorID{curr.Vendor}}
+		prompt = strings.TrimSpace(curr.Task)
+		if prompt == "" {
+			prompt = curr.Verb
 		}
+		// Prior hops' artifacts are injected in a later PR; hop 1 gets the task only.
+	} else {
+		m.flowChain = nil
+		route, prompt = ParseRoute(m.st.Draft)
 	}
 	if route.Mixed {
 		// Checked before the empty-brief case on purpose. A draft that mixes
@@ -543,18 +550,73 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 		}
 	}
 
-	if c.Phase == PhaseDone && strings.TrimSpace(c.Body) != "" && m.flowChain != nil {
-		if store, err := NewArtifactStore(); err == nil {
-			sessID := m.sessions[c.Vendor]
-			if sessID == "" {
-				sessID = "room-session"
-			}
-			_, _ = store.SaveArtifact(sessID, c.TurnN, c.Vendor, c.Body, c.Prompt)
-		}
-	}
+	m.finishFlowHop(c)
 
 	m.settleRestoredThread(c)
 	m.turnColumnFinished(c.Vendor)
+}
+
+// finishFlowHop records harness-observed completion of the active flow seat.
+// Draft/review hops become Approved when the seat reaches PhaseDone. Write hops
+// become Blocked until VerifyReceipt succeeds and a later gate (Cursor UI PR)
+// marks Published. Storage failures are surfaced, never swallowed.
+func (m *Model) finishFlowHop(c *Column) {
+	if m.flowChain == nil || c.Phase != PhaseDone || strings.TrimSpace(c.Body) == "" {
+		return
+	}
+	curr := m.flowChain.Current()
+	if curr == nil || c.Vendor != curr.Vendor || curr.State != FlowStateRunning {
+		return
+	}
+
+	store, err := NewArtifactStore()
+	if err != nil {
+		m.st.Notice = "artifact store: " + err.Error()
+	} else {
+		sessID := m.sessions[c.Vendor]
+		if sessID == "" {
+			sessID = "room-session"
+		}
+		if path, err := store.SaveArtifact(sessID, c.TurnN, c.Vendor, c.Body, c.Prompt); err != nil {
+			m.st.Notice = "artifact save: " + err.Error()
+		} else {
+			m.st.Notice = "artifact saved: " + path
+		}
+	}
+
+	if IsWriteVerb(curr.Verb) {
+		receipt := VerifyReceipt(m.st.Workspace, curr)
+		curr.Receipt = receipt
+		if err := m.flowChain.MarkBlocked(receipt.Detail); err != nil {
+			m.st.Notice = joinNotice(m.st.Notice, err.Error())
+			return
+		}
+		if receipt.Verified {
+			m.st.Notice = joinNotice(m.st.Notice, "publish receipt ok — confirm gate to mark published (UI follow-up)")
+		} else {
+			m.st.Notice = joinNotice(m.st.Notice, "publish blocked: "+receipt.Detail)
+		}
+		return
+	}
+
+	if err := m.flowChain.MarkApproved(); err != nil {
+		m.st.Notice = joinNotice(m.st.Notice, err.Error())
+		return
+	}
+	m.st.Notice = joinNotice(m.st.Notice, fmt.Sprintf("flow hop %d approved (@%s %s) — advance not auto-dispatched yet", m.flowChain.CurrentIndex+1, curr.Vendor, curr.Verb))
+}
+
+func joinNotice(a, b string) string {
+	a = strings.TrimSpace(a)
+	b = strings.TrimSpace(b)
+	switch {
+	case a == "":
+		return b
+	case b == "":
+		return a
+	default:
+		return a + " · " + b
+	}
 }
 
 // settleRestoredThread decides the fate of a session id that came back from a

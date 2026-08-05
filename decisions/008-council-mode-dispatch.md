@@ -1589,3 +1589,24 @@ four turns was blocked by broken hook wiring on the probe machine, so the parser
 still rests on the shipped bundle's field descriptors rather than on a captured line. It is
 labelled as bundle-derived in `vendors/cursor.go` and in its test, and one clean tool call on any
 machine closes it.
+
+---
+
+## Amendment — Flow artifacts and confirmed workflows (2026-08-04)
+
+**Contract change.** `room.json` remains **keys, not content**. Separately, when the user
+dispatches an explicit `/flow` chain, council may persist **redacted** seat replies under
+`~/.telltale/council/artifacts/` (user home only — never the repo working tree). That is
+opt-in orchestration storage, not a silent transcript of every turn.
+
+**Receipts.** Flow step states (`queued` / `running` / `blocked` / `approved` / `published`)
+are harness-observed. `published` requires `VerifyReceipt` evidence that a target path was
+created or changed after the hop started. A model saying it published, or a pre-existing
+unchanged file, is not a receipt.
+
+**Authority.** Draft/review hops may complete when the seat reaches a measured PhaseDone.
+Write/publish hops block for a user gate. Natural-language chain proposals never run without
+a confirmed `/flow` parse.
+
+**Sequencing.** Full auto-advance of hop N+1 after hop N is a follow-up; this amendment lands
+the artifact store, parser, and receipt rules first.
