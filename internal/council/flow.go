@@ -71,6 +71,44 @@ type FlowStep struct {
 	BaselineMod    time.Time
 }
 
+// writeTargetPrefix is the ONLY thing that confers write authority on a hop.
+//
+// It is a declared token, not a shape the parser recognises in prose. The
+// shipped parser sniffed the last word for `.`, `/` or `\` and promoted the hop
+// on a match, which meant "review the auth flow." and "config.yaml" and a
+// Windows path pasted into a sentence were all indistinguishable from an
+// instruction to mutate the workspace. English does not grant permissions.
+const writeTargetPrefix = "write:"
+
+// validWriteTarget accepts only a workspace-relative path with no traversal.
+//
+// Checked at PARSE time rather than at receipt time on purpose: VerifyReceipt
+// can prove after the fact that a write landed outside the workspace, but by
+// then the seat has already been spawned with write authority and pointed at
+// the path. The only place the answer is free is before the gate is drawn.
+func validWriteTarget(target string) error {
+	if target == "" {
+		return errors.New("empty target")
+	}
+	// filepath.IsAbs is platform-dependent — on Windows it does not consider
+	// "/etc/shadow" absolute — so the leading-separator and volume cases are
+	// spelled out rather than delegated to it.
+	if filepath.IsAbs(target) || strings.HasPrefix(target, "/") || strings.HasPrefix(target, `\`) {
+		return errors.New("must be relative to the workspace")
+	}
+	if filepath.VolumeName(target) != "" || strings.Contains(target, ":") {
+		return errors.New("must not name a volume or drive")
+	}
+	// Segment-wise, so "..", "a/../../b" and the backslash spellings of both are
+	// all one rule instead of a list of prefixes to keep in sync.
+	for _, seg := range strings.FieldsFunc(target, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if seg == ".." {
+			return errors.New("must not traverse out of the workspace")
+		}
+	}
+	return nil
+}
+
 // FlowChain is an ordered pipeline of steps.
 type FlowChain struct {
 	Steps        []FlowStep
@@ -83,7 +121,10 @@ func (s *FlowStep) RequiresWriteGate() bool {
 }
 
 // ParseFlowChain parses arrow-delimited workflow instructions.
-// Example: "/flow @claude draft feature spec -> @codex review security -> @agy publish docs/spec.md"
+//
+// Example: "/flow @claude draft feature spec -> @codex review security ->
+// @agy publish write:docs/spec.md". The third hop is a write hop because it
+// says so, not because "docs/spec.md" looks like a filename.
 func ParseFlowChain(input string) (*FlowChain, error) {
 	input = strings.TrimSpace(input)
 	if strings.HasPrefix(input, "/flow") {
@@ -123,19 +164,40 @@ func ParseFlowChain(input string) (*FlowChain, error) {
 		}
 
 		verb := strings.ToLower(parts[1])
+		// The verb slot would otherwise swallow a target the user clearly meant
+		// to declare, and the hop would run as a READ hop that looks written.
+		// Silently downgrading a declared write is the same class of lie as
+		// silently upgrading a read, so it is refused out loud.
+		if strings.HasPrefix(verb, writeTargetPrefix) {
+			return nil, fmt.Errorf("hop %q puts the %s target in the verb slot: expected '@seat verb %s<path>'", raw, writeTargetPrefix, writeTargetPrefix)
+		}
 		if verb == "merge" {
 			return nil, fmt.Errorf("merge hops are not supported in v1: file receipts cannot prove a GitHub merge")
 		}
 
+		// Write authority is declared, never inferred. Only a `write:<path>`
+		// token makes a hop a write hop — no path sniffing, no verb allowlist.
+		// "@cursor implement authentication" is a read hop; so is a task that
+		// happens to end in "v1." Anything else guesses authority from English.
 		task := ""
 		path := ""
-		if len(parts) >= 3 {
-			task = strings.Join(parts[2:], " ")
-			lastToken := parts[len(parts)-1]
-			if strings.ContainsAny(lastToken, "./\\") {
-				path = lastToken
+		var taskWords []string
+		for _, tok := range parts[2:] {
+			rest, isTarget := strings.CutPrefix(tok, writeTargetPrefix)
+			if !isTarget {
+				taskWords = append(taskWords, tok)
+				continue
 			}
+			if path != "" {
+				return nil, fmt.Errorf("hop %q declares more than one %s target", raw, writeTargetPrefix)
+			}
+			rest = strings.TrimSpace(rest)
+			if err := validWriteTarget(rest); err != nil {
+				return nil, fmt.Errorf("%s target %q in hop %q: %v", writeTargetPrefix, rest, raw, err)
+			}
+			path = rest
 		}
+		task = strings.Join(taskWords, " ")
 
 		steps = append(steps, FlowStep{
 			Vendor: vendorID,

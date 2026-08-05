@@ -11,7 +11,7 @@ import (
 )
 
 func TestParseFlowChainValid(t *testing.T) {
-	input := "@claude draft feature spec -> @codex review security -> @agy publish docs/spec.md"
+	input := "@claude draft feature spec -> @codex review security -> @agy publish write:docs/spec.md"
 	chain, err := ParseFlowChain(input)
 	if err != nil {
 		t.Fatalf("ParseFlowChain failed: %v", err)
@@ -106,7 +106,7 @@ func TestFlowReturnedNotApproved(t *testing.T) {
 }
 
 func TestWriteGateBeforeStart(t *testing.T) {
-	chain, _ := ParseFlowChain("@agy publish docs/x.md -> @codex review")
+	chain, _ := ParseFlowChain("@agy publish write:docs/x.md -> @codex review")
 	if err := chain.MarkAwaitingWrite("awaiting auth"); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestWriteGateBeforeStart(t *testing.T) {
 }
 
 func TestMarkPublishedRequiresVerifiedReceipt(t *testing.T) {
-	chain, _ := ParseFlowChain("@agy publish out.md -> @codex review")
+	chain, _ := ParseFlowChain("@agy publish write:out.md -> @codex review")
 	_ = chain.Start(t.TempDir())
 	if err := chain.MarkPublished(Receipt{Verified: false}); err == nil {
 		t.Fatal("expected refusal")
@@ -146,5 +146,71 @@ func TestArtifactPromptIsFingerprint(t *testing.T) {
 	}
 	if !strings.Contains(s, "PromptSHA256-8:") {
 		t.Fatal("expected fingerprint header")
+	}
+}
+
+// TestWriteAuthorityIsNeverInferredFromProse is blocker 2 in one table.
+//
+// The shipped parser promoted a hop to a write hop when its last token
+// contained '.', '/' or '\'. Every case below was therefore write authority
+// handed out by punctuation — a sentence that ended in a period, a task that
+// named a file it was only meant to READ, a Windows path quoted in a question.
+func TestWriteAuthorityIsNeverInferredFromProse(t *testing.T) {
+	for _, task := range []string{
+		"review docs/spec.md",
+		"summarize the auth flow.",
+		`explain C:\Users\me\notes.txt`,
+		"compare v1.2 and v1.3",
+		"read ./README",
+	} {
+		chain, err := ParseFlowChain("@codex review " + task + " -> @claude summarize")
+		if err != nil {
+			t.Fatalf("%q: %v", task, err)
+		}
+		step := chain.Steps[0]
+		if step.RequiresWriteGate() {
+			t.Errorf("%q was granted write authority by punctuation (path=%q)", task, step.Path)
+		}
+		if step.Path != "" {
+			t.Errorf("%q left a target path %q on a read hop", task, step.Path)
+		}
+	}
+}
+
+// TestDeclaredWriteTargetLeavesTheTaskIntact: the token is authority, not text.
+// Whatever remains after it is removed is what the seat is actually asked.
+func TestDeclaredWriteTargetLeavesTheTaskIntact(t *testing.T) {
+	chain, err := ParseFlowChain("@agy publish the reviewed spec write:docs/spec.md now -> @claude check")
+	if err != nil {
+		t.Fatal(err)
+	}
+	step := chain.Steps[0]
+	if step.Path != "docs/spec.md" {
+		t.Errorf("path = %q", step.Path)
+	}
+	if step.Task != "the reviewed spec now" {
+		t.Errorf("task = %q — the write: token must not survive into the prompt", step.Task)
+	}
+	if !step.RequiresWriteGate() {
+		t.Error("a declared target must require the gate")
+	}
+}
+
+// TestParseRejectsIllegalWriteTargets refuses at PARSE time, which is the last
+// moment the answer is free: after this the seat is spawned with authority.
+func TestParseRejectsIllegalWriteTargets(t *testing.T) {
+	for _, bad := range []string{
+		"@agy publish write: -> @claude check",                  // empty target
+		"@agy publish write:/etc/shadow -> @claude check",       // unix-absolute
+		`@agy publish write:C:\Windows\x.ini -> @claude check`,  // windows-absolute
+		"@agy publish write:../outside.md -> @claude check",     // traversal
+		`@agy publish write:docs\..\..\out.md -> @claude check`, // traversal, backslash
+		"@agy publish write:a/../../b.md -> @claude check",      // traversal, mid-path
+		"@agy publish write:a.md write:b.md -> @claude check",   // two targets
+		"@agy write:a.md -> @claude check",                      // target in the verb slot
+	} {
+		if _, err := ParseFlowChain(bad); err == nil {
+			t.Errorf("accepted an illegal write target: %q", bad)
+		}
 	}
 }

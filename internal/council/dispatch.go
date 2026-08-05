@@ -98,6 +98,28 @@ func (m *Model) dispatch() tea.Cmd {
 			m.flowChain = nil
 			return nil
 		}
+		// Posture comes from the STEP. A hop with no declared target is a read
+		// hop even in a --write room, and this is set before any of the paths
+		// below can spawn anything.
+		m.flowReadHop = !curr.RequiresWriteGate()
+
+		// A write hop in a READ room is refused, not downgraded. Running it
+		// read-only and reporting "returned" would be the room claiming to have
+		// done work it structurally could not do; running it at all would be the
+		// room granting itself authority the user withheld at startup. Checked
+		// ahead of the y/n gate because there is nothing to authorize — no
+		// keystroke here can produce a legal dispatch.
+		if curr.RequiresWriteGate() && !m.st.Write {
+			if curr.State == FlowStateQueued {
+				_ = m.flowChain.MarkAwaitingWrite("this room is read-only; write hops need --write")
+			}
+			m.flowWritePending = false
+			m.flowWriteArmed = false
+			m.st.Notice = fmt.Sprintf("flow blocked at step %d: @%s → %s is a write hop and this room is read-only — restart with --write",
+				m.flowChain.CurrentIndex+1, curr.Vendor, curr.Path)
+			return nil
+		}
+
 		// Pre-dispatch write gate: Path marks write authority. Do not spawn the
 		// seat until the user authorizes (y).
 		if curr.RequiresWriteGate() && !m.flowWriteArmed {
@@ -134,6 +156,7 @@ func (m *Model) dispatch() tea.Cmd {
 		m.flowDraft = ""
 		m.flowWriteArmed = false
 		m.flowWritePending = false
+		m.flowReadHop = false
 		route, prompt = ParseRoute(m.st.Draft)
 	}
 	if route.Mixed {
@@ -247,7 +270,7 @@ func (m *Model) dispatch() tea.Cmd {
 				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 				continue
 			}
-			h, err := runner.Start(ctx, spec, m.events, v.ParseEvent)
+			h, err := startProcess(ctx, spec, m.events, v.ParseEvent)
 			if err != nil {
 				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 				continue
@@ -322,7 +345,17 @@ func (m *Model) dispatch() tea.Cmd {
 }
 
 // posture is what the room is currently asking vendors for.
+//
+// A /flow READ hop overrides it downward and only downward. Posture is a
+// property of the STEP, not of the room: a chain whose first hop is "@codex
+// review security" must not hand codex write authority merely because the room
+// was started with --write and a LATER hop needs it. The reverse — a write hop
+// lifting a read room — is refused in dispatch before anything spawns, so there
+// is no upward case for this function to express.
 func (m *Model) posture() vendors.Posture {
+	if m.flowReadHop {
+		return vendors.PostureRead
+	}
 	if m.st.Write {
 		return vendors.PostureWrite
 	}
@@ -336,6 +369,12 @@ func (m *Model) posture() vendors.Posture {
 // are batch CLIs with no channel to ask on; giving them a gated posture would
 // be a flag that does nothing behind a badge that claims something.
 func (m *Model) seatPosture() vendors.Posture {
+	// A flow read hop is read for the seat too. Not "write, but gated": a gate
+	// the user has to answer is still an offer of write authority this hop was
+	// never granted, and the badge would claim one.
+	if m.flowReadHop {
+		return vendors.PostureRead
+	}
 	if m.st.Write && !m.opts.Auto {
 		return vendors.PostureWriteGated
 	}

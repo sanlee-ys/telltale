@@ -168,6 +168,11 @@ type Model struct {
 	flowWritePending bool
 	// flowWriteArmed is set by y so the next dispatch may Start the write hop.
 	flowWriteArmed bool
+	// flowReadHop marks the dispatch in progress as a /flow hop with NO declared
+	// write target, which forces read posture regardless of the room's. It is
+	// set per hop by dispatch and cleared on any non-flow dispatch, so it can
+	// never outlive the step that earned it.
+	flowReadHop bool
 }
 
 // New builds the model. Nothing renders until the first WindowSizeMsg arrives:
@@ -483,6 +488,7 @@ func (m *Model) flowWriteGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.flowWriteArmed = false
 		m.flowChain = nil
 		m.flowDraft = ""
+		m.flowReadHop = false
 		m.st.Notice = "flow write hop cancelled"
 		return m, nil
 	}

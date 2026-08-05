@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -158,12 +159,57 @@ func pruneSessionArtifacts(dir string, maxN int) error {
 	if len(files) < maxN {
 		return nil
 	}
-	// Delete oldest beyond cap (best-effort by filename sort: turn-N-*).
-	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
+	// Oldest first, by the turn number PARSED out of the name — not by the name.
+	//
+	// A lexicographic sort put "turn-10-claude.md" ahead of "turn-2-claude.md",
+	// so the prune deleted the ten newest artifacts and kept the oldest: the
+	// retention rule ran exactly backwards the moment a session reached turn 10,
+	// which is the first point at which anyone would care about retention.
+	sort.SliceStable(files, func(i, j int) bool {
+		ti, oki := artifactTurn(files[i].Name())
+		tj, okj := artifactTurn(files[j].Name())
+		if oki != okj {
+			// A name that does not parse has no turn to compare, so it cannot be
+			// ordered against one that does. Sorting it FIRST makes it the first
+			// thing pruned, which is the deterministic and conservative choice:
+			// an unrecognised file in the artifact directory is not a receipt
+			// this store wrote, and it must never displace one that is.
+			return !oki
+		}
+		if !oki {
+			return files[i].Name() < files[j].Name()
+		}
+		if ti != tj {
+			return ti < tj
+		}
+		// Same turn, different seats. Name order is arbitrary but stable, which
+		// is all that is needed to keep the prune reproducible.
+		return files[i].Name() < files[j].Name()
+	})
 	for i := 0; i < len(files)-maxN+1; i++ {
 		_ = os.Remove(filepath.Join(dir, files[i].Name()))
 	}
 	return nil
+}
+
+// artifactTurn reads N out of a "turn-N-<vendor>.md" artifact name.
+//
+// Reports ok=false rather than guessing, and never panics: this runs over a
+// directory on disk, which can hold anything a user or another tool put there.
+func artifactTurn(name string) (int, bool) {
+	rest, ok := strings.CutPrefix(name, "turn-")
+	if !ok {
+		return 0, false
+	}
+	i := strings.IndexByte(rest, '-')
+	if i <= 0 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(rest[:i])
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 func sanitizeFilename(s string) string {
