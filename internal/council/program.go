@@ -158,11 +158,10 @@ type Model struct {
 
 	// hooks is the user's own hook configuration, copied into a file of its
 	// own so the gated seat can be pointed at it.
-	//
-	// On Model for the same reason the brief is, and it is the same rule rather
-	// than a resemblance: it names a path into the user's private configuration,
-	// and only the boolean "is anything wired" crosses onto State.
 	hooks HookSet
+
+	// flowChain holds the active workflow DAG sequence if an orchestrated flow was dispatched.
+	flowChain *FlowChain
 }
 
 // New builds the model. Nothing renders until the first WindowSizeMsg arrives:

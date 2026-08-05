@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/model"
 )
@@ -12,23 +13,20 @@ import (
 // maxArtifactSize bounds stored artifact size (1MB).
 const maxArtifactSize = 1024 * 1024
 
-// ArtifactStore handles persistent turn output storage outside of the working tree.
-// Per ADR / Security requirements, artifacts are stored strictly under the user's home
-// directory (~/.telltale/council/artifacts) to avoid accidental git tracking or leaks.
+// ArtifactStore handles persistent turn output storage strictly outside the working tree.
+// Per ADR-008 & security requirements, artifacts are stored strictly under the user's home
+// directory (~/.telltale/council/artifacts) with provenance metadata and redaction.
 type ArtifactStore struct {
 	baseDir string
 }
 
-// NewArtifactStore initializes an ArtifactStore. If baseDir is empty, it defaults
-// to ~/.telltale/council/artifacts.
-func NewArtifactStore(baseDir string) (*ArtifactStore, error) {
-	if baseDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("getting user home dir: %w", err)
-		}
-		baseDir = filepath.Join(home, ".telltale", "council", "artifacts")
+// NewArtifactStore initializes an ArtifactStore enforced to ~/.telltale/council/artifacts.
+func NewArtifactStore() (*ArtifactStore, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("getting user home dir: %w", err)
 	}
+	baseDir := filepath.Join(home, ".telltale", "council", "artifacts")
 	if err := os.MkdirAll(baseDir, 0700); err != nil {
 		return nil, fmt.Errorf("creating artifact base dir: %w", err)
 	}
@@ -45,10 +43,13 @@ func (s *ArtifactStore) ArtifactPath(sessionID string, turnN int, vendor model.V
 	return filepath.Join(s.baseDir, sessDir, filename)
 }
 
-// SaveArtifact writes the turn content to disk atomically outside the repo.
-func (s *ArtifactStore) SaveArtifact(sessionID string, turnN int, vendor model.VendorID, content string) (string, error) {
-	if len(content) > maxArtifactSize {
-		content = content[:maxArtifactSize] + "\n[...artifact truncated at 1MB limit...]"
+// SaveArtifact writes turn content to disk atomically with provenance and redaction.
+func (s *ArtifactStore) SaveArtifact(sessionID string, turnN int, vendor model.VendorID, content string, prompt string) (string, error) {
+	// Sanitize and redact content before persisting to disk
+	cleanContent := Redact(content)
+
+	if len(cleanContent) > maxArtifactSize {
+		cleanContent = cleanContent[:maxArtifactSize] + "\n[...artifact truncated at 1MB limit...]"
 	}
 
 	path := s.ArtifactPath(sessionID, turnN, vendor)
@@ -57,6 +58,12 @@ func (s *ArtifactStore) SaveArtifact(sessionID string, turnN int, vendor model.V
 		return "", fmt.Errorf("creating session artifact dir: %w", err)
 	}
 
+	// Provenance metadata header
+	header := fmt.Sprintf("--- TELLTALE ARTIFACT PROVENANCE ---\nSessionID: %s\nTurn: %d\nVendor: %s\nTimestamp: %s\nPrompt: %s\n------------------------------------\n\n",
+		sessionID, turnN, vendor, time.Now().Format(time.RFC3339), sanitizeFilename(prompt))
+
+	fullOutput := header + cleanContent
+
 	// Atomic write: write to temp file then rename
 	tmpFile, err := os.CreateTemp(dir, ".tmp-art-*.md")
 	if err != nil {
@@ -64,7 +71,7 @@ func (s *ArtifactStore) SaveArtifact(sessionID string, turnN int, vendor model.V
 	}
 	tmpName := tmpFile.Name()
 
-	if _, err := tmpFile.WriteString(content); err != nil {
+	if _, err := tmpFile.WriteString(fullOutput); err != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmpName)
 		return "", fmt.Errorf("writing temp artifact file: %w", err)

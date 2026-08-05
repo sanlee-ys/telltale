@@ -70,6 +70,19 @@ func (m *Model) dispatch() tea.Cmd {
 		return nil
 	}
 
+	if strings.HasPrefix(m.st.Draft, "/flow") || strings.Contains(m.st.Draft, "->") {
+		fc, err := ParseFlowChain(m.st.Draft)
+		if err != nil {
+			m.st.Notice = "flow syntax error: " + err.Error()
+			return nil
+		}
+		m.flowChain = fc
+		if curr := m.flowChain.Current(); curr != nil {
+			curr.State = FlowStateRunning
+			curr.StartedAt = time.Now()
+		}
+	}
+
 	reg := vendors.Registry()
 	// The mentions are stripped from what the vendors receive. A brief that
 	// opens "@codex @claude compare these" should reach them as "compare
@@ -525,6 +538,17 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 			c.Note = "cancelled — the output above is partial"
 		}
 	}
+
+	if c.Phase == PhaseDone && strings.TrimSpace(c.Body) != "" {
+		if store, err := NewArtifactStore(); err == nil {
+			sessID := m.sessions[c.Vendor]
+			if sessID == "" {
+				sessID = "room-session"
+			}
+			_, _ = store.SaveArtifact(sessID, c.TurnN, c.Vendor, c.Body, c.Prompt)
+		}
+	}
+
 	m.settleRestoredThread(c)
 	m.turnColumnFinished(c.Vendor)
 }
