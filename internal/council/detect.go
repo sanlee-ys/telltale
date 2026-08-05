@@ -494,9 +494,9 @@ func postureClaim(v model.VendorID, windows, write, gated, hooked bool) SandboxC
 	if write {
 		return SandboxClaim{
 			Level: SandboxWrite,
-			Detail: "started with --write: this column may edit and run things in " +
-				"the workspace above. Containment is that directory, not a flag — " +
-				"point council at a worktree if that matters",
+			Detail: "this column may edit and run things in the workspace above. " +
+				"Containment is that directory, not a flag — point council at a " +
+				"worktree if that matters. --read opens a room that only talks",
 		}
 	}
 	return sandboxFor(v, windows)
@@ -518,7 +518,7 @@ func postureClaim(v model.VendorID, windows, write, gated, hooked bool) SandboxC
 // front of them. That is precisely the case the wired branch closes, and it is
 // why "the guard is absent" is worth a sentence rather than a shrug.
 func gatedDetail(hooked bool) string {
-	const shared = "started with --write, and this column asks before every tool " +
+	const shared = "this column asks before every tool " +
 		"call that changes anything: y approves, n denies, and nothing runs " +
 		"until you answer. Your settings' permission allow rules are dropped " +
 		"for this seat on purpose, and shell commands the CLI itself classifies " +

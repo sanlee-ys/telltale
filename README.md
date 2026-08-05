@@ -242,8 +242,8 @@ table, followed by the full claim each of your own seats is making.
 | `ro:enforced` | The vendor's own **OS-level sandbox** is applying it — `codex -s read-only` on macOS and Linux. The one posture here that an operating system rather than a flag is behind. |
 | `ro:requested` | A read-only flag was passed and accepted, and **what it actually enforces was never observed**. Weaker than the two above, and it says so rather than borrowing their word. |
 | `unsandboxed` | **Nothing restricts this vendor at the OS level** — measured, not assumed. Treat the column as able to change your files. It deliberately does not open with `ro:`, because a reader scanning four headers takes in the prefix before the qualifier. |
-| `WRITES` | The room was started with `--write`. This column may edit and run things in the workspace. |
-| `gated` | `--write`, and this seat **asks first**: `y` approves, `n` denies, and nothing runs until you answer. Only the seat driven as a live process can be asked; the others say `WRITES` rather than implying they can. |
+| `WRITES` | The room can write — the default. This column may edit and run things in the workspace. |
+| `gated` | The room can write, and this seat **asks first**: `y` approves, `n` denies, and nothing runs until you answer. Only the seat driven as a live process can be asked; the others say `WRITES` rather than implying they can. |
 
 Two of those need the same answer to the obvious follow-up — *must they stay that way?*
 
@@ -348,8 +348,9 @@ folded and why.
 
 `telltale council` flags: `--fresh` (start over instead of reattaching), `--cd <dir>`
 (launch-time override of the room's workspace — the daily path never needs it),
-`--vendor <list>`, `--brief <file>`, `--write`, `--resume` (accepted, and redundant —
-reattaching is the default), `--ascii`, `--no-title`.
+`--vendor <list>`, `--brief <file>`, `--read`, `--auto`, `--resume` (accepted, and
+redundant — reattaching is the default), `--write` (accepted, and does nothing —
+writing is the default), `--ascii`, `--no-title`.
 
 `--vendor <list>` decides who is in the room: `all` keeps every detected seat on screen
 including the ones that cannot be driven, and a comma list (`--vendor claude,codex`) seats
@@ -363,14 +364,28 @@ never content: telltale is public and a briefing is not, so no default location 
 repo is searched, and the file is never logged, never rendered and never stored by
 telltale. The header says `briefed` or `no brief` on every frame.
 
-`--write` drops the read-only postures. **The containment is the workspace, not the flag**
-— so the room states its posture where it cannot be missed: `⚠ WRITE` in the header for
-the whole session, and the same `WRITES` badge on every column, uniform on purpose because
-grading them would imply a safety difference that does not exist.
+**A plain `telltale council` can write.** That is the default, and `--read` is the
+opt-out — a room that only talks, where no seat may touch the workspace. It reads
+backwards until you notice what guards it: the *gate* does, per call, not the flag. An
+opt-in posture made sense while nothing could ask before a write, so "this room can
+write" meant "this room writes without you". Once the gated seat started raising an
+approval card, all the flag still did was make a room you opened to get work done unable
+to do any until you remembered a word — the same reason the workspace stopped being an
+invocation input.
+
+**The containment is the workspace, not the flag** — so the room states its posture where
+it cannot be missed: `⚠ WRITE` in the header for the whole session, and the same `WRITES`
+badge on every column, uniform on purpose because grading them would imply a safety
+difference that does not exist. A `--read` room says `READ` in the same place, because
+absence of a badge is not a claim.
+
+Only the seat driven as a live process can be asked. The other three are batch CLIs with
+no channel a question could arrive on, so they act unasked — which is exactly why the
+directory matters more than the posture:
 
 ```
 git worktree add ../telltale-council
-telltale.exe council --write --cd ../telltale-council
+telltale.exe council --cd ../telltale-council
 ```
 
 There is **one room**, and a bare `telltale council` reattaches to it by default. Each
@@ -381,8 +396,9 @@ fails lets that thread go and starts fresh, briefed. `--fresh` starts over, and 
 saved room is named once before the first dispatch replaces it. The workspace is a
 property of the room, not of the launch: `/cd <dir>` typed in the composer moves the room
 — absolute, relative to the current workspace, or a sibling of it — and every seat
-follows on the next dispatch. **Posture is never restored**: a `--write` room reopens
-read, because a grant that can arrive from a file is not a flag anyone typed. And one
+follows on the next dispatch. **Posture is never restored** — it comes from this launch's
+flags or from the default, never from the saved file, because a posture that can arrive
+from a file is not one anyone typed. And one
 room shared by every terminal means two councils open at once share one state file —
 last save wins.
 

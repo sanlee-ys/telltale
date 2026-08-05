@@ -102,11 +102,11 @@ const (
 	// either case: rendering `ro:requested` alongside vendors that at least
 	// attempt something would imply a posture these columns do not have.
 	SandboxNone
-	// SandboxWrite: the room was started with --write and no read-only posture
+	// SandboxWrite: the room can write and no read-only posture
 	// was requested at all.
 	SandboxWrite
-	// SandboxGated: the room was started with --write, and this seat asks
-	// before every tool call that changes anything.
+	// SandboxGated: the room can write, and this seat asks before every tool
+	// call that changes anything.
 	//
 	// Not a level of read-only. The seat may do everything SandboxWrite allows;
 	// what differs is that it has to be told yes first. It renders as its own
@@ -684,15 +684,27 @@ type State struct {
 	// the renderer has no reason to be able to reach it.
 	Briefed bool
 
-	// Write reports that this room was started with --write: vendors are asked
-	// for their widest posture rather than their most read-only one.
+	// Write reports that vendors are asked for their widest posture rather than
+	// their most read-only one. This is the DEFAULT; --read is the opt-out.
 	//
-	// A session-level flag rather than a toggle, on purpose. Widening what
-	// three agents may do to a working tree is a decision about how the room
-	// was OPENED, and one that should be visible in the command the user typed
-	// and in the header for the whole session — not something reachable by a
-	// keystroke mid-conversation.
+	// Still a session-level property rather than a toggle. What may act on a
+	// working tree is decided when the room is opened and is visible in the
+	// header for the whole session — not reachable by a keystroke mid-
+	// conversation, in either direction. What changed is only which way it
+	// defaults, once the approval card started guarding the calls the flag used
+	// to guard the room against.
 	Write bool
+
+	// FlowHop / FlowSteps / FlowVendor describe where a /flow chain stands, and
+	// exist because the room started dispatching without a keystroke.
+	//
+	// Every other turn here is something the user pressed enter on. A chain
+	// advances itself, so between hops the room sends a brief nobody typed to a
+	// seat nobody selected — and with three of four columns idle that looks the
+	// same as a room acting on its own. FlowSteps == 0 means no chain, which is
+	// the ordinary case and renders nothing.
+	FlowHop, FlowSteps int
+	FlowVendor         model.VendorID
 
 	// Gates are the tool calls waiting on a decision, OLDEST FIRST.
 	//
