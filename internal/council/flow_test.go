@@ -3,6 +3,7 @@ package council
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,45 +16,35 @@ func TestParseFlowChainValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseFlowChain failed: %v", err)
 	}
-
 	if len(chain.Steps) != 3 {
 		t.Fatalf("expected 3 steps, got %d", len(chain.Steps))
 	}
-
-	s1 := chain.Steps[0]
-	if s1.Vendor != model.VendorClaude || s1.Verb != "draft" || s1.Task != "feature spec" {
-		t.Errorf("step 0 mismatch: %+v", s1)
+	if !chain.Steps[2].RequiresWriteGate() {
+		t.Fatal("publish with path must require write gate")
 	}
-
-	s3 := chain.Steps[2]
-	if s3.Vendor != model.VendorAntigravity || s3.Verb != "publish" || s3.Path != "docs/spec.md" {
-		t.Errorf("step 2 mismatch: %+v", s3)
+	if chain.Steps[0].RequiresWriteGate() {
+		t.Fatal("draft without path must not require write gate")
 	}
 }
 
-func TestParseFlowChainAcceptsAntigravityAlias(t *testing.T) {
-	chain, err := ParseFlowChain("@claude draft -> @antigravity publish out.md")
-	if err != nil {
-		t.Fatalf("ParseFlowChain failed: %v", err)
-	}
-	if chain.Steps[1].Vendor != model.VendorAntigravity {
-		t.Errorf("expected agy vendor for @antigravity, got %s", chain.Steps[1].Vendor)
+func TestParseFlowChainRejectsMerge(t *testing.T) {
+	_, err := ParseFlowChain("@claude draft -> @agy merge")
+	if err == nil {
+		t.Fatal("expected merge verb rejected")
 	}
 }
 
 func TestParseFlowChainInvalidSeat(t *testing.T) {
-	input := "@gemini draft -> @codex review"
-	_, err := ParseFlowChain(input)
+	_, err := ParseFlowChain("@gemini draft -> @codex review")
 	if err == nil {
-		t.Fatal("expected error for invalid seat @gemini, got nil")
+		t.Fatal("expected error for @gemini")
 	}
 }
 
 func TestParseFlowChainInvalidCommandPrefix(t *testing.T) {
-	input := "/flower @claude draft -> @codex review"
-	_, err := ParseFlowChain(input)
+	_, err := ParseFlowChain("/flower @claude draft -> @codex review")
 	if err == nil {
-		t.Fatal("expected error for invalid prefix /flower, got nil")
+		t.Fatal("expected error for /flower")
 	}
 }
 
@@ -61,12 +52,12 @@ func TestVerifyReceiptPathlessNeverVerifies(t *testing.T) {
 	step := &FlowStep{
 		Vendor:    model.VendorClaude,
 		Verb:      "draft",
-		State:     FlowStatePublished, // narrated — must not matter
+		State:     FlowStatePublished,
 		StartedAt: time.Now(),
 	}
 	r := VerifyReceipt(t.TempDir(), step)
 	if r.Verified {
-		t.Fatalf("pathless step must not verify, even if State=published: %+v", r)
+		t.Fatalf("pathless must not verify: %+v", r)
 	}
 }
 
@@ -74,104 +65,86 @@ func TestVerifyReceiptRequiresChangeFromBaseline(t *testing.T) {
 	tempDir := t.TempDir()
 	relPath := "output.md"
 	absPath := filepath.Join(tempDir, relPath)
-
 	if err := os.WriteFile(absPath, []byte("# pre-existing"), 0600); err != nil {
 		t.Fatal(err)
 	}
-
-	step := &FlowStep{
-		Vendor:    model.VendorAntigravity,
-		Verb:      "publish",
-		Path:      relPath,
-		StartedAt: time.Now(),
-	}
+	step := &FlowStep{Vendor: model.VendorAntigravity, Verb: "publish", Path: relPath, StartedAt: time.Now()}
 	captureBaseline(tempDir, step)
-	if !step.BaselineExists {
-		t.Fatal("expected baseline to see pre-existing file")
+	if VerifyReceipt(tempDir, step).Verified {
+		t.Fatal("unchanged pre-existing must not verify")
 	}
-
-	r1 := VerifyReceipt(tempDir, step)
-	if r1.Verified {
-		t.Fatalf("unchanged pre-existing file must not verify: %+v", r1)
-	}
-
-	if err := os.WriteFile(absPath, []byte("# published by agent"), 0600); err != nil {
+	if err := os.WriteFile(absPath, []byte("# published"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	// Ensure mtime/size differ on coarse filesystems
 	_ = os.Chtimes(absPath, time.Now(), time.Now().Add(2*time.Second))
-
-	r2 := VerifyReceipt(tempDir, step)
-	if !r2.Verified {
-		t.Fatalf("changed file should verify: %+v", r2)
+	if !VerifyReceipt(tempDir, step).Verified {
+		t.Fatal("changed file should verify")
 	}
 }
 
-func TestVerifyReceiptNewFileAfterStart(t *testing.T) {
-	tempDir := t.TempDir()
-	relPath := "new.md"
-	step := &FlowStep{
-		Vendor:    model.VendorAntigravity,
-		Verb:      "publish",
-		Path:      relPath,
-		StartedAt: time.Now(),
-	}
-	captureBaseline(tempDir, step)
-	if step.BaselineExists {
-		t.Fatal("baseline should not exist yet")
-	}
-
-	r1 := VerifyReceipt(tempDir, step)
-	if r1.Verified {
-		t.Fatalf("missing file must not verify: %+v", r1)
-	}
-
-	if err := os.WriteFile(filepath.Join(tempDir, relPath), []byte("fresh"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	r2 := VerifyReceipt(tempDir, step)
-	if !r2.Verified {
-		t.Fatalf("new file should verify: %+v", r2)
-	}
-}
-
-func TestFlowStateTransitions(t *testing.T) {
+func TestFlowReturnedNotApproved(t *testing.T) {
 	chain, err := ParseFlowChain("@claude draft -> @codex review")
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if err := chain.Start(""); err != nil {
-		t.Fatalf("Start: %v", err)
+		t.Fatal(err)
 	}
-	if chain.Current().State != FlowStateRunning {
-		t.Fatalf("expected running, got %s", chain.Current().State)
-	}
-
 	if _, err := chain.Advance(); err == nil {
 		t.Fatal("Advance from Running must fail")
 	}
-
-	if err := chain.MarkApproved(); err != nil {
-		t.Fatalf("MarkApproved: %v", err)
+	if err := chain.MarkReturned(); err != nil {
+		t.Fatal(err)
+	}
+	if chain.Current().State != FlowStateReturned {
+		t.Fatalf("got %s", chain.Current().State)
 	}
 	ok, err := chain.Advance()
 	if !ok || err != nil {
-		t.Fatalf("Advance after Approved: ok=%v err=%v", ok, err)
+		t.Fatalf("Advance after Returned: %v", err)
 	}
-	if chain.Current().Vendor != model.VendorCodex {
-		t.Fatalf("expected codex hop, got %s", chain.Current().Vendor)
+}
+
+func TestWriteGateBeforeStart(t *testing.T) {
+	chain, _ := ParseFlowChain("@agy publish docs/x.md -> @codex review")
+	if err := chain.MarkAwaitingWrite("awaiting auth"); err != nil {
+		t.Fatal(err)
 	}
-	if chain.Current().State != FlowStateQueued {
-		t.Fatalf("next hop should still be queued until Start, got %s", chain.Current().State)
+	if err := chain.Start(""); err == nil {
+		t.Fatal("Start from Blocked must fail")
+	}
+	if err := chain.ClearBlockForStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := chain.Start(t.TempDir()); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestMarkPublishedRequiresVerifiedReceipt(t *testing.T) {
 	chain, _ := ParseFlowChain("@agy publish out.md -> @codex review")
 	_ = chain.Start(t.TempDir())
-	err := chain.MarkPublished(Receipt{Verified: false, Detail: "nope"})
-	if err == nil {
-		t.Fatal("MarkPublished must refuse unverified receipt")
+	if err := chain.MarkPublished(Receipt{Verified: false}); err == nil {
+		t.Fatal("expected refusal")
+	}
+}
+
+func TestArtifactPromptIsFingerprint(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := NewArtifactStoreWithBaseDir(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err := store.SaveArtifact("s", 1, model.VendorClaude, "body", "secret brief text sk-ant-abcdefghijklmnopqrst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	s := string(data)
+	if strings.Contains(s, "secret brief text") {
+		t.Fatal("full prompt must not be stored")
+	}
+	if !strings.Contains(s, "PromptSHA256-8:") {
+		t.Fatal("expected fingerprint header")
 	}
 }

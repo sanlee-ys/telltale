@@ -6,14 +6,17 @@ ADR-008 Amendment (Artifact Persistence & Privacy Contract):
    ~/.telltale/council/artifacts/<session-id>/ to prevent accidental staging or commits.
 2. Artifact persistence is opt-in for orchestrated flow execution and explicitly
    redacts credentials/secrets from both prompts and vendor body outputs using Redact().
-3. Artifacts carry provenance headers (SessionID, Turn, Vendor, Timestamp, Redacted Prompt)
-   and are written atomically via temporary file renaming.
+3. Artifacts carry provenance headers (SessionID, Turn, Vendor, Timestamp, PromptSHA256-8)
+   and are written atomically via temporary file renaming. Full brief text is not stored.
+4. Retention: at most 100 artifacts per session directory; oldest pruned on save.
+5. VerifyReceipt proves create/change after hop start inside the workspace — not authorship.
 */
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -79,11 +82,15 @@ func (s *ArtifactStore) SaveArtifact(sessionID string, turnN int, vendor model.V
 		return "", fmt.Errorf("stat artifact path: %w", err)
 	}
 
-	// Provenance metadata header
-	header := fmt.Sprintf("--- TELLTALE ARTIFACT PROVENANCE ---\nSessionID: %s\nTurn: %d\nVendor: %s\nTimestamp: %s\nPrompt: %s\n------------------------------------\n\n",
-		sessionID, turnN, vendor, time.Now().Format(time.RFC3339), cleanPrompt)
+	// Provenance metadata header — prompt fingerprint only, not brief content.
+	header := fmt.Sprintf("--- TELLTALE ARTIFACT PROVENANCE ---\nSessionID: %s\nTurn: %d\nVendor: %s\nTimestamp: %s\nPromptSHA256-8: %s\n------------------------------------\n\n",
+		sessionID, turnN, vendor, time.Now().Format(time.RFC3339), PromptFingerprint(cleanPrompt))
 
 	fullOutput := header + cleanContent
+
+	if err := pruneSessionArtifacts(dir, maxArtifactsPerSession); err != nil {
+		return "", fmt.Errorf("pruning artifacts: %w", err)
+	}
 
 	// Atomic write: write to temp file then rename
 	tmpFile, err := os.CreateTemp(dir, ".tmp-art-*.md")
@@ -129,6 +136,34 @@ func FormatFencedArtifact(label string, turnN int, content string) string {
 	b.WriteString("\n")
 	b.WriteString(footer)
 	return b.String()
+}
+
+// maxArtifactsPerSession caps retained files per session directory.
+const maxArtifactsPerSession = 100
+
+func pruneSessionArtifacts(dir string, maxN int) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	var files []os.DirEntry
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") && !strings.HasPrefix(e.Name(), ".tmp-") {
+			files = append(files, e)
+		}
+	}
+	if len(files) < maxN {
+		return nil
+	}
+	// Delete oldest beyond cap (best-effort by filename sort: turn-N-*).
+	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
+	for i := 0; i < len(files)-maxN+1; i++ {
+		_ = os.Remove(filepath.Join(dir, files[i].Name()))
+	}
+	return nil
 }
 
 func sanitizeFilename(s string) string {

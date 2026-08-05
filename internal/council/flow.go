@@ -1,6 +1,8 @@
 package council
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -11,16 +13,14 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
-// FlowStepState represents the empirical, measured status of a workflow step.
-// Column PhaseDone is turn state; these values are flow state — never derived
-// from a model claiming it finished.
+// FlowStepState is harness-observed workflow state — never inferred from model prose.
 type FlowStepState uint8
 
 const (
 	FlowStateQueued FlowStepState = iota
 	FlowStateRunning
-	FlowStateBlocked
-	FlowStateApproved
+	FlowStateBlocked  // awaiting user write authorization, or post-write receipt failure
+	FlowStateReturned // seat finished; not a judgment that the work is "approved"
 	FlowStatePublished
 	FlowStateFailed
 )
@@ -33,8 +33,8 @@ func (s FlowStepState) String() string {
 		return "running"
 	case FlowStateBlocked:
 		return "blocked"
-	case FlowStateApproved:
-		return "approved"
+	case FlowStateReturned:
+		return "returned"
 	case FlowStatePublished:
 		return "published"
 	case FlowStateFailed:
@@ -44,26 +44,28 @@ func (s FlowStepState) String() string {
 	}
 }
 
-// Receipt holds empirical evidence verifying a publish/write hop.
-// Verified is never true merely because State says so.
+// Receipt holds empirical evidence for a write hop's target path.
+// Verified means the file was created or changed after step start inside the
+// workspace — not that this seat authored it, and never that State claimed success.
 type Receipt struct {
 	Verified bool
 	Detail   string
 }
 
-// FlowStep represents one hop in an orchestrated workflow chain.
+// FlowStep is one hop in a /flow chain.
+//
+// Write authority is explicit: Path != "" means the hop may mutate the workspace
+// and requires a pre-dispatch user gate plus a post-dispatch disk receipt.
+// English verbs are labels only — they do not confer write authority.
 type FlowStep struct {
 	Vendor    model.VendorID
 	Verb      string
 	Task      string
 	State     FlowStepState
-	Path      string // Optional target file path for write/publish steps
+	Path      string
 	StartedAt time.Time
 	Receipt   Receipt
 
-	// Baseline* captured when the hop enters Running. Publish receipts require
-	// the target to appear or change relative to this snapshot — existence alone
-	// of a pre-existing file is not evidence.
 	BaselineExists bool
 	BaselineSize   int64
 	BaselineMod    time.Time
@@ -75,11 +77,13 @@ type FlowChain struct {
 	CurrentIndex int
 }
 
+// RequiresWriteGate reports explicit write hops (target path present).
+func (s *FlowStep) RequiresWriteGate() bool {
+	return s != nil && strings.TrimSpace(s.Path) != ""
+}
+
 // ParseFlowChain parses arrow-delimited workflow instructions.
-// Requires at least two hops. The "/flow " prefix is optional here; dispatch
-// requires it so ordinary prose containing "->" never becomes a chain.
-//
-// Example: "@claude draft feature spec -> @codex review security -> @agy publish docs/spec.md"
+// Example: "/flow @claude draft feature spec -> @codex review security -> @agy publish docs/spec.md"
 func ParseFlowChain(input string) (*FlowChain, error) {
 	input = strings.TrimSpace(input)
 	if strings.HasPrefix(input, "/flow") {
@@ -119,6 +123,9 @@ func ParseFlowChain(input string) (*FlowChain, error) {
 		}
 
 		verb := strings.ToLower(parts[1])
+		if verb == "merge" {
+			return nil, fmt.Errorf("merge hops are not supported in v1: file receipts cannot prove a GitHub merge")
+		}
 
 		task := ""
 		path := ""
@@ -139,13 +146,10 @@ func ParseFlowChain(input string) (*FlowChain, error) {
 		})
 	}
 
-	return &FlowChain{
-		Steps:        steps,
-		CurrentIndex: 0,
-	}, nil
+	return &FlowChain{Steps: steps, CurrentIndex: 0}, nil
 }
 
-// Current returns the step currently active or queued.
+// Current returns the active step.
 func (fc *FlowChain) Current() *FlowStep {
 	if fc == nil || fc.CurrentIndex < 0 || fc.CurrentIndex >= len(fc.Steps) {
 		return nil
@@ -153,7 +157,24 @@ func (fc *FlowChain) Current() *FlowStep {
 	return &fc.Steps[fc.CurrentIndex]
 }
 
-// Start moves the current Queued hop to Running and captures a path baseline.
+// MarkAwaitingWrite parks a Queued write hop until the user authorizes dispatch.
+func (fc *FlowChain) MarkAwaitingWrite(detail string) error {
+	curr := fc.Current()
+	if curr == nil {
+		return errors.New("no active step")
+	}
+	if curr.State != FlowStateQueued {
+		return fmt.Errorf("cannot await write from state %s", curr.State)
+	}
+	if !curr.RequiresWriteGate() {
+		return errors.New("step has no target path — not a write hop")
+	}
+	curr.State = FlowStateBlocked
+	curr.Receipt = Receipt{Verified: false, Detail: detail}
+	return nil
+}
+
+// Start moves Queued → Running and captures a path baseline.
 func (fc *FlowChain) Start(workspace string) error {
 	curr := fc.Current()
 	if curr == nil {
@@ -168,35 +189,45 @@ func (fc *FlowChain) Start(workspace string) error {
 	return nil
 }
 
-// MarkApproved records that the current hop finished in a way the harness observed
-// (seat PhaseDone for draft/review). It does not verify disk publication.
-func (fc *FlowChain) MarkApproved() error {
+// ClearBlockForStart returns a write hop from Blocked (pre-auth) to Queued so Start can run.
+func (fc *FlowChain) ClearBlockForStart() error {
 	curr := fc.Current()
 	if curr == nil {
 		return errors.New("no active step")
 	}
-	if curr.State != FlowStateRunning && curr.State != FlowStateBlocked {
-		return fmt.Errorf("cannot approve step in state %s", curr.State)
+	if curr.State != FlowStateBlocked {
+		return fmt.Errorf("cannot clear block from state %s", curr.State)
 	}
-	curr.State = FlowStateApproved
+	curr.State = FlowStateQueued
+	curr.Receipt = Receipt{}
 	return nil
 }
 
-// MarkBlocked parks a write/publish hop awaiting a user gate or a disk receipt.
-func (fc *FlowChain) MarkBlocked(detail string) error {
+// MarkReturned records that the seat finished (PhaseDone). Not an approval.
+func (fc *FlowChain) MarkReturned() error {
 	curr := fc.Current()
 	if curr == nil {
 		return errors.New("no active step")
 	}
 	if curr.State != FlowStateRunning {
-		return fmt.Errorf("cannot block step in state %s", curr.State)
+		return fmt.Errorf("cannot mark returned in state %s", curr.State)
 	}
-	curr.State = FlowStateBlocked
+	curr.State = FlowStateReturned
+	return nil
+}
+
+// MarkFailed records a harness-detected failure (e.g. artifact save).
+func (fc *FlowChain) MarkFailed(detail string) error {
+	curr := fc.Current()
+	if curr == nil {
+		return errors.New("no active step")
+	}
+	curr.State = FlowStateFailed
 	curr.Receipt = Receipt{Verified: false, Detail: detail}
 	return nil
 }
 
-// MarkPublished sets Published only when VerifyReceipt already succeeded.
+// MarkPublished sets Published only with a verified disk receipt.
 func (fc *FlowChain) MarkPublished(receipt Receipt) error {
 	curr := fc.Current()
 	if curr == nil {
@@ -205,7 +236,7 @@ func (fc *FlowChain) MarkPublished(receipt Receipt) error {
 	if !receipt.Verified {
 		return errors.New("cannot mark published without a verified receipt")
 	}
-	if curr.State != FlowStateBlocked && curr.State != FlowStateRunning {
+	if curr.State != FlowStateRunning {
 		return fmt.Errorf("cannot publish step in state %s", curr.State)
 	}
 	curr.Receipt = receipt
@@ -213,8 +244,7 @@ func (fc *FlowChain) MarkPublished(receipt Receipt) error {
 	return nil
 }
 
-// Advance moves to the next hop only from Approved or Published.
-// Running/Blocked/Failed/Queued cannot skip forward — that was the narrated-status bug.
+// Advance moves to the next hop only from Returned or Published.
 func (fc *FlowChain) Advance() (bool, error) {
 	curr := fc.Current()
 	if curr == nil {
@@ -227,8 +257,8 @@ func (fc *FlowChain) Advance() (bool, error) {
 	case FlowStateBlocked:
 		return false, fmt.Errorf("cannot advance: step %d (@%s %s) is blocked", fc.CurrentIndex+1, curr.Vendor, curr.Verb)
 	case FlowStateQueued, FlowStateRunning:
-		return false, fmt.Errorf("cannot advance: step %d (@%s %s) is still %s — approve or publish first", fc.CurrentIndex+1, curr.Vendor, curr.Verb, curr.State)
-	case FlowStateApproved, FlowStatePublished:
+		return false, fmt.Errorf("cannot advance: step %d (@%s %s) is still %s", fc.CurrentIndex+1, curr.Vendor, curr.Verb, curr.State)
+	case FlowStateReturned, FlowStatePublished:
 		if fc.CurrentIndex >= len(fc.Steps)-1 {
 			return false, nil
 		}
@@ -262,10 +292,8 @@ func captureBaseline(workspace string, step *FlowStep) {
 	step.BaselineMod = info.ModTime()
 }
 
-// VerifyReceipt checks disk evidence for a write/publish hop.
-// Never returns Verified for a pathless step. Never treats State as evidence.
-// A pre-existing unchanged file does not verify; the file must be new or changed
-// relative to the Running baseline.
+// VerifyReceipt checks disk evidence for a write hop with a target Path.
+// Proves create/change after start inside the workspace — not authorship.
 func VerifyReceipt(workspace string, step *FlowStep) Receipt {
 	if step == nil {
 		return Receipt{Verified: false, Detail: "nil step"}
@@ -306,10 +334,9 @@ func VerifyReceipt(workspace string, step *FlowStep) Receipt {
 	}
 
 	if !step.BaselineExists {
-		// File appeared after start — acceptable creation receipt.
 		return Receipt{
 			Verified: true,
-			Detail:   fmt.Sprintf("verified new file %s (%d bytes)", step.Path, info.Size()),
+			Detail:   fmt.Sprintf("verified new file %s (%d bytes); authorship not proven", step.Path, info.Size()),
 		}
 	}
 
@@ -323,16 +350,12 @@ func VerifyReceipt(workspace string, step *FlowStep) Receipt {
 
 	return Receipt{
 		Verified: true,
-		Detail:   fmt.Sprintf("verified changed file %s (%d bytes, modtime %s)", step.Path, info.Size(), info.ModTime().Format(time.RFC3339)),
+		Detail:   fmt.Sprintf("verified changed file %s (%d bytes); authorship not proven", step.Path, info.Size()),
 	}
 }
 
-// IsWriteVerb reports hops that require a disk receipt and user gate.
-func IsWriteVerb(verb string) bool {
-	switch strings.ToLower(verb) {
-	case "publish", "write", "land", "merge":
-		return true
-	default:
-		return false
-	}
+// PromptFingerprint is a non-reversible handle for provenance headers.
+func PromptFingerprint(redactedPrompt string) string {
+	sum := sha256.Sum256([]byte(redactedPrompt))
+	return hex.EncodeToString(sum[:8])
 }

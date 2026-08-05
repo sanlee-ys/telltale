@@ -2,6 +2,8 @@ package council
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -78,26 +80,60 @@ func (m *Model) dispatch() tea.Cmd {
 	var route Route
 	var prompt string
 	if strings.HasPrefix(strings.TrimSpace(m.st.Draft), "/flow") {
-		fc, err := ParseFlowChain(m.st.Draft)
-		if err != nil {
-			m.st.Notice = "flow syntax error: " + err.Error()
-			return nil
+		// Reuse an in-progress chain when the user just authorized a write gate
+		// against the same draft; otherwise parse fresh.
+		if m.flowChain == nil || m.flowDraft != m.st.Draft {
+			fc, err := ParseFlowChain(m.st.Draft)
+			if err != nil {
+				m.st.Notice = "flow syntax error: " + err.Error()
+				return nil
+			}
+			m.flowChain = fc
+			m.flowDraft = m.st.Draft
+			m.flowWriteArmed = false
 		}
-		m.flowChain = fc
-		if err := m.flowChain.Start(m.st.Workspace); err != nil {
-			m.st.Notice = "flow start error: " + err.Error()
+		curr := m.flowChain.Current()
+		if curr == nil {
+			m.st.Notice = "flow has no current step"
 			m.flowChain = nil
 			return nil
 		}
-		curr := m.flowChain.Current()
+		// Pre-dispatch write gate: Path marks write authority. Do not spawn the
+		// seat until the user authorizes (y).
+		if curr.RequiresWriteGate() && !m.flowWriteArmed {
+			if curr.State == FlowStateQueued {
+				_ = m.flowChain.MarkAwaitingWrite("awaiting user authorization before write hop runs")
+			}
+			m.flowWritePending = true
+			m.st.Notice = fmt.Sprintf("flow write gate: y authorizes @%s → %s · n cancels", curr.Vendor, curr.Path)
+			return nil
+		}
+		if curr.State == FlowStateBlocked && m.flowWriteArmed {
+			if err := m.flowChain.ClearBlockForStart(); err != nil {
+				m.st.Notice = "flow gate: " + err.Error()
+				return nil
+			}
+		}
+		if err := m.flowChain.Start(m.st.Workspace); err != nil {
+			m.st.Notice = "flow start error: " + err.Error()
+			m.flowChain = nil
+			m.flowWriteArmed = false
+			m.flowWritePending = false
+			return nil
+		}
+		m.flowWriteArmed = false
+		m.flowWritePending = false
+		curr = m.flowChain.Current()
 		route = Route{Vendors: []model.VendorID{curr.Vendor}}
 		prompt = strings.TrimSpace(curr.Task)
 		if prompt == "" {
 			prompt = curr.Verb
 		}
-		// Prior hops' artifacts are injected in a later PR; hop 1 gets the task only.
 	} else {
 		m.flowChain = nil
+		m.flowDraft = ""
+		m.flowWriteArmed = false
+		m.flowWritePending = false
 		route, prompt = ParseRoute(m.st.Draft)
 	}
 	if route.Mixed {
@@ -557,9 +593,9 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 }
 
 // finishFlowHop records harness-observed completion of the active flow seat.
-// Draft/review hops become Approved when the seat reaches PhaseDone. Write hops
-// become Blocked until VerifyReceipt succeeds and a later gate (Cursor UI PR)
-// marks Published. Storage failures are surfaced, never swallowed.
+// Non-write hops become Returned (not approved). Write hops (Path set) must
+// already have been user-gated before dispatch; on PhaseDone we verify the disk
+// receipt and MarkPublished or MarkFailed. Artifact save failure fails the hop.
 func (m *Model) finishFlowHop(c *Column) {
 	if m.flowChain == nil || c.Phase != PhaseDone || strings.TrimSpace(c.Body) == "" {
 		return
@@ -571,39 +607,48 @@ func (m *Model) finishFlowHop(c *Column) {
 
 	store, err := NewArtifactStore()
 	if err != nil {
-		m.st.Notice = "artifact store: " + err.Error()
-	} else {
-		sessID := m.sessions[c.Vendor]
-		if sessID == "" {
-			sessID = "room-session"
-		}
-		if path, err := store.SaveArtifact(sessID, c.TurnN, c.Vendor, c.Body, c.Prompt); err != nil {
-			m.st.Notice = "artifact save: " + err.Error()
-		} else {
-			m.st.Notice = "artifact saved: " + path
-		}
+		_ = m.flowChain.MarkFailed("artifact store: " + err.Error())
+		m.st.Notice = "flow hop failed: artifact store: " + err.Error()
+		return
 	}
+	sessID := m.sessions[c.Vendor]
+	if sessID == "" {
+		sessID = flowSessionID(m.st.Workspace)
+	}
+	path, err := store.SaveArtifact(sessID, c.TurnN, c.Vendor, c.Body, c.Prompt)
+	if err != nil {
+		_ = m.flowChain.MarkFailed("artifact save: " + err.Error())
+		m.st.Notice = "flow hop failed: " + err.Error()
+		return
+	}
+	m.st.Notice = "artifact saved: " + path
 
-	if IsWriteVerb(curr.Verb) {
+	if curr.RequiresWriteGate() {
 		receipt := VerifyReceipt(m.st.Workspace, curr)
 		curr.Receipt = receipt
-		if err := m.flowChain.MarkBlocked(receipt.Detail); err != nil {
+		if !receipt.Verified {
+			_ = m.flowChain.MarkFailed(receipt.Detail)
+			m.st.Notice = joinNotice(m.st.Notice, "publish failed: "+receipt.Detail)
+			return
+		}
+		if err := m.flowChain.MarkPublished(receipt); err != nil {
 			m.st.Notice = joinNotice(m.st.Notice, err.Error())
 			return
 		}
-		if receipt.Verified {
-			m.st.Notice = joinNotice(m.st.Notice, "publish receipt ok — confirm gate to mark published (UI follow-up)")
-		} else {
-			m.st.Notice = joinNotice(m.st.Notice, "publish blocked: "+receipt.Detail)
-		}
+		m.st.Notice = joinNotice(m.st.Notice, "flow hop published ("+receipt.Detail+")")
 		return
 	}
 
-	if err := m.flowChain.MarkApproved(); err != nil {
+	if err := m.flowChain.MarkReturned(); err != nil {
 		m.st.Notice = joinNotice(m.st.Notice, err.Error())
 		return
 	}
-	m.st.Notice = joinNotice(m.st.Notice, fmt.Sprintf("flow hop %d approved (@%s %s) — advance not auto-dispatched yet", m.flowChain.CurrentIndex+1, curr.Vendor, curr.Verb))
+	m.st.Notice = joinNotice(m.st.Notice, fmt.Sprintf("flow hop %d returned (@%s %s) — not an approval", m.flowChain.CurrentIndex+1, curr.Vendor, curr.Verb))
+}
+
+func flowSessionID(workspace string) string {
+	sum := sha256.Sum256([]byte(workspace))
+	return "room-" + hex.EncodeToString(sum[:8])
 }
 
 func joinNotice(a, b string) string {

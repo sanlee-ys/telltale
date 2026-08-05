@@ -1610,3 +1610,9 @@ a confirmed `/flow` parse.
 
 **Sequencing.** Full auto-advance of hop N+1 after hop N is a follow-up; this amendment lands
 the artifact store, parser, and receipt rules first.
+
+**Write gate.** Hops with an explicit target path require user authorization (`y`) *before*
+the seat is spawned. File create/change after start is a receipt of mutation, not authorship.
+
+**Returned vs approved.** A seat reaching PhaseDone marks the hop `returned`, not `approved`.
+Approval is a separate human (or structured) judgment.

@@ -37,15 +37,18 @@ func TestArtifactStoreSaveAndLoadInTempDir(t *testing.T) {
 		t.Fatalf("LoadArtifact failed: %v", err)
 	}
 
-	// Verify secret redaction in both prompt metadata and content
+	// Verify secret redaction in body; prompt stored as fingerprint only
 	if strings.Contains(loaded, "sk-ant-api-key-1234567890123456") {
 		t.Errorf("secret in content was not redacted: %s", loaded)
 	}
 	if strings.Contains(loaded, "sk-ant-secret-key-1234567890123456") {
-		t.Errorf("secret in prompt metadata was not redacted: %s", loaded)
+		t.Errorf("secret in prompt must not be stored: %s", loaded)
 	}
 	if !strings.Contains(loaded, "«redacted»") {
-		t.Errorf("expected redacted marker in artifact output: %s", loaded)
+		t.Errorf("expected redacted marker in artifact body: %s", loaded)
+	}
+	if !strings.Contains(loaded, "PromptSHA256-8:") {
+		t.Errorf("expected prompt fingerprint header: %s", loaded)
 	}
 }
 
