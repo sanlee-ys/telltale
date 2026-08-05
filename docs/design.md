@@ -3638,3 +3638,79 @@ reason, and recorded the refusal — which is the process working. What it did n
 what the user had actually been trying to *do* when they reached for the mouse. The answer was
 never "scroll"; it was "take this answer with me", and that want went unnamed for two sections
 because the request arrived wearing the costume of a mechanism.
+
+### 9.16 `/flow`: the hop holds the authority, and it has to say so out loud
+
+A `/flow` chain is `@seat verb [task] [write:<path>]`, arrows between hops, dispatched **one hop
+at a time to exactly one seat**. That is the first thing about it that is unlike everything else
+in §9: the room's normal dispatch asks every seated vendor the same question, because three
+answers formed independently *are* the product (§9.2). A flow hop is not a question to the room;
+it is an instruction to a named seat, and a chain that fanned out would hand each hop's authority
+to seats the chain never mentioned.
+
+Nothing becomes a flow without the literal `/flow` prefix. A bare `->` in prose stays prose —
+"compare approach A -> approach B" is a question — because the alternative is ordinary briefs
+silently acquiring orchestration semantics, write gates and all.
+
+**Write authority is declared, never inferred.** The parser as shipped decided a hop could mutate
+the workspace by checking whether its last token contained `.`, `/` or `\`. Spelled out, that is:
+a sentence that ended in a period was a write hop; so was a task naming a file it was only meant
+to *read*; so was a Windows path quoted inside a question. English does not grant permissions and
+neither does punctuation. **Only `write:<path>` does.** The verb is a label — `publish` confers
+nothing.
+
+The target is checked at **parse** time, which is the load-bearing part rather than a tidiness
+preference: once parsed, the seat is spawned holding authority and pointed at the path, so parse
+is the last moment the answer is still free. Refused there — absolute paths in *either* platform's
+spelling (`filepath.IsAbs` alone does not consider `/etc/shadow` absolute on Windows), `..` in any
+segment under either separator, an empty target, two targets on one hop, and a `write:` token
+occupying the verb slot. The last is refused loudly rather than read as a read hop: silently
+demoting a declared write is the same class of lie as silently promoting a read, and it is the
+more dangerous one, because the user believes they authorized something and the log agrees.
+
+**Posture belongs to the step, and it only ever moves down.**
+
+| the hop | the room | what happens |
+|---|---|---|
+| no `write:` target | `--write` | **read** posture. The room's authority is not the hop's. |
+| no `write:` target | read-only | read posture, unchanged |
+| `write:<path>` | `--write` | gate first (`y`), **then** spawn, at the room's write posture |
+| `write:<path>` | read-only | **blocked**, and nothing is spawned |
+
+The bottom row is where the two dishonest options live and both are refused. Running it read-only
+would let the seat return, the hop report `returned`, and the chain advance past a publish that
+never happened — §4a.1's ambiguity with a receipt attached. Upgrading the room would mean a
+program granting itself authority the person who started it withheld. So there is no `y`/`n` card
+here at all: a gate implies a keystroke exists that makes the action legal, and none does. The
+notice says the room is read-only and names the flag that would change it.
+
+**The gate is before the spawn, and that is now pinned by a test that counts processes.** On a
+write hop, zero vendor processes exist until `y`; `n` cancels with zero. A gate drawn after the
+spawn is a notification.
+
+**The persistent seat forced a real choice.** Claude's seat is a long-lived process (§9.8) and its
+posture is argv — fixed at spawn, with nothing in the stream-json envelope able to change it
+mid-session. This is the same measured constraint as `cwd`, which is why `/cd` respawns rather
+than redirects. So a hop needing a posture the live process was not launched with can either be
+sent anyway or trigger a respawn. **It respawns**, on `/cd`'s own `--resume` composition and under
+the same one-attempt probation, and the column says so. Sending it would have been the silent
+downgrade this whole section exists to forbid, and the tell would have been invisible in exactly
+the way that matters: the badge would read READ while the process still held write flags.
+
+**Retention was running backwards.** The artifact prune sorted filenames as strings, so
+`turn-10-*.md` sorted before `turn-2-*.md` and the cap deleted the *newest* ten and kept the
+oldest — reachable only at turn 10, which is the first moment retention does anything at all. It
+sorts by the parsed turn number now. A name that does not parse sorts first and is pruned first,
+because an unrecognised file in that directory is not a receipt this store wrote and must never
+displace one that is; and nothing there panics, since it reads a real directory that can hold
+anything.
+
+**How these are tested, and why it is worth a paragraph.** Every one of the six security
+properties is asserted on something observable — the number of processes spawned, the exact argv
+handed to the spawn, or the chain's state — and never on a helper returning `true`. This repo's
+recorded failure mode is a test that checks the flag instead of the effect, and it would be
+perfectly at home here: a flow that computed "read posture" correctly and then spawned a write
+invocation passes any test that asks the posture function what it thinks. The posture assertion
+witnesses `@cursor`'s argv rather than `@codex`'s for a measured reason — on Windows, codex's read
+and write sandbox flags collapse to the same value, so codex's command line cannot testify to a
+posture on this machine.

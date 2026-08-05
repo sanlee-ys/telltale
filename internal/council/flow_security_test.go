@@ -1,0 +1,360 @@
+package council
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/sanlee-ys/telltale/internal/council/runner"
+	"github.com/sanlee-ys/telltale/internal/council/vendors"
+	"github.com/sanlee-ys/telltale/internal/model"
+)
+
+// This file is the flow feature's security boundary, and every test in it
+// asserts an OBSERVABLE: how many processes were spawned, WHICH spec was handed
+// to the spawn, or what state the chain landed in. None of them assert that a
+// helper returned a value — this repo's recorded failure mode is a test that
+// checks the flag instead of the effect, and a flow that reported "read
+// posture: yes" while spawning a write invocation would pass such a test.
+
+// spawnLog counts and records the package's two process-spawn call sites.
+//
+// It does not simulate a vendor. The fake session's only behaviours are the
+// three the seat logic actually calls on a live one (Send, Alive, Kill), and it
+// exists so "nothing was spawned" can be asserted without paying for a spawn.
+type spawnLog struct {
+	specs []runner.Spec
+}
+
+type deadSession struct{}
+
+func (deadSession) Send([]byte) error { return nil }
+func (deadSession) Kill()             {}
+func (deadSession) Alive() bool       { return true }
+
+func countSpawns(t *testing.T) *spawnLog {
+	t.Helper()
+	log := &spawnLog{}
+	origProcess, origSession := startProcess, startSession
+	startProcess = func(_ context.Context, spec runner.Spec, _ chan<- runner.Event, _ runner.ParseFunc) (*runner.Handle, error) {
+		log.specs = append(log.specs, spec)
+		return &runner.Handle{}, nil
+	}
+	startSession = func(_ context.Context, spec runner.Spec, _ chan<- runner.Event, _ runner.ParseFunc) (seatSession, error) {
+		log.specs = append(log.specs, spec)
+		return deadSession{}, nil
+	}
+	t.Cleanup(func() { startProcess, startSession = origProcess, origSession })
+	return log
+}
+
+func (l *spawnLog) n() int { return len(l.specs) }
+
+// flowRoom is a full four-seat room with no terminal and no child processes.
+func flowRoom(t *testing.T, write bool) *Model {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	var cols []Column
+	for _, v := range []model.VendorID{
+		model.VendorClaude, model.VendorCodex,
+		model.VendorAntigravity, model.VendorCursor,
+	} {
+		cols = append(cols, Column{
+			Vendor: v, Label: string(v), Binary: string(v), Avail: AvailInstalled,
+		})
+	}
+	return &Model{
+		st:         State{Columns: cols, Write: write, Workspace: t.TempDir()},
+		sessions:   map[model.VendorID]string{},
+		resumeIDs:  map[model.VendorID]string{},
+		unproven:   map[model.VendorID]bool{},
+		threadLost: map[model.VendorID]bool{},
+		failure:    map[model.VendorID]runner.FailureClass{},
+		redactors:  map[model.VendorID]*Redactor{},
+		procs:      map[model.VendorID]*seatProc{},
+		gateInputs: map[string]map[string]any{},
+		events:     make(chan runner.Event, 64),
+		roomCtx:    ctx,
+		roomCancel: cancel,
+	}
+}
+
+// (a) No vendor process is spawned before the user presses y on a write hop.
+//
+// This is the whole gate. A gate that draws its card after the spawn is a
+// notification, not an authorization — the write is already in flight while the
+// user is still reading the question.
+func TestWriteHopSpawnsNothingBeforeTheUserSaysYes(t *testing.T) {
+	log := countSpawns(t)
+	m := flowRoom(t, true)
+	m.st.Draft = "/flow @codex publish write:docs/out.md -> @claude review it"
+
+	if cmd := m.dispatch(); cmd != nil {
+		t.Error("dispatch returned a command while the write gate was still unanswered")
+	}
+	if log.n() != 0 {
+		t.Fatalf("%d process(es) spawned before authorization: %+v", log.n(), log.specs)
+	}
+	if !m.flowWritePending {
+		t.Error("no gate is pending, so nothing is holding the write back")
+	}
+	if got := m.flowChain.Current().State; got != FlowStateBlocked {
+		t.Errorf("step state = %s, want blocked", got)
+	}
+	if m.turn != nil {
+		t.Error("a turn is in flight for a write hop nobody authorized")
+	}
+
+	// And y is what releases it — otherwise this test would also pass on a flow
+	// that never dispatches at all.
+	m.key(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	if log.n() != 1 {
+		t.Fatalf("after y: %d spawns, want exactly 1", log.n())
+	}
+}
+
+// (b) n cancels the flow with ZERO spawns.
+func TestWriteHopCancelledWithNSpawnsNothing(t *testing.T) {
+	log := countSpawns(t)
+	m := flowRoom(t, true)
+	m.st.Draft = "/flow @codex publish write:docs/out.md -> @claude review it"
+	m.dispatch()
+
+	m.key(tea.KeyPressMsg{Code: 'n', Text: "n"})
+
+	if log.n() != 0 {
+		t.Fatalf("%d process(es) spawned for a cancelled write hop: %+v", log.n(), log.specs)
+	}
+	if m.flowChain != nil {
+		t.Error("the chain survived the cancellation and would resume on the next enter")
+	}
+	if m.flowWritePending || m.flowWriteArmed {
+		t.Error("the gate is still armed or pending after n")
+	}
+	if m.turn != nil {
+		t.Error("a turn is in flight after a cancelled write hop")
+	}
+}
+
+// (c) A flow hop dispatches to the STEP's seat only — never to the room.
+//
+// A flow that fanned out would spend three vendors' quota per hop and, worse,
+// hand the hop's authority to seats the chain never named.
+func TestFlowHopDispatchesOnlyToItsOwnSeat(t *testing.T) {
+	log := countSpawns(t)
+	m := flowRoom(t, false)
+	m.st.Draft = "/flow @codex review security -> @claude summarize"
+	m.dispatch()
+
+	if log.n() != 1 {
+		t.Fatalf("%d spawns for a one-seat hop: %+v", log.n(), log.specs)
+	}
+	if len(m.turn.live) != 1 || !m.turn.live[model.VendorCodex] {
+		t.Fatalf("live seats = %v, want only codex", m.turn.live)
+	}
+	for _, c := range m.st.Columns {
+		if c.Vendor == model.VendorCodex {
+			continue
+		}
+		if !strings.Contains(c.Note, "not addressed") {
+			t.Errorf("@%s was drawn into a hop addressed to codex: phase=%v note=%q",
+				c.Vendor, c.Phase, c.Note)
+		}
+	}
+}
+
+// (d) A read hop gets READ posture even in a --write room.
+//
+// Asserted on the spec that was actually handed to the spawn, compared against
+// the two specs the vendor itself builds for the two postures. Asserting
+// m.posture() would prove only that a helper agrees with itself.
+func TestReadHopGetsReadPostureInAWriteRoom(t *testing.T) {
+	log := countSpawns(t)
+	m := flowRoom(t, true)
+	// @cursor rather than @codex: on Windows, codex's read and write sandbox
+	// flags collapse to the same value (measured, codexSandboxFor), so codex
+	// argv cannot witness a posture on this machine. Cursor's `--mode plan`
+	// can, on both.
+	m.st.Draft = "/flow @cursor review security -> @claude summarize"
+	m.dispatch()
+
+	if log.n() != 1 {
+		t.Fatalf("%d spawns, want 1: %+v", log.n(), log.specs)
+	}
+	v := vendors.Registry()[model.VendorCursor]
+	readSpec, err := v.FirstTurn("security", m.st.Workspace, string(model.VendorCursor), vendors.PostureRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeSpec, err := v.FirstTurn("security", m.st.Workspace, string(model.VendorCursor), vendors.PostureWrite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readArgs := strings.Join(readSpec.Args, " ")
+	writeArgs := strings.Join(writeSpec.Args, " ")
+	if readArgs == writeArgs {
+		t.Fatal("this vendor's read and write invocations are identical, so this test could not fail — pick a vendor whose posture is visible in argv")
+	}
+	got := strings.Join(log.specs[0].Args, " ")
+	if got != readArgs {
+		t.Errorf("read hop in a --write room was spawned as:\n  %s\nwant the read invocation:\n  %s", got, readArgs)
+	}
+}
+
+// (e) A write hop in a READ room blocks, and dispatches nothing.
+//
+// Not downgraded to a read invocation that returns and reports success: the
+// chain would then advance past a publish that never happened. Not upgraded
+// either — the room's authority was set by the person who started it.
+func TestWriteHopInAReadRoomBlocksWithoutDispatch(t *testing.T) {
+	log := countSpawns(t)
+	m := flowRoom(t, false)
+	m.st.Draft = "/flow @codex publish write:docs/out.md -> @claude review it"
+
+	m.dispatch()
+
+	if log.n() != 0 {
+		t.Fatalf("%d process(es) spawned for a write hop in a read-only room: %+v", log.n(), log.specs)
+	}
+	if got := m.flowChain.Current().State; got != FlowStateBlocked {
+		t.Errorf("step state = %s, want blocked", got)
+	}
+	if m.flowWritePending {
+		t.Error("a y/n gate was offered for a hop no keystroke can legalize")
+	}
+	if m.turn != nil {
+		t.Error("a turn is in flight for a blocked write hop")
+	}
+	if m.st.Write {
+		t.Error("the room upgraded ITSELF to write to serve the hop")
+	}
+	if !strings.Contains(m.st.Notice, "read-only") {
+		t.Errorf("notice does not say why it stopped: %q", m.st.Notice)
+	}
+
+	// And y must not rescue it either: the block is not a gate.
+	m.key(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	if log.n() != 0 {
+		t.Fatalf("y dispatched a blocked write hop: %+v", log.specs)
+	}
+}
+
+// (f) A bare "->" in ordinary prose creates NO flow.
+//
+// Only the explicit /flow prefix does. Without this, "compare approach A ->
+// approach B" silently becomes an orchestration with write semantics attached.
+func TestBareArrowInProseIsNotAFlow(t *testing.T) {
+	countSpawns(t)
+	m := flowRoom(t, true)
+	m.st.Draft = "@codex which is better: publish write:docs/out.md -> or a PR?"
+
+	m.dispatch()
+
+	if m.flowChain != nil {
+		t.Fatalf("prose containing '->' was parsed as a flow: %+v", m.flowChain.Steps)
+	}
+	if m.flowWritePending {
+		t.Error("prose raised a write gate")
+	}
+	if m.flowReadHop {
+		t.Error("a non-flow dispatch is carrying flow posture state")
+	}
+}
+
+// Blocker 4's regression: retention must delete the OLDEST artifacts.
+//
+// Under the lexicographic comparator "turn-10-*" sorted before "turn-2-*", so
+// crossing turn 10 — the first moment retention matters at all — pruned the
+// newest files and kept the oldest.
+func TestRetentionPrunesTheOldestTurnNotTheHighestString(t *testing.T) {
+	dir := t.TempDir()
+	// Turns 1..12 for one seat, plus an unparseable stray.
+	for n := 1; n <= 12; n++ {
+		name := "turn-" + itoa(n) + "-claude.md"
+		if err := writeFile(dir, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writeFile(dir, "notes.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Cap of 10 over 13 files deletes 13-10+1 = 4: the stray, then turns 1,2,3.
+	if err := pruneSessionArtifacts(dir, 10); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, gone := range []string{"notes.md", "turn-1-claude.md", "turn-2-claude.md", "turn-3-claude.md"} {
+		if fileExists(dir, gone) {
+			t.Errorf("%s should have been pruned as oldest", gone)
+		}
+	}
+	// The newest are what retention exists to keep, and they are exactly what
+	// the string comparator deleted first.
+	for _, kept := range []string{"turn-10-claude.md", "turn-11-claude.md", "turn-12-claude.md", "turn-4-claude.md"} {
+		if !fileExists(dir, kept) {
+			t.Errorf("%s was pruned — retention is deleting the newest", kept)
+		}
+	}
+}
+
+func writeFile(dir, name string) error {
+	return os.WriteFile(filepath.Join(dir, name), []byte("x"), 0600)
+}
+
+func fileExists(dir, name string) bool {
+	_, err := os.Stat(filepath.Join(dir, name))
+	return err == nil
+}
+
+// The persistent seat's posture is chosen at process SPAWN — the permission
+// flags are argv and nothing in the stream-json envelope changes them — so a
+// hop that needs a different posture than the live process was launched with
+// cannot be served by sending it the turn. It is respawned instead, on the same
+// --resume composition /cd already uses.
+//
+// The alternative was the silent downgrade this whole change exists to refuse:
+// the column would say READ while the live process still held write flags.
+func TestAFlowReadHopRespawnsAWriteSpawnedSeat(t *testing.T) {
+	log := countSpawns(t)
+	m := flowRoom(t, true)
+
+	// An ordinary turn in a --write room: the seat's process is spawned gated.
+	m.st.Draft = "@claude do the thing"
+	m.dispatch()
+	if log.n() != 1 {
+		t.Fatalf("setup: %d spawns, want 1", log.n())
+	}
+	first := m.procs[model.VendorClaude]
+	if first == nil || first.posture != vendors.PostureWriteGated {
+		t.Fatalf("setup: seat posture = %v, want write-gated", first)
+	}
+
+	// Now a flow READ hop to the same seat.
+	m.turn = nil
+	m.st.Draft = "/flow @claude review security -> @codex check"
+	m.dispatch()
+
+	if log.n() != 2 {
+		t.Fatalf("%d spawns — the read hop reused a process spawned with write flags", log.n())
+	}
+	second := m.procs[model.VendorClaude]
+	if second == first {
+		t.Fatal("the same process object served both postures")
+	}
+	if second.posture != vendors.PostureRead {
+		t.Errorf("respawned seat posture = %v, want read", second.posture)
+	}
+	want, err := vendors.Registry()[model.VendorClaude].(vendors.Persistent).
+		Session(m.st.Workspace, string(model.VendorClaude), "", vendors.PostureRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(log.specs[1].Args, " "); got != strings.Join(want.Args, " ") {
+		t.Errorf("respawn argv:\n  %s\nwant the read session:\n  %s", got, strings.Join(want.Args, " "))
+	}
+}

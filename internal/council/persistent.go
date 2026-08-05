@@ -1,6 +1,7 @@
 package council
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
@@ -8,6 +9,21 @@ import (
 	"github.com/sanlee-ys/telltale/internal/council/vendors"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
+
+// startSession and startProcess are the council package's ONLY two process
+// spawns, behind vars so the security tests can count them.
+//
+// A var rather than an injected interface because the property under test is
+// "nothing was spawned", and the cheapest honest way to assert that is to make
+// the real call site countable. These are not mocks of vendor behaviour — a
+// mock that invents a reply this product never produces is how a test ends up
+// asserting the flag instead of the effect. They wrap the actual functions and
+// production never replaces them.
+var startSession = func(ctx context.Context, spec runner.Spec, out chan<- runner.Event, parse runner.ParseFunc) (seatSession, error) {
+	return runner.StartSession(ctx, spec, out, parse)
+}
+
+var startProcess = runner.Start
 
 // seatSession is the slice of runner.Session the seat logic drives.
 //
@@ -51,6 +67,13 @@ type seatProc struct {
 	// workspace moves (/cd), a mismatch here is what tells seatProcess the
 	// process cannot follow and has to be respawned where the room now is.
 	dir string
+	// posture is what this process was SPAWNED with. Like cwd, it is fixed at
+	// spawn — the permission flags are argv, and nothing in the stream-json
+	// envelope changes them mid-session — so a hop that needs a different
+	// posture than this process was launched with cannot be served by it. The
+	// mismatch is what tells seatProcess to respawn rather than send the turn
+	// down a pipe whose authority does not match what the room promised.
+	posture vendors.Posture
 }
 
 // sendPersistentTurn hands one turn to a seat's process, starting one if there
@@ -93,18 +116,30 @@ func (m *Model) sendPersistentTurn(v vendors.Persistent, c *Column, prompt strin
 // the one it had has gone.
 func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string, error) {
 	existing, had := m.procs[c.Vendor]
+	want := m.seatPosture()
 	moved := false
+	repostured := false
 	if had && existing.sess.Alive() {
-		if sameDir(existing.dir, m.st.Workspace) {
+		if sameDir(existing.dir, m.st.Workspace) && existing.posture == want {
 			return existing, "", nil
 		}
+		// Two reasons a live process cannot serve this turn, and one remedy.
+		//
 		// The room moved (/cd) and this process is pinned to the old directory
 		// — cwd is fixed at spawn, so the documented way to move a conversation
 		// is the one the ninth amendment measured: respawn with --resume. The
 		// earned id goes through the SAME one-attempt probation the restored
 		// ids use, because a resume that fails here would otherwise be rebuilt
 		// on every turn for the life of the room.
-		moved = true
+		//
+		// Or a /flow hop needs a posture this process was not spawned with. The
+		// alternative was to send the turn anyway, which is precisely the silent
+		// downgrade (or silent upgrade) the per-step posture rule exists to
+		// forbid: the column would say READ while the live process still held
+		// the write flags it was launched with. Respawning costs one process and
+		// carries the thread across on the same measured --resume composition.
+		moved = !sameDir(existing.dir, m.st.Workspace)
+		repostured = !moved
 		existing.sess.Kill()
 		m.dropProcess(c.Vendor)
 		if id := m.sessions[c.Vendor]; id != "" && m.resumeIDs[c.Vendor] == "" {
@@ -118,7 +153,7 @@ func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string,
 	// already re-briefed for that reason — and a replacement that came back
 	// unscreened while the badge still said the guard was wired would be the
 	// quietest false claim in the room.
-	spec, err := v.Session(m.st.Workspace, c.Binary, m.hooks.Path, m.seatPosture())
+	spec, err := v.Session(m.st.Workspace, c.Binary, m.hooks.Path, want)
 	if err != nil {
 		return nil, "", err
 	}
@@ -135,7 +170,7 @@ func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string,
 	if id := m.resumeIDs[c.Vendor]; id != "" {
 		delete(m.resumeIDs, c.Vendor)
 		if rs, rerr := v.SessionResume(m.st.Workspace, c.Binary, m.hooks.Path,
-			id, m.seatPosture()); rerr == nil {
+			id, want); rerr == nil {
 			spec = rs
 			resumed = true
 		}
@@ -143,11 +178,11 @@ func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string,
 	// The ROOM's context, never the turn's. A turn that is cancelled must not
 	// take this process with it — that is the entire point of keeping it — so
 	// only quitting the room cancels this.
-	sess, err := runner.StartSession(m.roomCtx, spec, m.events, v.ParseEvent)
+	sess, err := startSession(m.roomCtx, spec, m.events, v.ParseEvent)
 	if err != nil {
 		return nil, "", err
 	}
-	p := &seatProc{sess: sess, resumed: resumed, dir: m.st.Workspace}
+	p := &seatProc{sess: sess, resumed: resumed, dir: m.st.Workspace, posture: want}
 	m.procs[c.Vendor] = p
 
 	if resumed {
@@ -158,6 +193,12 @@ func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string,
 		// restored; if the vendor refuses it, resumeFailed replaces that with the
 		// truth.
 		return p, "", nil
+	}
+	if repostured {
+		// Said out loud for the same reason /cd's note is: a seat whose process
+		// was replaced under it has a new history, and a column that quietly
+		// restarted while claiming continuity is the silent divergence again.
+		return p, "this hop needs a different posture — this seat is starting a new session for it", nil
 	}
 	if moved {
 		// The move itself was announced by /cd; what needs saying is that THIS

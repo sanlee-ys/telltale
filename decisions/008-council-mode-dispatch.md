@@ -1679,3 +1679,111 @@ four turns was blocked by broken hook wiring on the probe machine, so the parser
 still rests on the shipped bundle's field descriptors rather than on a captured line. It is
 labelled as bundle-derived in `vendors/cursor.go` and in its test, and one clean tool call on any
 machine closes it.
+
+---
+
+## Amendment — Flow artifacts and confirmed workflows (2026-08-04)
+
+**Contract change.** `room.json` remains **keys, not content**. Separately, when the user
+dispatches an explicit `/flow` chain, council may persist **redacted** seat replies under
+`~/.telltale/council/artifacts/` (user home only — never the repo working tree). That is
+opt-in orchestration storage, not a silent transcript of every turn.
+
+**Receipts.** Flow step states (`queued` / `running` / `blocked` / `approved` / `published`)
+are harness-observed. `published` requires `VerifyReceipt` evidence that a target path was
+created or changed after the hop started. A model saying it published, or a pre-existing
+unchanged file, is not a receipt.
+
+**Authority.** Draft/review hops may complete when the seat reaches a measured PhaseDone.
+Write/publish hops block for a user gate. Natural-language chain proposals never run without
+a confirmed `/flow` parse.
+
+**Sequencing.** Full auto-advance of hop N+1 after hop N is a follow-up; this amendment lands
+the artifact store, parser, and receipt rules first.
+
+**Write gate.** Hops with an explicit target path require user authorization (`y`) *before*
+the seat is spawned. File create/change after start is a receipt of mutation, not authorship.
+
+**Returned vs approved.** A seat reaching PhaseDone marks the hop `returned`, not `approved`.
+Approval is a separate human (or structured) judgment.
+
+---
+
+### Amendment, 2026-08-04 (twenty-first): authority is declared, and it belongs to the hop
+
+`/flow` shipped with the right shape and the wrong source of truth for the only thing in it that
+matters. Two independent reviews landed on the same seam from opposite ends, and the seam was
+this: **a chain hop's authority was being read off the room and off English, and it is a property
+of the step.**
+
+**What `/flow` is.** An ordered chain of hops, `@seat verb [task] [write:<path>]`, dispatched one
+hop at a time, each hop addressed to exactly *one* seat. It is not a broadcast. The room's normal
+dispatch asks every seated vendor the same question because three independent answers are the
+product; a flow hop asks the seat the chain named, because a chain that fanned out would hand
+every hop's authority to seats it never mentioned. Nothing becomes a flow without the literal
+`/flow` prefix — a bare `->` in prose stays prose, and "compare A -> B" is a question, not an
+orchestration.
+
+**Authority is declared, never inferred.** The shipped parser decided a hop could mutate the
+workspace by testing whether its last token contained `.`, `/` or `\`. That is write authority
+granted by punctuation: a sentence ending in a period, a filename the hop was only asked to
+*read*, a Windows path quoted inside a question. **Only an explicit `write:<path>` token makes a
+hop a write hop.** English verbs are labels. `publish` confers nothing; `write:docs/spec.md`
+confers everything.
+
+The target is validated at **parse** time, and the timing is the point: after parsing, the seat is
+spawned with authority and pointed at the path, so parse is the last moment the answer is free.
+Refused there: absolute paths in either platform's spelling, `..` in any segment or separator,
+an empty target, more than one target on a hop, and a `write:` token sitting in the verb slot —
+that last one refused *out loud* rather than quietly downgraded, because silently demoting a
+declared write is the same class of lie as silently promoting a read.
+
+**Posture is per hop, and it moves in one direction only.**
+
+- A hop with **no** declared target runs at **read** posture, *including in a `--write` room*. A
+  chain whose first hop is "@codex review security" must not receive write authority because a
+  later hop needs it.
+- A **write** hop in a **read** room **blocks**. It is not downgraded to a read invocation that
+  returns and reports success — the chain would then advance past a publish that never happened —
+  and the room does not upgrade itself to serve it. The room's authority was set by the person who
+  started it, and no keystroke inside the room can raise it, so no `y/n` gate is even offered:
+  there is nothing a user could authorize here that would be legal.
+- The gate-before-spawn guarantee is unchanged and now pinned: on a write hop **no vendor process
+  exists** until `y`, and `n` cancels with zero spawns. A gate drawn after the spawn is a
+  notification, not an authorization.
+
+**The persistent seat's fork, and how it was resolved.** Claude's seat is a long-lived process and
+its posture is argv — chosen at spawn, and nothing in the stream-json envelope changes it
+mid-session (**measured**, same finding as the ninth amendment's `cwd`). So a hop needing a
+posture the live process was not launched with is a real fork: send the turn anyway, or respawn.
+**Respawn.** Sending it would be exactly the silent downgrade this amendment exists to forbid —
+the column would render READ while the process still held the write flags — and the respawn rides
+the same `--resume` composition `/cd` already uses, under the same one-attempt probation, so the
+thread is carried and a stale id cannot wedge the seat. It costs one process launch per posture
+change and says so in the column's note, because a seat that quietly restarted while claiming
+continuity is this repo's own failure mode.
+
+**Retention was deleting the newest artifacts.** The per-session prune sorted filenames as
+strings, so `turn-10-*.md` sorted ahead of `turn-2-*.md` and the cap removed the ten newest and
+kept the oldest — a bug that could only appear at turn 10, the first moment retention does
+anything at all. It now sorts by the turn number parsed out of the name; a name that does not
+parse is ordered first and pruned first, since an unrecognised file in the artifact directory is
+not a receipt this store wrote and must never displace one that is. Never panics: this reads a
+directory on disk, which can hold anything.
+
+**Claims, by strength.**
+
+- **Measured** — the six security properties above, each asserted on an observable (spawn count,
+  the argv actually handed to the spawn, or the chain's state), not on a helper's return value;
+  the retention regression, which fails under the old comparator and passes under the new;
+  Windows codex collapsing read and write to one sandbox flag, which is why the posture assertion
+  witnesses `@cursor`'s argv rather than `@codex`'s.
+- **Inferred** — that respawning is cheaper than the alternatives in practice. It is one process
+  per posture *change*, not per hop, and a chain that alternates read and write hops on the same
+  seat pays per alternation. Not measured against a real chain; if it bites, the fix is to order
+  hops, not to relax the rule.
+- **Residual** — auto-advance of hop N+1 still does not exist, so a chain is driven a hop at a
+  time by the user. `VerifyReceipt` still proves mutation, never authorship. And the write gate
+  authorizes *the hop*, not each tool call inside it: within an authorized write hop the seat's
+  own gating posture is what stands between it and the workspace, which is the room's ordinary
+  contract and not a stronger one.

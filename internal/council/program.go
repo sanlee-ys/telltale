@@ -158,11 +158,21 @@ type Model struct {
 
 	// hooks is the user's own hook configuration, copied into a file of its
 	// own so the gated seat can be pointed at it.
-	//
-	// On Model for the same reason the brief is, and it is the same rule rather
-	// than a resemblance: it names a path into the user's private configuration,
-	// and only the boolean "is anything wired" crosses onto State.
 	hooks HookSet
+
+	// flowChain holds the active workflow DAG sequence if an orchestrated flow was dispatched.
+	flowChain *FlowChain
+	// flowDraft is the draft string that produced flowChain (reuse after write gate).
+	flowDraft string
+	// flowWritePending is true while a write hop awaits y/n before any vendor spawn.
+	flowWritePending bool
+	// flowWriteArmed is set by y so the next dispatch may Start the write hop.
+	flowWriteArmed bool
+	// flowReadHop marks the dispatch in progress as a /flow hop with NO declared
+	// write target, which forces read posture regardless of the room's. It is
+	// set per hop by dispatch and cleared on any non-flow dispatch, so it can
+	// never outlive the step that earned it.
+	flowReadHop bool
 }
 
 // New builds the model. Nothing renders until the first WindowSizeMsg arrives:
@@ -456,10 +466,34 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.st.Gating() {
 		return m.gateKey(msg)
 	}
+	if m.flowWritePending {
+		return m.flowWriteGateKey(msg)
+	}
 	if m.st.Mode == ModeComposing {
 		return m.composeKey(msg)
 	}
 	return m.viewKey(msg)
+}
+
+// flowWriteGateKey authorizes or cancels a /flow write hop before any seat is spawned.
+func (m *Model) flowWriteGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y":
+		m.flowWriteArmed = true
+		m.flowWritePending = false
+		m.st.Notice = "write hop authorized — dispatching"
+		return m, m.dispatch()
+	case "n":
+		m.flowWritePending = false
+		m.flowWriteArmed = false
+		m.flowChain = nil
+		m.flowDraft = ""
+		m.flowReadHop = false
+		m.st.Notice = "flow write hop cancelled"
+		return m, nil
+	}
+	m.st.Notice = "flow write gate — y authorizes, n cancels"
+	return m, nil
 }
 
 // gateKey is the keymap while a vendor is waiting to be told yes or no.
