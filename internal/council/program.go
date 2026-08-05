@@ -173,6 +173,13 @@ type Model struct {
 	// set per hop by dispatch and cleared on any non-flow dispatch, so it can
 	// never outlive the step that earned it.
 	flowReadHop bool
+	// flowCarry is the fenced artifact from the immediately preceding hop. It is
+	// consumed when the next hop starts; older artifacts never accumulate in a
+	// downstream prompt.
+	flowCarry string
+	// flowAdvancePending asks Update to dispatch the next hop after the current
+	// turn has fully retired. Dispatching earlier would trip the in-flight guard.
+	flowAdvancePending bool
 }
 
 // New builds the model. Nothing renders until the first WindowSizeMsg arrives:
@@ -433,6 +440,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case eventBatchMsg:
 		m.applyEvents(msg.events)
 		if m.turn == nil {
+			if m.flowAdvancePending {
+				m.flowAdvancePending = false
+				return m, m.dispatch()
+			}
 			// The turn is over. Stop waiting on the channel: re-arming would
 			// park a goroutine on a channel nothing will write to until the
 			// next dispatch.

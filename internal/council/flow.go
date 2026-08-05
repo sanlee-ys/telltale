@@ -279,10 +279,24 @@ func (fc *FlowChain) MarkReturned() error {
 }
 
 // MarkFailed records a harness-detected failure (e.g. artifact save).
+//
+// It refuses a step that has already finished, and that guard is the point
+// rather than tidiness. Returned and Published are terminal successes, and a
+// Published step carries a VERIFIED receipt — evidence that a write the user
+// authorized actually landed in the workspace. Rewriting it to
+// Failed{Verified:false} because something went wrong AFTERWARDS would make the
+// record deny a mutation the tree still holds, which is the same silent
+// demotion of a declared write that the parser refuses at the other end.
+//
+// A failure discovered after the hop finished stops the chain. It does not
+// relitigate the hop.
 func (fc *FlowChain) MarkFailed(detail string) error {
 	curr := fc.Current()
 	if curr == nil {
 		return errors.New("no active step")
+	}
+	if curr.State == FlowStateReturned || curr.State == FlowStatePublished {
+		return fmt.Errorf("cannot fail step %d (@%s %s): already %s", fc.CurrentIndex+1, curr.Vendor, curr.Verb, curr.State)
 	}
 	curr.State = FlowStateFailed
 	curr.Receipt = Receipt{Verified: false, Detail: detail}
