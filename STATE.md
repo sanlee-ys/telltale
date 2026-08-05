@@ -6,7 +6,7 @@ about current work.
 **Staleness rule:** any PR that changes what's in flight updates this file in
 the same commit. A ledger nobody updates is worse than none.
 
-Last updated: 2026-08-05 · Author: Claude Code (COO) · Rev: post-#62 refresh
+Last updated: 2026-08-05 · Author: Codex (CRO / CISO) · Rev: post-#61 merge
 
 ---
 
@@ -19,7 +19,6 @@ so San is not juggling vendor windows. Glass must earn that.
 
 | Work | Owners | Status | Branch / PR |
 |---|---|---|---|
-| Council flow execution engine + artifact transport seam | — | Open PR, not merged | [#61](https://github.com/sanlee-ys/telltale/pull/61) `feat/council-flow-seam` |
 | Council TUI upgrade (density, focus hierarchy, `isDark` chrome, footer) | Cursor + Antigravity | Partly overtaken by #49/#52/#54/#59 — re-cut against the current room before painting | — |
 | Fable council session (screenshots handed for TUI) | Fable | In progress (outside room) | unknown |
 
@@ -27,7 +26,7 @@ so San is not juggling vendor windows. Glass must earn that.
 
 - **v1 cut.** Gauges-only (statusline + HUD, declared vendor version pins) vs hold v1 until council settles. COO recommends gauges-only.
 - **Front-end scope / ADR-009.** Browser HUD vs docs/marketing vs TUI-only. Today's guarantees: one binary, no network calls, no credential reads — a served UI retires some of them.
-- **Council decision records.** Emit a per-turn decision file vs build no ledger. COO recommends emit-only. The **yank key** half of this shipped in #60 (`y` copies this seat's reply, `Y` the whole turn) — clipboard only, no file on disk. What is still unruled is whether a turn also gets written somewhere durable (`~/.telltale/council/last-turn.md` or a per-turn decision file); #61's artifact transport seam is the natural place for it if the answer is yes.
+- **Council decision records.** Emit a per-turn decision file vs build no ledger. COO recommends emit-only. The **yank key** half shipped in #60 (`y` copies this seat's reply, `Y` the whole turn) — clipboard only, no file on disk. #61 has now shipped the opt-in `/flow` artifact transport seam; what remains unruled is whether ordinary turns also get written somewhere durable (`~/.telltale/council/last-turn.md` or a per-turn decision file).
 
 ## Owners
 
@@ -56,6 +55,7 @@ so San is not juggling vendor windows. Glass must earn that.
 ## Landed recently
 
 - #62 — Cursor's mid-turn whole-message repeat no longer renders twice
+- #61 — `/flow` seat-to-seat handoffs, opt-in redacted artifacts, explicit `write:<path>` authority, and the ADR-008 amendment
 - #60 — `y` copies this seat's reply, `Y` copies the whole turn
 - #59 — the waiting card says what to expect, not how it works
 - #58 — stopped asking agy for a restriction that only ever killed turns
@@ -71,10 +71,9 @@ so San is not juggling vendor windows. Glass must earn that.
 
 ## Next
 
-1. **#61 is the one open PR** — land it or say why not; it blocks the durable-turn half of the decision-records question above.
+1. San: rule on whether ordinary council turns get a durable decision record; #61 now provides the opt-in `/flow` artifact seam but does not settle that policy.
 2. Antigravity: visual punch list → append under Council TUI detail.
-3. Cursor: re-cut the v1 TUI list against the post-#62 room (four of the five items moved under it), then branch; PR; merge on green; refresh this file in the same commit.
-4. Codex: review this STATE contract after this refresh lands (standing offer).
+3. Cursor: re-cut the v1 TUI list against the post-#61/#62 room (four of the five items moved under it), then branch; PR; merge on green; refresh this file in the same commit.
 
 ## How to re-enter
 
