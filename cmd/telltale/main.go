@@ -160,8 +160,20 @@ func runCouncil(args []string) error {
 	seats := fs.String("vendor", "", "who is in the room: a comma list (claude,codex,agy,cursor) or all; default seats every vendor that can be driven")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
-	write := fs.Bool("write", false, "let vendors edit and run things in the workspace, asking you first where they can (see decisions/008)")
-	auto := fs.Bool("auto", false, "with --write: let a gated seat approve its own tool calls instead of asking")
+	// The room writes by default, and --read is the opt-out. Posture used to be
+	// an opt-IN flag, which was right while nothing could ask before a write and
+	// "this room can write" therefore meant "this room writes without you". The
+	// gated seat's approval card retired that reading: the thing the flag was
+	// guarding is now guarded per call, and all the flag still did was make a
+	// room you opened to get work done unable to do any until you remembered a
+	// word. Same move already made for the workspace, which stopped being an
+	// invocation input for the same reason.
+	read := fs.Bool("read", false, "open a deliberation-only room: seats answer, and none of them may touch the workspace")
+	// Accepted and ignored, like --resume above it. It was in muscle memory and
+	// in notes; failing on it would be a worse answer than doing what it always
+	// meant, which is now the default.
+	fs.Bool("write", false, "accepted and ignored — the room writes by default now; --read is the opposite")
+	auto := fs.Bool("auto", false, "let the gated seat approve its own tool calls instead of asking you")
 	brief := fs.String("brief", "", "file of shared operating context handed to every vendor on its first turn (or TELLTALE_COUNCIL_BRIEF)")
 	resume := fs.Bool("resume", false, "reattach to the saved room (this is the default; the flag is kept for muscle memory)")
 	fresh := fs.Bool("fresh", false, "start a new room instead of reattaching to the saved one")
@@ -183,7 +195,7 @@ func runCouncil(args []string) error {
 		Seats:     room,
 		ASCII:     *ascii || os.Getenv("TELLTALE_ASCII") != "",
 		NoTitle:   *noTitle,
-		Write:     *write,
+		Write:     !*read,
 		Auto:      *auto,
 		BriefPath: *brief,
 		Resume:    *resume,
@@ -257,25 +269,32 @@ telltale council flags:
                               whatever convention they would otherwise each guess
                               at separately. Also TELLTALE_COUNCIL_BRIEF. The file
                               is read from disk and never stored by telltale.
-  --write                     let vendors edit files and run commands in that
-                              workspace. The seat that can be asked (claude)
-                              asks first: every tool call that changes anything
-                              raises an approval card, y approves and n denies,
-                              and nothing runs until you answer. The other three
-                              are batch CLIs with no channel to ask on, so they
-                              act unasked and their columns say so. The
-                              workspace is still the containment — point --cd at
-                              a git worktree if that matters. The header says
-                              WRITE all session.
-  --auto                      with --write: let the gated seat approve its own
-                              tool calls. This is the old behaviour, and it is
-                              the flag to reach for when you are not watching.
+  --read                      open a room that can only talk. Seats answer and
+                              compare; none of them may edit a file or run a
+                              command. The opposite is the DEFAULT: a plain
+                              council writes, because a room you opened to get
+                              work done should be able to do it without you
+                              remembering a word first.
+                              What guards the default is the approval card, not
+                              the flag. The seat that can be asked (claude) asks
+                              first: every tool call that changes anything
+                              raises a card, y approves and n denies, and
+                              nothing runs until you answer. The other three are
+                              batch CLIs with no channel to ask on, so they act
+                              unasked and their columns say so — which is why
+                              the workspace is the real containment. Point --cd
+                              at a git worktree if that matters.
+                              --write is still accepted and does nothing.
+  --auto                      let the gated seat approve its own tool calls
+                              instead of asking. Reach for it when you are not
+                              watching; it is the one setting that leaves
+                              nothing in the room asking permission for anything.
   --resume                    reattach to the saved room. This is the DEFAULT —
                               the flag is kept for muscle memory and does the
                               same thing. The turn counter continues and each
                               vendor picks up its OWN session; a seat whose
                               thread the vendor no longer has says so and
-                              starts fresh. Not a posture: --write is never
+                              starts fresh. Not a posture: --read is never
                               restored from the file, it is retyped or it is
                               not in effect.
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
@@ -283,8 +302,8 @@ telltale council flags:
 
 statusline and hud read vendor files and never write, never call the network,
 and never send anything to a running agent. council is the deliberate
-exception: it spawns vendor CLIs, and each column states its own read-only
-posture on screen (decisions/008). It is also the only mode that writes
+exception: it spawns vendor CLIs, and each column states its own posture on
+screen. It is also the only mode that writes
 anything at all — one room file, ~/.telltale/council/room.json, holding the
 session ids reattaching needs and no transcript, output or brief content.`)
 }

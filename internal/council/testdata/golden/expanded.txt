@@ -1,4 +1,4 @@
- council  │  ~/code/telltale                                                         turn 1  │  3/3 seated  │  no brief 
+ council READ  │  ~/code/telltale                                                    turn 1  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸ Claude Code    Codex    Antigravity                                                                                  
    Claude Code  ───────────────────────────────────────────────────────────────────────────────────────────────  ✓ done 

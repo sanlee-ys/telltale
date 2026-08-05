@@ -1057,10 +1057,48 @@ func TestWriteModeIsLoudAndPersistent(t *testing.T) {
 }
 
 // TestReadModeSaysNothingAboutWriting is the other direction: the loud marker
-// must not leak into the default room.
+// must not leak into a room that cannot write.
+//
+// It also pins that such a room NAMES itself. Write is the default now, so read
+// is the exception, and an unmarked header would leave the reader deciding
+// between "this room cannot write" and "the badge did not render" — the same
+// reason "no brief" is spelled out a few lines above it in the header.
 func TestReadModeSaysNothingAboutWriting(t *testing.T) {
-	if got := render(room()); strings.Contains(got, "WRITE") {
-		t.Error("the default room claims write mode")
+	got := render(room())
+	if strings.Contains(got, "WRITE") {
+		t.Error("a read room claims write mode")
+	}
+	if !strings.Contains(got, "READ") {
+		t.Error("a read room does not say so; absence of a badge is not a claim")
+	}
+}
+
+// TestFlowHopIsNamedWhileAChainDrivesTheRoom.
+//
+// A chain dispatches its own next hop, which makes it the only thing here that
+// sends a brief the user did not type to a seat the user did not pick. With
+// three of four columns idle, that is indistinguishable from the room acting on
+// its own unless the header says whose turn it is and how far along.
+func TestFlowHopIsNamedWhileAChainDrivesTheRoom(t *testing.T) {
+	st := room()
+	st.Turn = 3
+	st.FlowHop, st.FlowSteps = 2, 4
+	st.FlowVendor = st.Columns[0].Vendor
+
+	got := render(st)
+	if !strings.Contains(got, "hop 2/4") {
+		t.Error("the header does not say which hop the chain is on")
+	}
+	if !strings.Contains(got, "@"+string(st.Columns[0].Vendor)) {
+		t.Error("the header does not name the seat holding the hop")
+	}
+
+	// And it is absent for an ordinary turn: a marker that outlived its chain
+	// would report an orchestration over a room that is merely waiting.
+	plain := room()
+	plain.Turn = 3
+	if strings.Contains(render(plain), "hop ") {
+		t.Error("a room with no chain reports a hop")
 	}
 }
 
