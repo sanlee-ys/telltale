@@ -255,7 +255,7 @@ func (m *Model) queueGate(c *Column, g *runner.Gate) {
 	if g == nil || g.RequestID == "" {
 		return
 	}
-	if autoApproveBasicGit(g) {
+	if autoApproveRoutine(g) {
 		m.sendDecision(PendingGate{
 			Vendor: c.Vendor, RequestID: g.RequestID, ToolUseID: g.ToolUseID,
 			Text: g.Text,
@@ -282,12 +282,26 @@ func (m *Model) queueGate(c *Column, g *runner.Gate) {
 	m.gateInputs[g.RequestID] = g.Input
 }
 
-// autoApproveBasicGit recognizes the routine operations needed to turn a
-// finished edit into reviewable work. It is deliberately conservative: shell
-// composition and history/working-tree rewrites fall through to the visible
-// gate. A false negative costs one keystroke; a false positive could destroy
-// work, so ambiguous commands are never approved here.
-func autoApproveBasicGit(g *runner.Gate) bool {
+// autoApproveRoutine recognizes the operations that make up an ordinary
+// development loop: look at the tree, build it, test it, and turn a finished
+// edit into reviewable work.
+//
+// It started as git and gh only, and the first real session with it carded the
+// user THIRTY-FOUR times — every `go test`, `grep`, `ls` and `cat` between the
+// commits. A gate that fires on everything is one people stop reading, and a
+// waved-through card is worse than no card: it is the same keystroke with the
+// user's attention spent. Widening what is routine is what keeps the remaining
+// cards meaning something.
+//
+// Still deliberately conservative, and the ordering matters. Shell COMPOSITION
+// is refused before anything is classified — no newlines, no `;`, `&`, `|`,
+// backticks, redirection or `$(`. That guard is what makes an argv[0] allowlist
+// sound at all: without it `ls; rm -rf ~` classifies as `ls`. Everything past it
+// is a single command with literal arguments.
+//
+// A false negative costs one keystroke. A false positive spends a user's trust
+// on a call they never saw, so anything ambiguous falls through to the card.
+func autoApproveRoutine(g *runner.Gate) bool {
 	if g == nil || g.Tool != "Bash" {
 		return false
 	}
@@ -302,13 +316,68 @@ func autoApproveBasicGit(g *runner.Gate) bool {
 	if len(args) == 0 {
 		return false
 	}
-	if args[0] == "git" {
+	switch args[0] {
+	case "git":
 		return safeGitArgs(args[1:])
-	}
-	if args[0] == "gh" {
+	case "gh":
 		return safeGHArgs(args[1:])
+	case "go":
+		return safeGoArgs(args[1:])
+	case "find":
+		return safeFindArgs(args[1:])
+	}
+	return readOnlyCommands[args[0]]
+}
+
+// readOnlyCommands look at the tree and report. None of them writes, and with
+// redirection already refused above, none of them can be made to.
+//
+// Absent on purpose, each for its own reason rather than by oversight:
+// `sed` and `awk` write in place and to arbitrary paths; `env` and `printenv`
+// dump the environment, which is where credentials live and which the eighth
+// amendment's hook exists to screen; `rm`, `mv`, `cp`, `mkdir` and `chmod`
+// change the tree without being part of reading it; `curl`, `wget` and `ssh`
+// reach outside the workspace, which is the boundary --write widens and not one
+// it removes.
+var readOnlyCommands = map[string]bool{
+	"ls": true, "cat": true, "head": true, "tail": true, "wc": true,
+	"grep": true, "rg": true, "tree": true, "diff": true, "cmp": true,
+	"pwd": true, "which": true, "file": true, "stat": true,
+	"basename": true, "dirname": true, "echo": true, "date": true,
+	"sort": true, "uniq": true, "du": true, "df": true,
+}
+
+// safeGoArgs allows the build loop and refuses the subcommands that fetch,
+// install or execute something other than the package's own tests.
+//
+// `test` runs code, and that is not the objection it looks like: this seat can
+// already write files, so a test binary grants nothing a plain edit did not.
+// `run`, `install` and `get` are excluded anyway — they are not part of the loop
+// this exists to unblock, and `get` reaches the network.
+func safeGoArgs(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "build", "test", "vet", "list", "version", "env", "fmt", "doc":
+		return true
+	case "mod":
+		return len(args) > 1 && (args[1] == "tidy" || args[1] == "download" || args[1] == "verify")
 	}
 	return false
+}
+
+// safeFindArgs refuses the flags that turn a search into an execution or a
+// deletion. find is otherwise a read, and it is the one read in this list that
+// ships with a loaded gun in the same binary.
+func safeFindArgs(args []string) bool {
+	for _, a := range args {
+		switch a {
+		case "-exec", "-execdir", "-delete", "-ok", "-okdir", "-fprint", "-fprintf":
+			return false
+		}
+	}
+	return true
 }
 
 func safeGitArgs(args []string) bool {

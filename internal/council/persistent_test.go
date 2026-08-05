@@ -317,7 +317,7 @@ func TestDestructiveGitOpsStillGate(t *testing.T) {
 	} {
 		t.Run(command, func(t *testing.T) {
 			g := &runner.Gate{Tool: "Bash", Input: map[string]any{"command": command}}
-			if autoApproveBasicGit(g) {
+			if autoApproveRoutine(g) {
 				t.Fatalf("destructive or composed command was automatically approved: %s", command)
 			}
 		})
@@ -338,7 +338,7 @@ func TestRoutineGitOpsAreRecognized(t *testing.T) {
 	} {
 		t.Run(command, func(t *testing.T) {
 			g := &runner.Gate{Tool: "Bash", Input: map[string]any{"command": command}}
-			if !autoApproveBasicGit(g) {
+			if !autoApproveRoutine(g) {
 				t.Fatalf("routine command still requires approval: %s", command)
 			}
 		})
