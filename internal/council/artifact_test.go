@@ -2,33 +2,34 @@ package council
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
-func TestArtifactStoreSaveAndLoad(t *testing.T) {
-	store, err := NewArtifactStore()
+func TestArtifactStoreSaveAndLoadInTempDir(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := NewArtifactStoreWithBaseDir(tempDir)
 	if err != nil {
-		t.Fatalf("NewArtifactStore failed: %v", err)
+		t.Fatalf("NewArtifactStoreWithBaseDir failed: %v", err)
 	}
 
 	sessionID := "test-session-123"
 	turnN := 1
 	vendor := model.VendorID("claude")
-	content := "# Objective\nImplement v1 flow and artifact seam."
-	prompt := "draft v1 spec"
+	content := "# Objective\nImplement v1 flow and artifact seam with sk-ant-api-key-1234567890123456."
+	prompt := "draft v1 spec for sk-ant-secret-key-1234567890123456"
 
 	path, err := store.SaveArtifact(sessionID, turnN, vendor, content, prompt)
 	if err != nil {
 		t.Fatalf("SaveArtifact failed: %v", err)
 	}
 
-	// Verify file is saved in user home dir
-	home, _ := os.UserHomeDir()
-	if !strings.HasPrefix(path, home) {
-		t.Errorf("expected path to start with home dir %s, got %s", home, path)
+	// Verify file is saved strictly inside tempDir and NOT in user home
+	if !strings.HasPrefix(path, tempDir) {
+		t.Errorf("expected path to start with temp dir %s, got %s", tempDir, path)
 	}
 
 	loaded, err := store.LoadArtifact(sessionID, turnN, vendor)
@@ -36,11 +37,15 @@ func TestArtifactStoreSaveAndLoad(t *testing.T) {
 		t.Fatalf("LoadArtifact failed: %v", err)
 	}
 
-	if !strings.Contains(loaded, content) {
-		t.Errorf("expected loaded content to contain %q, got %q", content, loaded)
+	// Verify secret redaction in both prompt metadata and content
+	if strings.Contains(loaded, "sk-ant-api-key-1234567890123456") {
+		t.Errorf("secret in content was not redacted: %s", loaded)
 	}
-	if !strings.Contains(loaded, "SessionID: test-session-123") {
-		t.Errorf("expected provenance metadata in artifact, got: %s", loaded)
+	if strings.Contains(loaded, "sk-ant-secret-key-1234567890123456") {
+		t.Errorf("secret in prompt metadata was not redacted: %s", loaded)
+	}
+	if !strings.Contains(loaded, "«redacted»") {
+		t.Errorf("expected redacted marker in artifact output: %s", loaded)
 	}
 }
 
@@ -51,5 +56,17 @@ func TestFormatFencedArtifact(t *testing.T) {
 	}
 	if !strings.Contains(fenced, "--- end artifact turn-2 from Claude Code ---") {
 		t.Errorf("missing expected footer in fenced output: %s", fenced)
+	}
+}
+
+func TestDefaultArtifactStorePath(t *testing.T) {
+	store, err := NewArtifactStore()
+	if err != nil {
+		t.Fatalf("NewArtifactStore failed: %v", err)
+	}
+	home, _ := os.UserHomeDir()
+	expected := filepath.Join(home, ".telltale", "council", "artifacts")
+	if store.baseDir != expected {
+		t.Errorf("expected default baseDir %s, got %s", expected, store.baseDir)
 	}
 }

@@ -1,5 +1,15 @@
 package council
 
+/*
+ADR-008 Amendment (Artifact Persistence & Privacy Contract):
+1. Council artifacts are stored strictly outside the git repository tree under
+   ~/.telltale/council/artifacts/<session-id>/ to prevent accidental staging or commits.
+2. Artifact persistence is opt-in for orchestrated flow execution and explicitly
+   redacts credentials/secrets from both prompts and vendor body outputs using Redact().
+3. Artifacts carry provenance headers (SessionID, Turn, Vendor, Timestamp, Redacted Prompt)
+   and are written atomically via temporary file renaming.
+*/
+
 import (
 	"fmt"
 	"os"
@@ -14,8 +24,6 @@ import (
 const maxArtifactSize = 1024 * 1024
 
 // ArtifactStore handles persistent turn output storage strictly outside the working tree.
-// Per ADR-008 & security requirements, artifacts are stored strictly under the user's home
-// directory (~/.telltale/council/artifacts) with provenance metadata and redaction.
 type ArtifactStore struct {
 	baseDir string
 }
@@ -27,6 +35,11 @@ func NewArtifactStore() (*ArtifactStore, error) {
 		return nil, fmt.Errorf("getting user home dir: %w", err)
 	}
 	baseDir := filepath.Join(home, ".telltale", "council", "artifacts")
+	return NewArtifactStoreWithBaseDir(baseDir)
+}
+
+// NewArtifactStoreWithBaseDir allows specifying a custom base directory (used for testing).
+func NewArtifactStoreWithBaseDir(baseDir string) (*ArtifactStore, error) {
 	if err := os.MkdirAll(baseDir, 0700); err != nil {
 		return nil, fmt.Errorf("creating artifact base dir: %w", err)
 	}
@@ -45,8 +58,9 @@ func (s *ArtifactStore) ArtifactPath(sessionID string, turnN int, vendor model.V
 
 // SaveArtifact writes turn content to disk atomically with provenance and redaction.
 func (s *ArtifactStore) SaveArtifact(sessionID string, turnN int, vendor model.VendorID, content string, prompt string) (string, error) {
-	// Sanitize and redact content before persisting to disk
+	// Redact secrets from both content and prompt metadata
 	cleanContent := Redact(content)
+	cleanPrompt := Redact(prompt)
 
 	if len(cleanContent) > maxArtifactSize {
 		cleanContent = cleanContent[:maxArtifactSize] + "\n[...artifact truncated at 1MB limit...]"
@@ -60,7 +74,7 @@ func (s *ArtifactStore) SaveArtifact(sessionID string, turnN int, vendor model.V
 
 	// Provenance metadata header
 	header := fmt.Sprintf("--- TELLTALE ARTIFACT PROVENANCE ---\nSessionID: %s\nTurn: %d\nVendor: %s\nTimestamp: %s\nPrompt: %s\n------------------------------------\n\n",
-		sessionID, turnN, vendor, time.Now().Format(time.RFC3339), sanitizeFilename(prompt))
+		sessionID, turnN, vendor, time.Now().Format(time.RFC3339), cleanPrompt)
 
 	fullOutput := header + cleanContent
 

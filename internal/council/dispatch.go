@@ -70,6 +70,8 @@ func (m *Model) dispatch() tea.Cmd {
 		return nil
 	}
 
+	reg := vendors.Registry()
+
 	if strings.HasPrefix(m.st.Draft, "/flow") || strings.Contains(m.st.Draft, "->") {
 		fc, err := ParseFlowChain(m.st.Draft)
 		if err != nil {
@@ -83,12 +85,14 @@ func (m *Model) dispatch() tea.Cmd {
 		}
 	}
 
-	reg := vendors.Registry()
-	// The mentions are stripped from what the vendors receive. A brief that
-	// opens "@codex @claude compare these" should reach them as "compare
-	// these" — the routing is addressing, not content, and leaving it in makes
-	// every vendor read a header about who else is in the room.
 	route, prompt := ParseRoute(m.st.Draft)
+
+	if m.flowChain != nil {
+		if curr := m.flowChain.Current(); curr != nil {
+			// Override route to target ONLY the active flow step vendor
+			route = Route{Vendors: []model.VendorID{curr.Vendor}}
+		}
+	}
 	if route.Mixed {
 		// Checked before the empty-brief case on purpose. A draft that mixes
 		// the two forms cannot be routed at all, so telling the user to add a
@@ -539,7 +543,7 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 		}
 	}
 
-	if c.Phase == PhaseDone && strings.TrimSpace(c.Body) != "" {
+	if c.Phase == PhaseDone && strings.TrimSpace(c.Body) != "" && m.flowChain != nil {
 		if store, err := NewArtifactStore(); err == nil {
 			sessID := m.sessions[c.Vendor]
 			if sessID == "" {

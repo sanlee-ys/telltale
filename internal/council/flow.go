@@ -118,7 +118,6 @@ func ParseFlowChain(input string) (*FlowChain, error) {
 		path := ""
 		if len(parts) >= 3 {
 			task = strings.Join(parts[2:], " ")
-			// If the last token looks like a file path (has extension or slash), set path
 			lastToken := parts[len(parts)-1]
 			if strings.Contains(lastToken, ".") || strings.Contains(lastToken, "/") || strings.Contains(lastToken, "\\") {
 				path = lastToken
@@ -155,14 +154,12 @@ func (fc *FlowChain) Advance() (bool, error) {
 		return false, errors.New("no active step to advance")
 	}
 
-	// Enforce state machine transition invariants
 	switch curr.State {
 	case FlowStateFailed:
 		return false, fmt.Errorf("cannot advance flow chain: step %d (@%s %s) failed", fc.CurrentIndex+1, curr.Vendor, curr.Verb)
 	case FlowStateBlocked:
 		return false, fmt.Errorf("cannot advance flow chain: step %d (@%s %s) is blocked awaiting user approval", fc.CurrentIndex+1, curr.Vendor, curr.Verb)
 	case FlowStateQueued:
-		// Transition Queued -> Running
 		curr.State = FlowStateRunning
 		curr.StartedAt = time.Now()
 		return true, nil
@@ -180,20 +177,17 @@ func (fc *FlowChain) Advance() (bool, error) {
 }
 
 // VerifyReceipt checks for empirical evidence on disk before declaring a step published/done.
-// It verifies:
-// 1. Target path exists inside workspace boundary (evaluating symlinks).
-// 2. File size is non-zero.
-// 3. File modification time is equal to or after the step's StartedAt timestamp (preventing pre-existing files from passing).
+// Refuses self-verification: steps without a target path return unverified unless backed by file evidence.
 func VerifyReceipt(workspace string, step *FlowStep) Receipt {
 	if step == nil {
 		return Receipt{Verified: false, Detail: "nil step"}
 	}
 
 	if step.Path == "" {
-		if step.State == FlowStatePublished {
-			return Receipt{Verified: true, Detail: "step marked published cleanly"}
+		return Receipt{
+			Verified: false,
+			Detail:   "step has no target path specified; cannot verify disk receipt",
 		}
-		return Receipt{Verified: false, Detail: "no target path specified and step unpublished"}
 	}
 
 	targetPath := step.Path
