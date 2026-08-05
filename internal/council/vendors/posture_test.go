@@ -29,6 +29,57 @@ func TestWritePostureDropsTheDenyList(t *testing.T) {
 	}
 }
 
+// TestUngatedWritePostureCanLandWork.
+//
+// acceptEdits covers edits and nothing else, so this posture produced a seat
+// that wrote files all session and could not commit one: every git call raised
+// an approval request, and --auto is precisely the posture with nobody to answer
+// it. The room stopped one step short of the step that makes work exist for
+// anyone but the machine it ran on.
+//
+// The assertions are about the ARGV, and this test says so rather than claiming
+// the effect. The rule syntax has not been driven against a live CLI; if it is
+// wrong the seat goes back to asking and landing nothing, which is where it was.
+func TestUngatedWritePostureCanLandWork(t *testing.T) {
+	spec, err := Claude{}.FirstTurn("brief", `C:\ws`, "claude", PostureWrite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.Index(spec.Args, "--allowedTools")
+	if i < 0 || i == len(spec.Args)-1 {
+		t.Fatal("ungated write posture pre-approves nothing, so the seat cannot commit what it just wrote")
+	}
+	rules := spec.Args[i+1]
+	for _, want := range []string{"git add", "git commit", "git push"} {
+		if !strings.Contains(rules, want) {
+			t.Errorf("missing %q: the seat can build and cannot land", want)
+		}
+	}
+	// Scoped to landing work, not to git. This is the posture where nobody is
+	// watching, and rewriting existing history is a different grant from
+	// committing what was just built.
+	for _, never := range []string{"git reset", "git clean", "branch -D"} {
+		if strings.Contains(rules, never) {
+			t.Errorf("%q is pre-approved in the unattended posture", never)
+		}
+	}
+}
+
+// TestGatedPostureIsNotPreApproved is the other half, and it is the one that
+// would be expensive to get wrong. The gated seat's entire claim is that a call
+// which changes something raises a card first — and a pre-approved call never
+// reaches the gate at all. That is the settings hole --setting-sources "" exists
+// to close, and the product must not re-open it from the inside.
+func TestGatedPostureIsNotPreApproved(t *testing.T) {
+	spec, _ := Claude{}.FirstTurn("brief", `C:\ws`, "claude", PostureWriteGated)
+	if slices.Contains(spec.Args, "--allowedTools") {
+		t.Error("the gated seat pre-approves calls, which walk straight past the gate it advertises")
+	}
+	if !slices.Contains(spec.Args, "--setting-sources") {
+		t.Error("the gated seat kept the user's allow rules, so the gate sits behind them")
+	}
+}
+
 func TestReadPostureStillDenies(t *testing.T) {
 	spec, _ := Claude{}.FirstTurn("brief", `C:\ws`, "claude", PostureRead)
 	if !slices.Contains(spec.Args, "--disallowedTools") {

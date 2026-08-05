@@ -283,13 +283,57 @@ func (c Claude) baseArgs(p Posture) []string {
 		// permission mode it has nobody to ask and the turn stalls or refuses,
 		// so this flag is what makes write mode functional rather than merely
 		// unrestricted.
-		return append(args, "--permission-mode", "acceptEdits")
+		//
+		// acceptEdits covers EDITS and nothing else, which is the whole reason
+		// the second flag is here. Observed in this room: the seat wrote files
+		// all session and every `git` call came back needing an approval that
+		// this posture has nobody to give — --auto means the gate is off, so the
+		// request went to no one. The seat could produce work and could not land
+		// it, which stops the room one step short of the only step that makes
+		// the work exist for anyone else.
+		return append(args, "--permission-mode", "acceptEdits", "--allowedTools", autoAllowedTools)
 
 	case PostureWriteGated:
 		return append(args, gateArgs...)
 	}
 	return append(args, "--disallowedTools", deniedTools)
 }
+
+// autoAllowedTools pre-approves the calls that land work, and ONLY in the
+// ungated posture.
+//
+// --allowedTools is the flag this file spends forty lines warning about, and it
+// is the right one here for exactly the reason it was the wrong one there. It
+// does not remove tools from a session — measured, which is why the read posture
+// is a deny list — but what it DOES do is pre-approve them for permission
+// prompts. The read posture needed removal and got the wrong flag. This posture
+// needs pre-approval, which is the thing the flag actually is.
+//
+// STRENGTH: the mechanism is measured (the deny-list amendment established what
+// this flag does by reading a live session's own tools array). This RULE SYNTAX
+// is not. `Bash(git commit:*)` is the vendor's documented permission-rule shape
+// and it has not been driven here, so if it is wrong the failure is the seat
+// still asking and still landing nothing — the behaviour of the day before this
+// existed. That is why the change is spelled as an addition rather than as a
+// replacement of the permission mode: a wrong guess costs nothing that was
+// working.
+//
+// SCOPED TO THE VERBS THAT LAND WORK, not to git. `reset`, `clean` and
+// `branch -D` are absent on purpose: this posture is the one where nobody is
+// watching, and "commit what you built" is a different grant from "rewrite what
+// is already there". The honest hole in that sentence is `git push`, which
+// cannot be sub-scoped away from `--force` by this syntax — so a forced push is
+// reachable here, and the containment for it is the same one everything else in
+// this room rests on, which is the directory council was pointed at.
+//
+// The GATED posture gets none of this and must not: its whole claim is that a
+// call which changes something raises a card first, and a pre-approved call
+// never reaches the gate. That is the settings hole the seventh amendment
+// closed, and re-opening it from inside the product would be worse than the
+// user's own config doing it.
+const autoAllowedTools = "Bash(git add:*),Bash(git commit:*),Bash(git push:*)," +
+	"Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git log:*)," +
+	"Bash(git diff:*),Bash(git pull:*),Bash(git fetch:*),Bash(gh pr:*),Bash(gh run:*)"
 
 // gateArgs is what makes the vendor ask before every tool call.
 //
