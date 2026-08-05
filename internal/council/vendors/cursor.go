@@ -260,6 +260,22 @@ func (c Cursor) NextTurn(prompt, workspace, binary, sessionID string, p Posture)
 //	{"type":"result","subtype":"success","duration_ms":7827,"is_error":false,
 //	 "result":"PONG","session_id":"…","request_id":"…","usage":{"inputTokens":22862,"outputTokens":57,…}}
 //
+// A SECOND capture, the same day, from a turn asked to speak, run a tool, and
+// speak again. It is the one that matters for the whole-message repeat, because
+// a turn with a tool in it is several model calls and each one ends in a repeat
+// of its OWN segment. testdata/cursor-segmented-turn.jsonl is that turn in full,
+// redacted; these are its shape-bearing lines:
+//
+//	{"type":"assistant","message":{…,"text":"Beginning"}]},"session_id":"…","timestamp_ms":1785894418573}
+//	… seven more deltas, none carrying model_call_id …
+//	{"type":"assistant","message":{…,"text":"Beginning the survey of this repository now."}]},
+//	 "session_id":"…","model_call_id":"88fa1494-…-0-x7su","timestamp_ms":1785894419785}
+//	{"type":"tool_call","subtype":"started",…,"model_call_id":"88fa1494-…-0-x7su",…}
+//
+// and the turn's final assistant event carries NEITHER model_call_id nor
+// timestamp_ms, exactly as the PONG capture said. The `result` at the end
+// carried all three segments concatenated.
+//
 // Three absences are deliberate:
 //
 //   - No cost field. `usage` carries token counts only — measured across all
@@ -283,23 +299,50 @@ type cursorLine struct {
 
 	SessionID string `json:"session_id"`
 
-	// TimestampMS is what separates a text delta from the whole-message repeat
-	// that follows it, and it is a POINTER because its ABSENCE is the signal.
+	// TimestampMS separates a text delta from the whole-message repeat that ends
+	// a turn, and it is a POINTER because its ABSENCE is the signal.
 	//
-	// This is the trap in this schema and only a live run could have found it.
-	// With --stream-partial-output, one turn's assistant events were "P" then
-	// "ONG" — both carrying timestamp_ms — followed by a third carrying the
-	// complete "PONG" and NO timestamp_ms. Concatenating all three renders
-	// "PONGPONG". Confirmed on three separate turns; the whole-message event
-	// never carried the field, and no delta ever lacked it.
+	// The original capture (2026-08-04, "PONG") saw two deltas carrying
+	// timestamp_ms followed by a whole-message event carrying none, and this
+	// field alone was made the discriminator. That was TOO NARROW, and the
+	// second capture the same day says so: it is only true of the whole-message
+	// repeat that ends the TURN. A turn that runs a tool is cut into several
+	// model calls, each of which ends in its own whole-message repeat, and those
+	// mid-turn repeats DO carry timestamp_ms:
 	//
-	// It is a thin discriminator and it is the one the vendor offers. The
-	// safety net if upstream ever changes it is already in place and is not
-	// theoretical: the `result` event carries the entire reply, and the room
-	// uses it whenever a column streamed nothing — so the failure mode of this
-	// field disappearing is a column that fills at the end instead of
-	// incrementally, not a column that is wrong or empty.
+	//	…"text":"Beginning"…,"timestamp_ms":1785894418573}
+	//	… seven more deltas …
+	//	…"text":"Beginning the survey of this repository now."…,
+	//	  "model_call_id":"88fa1494-…-0-x7su","timestamp_ms":1785894419785}
+	//
+	// So this field is now the SECOND line of defence, covering the final
+	// repeat, and ModelCallID is the first. Neither is load-bearing on its own.
+	//
+	// The safety net if upstream changes both is unchanged and is not
+	// theoretical: the `result` event carries the entire reply — measured, on
+	// the segmented capture, as every segment concatenated — and the room uses
+	// it whenever a column streamed nothing. The failure mode of these fields
+	// disappearing is a column that fills at the end instead of incrementally,
+	// not a column that is wrong or empty.
 	TimestampMS *int64 `json:"timestamp_ms"`
+
+	// ModelCallID names the model call an event belongs to, and its PRESENCE on
+	// an assistant event is the whole-message repeat.
+	//
+	// CAPTURED on 2026-08-04 from a three-segment turn: across all 108 assistant
+	// events, every text delta carried NO model_call_id, and the two mid-turn
+	// whole-message repeats each carried one ("…-0-x7su" and "…-1-15l2" — the
+	// index in the suffix is the segment). The trailing digit-suffixed shape is
+	// the vendor's own numbering of the calls in the turn, and the same ids
+	// appear on the tool_call events that separate the segments.
+	//
+	// This is a better discriminator than an absent timestamp for the reason
+	// absence is always the weaker signal: a field that is missing cannot
+	// distinguish "the vendor is telling me this is a complete message" from
+	// "the vendor stopped sending a field". model_call_id is the vendor
+	// asserting which model call this text is the completed form of, and deltas
+	// — which are fragments of a call still in flight — have nothing to assert.
+	ModelCallID string `json:"model_call_id"`
 
 	Message struct {
 		Role    string `json:"role"`
@@ -505,12 +548,18 @@ func (Cursor) ParseEvent(line []byte) (runner.Event, bool) {
 		// The vendor speaking, one event per text chunk — measured token-level,
 		// which is what earns this column GranTokens.
 		//
-		// The whole-message repeat is dropped HERE, by the absence of
-		// timestamp_ms, and it has to be dropped somewhere: cursor-agent sends
-		// the deltas and then the complete message, so appending both renders
-		// every reply twice. See cursorLine.TimestampMS for the capture and for
-		// why the result event makes this safe to get wrong.
-		if cl.TimestampMS == nil {
+		// The whole-message repeat is dropped HERE, and it has to be dropped
+		// somewhere: cursor-agent sends a model call's deltas and then that
+		// call's complete message, so appending both renders the passage twice.
+		//
+		// TWO tests, not one, because there are two of these events and they do
+		// not look alike. A repeat that ends a mid-turn model call carries
+		// model_call_id; the one that ends the turn carries neither that nor
+		// timestamp_ms. Dropping on the first condition is what fixes the "X X Y"
+		// a live segmented turn renders; keeping the second is the belt that has
+		// held since the PONGPONG capture. See cursorLine.ModelCallID and
+		// cursorLine.TimestampMS for the lines off the wire.
+		if cl.ModelCallID != "" || cl.TimestampMS == nil {
 			return runner.Event{}, false
 		}
 		// Emitted raw and unseparated: the chunks concatenate into the reply

@@ -1,7 +1,9 @@
 package vendors
 
 import (
+	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -334,9 +336,12 @@ func TestCursorDoesNotRenderTheEchoedPrompt(t *testing.T) {
 //	…"text":"ONG"…,"timestamp_ms":1785855682264}
 //	…"text":"PONG"…}          ← no timestamp_ms
 //
-// Appending all three renders "PONGPONG". The absence of timestamp_ms is the
-// only discriminator the vendor offers, and it held on all three captured
-// turns.
+// Appending all three renders "PONGPONG". The absence of timestamp_ms held on
+// all three captured turns of that shape — every one of which was a turn with
+// no tool call in it, which is why it read as the whole rule and was not. See
+// TestCursorSegmentedTurnRendersEachPassageOnce for the half it missed; this
+// test is kept unchanged because that half must not be fixed by breaking this
+// one.
 func TestCursorDoesNotRenderTheWholeMessageRepeat(t *testing.T) {
 	var body string
 	for _, line := range [][]byte{
@@ -350,6 +355,79 @@ func TestCursorDoesNotRenderTheWholeMessageRepeat(t *testing.T) {
 	}
 	if body != "PONG" {
 		t.Errorf("body = %q, want %q — the whole-message repeat was concatenated onto its own deltas", body, "PONG")
+	}
+}
+
+// TestCursorSegmentedTurnRendersEachPassageOnce replays a real turn, whole,
+// and is the test the "X X Y" the owner saw would have failed.
+//
+// The rule above — drop the assistant event with no timestamp_ms — was derived
+// from turns that used no tools, and every such turn is ONE model call with one
+// whole-message repeat at its end. A turn that runs a tool is several model
+// calls, and each of THEM ends in a repeat of its own segment. Those mid-turn
+// repeats carry timestamp_ms like any delta, so the old rule passed them
+// straight through and the column rendered the segment, then the segment again,
+// then the next one.
+//
+// What separates them is model_call_id, present on the repeat and absent from
+// every delta. The assertion is not a substring count picked to fit: the deltas
+// alone must reconstruct the reply the vendor itself put in the `result` event,
+// which is the same turn's own answer to what it said.
+func TestCursorSegmentedTurnRendersEachPassageOnce(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "cursor-segmented-turn.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var body, whole string
+	var segments int
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		ev, ok := Cursor{}.ParseEvent(line)
+		if !ok {
+			continue
+		}
+		switch ev.Kind {
+		case runner.KindText:
+			body += ev.Text
+		case runner.KindMeta:
+			whole = ev.Text
+		}
+	}
+	if whole == "" {
+		t.Fatal("the fixture carried no result event; the invariant below has nothing to check against")
+	}
+	if body != whole {
+		t.Errorf("streamed body and the vendor's own result disagree:\n body   = %q\n result = %q", body, whole)
+	}
+
+	// Named explicitly as well, because "the two agree" would also be satisfied
+	// if a future change doubled BOTH. This is the passage the owner watched
+	// render twice.
+	const passage = "Beginning the survey of this repository now."
+	if n := strings.Count(body, passage); n != 1 {
+		t.Errorf("the first segment appears %d times in the body, want 1", n)
+	}
+	segments = strings.Count(whole, "The Read tool hit a hook error")
+	if segments != 1 {
+		t.Errorf("fixture drifted: the middle segment appears %d times in the result", segments)
+	}
+}
+
+// TestCursorWholeMessageRepeatIsDroppedByModelCallID pins the discriminator on
+// its own, at one line, so a failure says which of the two rules broke.
+//
+// Copied from the fixture. It carries timestamp_ms — that is the whole point,
+// and is why the older rule let it through — and it carries model_call_id,
+// which no delta in 108 captured assistant events ever did.
+func TestCursorWholeMessageRepeatIsDroppedByModelCallID(t *testing.T) {
+	repeat := []byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Beginning the survey of this repository now."}]},"session_id":"s1","model_call_id":"mc-0","timestamp_ms":1785894419785}`)
+	if ev, ok := (Cursor{}).ParseEvent(repeat); ok && ev.Kind == runner.KindText {
+		t.Fatalf("a mid-turn whole-message repeat rendered as a delta: %q", ev.Text)
+	}
+	delta := []byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Beginning"}]},"session_id":"s1","timestamp_ms":1785894418573}`)
+	ev, ok := Cursor{}.ParseEvent(delta)
+	if !ok || ev.Kind != runner.KindText || ev.Text != "Beginning" {
+		t.Fatalf("the delta beside it was dropped too: (%v, %v)", ev, ok)
 	}
 }
 
