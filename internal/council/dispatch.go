@@ -97,8 +97,16 @@ func (m *Model) dispatch() tea.Cmd {
 		if curr == nil {
 			m.st.Notice = "flow has no current step"
 			m.flowChain = nil
+			m.clearFlowMarker()
 			return nil
 		}
+		// Set before the gates below, not after them. Every path from here can
+		// return without dispatching — a blocked write hop, a refused one — and
+		// leaving the marker on the PREVIOUS hop would point at the seat that
+		// already finished while the room waits on this one.
+		m.st.FlowHop = m.flowChain.CurrentIndex + 1
+		m.st.FlowSteps = len(m.flowChain.Steps)
+		m.st.FlowVendor = curr.Vendor
 		// Posture comes from the STEP. A hop with no declared target is a read
 		// hop even in a --write room, and this is set before any of the paths
 		// below can spawn anything.
@@ -112,11 +120,11 @@ func (m *Model) dispatch() tea.Cmd {
 		// keystroke here can produce a legal dispatch.
 		if curr.RequiresWriteGate() && !m.st.Write {
 			if curr.State == FlowStateQueued {
-				_ = m.flowChain.MarkAwaitingWrite("this room is read-only; write hops need --write")
+				_ = m.flowChain.MarkAwaitingWrite("this room was opened with --read; write hops need a room that can write")
 			}
 			m.flowWritePending = false
 			m.flowWriteArmed = false
-			m.st.Notice = fmt.Sprintf("flow blocked at step %d: @%s → %s is a write hop and this room is read-only — restart with --write",
+			m.st.Notice = fmt.Sprintf("flow blocked at step %d: @%s → %s is a write hop and this room was opened with --read — reopen it without that flag",
 				m.flowChain.CurrentIndex+1, curr.Vendor, curr.Path)
 			return nil
 		}
@@ -164,6 +172,7 @@ func (m *Model) dispatch() tea.Cmd {
 		m.flowReadHop = false
 		m.flowCarry = ""
 		m.flowAdvancePending = false
+		m.clearFlowMarker()
 		route, prompt = ParseRoute(m.st.Draft)
 	}
 	if route.Mixed {
@@ -655,6 +664,7 @@ func (m *Model) finishFlowHop(c *Column) {
 	if err != nil {
 		_ = m.flowChain.MarkFailed("artifact store: " + err.Error())
 		m.st.Notice = "flow hop failed: artifact store: " + err.Error()
+		m.clearFlowMarker()
 		return
 	}
 	sessID := m.sessions[c.Vendor]
@@ -665,6 +675,7 @@ func (m *Model) finishFlowHop(c *Column) {
 	if err != nil {
 		_ = m.flowChain.MarkFailed("artifact save: " + err.Error())
 		m.st.Notice = "flow hop failed: " + err.Error()
+		m.clearFlowMarker()
 		return
 	}
 	m.st.Notice = "artifact saved: " + path
@@ -675,6 +686,7 @@ func (m *Model) finishFlowHop(c *Column) {
 		if !receipt.Verified {
 			_ = m.flowChain.MarkFailed(receipt.Detail)
 			m.st.Notice = joinNotice(m.st.Notice, "publish failed: "+receipt.Detail)
+			m.clearFlowMarker()
 			return
 		}
 		if err := m.flowChain.MarkPublished(receipt); err != nil {
@@ -698,17 +710,34 @@ func (m *Model) finishFlowHop(c *Column) {
 	artifact, err := store.LoadArtifact(sessID, c.TurnN, c.Vendor)
 	if err != nil {
 		m.st.Notice = joinNotice(m.st.Notice, "flow stopped: cannot read this hop's artifact back: "+err.Error())
+		m.clearFlowMarker()
 		return
 	}
 	hasNext, err := m.flowChain.Advance()
 	if err != nil {
 		m.st.Notice = joinNotice(m.st.Notice, "flow stopped: "+err.Error())
+		m.clearFlowMarker()
 		return
 	}
-	if hasNext {
-		m.flowCarry = FormatFencedArtifact(c.Label, c.TurnN, artifact)
-		m.flowAdvancePending = true
+	if !hasNext {
+		// The last hop returned, so the chain is over. The marker goes with it:
+		// left up, it would report an orchestration still in progress over a room
+		// that is now waiting for whatever the user types next.
+		m.clearFlowMarker()
+		return
 	}
+	m.flowCarry = FormatFencedArtifact(c.Label, c.TurnN, artifact)
+	m.flowAdvancePending = true
+}
+
+// clearFlowMarker takes the hop indicator off the header.
+//
+// Called wherever a chain stops advancing — finished, failed, or replaced by an
+// ordinary brief. A marker that outlived its chain would assert that the room is
+// mid-orchestration while it sits idle, which is the one thing this indicator
+// was added to prevent.
+func (m *Model) clearFlowMarker() {
+	m.st.FlowHop, m.st.FlowSteps, m.st.FlowVendor = 0, 0, ""
 }
 
 func flowSessionID(workspace string) string {

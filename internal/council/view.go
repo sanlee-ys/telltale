@@ -109,11 +109,24 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 		// can be missed while reading a column; the state it describes lasts
 		// the whole session, so its marker does too.
 		left += " " + sty.SevCrit.Render(g.Warn+" WRITE")
+	} else {
+		// Stated rather than left blank, now that write is the default. An
+		// absent badge used to mean read; it would now mean either read or a
+		// marker that failed to render, and a reader cannot tell those apart.
+		// Both postures name themselves so neither is inferred from a gap.
+		left += " " + sty.Muted.Render("READ")
 	}
 
 	round := "no turn yet"
 	if st.Turn > 0 {
 		round = "turn " + strconv.Itoa(st.Turn)
+	}
+	// A chain dispatches its own next hop, so the room names the hop it is on
+	// and the seat holding it. This is the only line here that explains a turn
+	// the user did not press enter on: three idle columns and a brief nobody
+	// typed is otherwise indistinguishable from the room acting on its own.
+	if st.FlowSteps > 0 {
+		round += "  " + g.Sep + "  hop " + strconv.Itoa(st.FlowHop) + "/" + strconv.Itoa(st.FlowSteps) + " @" + string(st.FlowVendor)
 	}
 	seated := strconv.Itoa(st.Seated()) + "/" + strconv.Itoa(len(st.Columns)) + " seated"
 	// "no brief" is stated rather than left blank, and that asymmetry is

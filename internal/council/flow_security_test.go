@@ -325,7 +325,10 @@ func TestWriteHopInAReadRoomBlocksWithoutDispatch(t *testing.T) {
 	if m.st.Write {
 		t.Error("the room upgraded ITSELF to write to serve the hop")
 	}
-	if !strings.Contains(m.st.Notice, "read-only") {
+	// It has to name the flag that produced this, not merely that the room is
+	// restricted. Write is the default now, so a user who lands here typed
+	// --read at some point and the notice is where they find that out.
+	if !strings.Contains(m.st.Notice, "--read") {
 		t.Errorf("notice does not say why it stopped: %q", m.st.Notice)
 	}
 
