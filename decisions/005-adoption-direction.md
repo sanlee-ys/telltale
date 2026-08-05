@@ -153,8 +153,8 @@ all three were accepted. San ruled the two product forks:
 The "built, not verified" label was written when nothing had ever been run on macOS.
 That is no longer true, so the label is raised to match the evidence — and no further.
 
-**What was run** (2026-08-03, macOS 15 / Darwin 25.5.0, Apple Silicon, Go 1.26.5,
-at `052a9d6`):
+**What was run** (2026-08-03, macOS 26.5.2 build 25F84 / Darwin 25.5.0, **Intel x86_64**
+(Core i7-9750H), Go 1.26.5, at `052a9d6`):
 
 - `go vet ./...` clean; `go test ./...` green across all 13 packages, including all
   five vendor adapters against their committed fixtures
@@ -179,6 +179,13 @@ at `052a9d6`):
   the macOS claim is point-in-time and decays with every subsequent commit. It is dated
   and SHA-bearing above for exactly that reason
 - Linux remains untouched, hence the split label — Linux keeps "built, not verified"
+- **Apple Silicon is unverified.** The run above was Intel x86_64. Nothing here was
+  executed on arm64, which is the majority of the macOS audience the label exists to
+  serve, and `os.UserConfigDir`/path behaviour is the same on both — but "smoke-verified
+  on macOS" should be read as smoke-verified on Intel macOS until an arm64 run says
+  otherwise. *(This bullet and the environment line above were corrected 2026-08-05: the
+  amendment as first merged recorded Apple Silicon and macOS 15, both wrong, from an
+  assumption rather than a `uname`/`sw_vers` read.)*
 
 The no-porting/no-verification-effort rule of ADR-002 is **unchanged**. This amendment
 records evidence that already existed; it does not authorize macOS work, and it does
