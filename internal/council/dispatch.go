@@ -721,7 +721,11 @@ func (m *Model) finishFlowHop(c *Column) {
 	// previous spelling called MarkFailed here, which on a published hop would
 	// overwrite a verified receipt: the write had landed, the workspace still held
 	// it, and the room would have reported that it failed.
-	artifact, err := store.LoadArtifact(sessID, c.TurnN, c.Vendor)
+	// Body only. The provenance header is council's own bookkeeping, and a fence
+	// carrying it hands the next seat a session id and a prompt hash as though
+	// the previous seat had written them — measured on a live chain, where codex
+	// answered with the artifact's PromptSHA256-8 quoted back.
+	artifact, err := store.LoadArtifactBody(sessID, c.TurnN, c.Vendor)
 	if err != nil {
 		m.st.Notice = joinNotice(m.st.Notice, "flow stopped: cannot read this hop's artifact back: "+err.Error())
 		m.clearFlowMarker()

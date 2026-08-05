@@ -115,7 +115,11 @@ func (s *ArtifactStore) SaveArtifact(sessionID string, turnN int, vendor model.V
 	return path, nil
 }
 
-// LoadArtifact reads a turn artifact from disk.
+// LoadArtifact reads a turn artifact from disk, header and all.
+//
+// Use LoadArtifactBody for anything that reaches a vendor. This returns the file
+// as written, which is what a receipt reader wants and what a prompt must not
+// have.
 func (s *ArtifactStore) LoadArtifact(sessionID string, turnN int, vendor model.VendorID) (string, error) {
 	path := s.ArtifactPath(sessionID, turnN, vendor)
 	data, err := os.ReadFile(path)
@@ -123,6 +127,49 @@ func (s *ArtifactStore) LoadArtifact(sessionID string, turnN int, vendor model.V
 		return "", fmt.Errorf("reading artifact file %s: %w", path, err)
 	}
 	return string(data), nil
+}
+
+// LoadArtifactBody reads a turn artifact and returns ONLY the seat's reply.
+//
+// The provenance header is council's own bookkeeping — session id, timestamp,
+// prompt fingerprint — and it was travelling into the next hop's prompt as
+// though the previous seat had written it. Measured on a live chain: codex
+// answered "AUDITED ALPHA. 573732eb6aa61068", quoting back the PromptSHA256-8 of
+// the artifact it had been handed. A model given a block of text inside a fence
+// cannot tell which lines the vendor said from which the harness stamped on, so
+// the cut has to happen before the fence rather than be left to the reader.
+//
+// The header stays in the FILE. It is what makes a saved artifact a receipt
+// rather than an anonymous blob, and that does not change because one consumer
+// must not see it.
+//
+// A file with no separator is returned whole: an artifact written by an older
+// build, or one a user dropped in the directory, still reaches the next seat
+// rather than arriving empty. Losing a hop's content is a worse failure than
+// carrying a header line.
+func (s *ArtifactStore) LoadArtifactBody(sessionID string, turnN int, vendor model.VendorID) (string, error) {
+	raw, err := s.LoadArtifact(sessionID, turnN, vendor)
+	if err != nil {
+		return "", err
+	}
+	return stripProvenance(raw), nil
+}
+
+// provenanceStart and provenanceEnd bracket the header SaveArtifact writes.
+const (
+	provenanceStart = "--- TELLTALE ARTIFACT PROVENANCE ---"
+	provenanceEnd   = "------------------------------------\n\n"
+)
+
+func stripProvenance(raw string) string {
+	if !strings.HasPrefix(raw, provenanceStart) {
+		return raw
+	}
+	_, body, ok := strings.Cut(raw, provenanceEnd)
+	if !ok {
+		return raw
+	}
+	return body
 }
 
 // FormatFencedArtifact formats an artifact into a secure, labelled prompt fence
