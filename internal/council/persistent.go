@@ -309,10 +309,78 @@ func autoApproveRoutine(g *runner.Gate) bool {
 	if !ok {
 		return false
 	}
-	if strings.ContainsAny(command, "\n\r;&|`<>") || strings.Contains(command, "$(") {
+	segments, ok := routineSegments(command)
+	if !ok {
 		return false
 	}
-	args := strings.Fields(command)
+	for _, seg := range segments {
+		if !routineCommand(seg) {
+			return false
+		}
+	}
+	return true
+}
+
+// routineSegments splits a command on the only two composition operators a
+// development loop actually needs, and refuses every other form outright.
+//
+// The first cut of this guard rejected any command containing & | < or >, which
+// was correct and unusable: the shapes it turned away were `go build && echo OK`
+// and `grep -rn foo internal | head`, whose every stage is a read. It carded the
+// user for the punctuation rather than for the command, which is the failure
+// this whole classifier exists to stop.
+//
+// PIPES AND && ARE SAFE HERE FOR ONE REASON, and it is not that pipes are
+// harmless: it is that EVERY segment must independently classify as routine, and
+// nothing in that allowlist writes. `cat x | rm` fails on the second segment.
+// The moment a segment cannot be classified the whole command falls through to
+// the card, so composition never becomes a way to smuggle a stage past the list.
+//
+// Everything else stays refused, each for a reason that survives the pipe
+// argument:
+//
+//   - `;` and a LONE `&` sequence commands rather than connect them, and a
+//     background job outlives the turn that started it.
+//   - redirection (`<`, `>`) writes to a path the classifier never inspects,
+//     which would turn `echo` — the most harmless entry in the list — into an
+//     arbitrary file write. This is also why `2>&1` is refused: it is real
+//     redirection, and picking that one spelling out by hand is how a parser
+//     starts guessing.
+//   - backticks and `$(` substitute a command's OUTPUT into the argv this
+//     function is reading, so what gets classified is not what runs.
+func routineSegments(command string) ([]string, bool) {
+	if strings.ContainsAny(command, "\n\r;`<>") || strings.Contains(command, "$(") {
+		return nil, false
+	}
+	// && is connection; a lone & is backgrounding. Take the pairs out first so
+	// the survivor test below sees only the single ampersands.
+	const andSentinel = "\x00"
+	work := strings.ReplaceAll(command, "&&", andSentinel)
+	if strings.Contains(work, "&") {
+		return nil, false
+	}
+	var segments []string
+	for _, part := range strings.FieldsFunc(work, func(r rune) bool {
+		return r == '|' || r == '\x00'
+	}) {
+		if seg := strings.TrimSpace(part); seg != "" {
+			segments = append(segments, seg)
+		}
+	}
+	if len(segments) == 0 {
+		return nil, false
+	}
+	// A separator with nothing on one side of it — `a || b`, `foo &&` — means the
+	// text does not say what it appears to. Counting is enough to catch it and
+	// does not require this function to become a shell parser.
+	if strings.Count(work, "|")+strings.Count(work, andSentinel) != len(segments)-1 {
+		return nil, false
+	}
+	return segments, true
+}
+
+func routineCommand(segment string) bool {
+	args := strings.Fields(segment)
 	if len(args) == 0 {
 		return false
 	}
