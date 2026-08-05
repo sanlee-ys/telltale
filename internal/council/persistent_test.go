@@ -10,6 +10,15 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
+type decisionSession struct{ sent [][]byte }
+
+func (s *decisionSession) Send(line []byte) error {
+	s.sent = append(s.sent, append([]byte(nil), line...))
+	return nil
+}
+func (*decisionSession) Kill()       {}
+func (*decisionSession) Alive() bool { return true }
+
 // turnModel is traceModel plus a turn in flight on a persistent seat. The turn
 // bookkeeping is the seam this file tests: a column can now be retired by four
 // different signals, and getting that wrong either hangs the room or ends a
@@ -269,6 +278,70 @@ func TestGatesQueueInArrivalOrder(t *testing.T) {
 	m.decideGate(false)
 	if m.st.Gating() {
 		t.Error("the room is still gating with an empty queue")
+	}
+}
+
+func TestBasicGitOpsProceedWithoutAGate(t *testing.T) {
+	m := turnModel(true)
+	sess := &decisionSession{}
+	m.procs[model.VendorClaude] = &seatProc{sess: sess}
+	g := &runner.Gate{
+		RequestID: "r1", ToolUseID: "t1", Tool: "Bash",
+		Text:  "Bash: git push -u origin feat/handoff",
+		Input: map[string]any{"command": "git push -u origin feat/handoff"},
+	}
+	m.queueGate(&m.st.Columns[0], g)
+
+	if m.st.Gating() {
+		t.Fatal("routine git push was put behind a user gate")
+	}
+	if len(sess.sent) != 1 {
+		t.Fatalf("decision messages = %d, want one automatic approval", len(sess.sent))
+	}
+	got := string(sess.sent[0])
+	if !strings.Contains(got, `"behavior":"allow"`) || !strings.Contains(got, "feat/handoff") {
+		t.Fatalf("automatic decision did not approve and echo the command input: %s", got)
+	}
+}
+
+func TestDestructiveGitOpsStillGate(t *testing.T) {
+	for _, command := range []string{
+		"git reset --hard HEAD~1",
+		"git clean -fd",
+		"git push --force origin main",
+		"git branch -D work",
+		"git checkout -- changed.go",
+		"git commit --amend --no-edit",
+		"gh pr merge 68 --squash",
+		"git status && rm -rf .",
+	} {
+		t.Run(command, func(t *testing.T) {
+			g := &runner.Gate{Tool: "Bash", Input: map[string]any{"command": command}}
+			if autoApproveBasicGit(g) {
+				t.Fatalf("destructive or composed command was automatically approved: %s", command)
+			}
+		})
+	}
+}
+
+func TestRoutineGitOpsAreRecognized(t *testing.T) {
+	for _, command := range []string{
+		"git status --short",
+		"git add internal/council/dispatch.go",
+		`git commit -m "fix handoff"`,
+		"git switch -c feat/handoff",
+		"git checkout -b feat/handoff",
+		"git pull --ff-only",
+		"git push -u origin feat/handoff",
+		"gh pr create --fill",
+		"gh run watch 123",
+	} {
+		t.Run(command, func(t *testing.T) {
+			g := &runner.Gate{Tool: "Bash", Input: map[string]any{"command": command}}
+			if !autoApproveBasicGit(g) {
+				t.Fatalf("routine command still requires approval: %s", command)
+			}
+		})
 	}
 }
 

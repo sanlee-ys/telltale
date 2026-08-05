@@ -66,14 +66,14 @@ func TestLiveFlowCursorThenCodex(t *testing.T) {
 	t.Logf("notice: %s", m.st.Notice)
 	t.Logf("flowHop=%d advance=%v chain=%v", m.st.FlowHop, m.flowAdvancePending, m.flowChain != nil)
 
-	if !strings.Contains(strings.ToUpper(gotCursor), "ALPHA") {
-		t.Fatalf("cursor hop missing ALPHA:\n%s", gotCursor)
+	if n := strings.Count(strings.ToUpper(gotCursor), "ALPHA"); n != 1 {
+		t.Fatalf("cursor hop contains ALPHA %d times, want exactly once:\n%s", n, gotCursor)
 	}
 	if !strings.Contains(strings.ToUpper(gotCodex), "AUDIT") {
 		t.Fatalf("codex hop missing AUDIT:\n%s", gotCodex)
 	}
-	if !strings.Contains(strings.ToUpper(gotCodex), "ALPHA") {
-		t.Fatalf("codex hop did not see ALPHA from predecessor (auto-advance feed broken):\n%s", gotCodex)
+	if n := strings.Count(strings.ToUpper(gotCodex), "ALPHA"); n != 1 {
+		t.Fatalf("codex hop contains ALPHA %d times, want exactly once (predecessor artifact must be clean):\n%s", n, gotCodex)
 	}
 }
 

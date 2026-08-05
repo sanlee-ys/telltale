@@ -255,6 +255,13 @@ func (m *Model) queueGate(c *Column, g *runner.Gate) {
 	if g == nil || g.RequestID == "" {
 		return
 	}
+	if autoApproveBasicGit(g) {
+		m.sendDecision(PendingGate{
+			Vendor: c.Vendor, RequestID: g.RequestID, ToolUseID: g.ToolUseID,
+			Text: g.Text,
+		}, true, g.Input)
+		return
+	}
 	// Redacted whole, like every other complete string a vendor produced. It
 	// matters more here than in prose: the argument line of a tool call is one
 	// of the likeliest places for a token to appear on screen, and this one is
@@ -275,6 +282,100 @@ func (m *Model) queueGate(c *Column, g *runner.Gate) {
 	m.gateInputs[g.RequestID] = g.Input
 }
 
+// autoApproveBasicGit recognizes the routine operations needed to turn a
+// finished edit into reviewable work. It is deliberately conservative: shell
+// composition and history/working-tree rewrites fall through to the visible
+// gate. A false negative costs one keystroke; a false positive could destroy
+// work, so ambiguous commands are never approved here.
+func autoApproveBasicGit(g *runner.Gate) bool {
+	if g == nil || g.Tool != "Bash" {
+		return false
+	}
+	command, ok := g.Input["command"].(string)
+	if !ok {
+		return false
+	}
+	if strings.ContainsAny(command, "\n\r;&|`<>") || strings.Contains(command, "$(") {
+		return false
+	}
+	args := strings.Fields(command)
+	if len(args) == 0 {
+		return false
+	}
+	if args[0] == "git" {
+		return safeGitArgs(args[1:])
+	}
+	if args[0] == "gh" {
+		return safeGHArgs(args[1:])
+	}
+	return false
+}
+
+func safeGitArgs(args []string) bool {
+	// Accept git -C <workspace> ..., but no other global switches whose effect
+	// Council would have to interpret.
+	if len(args) >= 3 && args[0] == "-C" {
+		args = args[2:]
+	}
+	if len(args) == 0 {
+		return false
+	}
+	sub, rest := args[0], args[1:]
+	has := func(forbidden ...string) bool {
+		for _, arg := range rest {
+			for _, bad := range forbidden {
+				if arg == bad || strings.HasPrefix(arg, bad+"=") {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	switch sub {
+	case "status", "log", "diff", "show", "fetch":
+		return true
+	case "add":
+		return !has("-p", "--patch")
+	case "commit":
+		return !has("--amend", "--fixup", "--squash")
+	case "pull":
+		return !has("--force")
+	case "push":
+		if has("-f", "--force", "--force-with-lease", "--delete", "--mirror", "--prune") {
+			return false
+		}
+		for _, arg := range rest {
+			if strings.HasPrefix(arg, "+") {
+				return false
+			}
+		}
+		return true
+	case "switch":
+		return !has("-C", "--force-create", "-f", "--force", "--discard-changes")
+	case "checkout":
+		// Checkout is only unambiguous when creating a new branch. `checkout x`
+		// may mean a path and can overwrite working-tree content.
+		return len(rest) >= 2 && (rest[0] == "-b" || rest[0] == "--branch")
+	case "branch":
+		return !has("-d", "-D", "--delete", "-m", "-M", "--move", "-f", "--force")
+	default:
+		return false
+	}
+}
+
+func safeGHArgs(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+	switch args[0] + " " + args[1] {
+	case "pr create", "pr view", "pr list", "pr status", "pr checks",
+		"run list", "run view", "run watch":
+		return true
+	default:
+		return false
+	}
+}
+
 // decideGate answers the OLDEST pending request.
 //
 // Oldest first because that is the one the card is showing. Answering anything
@@ -286,6 +387,7 @@ func (m *Model) decideGate(allow bool) {
 	}
 	pending := m.st.Gates[0]
 	m.st.Gates = m.st.Gates[1:]
+	input := m.gateInputs[pending.RequestID]
 	delete(m.gateInputs, pending.RequestID)
 
 	c := m.column(pending.Vendor)
@@ -301,7 +403,7 @@ func (m *Model) decideGate(allow bool) {
 		}, m.redactWhole)
 	}
 
-	m.sendDecision(pending, allow)
+	m.sendDecision(pending, allow, input)
 
 	if len(m.st.Gates) == 0 {
 		m.st.Notice = ""
@@ -317,7 +419,7 @@ func (m *Model) decideGate(allow bool) {
 const denialText = "denied by the person running this council room. " +
 	"Do not retry this call or a variation of it; say what you wanted to do and why."
 
-func (m *Model) sendDecision(pending PendingGate, allow bool) {
+func (m *Model) sendDecision(pending PendingGate, allow bool, input map[string]any) {
 	p, ok := m.procs[pending.Vendor]
 	if !ok {
 		return
@@ -326,8 +428,7 @@ func (m *Model) sendDecision(pending PendingGate, allow bool) {
 	if !ok {
 		return
 	}
-	line, err := pv.Decide(pending.RequestID, allow, denialText,
-		m.gateInputs[pending.RequestID])
+	line, err := pv.Decide(pending.RequestID, allow, denialText, input)
 	if err != nil {
 		return
 	}

@@ -294,7 +294,13 @@ func (c Claude) baseArgs(p Posture) []string {
 		return append(args, "--permission-mode", "acceptEdits", "--allowedTools", autoAllowedTools)
 
 	case PostureWriteGated:
-		return append(args, gateArgs...)
+		// Same land-work allowlist as the ungated posture. San's rule: basic
+		// gitops (add/commit/push/…) must not raise a card; the gate still
+		// catches Write/Edit and other shell. Pre-approving only these verbs
+		// does not re-open the settings hole — --setting-sources "" still
+		// drops the user's broader allow rules.
+		out := append(append([]string{}, gateArgs...), "--allowedTools", autoAllowedTools)
+		return append(args, out...)
 	}
 	return append(args, "--disallowedTools", deniedTools)
 }
@@ -325,11 +331,9 @@ func (c Claude) baseArgs(p Posture) []string {
 // here, and its containment is the same one everything else in this room rests
 // on, which is the directory council was pointed at.
 //
-// The GATED posture gets none of this and must not: its whole claim is that a
-// call which changes something raises a card first, and a pre-approved call
-// never reaches the gate. That is the settings hole --setting-sources "" exists
-// to close, and re-opening it from inside the product would be worse than the
-// user's own config doing it.
+// Both write postures carry this allowlist. The gated seat still asks before
+// Write/Edit and other shell; these verbs are the land-work exception so a
+// room that can edit files can also commit them without a card per git call.
 const autoAllowedTools = "Bash(git add:*),Bash(git commit:*),Bash(git push:*)," +
 	"Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git log:*)," +
 	"Bash(git diff:*),Bash(git pull:*),Bash(git fetch:*),Bash(gh pr:*),Bash(gh run:*)"

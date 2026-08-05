@@ -65,18 +65,29 @@ func TestUngatedWritePostureCanLandWork(t *testing.T) {
 	}
 }
 
-// TestGatedPostureIsNotPreApproved is the other half, and it is the one that
-// would be expensive to get wrong. The gated seat's entire claim is that a call
-// which changes something raises a card first — and a pre-approved call never
-// reaches the gate at all. That is the settings hole --setting-sources "" exists
-// to close, and the product must not re-open it from the inside.
-func TestGatedPostureIsNotPreApproved(t *testing.T) {
+// TestGatedPostureStillGatesEdits: land-work git verbs are pre-approved so a
+// room can commit without a card, but Write/Edit and other shell must still
+// raise the gate. --setting-sources "" stays so the user's broader allow
+// rules cannot walk past it.
+func TestGatedPostureStillGatesEdits(t *testing.T) {
 	spec, _ := Claude{}.FirstTurn("brief", `C:\ws`, "claude", PostureWriteGated)
-	if slices.Contains(spec.Args, "--allowedTools") {
-		t.Error("the gated seat pre-approves calls, which walk straight past the gate it advertises")
-	}
 	if !slices.Contains(spec.Args, "--setting-sources") {
 		t.Error("the gated seat kept the user's allow rules, so the gate sits behind them")
+	}
+	i := slices.Index(spec.Args, "--allowedTools")
+	if i < 0 || i == len(spec.Args)-1 {
+		t.Fatal("gated posture lost the land-work allowlist; basic gitops will card every call")
+	}
+	rules := spec.Args[i+1]
+	for _, want := range []string{"git add", "git commit", "git push"} {
+		if !strings.Contains(rules, want) {
+			t.Errorf("gated posture missing %q", want)
+		}
+	}
+	for _, never := range []string{"Write", "Edit", "MultiEdit"} {
+		if strings.Contains(rules, never) {
+			t.Errorf("gated posture pre-approves %q, so the card never appears for edits", never)
+		}
 	}
 }
 
