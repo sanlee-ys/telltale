@@ -65,18 +65,13 @@ func TestUngatedWritePostureCanLandWork(t *testing.T) {
 	}
 }
 
-// TestGatedPostureIsNotPreApproved is the other half, and it is the one that
-// would be expensive to get wrong. The gated seat's entire claim is that a call
-// which changes something raises a card first — and a pre-approved call never
-// reaches the gate at all. That is the settings hole --setting-sources "" exists
-// to close, and the product must not re-open it from the inside.
-func TestGatedPostureIsNotPreApproved(t *testing.T) {
+func TestGatedPostureLeavesCommandClassificationToCouncil(t *testing.T) {
 	spec, _ := Claude{}.FirstTurn("brief", `C:\ws`, "claude", PostureWriteGated)
-	if slices.Contains(spec.Args, "--allowedTools") {
-		t.Error("the gated seat pre-approves calls, which walk straight past the gate it advertises")
-	}
 	if !slices.Contains(spec.Args, "--setting-sources") {
 		t.Error("the gated seat kept the user's allow rules, so the gate sits behind them")
+	}
+	if slices.Contains(spec.Args, "--allowedTools") {
+		t.Error("the gated seat bypasses Council's safe/destructive command classifier")
 	}
 }
 

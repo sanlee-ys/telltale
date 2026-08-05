@@ -178,6 +178,35 @@ func TestActivityIsRedactedWholeAndDoesNotStealTheBodysBuffer(t *testing.T) {
 	}
 }
 
+func TestCursorResultReconcilesDuplicatedStreamBeforeHandoff(t *testing.T) {
+	m := traceModel()
+	m.st.Columns[0].Vendor = model.VendorCursor
+	m.redactors = map[model.VendorID]*Redactor{model.VendorCursor: {}}
+	m.applyEvents([]runner.Event{
+		{Vendor: model.VendorCursor, Kind: runner.KindText, Text: "ALPHA"},
+		{Vendor: model.VendorCursor, Kind: runner.KindText, Text: "ALPHA"},
+		{Vendor: model.VendorCursor, Kind: runner.KindMeta, Text: "ALPHA"},
+	})
+
+	if got := m.st.Columns[0].Body; got != "ALPHA" {
+		t.Fatalf("Cursor body = %q, want authoritative result exactly once", got)
+	}
+}
+
+// TestSingleTokenStreamPlusResultDoesNotDouble is the ALPHAALPHA bug: Feed
+// holds a whitespace-free chunk, Body still looks empty, and the old Meta path
+// ran result through Feed+Flush on top of the hold.
+func TestSingleTokenStreamPlusResultDoesNotDouble(t *testing.T) {
+	m := traceModel()
+	m.applyEvents([]runner.Event{
+		{Vendor: model.VendorClaude, Kind: runner.KindText, Text: "ALPHA"},
+		{Vendor: model.VendorClaude, Kind: runner.KindMeta, Text: "ALPHA"},
+	})
+	if got := m.st.Columns[0].Body; got != "ALPHA" {
+		t.Fatalf("body = %q, want ALPHA once (redactor hold + result must not concatenate)", got)
+	}
+}
+
 // TestDispatchClearsTheTraceBetweenTurns. Act ids are scoped to a turn — agy's
 // are just step indices — so a trace carried across a dispatch would let turn
 // 2's step 3 resolve turn 1's.

@@ -325,11 +325,10 @@ func (c Claude) baseArgs(p Posture) []string {
 // here, and its containment is the same one everything else in this room rests
 // on, which is the directory council was pointed at.
 //
-// The GATED posture gets none of this and must not: its whole claim is that a
-// call which changes something raises a card first, and a pre-approved call
-// never reaches the gate. That is the settings hole --setting-sources "" exists
-// to close, and re-opening it from inside the product would be worse than the
-// user's own config doing it.
+// The gated posture deliberately gets none of this broad verb allowlist.
+// Council answers its permission callback for safe command variants instead,
+// which is what lets `git push` proceed while keeping `git push --force`
+// visible and gated.
 const autoAllowedTools = "Bash(git add:*),Bash(git commit:*),Bash(git push:*)," +
 	"Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git log:*)," +
 	"Bash(git diff:*),Bash(git pull:*),Bash(git fetch:*),Bash(gh pr:*),Bash(gh run:*)"

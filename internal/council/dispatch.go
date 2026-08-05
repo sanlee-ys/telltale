@@ -497,11 +497,25 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			if ev.CostUSD != nil {
 				c.CostUSD = ev.CostUSD
 			}
-			// The final-result fallback: used ONLY when the turn streamed
-			// nothing, so a vendor whose partial events did not arrive still
-			// shows its reply instead of an empty column.
-			if c.Body == "" && ev.Text != "" {
-				c.Body = m.redact(ev.Vendor, ev.Text) + m.flush(ev.Vendor)
+			// End-of-turn result text.
+			//
+			// Flush the streaming redactor FIRST. A single-token reply
+			// ("ALPHA") has no whitespace, so Feed held it and Body still
+			// looked empty — measured 2026-08-05 with cursor-agent: then
+			// `redact(result)+flush` became ALPHAALPHA, and that doubled
+			// body is what /flow saved into the next hop's artifact.
+			// Result text is a complete message; never run it through Feed.
+			c.Body += m.flush(ev.Vendor)
+			if ev.Text != "" {
+				if ev.Vendor == model.VendorCursor {
+					// Cursor's result is the vendor's authoritative whole reply.
+					// Prefer it over provisional deltas so a delta/repeat pair
+					// cannot corrupt a /flow handoff even if ParseEvent drifts.
+					c.Body = m.redactWhole(ev.Text)
+					m.redactors[ev.Vendor] = &Redactor{}
+				} else if c.Body == "" {
+					c.Body = m.redactWhole(ev.Text)
+				}
 			}
 			// On a persistent seat this line is the ONLY end-of-turn signal:
 			// the process does not exit, so no KindDone is coming.
