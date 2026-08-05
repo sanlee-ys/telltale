@@ -27,14 +27,14 @@ against gemini-cli v0.53.1 (the writer's own persistence code, read at tag), wit
 first live-corpus pass itemized in [docs/design.md §3.7](docs/design.md). **Antigravity CLI (`agy`)** is served on both
 seams — the statusline against a live payload capture, and the HUD against its live
 on-disk corpus on agy 1.1.9 ([docs/design.md §2.1/§3.8](docs/design.md),
-[decisions/006](decisions/006-antigravity-hud-adapter.md)). **Cursor (Composer)** is
+[decisions/006](https://github.com/sanlee-ys/career/blob/main/decisions/telltale/006-antigravity-hud-adapter.md)). **Cursor (Composer)** is
 live-verified against its on-disk store on Cursor 3.14.7 — the first IDE-resident agent
 here, and the first whose store also holds live credentials, which is why that adapter's
 most load-bearing property is the list of things it does not read
 ([docs/design.md §3.9](docs/design.md),
-[decisions/007](decisions/007-cursor-hud-adapter.md)). **`telltale council`** seats the 4-vendor fleet (Claude Code, Codex, Cursor, Antigravity), and every sandbox and streaming claim in it was measured
+[decisions/007](https://github.com/sanlee-ys/career/blob/main/decisions/telltale/007-cursor-hud-adapter.md)). **`telltale council`** seats the 4-vendor fleet (Claude Code, Codex, Cursor, Antigravity), and every sandbox and streaming claim in it was measured
 against a live run of that CLI rather than read off its `--help`
-([docs/design.md §9](docs/design.md), [decisions/008](decisions/008-council-mode-dispatch.md)).
+([docs/design.md §9](docs/design.md), [decisions/008](https://github.com/sanlee-ys/career/blob/main/decisions/telltale/008-council-mode-dispatch.md)).
 
 Build from source:
 
@@ -137,22 +137,22 @@ but no Bubble Tea code runs on a statusline invocation).
 Honest claim, stated precisely: *cross-vendor monitoring; vendor-native statusline where
 the seam exists — and it exists twice: Claude Code and Antigravity CLI; dispatch across
 the 4-vendor fleet (Claude Code, Codex, Cursor, Antigravity).* (Codex CLI has
-no statusline hook today — see [decisions/001](decisions/001-v1-scope.md). Antigravity
+no statusline hook today — see [decisions/001](https://github.com/sanlee-ys/career/blob/main/decisions/telltale/001-v1-scope.md). Antigravity
 was statusline-only until a re-survey found the transcript its own docs advertise, which
 is what made its HUD adapter buildable — see
-[decisions/004](decisions/004-antigravity-statusline.md) for the first verdict and
-[decisions/006](decisions/006-antigravity-hud-adapter.md) for the reversal. Cursor reaches
+[decisions/004](https://github.com/sanlee-ys/career/blob/main/decisions/telltale/004-antigravity-statusline.md) for the first verdict and
+[decisions/006](https://github.com/sanlee-ys/career/blob/main/decisions/telltale/006-antigravity-hud-adapter.md) for the reversal. Cursor reaches
 telltale both ways: a built-in HUD adapter because its seam is on disk, and a council seat
 driven through `cursor-agent`'s own bundled `node.exe` — the `cursor` binary on PATH is only
 the editor launcher and council never drives it —
-see [decisions/008](decisions/008-council-mode-dispatch.md).)
+see [decisions/008](https://github.com/sanlee-ys/career/blob/main/decisions/telltale/008-council-mode-dispatch.md).)
 
 **The gauges never write.** `telltale statusline` and `telltale hud` read vendor files,
 make no network calls, read no credentials, and no keybinding can mutate vendor state or
 send anything to a running agent. `telltale council` is the deliberate exception, and it
 is labelled as one everywhere it can be: it spawns vendor CLIs, it is entered only by
 typing the subcommand, it is not reachable from the HUD, and it shares no keybinding with
-it ([decisions/008](decisions/008-council-mode-dispatch.md)). It is also the only mode
+it ([decisions/008](https://github.com/sanlee-ys/career/blob/main/decisions/telltale/008-council-mode-dispatch.md)). It is also the only mode
 that writes anything to disk — one room file, `~/.telltale/council/room.json`, holding
 the vendor session ids reattaching needs, the room's current workspace, and no
 transcript, output or brief content.
@@ -160,7 +160,7 @@ transcript, output or brief content.
 keeps its access tokens, refresh tokens and OAuth secrets in the *same SQLite file* as
 its session state — so it is enforced there as a read allowlist with a test that plants
 credential-shaped strings in the fixtures and asserts none of them reaches anything the
-HUD can display ([decisions/007](decisions/007-cursor-hud-adapter.md)).
+HUD can display ([decisions/007](https://github.com/sanlee-ys/career/blob/main/decisions/telltale/007-cursor-hud-adapter.md)).
 
 ## The dispatch room
 
@@ -389,7 +389,7 @@ last save wins.
 The rest of the account — why execution is argv and never a shell, the silent invocation
 trap each vendor hid, and what is still unverified — is in
 [docs/design.md §9](docs/design.md) and
-[decisions/008](decisions/008-council-mode-dispatch.md), amendments included.
+[decisions/008](https://github.com/sanlee-ys/career/blob/main/decisions/telltale/008-council-mode-dispatch.md), amendments included.
 
 ## The honest-gauge rule
 
@@ -406,11 +406,11 @@ a full track, absent draws nothing at all.
 Fixtures are **synthesized** — fake session ids, fake text, fake paths, realistic in shape
 only. No real session content is in this repository.
 
-## Design & decisions
+## Design
 
 - [docs/design.md](docs/design.md) — segments, data sources, the normalized schema, the
   adapter contract, and the HUD UI specification
-- [decisions/](decisions/) — ADR log
+- Historical ADRs (archived): [career/decisions/telltale](https://github.com/sanlee-ys/career/tree/main/decisions/telltale)
 
 ## License
 

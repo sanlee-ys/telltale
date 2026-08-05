@@ -6,7 +6,7 @@ about current work.
 **Staleness rule:** any PR that changes what's in flight updates this file in
 the same commit. A ledger nobody updates is worse than none.
 
-Last updated: 2026-08-05 · Author: Codex (CRO / CISO) · Rev: post-#61 merge
+Last updated: 2026-08-05 · Author: Cursor · Rev: ADRs archived; no-ledger closed
 
 ---
 
@@ -25,8 +25,7 @@ so San is not juggling vendor windows. Glass must earn that.
 ## Awaiting San's ruling
 
 - **v1 cut.** Gauges-only (statusline + HUD, declared vendor version pins) vs hold v1 until council settles. COO recommends gauges-only.
-- **Front-end scope / ADR-009.** Browser HUD vs docs/marketing vs TUI-only. Today's guarantees: one binary, no network calls, no credential reads — a served UI retires some of them.
-- **Council decision records.** Emit a per-turn decision file vs build no ledger. COO recommends emit-only. The **yank key** half shipped in #60 (`y` copies this seat's reply, `Y` the whole turn) — clipboard only, no file on disk. #61 has now shipped the opt-in `/flow` artifact transport seam; what remains unruled is whether ordinary turns also get written somewhere durable (`~/.telltale/council/last-turn.md` or a per-turn decision file).
+- **Front-end scope.** Browser HUD vs docs/marketing vs TUI-only. Today's guarantees: one binary, no network calls, no credential reads — a served UI retires some of them.
 
 ## Owners
 
@@ -54,8 +53,10 @@ so San is not juggling vendor windows. Glass must earn that.
 
 ## Landed recently
 
+- ADRs moved to [career/decisions/telltale](https://github.com/sanlee-ys/career/tree/main/decisions/telltale) — telltale adds no more ADRs
+- Ordinary turns stay in-room; yank + `/flow` are the export seams (no ambient ledger)
 - #62 — Cursor's mid-turn whole-message repeat no longer renders twice
-- #61 — `/flow` seat-to-seat handoffs, opt-in redacted artifacts, explicit `write:<path>` authority, and the ADR-008 amendment
+- #61 — `/flow` seat-to-seat handoffs, opt-in redacted artifacts, explicit `write:<path>` authority
 - #60 — `y` copies this seat's reply, `Y` copies the whole turn
 - #59 — the waiting card says what to expect, not how it works
 - #58 — stopped asking agy for a restriction that only ever killed turns
@@ -71,9 +72,8 @@ so San is not juggling vendor windows. Glass must earn that.
 
 ## Next
 
-1. San: rule on whether ordinary council turns get a durable decision record; #61 now provides the opt-in `/flow` artifact seam but does not settle that policy.
-2. Antigravity: visual punch list → append under Council TUI detail.
-3. Cursor: re-cut the v1 TUI list against the post-#61/#62 room (four of the five items moved under it), then branch; PR; merge on green; refresh this file in the same commit.
+1. Antigravity: visual punch list → append under Council TUI detail.
+2. Cursor: re-cut the v1 TUI list against the post-#61/#62 room (four of the five items moved under it), then branch; PR; merge on green; refresh this file in the same commit.
 
 ## How to re-enter
 
