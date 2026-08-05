@@ -2553,7 +2553,12 @@ Each adapter hit a failure that is silent rather than loud, which is the kind wo
   argv and is bounded by the ~32K Windows command-line limit — a real ceiling on a long brief,
   with no workaround short of upstream support.
 
-The shared shape: all three failures produce a *plausible* result rather than an error. That is
+- **Cursor**: the prompt is a variadic positional and needs a bare `--` in front of it, or a brief
+  that happens to open with `-` is read as an unknown option and the turn dies. And the stream
+  sends every passage twice — deltas, then the whole message again — which §9.6c covers, because
+  it is a parsing trap rather than an invocation one and it took two captures to state correctly.
+
+The shared shape: all four failures produce a *plausible* result rather than an error. That is
 why each one is pinned by a test asserting the argv this repo actually builds.
 
 ### 9.6a The activity trace carries outcomes — and says when it cannot
@@ -2799,6 +2804,39 @@ ADR-008 third and twelfth amendments), and agent-ops ADR-012 rules the same way 
 Deliberately **not** part of this: `--dangerously-skip-permissions`. Dropping a flag that
 restricted nothing and adding one that approves everything are different acts, and the second
 stays refused on both seats that offer it.
+
+### 9.6c The Cursor stream says everything twice, and the second time does not always look alike
+
+cursor-agent under `--stream-partial-output` sends a model call's text deltas and then that
+call's **complete message** as one more assistant event. Appending both renders the passage
+twice, which is the whole of this defect in both of its appearances.
+
+The first capture (2026-08-04, a turn asked to reply `PONG`) showed deltas `"P"`, `"ONG"` each
+carrying `timestamp_ms` and the repeat `"PONG"` carrying none, so the adapter dropped the event
+whose `timestamp_ms` was absent. That rule was derived from turns with no tool call in them, and
+**every such turn is one model call** — so it was a rule about the end of a *turn* being used as
+a rule about the end of a *message*.
+
+A turn that runs a tool is several model calls, each ending in a repeat of its own segment, and
+those mid-turn repeats carry `timestamp_ms` like any delta. The column rendered the segment, the
+segment again, then the next one — `X X Y` — which is what the owner saw on a long Cursor reply
+and what replaying the captured turn through the old parser reproduces exactly.
+
+What separates them is **`model_call_id`**: present on every whole-message repeat that ends a
+mid-turn model call, absent from every one of 108 captured deltas, and carrying the vendor's own
+per-segment numbering (`…-0-x7su`, `…-1-15l2`) that also appears on the `tool_call` events
+between the segments. The adapter now drops an assistant event when `model_call_id` is present
+**or** `timestamp_ms` is absent — the second is kept because the *turn-final* repeat still
+carries neither, so dropping it would trade this bug for the first one.
+
+Presence rather than absence is the point, and it generalises past this vendor: a missing field
+cannot distinguish "the vendor is telling me this is a complete message" from "the vendor stopped
+sending that field". `internal/council/vendors/testdata/cursor-segmented-turn.jsonl` is the whole
+turn, redacted, replayed by `TestCursorSegmentedTurnRendersEachPassageOnce`, which asserts the
+streamed body equals the reply the vendor itself put in its `result` event. That `result` remains
+the safety net if both fields ever go: the room uses it whenever a column streamed nothing, so
+the failure mode is a column that fills at the end, never one that is wrong. ADR-008's twentieth
+amendment carries the argument.
 
 ### 9.7 Status
 

@@ -1558,6 +1558,96 @@ user had been trying to *do* when they reached for the mouse. The answer was not
 was "take this answer with me", and that want went unnamed for two sections because the request
 arrived wearing the costume of a mechanism.
 
+### Amendment, 2026-08-04 (twentieth): the discriminator was true of the turns it was found on
+
+The owner watched a Cursor column render a passage twice, adjacent and verbatim, and then carry
+on: `X X Y`. From the screenshot — **measured**, this is his text, not a paraphrase:
+
+> Executing Codex's five blockers on PR #61 — no further questions.Executing Codex's five
+> blockers on PR #61 — no further questions.Implementing all five Codex blockers, then
+
+The same doubling appeared earlier in the same reply on an earlier passage. Cursor did not say
+it twice. This is the tenth amendment's own `PONGPONG` bug, back, in a costume the tenth
+amendment could not have seen.
+
+**What the old rule was, and why it was reasonable.** `vendors/cursor.go` dropped an assistant
+event whose `timestamp_ms` was absent, on the strength of the tenth amendment's capture: deltas
+carried the field, the whole-message repeat that followed them did not, on three separate turns.
+The comment on the field said, honestly, that this was "a thin discriminator and it is the one
+the vendor offers".
+
+**What the capture shows now.** cursor-agent `2026.07.23-e383d2b`, unchanged, re-run in print
+mode the way council drives it. Two turns, raw stdout kept.
+
+A turn with **no tool call** behaves exactly as the tenth amendment recorded — 168 deltas each
+carrying `timestamp_ms`, then one whole-message event carrying none. **Measured.** The old rule
+handles it, and nothing here weakens it.
+
+A turn that **runs a tool** does not. The turn is cut into several model calls, and *each one*
+ends in a repeat of its own segment. Off the wire (**measured**; the full turn is now
+`internal/council/vendors/testdata/cursor-segmented-turn.jsonl`, redacted):
+
+```
+{"type":"assistant","message":{…,"text":"Beginning"}]},…,"timestamp_ms":1785894418573}
+… seven more deltas, none carrying model_call_id …
+{"type":"assistant","message":{…,"text":"Beginning the survey of this repository now."}]},
+ …,"model_call_id":"88fa1494-…-0-x7su","timestamp_ms":1785894419785}
+{"type":"tool_call","subtype":"started",…,"model_call_id":"88fa1494-…-0-x7su",…}
+```
+
+That third line is the defect in one line: **a whole-message repeat carrying `timestamp_ms`.**
+The old rule passed it through, the column appended it to the deltas it duplicates, and the next
+segment followed — `X X Y`, exactly. Replaying the fixture through the old parser reproduces the
+owner's screenshot shape verbatim, which is the check that this is the same bug and not a
+lookalike.
+
+So neither hypothesis put to this session was right in the shape it was posed. Upstream did not
+change (**measured**: same version string, and the no-tool turn is byte-compatible with the
+tenth amendment's). The segment boundary did not "defeat" the check either. The check was simply
+**true of the turns it was found on and of no others** — every turn in the tenth amendment's
+capture had a hook-blocked tool call *after* all its text, or no tool call at all, so every one
+of them was a single model call, and a rule about the end of a turn was mistaken for a rule about
+the end of a message.
+
+**What replaces it.** The event carries a structural discriminator, and it is not an absence:
+`model_call_id`. Across 108 captured assistant events, **every** text delta carried none and
+**every** whole-message repeat that ends a mid-turn model call carried one, numbered by segment
+(`…-0-x7su`, `…-1-15l2`) and matching the id on the `tool_call` events that separate the
+segments. **Measured.** The parser now drops an assistant event when `model_call_id` is present
+**or** `timestamp_ms` is absent.
+
+Two rules, deliberately, and the order matters: the new one is the one that would have caught
+this, and the old one is kept because the *turn-final* repeat still carries neither field, so
+removing it would have traded this bug for the tenth amendment's. Neither is load-bearing alone.
+
+**Why a structural signal rather than comparing text.** A content guard — suppress an event whose
+text equals what has accumulated since the message began — was the fallback if the capture found
+nothing, and it is not needed. It should not be reached for anyway while a field exists:
+`ParseEvent` is a stateless method on a value type, so a content guard buys a per-turn parser
+instance or per-vendor stream state in the room, and it can only ever be *almost* right about a
+reply that legitimately repeats a sentence. A field the vendor sets is the vendor telling us
+which model call this text is the completed form of. Deltas — fragments of a call still in
+flight — have nothing to assert, which is why the signal is present rather than missing, and
+**presence is the stronger half of a discriminator**: an absent field cannot distinguish "this is
+a complete message" from "the vendor stopped sending that field". That distinction is the whole
+of what went wrong here.
+
+**Residual, and it is the same net as before.** If upstream drops `model_call_id` too, the `result`
+event still carries the entire reply — **measured** on the segmented turn as all three segments
+concatenated, which is also the invariant the new test asserts against — and the room uses it
+whenever a column streamed nothing. The failure mode of both fields disappearing is a column that
+fills at the end instead of incrementally, not a column that is wrong or empty. Unchanged residual
+from the tenth amendment: still no captured successful tool call; every read in this capture was
+blocked by the same broken hook wiring, which is incidentally what cut the turn into segments and
+so what made the bug visible at all.
+
+The general lesson, in this file's own terms: this file's law is that reading the source of a
+thing and reading its output are different measurements. This amendment adds the sharper half —
+**a capture measures the turns you ran, not the turns that exist.** Three turns agreed, the rule
+generalised from them was wrong, and no fourth reading of the bundle would have said so. The
+question a capture cannot answer for itself is *what kind of turn was that*, and here the answer
+was "one model call" on every sample.
+
 ## Verification status
 
 Flag surfaces were verified against the installed binaries' own `--help` output and, for Claude
