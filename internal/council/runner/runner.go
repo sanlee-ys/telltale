@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/model"
 )
@@ -309,6 +310,7 @@ func Start(ctx context.Context, spec Spec, out chan<- Event, parse ParseFunc) (*
 		return nil, ErrShellShimWithArgvPrompt
 	}
 
+	ck := newClock(spec.Vendor)
 	cmd := exec.Command(spec.Binary, spec.Args...)
 	cmd.Dir = spec.Dir
 
@@ -344,6 +346,10 @@ func Start(ctx context.Context, spec Spec, out chan<- Event, parse ParseFunc) (*
 		// that weakens, and killing the direct child remains possible.
 		_ = err
 	}
+	// The child exists, so the launch is over and this process's one turn is
+	// under way. A spawn-per-turn seat has no other turn boundary to find.
+	ck.launched()
+	ck.begin(time.Now())
 
 	h := &Handle{cmd: cmd, group: group, done: make(chan struct{})}
 
@@ -360,7 +366,7 @@ func Start(ctx context.Context, spec Spec, out chan<- Event, parse ParseFunc) (*
 	errTail := &ringBuffer{limit: stderrTail}
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() { defer wg.Done(); pumpStdout(stdout, spec.Vendor, out, parse) }()
+	go func() { defer wg.Done(); pumpStdout(stdout, spec.Vendor, out, parse, ck) }()
 	go func() { defer wg.Done(); errTail.consume(stderr) }()
 
 	// One goroutine owns the lifecycle: it waits for the readers to drain, then
@@ -370,6 +376,10 @@ func Start(ctx context.Context, spec Spec, out chan<- Event, parse ParseFunc) (*
 		defer close(h.done)
 		wg.Wait()
 		waitErr := cmd.Wait()
+		// The exit IS this turn's end: a batch child says the turn is over by
+		// dying. Closed before the terminal event goes out, so the record cannot
+		// be delayed by a full channel.
+		ck.end(time.Now())
 
 		ev := Event{Vendor: spec.Vendor, Kind: KindDone}
 		if waitErr != nil {
@@ -431,7 +441,11 @@ func (h *Handle) Done() <-chan struct{} { return h.done }
 // ReadBytes rather than bufio.Scanner: Scanner caps a token at 64K by default
 // and reports a line longer than that as an error, which for a stream of JSON
 // message deltas means silently losing exactly the largest replies.
-func pumpStdout(r io.Reader, vendor model.VendorID, out chan<- Event, parse ParseFunc) {
+//
+// ck sees every event just BEFORE it is queued, which is what keeps the turn
+// clock honest: the channel is bounded, so a slow consumer stalls this loop, and
+// stamping after the send would bill that stall to the vendor.
+func pumpStdout(r io.Reader, vendor model.VendorID, out chan<- Event, parse ParseFunc, ck *clock) {
 	br := bufio.NewReaderSize(r, 64<<10)
 	var acc []byte
 	for {
@@ -443,6 +457,7 @@ func pumpStdout(r io.Reader, vendor model.VendorID, out chan<- Event, parse Pars
 				acc = nil
 				if ev, ok := parse(line); ok {
 					ev.Vendor = vendor
+					ck.observe(ev)
 					out <- ev
 				}
 			}
@@ -453,6 +468,7 @@ func pumpStdout(r io.Reader, vendor model.VendorID, out chan<- Event, parse Pars
 			if len(acc) > 0 {
 				if ev, ok := parse(trimEOL(acc)); ok {
 					ev.Vendor = vendor
+					ck.observe(ev)
 					out <- ev
 				}
 			}

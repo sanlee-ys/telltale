@@ -43,12 +43,20 @@ func TestHelperProcess(t *testing.T) {
 	if os.Getenv(helperEnv) != "1" {
 		return
 	}
-	args := os.Args
+	// The `--` marker, not just the environment variable. helperSpec sets that
+	// variable on the PARENT — it has to, since the child inherits it — so once
+	// any test has built a spec, this function is reached in the parent too. Only
+	// a re-execution carries the marker; without it there is no mode to play and
+	// the honest thing is to be the no-op test this looks like.
+	args, spawned := os.Args, false
 	for i, a := range args {
 		if a == "--" {
-			args = args[i+1:]
+			args, spawned = args[i+1:], true
 			break
 		}
+	}
+	if !spawned {
+		return
 	}
 	if len(args) == 0 {
 		os.Exit(2)
@@ -114,6 +122,22 @@ func TestHelperProcess(t *testing.T) {
 			}
 			time.Sleep(20 * time.Millisecond)
 		}
+
+	case "slow":
+		// A turn with a real gap on both sides of the first line, so the clock
+		// tests can tell a wait from a stream instead of measuring scheduler
+		// noise. The pauses are the vendor's, not the harness's.
+		time.Sleep(300 * time.Millisecond)
+		os.Stdout.WriteString(`{"t":"first"}` + "\n")
+		time.Sleep(300 * time.Millisecond)
+		os.Stdout.WriteString(`{"t":"last"}` + "\n")
+		os.Exit(0)
+
+	case "silent":
+		// Runs, says nothing, exits clean. The turn has no first line to split
+		// on, which is the case where a stream figure would have to be invented.
+		time.Sleep(200 * time.Millisecond)
+		os.Exit(0)
 
 	case "sleep":
 		block()
