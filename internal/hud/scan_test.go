@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sanlee-ys/telltale/internal/adapter/drift"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -136,6 +137,97 @@ func TestUnreadableSessionDropsOnlyItsOwnRow(t *testing.T) {
 	}
 	if snap.Err != "" {
 		t.Errorf("a per-row failure must not become a scan failure: %q", snap.Err)
+	}
+}
+
+// ----------------------------------------------------------- shape drift
+
+// The HUD recognizes a drift report by the words internal/adapter/drift writes
+// onto Session.Diagnostics. drift.Watch.note is unexported, so that coupling is
+// invisible to the compiler and would fail silently — the vendor line would
+// simply stop lighting up, which is indistinguishable from nothing being wrong
+// and is the exact failure this feature exists to end.
+//
+// So the prefix is pinned against a note the drift package itself produces,
+// never a copy of it.
+func TestDriftIsRecognizedFromTheNoteTheAdapterLayerActuallyWrites(t *testing.T) {
+	s := sess(model.VendorCursor, "id", "", "", time.Minute)
+	drift.NewWatch("Cursor 3.14.7", drift.Canary{
+		Name:  "rowclock",
+		Feeds: model.NewFieldSet(model.FieldContextPercent),
+	}).Fold(s, 1)
+
+	if len(s.Diagnostics) == 0 {
+		t.Fatal("drift.Fold wrote no diagnostic; the fixture no longer exercises drift")
+	}
+	if !reportsDrift(s) {
+		t.Fatalf("the HUD no longer recognizes drift's own note %q\n"+
+			"internal/adapter/drift reworded its report; update driftNote in scan.go",
+			s.Diagnostics[0])
+	}
+	// An ordinary degradation is not drift. The adapters emit these constantly
+	// and a vendor line that lit up for every torn record would be one nobody
+	// reads.
+	torn := sess(model.VendorCodex, "id", "", "", time.Minute,
+		withDiagnostics("2 unparseable records skipped"))
+	if reportsDrift(torn) {
+		t.Error("an ordinary parse diagnostic was read as shape drift")
+	}
+}
+
+// ANY drifted session drifts the vendor, and the counts travel with the word.
+// Requiring every session would make the alarm wait for a vendor's old
+// transcripts to age out — the newest rows are the first to move.
+func TestOneDriftedSessionDriftsTheVendor(t *testing.T) {
+	a := fakeVendor(model.VendorCodex, "a", "b", "c")
+	drift.NewWatch("codex-cli 0.146.0", drift.Canary{
+		Name:  "session_meta",
+		Feeds: model.NewFieldSet(model.FieldWorkspace),
+	}).Fold(a.sessions["b"], 1)
+
+	snap := Scan(context.Background(), []model.Adapter{a}, pinned)
+	v := snap.Vendors[0]
+	if v.Status != StatusDrifted {
+		t.Fatalf("status = %s, want drifted", v.Status)
+	}
+	if v.Drifted != 1 || v.Sessions != 3 {
+		t.Errorf("roll-up = %d of %d, want 1 of 3", v.Drifted, v.Sessions)
+	}
+	// Every row still renders. Drift degrades what the canary fed; it does not
+	// drop the vendor's sessions.
+	if len(snap.Sessions) != 3 {
+		t.Errorf("collected %d sessions, want 3", len(snap.Sessions))
+	}
+}
+
+// A store nobody could open is a strictly bigger fact than one that no longer
+// matches, and the scan never has the chance to confuse them: the roll-up sits
+// on the path where Discover SUCCEEDED. cursor.ErrSchemaMismatch reaches the
+// vendor line through that same unreadable path and is undisturbed by this.
+func TestTheDiscoverTierStillWinsOverDrift(t *testing.T) {
+	refused := fakeVendor(model.VendorCursor)
+	refused.discoverErr = errors.New("cursor: unrecognized state store schema")
+	absent := fakeVendor(model.VendorCodex)
+	absent.discoverErr = model.ErrVendorAbsent
+
+	snap := Scan(context.Background(), []model.Adapter{refused, absent}, pinned)
+	for _, v := range snap.Vendors {
+		if v.Status == StatusDrifted {
+			t.Errorf("vendor %s was rolled up as drifted from a failed Discover", v.Vendor)
+		}
+	}
+}
+
+// A clean read leaves the word alone. The roll-up must not be a status the
+// scan sets by default and then walks back.
+func TestACleanReadIsStillWatching(t *testing.T) {
+	snap := Scan(context.Background(), []model.Adapter{fakeVendor(model.VendorClaude, "a", "b")}, pinned)
+	v := snap.Vendors[0]
+	if v.Status != StatusWatching {
+		t.Errorf("status = %s, want watching", v.Status)
+	}
+	if v.Drifted != 0 || v.Sessions != 2 {
+		t.Errorf("roll-up = %d of %d, want 0 of 2", v.Drifted, v.Sessions)
 	}
 }
 

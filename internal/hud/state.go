@@ -91,9 +91,27 @@ func (s SortKey) String() string {
 	}
 }
 
-// VendorStatus is what the empty state says about a vendor. Exactly three
-// words, because there are exactly three distinguishable facts and collapsing
+// VendorStatus is what the HUD says about a vendor's store. Exactly four
+// words, because there are exactly four distinguishable facts and collapsing
 // any two of them would hide one.
+//
+// It was three, and three was right for as long as Discover was the only thing
+// that knew anything: the directory is there, it is not there, or the OS
+// refused it. internal/adapter/drift added a fact none of those three can
+// express — the directory opened, the sessions parsed, and the structure the
+// readings hang off is no longer where the adapter was verified to find it.
+// Calling that "unreadable" would borrow the word for "the OS refused" to
+// describe a store the OS handed over intact, which is the exact collapse this
+// vocabulary exists to refuse. So four is now the honest count; the third word
+// was never wrong, it was answering a different question.
+//
+// The fourth word also arrives at a different time, and that has a rendering
+// consequence. The first three are known before a single session is read, so
+// the empty state can speak them. Drift is only knowable AFTER the read, and a
+// vendor cannot drift without having produced sessions — which means the grid
+// is almost never empty when it happens. The vendor line is still this word's
+// home, but footerLine carries it whenever there are rows, or the fourth word
+// would be one nobody ever sees.
 type VendorStatus uint8
 
 const (
@@ -105,6 +123,17 @@ const (
 	// StatusUnreadable: the directory exists and the OS refused. This is the
 	// one that deserves the operating system's own message beside it.
 	StatusUnreadable
+	// StatusDrifted: the store opened and read, and at least one session's
+	// read could not find the structure the adapter was verified against.
+	//
+	// It upgrades StatusWatching and nothing else, which is the whole of the
+	// precedence rule. A store the OS refused is a strictly bigger fact than
+	// one that no longer matches — we know nothing at all about its shape —
+	// and a vendor that is not installed has no sessions to drift. Because
+	// Scan only ever reaches the drift roll-up down the path where Discover
+	// succeeded, that ordering is structural rather than a comparison someone
+	// has to remember to write.
+	StatusDrifted
 )
 
 func (v VendorStatus) String() string {
@@ -113,6 +142,14 @@ func (v VendorStatus) String() string {
 		return "not detected"
 	case StatusUnreadable:
 		return "unreadable"
+	case StatusDrifted:
+		// "drifted", not "mismatched": cursor.ErrSchemaMismatch is the OTHER
+		// tier — a store whose shape cannot be read at all — and two words that
+		// near-rhyme for two different failures is how a vocabulary rots. Not
+		// "unrecognized" either: padded into the same column as "unreadable" it
+		// is the same length and the same opening syllable, and a reader
+		// scanning five vendor lines would take one for the other.
+		return "drifted"
 	default:
 		return "watching"
 	}
@@ -125,6 +162,19 @@ type VendorView struct {
 	Status VendorStatus
 	Err    string
 	Caps   model.Capabilities
+
+	// Drifted counts the sessions this scan read whose read reported shape
+	// drift; Sessions counts every session it read for this vendor.
+	//
+	// The pair travels because the word alone collapses two real cases: one
+	// drifted session out of forty is a vendor mid-rollout, forty out of forty
+	// is a format that moved under the whole store, and a reader deciding
+	// whether to go look needs to know which. It is the same reason the
+	// unreadable line carries the operating system's own message rather than
+	// just the word — a status is more useful with the measurement that
+	// produced it attached.
+	Drifted  int
+	Sessions int
 }
 
 // Snapshot is one completed scan.

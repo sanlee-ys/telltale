@@ -688,18 +688,28 @@ func emptyLines(st State, sty Styles, g Glyphs) []string {
 
 	var block []string
 	for _, v := range st.Snap.Vendors {
-		word := v.Status.String()
-		styled := sty.Muted.Render(padRight(word, statusW, g))
-		if v.Status == StatusUnreadable {
-			// The one status where the operating system knows something the
-			// user needs, so its own message travels with it.
-			styled = sty.SevWarn.Render(padRight(word, statusW, g))
+		word := padRight(v.Status.String(), statusW, g)
+		styled := sty.Muted.Render(word)
+		if v.Status == StatusUnreadable || v.Status == StatusDrifted {
+			// The two words that report a problem. Colour is the second signal
+			// only: both are already legible as words under NO_COLOR, which is
+			// the whole reason the fourth fact got a word rather than a tint on
+			// "watching".
+			styled = sty.SevWarn.Render(word)
 		}
 		line := sty.Identity.Render(padRight(string(v.Vendor), rootW, g)) +
 			"   " + styled +
 			"   " + sty.Muted.Render(RedactHome(v.Root, st.Home))
-		if v.Err != "" {
+		// The slot after the root carries the status's own evidence: the
+		// operating system's message for a store it refused, the scope of the
+		// report for a store that no longer matches. Never both — Discover
+		// either failed or it did not, and drift is only reachable when it did
+		// not.
+		switch {
+		case v.Err != "":
 			line += sty.SevWarn.Render("  " + v.Err)
+		case v.Status == StatusDrifted:
+			line += sty.SevWarn.Render("  " + driftScope(v))
 		}
 		block = append(block, line)
 	}
@@ -709,6 +719,60 @@ func emptyLines(st State, sty Styles, g Glyphs) []string {
 	out := centerBlock([]string{sty.Text.Render(head)}, st.Width)
 	out = append(out, "")
 	return append(out, centerBlock(block, st.Width)...)
+}
+
+// driftScope is the measurement behind the word: how many of the vendor's
+// sessions this scan reported drift for, out of how many it read.
+//
+// It borrows the header's own "n of m sessions" phrasing on purpose — the two
+// are the same kind of statement about the same denominator, and a second
+// grammar for it would read as a second quantity.
+func driftScope(v VendorView) string {
+	return fmt.Sprintf("%d of %d sessions", v.Drifted, v.Sessions)
+}
+
+// driftNotice is the vendor line folded onto one footer line.
+//
+// It exists because the vendor line renders in the empty state ONLY, and the
+// empty state is very nearly the one screen drift cannot appear on: a vendor
+// cannot drift without having produced sessions, so the grid it moved under is
+// the grid that is showing. Without this the fourth VendorStatus word would be
+// one nobody ever sees, and a store that silently stopped matching would go on
+// reading as healthy at a glance — the exact failure internal/adapter/drift was
+// built to catch and then only told the detail pane about.
+//
+// The footer rather than the rows, for two reasons. Drift is a fact about a
+// STORE, and painting it onto rows would assert per-session what was measured
+// per-vendor. And the grid deliberately renders degraded and absent cells
+// identically (§4a.1) so that "we failed to read this" never starts to look
+// like a value — a drift mark in a cell is that rule broken.
+//
+// It renders under every body — grid, empty state, help overlay, detail pane —
+// rather than only where the vendor table is absent. A warning that comes and
+// goes depending on which pane is open is one a reader cannot trust to be
+// there, and the duplication in the empty state costs a line that is already
+// saying the same thing in more detail.
+//
+// Up to two vendors are named, then only counted. Truncating a longer list
+// would drop a drifted vendor from the one notice whose entire job is to name
+// them, and the footer shares a fixed budget with every other notice; three
+// vendors moving at once is a machine-level event that the count describes
+// exactly, and the names are still on the vendor line and in the detail pane.
+func driftNotice(st State, g Glyphs) string {
+	var names []string
+	for _, v := range st.Snap.Vendors {
+		if v.Status == StatusDrifted {
+			names = append(names, string(v.Vendor))
+		}
+	}
+	switch len(names) {
+	case 0:
+		return ""
+	case 1, 2:
+		return g.Warn + " " + strings.Join(names, ", ") + " drifted"
+	default:
+		return fmt.Sprintf("%s %d vendors drifted", g.Warn, len(names))
+	}
 }
 
 // arrowHint spells the cursor keys in whichever alphabet is in use.
@@ -854,6 +918,13 @@ func footerLine(st State, visible, hiddenBelow int, sty Styles, g Glyphs) string
 	}
 	if st.Sort != SortActivity {
 		notices = append(notices, sty.Muted.Render("sort "+st.Sort.String()))
+	}
+	// The two ⚠ notices sit together, drift first: a stale scan resolves itself
+	// on the next tick that succeeds, and a store that no longer matches does
+	// not resolve at all until somebody goes and looks. The durable fact should
+	// not be the one crowded out of a reader's attention by the transient one.
+	if note := driftNotice(st, g); note != "" {
+		notices = append(notices, sty.SevWarn.Render(note))
 	}
 	if !st.Snap.At.IsZero() {
 		if age := st.scanAge(); age > staleAfter {

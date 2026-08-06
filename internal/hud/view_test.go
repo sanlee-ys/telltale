@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/adapter/claudecode"
 	"github.com/sanlee-ys/telltale/internal/adapter/codex"
 	cursoradapter "github.com/sanlee-ys/telltale/internal/adapter/cursor"
+	"github.com/sanlee-ys/telltale/internal/adapter/drift"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
@@ -73,6 +75,29 @@ func withExtras(kv ...string) sessionOpt {
 
 func withDiagnostics(d ...string) sessionOpt {
 	return func(s *model.Session) { s.Diagnostics = append(s.Diagnostics, d...) }
+}
+
+// codexCanary mirrors internal/adapter/codex's own session_meta canary — the
+// first record of every rollout file — including the fields that stop being
+// sourceable once it is gone. The literal is written out rather than imported
+// because the adapters keep their canaries unexported; what the fixture needs
+// is the SHAPE of a real report, and drift.Watch supplies the wording.
+var codexCanary = drift.Canary{
+	Name: "session_meta",
+	Feeds: model.NewFieldSet(
+		model.FieldModel, model.FieldWorkspace, model.FieldContextPercent),
+}
+
+// withDrift folds a real shape-drift verdict onto the session, through the
+// adapter package's own Watch rather than a hand-written diagnostic string.
+//
+// The HUD recognizes drift by the words drift.Watch produces, so a fixture that
+// copied those words by hand would keep passing after the wording moved — while
+// the product it is meant to pin went quiet. It must be the LAST option
+// applied: Fold reads what the session managed to source, which is the same
+// rule the adapters follow.
+func withDrift(verified string, cs ...drift.Canary) sessionOpt {
+	return func(s *model.Session) { drift.NewWatch(verified, cs...).Fold(s, 1) }
 }
 
 // burnSeries builds a pinned sampling history: n samples ending at the pinned
@@ -168,6 +193,18 @@ func cursorSession(age time.Duration) *model.Session {
 
 func watching(v model.VendorID, root string, caps model.Capabilities) VendorView {
 	return VendorView{Vendor: v, Root: root, Status: StatusWatching, Caps: caps}
+}
+
+// drifted is a vendor view as Scan leaves one whose read reported shape drift.
+//
+// It runs the SAME roll-up the scan does rather than setting the status and the
+// counts by hand, so a golden cannot pin a vendor line the real scan would
+// never produce — including the count pair, which is the part a hand-built
+// fixture would get subtly wrong first.
+func drifted(v model.VendorID, root string, caps model.Capabilities, read []*model.Session) VendorView {
+	view := watching(v, root, caps)
+	foldDrift(&view, read)
+	return view
 }
 
 // healthy is the reference data set: three Claude sessions and one Codex
@@ -542,6 +579,60 @@ func goldenCases() []goldenCase {
 		{name: "find-applied", state: func() State {
 			st := healthyState(120, 9)
 			st.Query = "api"
+			return st
+		}},
+
+		// ----------------------------------------------------- shape drift
+
+		// The fourth word, in the state it actually happens in. Every row here
+		// is identical to "wide-healthy" except the Codex one, whose read found
+		// no session_meta record — so everything that record feeds is absent
+		// and the row renders EXACTLY as it would if Codex simply had nothing
+		// to say. That is the failure: nothing in the grid can tell those two
+		// apart, and the footer notice is the only thing on screen that knows.
+		{name: "shape-drift", state: func() State {
+			st := healthyState(120, 9)
+			rows := healthy()
+			rows[2] = sess(model.VendorCodex, "00000000-bbbb-4ccc-8ddd-000000000001",
+				"", "", 4*time.Minute,
+				withDrift("codex-cli 0.146.0", codexCanary))
+			st.Snap.Sessions = rows
+			st.Snap.Vendors = []VendorView{
+				watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`, fullCaps),
+				drifted(model.VendorCodex, `%USERPROFILE%\.codex`, fullCaps, rows[2:3]),
+			}
+			return st
+		}},
+
+		// The fourth word ON the vendor line, which needs the narrow state
+		// where sessions exist and no row is visible — here because both Codex
+		// sessions are past the idle cutoff. One of the two drifted, and the
+		// line says which of the two kinds of "any" that was: a store mid-
+		// rollout, not a format that moved under all of it.
+		{name: "empty-drifted", state: func() State {
+			st := NewState()
+			st.Now = pinned
+			st.Width, st.Height = 120, 11
+			read := []*model.Session{
+				sess(model.VendorCodex, "00000000-bbbb-4ccc-8ddd-000000000001",
+					`C:\src\code\notes-api`, "gpt-5.1-codex", 9*time.Hour),
+				sess(model.VendorCodex, "00000000-bbbb-4ccc-8ddd-000000000002",
+					"", "", 11*time.Hour,
+					withDrift("codex-cli 0.146.0", codexCanary)),
+			}
+			st.Snap = Snapshot{
+				At:       pinned,
+				Sessions: read,
+				Vendors: []VendorView{
+					{Vendor: model.VendorAntigravity, Root: `%USERPROFILE%\.gemini\antigravity-cli`,
+						Status: StatusNotDetected},
+					{Vendor: model.VendorClaude, Root: `%USERPROFILE%\.claude\projects`,
+						Status: StatusNotDetected},
+					drifted(model.VendorCodex, `%USERPROFILE%\.codex`, fullCaps, read),
+					{Vendor: model.VendorCursor, Root: `%APPDATA%\Cursor\User`, Status: StatusNotDetected},
+					{Vendor: model.VendorGemini, Root: `%USERPROFILE%\.gemini\tmp`, Status: StatusNotDetected},
+				},
+			}
 			return st
 		}},
 
@@ -1167,6 +1258,168 @@ func TestTheForecastSamplesTheWindowsTheHeaderShows(t *testing.T) {
 	st.Snap.Sessions[3].Quota = []model.QuotaWindow{window("weekly", "7d", 5, time.Hour)}
 	if got := accountQuota(st); got[0].ID != "five_hour" {
 		t.Errorf("accountQuota picked the stale session's windows: %v", got)
+	}
+}
+
+// ----------------------------------------------------------- shape drift
+
+// driftState is the healthy frame plus one session whose read reported drift,
+// with the named vendors rolled up as drifted.
+//
+// The vendor list is a parameter because the footer notice changes shape with
+// how many vendors moved, and the width tests need the worst case. The one
+// drifted session is credited to each of them, which no real scan would do —
+// this fixture feeds the notice and the width, never the counts, which
+// TestTheVendorLineStatesHowMuchOfTheStoreDrifted covers on its own.
+func driftState(w, h int, vendors ...model.VendorID) State {
+	st := healthyState(w, h)
+	drifter := sess(model.VendorCodex, "drifted-row", "", "", time.Minute,
+		withDrift("codex-cli 0.146.0", codexCanary))
+	st.Snap.Sessions = append(healthy(), drifter)
+	st.Snap.Vendors = nil
+	for _, v := range vendors {
+		st.Snap.Vendors = append(st.Snap.Vendors,
+			drifted(v, `%USERPROFILE%\`+string(v), fullCaps, []*model.Session{drifter}))
+	}
+	return st
+}
+
+// THE assertion this change exists for. Drift reached the model in #84 and
+// stopped at the detail pane, which means a store that silently stopped
+// matching still read as healthy on the screen a person actually looks at.
+func TestDriftIsVisibleOnTheGridNotOnlyInTheDetailPane(t *testing.T) {
+	clean := Render(healthyState(120, 9), PlainStyles(), UnicodeGlyphs())
+	if strings.Contains(clean, "drift") {
+		t.Fatalf("a healthy frame mentions drift\n%s", clean)
+	}
+	got := Render(driftState(120, 9, model.VendorCodex), PlainStyles(), UnicodeGlyphs())
+	if !strings.Contains(got, "codex drifted") {
+		t.Errorf("a drifted store renders no differently from a healthy one\n%s", got)
+	}
+}
+
+// The word is carried by the WORD, per §7.1 rule 2: --ascii swaps the notice
+// glyph and NO_COLOR drops the hue, and the fact survives both.
+func TestTheDriftNoticeSurvivesASCIIAndPlainStyles(t *testing.T) {
+	st := driftState(120, 9, model.VendorCodex)
+	ascii := Render(st, PlainStyles(), GlyphsFor(true))
+	if !strings.Contains(ascii, "! codex drifted") {
+		t.Errorf("the ascii frame does not state the drift\n%s", ascii)
+	}
+	// Colour is the second signal, so stripping it must not remove the fact —
+	// but it must still BE a second signal when it is available.
+	coloured := Render(st, NewStyles(true), UnicodeGlyphs())
+	if !strings.Contains(coloured, "\x1b[33m") {
+		t.Error("the drift notice carries no warning colour")
+	}
+}
+
+// Naming beats counting until the list stops fitting the footer's share of the
+// line. Truncating instead would drop a drifted vendor from the one notice
+// whose job is to name them.
+func TestTheDriftNoticeNamesVendorsUntilThereAreTooMany(t *testing.T) {
+	all := []model.VendorID{
+		model.VendorAntigravity, model.VendorClaude, model.VendorCodex,
+		model.VendorCursor, model.VendorGemini,
+	}
+	cases := []struct {
+		n    int
+		want string
+	}{
+		{1, "⚠ agy drifted"},
+		{2, "⚠ agy, claude drifted"},
+		{3, "⚠ 3 vendors drifted"},
+		{5, "⚠ 5 vendors drifted"},
+	}
+	for _, c := range cases {
+		got := driftNotice(driftState(120, 9, all[:c.n]...), UnicodeGlyphs())
+		if got != c.want {
+			t.Errorf("%d drifted vendors: notice = %q, want %q", c.n, got, c.want)
+		}
+	}
+	if got := driftNotice(healthyState(120, 9), UnicodeGlyphs()); got != "" {
+		t.Errorf("a healthy snapshot produced a notice: %q", got)
+	}
+}
+
+// The notice is a fact about the snapshot, not about the visible rows: a filter
+// that happens to hide the drifted vendor's sessions does not un-move its store.
+func TestTheDriftNoticeSurvivesAFilterThatHidesTheDriftedRows(t *testing.T) {
+	st := driftState(120, 9, model.VendorCodex)
+	st.Filter = FilterClaude
+	if got := Render(st, PlainStyles(), UnicodeGlyphs()); !strings.Contains(got, "codex drifted") {
+		t.Errorf("filtering the drifted vendor's rows away silenced the notice\n%s", got)
+	}
+}
+
+// The notice must render under every body, because the vendor line renders
+// under exactly one of them. A warning that comes and goes with whichever pane
+// is open is one a reader cannot trust to be there.
+func TestTheDriftNoticeRendersUnderEveryBody(t *testing.T) {
+	for _, body := range []string{"grid", "help", "detail", "empty"} {
+		st := driftState(120, 14, model.VendorCodex)
+		switch body {
+		case "help":
+			st.Help = true
+		case "detail":
+			st.Detail, st.Cursor = true, 0
+		case "empty":
+			st.Query = "no-such-session"
+		}
+		if got := Render(st, PlainStyles(), UnicodeGlyphs()); !strings.Contains(got, "codex drifted") {
+			t.Errorf("%s body: the drift notice is missing\n%s", body, got)
+		}
+	}
+}
+
+// Every frame must fit the terminal it was asked for, drift notice included —
+// the footer's notice block is the side joinEnds keeps when the line overflows.
+func TestADriftedFrameStillFitsEveryTier(t *testing.T) {
+	all := []model.VendorID{
+		model.VendorAntigravity, model.VendorClaude, model.VendorCodex,
+		model.VendorCursor, model.VendorGemini,
+	}
+	for _, w := range []int{60, 72, 80, 99, 120} {
+		for _, n := range []int{1, 2, 5} {
+			st := driftState(w, 12, all[:n]...)
+			out := Render(st, PlainStyles(), UnicodeGlyphs())
+			for i, line := range strings.Split(out, "\n") {
+				if got := len([]rune(line)); got > w {
+					t.Errorf("width %d, %d drifted: line %d is %d columns\n%s", w, n, i, got, line)
+				}
+			}
+		}
+	}
+}
+
+// The vendor line states the SCOPE beside the word. One drifted session out of
+// forty is a vendor mid-rollout; forty of forty is a format that moved under
+// the whole store, and "drifted" alone cannot tell those apart.
+func TestTheVendorLineStatesHowMuchOfTheStoreDrifted(t *testing.T) {
+	read := make([]*model.Session, 0, 41)
+	for i := 0; i < 40; i++ {
+		read = append(read, sess(model.VendorCodex, "healthy-"+strconv.Itoa(i), `C:\x\y`, "m", time.Minute))
+	}
+	read = append(read, sess(model.VendorCodex, "moved", "", "", time.Minute,
+		withDrift("codex-cli 0.146.0", codexCanary)))
+
+	v := drifted(model.VendorCodex, `%USERPROFILE%\.codex`, fullCaps, read)
+	if v.Status != StatusDrifted {
+		t.Fatalf("status = %s, want drifted", v.Status)
+	}
+	if got := driftScope(v); got != "1 of 41 sessions" {
+		t.Errorf("driftScope = %q", got)
+	}
+}
+
+// StatusUnreadable is a strictly bigger fact than StatusDrifted — a store we
+// could not open tells us nothing about its shape — and it must not be
+// downgraded by a stale count left on the view.
+func TestUnreadableIsNeverDowngradedToDrifted(t *testing.T) {
+	view := VendorView{Vendor: model.VendorCursor, Status: StatusUnreadable, Err: "Access is denied."}
+	foldDrift(&view, nil)
+	if view.Status != StatusUnreadable {
+		t.Errorf("status = %s, want unreadable to survive the roll-up", view.Status)
 	}
 }
 

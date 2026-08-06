@@ -31,6 +31,16 @@ var notEmbedded = map[string]string{
 	"stale-scan-90s": "identical layout to stale-scan-47s; only the notice styling differs",
 	"quota-absent":   "described in §7.7; its layout is covered by wide-healthy",
 	"readme":         "pasted into README.md; see TestReadmeHeroFrameMatchesItsGolden",
+	// The two shape-drift frames. Neither introduces a layout: the whole point
+	// of "shape-drift" is that its grid is byte-for-byte wide-healthy's except
+	// for one row that renders as if the vendor simply had nothing to say, and
+	// the footer notice is the only difference. "empty-drifted" is
+	// empty-unreadable's frame with the fourth status word and its scope in the
+	// slot the OS message occupies there. What each one asserts is asserted
+	// directly instead — see TestDriftIsVisibleOnTheGridNotOnlyInTheDetailPane
+	// and TestTheVendorLineStatesHowMuchOfTheStoreDrifted.
+	"shape-drift":   "wide-healthy's layout; one row reads as if the vendor had nothing to say and the footer notice is what says otherwise",
+	"empty-drifted": "identical layout to empty-unreadable; only the status word and its scope differ",
 }
 
 // The README's hero frame is the project's most public claim about what the HUD
