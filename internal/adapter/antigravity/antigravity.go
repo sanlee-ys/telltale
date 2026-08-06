@@ -83,6 +83,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sanlee-ys/telltale/internal/adapter/drift"
 	"github.com/sanlee-ys/telltale/internal/jsonl"
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/sqlite"
@@ -148,6 +149,26 @@ const (
 const (
 	tableGenMetadata = "gen_metadata"
 	tableTrajectory  = "trajectory_metadata_blob"
+)
+
+// verifiedAgainst names the vendor build this adapter's field map was surveyed
+// against (see the package doc). Nothing on disk states the writer's version, so
+// a drift report here carries the pin and no observed counterpart.
+const verifiedAgainst = "agy 1.1.9"
+
+// The two tables every conversation database carried in the survey. Their names
+// are the whole contract: the protobuf field numbers below are unversioned
+// guesses promoted to a schema by a self-check, but a table that is not there at
+// all is not a guess — it is the shape having moved.
+var (
+	canaryGenMetadata = drift.Canary{
+		Name:  tableGenMetadata + " table",
+		Feeds: model.NewFieldSet(model.FieldModel),
+	}
+	canaryTrajectory = drift.Canary{
+		Name:  tableTrajectory + " table",
+		Feeds: model.NewFieldSet(model.FieldWorkspace),
+	}
 )
 
 // Adapter reads Antigravity CLI conversations. It holds no mutable state and
@@ -338,6 +359,12 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		modTime(ref.Locator+"-wal"),
 	)
 
+	// The watch's unit is the conversation database: one opened database is one
+	// well-formed unit examined, and a database that would not open is no
+	// evidence about the vendor's shape at all.
+	w := drift.NewWatch(verifiedAgainst, canaryGenMetadata, canaryTrajectory)
+	opened := 0
+
 	db, dbErr := a.readDatabase(ref.Locator)
 	switch {
 	case errors.Is(dbErr, fs.ErrNotExist):
@@ -348,7 +375,8 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		s.Degraded = s.Degraded.With(model.FieldModel).With(model.FieldWorkspace)
 		s.Diagnostics = append(s.Diagnostics, "conversation database unreadable: "+dbErr.Error())
 	default:
-		a.applyDatabase(s, db)
+		opened = 1
+		a.applyDatabase(s, db, w)
 	}
 
 	switch {
@@ -363,6 +391,9 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		s.Diagnostics = append(s.Diagnostics,
 			"no readable activity timestamp (mtimes ahead of the clock, no step timestamps)")
 	}
+
+	// Last, because the verdict reads what the session managed to source.
+	w.Fold(s, opened)
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -471,11 +502,11 @@ func (a *Adapter) readDatabase(path string) (*sqlite.File, error) {
 
 // applyDatabase folds the database's two contributions into the session: the
 // model and the workspace, plus the token totals as display-only extras.
-func (a *Adapter) applyDatabase(s *model.Session, db *sqlite.File) {
+func (a *Adapter) applyDatabase(s *model.Session, db *sqlite.File, w *drift.Watch) {
 	s.Diagnostics = append(s.Diagnostics, db.Notes()...)
 
-	a.applyGenerations(s, db)
-	a.applyWorkspace(s, db)
+	a.applyGenerations(s, db, w)
+	a.applyWorkspace(s, db, w)
 }
 
 // applyGenerations reads gen_metadata: the model, and the token totals.
@@ -484,7 +515,7 @@ func (a *Adapter) applyDatabase(s *model.Session, db *sqlite.File) {
 // has not called a model yet — the field is nil and nothing is degraded. A
 // gen_metadata table that exists and cannot be walked is a broken read and
 // says so.
-func (a *Adapter) applyGenerations(s *model.Session, db *sqlite.File) {
+func (a *Adapter) applyGenerations(s *model.Session, db *sqlite.File, w *drift.Watch) {
 	rows, ok, err := db.Table(tableGenMetadata)
 	if err != nil {
 		s.Degraded = s.Degraded.With(model.FieldModel)
@@ -492,12 +523,12 @@ func (a *Adapter) applyGenerations(s *model.Session, db *sqlite.File) {
 		return
 	}
 	if !ok {
-		// No such table: a shape this adapter does not recognize. Say so once
-		// rather than rendering the row as if the vendor had reported nothing.
-		s.Degraded = s.Degraded.With(model.FieldModel)
-		s.Diagnostics = append(s.Diagnostics, "no "+tableGenMetadata+" table in the conversation database")
+		// No such table: the shape moved. The canary owns the wording and the
+		// degradation from here, so the row says which version it was verified
+		// against rather than only that a table it wanted was missing.
 		return
 	}
+	w.Saw(canaryGenMetadata)
 
 	seen := map[string]bool{}
 	var gens []generation
@@ -609,7 +640,7 @@ func decodeGeneration(raw []byte) generation {
 // The vendor writes it twice — nested at #1.#1 and flat at #7 — and this reads
 // whichever it finds. A conversation started outside any workspace carries
 // neither, which is absence, not degradation: the survey saw exactly that.
-func (a *Adapter) applyWorkspace(s *model.Session, db *sqlite.File) {
+func (a *Adapter) applyWorkspace(s *model.Session, db *sqlite.File, w *drift.Watch) {
 	rows, ok, err := db.Table(tableTrajectory)
 	if err != nil {
 		s.Degraded = s.Degraded.With(model.FieldWorkspace)
@@ -617,10 +648,10 @@ func (a *Adapter) applyWorkspace(s *model.Session, db *sqlite.File) {
 		return
 	}
 	if !ok {
-		s.Degraded = s.Degraded.With(model.FieldWorkspace)
-		s.Diagnostics = append(s.Diagnostics, "no "+tableTrajectory+" table in the conversation database")
+		// Same as applyGenerations: the canary owns this case.
 		return
 	}
+	w.Saw(canaryTrajectory)
 	for _, r := range rows {
 		blob, ok := firstBlob(r)
 		if !ok {

@@ -109,12 +109,31 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sanlee-ys/telltale/internal/adapter/drift"
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/sqlite"
 )
 
 // Vendor is the stable id for rows this adapter produces.
 const Vendor = model.VendorCursor
+
+// verifiedAgainst names the vendor build the field map was surveyed against
+// (§3.9). The store carries no version of its own, so a drift report here
+// carries the pin and no observed counterpart.
+const verifiedAgainst = "Cursor 3.14.7"
+
+// canaryRowClock is the header row's activity timestamps, any one of which is
+// enough to date a session.
+//
+// It is the shape this adapter is least able to lose quietly. The store's file
+// mtime is deliberately NOT folded into last_activity (see lastActivity), so
+// these columns are the only clock a Cursor row has: rename all three and every
+// row degrades its age with a diagnostic that reads like a fact about that row,
+// when the fact is about the store.
+var canaryRowClock = drift.Canary{
+	Name:  tableHeaders + " timestamp columns",
+	Feeds: model.NewFieldSet(model.FieldLastActivity),
+}
 
 // Store layout, relative to the adapter's root.
 const (
@@ -260,6 +279,10 @@ type snapshot struct {
 	base     []byte // the main file's bytes, reused while the main file is unchanged
 	recs     []record
 	notes    []string
+	// watch is per-STORE, not per session: the columns either exist for every
+	// row or for none. Reads only read it, so sharing one across the snapshot's
+	// concurrent Reads is safe.
+	watch *drift.Watch
 }
 
 func (s *snapshot) find(id string) (record, bool) {
@@ -358,6 +381,11 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	} else {
 		s.LastActivity = model.TimePtr(rec.lastActivity)
 	}
+
+	// Last, because the verdict reads what the session managed to source. The
+	// unit is the header row: a store parsed down to zero sessions is no
+	// evidence about the shape of a session row.
+	snap.watch.Fold(s, len(snap.recs))
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -557,6 +585,16 @@ func (a *Adapter) parse(snap *snapshot, db *sqlite.File) error {
 	for _, want := range []string{colComposerID, colWorkspaceID, colValue} {
 		if _, ok := idx[want]; !ok {
 			return schemaErr(tableHeaders + " has no " + want + " column")
+		}
+	}
+
+	// The clock columns are not fatal — a store with none of them still names
+	// its sessions — so they are a canary rather than a schema error.
+	snap.watch = drift.NewWatch(verifiedAgainst, canaryRowClock)
+	for _, col := range []string{colLastUpdatedAt, colRecency, colCheckpointAt} {
+		if _, ok := idx[col]; ok {
+			snap.watch.Saw(canaryRowClock)
+			break
 		}
 	}
 
