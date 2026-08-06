@@ -20,6 +20,8 @@ var embedded = []string{
 	// v1.1
 	"detail-pane", "detail-degraded", "row-grammar", "burn-forecast",
 	"find-active", "find-applied",
+	// shape drift — §7.3 render M and the fourth vendor word beside the third.
+	"shape-drift", "empty-drifted",
 }
 
 // notEmbedded lists goldens deliberately kept out of the design doc, with the

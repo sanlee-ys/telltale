@@ -1574,10 +1574,12 @@ error dialog.
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
 ```
 
-The vendor status word is one of exactly three: `watching` (directory exists and is
+The vendor status word is one of exactly four: `watching` (directory exists and is
 readable), `not detected` (directory absent), `unreadable` (the vendor's data is there and
 the adapter cannot read it — an OS refusal, or a store whose schema the adapter does not
-recognize (§3.9); rendered `SevWarn` with the reason appended). On the dev machine today
+recognize (§3.9); rendered `SevWarn` with the reason appended), `drifted` (the store
+opened and read, and at least one session's read could not find the structure the adapter
+was verified against — `internal/adapter/drift`; also `SevWarn`). On the dev machine today
 the Codex line reads `not detected`, since `~/.codex` is absent (§3.2). The third word:
 
 ```
@@ -1592,6 +1594,42 @@ the Codex line reads `not detected`, since `~/.codex` is absent (§3.2). The thi
                        gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+```
+
+`drifted` is the word the other three cannot say. Those three are all answers from
+`Discover`, known before a single session is read. Drift is knowable only *after* the
+read: it is the finding that a store which opened, listed and parsed no longer carries the
+structure the adapter's readings hang off. Calling that `unreadable` would borrow the word
+for "the OS refused" to describe a store the OS handed over intact — the same collapse
+`zero` and `absent` are kept apart to avoid (§4a.1).
+
+It renders with its **scope** appended: how many of the vendor's sessions reported drift,
+out of how many this scan read. One of forty-one is a vendor mid-rollout; forty-one of
+forty-one is a format that moved under the whole store, and the word alone cannot tell
+those apart. The scope deliberately does **not** reuse the header's `n of m sessions`
+sentence — the header counts visible-of-total across every vendor, this counts
+drifted-of-read for one vendor, and the two land on the same screen. In the borrowed
+grammar the vendor line would read as a claim about how many sessions are *showing*, which
+the header directly contradicts; naming what the numerator counts is what keeps them
+apart. The scope is the only part of the line that gives way when the width runs out, the
+same way the grid sheds `COST`; the word never does.
+
+This state needs sessions to exist and every one of them to be hidden — below, by the
+8-hour idle cutoff — because a vendor cannot drift without having produced the sessions
+that revealed it. The ordinary case is render M. The fourth word:
+
+```
+ telltale  │  0 of 2 sessions  │  codex 2
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                   no active sessions
+
+                           agy      not detected   %USERPROFILE%\.gemini\antigravity-cli
+                           claude   not detected   %USERPROFILE%\.claude\projects
+                           codex    drifted        %USERPROFILE%\.codex  1 drifted of 2 read
+                           cursor   not detected   %APPDATA%\Cursor\User
+                           gemini   not detected   %USERPROFILE%\.gemini\tmp
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys                                    ⚠ codex drifted
 ```
 
 **H — help overlay (120 cols).** Replaces the row area rather than floating over it; a
@@ -1672,6 +1710,31 @@ the precision.
  . CC | learning-notes  C:\src\code                                  Haiku 4.5      ##########--  92.6%   $11.07 |  22m
  ----------------------------------------------------------------------------------------------------------------------
  q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+```
+
+**M — shape drift (120 cols).** A store that reads fine and no longer matches. Every row
+here is render A's except the Codex one, whose read found no `session_meta` record — so
+everything that record feeds is absent, and the row renders *exactly* as it would if Codex
+simply had nothing to say. That is the failure: nothing in the grid can tell those two
+apart, and the footer notice is the only thing on screen that knows.
+
+It is also why the fourth vendor word needs a second home. The vendor line renders in the
+empty state only, and a vendor cannot drift without having produced sessions — so the
+screen drift actually happens on is this one, where the vendor line is not present at all.
+`driftNotice` therefore renders under **every** body: grid, empty state, help overlay and
+detail pane alike. A warning that came and went with whichever pane was open would be one
+a reader could not trust to be there.
+
+```
+ telltale  │  4 sessions  │  claude 3  codex 1                5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                      MODEL          CONTEXT                 COST    AGE
+ ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
+ ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
+ ◐ CX │ 00000000-bbbb-4ccc-8ddd-000000000001                                                          —        — │   4m
+ ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys                                    ⚠ codex drifted
 ```
 
 ### 7.4 The gauge
@@ -1874,11 +1937,36 @@ Added in v1.1:
 | over-long query | 156 characters at 60–120 cols | `TestALongQueryIsTruncatedNotDropped` | Truncated with `…`, never pushed off the footer — a query that vanished while still filtering is the silent row-hiding the footer exists to prevent. |
 | query with a trailing space | `"acme "` | `TestTheDisplayedQueryIsTheQueryBeingMatched` | The string on screen is the string being matched; the display is not trimmed. |
 
+Added with shape-drift reporting:
+
+| Fixture | Condition | Where it is asserted | Assertion |
+|---|---|---|---|
+| `shape-drift` | a read reports drift; every row still renders | golden M + `TestDriftIsVisibleOnTheGridNotOnlyInTheDetailPane` | The grid is unchanged and the footer carries `⚠ <vendor> drifted`. A healthy frame never mentions drift, and the notice survives `--ascii` and `NO_COLOR` as a word. |
+| `empty-drifted` | sessions exist, all past the idle cutoff | golden + `TestTheDriftScopeCannotBeReadAsTheHeaderCount` | The fourth vendor word, with its scope in the slot `unreadable` gives to the OS message — and in a grammar the header's own count cannot be mistaken for. |
+| partial drift | 1 of 41 sessions reports drift | `TestOneDriftedSessionDriftsTheVendor`, `TestTheVendorLineStatesHowMuchOfTheStoreDrifted` | **Any** drifted session drifts the vendor, and the counts travel with the word. Every row still renders. |
+| drift under a failed `Discover` | vendor absent, or the OS refuses | `TestTheDiscoverTierStillWinsOverDrift` | `not detected` and `unreadable` are untouched: the roll-up only runs where `Discover` succeeded, so the ordering is structural rather than a comparison. |
+| reworded drift note | `drift.Watch` changes its wording | `TestDriftIsRecognizedFromTheNoteTheAdapterLayerActuallyWrites` | The HUD reads drift off `Diagnostics` text, which the compiler cannot check. The test folds a real `drift.Watch` so a rewording fails the build instead of silencing the vendor line. |
+| notice pile-up | 60 cols with a 24-char query, a filter, a sort, a stale scan **and** drift | `TestADriftedFrameStillFitsEveryTier`, `TestTheFooterGivesUpItsCheapestNoticesFirst` | Every line fits the terminal. Whole notices are dropped, cheapest first, and `…` says so. |
+
 Freshness escalation, stated once: **≤ 3 s** normal; **> 3 s** row area `Muted` + footer
 notice in `SevWarn`; **> 60 s** notice in `SevCrit` and the header quota goes `Muted` too.
 Retained values are not "presented as fresh" in any of these, because the age of the
 measurement is on screen next to them — that is the condition the honest-gauge rule
 actually imposes.
+
+Notice priority, stated once: the footer cannot always hold every notice — `joinEnds` has
+no truncation path, so a block that does not fit runs off the end of the terminal. The
+block is therefore fitted first, by dropping **whole** notices cheapest-first and
+prefixing what survives with `…`. The order is `sort`, `+N more`, `filter`, `find`, the
+stale-scan warning, drift. That is the rule `joinEnds` already applies between the key
+hints and the notice block, asked one level down: what survives is what the reader cannot
+find out anywhere else on this screen. `sort` hides nothing at all; `+N more` sits above a
+row area the reader can see is full; a filter and a query hide rows silently, but the
+header's `N of M sessions` still declares *that* rows are hidden, so only the cause is
+lost; a stale scan re-announces itself every tick and clears the moment a scan succeeds;
+drift does neither, and is the last to go. A single notice wider than the whole line is
+truncated rather than dropped — an ellipsis on a warning still says a warning is there,
+and a footer that dropped its last one would quietly claim nothing is wrong.
 
 ### 7.8 Keyboard
 

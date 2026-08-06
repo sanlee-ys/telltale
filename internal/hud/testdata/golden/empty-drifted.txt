@@ -1,0 +1,11 @@
+ telltale  │  0 of 2 sessions  │  codex 2
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                   no active sessions
+
+                           agy      not detected   %USERPROFILE%\.gemini\antigravity-cli
+                           claude   not detected   %USERPROFILE%\.claude\projects
+                           codex    drifted        %USERPROFILE%\.codex  1 drifted of 2 read
+                           cursor   not detected   %APPDATA%\Cursor\User
+                           gemini   not detected   %USERPROFILE%\.gemini\tmp
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys                                    ⚠ codex drifted

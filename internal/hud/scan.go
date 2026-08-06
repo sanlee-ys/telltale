@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,6 +35,10 @@ type Rooted interface {
 //   - A Read failure drops that row silently. ErrSessionGone is the expected
 //     case (the file rotated between Discover and Read); a sub-agent thread
 //     that is not a session at all reports itself the same way.
+//
+// Shape drift is the one status that cannot be decided here from an error,
+// because it is not one: every read succeeded. It is rolled up from what the
+// reads reported, after they are all in — see foldDrift.
 func Scan(ctx context.Context, adapters []model.Adapter, now time.Time) Snapshot {
 	snap := Snapshot{At: now}
 
@@ -72,6 +77,7 @@ func Scan(ctx context.Context, adapters []model.Adapter, now time.Time) Snapshot
 			view.Status = StatusWatching
 
 			got := readAll(ctx, a, refs)
+			foldDrift(&view, got)
 
 			mu.Lock()
 			sessions = append(sessions, got...)
@@ -92,6 +98,70 @@ func Scan(ctx context.Context, adapters []model.Adapter, now time.Time) Snapshot
 		snap.Err = err.Error()
 	}
 	return snap
+}
+
+// driftNote is the opening of every report internal/adapter/drift writes.
+//
+// This is a coupling across a package boundary that the compiler cannot see:
+// drift.Watch.note is unexported and its verdict reaches the HUD only as text
+// on Session.Diagnostics, so the vendor line recognizes drift by the words the
+// adapter layer chose. That is a real hazard — a reworded note would leave the
+// vendor line silently quiet, which is indistinguishable from nothing being
+// wrong and is the failure mode this whole feature exists to end — so it is
+// pinned by a test that folds a REAL drift.Watch onto
+// a session and asserts this prefix still matches
+// (TestDriftIsRecognizedFromTheNoteTheAdapterLayerActuallyWrites).
+const driftNote = "shape drift: "
+
+// reportsDrift is whether a session's read found the store's shape moved.
+//
+// Diagnostics, not Degraded: drift.Fold degrades only the fields the session
+// failed to source anyway, so a session that got its values from elsewhere
+// drifts with an empty Degraded delta — and an ordinary torn record degrades
+// fields with no drift at all. Degraded is neither necessary nor sufficient
+// here; the report is.
+func reportsDrift(s *model.Session) bool {
+	if s == nil {
+		return false
+	}
+	for _, d := range s.Diagnostics {
+		if strings.HasPrefix(d, driftNote) {
+			return true
+		}
+	}
+	return false
+}
+
+// foldDrift rolls a read's per-session drift reports up to the vendor.
+//
+// ANY drifted session drifts the vendor, and the counts travel so the display
+// can say which kind of any it was. Requiring every session would be a monitor
+// that goes quiet exactly when it should be loudest: a vendor mid-rollout
+// writes the new shape only into sessions started since the update, so the
+// newest and most-used rows are the first to drift and the last to outvote a
+// long tail of old transcripts. The alarm would wait for the evidence to age
+// out.
+//
+// The false-alarm cost that would usually argue for a threshold is already
+// paid upstream: drift.Fold reports nothing from a read that examined no
+// well-formed units, which is what a torn or empty file produces. So "any" is
+// not a loose rule here, and a count-based one would be an invented boundary
+// (decisions/001).
+//
+// It is a function rather than three lines inline because the golden fixtures
+// build vendor views by hand: sharing it is what stops a fixture from pinning
+// a roll-up the real scan would never produce.
+func foldDrift(view *VendorView, sessions []*model.Session) {
+	view.Sessions = len(sessions)
+	view.Drifted = 0
+	for _, s := range sessions {
+		if reportsDrift(s) {
+			view.Drifted++
+		}
+	}
+	if view.Drifted > 0 {
+		view.Status = StatusDrifted
+	}
 }
 
 func readAll(ctx context.Context, a model.Adapter, refs []model.SessionRef) []*model.Session {
