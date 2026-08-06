@@ -52,6 +52,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sanlee-ys/telltale/internal/adapter/drift"
 	"github.com/sanlee-ys/telltale/internal/jsonl"
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/theme"
@@ -59,6 +60,37 @@ import (
 
 // Vendor is the stable id for rows this adapter produces.
 const Vendor = model.VendorCodex
+
+// verifiedAgainst names the vendor build this adapter's field map was verified
+// against on 2026-08-01 (see the package doc). It is what a drift report is
+// measured against, and the rollout's own cli_version is what it is compared to.
+const verifiedAgainst = "codex-cli 0.146.0"
+
+var (
+	// canaryEnvelopeType is the outer envelope's serde discriminator. Every
+	// RolloutLine carries it, and applyLine dispatches on nothing else — so a
+	// rename here costs the model, the workspace, the quota windows and the
+	// context percentage all at once, without a single parse failure. It is the
+	// silent degradation this whole mechanism exists for.
+	canaryEnvelopeType = drift.Canary{
+		Name: "envelope type",
+		Feeds: model.NewFieldSet(
+			model.FieldModel,
+			model.FieldWorkspace,
+			model.FieldQuota,
+			model.FieldContextPercent,
+		),
+	}
+	// canarySessionMeta is the rollout's opening record, written at creation by
+	// codex-rs/rollout/src/recorder.rs and therefore present on every rollout
+	// regardless of how far the session got. It carries the cwd, and it is what
+	// the sub-agent and imported-transcript filters read: a rollout whose
+	// session_meta went missing is one those filters can no longer see.
+	canarySessionMeta = drift.Canary{
+		Name:  "session_meta record",
+		Feeds: model.NewFieldSet(model.FieldWorkspace),
+	}
+)
 
 // ErrSubAgentThread reports that a rollout file is a sub-agent thread rather
 // than a top-level session (session_meta carries agent_nickname / agent_role).
@@ -378,16 +410,21 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	}
 
 	var (
-		st       state
-		bad      int
-		newestTS time.Time
+		st        state
+		bad, good int
+		newestTS  time.Time
 	)
+	w := drift.NewWatch(verifiedAgainst, canaryEnvelopeType, canarySessionMeta)
 	consume := func(recs [][]byte) {
 		for _, raw := range recs {
 			var line rolloutLine
 			if err := json.Unmarshal(raw, &line); err != nil {
 				bad++
 				continue
+			}
+			good++
+			if line.Type != "" {
+				w.Saw(canaryEnvelopeType)
 			}
 			if ts, err := time.Parse(time.RFC3339Nano, line.Timestamp); err == nil &&
 				ts.After(newestTS) && !ts.After(now.Add(futureSkew)) {
@@ -430,6 +467,14 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		st.sawBadRecord = true
 	}
 	st.fold(s)
+
+	// sawMeta was accumulated for exactly this and had no reader until now.
+	if st.sawMeta {
+		w.Saw(canarySessionMeta)
+	}
+	w.Observed(st.cliVersion)
+	// Last, because the verdict reads what the session managed to source.
+	w.Fold(s, good)
 	return s, nil
 }
 

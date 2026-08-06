@@ -1,0 +1,3 @@
+{"session_id":"00000000-cccc-4ddd-8eee-000000000009","project_hash":"00000000000000000000000000000000000000000000000000000000000000c9","start_time":"2026-08-02T12:00:00.000Z","last_updated":"2026-08-02T12:04:00.000Z","summary":"FIXTURE the opening metadata keys moved","kind":"main"}
+{"id":"00000000-cccc-4ddd-8eee-00000000m901","timestamp":"2026-08-02T12:00:05.000Z","type":"user","content":"FIXTURE prompt"}
+{"id":"00000000-cccc-4ddd-8eee-00000000m902","timestamp":"2026-08-02T12:04:00.000Z","type":"gemini","model":"gemini-fixture-pro","content":"FIXTURE reply","tokens":{"input":38000,"output":420,"total":38420}}

@@ -53,12 +53,34 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sanlee-ys/telltale/internal/adapter/drift"
 	"github.com/sanlee-ys/telltale/internal/jsonl"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
 // Vendor is the stable id for rows this adapter produces.
 const Vendor = model.VendorClaude
+
+// verifiedAgainst names the vendor build this adapter's field map was read from
+// (see the package doc). It is what a drift report is measured against.
+const verifiedAgainst = "Claude Code 2.1.219"
+
+// canarySessionID is the record envelope's identity field. The survey found it
+// on the first record of 60 of 60 transcripts sampled, and on the housekeeping
+// records besides — it is the one field every record type here shares.
+//
+// A transcript whose records PARSE and carry no sessionId is not the shape this
+// adapter's field map describes: cwd, the title records and the assistant
+// message block all hang off that envelope, so their absence would otherwise
+// read as "the vendor had nothing to say".
+var canarySessionID = drift.Canary{
+	Name: "sessionId",
+	Feeds: model.NewFieldSet(
+		model.FieldName,
+		model.FieldModel,
+		model.FieldWorkspace,
+	),
+}
 
 // Read budget. Live transcripts routinely reach 7.7 MB, so Read never touches
 // the middle of a file: the head carries session identity (verified present on
@@ -402,8 +424,9 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		return nil, err
 	}
 
-	var bad int
+	var bad, good int
 	var newestTS time.Time
+	w := drift.NewWatch(verifiedAgainst, canarySessionID)
 	apply := func(recs [][]byte) {
 		for _, raw := range recs {
 			var r record
@@ -412,6 +435,13 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 				bad++
 				continue
 			}
+			good++
+			// The canary is checked before the sidechain skip: a sidechain
+			// record is not a row, but it is still evidence about the shape.
+			if r.SessionID != "" {
+				w.Saw(canarySessionID)
+			}
+			w.Observed(r.Version)
 			if ts, err := time.Parse(time.RFC3339Nano, r.Timestamp); err == nil &&
 				ts.After(newestTS) && !ts.After(now.Add(futureSkew)) {
 				newestTS = ts
@@ -454,6 +484,9 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	}
 
 	a.countSubagents(s, ref.Locator, now)
+
+	// Last, because the verdict reads what the session managed to source.
+	w.Fold(s, good)
 
 	if err := ctx.Err(); err != nil {
 		return nil, err

@@ -66,12 +66,34 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sanlee-ys/telltale/internal/adapter/drift"
 	"github.com/sanlee-ys/telltale/internal/jsonl"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
 // Vendor is the stable id for rows this adapter produces.
 const Vendor = model.VendorGemini
+
+// verifiedAgainst names the vendor build this adapter's field map was read at
+// (see the package doc). Nothing in the recording states the writer's version,
+// so a drift report here carries the pin and no observed counterpart.
+const verifiedAgainst = "gemini-cli v0.53.1"
+
+// canaryMetadata is the recording's opening line — sessionId plus projectHash,
+// the first thing chatRecordingService.ts writes for every session, and the only
+// line that carries both. It anchors the full session id the sub-agent nest is
+// keyed by and is where a summary becomes the row's name.
+//
+// It is always inside the read windows: the head window covers the start of the
+// file whenever it is enabled at all, and when it is not, the tail covers the
+// whole file.
+var canaryMetadata = drift.Canary{
+	Name: "metadata record",
+	Feeds: model.NewFieldSet(
+		model.FieldName,
+		model.FieldSubagents,
+	),
+}
 
 // ErrSubagentTranscript reports that a chat file records a sub-agent run, not
 // a top-level session (metadata kind == "subagent"). Sub-agent files normally
@@ -325,9 +347,10 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		return nil, err
 	}
 
-	var bad int
+	var bad, good int
 	var newestTS time.Time
 	var sessionID string
+	w := drift.NewWatch(verifiedAgainst, canaryMetadata)
 	noteTS := func(raw string) {
 		if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil &&
 			ts.After(newestTS) && !ts.After(now.Add(futureSkew)) {
@@ -424,6 +447,7 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 				bad++
 				continue
 			}
+			good++
 			if env.Set != nil {
 				applyMeta(env.Set, true)
 				continue
@@ -447,6 +471,7 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 				continue
 			}
 			if meta.SessionID != "" && meta.ProjectHash != "" {
+				w.Saw(canaryMetadata)
 				applyMeta(&meta, false)
 			}
 			// Anything else is a known-shaped record with nothing to read;
@@ -496,6 +521,11 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 
 	a.resolveWorkspace(s, ref.Locator)
 	a.countSubagents(s, ref.Locator, sessionID, now)
+
+	// Last, because the verdict reads what the session managed to source. The
+	// subagent count degrades on its own above and says what it cost; this says
+	// why, which is the part a per-row diagnostic cannot know.
+	w.Fold(s, good)
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
