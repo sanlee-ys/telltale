@@ -474,7 +474,7 @@ tokens or tool calls settle, so a linear last-wins pass needs no dedup map.
   handling (`googleQuotaErrors.ts`, `retry.ts`). `quota` is CapNone, not empty.
 - No context-window size reaches disk; the CLI's own percentage divides by a static
   per-model table compiled into its source. An assumed denominator is an invented
-  gauge (https://github.com/sanlee-ys/career/blob/main/decisions/telltale/001), so `context_pct` is CapNone — the §4a.7 sketch guessed
+  gauge, so `context_pct` is CapNone — the §4a.7 sketch guessed
   "derived" here, and the source read falsified the guess.
 - `workspace` is read verbatim from the vendor's registry entry (REPORTED, a lookup
   not a computation), with a fidelity caveat: the vendor lowercases the recorded path
@@ -626,7 +626,7 @@ screen. Documented but not yet observed live (the capture session ran outside a 
 `vcs`, `artifact_count`, `task_count`, `execution_mode` — the parser carries them as
 optional; the branch segment's live confirmation is the itemized remainder here.
 
-**Adapter built, 2026-08-02 (https://github.com/sanlee-ys/career/blob/main/decisions/telltale/006, `internal/adapter/antigravity`).** What the
+**Adapter built, 2026-08-02 (`internal/adapter/antigravity`).** What the
 adapter took from this survey and what it left:
 
 - **Took:** Name (conversation id, shortened for the grid — the only label on disk that
@@ -752,7 +752,7 @@ come from — not from reverse-engineering `status` out of the store. Recorded a
 watch item; §8 carries it. Separately, the `cursor-agent` CLI keeps its own store, which
 is **not installed on this machine** and therefore an unverified surface, out of scope.
 
-**Adapter built, 2026-08-02 (https://github.com/sanlee-ys/career/blob/main/decisions/telltale/007, `internal/adapter/cursor`).**
+**Adapter built, 2026-08-02 (`internal/adapter/cursor`).**
 Name, model, workspace and last_activity REPORTED; context % declared DERIVED and marked
 per read only when the adapter computed it; cost, quota, liveness and subagents
 `CapNone`. `internal/sqlite` gained two additions rather than being worked around:
