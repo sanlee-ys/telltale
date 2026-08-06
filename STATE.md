@@ -17,11 +17,16 @@ Pre-v1. The active push is making `telltale council` usable as a daily driver:
 one terminal, four seats, readable and steerable without opening four vendor
 apps.
 
+**The direction is recorded rather than remembered** (2026-08-06): council is
+the product, the gauges are the infrastructure under it, and **v1 is held until
+council settles**. Cutting v1 as gauges only was the standing alternative and it
+is rejected. `README.md` and [docs/design.md §1](docs/design.md) hold the
+binding copies and the argument; this file does not restate either.
+
 ## In flight
 
-| Work | Owner | Status | Branch / PR |
-|---|---|---|---|
-| Council TUI — empty-compose footer quieting + column gutter air | Cursor | Implementing | `cursor/council-ui-footer-density` |
+Nothing owned. Everything this file listed on 2026-08-06 was closed that day —
+see *Known gaps* for what replaced it.
 
 ## Closed without code (do not re-open)
 
@@ -32,36 +37,55 @@ apps.
   (`ColorTrackLite` / `ColorTrackDark`), and council has no gauge. Wiring
   `lipgloss.LightDark` here would invent hues and break "Council adds no hues
   of its own" in `style.go`. The `_ = isDark` placeholder stays documented.
+- **Negative routing** (`@all` minus a seat) — **shipped 2026-08-04**, and this
+  file went on listing it as an unowned gap for two days afterwards. `-@vendor`,
+  the expansion of `-@all` into a list of exclusions, and the refusal to mix the
+  positive and negative forms are all in `mentions.go`, with
+  `TestEveryAddressableVendorIsExcludable` pinning the vocabulary so a fifth
+  seat cannot be added while `-@all` quietly goes on meaning four.
 
 ## Open questions
 
-- **v1 cut.** Ship v1 as gauges only — statusline and HUD, with declared vendor
-  version pins — or hold v1 until council settles? The gauges are finished and
-  unreleased; council's surface still moves weekly.
-- **Product direction.** Council has been described as the primary product with
-  the gauges as supporting infrastructure. That direction has been *stated in
-  the room and never recorded*, so it currently binds nobody. Until it is
-  written down, treat the framing as unsettled.
-- **Turn latency has no provenance.** A 44-second reply to a greeting was
-  observed and could not be attributed. Splitting a turn's clock into measured
-  segments — spawn, wait, stream — would answer it without inferring anything.
-  Diagnosis so far: `cursor-agent` is spawned fresh per turn and `--resume`
-  restores context, not process warmth. Unowned; measure before optimising.
+- **The 44 seconds is still unattributed.** `telltale council --trace <file>`
+  now splits every turn into spawn / wait / stream per seat, so the question is
+  answerable — but nobody has run it against a slow turn. The instrument exists;
+  the measurement does not, and the two are not the same claim. Diagnosis so far
+  is unchanged: `cursor-agent` is spawned fresh per turn and `--resume` restores
+  context, not process warmth. **Read a trace before optimising anything.**
 
 ## Known gaps, not yet owned
 
-- **Adapter schema drift.** Adapters are pinned to vendors' private on-disk
-  formats (Cursor 3.14.7, Antigravity 1.1.9, gemini-cli v0.53.1). Nothing
-  detects that a corpus no longer matches what the adapter was verified
-  against, so drift would degrade silently — the one failure mode this project
-  exists to forbid.
-- **This file's own staleness is unmeasured.** Council could compare
-  `git log -1 STATE.md` against `HEAD` and show the gap on open. It does not,
-  so a stale pickup doc reads exactly like a current one.
-- **No repo-local contributor contract.** No `CLAUDE.md`.
-- **No negative routing in council** (`@all` minus a seat). Feature request.
+- **Drift is detected but does not reach the grid.** `internal/adapter/drift`
+  now catches a corpus that no longer matches what its adapter was verified
+  against, and reports it in the honest-gauge vocabulary the schema already has
+  (`Degraded` plus a `Diagnostic`). That surfaces in the detail pane. Its honest
+  home is the vendor line, which needs a fourth `VendorStatus` word — the
+  existing `unreadable` means "the OS refused", and a store that reads fine but
+  no longer matches is a different fact that should not borrow that word. The
+  work is in `internal/hud`.
+- **`docs/design.md` §3 does not name the canary set.** Each adapter's canary is
+  a survey finding and belongs beside the rest of that adapter's survey, or the
+  next person to re-verify a vendor will not know what was being watched.
+- **This file's own staleness is unmeasured**, and 2026-08-06 is the evidence
+  rather than the theory: a single pickup found *two* entries wrong — a shipped
+  feature still listed as an unowned gap, and an in-flight row naming work that
+  had merged. Council could compare `git log -1 STATE.md` against `HEAD` and
+  show the gap on open. It does not, so a stale pickup doc reads exactly like a
+  current one — which is the same failure this project refuses to tolerate in a
+  gauge, tolerated in the file that describes the project.
+- **The turn clock's concurrency is argued, not race-verified.** `-race` needs
+  cgo, is unavailable on the machine the clock was written on, and is not in the
+  CI gate either. The locking in `runner/clock.go` was reasoned through and
+  reviewed; it has not been run under the detector.
+- **CI actions are pinned to a deprecated runtime.** `actions/checkout@v4` and
+  `actions/setup-go@v5` target Node 20, which now force-runs on Node 24.
+  Cosmetic today, a broken gate eventually.
 
 Cross-platform and cross-machine status has its own file: [PARITY.md](PARITY.md).
+
+The conventions a fresh session would otherwise re-derive — golden-test traps,
+commit voice, the honesty rules, the read/write boundary — are in
+[CLAUDE.md](CLAUDE.md).
 
 ## How to re-enter
 
