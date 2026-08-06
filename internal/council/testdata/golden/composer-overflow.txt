@@ -1,19 +1,19 @@
  council READ  │  ~/code/telltale                                               no turn yet  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ───────────────  ○ idle │   Codex  ────────────────────  ○ idle │   Antigravity  ──────────────  ○ idle 
-   ro:tools  tokens                     │   ro:requested  final only            │   unsandboxed  final only             
-                                        │                                       │                                       
- no turn dispatched yet.                │ no turn dispatched yet.               │ no turn dispatched yet.               
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
+ ▸ Claude Code  ─────────────  ○ idle  │    Codex  ───────────────────  ○ idle  │    Antigravity  ─────────────  ○ idle 
+   ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
+                                       │                                        │                                       
+ no turn dispatched yet.               │  no turn dispatched yet.               │  no turn dispatched yet.              
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ↑ 16 more above                                                                                                        
    line                                                                                                                 
