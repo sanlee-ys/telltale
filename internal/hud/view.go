@@ -1057,7 +1057,11 @@ func fitNotices(ns []footerNotice, budget int, g Glyphs) ([]footerNotice, bool) 
 	if len(ns) == 1 {
 		if room := budget - noticeMarkWidth(dropped, g); room > 0 &&
 			lipgloss.Width(ns[0].text) > room {
-			ns[0].text = truncate(ns[0].text, room, g.Ellipsis)
+			// Copied rather than written in place: ns may still be the caller's
+			// own slice, and a fitting pass has no business editing it.
+			only := ns[0]
+			only.text = truncate(only.text, room, g.Ellipsis)
+			return []footerNotice{only}, dropped
 		}
 	}
 	return ns, dropped
