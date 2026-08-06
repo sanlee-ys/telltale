@@ -130,8 +130,8 @@ mechanism.
 ## What it is
 
 - **A dispatch room** — `telltale council`, one brief typed once and answered by Claude
-  Code, Codex and Antigravity side by side. The one mode that spawns vendor CLIs instead
-  of reading their files; it gets its own section below.
+  Code, Codex, Cursor and Antigravity side by side. The one mode that spawns vendor CLIs
+  instead of reading their files; it gets its own section below.
 - **In-prompt statusline for Claude Code** — model, context %, session cost, and quota
   pacing (`rate_limits` windows), rendered from the JSON Claude Code hands your
   statusline command on stdin. No network calls, no credential reads.
