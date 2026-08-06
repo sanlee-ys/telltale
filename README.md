@@ -426,6 +426,10 @@ only. No real session content is in this repository.
 
 - [docs/design.md](docs/design.md) — segments, data sources, the normalized schema, the
   adapter contract, and the HUD UI specification
+- [STATE.md](STATE.md) — where the project is right now: what is in flight, what is
+  unsettled, and what is known-missing and unowned
+- [PARITY.md](PARITY.md) — cross-platform and cross-machine differences, and which of
+  them are measured rather than assumed
 - Historical ADRs (archived): [career/decisions/telltale](https://github.com/sanlee-ys/career/tree/main/decisions/telltale)
 
 ## License
