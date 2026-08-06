@@ -1372,24 +1372,205 @@ func TestTheDriftNoticeRendersUnderEveryBody(t *testing.T) {
 	}
 }
 
-// Every frame must fit the terminal it was asked for, drift notice included —
-// the footer's notice block is the side joinEnds keeps when the line overflows.
-func TestADriftedFrameStillFitsEveryTier(t *testing.T) {
-	all := []model.VendorID{
-		model.VendorAntigravity, model.VendorClaude, model.VendorCodex,
-		model.VendorCursor, model.VendorGemini,
+// noticeLoads are the other things that compete for the footer's notice block.
+//
+// The first cut of the width test below was shaped to its own fixture: it never
+// set Query, Filter, Sort or scan staleness, so the drift notice was always the
+// ONLY notice on the line, and the case that actually overflowed — 60 columns
+// with a 24-character query and a vendor filter also active — was invisible to
+// it. A test that only ever exercises its subject alone cannot see the subject
+// pushing something else over the edge.
+func noticeLoads() []struct {
+	name  string
+	apply func(*State)
+} {
+	stale := func(st *State) {
+		st.Snap.At = pinned.Add(-90 * time.Second)
+		st.Snap.Err = "Access is denied."
 	}
-	for _, w := range []int{60, 72, 80, 99, 120} {
-		for _, n := range []int{1, 2, 5} {
-			st := driftState(w, 12, all[:n]...)
-			out := Render(st, PlainStyles(), UnicodeGlyphs())
-			for i, line := range strings.Split(out, "\n") {
-				if got := len([]rune(line)); got > w {
-					t.Errorf("width %d, %d drifted: line %d is %d columns\n%s", w, n, i, got, line)
+	// Exactly the length the footer truncates a query to, so the notice is at
+	// its widest.
+	query := func(st *State) { st.Query = "abcdefghijklmnopqrstuvwx" }
+	return []struct {
+		name  string
+		apply func(*State)
+	}{
+		{"alone", func(*State) {}},
+		{"query", query},
+		{"filter", func(st *State) { st.Filter = FilterClaude }},
+		{"sort", func(st *State) { st.Sort = SortCost }},
+		{"stale", stale},
+		{"query+filter", func(st *State) { query(st); st.Filter = FilterClaude }},
+		{"everything", func(st *State) {
+			query(st)
+			st.Filter = FilterClaude
+			st.Sort = SortCost
+			stale(st)
+		}},
+	}
+}
+
+// Every frame must fit the terminal it was asked for, drift notice included.
+// The notice block is the side joinEnds KEEPS when the line will not hold both,
+// and joinEnds has no truncation path — so a notice that does not fit is a
+// notice that runs off the end of the terminal.
+func TestADriftedFrameStillFitsEveryTier(t *testing.T) {
+	vendorSets := [][]model.VendorID{
+		{model.VendorCodex},
+		// The widest two-name notice, not the alphabetically first pair:
+		// "claude, cursor" is three columns wider than "agy, claude".
+		{model.VendorClaude, model.VendorCursor},
+		{model.VendorAntigravity, model.VendorClaude, model.VendorCodex,
+			model.VendorCursor, model.VendorGemini},
+	}
+	for _, w := range []int{MinWidth, 61, 72, 80, 99, 100, 120} {
+		for _, vs := range vendorSets {
+			for _, load := range noticeLoads() {
+				for _, ascii := range []bool{false, true} {
+					st := driftState(w, 12, vs...)
+					load.apply(&st)
+					out := Render(st, PlainStyles(), GlyphsFor(ascii))
+					for i, line := range strings.Split(out, "\n") {
+						if got := len([]rune(line)); got > w {
+							t.Errorf("width %d, %d drifted, load %q, ascii=%v: line %d is %d columns\n%s",
+								w, len(vs), load.name, ascii, i, got, line)
+						}
+					}
 				}
 			}
 		}
 	}
+}
+
+// What the line gives up when it cannot hold everything, stated as a table
+// rather than left to whichever notice happened to be appended last.
+//
+// The rule is joinEnds' own, asked one level down: joinEnds sacrifices the key
+// hints because the notices carry what the reader cannot get elsewhere, and the
+// notices are ordered among themselves by the same question. Drift is last to
+// go because it is the only one on the line that neither clears itself nor can
+// be re-read by pressing a key.
+func TestTheFooterGivesUpItsCheapestNoticesFirst(t *testing.T) {
+	st := driftState(60, 12, model.VendorCodex)
+	st.Query = "abcdefghijklmnopqrstuvwx"
+	st.Filter = FilterClaude
+	st.Sort = SortCost
+	st.Snap.At = pinned.Add(-90 * time.Second)
+
+	got := lastLine(Render(st, PlainStyles(), UnicodeGlyphs()))
+	// Both warnings survive; sort, the filter and the query do not, and the
+	// ellipsis says so.
+	for _, want := range []string{"⚠ codex drifted", "⚠ last scan 1m ago", "…"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("footer %q is missing %q", got, want)
+		}
+	}
+	if strings.Contains(got, "sort ") {
+		t.Errorf("sort outlived a warning in the footer: %q", got)
+	}
+	// Dropping is never silent: the ellipsis means here what it means in every
+	// other cell of this UI.
+	if !strings.HasPrefix(strings.TrimSpace(got), "…") {
+		t.Errorf("notices were dropped without the ellipsis saying so: %q", got)
+	}
+	// Nothing is dropped while it all fits.
+	wide := driftState(120, 12, model.VendorCodex)
+	wide.Filter = FilterClaude
+	wide.Sort = SortCost
+	if f := lastLine(Render(wide, PlainStyles(), UnicodeGlyphs())); strings.Contains(f, "…") ||
+		!strings.Contains(f, "sort cost") {
+		t.Errorf("a footer that fits dropped something anyway: %q", f)
+	}
+}
+
+// A single notice wider than the whole line is truncated, not dropped: an
+// ellipsis on a warning still says a warning is there, and dropping the last
+// one would leave a footer quietly claiming nothing is wrong.
+func TestTheLastSurvivingNoticeIsTruncatedRatherThanDropped(t *testing.T) {
+	st := driftState(60, 12, model.VendorCodex)
+	st.Snap.At = pinned.Add(-90 * time.Second)
+	st.Snap.Err = strings.Repeat("a very long operating system message. ", 5)
+
+	got := lastLine(Render(st, PlainStyles(), UnicodeGlyphs()))
+	if len([]rune(got)) > 60 {
+		t.Fatalf("footer is %d columns: %q", len([]rune(got)), got)
+	}
+	if !strings.Contains(got, "⚠") {
+		t.Errorf("the warning was dropped rather than truncated: %q", got)
+	}
+}
+
+// driftScope renders in the empty state and nowhere else, and neither existing
+// width test ever renders that state.
+//
+// The assertion is DIFFERENTIAL. centerBlock pads and never truncates, so a
+// long enough vendor root overflows the empty state on its own — that predates
+// this change (v.Err overflows it worse) and is not fixed here. What must hold
+// is that the scope never turns a frame that fit into one that does not.
+func TestTheDriftScopeNeverOverflowsAFrameThatFitWithoutIt(t *testing.T) {
+	for _, w := range []int{MinWidth, 61, 72, 80, 99, 120} {
+		st := driftState(w, 12, model.VendorCodex)
+		st.Query = "no-such-session" // empties the grid, so the vendor line renders
+		before := widestLine(Render(st, PlainStyles(), UnicodeGlyphs()))
+
+		st.Snap.Vendors[0].Status = StatusWatching
+		baseline := widestLine(Render(st, PlainStyles(), UnicodeGlyphs()))
+
+		if baseline <= w && before > w {
+			t.Errorf("width %d: the drift scope pushed a fitting frame to %d columns", w, before)
+		}
+	}
+	// And it is really on screen wherever there is room for it.
+	st := driftState(120, 12, model.VendorCodex)
+	st.Query = "no-such-session"
+	if got := Render(st, PlainStyles(), UnicodeGlyphs()); !strings.Contains(got, "1 drifted of 1 read") {
+		t.Errorf("the vendor line states no scope at 120 columns\n%s", got)
+	}
+}
+
+// The vendor line must not borrow the header's "n of m sessions" sentence: the
+// two land on the same screen with different numerators over different
+// populations, and in the borrowed grammar the vendor line reads as a claim
+// about how many sessions are SHOWING — which the header directly contradicts.
+func TestTheDriftScopeCannotBeReadAsTheHeaderCount(t *testing.T) {
+	st := driftState(120, 12, model.VendorCodex)
+	st.Query = "no-such-session"
+	out := Render(st, PlainStyles(), UnicodeGlyphs())
+
+	header := strings.Split(out, "\n")[0]
+	if !strings.Contains(header, "0 of 5 sessions") {
+		t.Fatalf("fixture drifted; header = %q", header)
+	}
+	var vendorLine string
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "drifted") && strings.Contains(l, "%USERPROFILE%") {
+			vendorLine = l
+		}
+	}
+	if vendorLine == "" {
+		t.Fatal("no vendor line in the empty state")
+	}
+	if strings.Contains(vendorLine, "sessions") {
+		t.Errorf("the vendor line reuses the header's noun: %q", vendorLine)
+	}
+	if !strings.Contains(vendorLine, "1 drifted of 1 read") {
+		t.Errorf("vendor line = %q", vendorLine)
+	}
+}
+
+func lastLine(frame string) string {
+	lines := strings.Split(frame, "\n")
+	return lines[len(lines)-1]
+}
+
+func widestLine(frame string) int {
+	w := 0
+	for _, l := range strings.Split(frame, "\n") {
+		if n := len([]rune(l)); n > w {
+			w = n
+		}
+	}
+	return w
 }
 
 // The vendor line states the SCOPE beside the word. One drifted session out of
@@ -1407,7 +1588,7 @@ func TestTheVendorLineStatesHowMuchOfTheStoreDrifted(t *testing.T) {
 	if v.Status != StatusDrifted {
 		t.Fatalf("status = %s, want drifted", v.Status)
 	}
-	if got := driftScope(v); got != "1 of 41 sessions" {
+	if got := driftScope(v); got != "1 drifted of 41 read" {
 		t.Errorf("driftScope = %q", got)
 	}
 }

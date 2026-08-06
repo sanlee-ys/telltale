@@ -107,11 +107,15 @@ func (s SortKey) String() string {
 //
 // The fourth word also arrives at a different time, and that has a rendering
 // consequence. The first three are known before a single session is read, so
-// the empty state can speak them. Drift is only knowable AFTER the read, and a
-// vendor cannot drift without having produced sessions — which means the grid
-// is almost never empty when it happens. The vendor line is still this word's
-// home, but footerLine carries it whenever there are rows, or the fourth word
-// would be one nobody ever sees.
+// the empty state — the only place the vendor line renders — can speak them.
+// Drift is knowable only AFTER the read, and a vendor cannot drift without
+// having produced sessions. Those sessions can still all be hidden, by the
+// idle cutoff or a filter or a query, so the vendor line does get to say this
+// word (testdata/golden/empty-drifted.txt is exactly that frame) — but the
+// ordinary case is a grid full of rows, where the vendor line is not on screen
+// at all. So the word has a second home: footerLine renders driftNotice under
+// EVERY body, grid and empty state and help overlay and detail pane alike.
+// Without that, the fourth word would be one nobody ever sees.
 type VendorStatus uint8
 
 const (

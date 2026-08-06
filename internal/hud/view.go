@@ -709,7 +709,19 @@ func emptyLines(st State, sty Styles, g Glyphs) []string {
 		case v.Err != "":
 			line += sty.SevWarn.Render("  " + v.Err)
 		case v.Status == StatusDrifted:
-			line += sty.SevWarn.Render("  " + driftScope(v))
+			// The scope is the status's RESOLUTION, not the status, so it is
+			// the part that gives way when the line runs out of room — the same
+			// cascade the grid uses when it sheds COST and then the gauge. The
+			// word never goes, and the counts are still in the detail pane. The
+			// budget assumes the minimum centring pad centerBlock will ever
+			// apply, so whether this renders depends on this line alone and not
+			// on how long some other vendor's root happens to be.
+			//
+			// It is shed whole, never truncated: half a count is a worse claim
+			// than no count.
+			if scope := driftScope(v); 1+lipgloss.Width(line)+2+lipgloss.Width(scope) <= st.Width {
+				line += sty.SevWarn.Render("  " + scope)
+			}
 		}
 		block = append(block, line)
 	}
@@ -722,13 +734,20 @@ func emptyLines(st State, sty Styles, g Glyphs) []string {
 }
 
 // driftScope is the measurement behind the word: how many of the vendor's
-// sessions this scan reported drift for, out of how many it read.
+// sessions reported drift, out of how many this scan read for it.
 //
-// It borrows the header's own "n of m sessions" phrasing on purpose — the two
-// are the same kind of statement about the same denominator, and a second
-// grammar for it would read as a second quantity.
+// The numerator is LABELLED, and that is the whole of why the phrasing is not
+// the header's "n of m sessions". The two sentences look like the same kind of
+// statement and are not: the header's is visible-of-total-across-every-vendor,
+// this one is drifted-of-read-for-this-vendor — different numerator, different
+// denominator, different population. Both land on screen together in the empty
+// state (testdata/golden/empty-drifted.txt shows a header reading "0 of 2
+// sessions" directly above this line), and in the borrowed grammar a reader
+// parses the vendor line as "1 of codex's 2 sessions is showing" — which the
+// header has just denied. Naming what the 1 counts is what makes the two
+// unmistakable for each other.
 func driftScope(v VendorView) string {
-	return fmt.Sprintf("%d of %d sessions", v.Drifted, v.Sessions)
+	return fmt.Sprintf("%d drifted of %d read", v.Drifted, v.Sessions)
 }
 
 // driftNotice is the vendor line folded onto one footer line.
@@ -900,31 +919,33 @@ func footerLine(st State, visible, hiddenBelow int, sty Styles, g Glyphs) string
 		keys = " " + sty.Muted.Render(strings.Join(hints, "   "))
 	}
 
-	var notices []string
+	var notices []footerNotice
 	if hiddenBelow > 0 {
-		notices = append(notices, sty.Muted.Render(fmt.Sprintf("+%d more", hiddenBelow)))
+		notices = append(notices, footerNotice{rankHiddenBelow,
+			fmt.Sprintf("+%d more", hiddenBelow), sty.Muted})
 	}
 	if st.Query != "" {
 		// The query survives leaving find mode, so it has to keep announcing
 		// itself: an applied filter the user has forgotten about is the same
 		// silent row-hiding the vendor filter notice exists to prevent.
-		notices = append(notices, sty.Muted.Render(
-			`find "`+truncate(sanitizeKeepingSpace(st.Query), 24, g.Ellipsis)+`"`))
+		notices = append(notices, footerNotice{rankQuery,
+			`find "` + truncate(sanitizeKeepingSpace(st.Query), 24, g.Ellipsis) + `"`, sty.Muted})
 	}
 	if st.Filter != FilterAll {
 		// A monitor that silently hides rows is a liar: a non-default filter is
 		// always stated.
-		notices = append(notices, sty.Muted.Render("filter "+st.Filter.String()))
+		notices = append(notices, footerNotice{rankFilter,
+			"filter " + st.Filter.String(), sty.Muted})
 	}
 	if st.Sort != SortActivity {
-		notices = append(notices, sty.Muted.Render("sort "+st.Sort.String()))
+		notices = append(notices, footerNotice{rankSort, "sort " + st.Sort.String(), sty.Muted})
 	}
 	// The two ⚠ notices sit together, drift first: a stale scan resolves itself
 	// on the next tick that succeeds, and a store that no longer matches does
 	// not resolve at all until somebody goes and looks. The durable fact should
 	// not be the one crowded out of a reader's attention by the transient one.
 	if note := driftNotice(st, g); note != "" {
-		notices = append(notices, sty.SevWarn.Render(note))
+		notices = append(notices, footerNotice{rankDrift, note, sty.SevWarn})
 	}
 	if !st.Snap.At.IsZero() {
 		if age := st.scanAge(); age > staleAfter {
@@ -936,13 +957,128 @@ func footerLine(st State, visible, hiddenBelow int, sty Styles, g Glyphs) string
 			if st.Snap.Err != "" {
 				msg += "   " + st.Snap.Err
 			}
-			notices = append(notices, warn.Render(msg))
+			notices = append(notices, footerNotice{rankStale, msg, warn})
 		}
 	}
 	if len(notices) == 0 {
 		return keys
 	}
-	return joinEnds(keys, strings.Join(notices, "   "), st.Width)
+
+	// joinEnds has no truncation path — when the right side alone overruns the
+	// line it returns it unclamped — so the notice block is fitted to the line
+	// BEFORE it gets there. width-1 is the widest block joinEnds can place and
+	// still leave its one column of left padding.
+	kept, dropped := fitNotices(notices, st.Width-1, g)
+	parts := make([]string, 0, len(kept))
+	for _, n := range kept {
+		parts = append(parts, n.sty.Render(n.text))
+	}
+	block := strings.Join(parts, noticeGap)
+	if dropped {
+		// The same ellipsis, meaning the same thing it means in every other
+		// cell of this UI: there is more than fits. Muted, because it marks an
+		// absence rather than stating a fact of its own.
+		block = sty.Muted.Render(g.Ellipsis) + " " + block
+	}
+	return joinEnds(keys, block, st.Width)
+}
+
+// noticeGap separates two footer notices.
+const noticeGap = "   "
+
+// footerNotice is one footer notice, the style it renders in, and its rank.
+//
+// The text is kept PLAIN until the block is settled. Widths are measured and
+// any last-resort truncation happens on it here, because truncating an
+// already-styled string cuts through an ANSI escape sequence — the trap
+// CLAUDE.md names, and one a golden rendered with PlainStyles is structurally
+// blind to.
+type footerNotice struct {
+	rank int
+	text string
+	sty  lipgloss.Style
+}
+
+// Drop ranks for the footer notices. Lowest goes first when the line cannot
+// hold them all.
+//
+// This is not a second priority rule; it is the one joinEnds already applies,
+// asked one level down. joinEnds sacrifices the key hints because the notices
+// carry facts the reader cannot get anywhere else on this screen, and the same
+// question orders the notices among themselves: if this line cannot say it,
+// where else would the reader find it out?
+//
+//   - sort hides nothing at all — it reorders, and the AGE column is right
+//     there. It is the cheapest thing on the line to lose.
+//   - "+N more" reports rows below the fold, on a row area the reader can see
+//     is full, and one keypress reveals them.
+//   - a filter and a query DO hide rows silently, which is what this footer
+//     exists to refuse — but they are backstopped: headerIdentity prints
+//     "N of M sessions" whenever anything narrows the list, so losing the
+//     notice loses the CAUSE, never the fact that rows are hidden. The query
+//     outranks the filter because a typed string is the more forgettable of
+//     the two and the filter is one visible `v` press from being re-read.
+//   - a stale scan is the machine's own problem and is recoverable from
+//     nothing else on screen, but it re-announces itself every tick and clears
+//     the moment a scan succeeds.
+//   - drift is that same fact minus the self-clearing: it stays true, and
+//     unsaid, until somebody goes and looks. It is the last notice to go.
+const (
+	rankSort = iota
+	rankHiddenBelow
+	rankFilter
+	rankQuery
+	rankStale
+	rankDrift
+)
+
+// fitNotices drops notices, lowest rank first, until the block fits budget,
+// and reports whether anything was dropped.
+//
+// It drops WHOLE notices. A block cut to length mid-notice would leave a
+// half-rendered warning, which is worse than an absent one — and the caller
+// marks the loss with an ellipsis, so a dropped notice is never a silent one.
+func fitNotices(ns []footerNotice, budget int, g Glyphs) ([]footerNotice, bool) {
+	dropped := false
+	for len(ns) > 1 && noticeBlockWidth(ns, dropped, g) > budget {
+		lowest := 0
+		for i := range ns {
+			if ns[i].rank < ns[lowest].rank {
+				lowest = i
+			}
+		}
+		ns = append(ns[:lowest:lowest], ns[lowest+1:]...)
+		dropped = true
+	}
+	// A single notice that alone overruns the line is truncated rather than
+	// dropped. An ellipsis on a warning still tells the reader a warning is
+	// there; dropping the last one would leave a footer quietly claiming
+	// nothing is wrong.
+	if len(ns) == 1 {
+		if room := budget - noticeMarkWidth(dropped, g); room > 0 &&
+			lipgloss.Width(ns[0].text) > room {
+			ns[0].text = truncate(ns[0].text, room, g.Ellipsis)
+		}
+	}
+	return ns, dropped
+}
+
+func noticeBlockWidth(ns []footerNotice, dropped bool, g Glyphs) int {
+	w := noticeMarkWidth(dropped, g)
+	for i, n := range ns {
+		if i > 0 {
+			w += len(noticeGap)
+		}
+		w += lipgloss.Width(n.text)
+	}
+	return w
+}
+
+func noticeMarkWidth(dropped bool, g Glyphs) int {
+	if !dropped {
+		return 0
+	}
+	return lipgloss.Width(g.Ellipsis) + 1
 }
 
 // ------------------------------------------------------------------ pieces
