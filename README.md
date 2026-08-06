@@ -1,26 +1,33 @@
 # telltale
 
-**An honest gauge for your coding agents.** A statusline and a cross-vendor HUD where
-every number is traceable to measured tool output — nothing narrated, nothing guessed —
-and a dispatch room where several vendor CLIs answer side by side, each column claiming
-only what was measured about that vendor.
+**An honest gauge for your coding agents.** A dispatch room where several vendor CLIs
+answer one brief side by side, each column claiming only what was measured about that
+vendor — standing on a statusline and a cross-vendor HUD where every number is traceable
+to measured tool output, nothing narrated, nothing guessed.
 
 > A telltale is the ribbon on a sail that shows true airflow. It doesn't interpret;
 > it just tells you what's actually happening.
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="images/telltale-hud-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="images/telltale-hud-light.svg">
-    <img alt="telltale TUI HUD showing cross-vendor agent telemetry" src="images/telltale-hud-dark.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="images/telltale-council-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="images/telltale-council-light.svg">
+    <img alt="telltale council dispatch room showing multi-agent panel" src="images/telltale-council-dark.svg">
   </picture>
 </p>
 
 ---
 
-**Status: pre-v1, under active development.** All three modes are built. The Claude Code
-adapter is verified against live on-disk data; the Codex adapter had its first
-live-verification pass on 2026-08-01 (Codex Desktop corpus — including a filter for
+**Status: pre-v1, under active development.** All three modes are built.
+
+**v1 is held until council settles**, and the gauges being done is not an argument against
+that. Cutting v1 as gauges only — statusline and HUD, with declared vendor version pins —
+was the standing alternative and it is rejected: a release names the product, and the
+product is the room. So the statusline and the HUD are finished and unreleased on purpose,
+and the version number waits on the surface that is still moving week to week.
+
+The Claude Code adapter is verified against live on-disk data; the Codex adapter had its
+first live-verification pass on 2026-08-01 (Codex Desktop corpus — including a filter for
 Desktop's imported non-Codex transcripts), with the short remainder itemized in
 [docs/design.md §3.4](docs/design.md). The Gemini CLI adapter is source-verified
 against gemini-cli v0.53.1 (the writer's own persistence code, read at tag), with its
@@ -39,6 +46,9 @@ Build from source:
 ```
 go build -o telltale.exe ./cmd/telltale
 ```
+
+`telltale.exe council` opens the room, which is the mode this project is for and has its
+own section below. The two gauges wire in underneath it.
 
 Then wire the statusline into Claude Code (`~/.claude/settings.json`):
 
@@ -69,6 +79,14 @@ field):
 ```
 telltale.exe hud
 ```
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/telltale-hud-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="images/telltale-hud-light.svg">
+    <img alt="telltale TUI HUD showing cross-vendor agent telemetry" src="images/telltale-hud-dark.svg">
+  </picture>
+</p>
 
 ```
  telltale  │  7 sessions  │  claude 2  codex 2  gemini 1  agy 1  cursor 1                     5h ██████▎─ 88.4% ↻ 3h02m
@@ -111,6 +129,9 @@ mechanism.
 
 ## What it is
 
+- **A dispatch room** — `telltale council`, one brief typed once and answered by Claude
+  Code, Codex and Antigravity side by side. The one mode that spawns vendor CLIs instead
+  of reading their files; it gets its own section below.
 - **In-prompt statusline for Claude Code** — model, context %, session cost, and quota
   pacing (`rate_limits` windows), rendered from the JSON Claude Code hands your
   statusline command on stdin. No network calls, no credential reads.
@@ -120,21 +141,23 @@ mechanism.
   **Antigravity CLI** and **Cursor (Composer)**, each reading that vendor's own native
   on-disk data — for Antigravity and Cursor that means a read-only SQLite reader written
   into this repo rather than a 9 MB dependency added to it.
-- **A dispatch room** — `telltale council`, one brief typed once and answered by Claude
-  Code, Codex and Antigravity side by side. The one mode that spawns vendor CLIs instead
-  of reading their files; it gets its own section below.
 - **A documented adapter interface** — one module per vendor — so you can wire in
   anything else that leaves session data on disk. The worked example in
   [docs/design.md §4a.7](docs/design.md) is the method the Gemini adapter was actually
   built with, kept alongside what live verification changed about its guesses.
 
-One binary, three modes: `telltale statusline`, `telltale hud` and `telltale council`.
-The statusline code path never initializes the TUI framework (the single binary links it,
-but no Bubble Tea code runs on a statusline invocation).
+One binary, three modes: `telltale statusline`, `telltale hud` and `telltale council` —
+and they are not three co-equal products. **The room is the product; the gauges are the
+infrastructure under it.** The statusline and the HUD are where this project surveyed each
+vendor's seam and wrote down what it found, and the honest-gauge rule they were built
+under is the rule a council column inherits when it states a sandbox posture. They are
+finished, they are load-bearing, and they are not the thing this is for. The statusline
+code path never initializes the TUI framework (the single binary links it, but no Bubble
+Tea code runs on a statusline invocation).
 
-Honest claim, stated precisely: *cross-vendor monitoring; vendor-native statusline where
-the seam exists — and it exists twice: Claude Code and Antigravity CLI; dispatch across
-the 4-vendor fleet (Claude Code, Codex, Cursor, Antigravity).* (Codex CLI has
+Honest claim, stated precisely: *dispatch across the 4-vendor fleet (Claude Code, Codex,
+Cursor, Antigravity); cross-vendor monitoring; vendor-native statusline where the seam
+exists — and it exists twice: Claude Code and Antigravity CLI.* (Codex CLI has
 no statusline hook today. Antigravity was statusline-only until a re-survey found the
 transcript its own docs advertise, which is what made its HUD adapter buildable — the
 first verdict and the reversal are both in [docs/design.md §2.1/§3.8](docs/design.md).
@@ -166,14 +189,6 @@ terminal. It exists because the alternative is four terminals and a clipboard.
 ```
 telltale.exe council
 ```
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="images/telltale-council-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="images/telltale-council-light.svg">
-    <img alt="telltale council dispatch room showing multi-agent panel" src="images/telltale-council-dark.svg">
-  </picture>
-</p>
 
 ```
  council  │  ~/code/telltale                                                         turn 1  │  3/3 seated  │  no brief 
