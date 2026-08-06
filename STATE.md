@@ -55,17 +55,11 @@ see *Known gaps* for what replaced it.
 
 ## Known gaps, not yet owned
 
-- **Drift is detected but does not reach the grid.** `internal/adapter/drift`
-  now catches a corpus that no longer matches what its adapter was verified
-  against, and reports it in the honest-gauge vocabulary the schema already has
-  (`Degraded` plus a `Diagnostic`). That surfaces in the detail pane. Its honest
-  home is the vendor line, which needs a fourth `VendorStatus` word — the
-  existing `unreadable` means "the OS refused", and a store that reads fine but
-  no longer matches is a different fact that should not borrow that word. The
-  work is in `internal/hud`.
-- **`docs/design.md` §3 does not name the canary set.** Each adapter's canary is
-  a survey finding and belongs beside the rest of that adapter's survey, or the
-  next person to re-verify a vendor will not know what was being watched.
+- **`docs/design.md` §3 does not name the canary set.** §7 now records how drift
+  *renders*; §3 still does not say what each adapter actually watches. A canary
+  is a survey finding and belongs beside the rest of that adapter's survey, or
+  the next person to re-verify a vendor will not know what was being watched.
+  `grep -n canary docs/design.md` returns nothing, which is the whole gap.
 - **This file's own staleness is unmeasured**, and 2026-08-06 is the evidence
   rather than the theory: a single pickup found *two* entries wrong — a shipped
   feature still listed as an unowned gap, and an in-flight row naming work that
@@ -80,6 +74,14 @@ see *Known gaps* for what replaced it.
 - **CI actions are pinned to a deprecated runtime.** `actions/checkout@v4` and
   `actions/setup-go@v5` target Node 20, which now force-runs on Node 24.
   Cosmetic today, a broken gate eventually.
+- **The empty state can still draw past the terminal width.** `emptyLines` builds
+  each vendor row and hands it to `centerBlock`, which pads and never truncates,
+  so a long `v.Err` overflows — `empty-unreadable` at 60 columns renders 74. The
+  footer's own overflow on this path was fixed when drift reached the grid; this
+  one was found in the same review and deliberately left, because it is older
+  than that change and fixing it there would have hidden a regression inside an
+  unrelated repair. A frame that tears is the honest-gauge rule failing at the
+  layer below the numbers.
 
 Cross-platform and cross-machine status has its own file: [PARITY.md](PARITY.md).
 
