@@ -1,19 +1,36 @@
 # telltale — design doc
 
-Status: v1 surface built. The honest-gauge rule requires every segment's data source to
-be named here before that segment ships; the tables below are the authority the eval
-harness tests against.
+Status: v1 surface built; v1 itself is held until council settles (§1). The honest-gauge
+rule requires every segment's data source to be named here before that segment ships; the
+tables below are the authority the eval harness tests against.
 
 ## 1. Product shape
 
-Two surfaces over one data layer:
+**`telltale council` is the product. The gauges — `telltale statusline` and `telltale
+hud` — are the infrastructure under it.** That ranking had been stated out loud and
+recorded nowhere, which meant it bound nothing and every argument about what to build
+next started over from memory. It is written here so it stops depending on who was in the
+room. It does not demote the gauges: they are where each vendor's on-disk seam was
+surveyed and written down (§3), they are what the honest-gauge rule was built and tested
+against (§5), and council inherits both — it renders through the same `internal/model`
+vocabulary and `internal/theme` palette the two gauge paths share. They are finished, they
+are load-bearing, and they are not the thing this is for.
+
+**v1 is held until council settles.** The gauges are finished and unreleased. The standing
+alternative — cut v1 as gauges only, statusline and HUD with declared vendor version pins
+— is rejected, because a v1 that named the gauges would name the wrong product. Council's
+surface is still moving week to week, so the version waits on §9 rather than on §2, §3
+and §7.
+
+Two gauge surfaces over one data layer:
 
 ```
 vendor adapters  ──►  normalized session model  ──►  renderers
 (claude, codex)       (one schema, documented)      (statusline / HUD)
 ```
 
-One Go module, one binary (`telltale.exe`), two modes (ADR-002):
+One Go module, one binary (`telltale.exe`). ADR-002 specified two modes; council (ADR-008)
+is the third, and it does not sit on the pipeline above:
 
 - **`telltale statusline`** (Claude Code and, since ADR-004, Antigravity CLI — routed
   on the payload's documented `product` field, §2.1): reads the vendor's JSON on
@@ -25,8 +42,12 @@ One Go module, one binary (`telltale.exe`), two modes (ADR-002):
   design section (layout grid, color/threshold system, motion rules, empty/degraded
   state designs) is written here BEFORE the HUD is built, and degraded-state renders
   are eval fixtures. Windows Terminal is the reference rendering environment.
+- **`telltale council`** (ADR-008, §9): the dispatch room — one brief typed once,
+  answered by the seated vendor CLIs side by side, each column claiming only what was
+  measured about that vendor. It spawns vendor CLIs instead of reading their session
+  files, which is why it is off the data layer above and specified separately in §9.
 
-The two paths share exactly two packages: `internal/model` (the schema) and
+The two gauge paths share exactly two packages: `internal/model` (the schema) and
 `internal/theme` (thresholds and value formatters). `internal/theme` is stdlib-only and
 holds no style type, which is what lets both surfaces share the numbers while the
 statusline links no TUI framework.
@@ -2216,6 +2237,9 @@ footer instead of quietly changing what an unmodified key does.
 Rigor stays the floor; features and front-end craft are the priority axis from here.
 Each item names its incumbent inspiration and the honest-gauge twist that makes it ours.
 Sources rule unchanged: a segment ships only when this doc names its source.
+
+Read the version numbers below against §1: v1 is held until council settles, so an item
+marked for v1 is not an item waiting on the gauges. They are done.
 
 ADR-005 adds a second axis: external adoption is now an explicit product goal alongside
 ADR-001's portfolio-evidence bar, and adoptability is a design input rather than a
