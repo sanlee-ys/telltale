@@ -177,6 +177,7 @@ func runCouncil(args []string) error {
 	brief := fs.String("brief", "", "file of shared operating context handed to every vendor on its first turn (or TELLTALE_COUNCIL_BRIEF)")
 	resume := fs.Bool("resume", false, "reattach to the saved room (this is the default; the flag is kept for muscle memory)")
 	fresh := fs.Bool("fresh", false, "start a new room instead of reattaching to the saved one")
+	trace := fs.String("trace", "", "append each turn's measured clock — spawn, wait, stream — to this file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -200,6 +201,7 @@ func runCouncil(args []string) error {
 		BriefPath: *brief,
 		Resume:    *resume,
 		Fresh:     *fresh,
+		TracePath: *trace,
 	})
 }
 
@@ -298,6 +300,19 @@ telltale council flags:
                               starts fresh. Not a posture: --read is never
                               restored from the file, it is retyped or it is
                               not in effect.
+  --trace <file>              append one line per seat per turn recording where
+                              that turn's time went: spawn (launching the vendor
+                              process), wait (launch, or the moment the turn was
+                              handed to a process already running, until the
+                              first line comes back) and stream (first line to
+                              last). A segment that did not happen prints "-",
+                              never 0 — a seat whose process outlives the turn
+                              spawns on its first turn and on no other.
+                              Off by default, and it adds nothing to the room:
+                              this answers "which phase took the 44 seconds",
+                              which is worth a file and not worth four more
+                              numbers on every column. The file is appended to,
+                              so runs accumulate.
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
 

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -50,6 +51,15 @@ type Options struct {
 	// saved room — if one exists — is named once before the first dispatch
 	// replaces it.
 	Fresh bool
+	// TracePath names a file each turn's measured clock is appended to: one line
+	// per seat per turn, split into spawn, wait and stream.
+	//
+	// A file and not a surface. The room already carries a header, a badge line,
+	// a card and a footer per column, and three more numbers on every one of
+	// them would cost every reader something to answer a question that is asked
+	// on the days a turn is inexplicably slow. Empty — the default — measures
+	// nothing, opens nothing and changes no pixel.
+	TracePath string
 }
 
 // Model is the Bubble Tea model. It owns State plus the things Render must not
@@ -890,6 +900,36 @@ func (m *Model) View() tea.View {
 // twice.
 func wantsHooks(opts Options) bool { return opts.Write && !opts.Auto }
 
+// openTrace opens the turn-clock file, returning the sink that writes to it and
+// the function that closes it.
+//
+// APPEND, never truncate. The thing being chased is a turn that was slow once,
+// so a run that erased the previous run's evidence on open would be the wrong
+// tool for its only job.
+//
+// The writes are serialised here rather than relied on from the runner: seats
+// finish independently, each on its own goroutine, and interleaved lines would
+// be exactly as useless as no lines.
+func openTrace(path string) (runner.Trace, func(), error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return nil, nil, err
+	}
+	var mu sync.Mutex
+	sink := func(c runner.TurnClock) {
+		mu.Lock()
+		defer mu.Unlock()
+		// Best effort, and silent. A full disk must not be able to take a room
+		// down; the trace is a diagnostic and the room is the product.
+		fmt.Fprintln(f, c)
+	}
+	return sink, func() {
+		mu.Lock()
+		defer mu.Unlock()
+		_ = f.Close()
+	}, nil
+}
+
 // Run starts the room.
 //
 // Council is the one telltale mode that dispatches to vendor CLIs. The
@@ -902,6 +942,23 @@ func Run(opts Options) error {
 	b, err := LoadBrief(opts.BriefPath)
 	if err != nil {
 		return err
+	}
+
+	// Opened before the alternate screen for the same reason the brief is: a
+	// path that cannot be written must be a line on stderr, not a card behind a
+	// TUI the user has to quit to read.
+	if opts.TracePath != "" {
+		sink, closeTrace, terr := openTrace(opts.TracePath)
+		if terr != nil {
+			return terr
+		}
+		runner.SetTrace(sink)
+		defer func() {
+			// Uninstalled before the file is closed, so nothing can write into a
+			// closed handle on the way out.
+			runner.SetTrace(nil)
+			closeTrace()
+		}()
 	}
 
 	// The room is the persistent object, so reattaching is the DEFAULT: a

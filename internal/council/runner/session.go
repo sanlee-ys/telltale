@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os/exec"
 	"sync"
+	"time"
 )
 
 // Session is a vendor process that outlives a single turn.
@@ -32,6 +33,12 @@ type Session struct {
 	// reading, and the caller here is the Bubble Tea update loop — a stalled
 	// write would freeze the whole room, including the key that cancels it.
 	sendQ chan []byte
+
+	// clock splits each turn this process takes. One clock for the process, not
+	// one per turn: the launch it records is spent by the FIRST turn and by no
+	// other, which is the difference between a persistent seat and a fresh spawn
+	// stated as a measurement.
+	clock *clock
 
 	mu     sync.Mutex
 	killed bool
@@ -70,6 +77,7 @@ const sendQueue = 8
 // guards Start therefore has nothing to guard here, because there is no path by
 // which prompt text could reach argv.
 func StartSession(ctx context.Context, spec Spec, out chan<- Event, parse ParseFunc) (*Session, error) {
+	ck := newClock(spec.Vendor)
 	cmd := exec.Command(spec.Binary, spec.Args...)
 	cmd.Dir = spec.Dir
 
@@ -97,11 +105,16 @@ func StartSession(ctx context.Context, spec Spec, out chan<- Event, parse ParseF
 	// microseconds before assignment escapes the job. Non-fatal — the tree-kill
 	// guarantee weakens, killing the direct child does not.
 	_ = group.attach(cmd)
+	// Held unspent until the first turn is sent. The process is up, but nobody
+	// is waiting on it yet, and charging its idle time to a turn that has not
+	// been typed would be the clock inventing a wait.
+	ck.launched()
 
 	s := &Session{
 		cmd:   cmd,
 		group: group,
 		sendQ: make(chan []byte, sendQueue),
+		clock: ck,
 		done:  make(chan struct{}),
 	}
 
@@ -131,7 +144,7 @@ func StartSession(ctx context.Context, spec Spec, out chan<- Event, parse ParseF
 	errTail := &ringBuffer{limit: stderrTail}
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() { defer wg.Done(); pumpStdout(stdout, spec.Vendor, out, parse) }()
+	go func() { defer wg.Done(); pumpStdout(stdout, spec.Vendor, out, parse, ck) }()
 	go func() { defer wg.Done(); errTail.consume(stderr) }()
 
 	// The lifecycle goroutine, identical in shape to Start's: drain the readers,
@@ -141,6 +154,10 @@ func StartSession(ctx context.Context, spec Spec, out chan<- Event, parse ParseF
 		defer close(s.done)
 		wg.Wait()
 		waitErr := cmd.Wait()
+		// A turn still open here died with the process. It is recorded rather
+		// than dropped: how long the seat waited before it fell over is the same
+		// question this clock answers for a turn that finished.
+		ck.end(time.Now())
 
 		ev := Event{Vendor: spec.Vendor, Kind: KindDone}
 		if waitErr != nil {
@@ -197,6 +214,12 @@ func (s *Session) Send(line []byte) error {
 
 	select {
 	case s.sendQ <- buf:
+		// The turn's clock starts where the room let go of it, not where the
+		// writer goroutine gets to it — the queue is a detail of this type, and
+		// time spent in it is still time the user is waiting. A write that lands
+		// mid-turn (a gate decision, an interrupt) finds a turn already open and
+		// leaves it alone; see clock.begin.
+		s.clock.begin(time.Now())
 		return nil
 	default:
 		return ErrSendBacklog
