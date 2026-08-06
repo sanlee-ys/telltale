@@ -245,7 +245,8 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		cells[j] = columnCell(st, st.Columns[idx], f, hint, w, lay.Body, sty, g)
 	}
 
-	sep := " " + sty.Rule().Render(g.Sep) + " "
+	sepPad := strings.Repeat(" ", gutter)
+	sep := sepPad + sty.Rule().Render(g.Sep) + sepPad
 	var b strings.Builder
 	for row := 0; row < lay.Body; row++ {
 		b.WriteString(" ")
@@ -1459,9 +1460,12 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 	}
 
 	if st.Draft == "" && st.Mode == ModeComposing {
+		// Short placeholder: the mode line already states routing (`→ everyone`),
+		// so repeating "goes to everyone" here was footer noise on an empty draft
+		// — the exact chrome the Windows screenshot spent body on.
 		return padRows([]string{
 			" " + sty.Muted.Render(prefix) +
-				sty.Muted.Render(padRight("type a brief — goes to everyone; @claude or @codex to narrow"+g.Caret, w, g)) + " ",
+				sty.Muted.Render(padRight("type a brief"+g.Caret, w, g)) + " ",
 		}, lay, w, sty, g)
 	}
 
@@ -1589,19 +1593,20 @@ func modeHints(st State, g Glyphs) []hint {
 		// thing on this line that changes what enter DOES. An @typo has to read
 		// as "this is going to everyone" while there is still time to fix it;
 		// discovering it afterwards means a wasted turn against three quotas.
-		// ^j is stated beside enter because the two are one decision: a key that
-		// adds a line and a key that spends four quotas sit next to each other on
-		// the keyboard, and a composer you can write a paragraph in is useless if
-		// nobody can find out how.
 		//
-		// Scrolling is named third, ahead of ^j and ^r, and the position is the
-		// fix rather than decoration on it. A finished turn drops the room into
-		// this mode, so this is the line on screen at the moment four long
-		// answers land — the one moment the user is certain to want to scroll,
-		// and the mode where the keys used to do nothing. It goes after the
-		// routing and after enter because those two decide what is SENT, and it
-		// is stated as bare arrows because that is the subset compose has: `f`,
-		// `g`, `G`, `j` and `k` are letters here.
+		// Scrolling is named next: a finished turn drops the room into this
+		// mode, so this is the line on screen at the moment four long answers
+		// land — the one moment the user is certain to want to scroll. Bare
+		// arrows because that is the subset compose has: `f`, `g`, `G`, `j`
+		// and `k` are letters here.
+		//
+		// Empty-draft compose keeps the line short on purpose. After a turn
+		// lands you are reading, not typing: ^j and ^r are real bindings but
+		// naming them beside an empty placeholder was the footer wall the
+		// Windows screenshot spent body on. They reappear the moment the draft
+		// has any text — §7.8 still forbids hiding a key that does something
+		// when you need it; an empty draft does not need newline or rebut yet.
+		// enter stays always: it is what the mode is for.
 		hs := []hint{
 			{key: "→ " + routeLabel(st) + quoteTag(st)},
 			{key: "enter", label: "dispatch"},
@@ -1624,7 +1629,13 @@ func modeHints(st State, g Glyphs) []hint {
 		if several {
 			hs = append(hs, hint{key: "tab", label: "focus"})
 		}
-		return append(hs, hint{key: "^j", label: "newline"}, hint{key: "^r", label: "rebut"})
+		if strings.TrimSpace(st.Draft) != "" {
+			// ^j beside enter once there is something to extend: a key that adds
+			// a line and a key that spends four quotas sit next to each other on
+			// the keyboard. ^r is the other content-changing control.
+			hs = append(hs, hint{key: "^j", label: "newline"}, hint{key: "^r", label: "rebut"})
+		}
+		return hs
 	}
 
 	hs := []hint{{key: g.Up + g.Down, label: "scroll"}}
@@ -1662,8 +1673,16 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 	}
 
 	left = "VIEW"
+	leftStyle := sty.Strong
 	if st.Mode == ModeComposing {
 		left = "COMPOSE"
+		// Empty compose is the post-turn resting state. Full weight on COMPOSE
+		// competed with the routing cell for the same attention the screenshot
+		// said the footer was stealing from the body — demote until there is a
+		// draft. Gate and notices still outrank this path above.
+		if strings.TrimSpace(st.Draft) == "" {
+			leftStyle = sty.Muted
+		}
 	}
 	if st.Notice != "" {
 		// A notice replaces the keys rather than joining them, and keeps the
@@ -1672,7 +1691,7 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 		return statusLine(sty.Strong.Render(left),
 			[]hint{{key: g.Warn, label: st.Notice, alarm: true}}, lay, sty, g)
 	}
-	return statusLine(sty.Strong.Render(left), modeHints(st, g), lay, sty, g)
+	return statusLine(leftStyle.Render(left), modeHints(st, g), lay, sty, g)
 }
 
 // statusLine lays the mode name against its right-anchored hints, and is the one

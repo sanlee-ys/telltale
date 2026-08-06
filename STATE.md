@@ -21,10 +21,17 @@ apps.
 
 | Work | Owner | Status | Branch / PR |
 |---|---|---|---|
-| Council TUI upgrade — column density, focus hierarchy, adaptive chrome, footer | Cursor | Needs re-cutting: four of its five items were overtaken by #49/#52/#54/#59 | — |
-| Council TUI implementation (parallel session, outside this room) | — | unknown | unknown |
+| Council TUI — empty-compose footer quieting + column gutter air | Cursor | Implementing | `cursor/council-ui-footer-density` |
 
-Nothing else is open. No open PRs, no open issues at the time of writing.
+## Closed without code (do not re-open)
+
+- **Focus hierarchy** — already shipped (`▸` + `Strong`, `hierarchy_test.go`).
+- **`isDark` adaptive chrome** — won't-do. Council uses ANSI palette indices from
+  `internal/theme`; the terminal resolves them against its own theme. The only
+  background-dependent tokens in the repo are the HUD's gauge track
+  (`ColorTrackLite` / `ColorTrackDark`), and council has no gauge. Wiring
+  `lipgloss.LightDark` here would invent hues and break "Council adds no hues
+  of its own" in `style.go`. The `_ = isDark` placeholder stays documented.
 
 ## Open questions
 

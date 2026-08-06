@@ -33,7 +33,14 @@ const (
 	columnsBreak = 96
 
 	// gutter is the space each side of the vertical separator between columns.
-	gutter = 1
+	//
+	// Two, not one: a single cell left prose welded to the │ on Windows
+	// Terminal (the reference host), which is the "rigid / cramped" read the
+	// screenshot pass named. One extra cell each side costs ~1–2 cells of
+	// wrap width per column at four-up and buys the air the frame was missing.
+	// columnsBody must use the same constant — ColWidth math and the painted
+	// sep have to agree or the row overflows the terminal.
+	gutter = 2
 
 	// minColumn is the narrowest a column may be before the tier drops.
 	minColumn = 24

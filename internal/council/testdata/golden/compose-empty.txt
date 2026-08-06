@@ -1,12 +1,12 @@
- council READ  │  ~/code/telltale                                                    turn 2  │  3/3 seated  │  no brief 
+ council READ  │  ~/code/telltale                                               no turn yet  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ─────────────  ✓ done  │    Codex  ─────────────────  ✗ failed  │    Antigravity  ────────  ⚠ cancelled 
+ ▸ Claude Code  ─────────────  ○ idle  │    Codex  ───────────────────  ○ idle  │    Antigravity  ─────────────  ○ idle 
    ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
                                        │                                        │                                       
- Use the native resume path.           │                                        │  Partly agree, though the             
- Re-sending the transcript grows       │                                        │                                       
- input quadratically.                  │  ⚠ exit 1: not signed in — run `codex  │  ⚠ cancelled — output above is        
-                                       │    login`                              │    partial                            
+ no turn dispatched yet.               │  no turn dispatched yet.               │  no turn dispatched yet.              
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
                                        │                                        │                                       
                                        │                                        │                                       
                                        │                                        │                                       
@@ -20,5 +20,5 @@
                                        │                                        │                                       
                                        │                                        │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ›                                                                                                                      
- VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 
+ › type a brief_                                                                                                        
+ COMPOSE                                                      → everyone  │  enter dispatch  │  ↑↓ scroll  │  tab focus 

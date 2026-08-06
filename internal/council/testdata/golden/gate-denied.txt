@@ -1,24 +1,24 @@
  council ⚠ WRITE  │  ~/code/telltale                                                 turn 1  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ───────────────  ✓ done │   Codex  ─────────────────  ⠋ waiting │   Antigravity  ───────────  ⠋ waiting 
-   gated  tokens                        │   WRITES  final only                  │   WRITES  final only                  
-                                        │                                       │                                       
- ⚙ Write: internal/council/gate.go ✗    │ working — the reply arrives whole.    │ working — the reply arrives whole.    
-   denied by you                        │                                       │                                       
- ⚙ Bash: go build ./... ✗               │                                       │                                       
-     exit 2: undefined: gateCard        │                                       │                                       
-                                        │                                       │                                       
- I need to add the card renderer.       │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
+ ▸ Claude Code  ─────────────  ✓ done  │    Codex  ────────────────  ⠋ waiting  │    Antigravity  ──────────  ⠋ waiting 
+   gated  tokens                       │    WRITES  final only                  │    WRITES  final only                 
+                                       │                                        │                                       
+ ⚙ Write: internal/council/gate.go ✗   │  working — the reply arrives whole.    │  working — the reply arrives whole.   
+   denied by you                       │                                        │                                       
+ ⚙ Bash: go build ./... ✗              │                                        │                                       
+     exit 2: undefined: gateCard       │                                        │                                       
+                                       │                                        │                                       
+ I need to add the card renderer.      │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                                 ↑↓ scroll  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 

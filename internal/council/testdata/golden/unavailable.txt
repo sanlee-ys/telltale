@@ -1,24 +1,24 @@
  council READ  │  ~/code/telltale                                               no turn yet  │  1/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ───────────────  ○ idle │   Codex  ─────────────  ⚠ unavailable │   Antigravity  ───────  ⚠ unavailable 
-   ro:tools  tokens                     │   final only                          │   final only                          
-                                        │                                       │                                       
- no turn dispatched yet.                │ ⚠ Codex is not seated                 │ ⚠ Antigravity is not seated           
-                                        │   not found on PATH (looked for       │   resolves to a shell shim (agy.cmd)  
-                                        │   codex)                              │   and takes its prompt as an          
-                                        │                                       │   argument; set                       
-                                        │   the other columns dispatch          │   TELLTALE_COUNCIL_AGY_BIN to the     
-                                        │   normally.                           │   real executable                     
-                                        │                                       │                                       
-                                        │                                       │   the other columns dispatch          
-                                        │                                       │   normally.                           
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
+ ▸ Claude Code  ─────────────  ○ idle  │    Codex  ────────────  ⚠ unavailable  │    Antigravity  ──────  ⚠ unavailable 
+   ro:tools  tokens                    │    final only                          │    final only                         
+                                       │                                        │                                       
+ no turn dispatched yet.               │  ⚠ Codex is not seated                 │  ⚠ Antigravity is not seated          
+                                       │    not found on PATH (looked for       │    resolves to a shell shim (agy.cmd) 
+                                       │    codex)                              │    and takes its prompt as an         
+                                       │                                        │    argument; set                      
+                                       │    the other columns dispatch          │    TELLTALE_COUNCIL_AGY_BIN to the    
+                                       │    normally.                           │    real executable                    
+                                       │                                        │                                       
+                                       │                                        │    the other columns dispatch         
+                                       │                                        │    normally.                          
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 

@@ -1,24 +1,24 @@
  council READ  │  ~/code/telltale                                                    turn 2  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ───────────────  ✓ done │   Codex  ───────────────  ⠋ streaming │   Antigravity  ───────────  ⠋ waiting 
-   ro:tools  tokens                     │   ro:requested  final only            │   unsandboxed  final only             
-                                        │                                       │                                       
- ⚙ Glob: **/*.go ✓                      │ ⚙ go build ./...                      │ ⚙ list_dir: C:\ws ?                   
- ⚙ Bash: go test ./... ✗                │ working…                              │ ⚙ run_command: pwsh -Command          
-     FAIL council 0.3s                  │                                       │   "Get-ChildItem" ✗                   
- ⚙ Read: view.go ✓                      │                                       │     granting access to C:\: Access is 
-                                        │                                       │     denied.                           
- One test fails.                        │                                       │ working — the steps above are what it 
-                                        │                                       │ has done so far.                      
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
-                                        │                                       │                                       
+ ▸ Claude Code  ─────────────  ✓ done  │    Codex  ──────────────  ⠋ streaming  │    Antigravity  ──────────  ⠋ waiting 
+   ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
+                                       │                                        │                                       
+ ⚙ Glob: **/*.go ✓                     │  ⚙ go build ./...                      │  ⚙ list_dir: C:\ws ?                  
+ ⚙ Bash: go test ./... ✗               │  working…                              │  ⚙ run_command: pwsh -Command         
+     FAIL council 0.3s                 │                                        │    "Get-ChildItem" ✗                  
+ ⚙ Read: view.go ✓                     │                                        │      granting access to C:\: Access   
+                                       │                                        │      is denied.                       
+ One test fails.                       │                                        │  working — the steps above are what   
+                                       │                                        │  it has done so far.                  
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                                 ↑↓ scroll  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 

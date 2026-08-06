@@ -279,6 +279,41 @@ func TestComposeMode(t *testing.T) {
 	golden(t, "compose", render(st))
 }
 
+// TestEmptyComposeQuietsTheFooter pins the screenshot cut: an empty draft in
+// compose mode keeps routing + enter + scroll/tab, and does not spend the mode
+// line on ^j/^r or a long placeholder that repeats what routing already says.
+func TestEmptyComposeQuietsTheFooter(t *testing.T) {
+	st := room()
+	st.Mode = ModeComposing
+	st.Draft = ""
+	st.Route, _ = ParseRoute(st.Draft)
+	got := render(st)
+
+	if !strings.Contains(got, "type a brief") {
+		t.Error("empty compose lost the short placeholder")
+	}
+	if strings.Contains(got, "goes to everyone; @claude") {
+		t.Error("empty compose still carries the long placeholder that repeated the routing")
+	}
+	if !strings.Contains(got, "enter dispatch") {
+		t.Error("empty compose dropped enter — the key the mode exists for")
+	}
+	if !strings.Contains(got, "→ everyone") {
+		t.Error("empty compose dropped routing")
+	}
+	if strings.Contains(got, "^j newline") || strings.Contains(got, "^r rebut") {
+		t.Error("empty compose still names ^j/^r before there is a draft to extend or rebut with")
+	}
+
+	st.Draft = "hello"
+	st.Route, _ = ParseRoute(st.Draft)
+	full := render(st)
+	if !strings.Contains(full, "^j newline") || !strings.Contains(full, "^r rebut") {
+		t.Error("a non-empty draft does not restore ^j/^r on the mode line")
+	}
+	golden(t, "compose-empty", got)
+}
+
 func TestHelp(t *testing.T) {
 	st := room()
 	st.Help = HelpKeys
