@@ -3,9 +3,11 @@ package council
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -115,6 +117,33 @@ func matrixRooms() map[string]func() State {
 				c.Body, c.Phase = unbreakable, PhaseDone
 				c.Note, c.Skipped = "not addressed in turn 214", true
 			}
+			return st
+		},
+
+		// The by-turn projection (§9.22). It plans as one column at the full
+		// frame, which means every width in this sweep hands it a reading area
+		// wider than the grid ever does — and its seat rules, its turn rule and
+		// its gate card are all assembled from differently-styled pieces, which
+		// is where the ANSI trap bites and the goldens cannot see it.
+		"turn-view": func() State {
+			st := room()
+			st.Turn = 6
+			for i := range st.Columns {
+				c := &st.Columns[i]
+				c.startTurn(5, unbreakable, false)
+				c.Body, c.Phase, c.Elapsed = unbreakable, PhaseDone, 5*time.Second
+				c.startTurn(6, unbreakable+" "+unbreakable, false)
+			}
+			st.Columns[0].Phase = PhaseStreaming
+			st.Columns[0].Acts = []Act{{Text: "Bash: " + unbreakable, Status: runner.ActOK}}
+			st.Columns[0].Body = unbreakable + " " + strings.Repeat("word ", 40)
+			st.Columns[1].Phase, st.Columns[1].Note = PhaseFailed, "the vendor exited: "+unbreakable
+			st.Columns[2].Phase = PhaseWaiting
+			st.Gates = []PendingGate{{
+				Vendor: model.VendorAntigravity, RequestID: "r1", ToolUseID: "t1",
+				Text: "Write: " + unbreakable,
+			}}
+			st.Page = TurnView{Open: true, Turn: 6}
 			return st
 		},
 

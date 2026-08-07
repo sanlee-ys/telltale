@@ -371,6 +371,17 @@ func (m *Model) dispatch() tea.Cmd {
 	sent := route
 	m.st.TurnRoute = &sent
 	m.st.Turn++
+	if m.st.Page.Open {
+		// Dispatching from the by-turn page lands on the turn just sent.
+		//
+		// This is not §7.1 rule 4's exception, it is its condition: that rule
+		// forbids the view moving because a VENDOR did something, and this moves
+		// it because the user pressed enter. A brief is a statement about what
+		// you want to read next, and a projection that answered it by staying on
+		// turn 7 would be the room showing an old conversation while spending
+		// quota on a new one (§9.22).
+		m.openPage(m.st.Turn)
+	}
 	m.st.Mode = ModeViewing
 	m.setDraft("")
 	m.st.Notice = ""

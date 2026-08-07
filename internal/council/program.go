@@ -785,6 +785,138 @@ func (m *Model) navKey(name string) bool {
 	return true
 }
 
+// pageOpen reports that the body is showing one turn rather than the grid.
+//
+// Read in the handful of places a key means something different across the two
+// projections, so the condition is spelled once and the keymap and the mode line
+// are asking the same question (§9.22).
+func (m *Model) pageOpen() bool { return m.st.Page.Open }
+
+// toggleTurnView swaps the body between the by-seat grid and one turn read
+// across every seat.
+//
+// It opens on the NEWEST turn, which is the turn the grid's columns are already
+// following when `t` is pressed: the projection changes and the subject does
+// not, so the key reads as turning the transcript ninety degrees rather than as
+// navigating somewhere. That is also why it is a toggle on one key — the two
+// views are one transcript, and a pair of keys would make them two places.
+//
+// A room with no turn is told so rather than handed an empty page. askClearSeat's
+// shape and askClearSeat's reason: a control that opens onto nothing teaches
+// that the key is unreliable, not that the room is empty.
+func (m *Model) toggleTurnView() {
+	if m.st.Page.Open {
+		m.st.Page.Open = false
+		m.st.Notice = ""
+		return
+	}
+	turns := m.st.PageTurns()
+	if len(turns) == 0 {
+		m.st.Notice = "no turn has been taken yet — t reads the room one turn at a time"
+		return
+	}
+	m.openPage(turns[len(turns)-1])
+}
+
+// openPage puts one turn on screen.
+//
+// The LIVE turn opens FOLLOWING its tail and a finished one opens at its head,
+// and that is the grid's rule rather than a second one: what arrives next belongs
+// at the bottom of a turn still running, and a turn that is over is a document
+// whose top is the brief that produced it. Pure over State — it asks State.Turn,
+// never a clock.
+func (m *Model) openPage(n int) {
+	m.st.Page.Open = true
+	m.st.Page.Turn = n
+	m.st.Page.Scroll = 0
+	m.st.Page.Follow = n == m.st.Turn
+	m.st.Notice = ""
+}
+
+// hopPage walks the page a turn at a time, in `[` and `]`'s existing vocabulary
+// (§9.20) — one motion, one unit, both projections.
+//
+// The two ends are asymmetric exactly as the grid's hops are. `[` at the first
+// turn does nothing: there is no turn 0, and a wrap would make a key pressed one
+// time too many jump a whole conversation. `]` past the newest restores that
+// page's tail, because what comes after the last turn is the live output — G's
+// answer to the same question rather than a second one.
+func (m *Model) hopPage(d int) {
+	turns := m.st.PageTurns()
+	if len(turns) == 0 {
+		return
+	}
+	pos := -1
+	for i, n := range turns {
+		if n == m.st.Page.Turn {
+			pos = i
+			break
+		}
+	}
+	if pos < 0 {
+		// The open page's last record was evicted by the fifty-turn cap while it
+		// was on screen (§9.9). The hop lands on the newest turn rather than
+		// refusing: the reader asked to move, and the alternative is a key that
+		// silently does nothing on the one page that cannot be read any more.
+		m.openPage(turns[len(turns)-1])
+		return
+	}
+	switch next := pos + d; {
+	case next < 0:
+		return
+	case next >= len(turns):
+		m.followPage()
+	default:
+		m.openPage(turns[next])
+	}
+}
+
+// gotoPage is `g` and `G` in the by-turn projection: the first turn still in
+// memory, or the newest.
+//
+// The same two positions those keys already reach in a column — the beginning of
+// what this room remembers, and the live end — measured in turns because that is
+// the unit this projection moves in. `G` on the newest page also restores its
+// tail, through openPage's own rule, so the key answers "take me to now" in one
+// press from anywhere.
+func (m *Model) gotoPage(d int) {
+	turns := m.st.PageTurns()
+	if len(turns) == 0 {
+		return
+	}
+	if d < 0 {
+		m.openPage(turns[0])
+		return
+	}
+	m.openPage(turns[len(turns)-1])
+}
+
+// followPage pins the page back to its newest line.
+func (m *Model) followPage() {
+	m.st.Page.Follow = true
+	m.st.Page.Scroll = PageMaxScroll(m.st)
+}
+
+// pageScrollBy moves the page and takes it off the tail, on exactly the terms
+// scrollBy moves a column: scrolling down into the bottom re-arms following,
+// scrolling up disarms it.
+func (m *Model) pageScrollBy(d int) {
+	max := PageMaxScroll(m.st)
+	cur := m.st.Page.Scroll
+	if m.st.Page.Follow {
+		cur = max
+	}
+	off := cur + d
+	if off < 0 {
+		off = 0
+	}
+	if off >= max {
+		m.st.Page.Scroll, m.st.Page.Follow = max, true
+		return
+	}
+	m.st.Page.Scroll, m.st.Page.Follow = off, false
+}
+
 // setDraft changes the brief and re-derives its routing.
 //
 // Routing is recomputed on every keystroke rather than at dispatch so the
@@ -839,7 +971,19 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "f":
 		// One column at full width. Three columns are for comparing at a
 		// glance; one is for actually reading a long reply.
+		if m.pageOpen() {
+			// A page is already the whole frame and has no column to expand.
+			// Swallowed rather than allowed to flip Expanded invisibly: the mode
+			// line does not offer this key here, and a key the room says is
+			// absent must not change what the grid looks like when you go back.
+			return m, nil
+		}
 		m.st.Expanded = !m.st.Expanded
+	case "t":
+		// The by-turn projection. One key, a toggle, because the two views are
+		// one transcript read two ways (§9.22). View mode only: in compose `t` is
+		// the letter t, which is the same contract `q`, `f` and `c` already keep.
+		m.toggleTurnView()
 	case "c":
 		// Clear the focused seat's thread — the first control built to §9.17's
 		// rule, and a key rather than a room command for a reason recorded
@@ -857,13 +1001,25 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// is blocked. That precedence is asserted rather than assumed, because
 		// it is the one collision in this keymap where losing would mean a
 		// keystroke the user believes approved a tool call quietly copying text
-		// instead.
+		// instead. That precedence is unchanged by the by-turn page below: key()
+		// still routes a pending gate to gateKey first, in either projection.
+		if m.pageOpen() {
+			// On a page `y` and `Y` produce the same document, because the page
+			// IS that document (§9.15's `Y`, rendered). A per-seat `y` would need
+			// a per-seat focus, and a projection whose whole point is that the
+			// turn is the unit deliberately has none — so the narrower key takes
+			// the wider document rather than guessing which seat was meant.
+			return m, m.yank(m.st.YankTurnN(m.st.Page.Turn))
+		}
 		return m, m.yank(m.st.YankColumn(m.st.Focus))
 	case "Y":
 		// The whole turn, every seat, labelled. A separate key rather than a
 		// modifier on the first because they produce different documents, and
 		// shift is what this room already uses for the wider version of a
 		// motion (`G` against `g`).
+		if m.pageOpen() {
+			return m, m.yank(m.st.YankTurnN(m.st.Page.Turn))
+		}
 		return m, m.yank(m.st.YankTurn())
 	case "k":
 		m.scrollBy(-1)
@@ -872,8 +1028,18 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case " ":
 		m.scrollBy(m.pageSize())
 	case "home", "g":
+		// The two ends, in whichever unit the body is currently in: the first
+		// line of a column's transcript, or the first turn still in memory.
+		if m.pageOpen() {
+			m.gotoPage(-1)
+			return m, nil
+		}
 		m.scrollTo(0)
 	case "end", "G":
+		if m.pageOpen() {
+			m.gotoPage(1)
+			return m, nil
+		}
 		m.followFocused()
 	case "[":
 		// The transcript's unit is the turn and the scroll keys' unit is the
@@ -881,8 +1047,20 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// (§9.20). View mode only: in compose these are the characters `[` and
 		// `]`, and composeKey's own rule — a key that carries text IS text —
 		// keeps them there without a second list to maintain.
+		//
+		// In the by-turn projection the same keys move the same unit — the page
+		// itself — so there is one motion to learn rather than a second binding
+		// for the same idea one view over (§9.22).
+		if m.pageOpen() {
+			m.hopPage(-1)
+			return m, nil
+		}
 		m.hopTurn(-1)
 	case "]":
+		if m.pageOpen() {
+			m.hopPage(1)
+			return m, nil
+		}
 		m.hopTurn(1)
 	}
 	return m, nil
@@ -945,6 +1123,14 @@ func (m *Model) toggleQuote() {
 // Scrolling up disarms it: yanking someone back to the bottom mid-read is the
 // most irritating thing a streaming pane can do, and it hides content.
 func (m *Model) scrollBy(d int) {
+	if m.pageOpen() {
+		// The line-wise keys move whatever the body is showing. Routed here
+		// rather than at every call site so ↑ ↓, pgup/pgdn, j, k and space reach
+		// the page through the one function that already knows what scrolling
+		// means in this room (§9.22).
+		m.pageScrollBy(d)
+		return
+	}
 	c := m.focused()
 	if c == nil {
 		return
@@ -1048,6 +1234,15 @@ func (m *Model) focused() *Column {
 // would leave the marker nowhere on screen and the scroll keys addressing a
 // column nobody can see.
 func (m *Model) focusBy(d int) {
+	if m.pageOpen() {
+		// Focus is a property of the GRID. One page has no columns to move
+		// between, so tab, shift+tab and the arrow aliases do nothing here — and
+		// the mode line drops the hint to match, because a footer that promises a
+		// key which does nothing is §7.8's surprise pointing the other way
+		// (§9.22). Silently moving focus instead would change what the grid shows
+		// the next time `t` is pressed, from a key the room said was inert.
+		return
+	}
 	vis := m.st.VisibleColumns()
 	if len(vis) == 0 {
 		return

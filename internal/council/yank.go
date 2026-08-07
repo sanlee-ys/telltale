@@ -66,9 +66,20 @@ func (s State) YankColumn(idx int) Yank {
 	}
 }
 
-// YankTurn copies the whole current turn: every seat that took part, labelled,
-// with the brief that produced it at the top.
+// YankTurn copies the whole CURRENT turn. See YankTurnN.
+func (s State) YankTurn() Yank { return s.YankTurnN(s.Turn) }
+
+// YankTurnN copies one turn: every seat that took part, labelled, with the brief
+// that produced it at the top.
 //
+// Any turn rather than only the newest, since the by-turn page can be open on an
+// older one and `y` there takes the page (§9.22). The participants come from
+// turnEntries, which is the SAME call the page renders from — that is the whole
+// reason the page could be built: this document already decided who is in a
+// turn, in what order, and with the brief at the top, and the only thing that
+// could read it was a clipboard.
+//
+
 // The brief is included and it is not padding. A file of four answers to a
 // question it does not contain is unreadable a week later, and the brief is the
 // user's own words — already echoed on screen under the composer's own mark, and
@@ -82,16 +93,16 @@ func (s State) YankColumn(idx int) Yank {
 // (§9.9) rather than a filter: a seat that sat out turn 11 still holds turn 9's
 // reply, and pasting it under a turn-11 heading would be the room inventing a
 // conversation into a document, where it would outlive every chance to notice.
-func (s State) YankTurn() Yank {
-	var b strings.Builder
-	brief, seats := "", 0
+func (s State) YankTurnN(n int) Yank {
+	entries := s.turnEntries(n)
+	if len(entries) == 0 {
+		return Yank{Notice: "nothing to copy — no seat has taken this turn yet"}
+	}
 
-	for _, idx := range s.VisibleColumns() {
-		c := s.Columns[idx]
-		if c.TurnN != s.Turn || s.Turn == 0 {
-			continue
-		}
-		text := strings.TrimSpace(c.Body)
+	var b strings.Builder
+	brief := ""
+	for i, e := range entries {
+		text := strings.TrimSpace(e.Body)
 		if text == "" {
 			// A seat that was asked and said nothing is a fact, not a gap —
 			// the same reason the transcript prints "(no reply)" rather than
@@ -99,28 +110,24 @@ func (s State) YankTurn() Yank {
 			text = "(no reply)"
 		}
 		if brief == "" {
-			brief = strings.TrimSpace(c.Prompt)
+			brief = strings.TrimSpace(e.Prompt)
 		}
-		if seats > 0 {
+		if i > 0 {
 			b.WriteString("\n\n")
 		}
-		b.WriteString("## " + c.Label + "\n\n" + text)
-		seats++
-	}
-	if seats == 0 {
-		return Yank{Notice: "nothing to copy — no seat has taken this turn yet"}
+		b.WriteString("## " + e.Label + "\n\n" + text)
 	}
 
-	head := "# turn " + itoa(s.Turn)
+	head := "# turn " + itoa(n)
 	if brief != "" {
 		head += "\n\n> " + strings.ReplaceAll(brief, "\n", "\n> ")
 	}
 	noun := " seats"
-	if seats == 1 {
+	if len(entries) == 1 {
 		noun = " seat"
 	}
 	return Yank{
 		Text:   head + "\n\n" + b.String() + "\n",
-		Notice: "copied turn " + itoa(s.Turn) + " — " + itoa(seats) + noun,
+		Notice: "copied turn " + itoa(n) + " — " + itoa(len(entries)) + noun,
 	}
 }
