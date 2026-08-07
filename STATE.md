@@ -25,7 +25,11 @@ binding copies and the argument; this file does not restate either.
 
 ## In flight
 
-Nothing owned. Phases 0–2 landed. **Next:** council UI ceiling Phases 3–5 — route-weighted geometry (Phase 5 is gated on 3–4).
+| Work | Owner | Status | Branch / PR |
+|---|---|---|---|
+| Council UI ceiling Phase 3 — idle header rhythm, notice/composer weight | Cursor | Implementing | `cursor/council-phase3-rhythm` |
+
+Phases 0–2 landed (#88–#90). Phase 5 (route-weighted geometry) stays gated.
 
 ## Closed without code (do not re-open)
 

@@ -1,6 +1,6 @@
  council READ  │  ~/code/telltale                                                    turn 3  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ─────────────  ○ idle  │    Codex  ───────────────────  ○ idle  │    Antigravity  ─────────────  ○ idle 
+ ▸ Claude Code                 ○ idle  │    Codex                       ○ idle  │    Antigravity                 ○ idle 
    ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
                                        │                                        │                                       
  this seat's thread came back. the     │  this seat's thread came back. the     │  no thread came back for this seat.   

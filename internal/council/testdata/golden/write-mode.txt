@@ -1,6 +1,6 @@
  council ⚠ WRITE  │  ~/code/telltale                                            no turn yet  │  3/3 seated  │  no brief 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ─────────────  ○ idle  │    Codex  ───────────────────  ○ idle  │    Antigravity  ─────────────  ○ idle 
+ ▸ Claude Code                 ○ idle  │    Codex                       ○ idle  │    Antigravity                 ○ idle 
    WRITES  tokens                      │    WRITES  final only                  │    WRITES  final only                 
                                        │                                        │                                       
  no turn dispatched yet.               │  no turn dispatched yet.               │  no turn dispatched yet.              
