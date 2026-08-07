@@ -3901,8 +3901,37 @@ with a leading `~` "rather than passing it off as a vendor figure." ADR-005 sett
 for the fleet — status is advisory, never a gate, and nothing irreversible branches on it. A
 dropped thread is irreversible.
 
+#### What `c` does, and the two things it gets right by construction
+
+The first control built to this rule. `c` in view mode arms a confirmation for the focused seat;
+`y` drops that seat's thread, `n` keeps it, and **any other key cancels**. The flow gate falls
+through to `viewKey` and this one does not, because they ask different questions: that one blocks
+a chain already running, so reading the columns is part of deciding, while this one interrupts
+nothing and the safe reading of a key nobody meant to press is to put the thread back out of
+reach. It refuses while a turn is in flight — `/cd`'s rule, for `/cd`'s reason — and a seat with
+nothing to clear is told so rather than handed a card whose `y` does nothing.
+
+**The ordering is load-bearing and it fails silently.** `seatProcess` re-arms `resumeIDs` from
+`m.sessions` whenever it replaces a live process; that is what carries a thread across a `/cd`.
+So the deletes come *before* the kill. Reversed, the id is handed straight back, the next brief
+resumes the conversation the user just ended, and every word on screen still says cleared —
+which is why it is a named test (`TestClearSeatKillsThePersistentProcessAndDoesNotRearmTheThread`)
+rather than a comment.
+
+**The drop is saved immediately, not at the next dispatch.** The room file is what a reattach
+reads, so a clear held only in memory would be undone by quitting: the user ends a thread and
+finds it waiting for them, which is the failure the control was built to remove.
+
+**`Cleared` is its own field, not `!Restored`.** "This seat never had a thread" and "you ended
+this seat's thread" reach the same next brief, and collapsing them is zero-vs-absent (§4a.1)
+applied to a conversation. The marker is a labelled rule in the transcript's own grammar, drawn
+last because that is when it happened — and **the turns above it stay**. What was cleared is the
+thread the next brief would have continued, not the record of what was said; blanking the
+reading surface to report a vendor-side change would be the room destroying the thing it exists
+to show. It retires in `startTurn`: once the brief is sent the seat has a thread again, and a
+marker outliving that would describe a break the room has already healed.
+
 #### Not decided here
 
-The keybinding itself, what a cleared seat renders while it holds no thread, and whether the
-other five violating controls are worth their own surfaces or should be judged one at a time
-against this rule. This section is the rule and the inventory; each control is its own change.
+Whether the other four violating controls earn their own surfaces or should be judged one at a
+time against this rule. Each is its own change.

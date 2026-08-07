@@ -389,6 +389,22 @@ type Column struct {
 	// conversation it is not in.
 	Restored bool
 
+	// Cleared reports that this seat's thread was dropped from inside the room
+	// (design.md §9.17) and its next brief opens a new session.
+	//
+	// A field of its own rather than reusing !Restored, because "this seat never
+	// had a thread" and "this seat had one and you ended it" are different facts
+	// about the same empty slot — the zero-vs-absent rule (§4a.1) applied to a
+	// conversation instead of a gauge. The transcript above it is NOT erased: the
+	// turns happened, and a room that blanked them would be destroying the
+	// reading surface to report a vendor-side change. What is gone is the thread
+	// the next brief would have continued, and that is what the marker says.
+	//
+	// Cleared by the next dispatch, in resetForTurn: once the new session exists
+	// the statement has stopped being true, and a marker that outlived it would
+	// be claiming a break in a conversation that has since resumed.
+	Cleared bool
+
 	// CostSession reports that the figure above is the PROCESS's running total
 	// rather than this turn's spend.
 	//
@@ -449,6 +465,10 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	c.Note = ""
 	c.NoteDetail = ""
 	c.NoteCalm = false
+	// The marker retires the moment the brief it was warning about is sent: from
+	// here on this seat HAS a thread again, and a "thread cleared" line left
+	// standing would describe a break the room has already healed.
+	c.Cleared = false
 	c.CostUSD = nil
 	c.CostSession = false
 	c.Started = time.Time{}

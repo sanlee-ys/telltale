@@ -878,6 +878,26 @@ func columnText(st State, c Column, w int, sty Styles, g Glyphs) []string {
 		out = append(out, "")
 		out = append(out, noteCard(c.Note, c.NoteDetail, c.NoteCalm, w, sty, g)...)
 	}
+	if c.Cleared {
+		// LAST, below everything, because that is when it happened: the turns
+		// above were said, and then the thread behind them was ended. Drawn as a
+		// labelled rule rather than as a card for the same reason turnHead is —
+		// it marks a boundary in the transcript, and the transcript's existing
+		// grammar for "a boundary you scroll past" is a rule with a word on it.
+		//
+		// The turns are deliberately still there. What was cleared is the thread
+		// the next brief would have continued, not the record of what was said,
+		// and erasing the reading surface to report a vendor-side change would be
+		// the room destroying the thing it exists to show.
+		out = append(out, "")
+		out = append(out, sty.Muted.Render(padRight(labelRule("thread cleared", "", w, g), w, g)))
+		// The same sentence the no-thread reattach card uses, on purpose: one
+		// vocabulary for one fact. A seat that never had a thread and a seat
+		// whose thread was just ended arrive at the same next brief, and the two
+		// are told apart by the marker above rather than by two descriptions of
+		// one outcome.
+		out = append(out, wrap("its next brief opens a new session, with the brief re-applied.", w)...)
+	}
 	return out
 }
 
@@ -913,7 +933,16 @@ func turnHead(n int, meta, prompt string, quoted bool, w int, sty Styles, g Glyp
 // applied to the turn in flight and to a turn in the transcript, and a reader
 // should not have to notice they are different lines.
 func turnRule(n int, meta string, w int, g Glyphs) string {
-	label := "turn " + strconv.Itoa(n)
+	return labelRule("turn "+strconv.Itoa(n), meta, w, g)
+}
+
+// labelRule is turnRule's construction with the label supplied.
+//
+// Extracted when the cleared marker needed the same line with a different word.
+// One implementation rather than two, because the thing being kept in step is
+// the GRAMMAR — a label, a rule, optional numbers, two cells of air each side —
+// and a second copy would drift from it one narrow-terminal fix at a time.
+func labelRule(label, meta string, w int, g Glyphs) string {
 	fill := func(m string) int {
 		if m == "" {
 			return w - lipgloss.Width(label) - 2
@@ -1886,7 +1915,14 @@ func helpKeys(sty Styles) []string {
 		"               one. Unaddressed goes to every seat. Leading only: \"ask @claude\" is prose",
 		// One line, like pgup/pgdn below and for the same reason: the panel has
 		// to fit a 24-row terminal with q and ? still on screen.
-		"  /cd <dir>    move the room to another repo — seats follow on their next turn",
+		//
+		// `c` shares the row rather than taking a new one, and the merge is the
+		// honest shape rather than only a saving: these are the two controls that
+		// change the ROOM from inside it instead of addressing the vendors, which
+		// is the distinction design.md §9.17 turned into a rule. The budget is
+		// hard (17 rows, above) and a row added here pushes the `?` line — the
+		// only documented way out of this panel — off a 24-row terminal.
+		"  /cd <dir>    move the room to another repo; c clears the focused seat's thread (y confirms)",
 		// One row for three keys, and the merge is the honest shape rather than
 		// a saving. The panel's budget is hard (17 rows, above) and yank had to
 		// land inside it — a copy key documented below the fold is a copy key

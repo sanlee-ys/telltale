@@ -412,6 +412,15 @@ from a file is not one anyone typed. And one
 room shared by every terminal means two councils open at once share one state file —
 last save wins.
 
+**`--fresh` is room-wide; `c` is one seat.** A seat whose context has filled up does not
+need the other three restarted with it, so `c` in view mode clears the **focused** seat's
+thread — `y` confirms, `n` keeps it, any other key cancels — and its next brief opens a new
+session with the brief re-applied. The turns already on screen stay: what is cleared is the
+thread the next brief would have continued, not the record of what was said. It refuses
+while a turn is in flight, for the same reason `/cd` does. The rule it is the first control
+built to — anything that changes while the room is open is reachable from inside it, and a
+flag is for what is true at launch — is [docs/design.md §9.17](docs/design.md).
+
 The rest of the account — why execution is argv and never a shell, the silent invocation
 trap each vendor hid, and what is still unverified — is in
 [docs/design.md §9](docs/design.md).

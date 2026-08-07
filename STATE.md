@@ -25,12 +25,13 @@ binding copies and the argument; this file does not restate either.
 
 ## In flight
 
-The mid-session control invariant is on this branch (ships with this PR): a rule
-plus an inventory, no behaviour change. [docs/design.md §9.17](docs/design.md)
-is the binding copy — state that changes while the room is open is reachable
-from inside it, flags are for what is true at launch. Six controls were swept;
-five violate it. Surface for the first one is **ruled** (a key on the focused
-seat, not a slash command); the keybinding itself is not built.
+The mid-session control invariant, and the first control built to it, are on
+this branch (ships with this PR). [docs/design.md §9.17](docs/design.md) is the
+binding copy — state that changes while the room is open is reachable from
+inside it, flags are for what is true at launch. Six controls were swept; five
+violated it. **`c` clears the focused seat's thread** (`y` confirms), which
+retires the first: `--fresh` is still there and still room-wide, but clearing
+one seat no longer costs the other three theirs.
 
 ## Closed without code (do not re-open)
 
@@ -67,12 +68,13 @@ seat, not a slash command); the keybinding itself is not built.
 
 ## Known gaps, not yet owned
 
-- **Five controls violate the §9.17 mid-session rule**, each its own change:
-  `--fresh` (the one that raised it — clearing one seat's thread costs the other
-  three), `--trace`, `--read`, `--auto`, `--vendor`. The inventory and the
+- **Four controls still violate the §9.17 mid-session rule**, each its own
+  change: `--trace`, `--read`, `--auto`, `--vendor`. The inventory and the
   per-control reasoning are in [docs/design.md §9.17](docs/design.md); it is not
   restated here. `--brief` was examined and deliberately **not** filed — it is
   first-turn context by definition, so re-briefing is a separate question.
+  `--fresh` came off this list when `c` landed; the flag itself stays, because
+  starting the whole room over is a real thing to want at launch.
 
 - **`docs/design.md` §3 does not name the canary set.** §7 now records how drift
   *renders*; §3 still does not say what each adapter actually watches. A canary
