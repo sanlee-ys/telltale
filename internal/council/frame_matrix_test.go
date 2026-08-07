@@ -81,6 +81,24 @@ func matrixRooms() map[string]func() State {
 			return st
 		},
 
+		// A turn narrowed to one seat, which is the ordinary room since the
+		// default route stopped being everyone. The other seats sit at
+		// stripColumn, where every "it fits" assumption in the renderer is
+		// fourteen cells from being wrong — see §9.18 and strips_test.go.
+		"narrow-route": func() State {
+			st := room()
+			st.Turn = 4
+			st.FrameOwners = []model.VendorID{model.VendorClaude}
+			st.Columns[0].Phase = PhaseStreaming
+			st.Columns[0].TurnN, st.Columns[0].Prompt = 4, unbreakable
+			st.Columns[0].Body = unbreakable + " " + strings.Repeat("word ", 40)
+			st.Columns[1].Phase = PhaseCancelled
+			st.Columns[1].Sandbox = SandboxClaim{Level: SandboxWrite}
+			st.Columns[2].Phase = PhaseDone
+			st.Columns[2].Body = unbreakable
+			return st
+		},
+
 		"gated-long": func() State {
 			st := room()
 			st.Gates = []PendingGate{{

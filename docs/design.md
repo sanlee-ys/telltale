@@ -3978,6 +3978,63 @@ were asserted only by a comment.
 Whether the other three violating controls — `--read`, `--auto`, `--vendor` — earn their own
 surfaces or should be judged one at a time against this rule. Each is its own change.
 
+### 9.18 a strip said four fifths of a name it could have said whole in two letters
+
+Since the default route stopped being everyone, the ordinary turn narrows the frame to one
+seat and leaves the rest at `stripColumn` — fourteen cells. Every layout rule in §9.11 was
+written for a column three times that, and at fourteen the room did the opposite of what
+§9.11 ruled in both halves of the chrome at once. `Antigravity` rendered `Anti…`. The badge
+row rendered `ro:tools  to` and `gated  fina`, and the overflow marker rendered `↑ 12 more
+abov`.
+
+The ruling those violate is §9.11's own: **a clipped seat name is still recognisable and a
+clipped state word is not**, so identity yields first. A clipped state word that is also the
+prefix of another word in the same vocabulary is worse than damage — it reads as a different
+claim. `fina` is not a broken `final only`; it is a thing this room does not say.
+
+So at strip width the room **sheds whole words** rather than cutting them, in a fixed order
+that is a pure function of the width — which is what lets the frame sweep pin the whole
+ladder instead of a golden per state:
+
+- **Identity collapses to two letters.** `CC ✓ done`, `CX ○ idle`, `AG ⠋ streaming`. The tags
+  are the HUD's own, character for character, because a reader who learned `CX` is Codex from
+  the HUD's grid must not meet a second abbreviation in the room. They are *copied*, not
+  imported: the seam between the two surfaces is the normalized session model and
+  `internal/theme`'s numbers and nothing else, and a test asserts the strings by literal so
+  the copy cannot drift in silence.
+- **The clock goes, then the focus mark, then — for `unavailable` alone — the tag itself.**
+  `8s` is the meta on that line and `turnRule` already ranks a label above the numbers that
+  belong to it; every finished turn still carries its elapsed on its own separator. The
+  arithmetic behind the rest: nine cells of `streaming` plus its mark leaves exactly three,
+  which is a two-letter tag and the space after it, and `unavailable` at eleven leaves room
+  for a mark or a tag but not both.
+- **The badge row keeps the posture word and drops the cost and the granularity.** §9.2 is
+  emphatic that a claim you cannot see is not a claim, so the safety word is the last thing on
+  that row to go; the cost is a number the transcript records on every turn separator, and the
+  granularity word exists to keep `waiting` from reading as a slow `streaming` — both of which
+  are now the only thing on the header one row above. A badge too long for a strip would drop
+  rather than clip, and stays readable at full length on the `?` postures page.
+- **The overflow marker sheds `more`, then `above` / `below`.** The count is never traded: how
+  much is hidden outranks which way to press, which outranks the filler between them.
+
+**The focus mark is the one deliberate loss, and §9.12 is why it is affordable.** Two cells of
+`▸ ` at fourteen is the difference between a tag and no tag for every nine-letter phase word.
+§9.12 had already found that the glyph was the *weakest* part of that signal — "one `▸` in a
+frame carrying four columns of prose" — and moved the load-bearing half onto weight and onto
+the overflow marker's own words, `↑↓ scroll` against `tab to focus`. Both cost no cells and
+both survive here. A strip is by construction the seat this turn was **not** addressed to, so
+spending a seventh of its width marking it, at the price of its identity, inverts the priority
+§9.11 set.
+
+**What was declined.** Keeping the two-cell indent on a strip so the focused and unfocused
+forms line up: it is chrome that exists to align a *name*, and at strip width there is no name
+— the header starts at column zero and the badges start under it, so the strip reads as one
+flush-left block rather than as a column with its margins still on. Shortening a phase word to
+fit (`cancel` for `cancelled`, `stream` for `streaming`): a different word is a different
+claim, and the vocabulary is shared with the help panel and the transcript. Giving the strip a
+narrower vocabulary of its own — a second alphabet is exactly what §9.11's phase marks were
+built to avoid.
+
 ### 9.20 the transcript is turn-wise and the only way through it was line-wise
 
 §9.9 gave every column a real conversation and §9.10 and §9.12 made it reachable and

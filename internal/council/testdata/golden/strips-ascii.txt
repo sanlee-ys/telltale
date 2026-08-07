@@ -1,0 +1,20 @@
+ council READ  |  ~/code/telltale                                                    turn 4  |  4/4 seated  |  no brief 
+------------------------------------------------------------------------------------------------------------------------
+ ] Claude Code  ---------------------------------  - streaming  |  CX + done       |  AG ! cancelled  |  CU . idle      
+   ro:tools  tokens                                             |  ro:requested    |  unsandboxed     |  gated          
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+ turn 4  -----------------------------------------------------  |                  |                  |                 
+ : where does the resume path break?                            |                  |                  |  no turn        
+                                                                |                  |                  |  dispatched     
+ Reading resume.go now.                                         |                  |                  |  yet.           
+------------------------------------------------------------------------------------------------------------------------
+ :                                                                                                                      
+ VIEW                                    ^v scroll  |  [ ] turn  |  f expand  |  tab focus  |  ctrl+c cancel  |  ? help 
