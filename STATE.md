@@ -83,14 +83,6 @@ Nothing claimed.
 - **CI actions are pinned to a deprecated runtime.** `actions/checkout@v4` and
   `actions/setup-go@v5` target Node 20, which now force-runs on Node 24.
   Cosmetic today, a broken gate eventually.
-- **The empty state can still draw past the terminal width.** `emptyLines` builds
-  each vendor row and hands it to `centerBlock`, which pads and never truncates,
-  so a long `v.Err` overflows — `empty-unreadable` at 60 columns renders 74. The
-  footer's own overflow on this path was fixed when drift reached the grid; this
-  one was found in the same review and deliberately left, because it is older
-  than that change and fixing it there would have hidden a regression inside an
-  unrelated repair. A frame that tears is the honest-gauge rule failing at the
-  layer below the numbers.
 
 Cross-platform and cross-machine status has its own file: [PARITY.md](PARITY.md).
 
