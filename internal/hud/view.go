@@ -705,6 +705,15 @@ func emptyLines(st State, sty Styles, g Glyphs) []string {
 		}
 	}
 
+	// centerBlock pads by at least one cell and never truncates, so every
+	// column a vendor line spends past st.Width-1 tears the frame's right
+	// edge — the empty-unreadable scenario rendered 74 columns in a 60-column
+	// terminal before this budget existed. A frame that tears is the
+	// honest-gauge rule failing at the layer below the numbers, so the line
+	// gives way before the frame does. driftScope below already assumed this
+	// exact minimum pad; `avail` makes the assumption a budget.
+	avail := st.Width - 1
+
 	var block []string
 	for _, v := range st.Snap.Vendors {
 		word := padRight(v.Status.String(), statusW, g)
@@ -716,9 +725,13 @@ func emptyLines(st State, sty Styles, g Glyphs) []string {
 			// "watching".
 			styled = sty.SevWarn.Render(word)
 		}
+		// The root is truncated as a backstop only — every shipped adapter's
+		// root is a short known path, but the budget has to hold for whatever
+		// Discover reports, not for the roots we happen to have today.
+		root := truncate(RedactHome(v.Root, st.Home), avail-(rootW+3+statusW+3), g.Ellipsis)
 		line := sty.Identity.Render(padRight(string(v.Vendor), rootW, g)) +
 			"   " + styled +
-			"   " + sty.Muted.Render(RedactHome(v.Root, st.Home))
+			"   " + sty.Muted.Render(root)
 		// The slot after the root carries the status's own evidence: the
 		// operating system's message for a store it refused, the scope of the
 		// report for a store that no longer matches. Never both — Discover
@@ -726,7 +739,14 @@ func emptyLines(st State, sty Styles, g Glyphs) []string {
 		// not.
 		switch {
 		case v.Err != "":
-			line += sty.SevWarn.Render("  " + v.Err)
+			// Truncated, never dropped and never overflowing — the footer's
+			// rule for its last surviving notice, for the same reason: an
+			// ellipsis on a warning still tells the reader a warning is there,
+			// while a dropped one leaves "unreadable" standing with no
+			// evidence, and an untruncated one tears the frame.
+			if room := avail - lipgloss.Width(line) - 2; room > 0 {
+				line += sty.SevWarn.Render("  " + truncate(v.Err, room, g.Ellipsis))
+			}
 		case v.Status == StatusDrifted:
 			// The scope is the status's RESOLUTION, not the status, so it is
 			// the part that gives way when the line runs out of room — the same
@@ -738,7 +758,7 @@ func emptyLines(st State, sty Styles, g Glyphs) []string {
 			//
 			// It is shed whole, never truncated: half a count is a worse claim
 			// than no count.
-			if scope := driftScope(v); 1+lipgloss.Width(line)+2+lipgloss.Width(scope) <= st.Width {
+			if scope := driftScope(v); lipgloss.Width(line)+2+lipgloss.Width(scope) <= avail {
 				line += sty.SevWarn.Render("  " + scope)
 			}
 		}

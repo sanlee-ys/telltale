@@ -1522,10 +1522,12 @@ func TestTheLastSurvivingNoticeIsTruncatedRatherThanDropped(t *testing.T) {
 // driftScope renders in the empty state and nowhere else, and neither existing
 // width test ever renders that state.
 //
-// The assertion is DIFFERENTIAL. centerBlock pads and never truncates, so a
-// long enough vendor root overflows the empty state on its own — that predates
-// this change (v.Err overflows it worse) and is not fixed here. What must hold
-// is that the scope never turns a frame that fit into one that does not.
+// The assertion is DIFFERENTIAL. It was written while the empty state could
+// still overflow on its own (centerBlock pads and never truncates, and the
+// vendor line carried no budget), so it asserts only that the scope never
+// turns a frame that fit into one that does not. The absolute claim — no
+// vendor line exceeds the frame at all — is
+// TestAVendorErrorIsTruncatedRatherThanTearingTheFrame's.
 func TestTheDriftScopeNeverOverflowsAFrameThatFitWithoutIt(t *testing.T) {
 	for _, w := range []int{MinWidth, 61, 72, 80, 99, 120} {
 		st := driftState(w, 12, model.VendorCodex)
@@ -1544,6 +1546,52 @@ func TestTheDriftScopeNeverOverflowsAFrameThatFitWithoutIt(t *testing.T) {
 	st.Query = "no-such-session"
 	if got := Render(st, PlainStyles(), UnicodeGlyphs()); !strings.Contains(got, "1 drifted of 1 read") {
 		t.Errorf("the vendor line states no scope at 120 columns\n%s", got)
+	}
+}
+
+// The empty state's vendor table used to be the one surface with no width
+// budget: centerBlock pads and never truncates, so a refused store's OS
+// message drew straight past the frame — the empty-unreadable scenario
+// rendered 74 columns in a 60-column terminal. The error is the status's
+// evidence, so it is truncated rather than dropped (the footer's rule for its
+// last surviving notice), and the frame never tears.
+func TestAVendorErrorIsTruncatedRatherThanTearingTheFrame(t *testing.T) {
+	unreadable := func(w int, err string) State {
+		st := NewState()
+		st.Now = pinned
+		st.Width, st.Height = w, 12
+		st.Snap = Snapshot{
+			At: pinned,
+			Vendors: []VendorView{
+				{Vendor: model.VendorClaude, Root: `%USERPROFILE%\.claude\projects`,
+					Status: StatusUnreadable, Err: err},
+				{Vendor: model.VendorCodex, Root: `%USERPROFILE%\.codex`,
+					Status: StatusNotDetected},
+			},
+		}
+		return st
+	}
+
+	long := strings.Repeat("The volume for a file has been externally altered. ", 3)
+	for _, w := range []int{MinWidth, 61, 72, 80, 99, 120} {
+		frame := Render(unreadable(w, long), PlainStyles(), UnicodeGlyphs())
+		if widest := widestLine(frame); widest > w {
+			t.Errorf("width %d: the empty state draws %d columns", w, widest)
+		}
+		// Truncated, not dropped: the surviving fragment still ends in the
+		// ellipsis that says there is more, on the line that says unreadable.
+		for _, l := range strings.Split(frame, "\n") {
+			if strings.Contains(l, "unreadable") && !strings.Contains(l, "…") {
+				t.Errorf("width %d: the error was dropped rather than truncated: %q", w, l)
+			}
+		}
+	}
+
+	// The short real-world message is untouched wherever it fits: the budget
+	// spends nothing on a line that was never going to tear.
+	frame := Render(unreadable(120, "Access is denied."), PlainStyles(), UnicodeGlyphs())
+	if !strings.Contains(frame, "Access is denied.") {
+		t.Errorf("a fitting error was altered:\n%s", frame)
 	}
 }
 
