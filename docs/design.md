@@ -3977,3 +3977,104 @@ were asserted only by a comment.
 
 Whether the other three violating controls — `--read`, `--auto`, `--vendor` — earn their own
 surfaces or should be judged one at a time against this rule. Each is its own change.
+
+### 9.20 the transcript is turn-wise and the only way through it was line-wise
+
+§9.9 gave every column a real conversation and §9.10 and §9.12 made it reachable and
+attributed. What none of the three changed is the *unit*. The scrollback moves a line at
+a time, a page at a time, or all the way to either end — and the thing being scrolled
+through is a list of turns, each one a labelled rule, a brief, and however much prose a
+vendor felt like producing. So the room could tell you, honestly and precisely:
+
+> `↑ 509 more above`
+
+and nobody has ever counted lines. The number is measured, it is correct, and the only
+question a reader actually has — *how far back is what I asked?* — is one it cannot
+answer. `g` goes to the beginning and `G` goes to the end, which are the two positions
+in a transcript that need no help finding.
+
+**`[` and `]` walk the focused column one turn at a time.** They land the turn's
+separator on the viewport's top row, which is the position that makes the brief and the
+answer to it readable in one screen, and they take their offsets from `columnLines` —
+the *same* pass that produced the lines — rather than recomputing where a turn starts
+from `History`. A second derivation of "how tall is this turn at this width" would agree
+with the first until the day a card grows a row, and would then disagree silently, since
+both answers would still be plausible line numbers.
+
+**Backwards is the audio player's rule, and it is the one people already have in their
+hands.** `[` from the middle of a turn lands on *that* turn's head; only a second press
+reaches the one before it. That falls out of the definition rather than being a special
+case — "the last head strictly above where we are" produces both — and it means the key
+answers "start this again" and "go back one" with the same press, in the order a reader
+wants them.
+
+**The two ends are deliberately not symmetric.** `[` at the first turn does nothing:
+there is no turn 0, and a wrap would make a key pressed one time too many jump an entire
+conversation. `]` past the last turn restores the tail and `Follow`, because what comes
+after the last turn is the live output — that is `G`'s answer to the same question, not a
+second one. Every landing goes through `applyScroll`, so `Follow` drops exactly as it does
+for `↑`; a column pinned to the tail while displaying turn 3 would be lying about which of
+the two it is doing.
+
+**In compose they are the characters `[` and `]`.** No rule was added for that: §9.10
+replaced the composer's list of exceptions with a test — a key that carries text *is*
+text — and brackets carry text. This is the same contract that keeps `q` the letter q
+there, and it is asserted rather than assumed, because a bracket that scrolled instead of
+typing would corrupt a draft in a way the user would only find after pressing enter.
+
+#### The marker states the coordinate, and §9.12's rules decide what it costs
+
+The overflow marker is where the count lives, so it is where the coordinate belongs:
+`↑ 25 more above  │  turn 3  │  ↑↓ scroll  │  f expand`. Three constraints from §9.12 and
+§9.10 bound the whole design, and each one closed a question:
+
+- **The count is never traded away**, in any form, at any width. It was §9.10's rule about
+  the key hint and it is unchanged: how much is hidden outranks both how to reach it and
+  what it is.
+- **The coordinate sheds FIRST** — below even `f expand`. It says *where you are* while the
+  hints say *what you can do about it*, and a marker that dropped a key to keep a coordinate
+  would be §9.10's trade run backwards. Concretely it rides only on the widest hint form, so
+  at the three-up tier's 37 cells the keys win and the coordinate is simply absent; `f`, the
+  reading tier, is where it appears. That is the graceful degradation, not a gap in it.
+- **A marker states the key for THIS column and never a neighbour's** — §9.12's rule, applied
+  to a fact rather than a key. An unfocused column keeps `tab to focus`, the one thing a
+  reader looking at it can act on, and gets no coordinate at all: putting the question in
+  front of the answer is how §9.12's bug worked in the first place.
+
+**Which turn it names is the part that could have lied.** The choice was between the topmost
+hidden separator and *the turn the line immediately outside the fold belongs to*, and only
+the second is honest when a turn is half on screen: a long reply running off the top is still
+the turn you are reading, while the topmost hidden separator can be several screens further
+back and answers a question nobody asked. So `turnAt` takes "the last turn that started at or
+before this line", the two markers on one column name two *different* turns, and a column with
+no turns at all — an unavailable card, a seat never asked anything — prints nothing rather
+than `turn 0`, because a coordinate the room does not have is omitted and never invented
+(§4a.1).
+
+#### The footer learned to shed a cell instead of losing its way out
+
+`[ ] turn` joins the view mode line immediately after the arrows, offered unconditionally for
+§9.12's reason — the promise is about what the mode can do, not about how many turns a vendor
+happens to have taken, and a footer cell that appeared at the first dispatch is chrome moving
+while output arrives.
+
+That exposed something the line had been getting away with. At the tabbed tier the six hints
+fit **exactly**, and `statusLine`'s only answer to running out of width is to truncate — from
+the right, which is where `? help` and `q quit` live. A motion key bought with the panel's
+documented way out and the room's only quit key is precisely the trade §9.11's footer pass
+existed to refuse. So a hint may now be marked *sheddable*: when the line does not fit, the
+sheddable cells are dropped whole, newest-first, before the ellipsis is allowed to choose.
+Exactly one hint carries the mark, and it is the one this section added — this is a rule about
+which cell goes, not a licence to hide keys.
+
+The help panel took it inside the hard 17-row budget by merging onto the row that already
+holds the other jumps, the way §9.15 merged `y`/`Y` onto the gate's row: `g / G first turn or
+newest; [ ] step one turn at a time`. "jump to the" paid for it — the line above already says
+`scroll`, so the verb was never carrying anything.
+
+**What was declined.** A turn coordinate on unfocused columns, which the width would have paid
+for out of `tab to focus` (above). Numbering the hop in the notice line — "turn 3 of 7" is a
+progress bar for a conversation, and the marker already says how much is left in the unit the
+scroll keys use. And a `[`/`]` that moved *focus* between columns when a column has one turn:
+two motions on one key, resolved by content, is the kind of binding that is only ever right for
+the person who wrote it.

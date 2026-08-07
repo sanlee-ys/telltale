@@ -21,4 +21,4 @@
  no turn dispatched yet.                                                                                                
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
- VIEW                                                                     ↑↓ scroll  │  i compose  │  ? help  │  q quit 
+ VIEW                                                        ↑↓ scroll  │  [ ] turn  │  i compose  │  ? help  │  q quit 

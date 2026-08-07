@@ -1,0 +1,24 @@
+ council READ  │  ~/code/telltale                                                    turn 4  │  3/3 seated  │  no brief 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ▸ Claude Code    Codex    Antigravity                                                                                  
+   Claude Code  ──────────────────────────────────────────────────────────────────────────────────────────  ⠋ streaming 
+   ro:tools  tokens                                                                                                     
+                                                                                                                        
+ ↑ 25 more above  │  turn 3  │  ↑↓ scroll  │  f expand                                                                  
+ line 2 of the reply                                                                                                    
+ line 3 of the reply                                                                                                    
+ line 4 of the reply                                                                                                    
+ line 5 of the reply                                                                                                    
+ line 6 of the reply                                                                                                    
+ line 7 of the reply                                                                                                    
+ line 8 of the reply                                                                                                    
+ turn 4  ────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+ › brief 4                                                                                                              
+                                                                                                                        
+ line 1 of the reply                                                                                                    
+ line 2 of the reply                                                                                                    
+ line 3 of the reply                                                                                                    
+ ↓ 26 more below  │  turn 4                                                                                             
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ›                                                                                                                      
+ VIEW                                    ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 
