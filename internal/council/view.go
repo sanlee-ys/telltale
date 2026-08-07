@@ -39,6 +39,13 @@ func Render(st State, sty Styles, g Glyphs) string {
 
 	if st.Help != HelpClosed {
 		b.WriteString(helpBody(st, lay, sty, g))
+	} else if st.Page.Open {
+		// The by-turn page outranks the tier branch rather than living inside
+		// one, because it is a PROJECTION of the transcript and not a width
+		// breakpoint (§9.22). What it does share with the tabs tier is the
+		// geometry — one reading area at the full frame — which layoutFor
+		// resolves for it rather than a second layout path inventing one.
+		b.WriteString(pageBody(st, lay, sty, g))
 	} else if lay.Tier == TierTabs {
 		if lay.Tabs {
 			b.WriteString(tabBar(st, lay, sty, g))
@@ -69,14 +76,28 @@ func Render(st State, sty Styles, g Glyphs) string {
 // many rows there are.
 func layoutFor(st State, g Glyphs) Layout {
 	vis := st.VisibleColumns()
+	cols, primary := len(vis), framePrimary(st, vis)
+	if st.Page.Open {
+		// A turn page is ONE reading area at the full frame, so it plans as one
+		// column — which is the tabs tier's own arithmetic, already written and
+		// already swept by the frame matrix. Reusing it is what keeps the height
+		// budget, the 60-column floor, the composer's growth and the
+		// collapsed-seat notice identical in both projections; a second layout
+		// path for a surface that IS a column at full width would be a second
+		// place for the frame to tear (§9.22).
+		//
+		// The frame owners go with it. FrameOwners apportions width between
+		// seats, and there are no seats side by side here for it to apportion.
+		cols, primary = 1, nil
+	}
 	return resolveLayoutIn(layoutInput{
 		Width:    st.Width,
 		Height:   st.Height,
-		Cols:     len(vis),
+		Cols:     cols,
 		Expanded: st.Expanded,
 		Composer: composerRows(st, g),
 		Notice:   collapsedNotice(st, g) != "",
-		Primary:  framePrimary(st, vis),
+		Primary:  primary,
 	})
 }
 
@@ -660,6 +681,18 @@ func focusHint(st State, g Glyphs) []string {
 // what arrived. A column the user has scrolled uses its stored offset, clamped
 // here so a resize or a shorter reply can never strand the view past the end.
 func scrollWindow(c Column, body []string, avail int) (win []string, above, below int) {
+	return scrollWindowAt(c.Scroll, c.Follow, body, avail)
+}
+
+// scrollWindowAt is scrollWindow with the two fields named rather than carried
+// on a Column.
+//
+// Split out when the by-turn page needed the same window over a list that is not
+// a column's (§9.22). One implementation, because "which slice is visible" is
+// the contract the overflow markers, MaxScroll and every hop key are clamped
+// against — and a second copy would agree with the first until the day one of
+// them learned to clamp differently.
+func scrollWindowAt(scroll int, follow bool, body []string, avail int) (win []string, above, below int) {
 	if avail <= 0 {
 		return nil, 0, 0
 	}
@@ -668,8 +701,8 @@ func scrollWindow(c Column, body []string, avail int) (win []string, above, belo
 	}
 
 	max := len(body) - avail
-	off := c.Scroll
-	if c.Follow {
+	off := scroll
+	if follow {
 		off = max
 	}
 	if off < 0 {
@@ -1066,11 +1099,17 @@ func phaseMark(p Phase, st State, g Glyphs) string {
 
 // elapsed is how long the current turn has been running, from State.Now rather
 // than the clock, so Render stays pure.
-func elapsed(st State, c Column) string {
-	if c.Started.IsZero() || st.Now.IsZero() {
+func elapsed(st State, c Column) string { return elapsedSince(st, c.Started) }
+
+// elapsedSince is elapsed with the start time named rather than carried on a
+// Column, for the by-turn page's own seat rules (§9.22). Same purity contract:
+// the answer comes from State.Now, which a tick stamps, and never from a clock
+// inside Render.
+func elapsedSince(st State, started time.Time) string {
+	if started.IsZero() || st.Now.IsZero() {
 		return ""
 	}
-	d := st.Now.Sub(c.Started)
+	d := st.Now.Sub(started)
 	if d < 0 {
 		return ""
 	}
@@ -1182,50 +1221,16 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 	}
 
 	switch {
-	case c.Phase == PhaseStreaming && c.Body == "" && len(c.Acts) > 0:
-		out = append(out, wrap("working…", w)...)
+	// The two IDLE cards first, because they are the only cases here that are
+	// about a column with no turn at all — and they are therefore the only ones
+	// the by-turn page never reaches, since a seat on a page took the turn by
+	// definition. Everything else is inFlightBody, shared (§9.22).
 	case c.Phase == PhaseIdle && c.Body == "" && st.Reattached.Active():
 		out = append(out, reattachCard(st, c, w, sty)...)
 	case c.Phase == PhaseIdle && c.Body == "":
 		out = append(out, wrap("no turn dispatched yet.", w)...)
-	// The three waiting lines below are one row each, on purpose, and what they
-	// used to be is the point.
-	//
-	// This card exists because PhaseWaiting must never be mistaken for streaming
-	// — a genuine honesty distinction (§9.2), and it is kept. What did not
-	// belong is the ARGUMENT for it, restated in full in the body of every
-	// waiting turn: "this vendor reports no incremental output, so nothing
-	// appears until the turn finishes" is a sentence about council's plumbing,
-	// written in council's vocabulary, in the space where a user came to read an
-	// answer. Two thirds of the room renders this card, so on a normal turn it
-	// was most of what was on screen.
-	//
-	// What carries the distinction now is the word already in the column header
-	// — `waiting` against `streaming`, always drawn, in both glyph sets, beside
-	// the granularity badge that says WHY. The body says only that the seat is
-	// working and what to expect, and the wiring moved to the help panel's
-	// posture page, where a reader who wants it can go and get it. That is the
-	// same trade §9.13 made for the sandbox badges: the claim stays on the
-	// column, the argument moves somewhere it can be read properly.
-	case c.Phase == PhaseWaiting && c.Body == "" && len(c.Acts) > 0:
-		// It has acted but not spoken. This one keeps its own sentence because
-		// it is a different claim from the two below — there IS something on
-		// screen, and pointing at it beats describing the seat.
-		out = append(out, wrap("working — the steps above are what it has done so far.", w)...)
-	case c.Phase == PhaseWaiting && c.Body == "" && c.Gran == GranUnknown:
-		// Deliberately NOT the line below. "The reply arrives whole" is a
-		// measurement two vendors earned; a column whose granularity was never
-		// established must not borrow it. This says only what is observed —
-		// nothing has arrived — and claims nothing about whether anything will
-		// before the end. The header carries the rest: this is the one seat that
-		// prints no granularity word at all.
-		out = append(out, wrap("working — nothing has arrived yet.", w)...)
-	case c.Phase == PhaseWaiting && c.Body == "":
-		// The honest version of an empty streaming column, in one line. This
-		// vendor is working; it just does not report anything until it is done.
-		out = append(out, wrap("working — the reply arrives whole.", w)...)
 	default:
-		out = append(out, wrap(c.Body, w)...)
+		out = append(out, inFlightBody(c.Phase, c.Gran, c.Body, len(c.Acts) > 0, w)...)
 	}
 
 	// Everything this seat has sat out SINCE its last turn, which is where the
@@ -1279,6 +1284,59 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		out = append(out, wrap("its next brief opens a new session, with the brief re-applied.", w)...)
 	}
 	return out, anchors
+}
+
+// inFlightBody is what a seat's reading area says for the turn it is on: the
+// reply as it lands, or the one line standing in for one that has not (§9.14).
+//
+// The three waiting lines are one row each, on purpose, and what they used to be
+// is the point. This card exists because PhaseWaiting must never be mistaken for
+// streaming — a genuine honesty distinction (§9.2), and it is kept. What did not
+// belong is the ARGUMENT for it, restated in full in the body of every waiting
+// turn: "this vendor reports no incremental output, so nothing appears until the
+// turn finishes" is a sentence about council's plumbing, written in council's
+// vocabulary, in the space where a user came to read an answer. Two thirds of
+// the room renders this card, so on a normal turn it was most of what was on
+// screen.
+//
+// What carries the distinction now is the word already in the column header —
+// `waiting` against `streaming`, always drawn, in both glyph sets, beside the
+// granularity badge that says WHY. The body says only that the seat is working
+// and what to expect, and the wiring moved to the help panel's posture page,
+// where a reader who wants it can go and get it. That is the same trade §9.13
+// made for the sandbox badges: the claim stays on the column, the argument moves
+// somewhere it can be read properly.
+//
+// Extracted from columnLines when the by-turn page needed the same answer
+// (§9.22). It takes the four facts it actually reads rather than a Column,
+// because the page's participants are turnEntry values — and the extraction is
+// the point: two projections of one transcript that disagreed about what a
+// waiting seat says would be the room telling a reader two things about one
+// seat, in two places, with nothing on screen to say which was true.
+func inFlightBody(phase Phase, gran Granularity, body string, acted bool, w int) []string {
+	switch {
+	case phase == PhaseStreaming && body == "" && acted:
+		return wrap("working…", w)
+	case phase == PhaseWaiting && body == "" && acted:
+		// It has acted but not spoken. This one keeps its own sentence because
+		// it is a different claim from the two below — there IS something on
+		// screen, and pointing at it beats describing the seat.
+		return wrap("working — the steps above are what it has done so far.", w)
+	case phase == PhaseWaiting && body == "" && gran == GranUnknown:
+		// Deliberately NOT the line below. "The reply arrives whole" is a
+		// measurement two vendors earned; a column whose granularity was never
+		// established must not borrow it. This says only what is observed —
+		// nothing has arrived — and claims nothing about whether anything will
+		// before the end. The header carries the rest: this is the one seat that
+		// prints no granularity word at all.
+		return wrap("working — nothing has arrived yet.", w)
+	case phase == PhaseWaiting && body == "":
+		// The honest version of an empty streaming column, in one line. This
+		// vendor is working; it just does not report anything until it is done.
+		return wrap("working — the reply arrives whole.", w)
+	default:
+		return wrap(body, w)
+	}
 }
 
 // trailingSkip is the run of turns this seat has sat out since its last one,
@@ -1720,18 +1778,34 @@ func gateCard(st State, c Column, w int, sty Styles, g Glyphs) []string {
 			mine = append(mine, p)
 		}
 	}
-	if len(mine) == 0 {
+	// No seat name: in the grid the card's POSITION is the seat, and naming it
+	// again inside its own column would be the room saying one thing twice. The
+	// by-turn page has no position left to carry it and passes one (§9.22).
+	return gateCardLines(mine, "", w, sty, g)
+}
+
+// gateCardLines is the card itself, with the queue and the subject supplied.
+//
+// who is empty wherever the surface already says which seat is asking, and is
+// the seat's label wherever it does not. The two callers are the grid's column
+// and the by-turn page; splitting the card in two instead would have given the
+// one line in this room that guards a write two spellings to drift between.
+func gateCardLines(q []PendingGate, who string, w int, sty Styles, g Glyphs) []string {
+	if len(q) == 0 {
 		return nil
 	}
-
+	subject := q[0].Text
+	if who != "" {
+		subject = who + " — " + subject
+	}
 	// Same card grammar as every other card in this column: a title at weight,
 	// its body hanging under it. The call being decided used to wrap back to the
 	// column edge, so the second line of a long path sat flush against the frame
 	// and read as a new statement rather than as the rest of the question.
-	out := styleAll(hangWrap(g.Warn+" ", "waiting on you: "+mine[0].Text, w), sty.Alert)
+	out := styleAll(hangWrap(g.Warn+" ", "waiting on you: "+subject, w), sty.Alert)
 
 	keys := "y approve   n deny"
-	if n := len(mine) - 1; n > 0 {
+	if n := len(q) - 1; n > 0 {
 		keys += "   +" + strconv.Itoa(n) + " queued"
 	}
 	// The keys are repeated here AND in the mode line on purpose. The mode line
@@ -2234,7 +2308,12 @@ func hints(sty Styles, g Glyphs, hs []hint) (styled, plain string) {
 // line that promises a key which does nothing is the same failure as one that
 // hides a key that does — §7.8 forbids the surprise, in both directions.
 func modeHints(st State, g Glyphs) []hint {
-	several := len(st.VisibleColumns()) > 1
+	// `tab` and `f` address COLUMNS, and the by-turn page has none: there is one
+	// reading area, so focus has nothing to move between and expanding it grows
+	// it to the width it already has. Dropped in both modes for that reason —
+	// including compose, where the page stays open while a brief is typed
+	// (§9.22).
+	several := len(st.VisibleColumns()) > 1 && !st.Page.Open
 	if st.Mode == ModeComposing {
 		// The routing is stated before the keybindings because it is the one
 		// thing on this line that changes what enter DOES. An @typo has to read
@@ -2298,6 +2377,36 @@ func modeHints(st State, g Glyphs) []hint {
 		return hs
 	}
 
+	if st.Page.Open {
+		// The by-turn line, and what is NOT on it is the argument.
+		//
+		// `[ ]` keeps the words it has in the grid, because it is the same motion
+		// at the same unit — §9.20's vocabulary, moved one projection over rather
+		// than re-spelled, so there is one thing to learn. `t grid` is the way
+		// BACK, and it is the one cell here that may never shed: a projection you
+		// cannot leave is the help panel's missing `?` with a whole surface behind
+		// it. `y yank` is named here and not in the grid because on a page the key
+		// takes the document the page is showing — a fact a reader can check
+		// against what is in front of them, which is what makes it worth a cell.
+		//
+		// `f` and `tab` are absent because they do nothing here (see several,
+		// above). `i compose` is the deliberate omission: the six cells below are
+		// what this page's own motions need, the composer is one `t` away in a
+		// mode line that names it, and it is on the help panel's first row —
+		// while a footer that ran out of width would otherwise start cutting into
+		// the way out of the room.
+		hs := []hint{
+			{key: g.Up + g.Down, label: "scroll"},
+			{key: "[ ]", label: "turn", shed: true},
+			{key: "t", label: "grid"},
+			{key: "y", label: "yank", shed: true},
+		}
+		if st.Busy() {
+			return append(hs, hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
+		}
+		return append(hs, hint{key: "?", label: "help"}, hint{key: "q", label: "quit"})
+	}
+
 	// The turn hop sits immediately after the line-wise keys, because it is the
 	// same motion at the transcript's own scale and a reader hunting for "how do
 	// I get back to what I asked" should not have to find it three cells later
@@ -2352,7 +2461,8 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 
 	left = "VIEW"
 	leftStyle := sty.Strong
-	if st.Mode == ModeComposing {
+	switch {
+	case st.Mode == ModeComposing:
 		left = "COMPOSE"
 		// Empty compose is the post-turn resting state. Full weight on COMPOSE
 		// competed with the routing cell for the same attention the screenshot
@@ -2361,6 +2471,10 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 		if strings.TrimSpace(st.Draft) == "" {
 			leftStyle = sty.Muted
 		}
+	case st.Page.Open:
+		// The mode word says which PROJECTION is live, and carries the turn the
+		// body is deliberately not allowed to move to (§9.22, pageLabel).
+		left = pageLabel(st)
 	}
 	if st.Notice != "" {
 		// A notice replaces the keys rather than joining them, and keeps the
@@ -2569,7 +2683,7 @@ func helpKeys(sty Styles) []string {
 		// blocked, gateKey resolves it, and the one place a reader could learn
 		// that is the line that names both. Splitting them into two rows would
 		// have spent a row to make the collision harder to see.
-		"  y / Y        copy this seat's reply, or the whole turn — while a gate waits, y/n answer it",
+		"  y / Y        copy this seat's reply, or the whole turn (in turn view, both) — while a gate waits, y/n answer it",
 		"  esc          leave compose (the draft is kept)",
 		// The "in compose too" clauses are the whole of this change on this
 		// panel. These keys always worked; what no one could find out is that
@@ -2586,7 +2700,15 @@ func helpKeys(sty Styles) []string {
 		// without the verb, and a key documented below the fold is a key nobody
 		// finds (§9.20).
 		"               g / G first turn or newest; [ ] step one turn at a time",
-		"  f            expand the focused column to the full width (in compose, f is text)",
+		// `t` lands on the row that already holds `f` rather than on one of its
+		// own, because the budget is hard (17 rows, above) and these two are the
+		// same question asked twice: how much of the room is the reading area.
+		// `f` gives one seat the width; `t` gives one turn the room. A reader
+		// looking for either is looking for the other, and the merge is what §9.15
+		// made of y/Y and §9.20 made of g/G and [ ] — a category, not a saving.
+		// "expand"/"the focused column" paid for it: the words above already say
+		// column, and a key documented below the fold is a key nobody finds.
+		"  f / t        f gives one column the full width; t gives one turn the whole room (in compose, text)",
 		"  ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted",
 		// Two keys on one line, because this panel has to fit a 24-row terminal
 		// and the line they were competing with is "? this help" — which toggles,

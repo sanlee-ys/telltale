@@ -14,6 +14,7 @@
 package council
 
 import (
+	"sort"
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
@@ -513,6 +514,88 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	c.Scroll = 0
 }
 
+// TurnView is the by-turn projection of the transcript: which turn is on
+// screen, and where that one page is scrolled (design.md §9.22).
+//
+// View state and only view state. It is never written to the room file —
+// room.json stays keys-only (ADR-008, ninth amendment) — for the same reason
+// §9.9 refuses to persist the scrollback: which turn a reader happened to be
+// looking at is not a fact the next session should inherit, and a projection
+// restored from disk is a room that opens somewhere nobody asked for.
+//
+// Turn is a turn NUMBER and never an index into History or into PageTurns. That
+// is the coordinate every other surface in this room already prints — the turn
+// separators, the overflow markers, the yank notice — and an index would be a
+// second vocabulary for one fact, in the one place a reader is meant to be able
+// to read a number off the footer and type it back into a conversation.
+type TurnView struct {
+	// Open reports that the body draws one turn across every seat rather than
+	// the by-seat grid.
+	Open bool
+
+	// Turn is the turn on screen, and it deliberately does NOT track
+	// State.Turn.
+	//
+	// A turn arriving while an older page is open must not move the view (§7.1
+	// rule 4): the room is a reading surface, and content that jumps out from
+	// under a reader because a vendor finished is the thing the whole
+	// bottom-anchor / no-mid-stream-reflow discipline exists to prevent. The
+	// drift that creates is carried by the mode word instead — "TURN 10/11" —
+	// which is where a reader already looks to find out what the keys mean.
+	Turn int
+
+	// Scroll and Follow are this page's position, on exactly the terms a
+	// column's are.
+	//
+	// Not a second scroll model: a page is a flat list of lines, which is what
+	// §9.9 already argued a transcript is, so the window, the overflow markers,
+	// the tail and the clamp are the code that was here — pointed at a
+	// different list. Follow goes false the moment the reader scrolls up and G
+	// restores it, which is the grid's rule unchanged.
+	Scroll int
+	Follow bool
+}
+
+// PageTurns is every turn a page can be opened on, oldest first.
+//
+// Derived from the records themselves rather than counted off State.Turn, and
+// the difference is the fifty-turn cap (§9.9): a room on turn 214 whose early
+// records were evicted has nothing to draw for turn 3, and offering a page for
+// it would be the room inventing a conversation — §9.19's error about absence,
+// run one surface up.
+//
+// A turn is listed when ANY seat on screen recorded it, because a turn routed
+// to one seat is still a turn — that is the whole of the post-#99 room, where
+// the ordinary brief reaches Claude alone. The live turn is included through
+// Column.TurnN, which dispatch sets on every seat the route addressed, so a page
+// exists for a turn from the instant it is sent rather than from the instant it
+// lands.
+func (s State) PageTurns() []int {
+	seen := map[int]bool{}
+	var out []int
+	add := func(n int) {
+		if n > 0 && !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	for _, idx := range s.VisibleColumns() {
+		c := s.Columns[idx]
+		if c.Avail != AvailInstalled {
+			// A seat that cannot be driven has never been asked anything, so it
+			// contributes no turn — the same answer columnLines gives its hop
+			// keys (§9.20).
+			continue
+		}
+		for _, h := range c.History {
+			add(h.N)
+		}
+		add(c.TurnN)
+	}
+	sort.Ints(out)
+	return out
+}
+
 // Seats is which columns the room draws and dispatches to.
 //
 // The zero value is the default and the interesting one: every seat that can
@@ -734,6 +817,14 @@ type State struct {
 
 	// Help is which page of the help panel is open, if any.
 	Help HelpPage
+
+	// Page is the by-turn projection: `t` swaps the body between the grid and
+	// one turn read across every seat (§9.22).
+	//
+	// It sits on State because Render has to draw it and Render is pure over
+	// State — the same reason Focus and Expanded are here. What is NOT here is
+	// any part of it reaching room.json: see TurnView.
+	Page TurnView
 
 	// Briefed reports that shared operating context was loaded. The content
 	// itself is deliberately NOT on State: it is the user's private file and

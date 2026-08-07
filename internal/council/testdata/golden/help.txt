@@ -7,13 +7,13 @@
    @codex       name a lane: @claude @codex @agy @cursor; @all convenes everyone                                        
                 -@codex excludes one. Unaddressed goes to claude. Leading only: "ask @claude" is prose                  
    /cd <dir>    move the room; c clears the focused seat's thread (y); /trace <file> times turns                        
-   y / Y        copy this seat's reply, or the whole turn — while a gate waits, y/n answer it                           
+   y / Y        copy this seat's reply, or the whole turn (in turn view, both) — while a gate waits, y/n answer it      
    esc          leave compose (the draft is kept)                                                                       
    tab          move focus between columns — in compose too                                                             
    ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too                                       
    pgup/pgdn    scroll by a screenful, in compose too (space = pgdn in view mode);                                      
                 g / G first turn or newest; [ ] step one turn at a time                                                 
-   f            expand the focused column to the full width (in compose, f is text)                                     
+   f / t        f gives one column the full width; t gives one turn the whole room (in compose, text)                   
    ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted                                      
    ctrl+c / q   ctrl+c cancels the turn, or quits when idle; q quits (in compose it is text)                            
    ?            next page: what the badge on each column means                                                          

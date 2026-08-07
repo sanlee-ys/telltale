@@ -4275,3 +4275,139 @@ deriving a number and presenting it as read — the top item on this repo's reje
 (§4a.1). Billing the *route's* vendors rather than the seated ones, which would have been
 one line shorter and would have priced seats that are never spawned. And a count on the
 one-seat case, which is a number whose only reading is "yes, one".
+
+### 9.22 four answers to one question, and no way to read them as one
+
+Council exists to put several vendors' answers side by side. Everything from §9.9 onward
+built the surface that does it — a real transcript, per seat, scrollable, attributed,
+navigable a turn at a time — and every one of those sections improved a **column**. The
+room therefore had a comparison surface with no way to read a comparison. To see what four
+seats made of one brief you scrolled Claude to turn 10, remembered it, tabbed, scrolled
+Codex to turn 10, remembered that, and tabbed again; §9.20's `[` and `]` made each of those
+one keystroke and did not change what the exercise was.
+
+**The document already existed.** §9.15's `Y` assembles exactly this: the brief once at the
+top, then every seat that took *this* turn, labelled, in seating order — and it was ruled,
+argued and tested a release ago. What it could be read in was a clipboard. So this section
+adds no content model at all; it renders the one `Y` already had, and the two now come from
+the same call (`turnEntries`), which is the point rather than a tidiness. A page and a
+paste that disagreed about who was in a turn would be two honest-looking documents with
+nothing on screen to say which was the room's answer.
+
+**`t` swaps the body between the by-seat grid and one turn's page.** One key and a toggle,
+because the two are one transcript read two ways rather than two places — and it opens on
+the turn the grid was already following, so the projection changes and the subject does
+not.
+
+#### What the page is, line by line, and why none of it is new
+
+- **The turn's own rule**, carrying the number, where the turn went, and how long it took:
+  `turn 10 ──────── → claude, codex  41s`. Same `labelRule` grammar, same shedding, meta
+  before number, as every separator since §9.11.
+- **The brief once**, under the composer's own `›` at full weight. Four copies is what a
+  *grid* has to do — each seat's prompt is a fact about that seat (§9.9), since a turn can
+  reach two seats and not a third — and it is precisely what a page must not.
+- **Each participating seat under its own labelled rule**, name at weight, then its
+  activity trace, then what it said, with §9.11's boundary strengths unchanged. The only
+  thing that differs from a column is what the strongest boundary is *about*: a turn there,
+  a seat here. That is what swapping the projection means.
+- **A seat that sat the turn out does not appear.** §9.15's rule, for §9.15's reason: it
+  still holds an older reply, and filing that under this turn's heading would be the room
+  inventing a conversation — on the surface built to compare them, where it would be
+  believed.
+- **Failed and cancelled seats keep their note cards.** A turn's page shows what actually
+  happened; the two turns anyone scrolls back for are the ones that went wrong.
+
+**The route is read off participation, not off `State.TurnRoute`.** §9.21 retires the live
+route the instant the last column lands, because the header describes the present. What
+outlives it is the measurement — a `TurnRecord` exists for exactly the seats the brief
+reached — so the page states who took the turn, through `Route.label()` so what is
+displayed is still what would have to be typed to reproduce it. **The clock is the longest
+seat's own elapsed**, because a turn is over when its slowest seat lands. A sum would be
+the wall time of a room that dispatched serially and a mean is a duration no seat ever
+took; both would be council deriving a number and printing it as read, which is the top
+item on §4a.1's rejected list, and being in seconds does not exempt them. A turn still
+running carries no turn-level clock at all — how long it took is not a fact yet — while
+each seat's own rule carries its running one, from `State.Now`.
+
+#### The two rules that shaped it more than the layout did
+
+**Gate precedence, in both projections.** A pending approval renders on the page as
+*chrome* — above the scroll, like `columnChrome` — and the argument is stronger here than
+in the grid: a vendor is stopped, the live page follows its own tail, and a card inside the
+body would be pushed off screen by the output of the very call it is asking about. It also
+**names the seat**, which the grid's card never had to: there the card's position *is* the
+seat, and one page has no position left to carry it. And `y`/`n` still answer the gate
+before they mean anything else, because `key()` routes to `gateKey` first in either view.
+That was already true; §9.15 made it asserted, and it is asserted again here — a keystroke
+the user believes approved a write must never quietly copy text instead, since their next
+move is to press it again.
+
+**§7.1 rule 4 decided what the footer says.** A turn arriving while an older page is open
+**never moves the view**: content jumping out from under a reader because a vendor finished
+is the thing the bottom-anchor and the frozen-geometry rules exist to prevent. But a reader
+on turn 10 of a room now on turn 11 is looking at something stale, and silence about that
+is its own dishonesty — so the drift goes where a reader already looks to learn what the
+keys mean. The mode word is `TURN 10/11`. §9.20 declined "turn 3 of 7" and this is not that
+reversed: that was a progress bar offered in the *notice* line, describing a hop that had
+already happened. This is §7.8's always-on mode label answering which projection is live,
+which is the one thing the body has been ruled out of saying.
+
+Pressing **enter** is the exception that proves the rule: dispatching from a page lands on
+the turn just sent, because that move is the user's, not a vendor's, and a projection that
+answered a new brief by staying on turn 7 would show an old conversation while spending
+quota on a new one.
+
+#### What it does not get, and the two keys that say so
+
+There is **no column focus** on a page, so `tab` and `f` do nothing — and both are dropped
+from the mode line rather than left promising something, which is §7.8's surprise pointing
+the other way (§9.11's footer rule). The overflow markers follow: the focused-column form,
+no `tab to focus` and no turn coordinate, since every line on a page belongs to the same
+turn and the mode word already names it.
+
+For the same reason **`y` and `Y` produce the same document here**. A per-seat `y` needs a
+per-seat focus, and a projection whose whole unit is the turn deliberately has none — so
+the narrower key takes the wider document rather than guessing which seat was meant. `y
+yank` is named on this mode line and not on the grid's, because here the key takes the
+thing in front of the reader, which is what makes it worth a cell.
+
+`i` is the deliberate omission from that line. The six cells the page needs are its own
+motions and its two ways out; the composer is one `t` away in a mode line that names it,
+and it is the first row of the help panel. A footer short of width starts cutting into `?`
+and `q` (§9.20), and that is the trade this line was designed never to make.
+
+`t` joins the help panel by merging onto `f`'s row, inside the hard 17-row budget: `f gives
+one column the full width; t gives one turn the whole room`. Not a saving — the same
+category, the way §9.15 merged `y`/`Y` and §9.20 merged `[ ]` onto `g`/`G`. Both keys
+answer one question, *how much of the room is the reading area*, and a reader looking for
+either is looking for the other.
+
+Everything else is reuse rather than resemblance. The page plans as **one column at the
+full frame**, which is the tabs tier's own arithmetic, so the height budget, the 60-column
+floor, the composer's growth and the collapsed-seat notice are identical in both
+projections — a second layout path for a surface that *is* a column at full width would
+just be a second place for the frame to tear. The scroll window, the overflow markers, the
+tail and the clamp are §9.9's own argument applied once more: a page is a flat list of
+lines, and this room already knows how to move through one. `[` and `]` keep the words they
+have in the grid, at the same unit, so there is one motion to learn; `g` and `G` reach the
+same two positions — the oldest turn still in memory and the live end — in the projection's
+own unit. A turn the fifty-turn cap has evicted has no page, and says so rather than
+drawing an empty one: "nobody answered" and "the room no longer remembers" are different
+facts (§4a.1).
+
+#### Declined
+
+- **Cross-seat diff or agreement marks** — "these two agree", "this one dissents". A page
+  puts the answers where a person can judge them; a mark would be council judging them,
+  which no adapter sourced and no vendor reported (§4a.1). It is the same refusal as the
+  "role" line §9.11 declined, with a harder consequence: a wrong agreement mark is one a
+  reader would act on.
+- **Persisting the projection.** `room.json` stays keys-only (ADR-008, ninth amendment) and
+  which turn someone was looking at is not state the next session should inherit — §9.9's
+  argument for not persisting the scrollback, one surface up.
+- **Per-seat focus inside the page**, with `tab` cycling seats and `y` taking one of them.
+  It would import the grid's whole focus apparatus — a marker, a weight, a hint on every
+  marker — into a view whose entire claim is that the turn is the unit, and it would buy
+  one thing the grid already does better. v1 lacks it deliberately, and `y`'s behaviour
+  here is what falls out of that rather than a limitation worked around.
