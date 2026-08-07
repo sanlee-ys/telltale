@@ -1,0 +1,24 @@
+ council READ  │  ~/code/telltale                                                    turn 3  │  3/3 seated  │  no brief 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ▸ Claude Code  ─────────────  ✓ done  │    Codex  ───────────────────  ✓ done  │    Antigravity                 ○ idle 
+   ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
+                                                                                                                        
+ ↑ 7 more above  │  ↑↓ scroll          │                                        │                                       
+                                                                                                                        
+ ⚙ Read: dispatch.go ✓                 │                                        │                                       
+                                                                                                                        
+ About 30K redundant input tokens per  │                                        │                                       
+ vendor.                               │                                        │                                       
+ turn 3  ────────────────────────────  │                                        │                                       
+ › @all is the scrollback worth the    │                                        │                                       
+   memory?                             │                                        │                                       
+                                                                                                                        
+ Fifty turns is cheap against          │                                        │                                       
+ forgetting.                           │  turn 3  ────────────────────────────  │                                       
+                                       │  › @all is the scrollback worth the    │                                       
+ thread cleared  ────────────────────  │    memory?                             │                                       
+ its next brief opens a new session,   │                                        │                                       
+ with the brief re-applied.            │                                        │  no turn dispatched yet.              
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ›                                                                                                                      
+ VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 

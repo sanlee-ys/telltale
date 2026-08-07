@@ -25,9 +25,13 @@ binding copies and the argument; this file does not restate either.
 
 ## In flight
 
-Nothing open. Tall-window bottom-anchor is on this branch (ships with this PR):
-short bodies sit above the composer; Follow freezes on scroll-up; `G` restores;
-geometry-only. Ceiling Phases 0–5 remain on main (#88–#95).
+The mid-session control invariant, and the first control built to it, are on
+this branch (ships with this PR). [docs/design.md §9.17](docs/design.md) is the
+binding copy — state that changes while the room is open is reachable from
+inside it, flags are for what is true at launch. Six controls were swept; five
+violated it. **`c` clears the focused seat's thread** (`y` confirms), which
+retires the first: `--fresh` is still there and still room-wide, but clearing
+one seat no longer costs the other three theirs.
 
 ## Closed without code (do not re-open)
 
@@ -57,8 +61,20 @@ geometry-only. Ceiling Phases 0–5 remain on main (#88–#95).
   the measurement does not, and the two are not the same claim. Diagnosis so far
   is unchanged: `cursor-agent` is spawned fresh per turn and `--resume` restores
   context, not process warmth. **Read a trace before optimising anything.**
+  §9.17 offers a candidate explanation for why the measurement never happened:
+  `--trace` is launch-only, so catching a slow turn means having predicted one
+  before the room opened. Unconfirmed — it is a reading of the control surface,
+  not of anyone's actual attempt.
 
 ## Known gaps, not yet owned
+
+- **Four controls still violate the §9.17 mid-session rule**, each its own
+  change: `--trace`, `--read`, `--auto`, `--vendor`. The inventory and the
+  per-control reasoning are in [docs/design.md §9.17](docs/design.md); it is not
+  restated here. `--brief` was examined and deliberately **not** filed — it is
+  first-turn context by definition, so re-briefing is a separate question.
+  `--fresh` came off this list when `c` landed; the flag itself stays, because
+  starting the whole room over is a real thing to want at launch.
 
 - **`docs/design.md` §3 does not name the canary set.** §7 now records how drift
   *renders*; §3 still does not say what each adapter actually watches. A canary

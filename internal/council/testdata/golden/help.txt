@@ -6,7 +6,7 @@
    ctrl+j       newline in the brief — the compose area grows to six rows                                               
    @codex       narrow to a lane: @claude @codex @agy @cursor; -@codex excludes                                         
                 one. Unaddressed goes to every seat. Leading only: "ask @claude" is prose                               
-   /cd <dir>    move the room to another repo — seats follow on their next turn                                         
+   /cd <dir>    move the room to another repo; c clears the focused seat's thread (y confirms)                          
    y / Y        copy this seat's reply, or the whole turn — while a gate waits, y/n answer it                           
    esc          leave compose (the draft is kept)                                                                       
    tab          move focus between columns — in compose too                                                             

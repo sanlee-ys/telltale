@@ -3826,3 +3826,112 @@ invocation passes any test that asks the posture function what it thinks. The po
 witnesses `@cursor`'s argv rather than `@codex`'s for a measured reason — on Windows, codex's read
 and write sandbox flags collapse to the same value, so codex's command line cannot testify to a
 posture on this machine.
+
+### 9.17 a control you need mid-session cannot live in a flag
+
+**The rule: state that changes while the room is open is reachable from inside the room.
+A flag is for what is true at launch and stays true.** A control that only exists as a flag
+answers, at the one moment you cannot yet have the question, something you will only learn by
+working — so the remedy for noticing it is to quit the room and lose the conversation.
+
+This is not a new principle here. It is the one council has already applied twice, case by
+case, without ever writing it down.
+
+- **The workspace stopped being an invocation input.** `--cd` still exists, but `/cd <dir>`
+  moves the room between turns and every seat follows on its next dispatch (§9.16, `roomcmd.go`).
+- **Posture stopped being opt-in.** The room writes by default and `--read` is the opt-out,
+  because once the gated seat could raise an approval card, "all the flag still did was make a
+  room you opened to get work done unable to do any until you remembered a word" — and that
+  demotion cites the workspace one as its precedent.
+
+Two demotions with the same argument is a rule. `roomcmd.go` even states the scope it was
+decided under — "the workspace is **the one piece** of room state the P0 demands be movable
+from inside" — and that claim is what has now failed. It was true when the room could not run
+long enough for anything else to drift. A room used as a daily driver drifts in several
+places at once.
+
+**The tell is a refusal that names a flag.** §9.16 has one already: a `/flow` write hop into a
+read-only room is blocked, and "the notice says the room is read-only and names the flag that
+would change it." That sentence is the defect in miniature — the room knows exactly what you
+want, knows exactly what would grant it, and can only tell you to quit and start over. Any
+notice whose remedy is a relaunch is this bug.
+
+#### The sweep
+
+Every council control, classified. This is a **source read**, not a live run — the claims below
+are about where a control is reachable from, which argv and `roomcmd.go` settle, not about
+vendor behaviour, which would need measuring.
+
+| control | verdict | why |
+|---|---|---|
+| workspace (`--cd` / `/cd`) | **compliant** | the launch flag has an inside-the-room twin; the flag's own help says so |
+| `--fresh` | **violates** | a conversation fills up *by being used*. The only reset is room-wide and launch-time, so clearing one seat costs the other three their threads |
+| `--trace` | **violates** | its own doc says it answers "a question that is asked on the days a turn is inexplicably slow" — a day you identify from inside a slow turn. This is a candidate explanation for STATE.md's standing open question: the instrument shipped and the measurement never happened, and you must predict the slow turn at launch to catch one |
+| `--read` (posture) | **violates** | see the refusal above. Note what is *not* an objection: posture is deliberately never restored from the saved room, because "a posture that can arrive from a file is not one anyone typed." A posture typed into the composer is typed |
+| `--auto` | **violates** | whether the gated seat asks before each tool call is a preference you form partway through a batch, not before it |
+| `--vendor` | **violates** | who is *seated* is launch-only. `-@seat` routes one turn and is explicitly "a different control from an @mention" — routing is not reseating |
+| `--brief` | **arguable, not filed** | it is defined as first-turn context, so re-briefing is a different feature rather than a missing surface for this one. Left out deliberately; do not fold it in without deciding that question on its own |
+| `--ascii`, `--no-title` | **legitimately launch-only** | properties of the terminal, not of the room. They do not change while it is open |
+| `--resume`, `--write` | **vestigial** | accepted and ignored; kept for muscle memory |
+
+#### What satisfying the rule costs
+
+Not every control can simply be flipped in place. Posture and `cwd` are **argv** — fixed at
+spawn, with nothing in the stream-json envelope able to change them mid-session — which is why
+`/cd` respawns the persistent seat rather than redirecting it. That is the pattern, not an
+obstacle: respawn lazily on the next dispatch, under `--resume` composition and the same
+one-attempt probation, and let the column say so. A mid-session control may cost a respawn; it
+may not cost the room.
+
+#### The surface, and why it is not a slash command
+
+**Ruled: a key on the focused seat.** Focus already ships (`▸` + `Strong`,
+`hierarchy_test.go`), so the seat is already named without anyone typing its name.
+
+The alternative was a room command with the mention grammar (`/clear @codex`), and the argument
+against it is vocabulary. `roomcmd.go` intercepts only a draft that *is* the command,
+"so no vocabulary is quietly stolen from the conversation" — but two words are already spoken
+for, `/cd` and `/flow`, and `/clear` is a word people mean for a vendor, since it is a real
+Claude Code command. A key takes nothing from the composer.
+
+**It must not be automatic.** The obvious version — the room notices a seat is near its ceiling
+and clears it — reads `context_pct`, which for the codex adapter is declared `Derived`, not
+`Reported`: Codex ships a denominator, telltale computes the percentage, and the HUD marks it
+with a leading `~` "rather than passing it off as a vendor figure." ADR-005 settled this class
+for the fleet — status is advisory, never a gate, and nothing irreversible branches on it. A
+dropped thread is irreversible.
+
+#### What `c` does, and the two things it gets right by construction
+
+The first control built to this rule. `c` in view mode arms a confirmation for the focused seat;
+`y` drops that seat's thread, `n` keeps it, and **any other key cancels**. The flow gate falls
+through to `viewKey` and this one does not, because they ask different questions: that one blocks
+a chain already running, so reading the columns is part of deciding, while this one interrupts
+nothing and the safe reading of a key nobody meant to press is to put the thread back out of
+reach. It refuses while a turn is in flight — `/cd`'s rule, for `/cd`'s reason — and a seat with
+nothing to clear is told so rather than handed a card whose `y` does nothing.
+
+**The ordering is load-bearing and it fails silently.** `seatProcess` re-arms `resumeIDs` from
+`m.sessions` whenever it replaces a live process; that is what carries a thread across a `/cd`.
+So the deletes come *before* the kill. Reversed, the id is handed straight back, the next brief
+resumes the conversation the user just ended, and every word on screen still says cleared —
+which is why it is a named test (`TestClearSeatKillsThePersistentProcessAndDoesNotRearmTheThread`)
+rather than a comment.
+
+**The drop is saved immediately, not at the next dispatch.** The room file is what a reattach
+reads, so a clear held only in memory would be undone by quitting: the user ends a thread and
+finds it waiting for them, which is the failure the control was built to remove.
+
+**`Cleared` is its own field, not `!Restored`.** "This seat never had a thread" and "you ended
+this seat's thread" reach the same next brief, and collapsing them is zero-vs-absent (§4a.1)
+applied to a conversation. The marker is a labelled rule in the transcript's own grammar, drawn
+last because that is when it happened — and **the turns above it stay**. What was cleared is the
+thread the next brief would have continued, not the record of what was said; blanking the
+reading surface to report a vendor-side change would be the room destroying the thing it exists
+to show. It retires in `startTurn`: once the brief is sent the seat has a thread again, and a
+marker outliving that would describe a break the room has already healed.
+
+#### Not decided here
+
+Whether the other four violating controls earn their own surfaces or should be judged one at a
+time against this rule. Each is its own change.

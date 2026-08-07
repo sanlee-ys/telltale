@@ -174,6 +174,17 @@ type Model struct {
 	flowChain *FlowChain
 	// flowDraft is the draft string that produced flowChain (reuse after write gate).
 	flowDraft string
+	// clearPending names the seat awaiting y/n before its thread is dropped, and
+	// is empty when nothing is pending.
+	//
+	// Confirmed rather than immediate, which is the one place this feature spends
+	// a keystroke on purpose. The complaint that produced it (§9.17) is about
+	// friction — needing to remember a flag and quit the room — and one y is not
+	// that. What it buys is the difference between a stray press in view mode and
+	// a multi-turn conversation ending: the drop is irreversible, the session id
+	// is the only handle on that thread, and no vendor here offers a way back to
+	// one it has been told to forget.
+	clearPending model.VendorID
 	// flowWritePending is true while a write hop awaits y/n before any vendor spawn.
 	flowWritePending bool
 	// flowWriteArmed is set by y so the next dispatch may Start the write hop.
@@ -493,6 +504,9 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.st.Gating() {
 		return m.gateKey(msg)
 	}
+	if m.clearPending != "" {
+		return m.clearGateKey(msg)
+	}
 	if m.flowWritePending {
 		return m.flowWriteGateKey(msg)
 	}
@@ -500,6 +514,105 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.composeKey(msg)
 	}
 	return m.viewKey(msg)
+}
+
+// clearGateKey answers the confirmation armed by `c`.
+//
+// Anything that is not y or n cancels rather than falling through to viewKey.
+// The flow gate falls through and this one does not, because the two are asking
+// different questions: that one blocks a chain the user already started, so
+// reading the columns first is part of deciding, while this one interrupts
+// nothing and the safe answer to a key nobody meant to press is to put the
+// thread back out of reach.
+func (m *Model) clearGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	v := m.clearPending
+	m.clearPending = ""
+	switch msg.String() {
+	case "y":
+		m.clearSeat(v)
+	case "n":
+		m.st.Notice = "kept — nothing was cleared"
+	default:
+		m.st.Notice = "clear cancelled — y confirms, n declines"
+	}
+	return m, nil
+}
+
+// askClearSeat arms the confirmation for the focused seat.
+//
+// The refusals here are all the same refusal: a thread cannot be dropped out
+// from under something that is using it. A turn in flight is `/cd`'s rule
+// (roomcmd.go) for the same reason — the seats were dispatched against the state
+// this would change — and a seat with nothing to clear is told so rather than
+// being handed a card whose y does nothing, which would teach that the key is
+// unreliable rather than that the seat is empty.
+func (m *Model) askClearSeat() {
+	if m.turn != nil {
+		m.st.Notice = "a turn is in flight — c clears a seat between turns"
+		return
+	}
+	c := m.focused()
+	if c == nil {
+		m.st.Notice = "no seat is focused"
+		return
+	}
+	if !m.seatHasThread(c.Vendor) {
+		m.st.Notice = c.Label + " has no thread to clear — its next brief already opens a new session"
+		return
+	}
+	m.clearPending = c.Vendor
+	m.st.Notice = "clear " + c.Label + "'s thread? y confirms — its next brief starts a new session · n keeps it"
+}
+
+// seatHasThread reports whether this seat has anything a clear would drop.
+//
+// A live process counts even with no saved id yet: the persistent seat holds the
+// conversation in the process itself (§9.8), so a first turn that has not
+// reported a session id is still a thread on screen.
+func (m *Model) seatHasThread(v model.VendorID) bool {
+	if m.sessions[v] != "" || m.resumeIDs[v] != "" {
+		return true
+	}
+	_, alive := m.procs[v]
+	return alive
+}
+
+// clearSeat drops one seat's thread and leaves the other seats untouched.
+//
+// This is the drop dispatch.go already performs when a restored id fails its
+// first turn, reached deliberately instead of by accident — the same three maps,
+// for the same reason: an id left in any one of them gets rebuilt into the next
+// invocation and the seat carries on the conversation the user just ended.
+//
+// The persistent seat needs its process killed as well, and the ORDER is
+// load-bearing. seatProcess re-arms resumeIDs from m.sessions when it replaces a
+// process, which is what carries a thread across a /cd — so a kill before the
+// deletes would hand the id straight back and the next brief would resume the
+// conversation this function exists to end.
+func (m *Model) clearSeat(v model.VendorID) {
+	delete(m.sessions, v)
+	delete(m.resumeIDs, v)
+	delete(m.unproven, v)
+	if p, ok := m.procs[v]; ok {
+		p.sess.Kill()
+		m.dropProcess(v)
+	}
+	label := string(v)
+	for i := range m.st.Columns {
+		c := &m.st.Columns[i]
+		if c.Vendor != v {
+			continue
+		}
+		label = c.Label
+		c.Restored = false
+		c.Cleared = true
+	}
+	// Saved now rather than at the next dispatch. The room file is what a
+	// reattach reads, so a clear that lived only in memory would be undone by
+	// quitting — the user would have ended a thread and found it waiting for
+	// them, which is the failure this whole control was built to remove.
+	m.saveRoom()
+	m.st.Notice = label + "'s thread cleared — its next brief opens a new session"
 }
 
 // flowWriteGateKey authorizes or cancels a /flow write hop before any seat is spawned.
@@ -705,6 +818,15 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// One column at full width. Three columns are for comparing at a
 		// glance; one is for actually reading a long reply.
 		m.st.Expanded = !m.st.Expanded
+	case "c":
+		// Clear the focused seat's thread — the first control built to §9.17's
+		// rule, and a key rather than a room command for a reason recorded
+		// there: focus already names the seat, while a `/clear` would take a
+		// word out of the conversation that people mean for a vendor.
+		//
+		// View mode only, and that is not an oversight. In compose `c` is the
+		// letter c, which is the same contract `q` and `f` already keep.
+		m.askClearSeat()
 	case "y":
 		// The focused seat's reply. Reachable here only when nothing is gated:
 		// key() routes a pending gate to gateKey first, and gateKey answers `y`
