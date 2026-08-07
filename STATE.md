@@ -27,9 +27,9 @@ binding copies and the argument; this file does not restate either.
 
 | Work | Owner | Status | Branch / PR |
 |---|---|---|---|
-| Council UI ceiling Phase 3 — idle header rhythm, notice/composer weight | Cursor | Implementing | `cursor/council-phase3-rhythm` |
 
-Phases 0–2 landed (#88–#90). Phase 5 (route-weighted geometry) stays gated.
+Phases 0–3 landed (#88–#91). Next: phases 4–5. Phase 5 (route-weighted geometry)
+stays gated.
 
 ## Closed without code (do not re-open)
 
