@@ -8,17 +8,17 @@
  input quadratically.                  │  ⚠ exit 1: not signed in — run `codex  │  ⚠ cancelled — output above is        
                                        │    login`                              │    partial                            
                                        │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 

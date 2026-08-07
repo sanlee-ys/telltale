@@ -3,22 +3,22 @@
  ▸ Claude Code  ─────────────  ○ idle  │    Codex  ───────────────────  ○ idle  │    Antigravity  ─────────────  ○ idle 
    ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
                                        │                                        │                                       
- reattached — turn 3 was the last,     │  reattached — turn 3 was the last,     │  reattached — turn 3 was the last,    
- saved 2h ago.                         │  saved 2h ago.                         │  saved 2h ago.                        
-   this seat's thread came back. the   │    this seat's thread came back. the   │    no thread came back for this seat. 
-   next brief continues it.            │    next brief continues it.            │    its next brief opens a new         
-                                       │                                        │    session, with the brief            
-                                       │                                        │    re-applied.                        
+ this seat's thread came back. the     │  this seat's thread came back. the     │  no thread came back for this seat.   
+ next brief continues it.              │  next brief continues it.              │  its next brief opens a new session,  
+                                       │                                        │  with the brief re-applied.           
                                        │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
- VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 
+ VIEW           ⚠ reattached from ~/.telltale/council/room.json — turn 3 was the last, saved 2h ago, 2/3 seats restored 

@@ -6,19 +6,19 @@
  Reading internal/council/layout.go    │  working — the reply arrives whole.    │  working — the reply arrives whole.   
  to find the breakpoints.              │                                        │                                       
                                        │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                                 ↑↓ scroll  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 

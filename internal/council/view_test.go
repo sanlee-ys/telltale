@@ -314,6 +314,67 @@ func TestEmptyComposeQuietsTheFooter(t *testing.T) {
 	golden(t, "compose-empty", got)
 }
 
+// TestRailsStopThroughEmptyBody pins Phase 2: a tall idle frame must not draw
+// │ through every empty body row. Content rows keep the separator; the void
+// below is gutter-width spaces only.
+func TestRailsStopThroughEmptyBody(t *testing.T) {
+	st := room()
+	st.Width, st.Height = 120, 60
+	rows := strings.Split(render(st), "\n")
+	g := GlyphsFor(false)
+	// Skip header/rules/footer: body is between the two full-width rules.
+	// Column chrome also repeats g.Rule under seat names; only a line that is
+	// entirely the rule glyph at frame width is a room rule.
+	bodyStart, bodyEnd := -1, -1
+	for i, r := range rows {
+		if !fullWidthRule(r, st.Width, g) {
+			continue
+		}
+		if bodyStart < 0 {
+			bodyStart = i + 1
+			continue
+		}
+		bodyEnd = i
+		break
+	}
+	if bodyStart < 0 || bodyEnd <= bodyStart {
+		t.Fatalf("could not find body between rules in a 120x60 idle frame (%d rows)", len(rows))
+	}
+	withSep, withoutSep := 0, 0
+	for _, r := range rows[bodyStart:bodyEnd] {
+		if strings.Contains(r, g.Sep) {
+			withSep++
+		} else {
+			withoutSep++
+		}
+	}
+	if withSep == 0 {
+		t.Error("no column separators in the occupied region — rails were removed entirely")
+	}
+	if withoutSep == 0 {
+		t.Error("every body row still carries │ — rails were not truncated at content height")
+	}
+	if withoutSep < withSep {
+		t.Errorf("expected most of a tall idle body to be sep-free; with=%d without=%d", withSep, withoutSep)
+	}
+}
+
+// fullWidthRule is true when a line is the room's horizontal rule — every cell
+// is g.Rule at st.Width — as opposed to the shorter rules drawn under a seat
+// name in column chrome.
+func fullWidthRule(line string, width int, g Glyphs) bool {
+	rs := []rune(line)
+	if len(rs) != width {
+		return false
+	}
+	for _, r := range rs {
+		if string(r) != g.Rule {
+			return false
+		}
+	}
+	return true
+}
+
 func TestHelp(t *testing.T) {
 	st := room()
 	st.Help = HelpKeys

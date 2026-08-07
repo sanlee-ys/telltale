@@ -222,6 +222,12 @@ func collapsedNotice(st State, g Glyphs) string {
 }
 
 // columnsBody draws the seats side by side.
+//
+// Vertical separators stop at content height. A tall idle window used to draw
+// │ through every empty body row down to the footer — four spears through a
+// void, which is the "spreadsheet of pipes" read. Busy rooms keep full
+// structure wherever any column still has chrome or text; below that the
+// gutters are blank at the same width so the grid does not shear.
 func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	vis := st.VisibleColumns()
 	cells := make([][]string, len(vis))
@@ -246,13 +252,20 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	}
 
 	sepPad := strings.Repeat(" ", gutter)
+	plainSep := sepPad + g.Sep + sepPad
 	sep := sepPad + sty.Rule().Render(g.Sep) + sepPad
+	blankSep := strings.Repeat(" ", lipgloss.Width(plainSep))
+	railThrough := contentRailRows(cells)
 	var b strings.Builder
 	for row := 0; row < lay.Body; row++ {
 		b.WriteString(" ")
+		div := sep
+		if row > railThrough {
+			div = blankSep
+		}
 		for j := range vis {
 			if j > 0 {
-				b.WriteString(sep)
+				b.WriteString(div)
 			}
 			b.WriteString(cells[j][row])
 		}
@@ -262,6 +275,37 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		}
 	}
 	return b.String()
+}
+
+// contentRailRows is the last body row index that still carries content in any
+// column (inclusive). Rows below it get blank gutters instead of │.
+//
+// One pad row of rail past the last content keeps the occupied region from
+// looking like it was cut with scissors; more than that reintroduces the void
+// spears this exists to remove.
+func contentRailRows(cells [][]string) int {
+	if len(cells) == 0 || len(cells[0]) == 0 {
+		return 0
+	}
+	last := -1
+	for _, col := range cells {
+		for i := len(col) - 1; i >= 0; i-- {
+			if strings.TrimSpace(col[i]) != "" {
+				if i > last {
+					last = i
+				}
+				break
+			}
+		}
+	}
+	if last < 0 {
+		return 0
+	}
+	pad := last + 1
+	if pad >= len(cells[0]) {
+		return len(cells[0]) - 1
+	}
+	return pad
 }
 
 // seatFocus is how a column stands in relation to the keys, which is two
@@ -1218,36 +1262,31 @@ func costCell(c Column) string {
 // would have no way to tell a successful reattach from a --resume that quietly
 // did nothing.
 //
-// Two versions, one per seat, and the split is the honest part. A room can
-// reattach with only some of its seats restored: a vendor that never answered
-// left no id, and a vendor installed since the room was saved was never in it.
-// Both open beside seats that DO continue, and one shared sentence would let
-// either be read as continuing something.
+// The ROOM half of the news — which turn was last, how stale the save is, where
+// it was loaded from — lives once in Notice. Columns used to repeat that
+// sentence four times beside each other, which is what made an idle reattach
+// read as a spreadsheet of identical paragraphs. What remains here is only
+// the per-seat fact: whether THIS seat's thread came back. A room can reattach
+// with only some seats restored (no id left, or a vendor installed since), and
+// one shared sentence would let either be read as continuing something.
 //
 // No warning glyph. A reattach is the feature working, not a problem, and
 // spending the ⚠ on it would blunt the mark that carries real failures — the
 // same argument ActDenied makes for SevWarn over SevCrit.
-func reattachCard(st State, c Column, w int, sty Styles) []string {
-	// The age comes off State.Now, never a clock, so this stays pure and the
-	// goldens stay reproducible — the same contract elapsed() renders under.
-	when := ""
-	if !st.Now.IsZero() {
-		when = ", saved " + age(st.Now.Sub(st.Reattached.SavedAt))
-	}
-	// Same card grammar as the unavailable one — title, then an indented body —
-	// but at plain weight rather than the warning colour, because a reattach is
-	// the feature working. Spending the alarm palette on it would blunt the mark
-	// that carries real failures, which is the argument ActDenied already makes
-	// for SevWarn over SevCrit.
-	out := styleAll(wrap("reattached — turn "+strconv.Itoa(st.Reattached.Turn)+
-		" was the last"+when+".", w), sty.bold(sty.Text))
+func reattachCard(_ State, c Column, w int, sty Styles) []string {
+	// Plain weight rather than warning colour: same argument as above. Bold so
+	// the one line that remains still reads as a card title, not body chrome.
 	if c.Restored {
 		// "continues it" rather than "resumes it": the resume is the vendor's
 		// own mechanism and it has not been asked yet. What the room can promise
 		// is where the next brief is addressed.
-		return append(out, indentWrap("  ", "this seat's thread came back. the next brief continues it.", w)...)
+		return styleAll(wrap(
+			"this seat's thread came back. the next brief continues it.", w),
+			sty.bold(sty.Text))
 	}
-	return append(out, indentWrap("  ", "no thread came back for this seat. its next brief opens a new session, with the brief re-applied.", w)...)
+	return styleAll(wrap(
+		"no thread came back for this seat. its next brief opens a new session, with the brief re-applied.", w),
+		sty.bold(sty.Text))
 }
 
 // unavailableCard says which failure this is and what would fix it. Absence and

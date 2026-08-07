@@ -5,20 +5,20 @@
                                        │                                        │                                       
  no turn dispatched yet.               │  no turn dispatched yet.               │  no turn dispatched yet.              
                                        │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  › @codex @agy is the resume flag right?_                                                                               
  COMPOSE                        → codex, agy  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut 

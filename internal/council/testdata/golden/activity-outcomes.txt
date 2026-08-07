@@ -11,14 +11,14 @@
  One test fails.                       │                                        │  working — the steps above are what   
                                        │                                        │  it has done so far.                  
                                        │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
-                                       │                                        │                                       
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                                 ↑↓ scroll  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 

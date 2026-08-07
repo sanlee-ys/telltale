@@ -25,8 +25,7 @@ binding copies and the argument; this file does not restate either.
 
 ## In flight
 
-Nothing owned. Everything this file listed on 2026-08-06 was closed that day —
-see *Known gaps* for what replaced it.
+Nothing owned. Phases 0–2 landed. **Next:** council UI ceiling Phases 3–5 — route-weighted geometry (Phase 5 is gated on 3–4).
 
 ## Closed without code (do not re-open)
 

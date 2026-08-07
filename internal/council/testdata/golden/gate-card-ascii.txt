@@ -11,14 +11,14 @@
                                        |                                        |                                       
  I need to add the card renderer.      |                                        |                                       
                                        |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
 ------------------------------------------------------------------------------------------------------------------------
  :                                                                                                                      
  GATE                               Write: internal/council/gate.go  |  y approve  |  n deny  |  ctrl+c cancel the turn 

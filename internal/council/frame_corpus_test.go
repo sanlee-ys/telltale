@@ -3,6 +3,7 @@ package council
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // The frame corpus renders the same rooms at the heights a person actually
@@ -25,15 +26,22 @@ var corpusHeights = []int{24, 40, 60}
 // corpusIdle is a seated room before anything has been dispatched.
 func corpusIdle() State { return room() }
 
-// corpusReattached is the shape that was reported: every column holding the
-// same short paragraph, which is the room's own news repeated once per seat.
+// corpusReattached is the shape that was reported: a room fact repeated once
+// per column. It uses the real Reattached path (empty Body + Active reattach)
+// so the hoist — notice once, per-seat line in columns — is what the corpus
+// measures, not a hand-pasted Body that would keep lying after the fix.
 func corpusReattached() State {
 	st := room()
-	for i := range st.Columns {
-		st.Columns[i].Body = "reattached — turn 109 was the last, saved just now.\n" +
-			"  this seat's thread came back. the next brief continues it."
+	st.Now = time.Date(2026, 8, 5, 22, 0, 0, 0, time.UTC)
+	st.Turn = 109
+	st.Reattached = Reattach{
+		Turn:    109,
+		SavedAt: st.Now.Add(-time.Minute),
 	}
-	st.Notice = "reattached from ~/.telltale/council/room.json — turn 109 was the last, 3/3 seats restored"
+	for i := range st.Columns {
+		st.Columns[i].Restored = true
+	}
+	st.Notice = "reattached from ~/.telltale/council/room.json — turn 109 was the last, saved just now, 3/3 seats restored"
 	return st
 }
 
