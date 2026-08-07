@@ -1,0 +1,40 @@
+ council READ  │  ~/code/telltale                                               no turn yet  │  3/3 seated  │  no brief 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ▸ Claude Code  ────────  ⠋ streaming  │    Codex  ────────────────  ⠋ waiting  │    Antigravity  ──────────  ⠋ waiting 
+   ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
+                                       │                                        │                                       
+ Reading internal/council/layout.go    │  working — the reply arrives whole.    │  working — the reply arrives whole.   
+ to find the breakpoints.              │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+                                       │                                        │                                       
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ›                                                                                                                      
+ VIEW                                                 ↑↓ scroll  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 
