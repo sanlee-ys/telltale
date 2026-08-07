@@ -47,11 +47,33 @@ func parseRoomCommand(draft string) (arg string, ok bool) {
 	return parseCommand(draft, "/cd")
 }
 
+// parseBareCommand recognises ONLY the argument-less form of a verb.
+//
+// Separate from parseCommand, and the difference is the vocabulary rule this
+// file opens with rather than a stylistic split. `/cd` and `/trace` take an
+// argument, so "/cd " and "/trace " are already unmistakably commands — nobody
+// types them as prose. `/read` and `/write` take none, and both are words a
+// person addresses a ROOM with: "/read the design doc before answering",
+// "/write a test for this" are ordinary briefs, and intercepting them would
+// steal two live verbs out of the conversation to run a setting the user did
+// not ask for. So the bare draft is the command and everything else dispatches
+// untouched, which is the strictest reading of "only a draft that IS a command
+// is intercepted".
+func parseBareCommand(draft, verb string) bool {
+	return strings.TrimSpace(draft) == verb
+}
+
 // roomCommand handles a room-addressed draft. Returns false when the draft is
 // ordinary and should dispatch.
 func (m *Model) roomCommand() bool {
 	if arg, ok := parseCommand(m.st.Draft, "/trace"); ok {
 		return m.traceCommand(arg)
+	}
+	if parseBareCommand(m.st.Draft, "/read") {
+		return m.postureCommand(false)
+	}
+	if parseBareCommand(m.st.Draft, "/write") {
+		return m.postureCommand(true)
 	}
 	arg, ok := parseRoomCommand(m.st.Draft)
 	if !ok {
@@ -242,6 +264,101 @@ func (m *Model) resolveTrace(arg string) string {
 		return filepath.Clean(p)
 	}
 	return filepath.Clean(filepath.Join(m.st.Workspace, p))
+}
+
+// postureCommand moves the room between read and write from inside it.
+//
+// The §9.17 case for this one is the sharpest in the sweep, because the defect
+// is already written down elsewhere as a feature: §9.16's refusal of a /flow
+// write hop into a read-only room "names the flag that would change it". The
+// room knows what you want, knows what would grant it, and could only tell you
+// to quit and start over.
+//
+// TWO ASYMMETRIES, both deliberate.
+//
+// The first is the confirmation. /read applies at once and /write asks, because
+// they are not the same act: tightening takes authority away from four seats and
+// the worst case of a stray one is that a turn has to be re-run, while loosening
+// hands editing and command authority to every seat in the room — and in an
+// --auto room, hands it with nothing left asking. `c` spends a keystroke on the
+// irreversible direction for exactly this reason. So does this.
+//
+// The second is that neither direction is offered mid-turn. Posture is argv,
+// fixed at spawn (persistent.go), so the seats already running hold the flags
+// they were launched with no matter what this function sets. Flipping under them
+// would leave the badge claiming a posture the live process does not have, which
+// is the "column would say READ while the live process still held the write
+// flags" failure the per-step posture rule exists to forbid. /cd refuses for the
+// same reason and this is the same refusal, not a house style.
+//
+// Nothing is persisted as a posture to be restored. resume.go records the
+// posture "for the record only" and TestReattachDoesNotRestoreWritePosture is
+// the guarantee that it never comes back from a file — "a posture that can
+// arrive from a file is not one anyone typed" survives this change intact,
+// because a posture typed into the composer is typed.
+func (m *Model) postureCommand(write bool) bool {
+	if m.turn != nil {
+		// The draft is kept, the way /cd keeps it: the command is still what the
+		// user wants, one turn later.
+		m.st.Notice = "a turn is in flight — /read and /write move the room between turns"
+		return true
+	}
+	if write == m.st.Write {
+		if write {
+			m.st.Notice = "the room already writes — /read makes it read-only"
+		} else {
+			m.st.Notice = "the room is already read-only — /write lets it write again"
+		}
+		m.setDraft("")
+		return true
+	}
+	m.setDraft("")
+
+	if !write {
+		m.applyPosture(false)
+		// "on their next turn" is the honest half. Nothing is killed here: a live
+		// seat is respawned lazily by seatProcess when it sees the mismatch, the
+		// same way /cd moves one, so a /read that is /write'd back before anyone
+		// dispatches costs nothing at all.
+		m.st.Notice = "the room is read-only — seats answer and compare, none of them writes. " +
+			"They move on their next turn"
+		return true
+	}
+
+	m.writePending = true
+	// The card names which write the user is about to get, because the two are
+	// materially different and only one of them asks first. A room started with
+	// --auto has no gate to restore, and saying "y approves each change" there
+	// would be a promise this room cannot keep.
+	if m.opts.Auto {
+		m.st.Notice = "let the room write again? y confirms — --auto is on, so no seat will ask before it acts · n keeps it read-only"
+	} else {
+		m.st.Notice = "let the room write again? y confirms — claude asks before each change, the other seats do not · n keeps it read-only"
+	}
+	return true
+}
+
+// applyPosture sets the room's posture and rebuilds every column's claim about
+// it.
+//
+// The rebuild is the whole function. Sandbox is computed once in stateWith from
+// opts.Write, so a posture that moved without this loop would leave four badges
+// describing the room the user just left — a column reading "write" beside a
+// room that only talks, which is a displayed value no longer coming from what
+// was measured (§4a.1). The badge is the seat's own claim about what it may do;
+// it may not outlive the claim being true.
+//
+// Recomputed from postureClaim rather than patched in place so the badge and the
+// invocation cannot drift: the same function answers at launch and here, still
+// reading the gate from opts.Auto and the guard from the hooks file that was
+// actually written.
+func (m *Model) applyPosture(write bool) {
+	m.st.Write = write
+	windows := runtime.GOOS == "windows"
+	for i := range m.st.Columns {
+		c := &m.st.Columns[i]
+		c.Sandbox = postureClaim(c.Vendor, windows, write, !m.opts.Auto, m.hooks.Wired())
+	}
 }
 
 // plural is the one-word difference between "1 turn" and "2 turns".

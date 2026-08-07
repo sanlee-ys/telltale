@@ -2674,7 +2674,7 @@ func helpKeys(sty Styles) []string {
 		// terminal — which is exactly where the posture explanation was standing
 		// when a user asked what "unsandboxed" meant, the failure that split this
 		// panel into two pages. Below the fold is not a cheaper row, it is no row.
-		"  /cd <dir>    move the room; c clears the focused seat's thread (y); /trace <file> times turns",
+		"  /cd <dir>    move the room; /read /write posture (y); c clears a seat's thread (y); /trace <file> times turns",
 		// One row for three keys, and the merge is the honest shape rather than
 		// a saving. The panel's budget is hard (17 rows, above) and yank had to
 		// land inside it — a copy key documented below the fold is a copy key
@@ -2775,11 +2775,15 @@ func helpBadgeGloss() []struct {
 			"nothing restricts this vendor at the OS level. MEASURED,",
 			"not assumed — treat this column as able to change your files",
 		}},
+		// Both of these named --write alone until /write existed. The flag was
+		// the only way to reach either badge and now it is not, so a legend
+		// still crediting it would send a reader looking for a relaunch — the
+		// §9.17 defect, reappearing in the glossary that explains the thing.
 		{SandboxWrite, []string{
-			"--write: this column may edit and run things in the workspace",
+			"--write or /write: this column may edit and run in the workspace",
 		}},
 		{SandboxGated, []string{
-			"--write, and this seat asks first — y approves, n denies",
+			"--write or /write, and this seat asks first — y approves, n denies",
 		}},
 	}
 }

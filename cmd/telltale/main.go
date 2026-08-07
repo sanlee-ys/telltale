@@ -286,6 +286,12 @@ telltale council flags:
                               unasked and their columns say so — which is why
                               the workspace is the real containment. Point --cd
                               at a git worktree if that matters.
+                              The posture also moves from INSIDE the room: /read
+                              makes it read-only at once, /write asks y/n before
+                              letting it write again. The flag is for the room
+                              you want at the door; those are for the one you
+                              change your mind about. Seats move on their next
+                              turn.
                               --write is still accepted and does nothing.
   --auto                      let the gated seat approve its own tool calls
                               instead of asking. Reach for it when you are not

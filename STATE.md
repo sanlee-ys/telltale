@@ -63,13 +63,16 @@ Nothing claimed.
 
 ## Known gaps, not yet owned
 
-- **Three controls still violate the §9.17 mid-session rule**, each its own
-  change: `--read`, `--auto`, `--vendor`. The inventory and the per-control
+- **Two controls still violate the §9.17 mid-session rule**, each its own
+  change: `--auto`, `--vendor`. The inventory and the per-control
   reasoning are in [docs/design.md §9.17](docs/design.md); it is not restated
   here. `--brief` was examined and deliberately **not** filed — it is first-turn
-  context by definition, so re-briefing is a separate question.   `--fresh` and
-  `--trace` came off this list when `c` and `/trace` landed; both flags stay,
-  because each is a real thing to want at launch.
+  context by definition, so re-briefing is a separate question.   `--fresh`,
+  `--trace` and `--read` came off this list when `c`, `/trace` and
+  `/read`/`/write` landed; all three flags stay, because each is a real thing to
+  want at launch. `--auto`'s surface may not be a room command at all — the
+  preference forms while an approval card is on screen, so a third key on that
+  card is the live alternative and is undecided.
 
 - **`docs/design.md` §3 does not name the canary set.** §7 now records how drift
   *renders*; §3 still does not say what each adapter actually watches. A canary
