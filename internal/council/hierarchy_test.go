@@ -134,34 +134,51 @@ func TestPhaseMarksSurviveASCII(t *testing.T) {
 
 // TestTheSeatNameAndItsStateAreOneLine. The header used to be a name at the far
 // left and a bare word at the far right with twenty-five dead cells between,
-// which reads as two unrelated labels rather than as a seat with a state. The
-// rule between them is this room's existing grammar for "a label and the
-// numbers that belong to it" — the same shape turnRule draws for every turn in
-// the transcript underneath, so a reader learns one line form instead of two.
+// which reads as two unrelated labels rather than as a seat with a state.
+//
+// Idle seats bind with whitespace — a leader rule there was ink with nothing to
+// divide. Active seats keep the turn-rule grammar (same shape as turnRule) so a
+// reader still learns one line form for "a label and the numbers that belong
+// to it" wherever a seat is actually working.
 func TestTheSeatNameAndItsStateAreOneLine(t *testing.T) {
 	g := UnicodeGlyphs()
-	got := headerRow(room(), g)
-	if !strings.Contains(got, "Claude Code  "+g.Rule) {
-		t.Errorf("the seat name is not bound to its state by a rule: %q", got)
+	idle := headerRow(room(), g)
+	if strings.Contains(idle, g.Rule) {
+		t.Errorf("an idle header still fills with a leader rule: %q", idle)
 	}
-	if !strings.Contains(got, g.Rule+"  "+g.Idle+" idle") {
+	if !strings.Contains(idle, "Claude Code") || !strings.Contains(idle, g.Idle+" idle") {
+		t.Errorf("an idle header lost the name or the state: %q", idle)
+	}
+
+	st := room()
+	st.Columns[0].Phase = PhaseStreaming
+	got := headerRow(st, g)
+	if !strings.Contains(got, "Claude Code  "+g.Rule) {
+		t.Errorf("a working seat name is not bound to its state by a rule: %q", got)
+	}
+	if !strings.Contains(got, g.Rule+"  "+g.Spinner[0]) && !strings.Contains(got, g.Rule+"  ") {
 		t.Errorf("the state does not close the header's rule: %q", got)
 	}
 
-	// The transcript separator is the same shape, which is the point of using it.
+	// The transcript separator is the same shape, which is the point of using it
+	// on working seats.
 	if !strings.Contains(turnRule(2, "8s", 40, g), "turn 2  "+g.Rule) {
-		t.Error("the turn separator and the column header no longer share a grammar")
+		t.Error("the turn separator and the working column header no longer share a grammar")
 	}
 
-	// A column too narrow for a rule keeps the STATE and truncates the name: a
+	// A column too narrow for a gap keeps the STATE and truncates the name: a
 	// clipped seat name is still recognisable and a clipped state word is not.
-	st := room()
 	narrow := columnHeader(st, st.Columns[0], seatFocused, 18, PlainStyles(), g)
-	if !strings.Contains(narrow, "idle") {
-		t.Errorf("a narrow header dropped the state rather than the name: %q", narrow)
+	if !strings.Contains(narrow, "streaming") {
+		t.Errorf("a narrow working header dropped the state rather than the name: %q", narrow)
 	}
-	if w := lipgloss.Width(narrow); w > 18 {
-		t.Errorf("a narrow header is %d cells, want at most 18: %q", w, narrow)
+	idleSt := room()
+	narrowIdle := columnHeader(idleSt, idleSt.Columns[0], seatFocused, 18, PlainStyles(), g)
+	if !strings.Contains(narrowIdle, "idle") {
+		t.Errorf("a narrow idle header dropped the state rather than the name: %q", narrowIdle)
+	}
+	if w := lipgloss.Width(narrowIdle); w > 18 {
+		t.Errorf("a narrow header is %d cells, want at most 18: %q", w, narrowIdle)
 	}
 }
 

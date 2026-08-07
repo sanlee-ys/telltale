@@ -637,24 +637,30 @@ func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 	}
 	right := style.Render(status)
 
-	// The rule takes what the name and the state leave, with TWO cells of air
-	// each side — the same gap this product puts around the "  │  " that
-	// separates zones in the header and the mode line. One cell was enough
-	// everywhere except the case that matters: in --ascii the rule is "-" and
-	// the spinner's first frame is also "-", so a streaming column rendered
-	// "------------ - streaming" and the state mark disappeared into the rule
-	// that was supposed to point at it.
-	//
-	// If there is no room for a rule the name gives way — a truncated seat name
-	// is still recognisable and a truncated state word is not, and the state is
-	// the thing that changed.
+	// The gap between name and state is filled with a rule when the seat is
+	// doing something — same grammar as turnRule, and the two-cell air each
+	// side keeps an ascii spinner ("-") from vanishing into the leader ("-").
+	// Idle seats used to get the same ink for nothing to divide: a long ────
+	// between a name and "○ idle" was filling, not separating. Whitespace does
+	// that job and costs no chrome; the name and state still share one line.
 	gap := w - lipgloss.Width(name) - lipgloss.Width(status) - 4
 	if gap < 1 {
 		keep := maxInt(1, w-lipgloss.Width(status)-1)
 		return label.Render(truncate(name, keep, g.Ellipsis)) + " " + right
 	}
-	return label.Render(name) + "  " +
-		sty.Rule().Render(strings.Repeat(g.Rule, gap)) + "  " + right
+	mid := strings.Repeat(" ", gap)
+	if headerUsesLeader(c) {
+		mid = sty.Rule().Render(strings.Repeat(g.Rule, gap))
+	}
+	return label.Render(name) + "  " + mid + "  " + right
+}
+
+// headerUsesLeader reports whether the column header fills its gap with the
+// turn-rule glyph. Idle has nothing to bind; every other phase does (and
+// streaming/waiting need the air around a rule so an ascii spinner stays
+// distinct).
+func headerUsesLeader(c Column) bool {
+	return c.Phase != PhaseIdle || c.Avail != AvailInstalled
 }
 
 // columnStatus is the state word with its mark and, where there is one, the
@@ -1726,8 +1732,10 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 	if st.Notice != "" {
 		// A notice replaces the keys rather than joining them, and keeps the
 		// warning mark at severity while its words stay plain — the same split
-		// every other note in this room makes.
-		return statusLine(sty.Strong.Render(left),
+		// every other note in this room makes. The mode label keeps leftStyle
+		// (muted on empty compose) so COMPOSE does not compete with the notice
+		// for the same attention.
+		return statusLine(leftStyle.Render(left),
 			[]hint{{key: g.Warn, label: st.Notice, alarm: true}}, lay, sty, g)
 	}
 	return statusLine(leftStyle.Render(left), modeHints(st, g), lay, sty, g)
