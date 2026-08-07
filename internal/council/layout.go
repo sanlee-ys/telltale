@@ -47,9 +47,30 @@ const (
 
 	// stripColumn is the width of a seat that is on screen but not owning the
 	// frame this turn (unaddressed under a narrow route). Wide enough for a
-	// truncated name + phase mark; narrow enough that the addressed seats get
-	// real reading width. Intent-controlled — see State.FrameOwners.
+	// two-letter vendor tag + phase mark + the phase word; narrow enough that
+	// the addressed seats get real reading width. Intent-controlled — see
+	// State.FrameOwners.
 	stripColumn = 14
+
+	// stripWidth is the width at or below which a column stops rendering as a
+	// seat and renders as a STRIP: identity collapses to its two-letter vendor
+	// tag, the clock and the cost leave, and the badge row keeps only a posture
+	// word that fits whole (view.go, stripHeader / stripBadges).
+	//
+	// It is stripColumn itself, and the arithmetic is why it cannot be anything
+	// else. The widest thing a header must still say WHOLE is its phase word —
+	// `streaming` and `cancelled` are nine cells — and the mark in front of it
+	// costs two more. Fourteen minus eleven is three: exactly a two-letter tag
+	// and the space after it. One more cell of indent and the tag would not fit;
+	// one fewer cell of column and the phase word would clip, which §9.11 rules
+	// is not a word at all.
+	//
+	// Nothing else in this package can land here. A PRIMARY column never falls
+	// below minColumn (24) — the tier drops to tabs first — and a tabbed column
+	// is the frame minus two pads, so MinWidth already floors it at 58. So a
+	// column at or under this width is a strip, and no second predicate is
+	// needed to say so.
+	stripWidth = stripColumn
 
 	// promptChrome is the fixed part of the footer: the rule above the
 	// composer, and the mode line below it. The composer itself is variable —

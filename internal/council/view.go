@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
+	"github.com/sanlee-ys/telltale/internal/model"
 )
 
 // Render draws one frame.
@@ -498,30 +499,50 @@ func columnChrome(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 // and therefore the first to shed — below even `f expand`, because it says
 // where you are while the hints say what you can do about it, and a marker that
 // dropped a key to keep a coordinate would be §9.10's trade run backwards.
+//
+// The marker's OWN WORDS shed last, and they shed whole (§9.18). `↑ 12 more
+// above` is fifteen cells against a strip's fourteen, so it used to reach fit()
+// and come back as `↑ 12 more abov` — a line telling a reader something is
+// hidden, in a word that is not one. `more` goes first, because the count in
+// front of it already says how much; `above` and `below` go last, because they
+// are the only part that says which way to press. The count never goes at all.
 func overflowMarker(mark string, n int, where, turn string, hints []string, w int, g Glyphs) string {
-	s := mark + " " + strconv.Itoa(n) + " more " + where
+	count := mark + " " + strconv.Itoa(n)
+	// Longest first, like every shedding list in this file. A width that fits
+	// the full form never reaches the shorter ones, so nothing above strip width
+	// renders differently than it did.
+	forms := []string{count + " more " + where, count + " " + where, count}
 	sep := "  " + g.Sep + "  "
-	fits := func(tail string) bool {
-		return lipgloss.Width(s)+lipgloss.Width(sep)+lipgloss.Width(tail) <= w
-	}
-	// Widest first, and the turn coordinate only ever rides on the widest hint
-	// form. Pairing it with a SHORTER hint would let it survive a width that
-	// cost the room a key, which is the shedding order this comment forbids.
-	if turn != "" {
-		tail := turn
-		if len(hints) > 0 {
-			tail = turn + sep + hints[0]
+	for _, s := range forms {
+		if lipgloss.Width(s) > w {
+			continue
 		}
-		if fits(tail) {
-			return s + sep + tail
+		fits := func(tail string) bool {
+			return lipgloss.Width(s)+lipgloss.Width(sep)+lipgloss.Width(tail) <= w
 		}
-	}
-	for _, h := range hints {
-		if fits(h) {
-			return s + sep + h
+		// Widest first, and the turn coordinate only ever rides on the widest
+		// hint form. Pairing it with a SHORTER hint would let it survive a width
+		// that cost the room a key, which is the shedding order this comment
+		// forbids.
+		if turn != "" {
+			tail := turn
+			if len(hints) > 0 {
+				tail = turn + sep + hints[0]
+			}
+			if fits(tail) {
+				return s + sep + tail
+			}
 		}
+		for _, h := range hints {
+			if fits(h) {
+				return s + sep + h
+			}
+		}
+		return s
 	}
-	return s
+	// Narrower than the count itself. padRight clips it and says so, which is
+	// the only honest answer left at a width that cannot hold a number.
+	return forms[len(forms)-1]
 }
 
 // scrollHint is the keys that move the focused column, as the CURRENT mode has
@@ -753,6 +774,9 @@ func turnAt(anchors []turnAnchor, line int) int {
 // header and for a finished turn's separator means a reader learns one line
 // form instead of two, and the header stops being able to read as two things.
 func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) string {
+	if w <= stripWidth {
+		return stripHeader(st, c, f, w, sty, g)
+	}
 	// A space after the focus mark, and two cells of indent without it, so the
 	// names still line up across the row. "▸Claude Code" saved a cell and spent
 	// it looking like a typo.
@@ -803,6 +827,109 @@ func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 		mid = sty.Rule().Render(strings.Repeat(g.Rule, gap))
 	}
 	return label.Render(name) + "  " + mid + "  " + right
+}
+
+// stripHeader is a seat's header at strip width: who it is, what state it is
+// in, and nothing else that would push a state word off the line.
+//
+// §9.11 settled the degradation order — a clipped seat name is still
+// recognisable and a clipped state word is not, so identity yields first — and
+// then never enforced it at the one width where it bites. A 14-cell strip drew
+// `Anti… ○ idle`: four fifths of a name the room could have said WHOLE in two
+// letters, next to the only fact the strip exists to carry. So identity
+// collapses to the two-letter vendor tag the HUD's grid already prints for the
+// same vendor (vendorTag), and what it gives back is spent on the state:
+//
+//	CC ✓ done      CX ○ idle      AG ⠋ streaming      ⚠ unavailable
+//
+// Three things shed, in this order, and each is a pure function of the width so
+// the frame sweep pins the whole ladder rather than one golden per state:
+//
+//   - the CLOCK, first and always. `8s` is the meta on this line, and turnRule
+//     already ranks a label above the numbers that belong to it. It is not lost:
+//     every finished turn carries its own elapsed on its separator (historyMeta).
+//   - the FOCUS MARK. Two cells of `▸ ` at fourteen is the difference between a
+//     tag and no tag for every nine-letter phase word. §9.12 had already moved
+//     the load-bearing half of that signal off the glyph and onto WEIGHT and
+//     onto the overflow marker's own words (`↑↓ scroll` against `tab to focus`);
+//     both cost no cells, both survive here, and both are what a reader actually
+//     used. A strip is by construction the seat this turn was NOT addressed to,
+//     so spending a seventh of its width marking it — at the price of its
+//     identity — inverts the priority §9.11 set.
+//   - the TAG, last, and only for `unavailable`: the one state word long enough
+//     that two letters and a mark cannot both sit beside it. The column's
+//     position says which seat it is; the word says the thing nothing else can.
+//
+// The phase word itself never truncates. That is the whole rule this function
+// exists to hold.
+func stripHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) string {
+	word, mark := c.Phase.String(), phaseMark(c.Phase, st, g)
+	style := sty.ForPhase(c.Phase)
+	if c.Avail != AvailInstalled {
+		// The same substitution columnStatus makes, and for the same reason: the
+		// phase of a seat that is not there is not a fact about a turn.
+		word, mark, style = "unavailable", g.Warn, sty.SevWarn
+	}
+	// Weight, not a marker, is what says the keys move this one — see above.
+	label := sty.Identity
+	if f.hasKeys() {
+		label = sty.Strong
+	}
+
+	tag := vendorTag(c.Vendor)
+	state := mark + " " + word
+	// Longest first, widest that fits wins. Same idiom as the overflow marker's
+	// hint list, so a reader of this file meets one shedding shape rather than
+	// three.
+	switch {
+	case tag != "" && lipgloss.Width(tag)+1+lipgloss.Width(state) <= w:
+		return label.Render(tag) + " " + style.Render(state)
+	case lipgloss.Width(state) <= w:
+		return style.Render(state)
+	case lipgloss.Width(word) <= w:
+		return style.Render(word)
+	}
+	// Unreachable at stripColumn — the longest word is eleven cells and the
+	// narrowest strip is fourteen — and still honest if some future width breaks
+	// that: a clipped string in this room says out loud that it was clipped.
+	return style.Render(truncate(word, w, g.Ellipsis))
+}
+
+// vendorTag is a seat's identity in two cells, for a column too narrow to say
+// its name.
+//
+// The spellings are the HUD's, character for character (internal/hud's
+// vendorTag), and they are COPIED rather than imported. One product, one
+// vocabulary: a reader who learned `CX` is Codex from the HUD's grid must not
+// meet a second abbreviation in the room. What the copy protects is the seam
+// this repo keeps between the two surfaces — internal/hud and internal/council
+// share the normalized session model and internal/theme's numbers and nothing
+// else (see padRight's note in layout.go) — and reaching across it for a
+// rendering detail is the coupling that seam exists to prevent.
+// TestStripTagsMatchTheHUDSpelling asserts the strings by literal so the copy
+// cannot drift in silence.
+func vendorTag(v model.VendorID) string {
+	switch v {
+	case model.VendorClaude:
+		return "CC"
+	case model.VendorCodex:
+		return "CX"
+	case model.VendorGemini:
+		return "GE"
+	case model.VendorAntigravity:
+		return "AG"
+	case model.VendorCursor:
+		return "CU"
+	default:
+		// A vendor this map has not met yet still gets two cells rather than
+		// none, on the HUD's own fallback: a seat added to one surface should not
+		// read differently on the other in the window before anyone updates both.
+		s := strings.ToUpper(string(v))
+		if len(s) > 2 {
+			s = s[:2]
+		}
+		return s
+	}
 }
 
 // headerUsesLeader reports whether the column header fills its gap with the
@@ -1427,6 +1554,9 @@ func gateCard(st State, c Column, w int, sty Styles, g Glyphs) []string {
 // repo's deliberately-rejected list (design.md §8) — council does not get to
 // invent dollars either.
 func badgeRow(c Column, w int, sty Styles, g Glyphs) string {
+	if w <= stripWidth {
+		return stripBadges(c, w, sty)
+	}
 	var plain, styled []string
 	if b := c.Sandbox.Badge(); b != "" {
 		plain = append(plain, b)
@@ -1455,6 +1585,44 @@ func badgeRow(c Column, w int, sty Styles, g Glyphs) string {
 		return leftS + strings.Repeat(" ", gap) + sty.Muted.Render(cost)
 	}
 	return leftS + sty.Muted.Render("  "+cost)
+}
+
+// stripBadges is the badge row at strip width: the posture word, or nothing at
+// all.
+//
+// The row says three things at full width, and at fourteen cells it used to say
+// all three and clip two: `  ro:tools  tokens` arrived as `  ro:tools  to`, and
+// `gated  final only` as `gated  fina`. §9.11 rules that a clipped state word is
+// not a word — and a clipped one that is also a PREFIX of another word in the
+// same vocabulary is worse than damage, because it reads as a different claim.
+// `fina` is not a broken `final only`; it is a word this room does not have.
+//
+// So whole words leave instead, in the order of what a reader loses by not
+// seeing them:
+//
+//   - COST first. It is a number, the transcript records it on every turn's own
+//     separator (historyMeta), and §9.11 already ruled that the posture claim
+//     never gives way to it.
+//   - GRANULARITY with it. That word exists so `waiting` cannot be read as a slow
+//     `streaming` — and both of those words are on the header one row above,
+//     where at strip width they are now the only thing on the line.
+//   - POSTURE stays, if it fits WHOLE. Every badge this room spells does at
+//     fourteen (`ro:requested` is the longest, at twelve), which is not luck:
+//     §9.2 is emphatic that a claim you cannot see is not a claim, so the safety
+//     word is the last thing on this row to go. A badge too long for the strip
+//     drops rather than clips, and stays reachable at full length on the `?`
+//     postures page and in the room header's own READ / WRITE marker.
+//
+// No indent, unlike the full-width row. Those two cells exist to bind the badges
+// to a seat NAME above them, and at strip width there is no name — the header
+// starts at column zero, so this does too, and the strip reads as one flush-left
+// block rather than as a column with its margins still on.
+func stripBadges(c Column, w int, sty Styles) string {
+	b := c.Sandbox.Badge()
+	if b == "" || lipgloss.Width(b) > w {
+		return ""
+	}
+	return sty.ForSandbox(c.Sandbox.Level).Render(b)
 }
 
 // costCell is the vendor's own figure, and the word that says what it counted.
