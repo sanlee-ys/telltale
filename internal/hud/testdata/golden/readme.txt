@@ -1,4 +1,4 @@
- telltale  │  7 sessions  │  claude 2  codex 2  gemini 1  agy 1  cursor 1                     5h ██████▎─ 88.4% ↻ 3h02m
+ telltale  │  7 sessions  │  claude 2  codex 2  gemini 1  agy 1  cursor 1               codex 5h ██████▎─ 88.4% ↻ 3h02m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                               MODEL          CONTEXT                AGE
  ● CC │ telltale  C:\src\code                                                 Opus 5                           — │  12s

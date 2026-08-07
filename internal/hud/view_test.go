@@ -1245,6 +1245,25 @@ func TestForecastClockUsesTheStateLocation(t *testing.T) {
 	}
 }
 
+func TestQuotaBlockNamesItsVendor(t *testing.T) {
+	st := healthyState(120, 9)
+	got := quotaBlock(st, PlainStyles(), UnicodeGlyphs(), st.Width)
+	if !strings.Contains(got, "claude ") {
+		t.Fatalf("quota block missing vendor label: %q", got)
+	}
+	if strings.HasPrefix(strings.TrimSpace(got), "5h") {
+		t.Fatalf("quota block still unattributed: %q", got)
+	}
+
+	got = quotaBlock(st, PlainStyles(), UnicodeGlyphs(), 60)
+	if !strings.HasPrefix(got, "cc ") {
+		t.Fatalf("narrow quota block missing compact vendor label: %q", got)
+	}
+	if lipgloss.Width(got) > 60 {
+		t.Fatalf("narrow quota block is %d columns: %q", lipgloss.Width(got), got)
+	}
+}
+
 // The sampler and the header must read the same windows, or the forecast
 // describes a quota that is not on screen.
 func TestTheForecastSamplesTheWindowsTheHeaderShows(t *testing.T) {

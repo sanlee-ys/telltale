@@ -36,13 +36,9 @@ func TestParseRoute(t *testing.T) {
 		brief string
 	}{
 		{
-			// The committee rule, encoded: silence convenes the whole room. The
-			// old rule sent this to Claude alone to protect two constrained
-			// quota pools; that was overruled, and the bill is now every seated
-			// vendor on every unaddressed turn.
-			name:  "no mention goes to everyone, not claude alone",
+			name:  "no mention goes to claude alone",
 			draft: "should we resume or re-send?",
-			want:  Route{},
+			want:  to(model.VendorClaude),
 			brief: "should we resume or re-send?",
 		},
 		{
@@ -92,10 +88,9 @@ func TestParseRoute(t *testing.T) {
 			brief: "go",
 		},
 		{
-			// @all is redundant now — it names the default — and it stays
-			// accepted rather than erroring, so it has to resolve to the same
-			// zero route silence does.
-			name:  "@all is redundant and still convenes the whole room",
+			// @all is load-bearing again: silence is Claude alone, so this is
+			// how you convene the committee.
+			name:  "@all explicitly convenes the whole room",
 			draft: "@all what do you think?",
 			want:  Route{},
 			brief: "what do you think?",
@@ -106,16 +101,16 @@ func TestParseRoute(t *testing.T) {
 			// because of a word in the middle of a sentence.
 			name:  "a mention mid-sentence is prose, not routing",
 			draft: "ask @claude about the resume flag",
-			want:  Route{},
+			want:  to(model.VendorClaude),
 			brief: "ask @claude about the resume flag",
 		},
 		{
 			// An unresolvable token is left alone rather than erroring. The
 			// footer shows the resolved routing while typing, so a typo reads
-			// as "going to everyone" before enter rather than after.
+			// as "going to claude" before enter rather than after.
 			name:  "an unknown mention stays in the brief",
 			draft: "@claud fix the typo",
-			want:  Route{},
+			want:  to(model.VendorClaude),
 			brief: "@claud fix the typo",
 		},
 		{
@@ -214,20 +209,20 @@ func TestParseRoute(t *testing.T) {
 			// must not be eaten by the router.
 			name:  "an unknown exclusion stays in the brief",
 			draft: "-@claud fix the typo",
-			want:  Route{},
+			want:  to(model.VendorClaude),
 			brief: "-@claud fix the typo",
 		},
 		{
 			// A bare dash is not routing. Only "-@" is.
 			name:  "a leading dash that is not -@ is left alone",
 			draft: "-- fix the flag parsing",
-			want:  Route{},
+			want:  to(model.VendorClaude),
 			brief: "-- fix the flag parsing",
 		},
 		{
 			name:  "an exclusion mid-sentence is prose, not routing",
 			draft: "ask everyone -@claude style",
-			want:  Route{},
+			want:  to(model.VendorClaude),
 			brief: "ask everyone -@claude style",
 		},
 	}
@@ -336,8 +331,8 @@ func TestFooterShowsRoutingBeforeDispatch(t *testing.T) {
 
 	st.Draft = "an unaddressed brief"
 	st.Route, _ = ParseRoute(st.Draft)
-	if got := render(st); !strings.Contains(got, "everyone") {
-		t.Error("an unaddressed brief does not say it is convening everyone")
+	if got := render(st); !strings.Contains(got, "claude") {
+		t.Error("an unaddressed brief does not say it is going to claude")
 	}
 
 	st.Draft = "@all convene"
@@ -356,13 +351,12 @@ func TestFooterShowsRoutingBeforeDispatch(t *testing.T) {
 		t.Error("an addressed brief still claims it is going to everyone")
 	}
 
-	// The typo case, which is the whole reason this is on screen: an @typo does
-	// not narrow, so it must read as going to the whole room — four quotas —
-	// while there is still time to fix it, not silently to nobody.
+	// The typo case: an @typo does not narrow, so it falls back to the default
+	// (Claude) while there is still time to fix it.
 	st.Draft = "@claud typo"
 	st.Route, _ = ParseRoute(st.Draft)
-	if got := render(st); !strings.Contains(got, "everyone") {
-		t.Error("an unresolved mention does not read as going to everyone")
+	if got := render(st); !strings.Contains(got, "claude") {
+		t.Error("an unresolved mention does not read as going to claude")
 	}
 }
 

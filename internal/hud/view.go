@@ -52,7 +52,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 	stale := st.scanAge() > staleAfter && !st.Snap.At.IsZero()
 	rowSty := sty.Dim(stale)
 
-	quota := quotaBlock(st, sty.Dim(st.scanAge() > criticalAfter && !st.Snap.At.IsZero()), g)
+	quota := quotaBlock(st, sty.Dim(st.scanAge() > criticalAfter && !st.Snap.At.IsZero()), g, st.Width)
 	header := headerLines(st, lay, quota, sty, g)
 
 	full := st.Height >= fullChromeHeight
@@ -305,20 +305,25 @@ func vendorCounts(st State, sty Styles) string {
 	return strings.Join(out, "  ")
 }
 
-// quotaBlock renders account-level quota, ONCE.
+// quotaBlock renders account-level quota, ONCE, labelled with the vendor whose
+// session supplied the windows.
 //
 // rate_limits is a property of the account, not of the session: repeating it
 // per row would assert per-session quota, which is false (§7.1). If no adapter
 // can source it, the block is absent — not zeroed.
 //
-// v1 limitation, stated rather than hidden: the block shows the windows from
-// the most recently active session that has any. With one quota-bearing vendor
-// that is exact; a second one would need a per-vendor block, which is a change
-// to this function and to the header layout, not to the schema.
-func quotaBlock(st State, sty Styles, g Glyphs) string {
-	windows := accountQuota(st)
+// v1 still shows one vendor's windows (most recently active session that has
+// any). The vendor id prefixes the block so an unlabeled `7d 79%` cannot be
+// read as "the fleet" when it is Codex's weekly. A second vendor needs a
+// per-vendor block — layout change, not schema.
+func quotaBlock(st State, sty Styles, g Glyphs, width int) string {
+	windows, source := accountQuotaSource(st)
 	if len(windows) == 0 {
 		return ""
+	}
+	vendor := ""
+	if i := strings.IndexByte(source, '/'); i > 0 {
+		vendor = source[:i]
 	}
 
 	parts := make([]string, 0, len(windows))
@@ -354,7 +359,21 @@ func quotaBlock(st State, sty Styles, g Glyphs) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	return strings.Join(parts, "   "+sty.Muted.Render(g.Sep)+"   ")
+	if vendor == "" {
+		return strings.Join(parts, "   "+sty.Muted.Render(g.Sep)+"   ")
+	}
+
+	// Keep the full vendor name whenever it fits. At the 60-column floor the
+	// established two-letter vendor tag plus a separator with one less padding
+	// cell preserves attribution without pushing the header past the terminal.
+	wideBody := strings.Join(parts, "   "+sty.Muted.Render(g.Sep)+"   ")
+	full := sty.Muted.Render(vendor) + " " + wideBody
+	if lipgloss.Width(full) <= width {
+		return full
+	}
+	compactBody := strings.Join(parts, "  "+sty.Muted.Render(g.Sep)+"   ")
+	tag := strings.ToLower(vendorTag(model.VendorID(vendor)))
+	return sty.Muted.Render(tag) + " " + compactBody
 }
 
 // accountQuota picks the windows the header block speaks for.

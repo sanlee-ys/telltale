@@ -670,11 +670,13 @@ type State struct {
 	Quote bool
 
 	// Route is who the CURRENT draft is addressed to, re-derived on every
-	// keystroke. Nil means everyone seated.
+	// keystroke. The zero Route means explicit @all; NewState starts with the
+	// control-plane default so an empty first draft is not displayed as a
+	// broadcast before the first keystroke.
 	//
 	// It lives on State rather than being computed inside Render because the
 	// footer has to show it while typing: the point of showing routing is that
-	// an @typo reads as "this is going to everyone" BEFORE enter, and a value
+	// an @typo reads as "this is going to claude" BEFORE enter, and a value
 	// the renderer derived privately could drift from the one dispatch uses.
 	// One parse, one source of truth, displayed and acted on.
 	Route Route
@@ -768,7 +770,7 @@ type State struct {
 
 // NewState is the empty room.
 func NewState() State {
-	return State{Mode: ModeComposing, Focus: 0}
+	return State{Mode: ModeComposing, Focus: 0, Route: defaultRoute()}
 }
 
 // Busy reports whether any column is still working. Drives the spinner and the

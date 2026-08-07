@@ -1437,7 +1437,7 @@ vendor that declares every capability, so the whole grid is exercised; render I 
 shows what the real v1 capability mix produces.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1                5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  4 sessions  │  claude 3  codex 1         claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
@@ -1456,7 +1456,7 @@ columns. Nothing about it looks like zero.
 
 ```
  telltale  │  4 sessions  │  claude 3  codex 1
-                      5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+               claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────
         SESSION                           MODEL          CONTEXT            AGE
  ● CC │ telltale  C:\src\code             Opus 5         █████▉──  84.2% │  12s
@@ -1471,7 +1471,7 @@ columns. Nothing about it looks like zero.
 
 ```
  telltale  │  4 sessions  │  cc 3  cx 1
-              5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+       claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────
         SESSION                             MODEL            CTX    AGE
  ● CC │ telltale  C:\src\code               Opus 5         84.2% │  12s
@@ -1486,7 +1486,7 @@ columns. Nothing about it looks like zero.
 sorted by activity, so they do not appear in the order they are described.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1                                                5h ███─────   42% ↻ 2h13m
+ telltale  │  4 sessions  │  claude 3  codex 1                                         claude 5h ███─────   42% ↻ 2h13m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         ────────────     0%    $0.04 │   3s
@@ -1529,7 +1529,7 @@ is never used for notices — it holds identity and quota only, which keeps it f
 overflowing at any width.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1                5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  4 sessions  │  claude 3  codex 1         claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
@@ -1545,7 +1545,7 @@ contradict the per-vendor totals beside it. Non-default filter/sort is stated in
 footer, because a monitor that silently hides rows is a liar.
 
 ```
- telltale  │  3 of 4 sessions  │  claude 3  codex 1           5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  3 of 4 sessions  │  claude 3  codex 1    claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
@@ -1636,7 +1636,7 @@ that revealed it. The ordinary case is render M. The fourth word:
 floating panel on a monitor obscures the thing being monitored.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1                5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  4 sessions  │  claude 3  codex 1         claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
         q      quit  (also ctrl+c)
@@ -1666,7 +1666,7 @@ carries a `~`, because Cursor persists its own `contextUsagePercent` and telltal
 it rather than computing one (§3.9).
 
 ```
- telltale  │  5 sessions  │  claude 1  codex 1  gemini 1  agy 1  cursor 1                     5h ██████▎─ 88.4% ↻ 3h02m
+ telltale  │  5 sessions  │  claude 1  codex 1  gemini 1  agy 1  cursor 1               codex 5h ██████▎─ 88.4% ↻ 3h02m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                               MODEL          CONTEXT                AGE
  ● CC │ telltale  C:\src\code                                                 Opus 5                           — │  12s
@@ -1701,7 +1701,7 @@ real precision loss in the bar and acceptable only because the number beside it 
 the precision.
 
 ```
- telltale  |  4 sessions  |  claude 3  codex 1                5h ###-----   42% ~ 2h13m   |   7d #-------   18% ~ 5d02h
+ telltale  |  4 sessions  |  claude 3  codex 1         claude 5h ###-----   42% ~ 2h13m   |   7d #-------   18% ~ 5d02h
  ----------------------------------------------------------------------------------------------------------------------
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  * CC | telltale  C:\src\code                                        Opus 5         #########---  84.2%    $2.41 |  12s
@@ -1726,7 +1726,7 @@ detail pane alike. A warning that came and went with whichever pane was open wou
 a reader could not trust to be there.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1                5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  4 sessions  │  claude 3  codex 1         claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
@@ -2197,7 +2197,7 @@ quota is a property of the account):
 
 ```
  telltale  │  4 sessions  │  claude 3  codex 1
-                                          5h ███─────   42% ↻ 2h13m  ~13:27 · 18m basis   │   7d █▎──────   18% ↻ 5d02h
+                                   claude 5h ███─────   42% ↻ 2h13m  ~13:27 · 18m basis   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
@@ -2275,7 +2275,7 @@ sourced number in the same visual class as a missing one.
 query and hands the keyboard back; `esc` clears it.
 
 ```
- telltale  │  2 of 4 sessions  │  claude 3  codex 1           5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  2 of 4 sessions  │  claude 3  codex 1    claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
@@ -2289,7 +2289,7 @@ query and hands the keyboard back; `esc` clears it.
 and once applied, with the mode left:
 
 ```
- telltale  │  2 of 4 sessions  │  claude 3  codex 1           5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  2 of 4 sessions  │  claude 3  codex 1    claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
@@ -2466,9 +2466,10 @@ in the schema moved.
 
 ## 9. Council (ADR-008)
 
-`telltale council` is the dispatch room: one brief typed once, broadcast to every seated
-vendor CLI, replies streaming side by side. It exists because the alternative is four
-terminals and a clipboard.
+`telltale council` is the dispatch room: one brief typed once, routed to Claude's control
+plane by default or to the explicitly `@mentioned` seats, replies streaming side by side.
+`@all` convenes every seated vendor when independent answers are the point. It exists
+because the alternative is four terminals and a clipboard.
 
 It is the one subcommand that is not a gauge, and the boundary is worth stating precisely
 rather than hand-waving. §7.8's invariant — no keybinding may mutate vendor state or send
@@ -3754,11 +3755,10 @@ because the request arrived wearing the costume of a mechanism.
 ### 9.16 `/flow`: the hop holds the authority, and it has to say so out loud
 
 A `/flow` chain is `@seat verb [task] [write:<path>]`, arrows between hops, dispatched **one hop
-at a time to exactly one seat**. That is the first thing about it that is unlike everything else
-in §9: the room's normal dispatch asks every seated vendor the same question, because three
-answers formed independently *are* the product (§9.2). A flow hop is not a question to the room;
-it is an instruction to a named seat, and a chain that fanned out would hand each hop's authority
-to seats the chain never mentioned.
+at a time to exactly one seat**. Ordinary dispatch can address Claude by default, one or more
+explicitly mentioned seats, or the whole committee via `@all`; a flow hop has no such choice.
+It is an instruction to its one named seat, and a chain that fanned out would hand each hop's
+authority to seats the chain never mentioned.
 
 Nothing becomes a flow without the literal `/flow` prefix. A bare `->` in prose stays prose —
 "compare approach A -> approach B" is a question — because the alternative is ordinary briefs

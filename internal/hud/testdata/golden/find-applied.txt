@@ -1,4 +1,4 @@
- telltale  │  2 of 4 sessions  │  claude 3  codex 1           5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  2 of 4 sessions  │  claude 3  codex 1    claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
