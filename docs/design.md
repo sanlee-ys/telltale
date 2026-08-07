@@ -4135,3 +4135,86 @@ progress bar for a conversation, and the marker already says how much is left in
 scroll keys use. And a `[`/`]` that moved *focus* between columns when a column has one turn:
 two motions on one key, resolved by content, is the kind of binding that is only ever right for
 the person who wrote it.
+
+### 9.21 the room knew what the turn would cost and did not say
+
+#99 restored the cheap default: silence goes to Claude alone, and the committee is
+convened by typing `@all` or naming the seats. That settled *which* route is expensive and
+made every expensive route explicit — and it left the footer stating the route in the same
+words whether it reaches one vendor or four. `→ everyone` is accurate, and how much
+`everyone` is depends on what is installed and on what `--vendor` left in the room, which
+is exactly the part a user cannot read off the word.
+
+**The routing cell states the bill when the draft would reach more than one seat.**
+`→ everyone  (3 seats)`, `→ everyone but codex  (2 seats)`. The room already computes this
+number — `dispatch` refuses a turn that reaches nobody by counting it — and the moment it
+is worth knowing is the moment before `enter`, on the cell that is already answering the
+same question.
+
+- **One seat states no count.** `→ claude` names every seat it reaches in its own text; a
+  cell that restates its neighbour is how this footer became the wall §9.11 had to take
+  apart. From two upward the route names a *set*, and the size of a set is not in the word.
+- **It counts seated ∩ addressed**, through the same `State.SeatsIn` the dispatch gate now
+  calls. A route may name a vendor that is not installed or that `--vendor` left out; that
+  seat is never spawned, so billing for it would quote a price for a turn that does not
+  happen. `Model.seatedIn` became one line delegating to it rather than a second copy —
+  a bill derived from different arithmetic than the dispatch is a bill for a different turn.
+- **A refused route prices nothing.** `mixed @ and -@` addresses nobody, and the one thing
+  that cell owes a reader mid-typing is what is wrong with the line they are still holding.
+- **No colour, no cell, no new glyph.** The count is the *label* half of a hint and the
+  route is the *key* half, which is the figure/ground split every other item on this line
+  already makes (§9.11) — so the seat names keep their intensity and the number recedes to
+  chrome for free. It is parenthesised because that is this room's existing grammar for a
+  qualifier on the thing in front of it (`(+2 queued)`, `(turn 1 is blind)`), and because
+  weight is invisible under `NO_COLOR`, where `→ codex, agy 2 seats` runs the price into
+  the list it is pricing. The rebuttal tag moved to its own cell so the count could sit
+  against the route it prices; it kept its intensity by keeping the key half of a hint.
+
+#### The header carries the live turn's route
+
+Once `enter` is pressed the composer clears and its routing cell resets to the *next*
+draft's default, while the columns take anything from seconds to minutes. For that whole
+window the room has nowhere at all that says where this turn went — and each column's
+transcript does not record participation until it lands. So the header's turn cell carries
+it while it is live: `turn 10 → everyone`, `turn 10 → codex, agy`, reverting to plain
+`turn 10` when the last column finishes. **The route becomes history at that instant**, and
+the transcript is where history goes; a header still naming it would be describing the past
+in the one cell that describes the present.
+
+`State.TurnRoute` is a **pointer**, and that is §4a.1's zero-vs-absent rule rather than a
+style choice: `Route{}` is a real and extremely common route — it is what `@all` parses to
+— so a value field could not tell "this turn went to everyone" from "no turn is running".
+The same distinction `Column.CostUSD` draws with the same mechanism. It is set where the
+turn actually starts rather than beside `FrameOwners`, because everything above that line
+can still refuse the dispatch and a route on the header of a turn that never began would
+report a spend that never happened. The two have opposite lifetimes on purpose: the
+geometry outlives the turn so nothing reflows under a reader (§9.11), the route is retired
+with it.
+
+**It prints the route's own `label()`**, never a second vocabulary — what the header shows
+is what would have to be typed to produce it — and the arrow is the literal one the
+composer's cell uses rather than a `Glyphs` entry, so one fact cannot drift into two
+spellings.
+
+**A `/flow` hop states no route at all.** A hop is dispatched to exactly one named seat
+(§9.16) and the cell immediately to its right already says which, so the route would be the
+header saying the same thing twice — and the arrow, appended after the hop, would read as
+pointing at it. This is the same rule as the shedding below rather than an exception to it.
+
+#### Shedding order: a fact with a home elsewhere yields to facts that have none
+
+The header already elides the workspace path from the left, and the new cell had to be
+ranked against it. **The route sheds first** — before the path, before `3/4 seated`, before
+`briefed`. The route is on screen in the composer a keystroke earlier and in the transcript
+a moment later; the workspace is nowhere else at all, and it is the one fact here that
+changes *what the agents can see*, which is why it has been on screen at all times since
+this header was written. So the route is added only when it costs nothing that was already
+there: the path keeps its cells if it had them, and where there was no room for a path
+either way, the counts keep their gap.
+
+**What was declined.** A dollar figure beside the seat count: cost is reported per seat per
+turn where a vendor reports it, and multiplying a seat count by anything would be council
+deriving a number and presenting it as read — the top item on this repo's rejected list
+(§4a.1). Billing the *route's* vendors rather than the seated ones, which would have been
+one line shorter and would have priced seats that are never spawned. And a count on the
+one-seat case, which is a number whose only reading is "yes, one".

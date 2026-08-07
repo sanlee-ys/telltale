@@ -357,6 +357,15 @@ func (m *Model) dispatch() tea.Cmd {
 	}
 
 	m.turn = ts
+	// The header carries this until the last column lands (§9.21). Set HERE and
+	// not beside FrameOwners, even though both are the turn's intent captured at
+	// the one moment it is known: everything above this line can still refuse
+	// the dispatch, and a route on the header of a turn that never started would
+	// be the room reporting a spend that never happened. The two also have
+	// opposite lifetimes — the geometry outlives the turn so nothing reflows
+	// under a reader, the route is retired the moment the turn ends.
+	sent := route
+	m.st.TurnRoute = &sent
 	m.st.Turn++
 	m.st.Mode = ModeViewing
 	m.setDraft("")
@@ -402,15 +411,11 @@ func (m *Model) seatPosture() vendors.Posture {
 }
 
 // seatedIn counts how many seated columns a route actually reaches.
-func (m *Model) seatedIn(route Route) int {
-	n := 0
-	for _, c := range m.st.Columns {
-		if m.st.seats(c) && route.addresses(c.Vendor) {
-			n++
-		}
-	}
-	return n
-}
+//
+// One line, because the footer quotes this number before enter is pressed and
+// the renderer cannot reach a *Model: the arithmetic moved to State.SeatsIn so
+// the bill and the dispatch cannot be computed two different ways (§9.21).
+func (m *Model) seatedIn(route Route) int { return m.st.SeatsIn(route) }
 
 // frameOwnersFor lists the visible seated vendors that own column width for
 // this turn. Empty means equal four-up — @all, everyone, or a route that
@@ -974,6 +979,11 @@ func (m *Model) turnColumnFinished(v model.VendorID) {
 	m.turn.cancel()
 	m.turn = nil
 	m.cancelling = false
+	// The route stops being live news the instant the turn is over: each column
+	// has recorded its own participation by now, so a header that went on naming
+	// it would be repeating history in the one cell that describes the present
+	// (§9.21).
+	m.st.TurnRoute = nil
 	m.st.Mode = ModeComposing
 	// The turn is over, so the ids it produced are worth keeping. Saved HERE
 	// rather than only on the way out, because the failure this exists to

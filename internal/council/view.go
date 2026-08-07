@@ -153,8 +153,9 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	// and the seat holding it. This is the only line here that explains a turn
 	// the user did not press enter on: three idle columns and a brief nobody
 	// typed is otherwise indistinguishable from the room acting on its own.
+	hop := ""
 	if st.FlowSteps > 0 {
-		round += "  " + g.Sep + "  hop " + strconv.Itoa(st.FlowHop) + "/" + strconv.Itoa(st.FlowSteps) + " @" + string(st.FlowVendor)
+		hop = "  " + g.Sep + "  hop " + strconv.Itoa(st.FlowHop) + "/" + strconv.Itoa(st.FlowSteps) + " @" + string(st.FlowVendor)
 	}
 	seated := strconv.Itoa(st.Seated()) + "/" + strconv.Itoa(len(st.Columns)) + " seated"
 	// "no brief" is stated rather than left blank, and that asymmetry is
@@ -166,7 +167,31 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	if st.Briefed {
 		brief = "briefed"
 	}
-	right := sty.Muted.Render(round + "  " + g.Sep + "  " + seated + "  " + g.Sep + "  " + brief)
+	// The live turn's destination, on the cell that already names the turn:
+	// "turn 10 → everyone". It is the room's one moving fact that has no other
+	// home while it is true — the composer's routing cell has already been
+	// cleared and refilled with the next draft's default, and each column's
+	// transcript does not record participation until the turn lands (§9.21).
+	//
+	// The route's OWN label(), never a second vocabulary: what the header prints
+	// is what would have to be typed to produce it, so a reader can read the
+	// header and then reproduce the turn. The arrow is likewise the literal one
+	// the composer's routing cell uses rather than a Glyphs entry — the two are
+	// the same statement about the same turn a keystroke apart, and giving the
+	// header its own glyph would let one fact drift into two spellings.
+	//
+	// A /flow hop states no route, and that is the same rule the shedding below
+	// runs on rather than an exception to it: a hop goes to exactly one named
+	// seat (§9.16) and the cell immediately to the right already says which.
+	// The route is attached to the turn number and BEFORE the hop cell, so the
+	// arrow can never read as pointing at the hop.
+	rightZone := func(withRoute bool) string {
+		r := round
+		if withRoute && st.TurnRoute != nil && st.FlowSteps == 0 {
+			r += " → " + st.TurnRoute.label()
+		}
+		return sty.Muted.Render(r + hop + "  " + g.Sep + "  " + seated + "  " + g.Sep + "  " + brief)
+	}
 
 	// The path takes whatever is left, elided from the left because the
 	// uninformative part of a path is its prefix. It is introduced by the same
@@ -174,8 +199,35 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	// and the directory it dispatches into read as two facts rather than as one
 	// run-on label — which is what a bare space made them.
 	sep := "  " + sty.Rule().Render(g.Sep) + "  "
-	used := lipgloss.Width(left) + lipgloss.Width(right) + 2 + lipgloss.Width(sep)
-	pathw := lay.Width - used
+	pathWidth := func(r string) int {
+		return lay.Width - lipgloss.Width(left) - lipgloss.Width(r) - 2 - lipgloss.Width(sep)
+	}
+
+	// The route sheds BEFORE the workspace and before the seated/briefed counts,
+	// and the ordering is a rule rather than a preference: a fact with a home
+	// elsewhere yields to facts that have none. The route is on screen in the
+	// composer a keystroke earlier and in the transcript a moment later; the
+	// path is nowhere else at all, and it is the one that changes what the
+	// agents can see. So the route is added only when it costs nothing that was
+	// already here — the path keeps its cells if it had them, and the line
+	// keeps its gap if it did not.
+	right := rightZone(true)
+	if right != rightZone(false) {
+		bare := rightZone(false)
+		// The path was on screen without the route, so it has to still be on
+		// screen with it. Where there was no room for a path either way, the
+		// only question left is whether the counts still fit beside the room's
+		// own name.
+		affordable := pathWidth(right) > 3
+		if pathWidth(bare) <= 3 {
+			affordable = lay.Width-lipgloss.Width(left)-lipgloss.Width(right)-2 >= 1
+		}
+		if !affordable {
+			right = bare
+		}
+	}
+
+	pathw := pathWidth(right)
 	mid := ""
 	if pathw > 3 {
 		mid = sep + sty.Muted.Render(elideLeft(displayPath(st), pathw, g.Ellipsis))
@@ -2046,11 +2098,24 @@ func modeHints(st State, g Glyphs) []hint {
 		// has any text — §7.8 still forbids hiding a key that does something
 		// when you need it; an empty draft does not need newline or rebut yet.
 		// enter stays always: it is what the mode is for.
-		hs := []hint{
-			{key: "→ " + routeLabel(st) + quoteTag(st)},
-			{key: "enter", label: "dispatch"},
-			{key: g.Up + g.Down, label: "scroll"},
+		// The routing cell states the BILL as well as the destination, and the
+		// two are one hint rather than two because the count is a property of
+		// the route rather than a fact beside it: key and label is the same
+		// figure/ground split every other cell on this line makes, so the seat
+		// names keep their intensity and the number recedes to chrome without
+		// costing a cell or a colour (§9.21).
+		//
+		// The rebuttal tag moves to its own cell so the count can sit against
+		// the route it prices. It still answers the same question — what is
+		// actually about to be sent — one separator further along.
+		hs := []hint{{key: "→ " + routeLabel(st), label: seatBill(st)}}
+		if q := quoteTag(st); q != "" {
+			hs = append(hs, hint{key: q})
 		}
+		hs = append(hs,
+			hint{key: "enter", label: "dispatch"},
+			hint{key: g.Up + g.Down, label: "scroll"},
+		)
 		// `tab` sits immediately after the scroll keys, and its absence here was
 		// the concrete half of "i tried scrolling up/down in agy and cursor.
 		// could not." §9.10 wired tab into compose so the scroll keys would have
@@ -2207,14 +2272,47 @@ func gateLabel(st State) string {
 // destination. "(blind)" is shown rather than nothing when armed on turn 1, so
 // the user learns the rule at the moment it applies to them instead of
 // wondering why the toggle did nothing.
+//
+// Its own cell rather than a suffix glued to the routing text, since the
+// routing cell's label is now the seat count and the count has to sit against
+// the route it prices (§9.21). It keeps its intensity by keeping the key half
+// of a hint: this is a fact about the dispatch, not chrome describing one.
 func quoteTag(st State) string {
 	if !st.Quote {
 		return ""
 	}
 	if st.Turn == 0 {
-		return "  + rebuttal (turn 1 is blind)"
+		return "+ rebuttal (turn 1 is blind)"
 	}
-	return "  + rebuttal"
+	return "+ rebuttal"
+}
+
+// seatBill is what the draft would actually cost in seats, or empty when the
+// number would be noise.
+//
+// Empty below two, and that is the whole rule: "→ claude · 1 seat" prices a
+// route whose own text already names every seat it reaches, and a cell that
+// restates its neighbour is how the footer became the wall §9.11 had to take
+// apart. From two upward the route names a SET — "everyone", "everyone but
+// codex" — and how many seats that is depends on what is installed and what
+// --vendor left in the room, which is a fact the user cannot read off the
+// words.
+//
+// It counts seated ∩ addressed, through the same State.SeatsIn that dispatch
+// gates on, so a route naming an unseated vendor is not billed for it. A
+// refused route addresses nobody and prices nothing: its cell keeps the
+// refusal label unchanged, which is the one thing a reader needs from it.
+func seatBill(st State) string {
+	if n := st.SeatsIn(st.Route); n > 1 {
+		// Parenthesised, which is this room's existing grammar for a qualifier
+		// on the thing in front of it — the gate's "(+2 queued)", the rebuttal's
+		// "(turn 1 is blind)". Weight already separates the count from the route
+		// in a colour terminal; the brackets are what keep them apart under
+		// NO_COLOR and in every PlainStyles golden, where a bare "→ codex, agy 2
+		// seats" runs the price into the list it is pricing.
+		return "(" + strconv.Itoa(n) + " seats)"
+	}
+	return ""
 }
 
 // routeLabel names who the current draft is addressed to.
