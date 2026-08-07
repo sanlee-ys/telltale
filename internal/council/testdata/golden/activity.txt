@@ -2,23 +2,23 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸ Claude Code  ─────────────  ✓ done  │    Codex                       ○ idle  │    Antigravity                 ○ idle 
    ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
-                                       │                                        │                                       
- ⚙ Glob                                │  no turn dispatched yet.               │  no turn dispatched yet.              
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+ ⚙ Glob                                │                                        │                                       
  ⚙ Read                                │                                        │                                       
  ⚙ Bash: go test ./...                 │                                        │                                       
-                                       │                                        │                                       
- Tests pass.                           │                                        │                                       
-                                       │                                        │                                       
                                                                                                                         
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
+ Tests pass.                           │  no turn dispatched yet.               │  no turn dispatched yet.              
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 
