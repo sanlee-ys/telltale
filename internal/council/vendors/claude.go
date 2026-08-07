@@ -329,9 +329,26 @@ func (c Claude) baseArgs(p Posture) []string {
 // Council answers its permission callback for safe command variants instead,
 // which is what lets `git push` proceed while keeping `git push --force`
 // visible and gated.
+// The go verbs are here for the same reason the git ones are, and their
+// absence was the sharper hole. A seat in this posture could `git commit` and
+// `git push` but could not `go build` or `go test`, which is not a narrower
+// grant than the git one — it is the same grant with the check removed. It
+// could land work it had no way to verify, and it did: a night was spent
+// producing changes to this package that could not be compiled, and the only
+// safe thing left to do with them was park them on a branch marked UNVERIFIED.
+//
+// `go test` runs the repository's own test code, so this is a real widening
+// and is worth saying plainly rather than filing under tooling. Its
+// containment is the one everything else in this posture rests on — the
+// directory council was pointed at — and it is the same containment already
+// accepted for `git push`, which reaches further than any of these do.
+//
+// `go run` is deliberately absent. It executes an arbitrary main package,
+// which is a different claim from building and testing what is already here.
 const autoAllowedTools = "Bash(git add:*),Bash(git commit:*),Bash(git push:*)," +
 	"Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git log:*)," +
-	"Bash(git diff:*),Bash(git pull:*),Bash(git fetch:*),Bash(gh pr:*),Bash(gh run:*)"
+	"Bash(git diff:*),Bash(git pull:*),Bash(git fetch:*),Bash(gh pr:*),Bash(gh run:*)," +
+	"Bash(go build:*),Bash(go test:*),Bash(go vet:*),Bash(gofmt:*)"
 
 // gateArgs is what makes the vendor ask before every tool call.
 //
