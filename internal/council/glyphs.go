@@ -23,6 +23,16 @@ type Glyphs struct {
 	Down     string // "there is more below" marker
 	Act      string // prefixes a tool call / command in the activity trace
 
+	// Range joins the ends of a span of turn numbers — "turns 2–7" (§9.19).
+	//
+	// Punctuation rather than a mark, which is why it may be the hyphen in the
+	// reduced set even though "-" is already the ASCII rule and the ASCII
+	// spinner's first frame. Those two are marks: they stand alone in a slot and
+	// are read as a symbol. This one only ever appears wedged between two digits,
+	// where nothing else in this room can be, so there is no slot for it to
+	// collide in.
+	Range string
+
 	// Idle is the one mark the phase vocabulary needed that nothing else in this
 	// package already carried: a seat that has not been asked anything yet.
 	//
@@ -71,6 +81,7 @@ func UnicodeGlyphs() Glyphs {
 		Up:       "↑", // ↑
 		Down:     "↓", // ↓
 		Act:      "⚙", // ⚙
+		Range:    "–", // en dash, the typographic joiner for a numeric span
 		Idle:     "○", // ○
 		// ✓ / ✗ / ? — the third is an ordinary question mark on purpose. It is
 		// the one character that reads as "not known" to everybody without a
@@ -105,6 +116,9 @@ func ASCIIGlyphs() Glyphs {
 		// and not ">" (the ellipsis here), because a mark that already means
 		// something else is not a mark.
 		Act: "*",
+		// The plain hyphen, between two digits only — see Range's doc comment
+		// for why that is not the collision the rest of this block avoids.
+		Range: "-",
 		// "." for a seat nothing has been asked of. Unclaimed here, and it is
 		// exactly what the HUD's ASCII table already maps "○" to (design.md
 		// §7.5) — so the two surfaces spell the same state the same way in both

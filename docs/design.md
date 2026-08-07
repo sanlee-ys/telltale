@@ -4035,6 +4035,63 @@ claim, and the vocabulary is shared with the help panel and the transcript. Givi
 narrower vocabulary of its own — a second alphabet is exactly what §9.11's phase marks were
 built to avoid.
 
+### 9.19 sitting a turn out cost a line a turn, and wore the wrong mark doing it
+
+Since the default route became one seat (#99), three columns sit out every ordinary turn. The
+room said so, correctly, once per turn — and a quiet seat's transcript became a column of
+identical warnings with the answer it actually gave scrolled off the top:
+
+> `⚠ not addressed in turn 2` / `⚠ not addressed in turn 3` / `⚠ not addressed in turn 4` / …
+
+Two things are wrong there and they are separate. One is the arithmetic. The other is the mark.
+
+**Consecutive skips coalesce, at render time only.** A run of turns this seat was not part of
+is one muted line — `not addressed in turns 2–7`, singular for a run of one. The run is the fact;
+the turns inside it are not separately interesting, and a reader who wants one has the numbers.
+The **data model is untouched**: nothing is written down for a turn a seat did not take, which
+is §9.9's rule and the reason a transcript skips from 3 to 5 in the first place. The runs are
+*derived* from the gaps between the turns that ARE recorded, so `[` and `]` still hop between
+real turns (§9.20) and no record says anything it did not say before. A run broken by a turn
+the seat took starts a new line in place, so the transcript still reads in order, and the LIVE
+turn's skip keeps a line of its own — the run above it is history, that one is the turn the user
+is deciding whether to act on.
+
+A run is never claimed **before the oldest record**. History is capped at fifty and drops the
+oldest first, so a column whose early turns were evicted would otherwise report "not addressed
+in turns 1–29" about turns it may well have answered. Inventing an absence is the same error as
+§9.9's inventing a conversation, run the other way.
+
+Underneath the rendering bug was a data one, and it is the reason `Column.Skipped` exists at
+all: the note is written on the LIVE column, and the live column is what `startTurn` files into
+history. A seat that answered turn 1 and then sat out through 7 filed turn 1's record wearing
+`not addressed in turn 7` — a turn that succeeded, with someone else's absence stapled under it.
+A skip is not a fact about any turn this column recorded, so it does not travel with one.
+
+**The mark is demoted to `○`.** `⚠` opens a note because a note reports something that did not
+complete normally — a cancellation, a seat that is not there. Sitting a turn out is neither, and
+it was a fair mark only while a narrow route was the exception. Drawn on the ordinary case it
+is a warning the eye learns to skip, which is the same argument `ActDenied` makes for `SevWarn`
+over `SevCrit` and the reattach card makes for no mark at all. `○` is what this room already
+spends on *nothing has been asked of this seat*, which is exactly what a skipped turn is, said
+about one turn instead of a session. It survives `--ascii` as `.` against the warning's `!`, so
+the demotion is legible with colour switched off — and the word carries it first either way.
+
+**An idle strip says where it left off.** At fourteen cells (§9.18) a backgrounded seat had a
+header, a posture word and a run of skips, and the one thing a reader wants from it is which
+turn it last took: `last: turn 8 ✓`, above the coalesced line. Every part of it is measured —
+the number is the turn this column recorded, the mark is that turn's own phase — and a seat
+with nothing behind it renders nothing rather than a placeholder, because absent is absent
+(§4a.1) and this room does not draw `last: —`. Strip width only: a wide column already answers
+the question with the turn separators themselves, and repeating it there would be the room
+being loudest where it has the least to add.
+
+**What was declined.** Recording a `TurnRecord` per skipped turn so the coalescing could read
+one list: that is the room writing down a conversation that did not happen, and it would put
+the skips in `[`/`]`'s path. Dropping the live skip into the coalesced run to save a row: the
+run is history and that line is now, and a reader deciding whether to re-address a seat should
+not have to read a range to find out. And giving the skip a mark of its own — `○` already means
+this, and a second glyph for one meaning is the collision `glyphs.go` argues against.
+
 ### 9.20 the transcript is turn-wise and the only way through it was line-wise
 
 §9.9 gave every column a real conversation and §9.10 and §9.12 made it reachable and

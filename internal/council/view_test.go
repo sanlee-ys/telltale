@@ -873,7 +873,11 @@ func TestUnaddressedColumnSaysSo(t *testing.T) {
 	st.Columns[0].Body = "Looking at the resume path now."
 	st.Columns[1].Phase = PhaseDone
 	st.Columns[1].Body = "An older answer from turn 1."
+	// The pair dispatch() writes together: the note, and the flag saying it is
+	// about a turn this seat sat out rather than about the turn it last took.
+	st.Columns[1].TurnN = 1
 	st.Columns[1].Note = "not addressed in turn 2"
+	st.Columns[1].Skipped = true
 	st.Columns[2].Phase = PhaseWaiting
 
 	got := render(st)

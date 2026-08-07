@@ -99,6 +99,25 @@ func matrixRooms() map[string]func() State {
 			return st
 		},
 
+		// Two seats several turns behind the room, which is what the default
+		// route leaves behind every ordinary turn. The coalesced run and the
+		// "last: turn N" line are both content that varies with the turn NUMBER,
+		// so a three-digit room is where they stop fitting (§9.19).
+		"skipped-run": func() State {
+			st := room()
+			st.Turn = 214
+			st.FrameOwners = []model.VendorID{model.VendorClaude}
+			st.Columns[0].Phase = PhaseStreaming
+			st.Columns[0].TurnN, st.Columns[0].Prompt = 214, unbreakable
+			for i, n := range []int{7, 108} {
+				c := &st.Columns[i+1]
+				c.startTurn(n, unbreakable, false)
+				c.Body, c.Phase = unbreakable, PhaseDone
+				c.Note, c.Skipped = "not addressed in turn 214", true
+			}
+			return st
+		},
+
 		"gated-long": func() State {
 			st := room()
 			st.Gates = []PendingGate{{

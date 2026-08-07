@@ -251,6 +251,10 @@ func (m *Model) dispatch() tea.Cmd {
 			// for a turn this seat sat out would be the room inventing a
 			// conversation.
 			c.Note = "not addressed in turn " + itoa(next)
+			// Flagged, not merely worded: this note is about a turn the seat sat
+			// out, which is neither a fact about the turn it last took nor a
+			// failure. Both consequences are on Column.Skipped.
+			c.Skipped = true
 			continue
 		}
 		v, ok := reg[c.Vendor]
