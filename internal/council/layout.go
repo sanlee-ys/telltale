@@ -42,8 +42,14 @@ const (
 	// sep have to agree or the row overflows the terminal.
 	gutter = 2
 
-	// minColumn is the narrowest a column may be before the tier drops.
+	// minColumn is the narrowest a PRIMARY column may be before the tier drops.
 	minColumn = 24
+
+	// stripColumn is the width of a seat that is on screen but not owning the
+	// frame this turn (unaddressed under a narrow route). Wide enough for a
+	// truncated name + phase mark; narrow enough that the addressed seats get
+	// real reading width. Intent-controlled — see State.FrameOwners.
+	stripColumn = 14
 
 	// promptChrome is the fixed part of the footer: the rule above the
 	// composer, and the mode line below it. The composer itself is variable —
@@ -68,8 +74,12 @@ type Layout struct {
 	Width int
 	// Cols is how many columns are drawn side by side (1 in TierTabs).
 	Cols int
-	// ColWidth is the usable text width inside one column.
+	// ColWidth is the usable text width inside one column when the frame is
+	// equal (or the tabbed single column). Weighted frames use ColWidths.
 	ColWidth int
+	// ColWidths is per drawn column when FrameOwners narrows the turn. Nil
+	// means every column uses ColWidth (+ extraFor on the leftmost).
+	ColWidths []int
 	// Body is how many rows the column bodies get.
 	Body int
 	// Tabs reports that a tab bar is drawn above the body.
@@ -102,6 +112,10 @@ type layoutInput struct {
 	Composer int
 	// Notice reports that the collapsed-seat line is on screen.
 	Notice bool
+	// Primary marks which of the Cols drawn columns own the frame this turn.
+	// Nil, empty, or all-true means equal widths. When set, length must equal
+	// Cols; false entries get stripColumn and the rest share what remains.
+	Primary []bool
 }
 
 func tierFor(width, cols int, expanded bool) Tier {
@@ -190,13 +204,77 @@ func resolveLayoutIn(in layoutInput) Layout {
 		}
 		return l
 	}
-	l.Cols, l.ColWidth = in.Cols, (in.Width-chrome)/in.Cols
+	l.Cols = in.Cols
+	if widths, ok := weightedWidths(in.Width, in.Cols, in.Primary); ok {
+		l.ColWidths = widths
+		l.ColWidth = widths[0] // callers that ignore ColWidths stay sane
+		return l
+	}
+	l.ColWidth = (in.Width - chrome) / in.Cols
 	return l
 }
 
-// extraFor returns the leftover cells given to the focused column, so the row
-// always fills the terminal exactly rather than leaving a ragged right edge.
+// weightedWidths apportions usable width when some seats own the frame.
+//
+// Returns ok=false when the split would leave a primary under minColumn or the
+// strips would consume the row — callers fall back to equal columns rather than
+// ship an unreadable frame.
+func weightedWidths(width, cols int, primary []bool) ([]int, bool) {
+	if cols < 2 || len(primary) != cols {
+		return nil, false
+	}
+	nPrim := 0
+	for _, p := range primary {
+		if p {
+			nPrim++
+		}
+	}
+	if nPrim == 0 || nPrim == cols {
+		return nil, false
+	}
+	chrome := 2 + (cols-1)*(1+2*gutter)
+	usable := width - chrome
+	nStrip := cols - nPrim
+	if nStrip*stripColumn >= usable {
+		return nil, false
+	}
+	rem := usable - nStrip*stripColumn
+	if rem/nPrim < minColumn {
+		return nil, false
+	}
+	base, leftover := rem/nPrim, rem%nPrim
+	out := make([]int, cols)
+	firstPrim := -1
+	for i, p := range primary {
+		if p {
+			out[i] = base
+			if firstPrim < 0 {
+				firstPrim = i
+			}
+			continue
+		}
+		out[i] = stripColumn
+	}
+	if firstPrim >= 0 {
+		out[firstPrim] += leftover
+	}
+	return out, true
+}
+
+// widthAt is the usable text width of drawn column idx.
+func (l Layout) widthAt(idx int) int {
+	if len(l.ColWidths) == l.Cols && idx >= 0 && idx < len(l.ColWidths) {
+		return l.ColWidths[idx]
+	}
+	return l.ColWidth + l.extraFor(idx)
+}
+
+// extraFor returns leftover cells for equal frames only. Weighted frames fold
+// the remainder into the first primary column inside weightedWidths.
 func (l Layout) extraFor(idx int) int {
+	if len(l.ColWidths) == l.Cols {
+		return 0
+	}
 	if l.Tier != TierColumns || l.Cols == 0 {
 		return 0
 	}

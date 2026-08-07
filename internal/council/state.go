@@ -723,8 +723,20 @@ type State struct {
 	//
 	// Three columns are for comparing at a glance; one is for actually reading
 	// a long reply. Both are the same renderer — expanding reuses the tabbed
-	// path — so there is no second layout to keep in sync.
+	// path — so there is no second layout to keep in sync. Expanded outranks
+	// FrameOwners for the frames it is on.
 	Expanded bool
+
+	// FrameOwners are the vendors that own column width until the NEXT
+	// dispatch. Empty means equal four-up (an @all / everyone turn).
+	//
+	// Intent controls geometry, activity controls styling: the set is computed
+	// once from the route (or the current /flow hop) at dispatch, stays fixed
+	// for the whole turn and after completion, and is replaced only by the next
+	// enter. Mid-stream resize is forbidden — seats finishing at different
+	// times must not reflow neighbours under the reader's eyes. `f` (Expanded)
+	// still overrides to one full-width column without clearing this set.
+	FrameOwners []model.VendorID
 
 	// Spinner advances only while something is genuinely in flight.
 	Spinner int

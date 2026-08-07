@@ -41,7 +41,7 @@ func TestColumnsExactlyFillTheWidth(t *testing.T) {
 			}
 			total := 2 + (lay.Cols-1)*(1+2*gutter) // pads + separators and gutters
 			for i := 0; i < lay.Cols; i++ {
-				total += lay.ColWidth + lay.extraFor(i)
+				total += lay.widthAt(i)
 			}
 			if total != w {
 				t.Fatalf("w=%d n=%d: columns total %d cells, want %d", w, n, total, w)

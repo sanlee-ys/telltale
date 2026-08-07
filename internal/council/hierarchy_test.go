@@ -239,9 +239,9 @@ func TestTheChromeIsMeasuredRatherThanCounted(t *testing.T) {
 	st.Columns[0].Follow = false
 
 	lay := layoutFor(st, GlyphsFor(false))
-	chrome := columnChrome(st, st.Columns[0], seatFocused, lay.ColWidth+lay.extraFor(0),
+	chrome := columnChrome(st, st.Columns[0], seatFocused, lay.widthAt(0),
 		PlainStyles(), GlyphsFor(false))
-	body := columnText(st, st.Columns[0], lay.ColWidth+lay.extraFor(0),
+	body := columnText(st, st.Columns[0], lay.widthAt(0),
 		PlainStyles(), GlyphsFor(false))
 	if want := len(body) - (lay.Body - len(chrome)); MaxScroll(st, 0) != want {
 		t.Errorf("MaxScroll = %d, want %d — the scroll model and the renderer disagree about the chrome",

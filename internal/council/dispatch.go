@@ -194,6 +194,10 @@ func (m *Model) dispatch() tea.Cmd {
 		return nil
 	}
 
+	// Geometry for this turn is decided here, from the route, and stays until
+	// the next dispatch. Empty FrameOwners = equal columns (@all / everyone).
+	m.st.FrameOwners = frameOwnersFor(route, m.st)
+
 	// Turn 1 is blind no matter what is armed: the whole value of the room is
 	// three opinions formed without sight of each other, and a first round that
 	// quoted anything would have nothing to quote but would still establish the
@@ -406,6 +410,26 @@ func (m *Model) seatedIn(route Route) int {
 		}
 	}
 	return n
+}
+
+// frameOwnersFor lists the visible seated vendors that own column width for
+// this turn. Empty means equal four-up — @all, everyone, or a route that
+// happens to address every seat still on screen.
+func frameOwnersFor(route Route, st State) []model.VendorID {
+	if route.Mixed {
+		return nil
+	}
+	var out []model.VendorID
+	for _, idx := range st.VisibleColumns() {
+		c := st.Columns[idx]
+		if route.addresses(c.Vendor) {
+			out = append(out, c.Vendor)
+		}
+	}
+	if len(out) == 0 || len(out) == len(st.VisibleColumns()) {
+		return nil
+	}
+	return out
 }
 
 // itoa is strconv.Itoa under a shorter name, kept local so the dispatch path
