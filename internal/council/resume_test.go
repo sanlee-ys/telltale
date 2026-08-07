@@ -1101,8 +1101,10 @@ func TestReattachedRoomGolden(t *testing.T) {
 		Turn:    3,
 		SavedAt: st.Now.Add(-2 * time.Hour),
 	}
-	// Two seats came back and one did not, which is the case the card exists to
-	// tell apart — a room does not reattach all-or-nothing.
+	// Room fact once, in the notice — columns only say whether THEIR thread
+	// came back. Two seats restored and one not is the case the card exists to
+	// tell apart.
+	st.Notice = "reattached from ~/.telltale/council/room.json — turn 3 was the last, saved 2h ago, 2/3 seats restored"
 	st.Columns[0].Restored = true
 	st.Columns[1].Restored = true
 
@@ -1111,7 +1113,13 @@ func TestReattachedRoomGolden(t *testing.T) {
 		t.Error("the header does not continue the saved turn count")
 	}
 	if !strings.Contains(got, "saved 2h ago") {
-		t.Error("the card does not say how stale the saved room is")
+		t.Error("the room notice does not say how stale the saved room is")
+	}
+	if n := strings.Count(got, "was the last"); n != 1 {
+		t.Errorf("room reattach fact appears %d times, want 1 (notice only)", n)
+	}
+	if !strings.Contains(got, "this seat's thread came back") {
+		t.Error("a restored seat does not say its thread came back")
 	}
 	if !strings.Contains(got, "no thread came back for this seat") {
 		t.Error("the unrestored seat is not distinguished from the restored ones")

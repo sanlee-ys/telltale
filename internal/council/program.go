@@ -309,8 +309,14 @@ func (m *Model) reattach(re Reattachment) {
 		source += " (adopted from the old per-workspace format)"
 	}
 	m.st.Notice = "reattached from " + source +
-		" — turn " + itoa(re.Room.Turn) + " was the last, " +
-		itoa(seats) + "/" + itoa(m.st.Seated()) + " seats restored"
+		" — turn " + itoa(re.Room.Turn) + " was the last"
+	if !re.Room.SavedAt.IsZero() {
+		// Age is the room fact columns used to repeat; Notice is the one place
+		// it lives after the hoist. Frozen at attach — a footer that counted
+		// up every frame would be a moving cell §7.1 does not budget for.
+		m.st.Notice += ", saved " + age(time.Since(re.Room.SavedAt))
+	}
+	m.st.Notice += ", " + itoa(seats) + "/" + itoa(m.st.Seated()) + " seats restored"
 	if !sameDir(re.Room.Workspace, m.st.Workspace) {
 		// The room reopened somewhere other than where it was saved — a --cd
 		// override, or a saved directory that no longer exists. The seats'

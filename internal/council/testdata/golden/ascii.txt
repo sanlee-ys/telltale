@@ -5,20 +5,20 @@
                                        |                                        |                                       
  Reading the adapter interface.        |  no turn dispatched yet.               |  no turn dispatched yet.              
                                        |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
-                                       |                                        |                                       
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
 ------------------------------------------------------------------------------------------------------------------------
  :                                                                                                                      
  VIEW                                                 ^v scroll  |  f expand  |  tab focus  |  ctrl+c cancel  |  ? help 
