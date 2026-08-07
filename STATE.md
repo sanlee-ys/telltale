@@ -25,11 +25,7 @@ binding copies and the argument; this file does not restate either.
 
 ## In flight
 
-**`/trace <file>`** is on this branch (ships with this PR): the turn trace is
-reachable from inside the room, and it writes the turns the room was already
-holding rather than only the next ones. Second control built to the §9.17
-mid-session rule, after `c`. [docs/design.md §9.17](docs/design.md) is the
-binding copy for both.
+Nothing claimed.
 
 ## Closed without code (do not re-open)
 
@@ -71,24 +67,15 @@ binding copy for both.
   change: `--read`, `--auto`, `--vendor`. The inventory and the per-control
   reasoning are in [docs/design.md §9.17](docs/design.md); it is not restated
   here. `--brief` was examined and deliberately **not** filed — it is first-turn
-  context by definition, so re-briefing is a separate question. `--fresh` and
+  context by definition, so re-briefing is a separate question.   `--fresh` and
   `--trace` came off this list when `c` and `/trace` landed; both flags stay,
   because each is a real thing to want at launch.
-  `--fresh` came off this list when `c` landed; the flag itself stays, because
-  starting the whole room over is a real thing to want at launch.
 
 - **`docs/design.md` §3 does not name the canary set.** §7 now records how drift
   *renders*; §3 still does not say what each adapter actually watches. A canary
   is a survey finding and belongs beside the rest of that adapter's survey, or
   the next person to re-verify a vendor will not know what was being watched.
   `grep -n canary docs/design.md` returns nothing, which is the whole gap.
-- **This file's own staleness is unmeasured**, and 2026-08-06 is the evidence
-  rather than the theory: a single pickup found *two* entries wrong — a shipped
-  feature still listed as an unowned gap, and an in-flight row naming work that
-  had merged. Council could compare `git log -1 STATE.md` against `HEAD` and
-  show the gap on open. It does not, so a stale pickup doc reads exactly like a
-  current one — which is the same failure this project refuses to tolerate in a
-  gauge, tolerated in the file that describes the project.
 - **The turn clock's concurrency is argued, not race-verified.** `-race` needs
   cgo, is unavailable on the machine the clock was written on, and is not in the
   CI gate either. The locking in `runner/clock.go` was reasoned through and
