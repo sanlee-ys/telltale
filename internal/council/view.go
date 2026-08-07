@@ -1138,7 +1138,14 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 
 	var out []string
 	var anchors []turnAnchor
-	for _, h := range c.History {
+	for i, h := range c.History {
+		if i > 0 {
+			// The turns between this record and the one before it are turns this
+			// seat sat out, and they are coalesced IN PLACE — a run broken by a
+			// turn the seat took starts a new line where the break is, so the
+			// transcript still reads in order (§9.19).
+			out = append(out, skipSpan(c.History[i-1].N+1, h.N-1, w, sty, g)...)
+		}
 		anchors = append(anchors, turnAnchor{N: h.N, Off: len(out)})
 		// No blank BETWEEN turns any more, and that is a swap rather than a cut:
 		// the row it used to spend now sits between the brief and the answer
@@ -1151,6 +1158,9 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		out = append(out, pastTurn(h, w, sty, g)...)
 	}
 	if c.Prompt != "" {
+		if n := len(c.History); n > 0 {
+			out = append(out, skipSpan(c.History[n-1].N+1, c.TurnN-1, w, sty, g)...)
+		}
 		// The current turn's separator carries the number and nothing else. Its
 		// clock and its cost are in the column header and the badge line, which
 		// is chrome that describes exactly this turn — repeating them a row
@@ -1218,9 +1228,35 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		out = append(out, wrap(c.Body, w)...)
 	}
 
+	// Everything this seat has sat out SINCE its last turn, which is where the
+	// post-#99 room spends most of its rows: the default route is one seat, so
+	// three columns skip every ordinary turn.
+	//
+	// Anchored on a turn the transcript actually shows, and never extended
+	// backwards past the oldest record. History is capped at fifty and drops the
+	// oldest first, so "not addressed in turns 1–29" on a column whose record of
+	// those turns was evicted would be the room inventing an absence — the same
+	// error in the other direction as inventing a conversation (§9.9).
+	from, to, run := trailingSkip(st, c)
+	if last := lastTurnLine(c, st, w, sty, g); len(last) > 0 {
+		out = append(out, "")
+		out = append(out, last...)
+	} else if run {
+		out = append(out, "")
+	}
+	if run {
+		out = append(out, skipSpan(from, to, w, sty, g)...)
+	}
 	if c.Note != "" {
 		out = append(out, "")
-		out = append(out, noteCard(c.Note, c.NoteDetail, c.NoteCalm, w, sty, g)...)
+		if c.Skipped {
+			// The LIVE skip keeps a line of its own — the coalesced run above is
+			// history, this is the turn happening now — and it is drawn as a skip
+			// rather than as a note, for the reason Column.Skipped records.
+			out = append(out, skipLine(c.Note, w, sty, g)...)
+		} else {
+			out = append(out, noteCard(c.Note, c.NoteDetail, c.NoteCalm, w, sty, g)...)
+		}
 	}
 	if c.Cleared {
 		// LAST, below everything, because that is when it happened: the turns
@@ -1243,6 +1279,126 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		out = append(out, wrap("its next brief opens a new session, with the brief re-applied.", w)...)
 	}
 	return out, anchors
+}
+
+// trailingSkip is the run of turns this seat has sat out since its last one,
+// as an inclusive range, minus the turn its own live note already speaks for.
+//
+// Reported rather than stored, and derived from two numbers the room already
+// keeps: the newest turn this column took (TurnN) and the turn the room is on
+// (State.Turn). Recording a skip would mean a TurnRecord per turn a seat did not
+// take, which is the room writing down a conversation that did not happen —
+// §9.9's rule, and the reason the transcript skips from 3 to 5 in the first
+// place.
+//
+// ok is false for a seat that has never taken a turn. A run needs a turn to hang
+// off: "not addressed in turns 1–6" under a column whose card already says "no
+// turn dispatched yet." is a second way of saying nothing happened, and on a
+// column whose early records were evicted by the history cap it would be a
+// claim about turns this seat may well have answered.
+func trailingSkip(st State, c Column) (from, to int, ok bool) {
+	if c.TurnN <= 0 {
+		return 0, 0, false
+	}
+	to = st.Turn
+	if c.Skipped {
+		// The live note names this turn on a line of its own — it is the current
+		// fact, the one the user is deciding whether to act on — so the coalesced
+		// run stops one short of it rather than saying it twice.
+		to--
+	}
+	from = c.TurnN + 1
+	return from, to, from <= to
+}
+
+// skipSpan is the one muted line a whole run of sat-out turns costs.
+//
+// Post-#99 the default route is one seat, so three columns sit out every
+// ordinary turn — and a line each turned the transcript of a quiet seat into a
+// column of identical warnings, one per turn, with the answer it actually gave
+// scrolled off the top. The run is the fact; the turns inside it are not
+// separately interesting, and a reader who wants one has the turn numbers.
+//
+// The data model is untouched: nothing is coalesced on the way in, only on the
+// way out, so `[` and `]` still hop between the turns this seat really took and
+// the record still says exactly what it said.
+//
+// Singular for a run of one, because "turns 4–4" is a sentence no one writes.
+func skipSpan(from, to, w int, sty Styles, g Glyphs) []string {
+	switch {
+	case from > to:
+		return nil
+	case from == to:
+		return skipLine("not addressed in turn "+strconv.Itoa(from), w, sty, g)
+	default:
+		return skipLine("not addressed in turns "+
+			strconv.Itoa(from)+g.Range+strconv.Itoa(to), w, sty, g)
+	}
+}
+
+// skipLine draws a sat-out turn: muted, and led by the IDLE mark rather than by
+// the warning one.
+//
+// ⚠ opens a note because a note reports something that did not complete
+// normally — a cancellation, a seat that is not there. Sitting a turn out is
+// neither. It was a fair mark when a narrow route was the exception; since the
+// default route became one seat it is the ordinary shape of every turn, and a
+// warning drawn on the common case is a warning the eye learns to skip — the
+// same argument ActDenied makes for SevWarn over SevCrit, and reattachCard makes
+// for no mark at all.
+//
+// ○ is the mark this room already spends on "nothing has been asked of this
+// seat", which is exactly what a skipped turn is, said about one turn instead of
+// about the whole session. It survives --ascii as "." against the warning's "!",
+// so the demotion is legible with colour switched off — the word carries it
+// first either way.
+func skipLine(text string, w int, sty Styles, g Glyphs) []string {
+	return styleAll(hangWrap(g.Idle+" ", text, w), sty.Muted)
+}
+
+// lastTurnLine is what an idle strip says instead of nothing: which turn it last
+// took, and how that turn ended.
+//
+// Strip-width only. A wide column already answers this — the turn separators are
+// on screen with their own numbers and their own outcomes — so the line would be
+// the room repeating itself at the width that has rows to spare, and silent at
+// the width that does not. At fourteen cells a seat sitting out had a header, a
+// posture word and then a run of skips, and the one thing a reader wants from a
+// backgrounded seat is where it left off.
+//
+// Every part of it is MEASURED: the turn number is the one this column recorded,
+// the mark is that turn's own phase. A seat with no turns behind it renders
+// nothing here rather than a placeholder — absent is absent (§4a.1), and this
+// room does not draw "last: —". Nor does a seat that is IN the current turn: the
+// line answers "where did this one leave off", which is not a question about a
+// column that is answering right now.
+func lastTurnLine(c Column, st State, w int, sty Styles, g Glyphs) []string {
+	if w > stripWidth || c.TurnN <= 0 {
+		return nil
+	}
+	if !c.Skipped && c.TurnN >= st.Turn {
+		return nil
+	}
+	if c.Phase == PhaseWaiting || c.Phase == PhaseStreaming {
+		// A turn that is still running is not one this seat "last took", and its
+		// mark is the spinner — a moving cell on a line about something finished.
+		// Unreachable in a real frame, since a column only reaches here by having
+		// sat the current turn out, and kept as a guard rather than an assumption.
+		return nil
+	}
+	mark := phaseMark(c.Phase, st, g)
+	// Longest first, same shedding idiom as the header above it: `last:` is the
+	// label and the turn number is the fact, so the label is what goes when a
+	// three-digit turn arrives.
+	for _, s := range []string{
+		"last: turn " + strconv.Itoa(c.TurnN) + " " + mark,
+		"turn " + strconv.Itoa(c.TurnN) + " " + mark,
+	} {
+		if lipgloss.Width(s) <= w {
+			return []string{sty.Muted.Render(s)}
+		}
+	}
+	return nil
 }
 
 // turnHead opens one turn: the separator naming it, then the brief that

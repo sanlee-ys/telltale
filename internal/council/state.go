@@ -335,6 +335,28 @@ type Column struct {
 	// case that earned it, where a single sentence carrying both read as one
 	// long alarm about something the user cannot act on.
 	NoteDetail string
+	// Skipped reports that Note describes a turn this seat SAT OUT rather than
+	// a turn it took.
+	//
+	// It is one bit and it does two things, and both are the same rule: a skip
+	// is not a fact about any turn this column recorded.
+	//
+	//   - startTurn does not carry the note into the TurnRecord it files.
+	//     Without that, a seat that answered turn 1 and then sat out 2 through 7
+	//     filed turn 1's record wearing "not addressed in turn 7", so the
+	//     transcript showed a turn that succeeded with someone else's absence
+	//     stapled underneath it.
+	//   - the renderer draws it as a skip rather than as a note (see skipLine):
+	//     muted, led by the idle mark, never by ⚠. Post-#99 the default route is
+	//     one seat, so three columns sit a turn out every ordinary turn — that is
+	//     the room working, and a warning glyph spent on it is a warning glyph
+	//     the eye stops trusting (§9.19).
+	//
+	// What the transcript says about the turns in BETWEEN is derived from the
+	// gaps in History rather than stored, because that is the only place the
+	// fact was ever measured — see skipSpan.
+	Skipped bool
+
 	// NoteCalm drops the warning mark from the note.
 	//
 	// It selects the SHAPE, never the words: what a card says is decided where
@@ -431,7 +453,7 @@ type Column struct {
 // reaches here at all.
 func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	if c.TurnN > 0 {
-		c.History = append(c.History, TurnRecord{
+		rec := TurnRecord{
 			N:           c.TurnN,
 			Prompt:      c.Prompt,
 			Quoted:      c.Quoted,
@@ -444,7 +466,17 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 			CostUSD:     c.CostUSD,
 			CostSession: c.CostSession,
 			Phase:       c.Phase,
-		})
+		}
+		if c.Skipped {
+			// The note on the column is about a turn this seat sat out, which is
+			// a LATER turn than the one being filed here. Carrying it would put
+			// "not addressed in turn 7" under turn 1's separator — a record of a
+			// turn that happened, wearing the absence of one that did not. The
+			// skipped turns are still reported; they are derived from the gap
+			// between this record and the next (view.go, skipSpan).
+			rec.Note, rec.NoteDetail, rec.NoteCalm = "", "", false
+		}
+		c.History = append(c.History, rec)
 		if len(c.History) > maxHistory {
 			// Oldest first out. A room this long-lived has scrolled past them,
 			// and the alternative — dropping the newest — would make the cap
@@ -465,6 +497,8 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	c.Note = ""
 	c.NoteDetail = ""
 	c.NoteCalm = false
+	// This seat is in the turn, so whatever it sat out is behind it now.
+	c.Skipped = false
 	// The marker retires the moment the brief it was warning about is sent: from
 	// here on this seat HAS a thread again, and a "thread cleared" line left
 	// standing would describe a break the room has already healed.

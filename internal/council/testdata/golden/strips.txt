@@ -11,10 +11,10 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
- turn 4  ─────────────────────────────────────────────────────  │                  │                  │                 
- › where does the resume path break?                            │                  │                  │  no turn        
-                                                                │                  │                  │  dispatched     
- Reading resume.go now.                                         │                  │                  │  yet.           
+ turn 4  ─────────────────────────────────────────────────────  │  last: turn 3 ✓  │  last: turn 3 ⚠  │                 
+ › where does the resume path break?                            │  ○ not           │  ○ not           │  no turn        
+                                                                │    addressed in  │    addressed in  │  dispatched     
+ Reading resume.go now.                                         │    turn 4        │    turn 4        │  yet.           
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                    ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 
