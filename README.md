@@ -361,6 +361,13 @@ folded and why.
 redundant — reattaching is the default), `--write` (accepted, and does nothing —
 writing is the default), `--ascii`, `--no-title`.
 
+**`/seat <list>` changes who is in the room**, taking the same argument as `--vendor` and
+reading it through the same alias table `@mentions` use. An unseated seat **keeps its
+thread and its process** — it just stops being drawn and stops being dispatched to, so its
+width goes to the seats that are answering. `/seat all` puts everyone back mid-conversation,
+with nothing to resume and nothing that can fail. That is a different control from sitting
+out: a seat nobody addresses is already quiet and already free.
+
 **`--read` is the door; `/read` and `/write` are the room.** Typed into the composer,
 `/read` makes the room read-only at once and `/write` asks `y`/`n` before letting it write
 again — the confirmation is on the loosening direction only, because that one hands editing
