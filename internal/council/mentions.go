@@ -8,11 +8,11 @@ import (
 
 // Route is who a brief is addressed to.
 //
-// It has three shapes, and the zero value is the one that carries the room's
-// default:
+// Shapes:
 //
-//	Route{}                                    everyone seated — silence, and @all
-//	Route{Vendors: [codex]}                     codex alone — a mention NARROWS
+//	Route{}                                    everyone seated — explicit @all
+//	Route{Vendors: [claude]}                   silence — Claude alone (defaultRoute)
+//	Route{Vendors: [codex]}                    codex alone — a mention names a seat
 //	Route{Vendors: [claude], Negated: true}     everyone seated EXCEPT claude
 //
 // Mixed is not a fourth shape. It is the refusal: a draft carrying both forms
@@ -30,30 +30,21 @@ type Route struct {
 	Mixed   bool
 }
 
-// defaultRoute is where an unaddressed brief goes.
+// defaultRoute is where an unaddressed brief goes: Claude alone.
 //
-// EVERY seated vendor. The room is the owner's operating committee, and an
-// unaddressed item on a committee's agenda goes to the table, not to its chair.
-// So mentions NARROW — @claude, @codex, @agy and @cursor pick a seat for one
-// turn — and nothing widens, because nothing has to.
+// Cross-vendor fan-out is not a fleet default. Broadcasting every unaddressed
+// turn bills every seated vendor's quota, including the scarce independence
+// pool. Silence → control plane; @all / multi-mention widens when you want
+// the committee.
 //
-// This inverts what this function used to do, and the old reasoning is recorded
-// rather than deleted because it was not wrong, it was overruled. It was a
-// QUOTA-COST decision: the fleet strategy is explicit that cross-vendor fan-out
-// is not a default, so an unaddressed brief went to Claude alone and @codex and
-// @agy widened the room, on the argument that broadcasting every "hello" spends
-// two deliberately constrained subscription pools on nothing. San overrode it
-// eyes open — "if I only wanted to ask one model, I can do that ad-hoc" — and
-// the price is stated here unsoftened rather than left to be discovered: an
-// unaddressed brief now bills EVERY seated vendor's quota, on every turn, and
-// the cheap case is the one that has to be typed.
-//
-// @all, @everyone and @council stay accepted and are now redundant, because
-// they name the default. Same shape `--resume` took when the room started
-// reattaching on its own (ADR-008, eleventh amendment), and kept for the same
-// reason: a word someone has typed for weeks should not start erroring, and it
-// still reads as a statement of intent rather than a shrug.
-func defaultRoute() Route { return Route{} }
+// History: briefly inverted to everyone-by-default after San preferred
+// committee-as-product ("if I only wanted one model, I can do that ad-hoc").
+// A week of council use depleted Codex's weekly pool while every casual turn
+// still billed it, proving the expensive default was the defect. Restored
+// 2026-08-07.
+func defaultRoute() Route {
+	return Route{Vendors: []model.VendorID{model.VendorClaude}}
+}
 
 // mentionAliases maps what a user might type to a vendor.
 //
@@ -92,10 +83,8 @@ func addressableVendors() []model.VendorID {
 	}
 }
 
-// allAliases address the whole room explicitly. Redundant since the room became
-// the default (see defaultRoute) and kept anyway: typing @all is still a
-// statement of intent, and a word a user has typed for weeks should not turn
-// into an error the day it stops being load-bearing.
+// allAliases address the whole room explicitly. They are how you convene the
+// committee now that silence goes to Claude alone (see defaultRoute).
 var allAliases = map[string]bool{"all": true, "everyone": true, "council": true}
 
 // ParseRoute splits a draft into its leading @mentions and the brief itself.
@@ -120,19 +109,19 @@ var allAliases = map[string]bool{"all": true, "everyone": true, "council": true}
 // contradictory theories of who is in the room. Reconciling them would mean the
 // room picking one silently — exactly the class of hidden decision the footer's
 // live routing exists to prevent. The user picks the form; the room does not
-// guess. `@all -@claude` is NOT that case and IS accepted: `@all` names the
-// default rather than adding a seat, so it names the set the exclusion
-// subtracts from, and the two agree.
+// guess. `@all -@claude` is NOT that case and IS accepted: `@all` names
+// everyone, so it names the set the exclusion subtracts from, and the two
+// agree.
 //
 // An unrecognised @token is left in the brief untouched rather than treated as
 // an error. It might be a handle, a path, an email. What the room does instead
 // is show the resolved routing in the footer while typing, so an @typo is
-// visible as "this is going to everyone" BEFORE enter is pressed rather than
+// visible as the resolved routing BEFORE enter is pressed rather than
 // afterwards. A refused route is visible in the same cell, for the same reason
 // and at the same moment.
 //
-// Returns the zero Route when no mention was found, which means "everyone
-// seated".
+// Returns defaultRoute() when no mention was found (Claude alone). Returns the
+// zero Route for explicit @all (everyone seated).
 func ParseRoute(draft string) (Route, string) {
 	aliases := mentionAliases()
 
@@ -206,14 +195,13 @@ func ParseRoute(draft string) (Route, string) {
 		return Route{Vendors: neg, Negated: true}, brief
 	}
 	if all {
-		// @all is explicit "everyone", which is the same set as no mention at
-		// all. Returning the zero route keeps one meaning for one thing
-		// downstream.
+		// @all is explicit "everyone". Zero route is that set downstream
+		// (addresses every seat; equal four-up columns).
 		return Route{}, brief
 	}
 	if len(pos) == 0 {
 		// No mentions consumed: the draft is unchanged, including any @token
-		// that did not resolve, and it goes to the whole room.
+		// that did not resolve, and it goes to Claude alone.
 		return defaultRoute(), draft
 	}
 	return Route{Vendors: pos}, brief

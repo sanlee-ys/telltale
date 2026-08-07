@@ -89,7 +89,7 @@ telltale.exe hud
 </p>
 
 ```
- telltale  │  7 sessions  │  claude 2  codex 2  gemini 1  agy 1  cursor 1                     5h ██████▎─ 88.4% ↻ 3h02m
+ telltale  │  7 sessions  │  claude 2  codex 2  gemini 1  agy 1  cursor 1               codex 5h ██████▎─ 88.4% ↻ 3h02m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                               MODEL          CONTEXT                AGE
  ● CC │ telltale  C:\src\code                                                 Opus 5                           — │  12s
@@ -278,13 +278,12 @@ a safety property; it was a defect wearing one's clothes.
 The `⚙` lines are the activity trace: what a vendor is *doing* — the tool call, and the
 command it ran — interleaved with what it says.
 
-The room is an operating committee, so routing defaults to convening it. An unaddressed
-brief goes to **every seated vendor**; `@claude`, `@codex`, `@agy` and `@cursor` **narrow**
-it to those seats for one turn, which is how you ask one model something without leaving
-the room. `@all` still works and is now redundant — it names the default. The cost is
-stated rather than hidden: an unaddressed brief bills every seated vendor's quota on every
-turn, and the narrow case is the one you type. Only leading mentions route, so "ask @claude
-about it" stays prose.
+The room is an operating committee, but routing defaults to the **control plane**, not a
+broadcast. An unaddressed brief goes to **Claude alone**; `@codex`, `@agy` and `@cursor`
+(and `@claude`) name seats for one turn; **`@all`** (also `@everyone` / `@council`)
+convenes every seated vendor. Mentions used to narrow from an everyone-default; that
+inverted after measured council burn billed scarce seats on every casual turn. Only
+leading mentions route, so "ask @claude about it" stays prose.
 
 **`-@claude` goes the other way: everyone seated *except* that seat.** Same position, same
 aliases, same case-insensitivity — it is the mention grammar with a minus in front, not a
@@ -296,8 +295,8 @@ reconciled, because it is over-specified rather than under-specified: `@` starts
 nobody and adds, `-@` starts from everyone and subtracts, and a line that does both states
 two contradictory theories of who is in the room. Picking one silently is exactly the
 hidden decision the live routing indicator exists to prevent, so the room does not.
-`@all -@claude` is *not* that case and is accepted — `@all` names the default rather than
-adding a seat, so it names the set the exclusion subtracts from. An exclusion that leaves
+`@all -@claude` is *not* that case and is accepted — `@all` names everyone, so it names
+the set the exclusion subtracts from. An exclusion that leaves
 nobody (`-@all`, or naming every seat you have) gets the same "none of the vendors you
 addressed are seated" notice a mention of an unseated vendor already gets.
 

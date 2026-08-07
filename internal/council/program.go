@@ -784,8 +784,8 @@ func (m *Model) navKey(name string) bool {
 //
 // Routing is recomputed on every keystroke rather than at dispatch so the
 // footer can show it as it is typed. Deleting the "x" from "@codex" has to move
-// the indicator back to everyone at the moment it stops being a mention, not
-// after enter.
+// the indicator back to the Claude default at the moment it stops being a
+// mention, not after enter.
 func (m *Model) setDraft(s string) {
 	m.st.Draft = s
 	m.st.Route, _ = ParseRoute(s)

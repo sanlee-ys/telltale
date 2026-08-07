@@ -1686,8 +1686,8 @@ func modeHints(st State, g Glyphs) []hint {
 	if st.Mode == ModeComposing {
 		// The routing is stated before the keybindings because it is the one
 		// thing on this line that changes what enter DOES. An @typo has to read
-		// as "this is going to everyone" while there is still time to fix it;
-		// discovering it afterwards means a wasted turn against three quotas.
+		// as "this is going to claude" while there is still time to fix it;
+		// discovering it afterwards means a turn went to the wrong seat.
 		//
 		// Scrolling is named next: a finished turn drops the room into this
 		// mode, so this is the line on screen at the moment four long answers
@@ -1895,7 +1895,7 @@ func helpKeys(sty Styles) []string {
 		"",
 		// Merged with the `enter` line it used to sit above. The two described one
 		// key in two rows, which is the cheapest row in the panel to buy back.
-		"  i / enter    compose a brief; enter dispatches — to everyone, or whoever is @mentioned",
+		"  i / enter    compose a brief; enter dispatches — to claude, or whoever is @mentioned (@all = everyone)",
 		"  ctrl+j       newline in the brief — the compose area grows to six rows",
 		// Down from three rows to two. What went is "the others are review, IDE
 		// and tiebreak lanes" — which explains why the fleet is shaped this way
@@ -1911,8 +1911,8 @@ func helpKeys(sty Styles) []string {
 		// that one announces itself in the footer while the line is still being
 		// typed, and again as a notice on enter, so it is the one rule on this
 		// list that does not need a row to be discovered.
-		"  @codex       narrow to a lane: @claude @codex @agy @cursor; -@codex excludes",
-		"               one. Unaddressed goes to every seat. Leading only: \"ask @claude\" is prose",
+		"  @codex       name a lane: @claude @codex @agy @cursor; @all convenes everyone",
+		"               -@codex excludes one. Unaddressed goes to claude. Leading only: \"ask @claude\" is prose",
 		// One line, like pgup/pgdn below and for the same reason: the panel has
 		// to fit a 24-row terminal with q and ? still on screen.
 		//

@@ -21,4 +21,4 @@
    second line                                                                                                          
    third line                                                                                                           
    fourth line_                                                                                                         
- COMPOSE                          → everyone  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut 
+ COMPOSE                            → claude  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut 

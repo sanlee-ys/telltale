@@ -286,7 +286,6 @@ func TestEmptyComposeQuietsTheFooter(t *testing.T) {
 	st := room()
 	st.Mode = ModeComposing
 	st.Draft = ""
-	st.Route, _ = ParseRoute(st.Draft)
 	got := render(st)
 
 	if !strings.Contains(got, "type a brief") {
@@ -298,7 +297,7 @@ func TestEmptyComposeQuietsTheFooter(t *testing.T) {
 	if !strings.Contains(got, "enter dispatch") {
 		t.Error("empty compose dropped enter — the key the mode exists for")
 	}
-	if !strings.Contains(got, "→ everyone") {
+	if !strings.Contains(got, "→ claude") {
 		t.Error("empty compose dropped routing")
 	}
 	if strings.Contains(got, "^j newline") || strings.Contains(got, "^r rebut") {
