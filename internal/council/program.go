@@ -252,6 +252,11 @@ func newWithBrief(opts Options, b Brief, hs HookSet, re Reattachment) *Model {
 	}
 	m.st.Briefed = b.Loaded()
 	m.reattach(re)
+	// Pickup-doc drift is a room-open fact, same class as a reattach notice:
+	// said once when the room starts, then displaced by whatever the user does
+	// next. Joined rather than replaced, so a reattach and a stale STATE.md
+	// both land — either alone would hide the other (§4a.1 applied to notices).
+	m.st.Notice = joinNotice(m.st.Notice, stateMDStaleNotice(m.st.Workspace))
 	return m
 }
 
