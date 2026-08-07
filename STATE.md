@@ -25,13 +25,11 @@ binding copies and the argument; this file does not restate either.
 
 ## In flight
 
-The mid-session control invariant, and the first control built to it, are on
-this branch (ships with this PR). [docs/design.md §9.17](docs/design.md) is the
-binding copy — state that changes while the room is open is reachable from
-inside it, flags are for what is true at launch. Six controls were swept; five
-violated it. **`c` clears the focused seat's thread** (`y` confirms), which
-retires the first: `--fresh` is still there and still room-wide, but clearing
-one seat no longer costs the other three theirs.
+**`/trace <file>`** is on this branch (ships with this PR): the turn trace is
+reachable from inside the room, and it writes the turns the room was already
+holding rather than only the next ones. Second control built to the §9.17
+mid-session rule, after `c`. [docs/design.md §9.17](docs/design.md) is the
+binding copy for both.
 
 ## Closed without code (do not re-open)
 
@@ -61,18 +59,21 @@ one seat no longer costs the other three theirs.
   the measurement does not, and the two are not the same claim. Diagnosis so far
   is unchanged: `cursor-agent` is spawned fresh per turn and `--resume` restores
   context, not process warmth. **Read a trace before optimising anything.**
-  §9.17 offers a candidate explanation for why the measurement never happened:
-  `--trace` is launch-only, so catching a slow turn means having predicted one
-  before the room opened. Unconfirmed — it is a reading of the control surface,
-  not of anyone's actual attempt.
+  The launch-only excuse is now gone: `/trace <file>` records from inside the
+  room and writes the turns already held, so catching a slow turn no longer
+  needs one predicted before the room opened. **That removes the obstacle, not
+  the question** — the measurement still has not been taken, and whether the
+  flag's shape was ever the real reason is untested either way.
 
 ## Known gaps, not yet owned
 
-- **Four controls still violate the §9.17 mid-session rule**, each its own
-  change: `--trace`, `--read`, `--auto`, `--vendor`. The inventory and the
-  per-control reasoning are in [docs/design.md §9.17](docs/design.md); it is not
-  restated here. `--brief` was examined and deliberately **not** filed — it is
-  first-turn context by definition, so re-briefing is a separate question.
+- **Three controls still violate the §9.17 mid-session rule**, each its own
+  change: `--read`, `--auto`, `--vendor`. The inventory and the per-control
+  reasoning are in [docs/design.md §9.17](docs/design.md); it is not restated
+  here. `--brief` was examined and deliberately **not** filed — it is first-turn
+  context by definition, so re-briefing is a separate question. `--fresh` and
+  `--trace` came off this list when `c` and `/trace` landed; both flags stay,
+  because each is a real thing to want at launch.
   `--fresh` came off this list when `c` landed; the flag itself stays, because
   starting the whole room over is a real thing to want at launch.
 
