@@ -314,9 +314,64 @@ func TestEmptyComposeQuietsTheFooter(t *testing.T) {
 	golden(t, "compose-empty", got)
 }
 
+// TestBottomAnchorPutsBodyNearComposer pins the ruled tall-window contract:
+// when body content is shorter than avail, spare blanks sit between chrome and
+// transcript so the last body line is adjacent to the lower rule (composer).
+func TestBottomAnchorPutsBodyNearComposer(t *testing.T) {
+	st := room()
+	st.Width, st.Height = 120, 60
+	st.Columns[0].Body = "short reply for bottom-anchor"
+	st.Columns[0].Phase = PhaseDone
+	rows := strings.Split(render(st), "\n")
+	g := GlyphsFor(false)
+	bodyStart, bodyEnd := -1, -1
+	for i, r := range rows {
+		if !fullWidthRule(r, st.Width, g) {
+			continue
+		}
+		if bodyStart < 0 {
+			bodyStart = i + 1
+			continue
+		}
+		bodyEnd = i
+		break
+	}
+	if bodyStart < 0 || bodyEnd <= bodyStart {
+		t.Fatalf("could not find body between rules (%d rows)", len(rows))
+	}
+	body := rows[bodyStart:bodyEnd]
+	lastContent := -1
+	for i, r := range body {
+		if strings.Contains(r, "short reply for bottom-anchor") {
+			lastContent = i
+		}
+	}
+	if lastContent < 0 {
+		t.Fatal("reply text missing from body")
+	}
+	// Last content row must be the final body row (adjacent to lower rule /
+	// composer), not mid-column under a top-anchored pad.
+	if lastContent != len(body)-1 {
+		t.Errorf("bottom-anchor failed: reply at body row %d of %d (want last)", lastContent, len(body))
+	}
+	// Mid-column pad above the reply must be sep-free (no void spears).
+	blankPadWithSep := 0
+	for _, r := range body[:lastContent] {
+		if strings.TrimSpace(r) != "" {
+			continue
+		}
+		if strings.Contains(r, g.Sep) {
+			blankPadWithSep++
+		}
+	}
+	if blankPadWithSep != 0 {
+		t.Errorf("blank pad rows still carry │ (%d) — void spears returned", blankPadWithSep)
+	}
+}
+
 // TestRailsStopThroughEmptyBody pins Phase 2: a tall idle frame must not draw
 // │ through every empty body row. Content rows keep the separator; the void
-// below is gutter-width spaces only.
+// between and below content is gutter-width spaces only.
 func TestRailsStopThroughEmptyBody(t *testing.T) {
 	st := room()
 	st.Width, st.Height = 120, 60

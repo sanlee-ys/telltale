@@ -2,12 +2,6 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸ Claude Code  ─────────────  ✓ done  │    Codex  ─────────────────  ✗ failed  │    Antigravity  ────────  ⚠ cancelled 
    ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
-                                       │                                        │                                       
- Use the native resume path.           │                                        │  Partly agree, though the             
- Re-sending the transcript grows       │                                        │                                       
- input quadratically.                  │  ⚠ exit 1: not signed in — run `codex  │  ⚠ cancelled — output above is        
-                                       │    login`                              │    partial                            
-                                       │                                        │                                       
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -19,6 +13,12 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
+                                                                                                                        
+                                                                                                                        
+                                       │                                        │  Partly agree, though the             
+ Use the native resume path.           │                                        │                                       
+ Re-sending the transcript grows       │  ⚠ exit 1: not signed in — run `codex  │  ⚠ cancelled — output above is        
+ input quadratically.                  │    login`                              │    partial                            
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 

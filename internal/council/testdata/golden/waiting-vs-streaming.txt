@@ -2,23 +2,23 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸ Claude Code  ──────────  ⠋ waiting  │    Codex                       ○ idle  │    Antigravity                 ○ idle 
    ro:tools  final only                │    ro:requested  final only            │    unsandboxed  final only            
-                                       │                                        │                                       
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
  working — the reply arrives whole.    │  no turn dispatched yet.               │  no turn dispatched yet.              
-                                       │                                        │                                       
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                                 ↑↓ scroll  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 

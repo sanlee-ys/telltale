@@ -2,8 +2,8 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸ Claude Code  ─────────────  ✓ done  │    Codex                       ○ idle  │    Antigravity                 ○ idle 
    ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
-                                       │                                        │                                       
- ↑ 20 more above  │  ↑↓ scroll         │  no turn dispatched yet.               │  no turn dispatched yet.              
+                                                                                                                        
+ ↑ 20 more above  │  ↑↓ scroll         │                                        │                                       
  line 22 of the reply                  │                                        │                                       
  line 23 of the reply                  │                                        │                                       
  line 24 of the reply                  │                                        │                                       
@@ -18,7 +18,7 @@
  line 33 of the reply                  │                                        │                                       
  line 34 of the reply                  │                                        │                                       
  line 35 of the reply                  │                                        │                                       
- ↓ 24 more below                       │                                        │                                       
+ ↓ 24 more below                       │  no turn dispatched yet.               │  no turn dispatched yet.              
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 

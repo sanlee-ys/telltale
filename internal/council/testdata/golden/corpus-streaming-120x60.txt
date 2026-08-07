@@ -2,10 +2,6 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸ Claude Code  ────────  ⠋ streaming  │    Codex  ────────────────  ⠋ waiting  │    Antigravity  ──────────  ⠋ waiting 
    ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
-                                       │                                        │                                       
- Reading internal/council/layout.go    │  working — the reply arrives whole.    │  working — the reply arrives whole.   
- to find the breakpoints.              │                                        │                                       
-                                       │                                        │                                       
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -55,6 +51,10 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
+                                                                                                                        
+                                                                                                                        
+ Reading internal/council/layout.go    │                                        │                                       
+ to find the breakpoints.              │  working — the reply arrives whole.    │  working — the reply arrives whole.   
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                                 ↑↓ scroll  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 

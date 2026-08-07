@@ -2,11 +2,6 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸ Claude Code  ────────  ⠋ streaming  │    Codex  ───────────────────  ✓ done  │    Antigravity  ──────────  ⠋ waiting 
    ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
-                                       │                                        │                                       
- Looking at the resume path now.       │  An older answer from turn 1.          │  working — the reply arrives whole.   
-                                       │                                        │                                       
-                                       │  ⚠ not addressed in turn 2             │                                       
-                                       │                                        │                                       
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -19,6 +14,11 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
+                                                                                                                        
+                                                                                                                        
+                                       │  An older answer from turn 1.          │                                       
+                                                                                                                        
+ Looking at the resume path now.       │  ⚠ not addressed in turn 2             │  working — the reply arrives whole.   
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
  VIEW                                                 ↑↓ scroll  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 

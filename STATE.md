@@ -25,12 +25,16 @@ binding copies and the argument; this file does not restate either.
 
 ## In flight
 
-Nothing open. Council UI ceiling Phases 0–5 landed (#88–#95): frame corpus and
-drift fixes (#88–#91), ungated compile (#93), frame-fit goldens (#94), route-
-weighted column geometry (#95). Phase 4 audit (Codex): no semantic blockers.
+Nothing open. Tall-window bottom-anchor is on this branch (ships with this PR):
+short bodies sit above the composer; Follow freezes on scroll-up; `G` restores;
+geometry-only. Ceiling Phases 0–5 remain on main (#88–#95).
 
 ## Closed without code (do not re-open)
 
+- **Tall-window content anchor** — **bottom**, ruled 2026-08-05. Short content
+  sits above the composer and grows upward. Top-anchor is rejected; do not
+  re-litigate. Contract: viewport geometry only; scroll-up freezes Follow; `G`
+  restores; no jump on Done; long content keeps full-viewport scroll.
 - **Focus hierarchy** — already shipped (`▸` + `Strong`, `hierarchy_test.go`).
 - **`isDark` adaptive chrome** — won't-do. Council uses ANSI palette indices from
   `internal/theme`; the terminal resolves them against its own theme. The only

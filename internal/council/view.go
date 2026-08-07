@@ -250,11 +250,11 @@ func collapsedNotice(st State, g Glyphs) string {
 
 // columnsBody draws the seats side by side.
 //
-// Vertical separators stop at content height. A tall idle window used to draw
-// │ through every empty body row down to the footer — four spears through a
-// void, which is the "spreadsheet of pipes" read. Busy rooms keep full
-// structure wherever any column still has chrome or text; below that the
-// gutters are blank at the same width so the grid does not shear.
+// Vertical separators appear only on rows that carry content in any column.
+// A tall idle window used to draw │ through every empty body row down to the
+// footer — four spears through a void. Bottom-anchor adds a second void
+// between chrome and transcript; the same per-row rule keeps that pad
+// sep-free. Gutters stay blank-width so the grid does not shear.
 func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	vis := st.VisibleColumns()
 	cells := make([][]string, len(vis))
@@ -282,13 +282,15 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	plainSep := sepPad + g.Sep + sepPad
 	sep := sepPad + sty.Rule().Render(g.Sep) + sepPad
 	blankSep := strings.Repeat(" ", lipgloss.Width(plainSep))
-	railThrough := contentRailRows(cells)
 	var b strings.Builder
 	for row := 0; row < lay.Body; row++ {
 		b.WriteString(" ")
-		div := sep
-		if row > railThrough {
-			div = blankSep
+		// Rails only on rows that carry content in any column. Bottom-anchor
+		// puts blank pad between chrome and transcript; drawing │ through that
+		// pad would recreate the void spears Phase 2 removed below the content.
+		div := blankSep
+		if rowHasContent(cells, row) {
+			div = sep
 		}
 		for j := range vis {
 			if j > 0 {
@@ -304,35 +306,14 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	return b.String()
 }
 
-// contentRailRows is the last body row index that still carries content in any
-// column (inclusive). Rows below it get blank gutters instead of │.
-//
-// One pad row of rail past the last content keeps the occupied region from
-// looking like it was cut with scissors; more than that reintroduces the void
-// spears this exists to remove.
-func contentRailRows(cells [][]string) int {
-	if len(cells) == 0 || len(cells[0]) == 0 {
-		return 0
-	}
-	last := -1
+// rowHasContent reports that any drawn column has non-blank text on this row.
+func rowHasContent(cells [][]string, row int) bool {
 	for _, col := range cells {
-		for i := len(col) - 1; i >= 0; i-- {
-			if strings.TrimSpace(col[i]) != "" {
-				if i > last {
-					last = i
-				}
-				break
-			}
+		if row >= 0 && row < len(col) && strings.TrimSpace(col[row]) != "" {
+			return true
 		}
 	}
-	if last < 0 {
-		return 0
-	}
-	pad := last + 1
-	if pad >= len(cells[0]) {
-		return len(cells[0]) - 1
-	}
-	return pad
+	return false
 }
 
 // seatFocus is how a column stands in relation to the keys, which is two
@@ -369,19 +350,24 @@ func (f seatFocus) hasKeys() bool { return f != seatUnfocused }
 // yet occupies its seat instead of letting its neighbours slide left.
 // hint is the key names appended to this column's overflow marker: the scroll
 // keys on the column they move, and `tab` on a column they do not.
+//
+// Short content is BOTTOM-ANCHORED under the chrome: spare rows sit between
+// the badge/gate block and the transcript, so the latest output sits next to
+// the composer in a tall window. Long content fills avail and behaves as
+// before. The pad depends only on (avail − window height) — viewport geometry,
+// not phase or activity — and shrinks as the reply grows, so completion never
+// jumps. Scroll-up still freezes via Follow; G restores the tail.
 func columnCell(st State, c Column, f seatFocus, hint []string, w, h int, sty Styles, g Glyphs) []string {
-	lines := make([]string, 0, h)
-	for _, l := range columnChrome(st, c, f, w, sty, g) {
-		if len(lines) >= h {
-			break
-		}
-		lines = append(lines, l)
+	chrome := columnChrome(st, c, f, w, sty, g)
+	if len(chrome) > h {
+		chrome = chrome[:h]
 	}
 
 	body := columnText(st, c, w, sty, g)
-	avail := h - len(lines)
+	avail := h - len(chrome)
 	win, above, below := scrollWindow(c, body, avail)
 
+	bodyLines := make([]string, 0, len(win))
 	for i, l := range win {
 		// The overflow markers replace the first and last visible lines rather
 		// than sitting outside the body, because the body area is the whole
@@ -390,7 +376,7 @@ func columnCell(st State, c Column, f seatFocus, hint []string, w, h int, sty St
 		// which is exactly the ambiguity §4a.1 forbids.
 		switch {
 		case i == 0 && above > 0:
-			lines = append(lines, sty.Muted.Render(padRight(
+			bodyLines = append(bodyLines, sty.Muted.Render(padRight(
 				overflowMarker(g.Up, above, "above", hint, w, g), w, g)))
 		case i == len(win)-1 && below > 0:
 			// The hint is named once per column. On a column with content hidden
@@ -400,7 +386,7 @@ func columnCell(st State, c Column, f seatFocus, hint []string, w, h int, sty St
 			if above > 0 {
 				h = nil
 			}
-			lines = append(lines, sty.Muted.Render(padRight(
+			bodyLines = append(bodyLines, sty.Muted.Render(padRight(
 				overflowMarker(g.Down, below, "below", h, w, g), w, g)))
 		default:
 			// fit, not padRight, and this is the ANSI trap §9.5 records rather
@@ -410,11 +396,22 @@ func columnCell(st State, c Column, f seatFocus, hint []string, w, h int, sty St
 			// sequence and count escape bytes as width. Goldens render with
 			// PlainStyles and are blind to that, which is exactly why the rule
 			// is enforced by the function used rather than by review.
-			lines = append(lines, fit(l, w))
+			bodyLines = append(bodyLines, fit(l, w))
 		}
 	}
 
 	blank := strings.Repeat(" ", w)
+	lines := make([]string, 0, h)
+	lines = append(lines, chrome...)
+	// Spare rows ABOVE the transcript, not below: that is the bottom-anchor.
+	pad := avail - len(bodyLines)
+	if pad < 0 {
+		pad = 0
+	}
+	for i := 0; i < pad; i++ {
+		lines = append(lines, blank)
+	}
+	lines = append(lines, bodyLines...)
 	for len(lines) < h {
 		lines = append(lines, blank)
 	}
