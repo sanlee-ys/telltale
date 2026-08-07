@@ -363,9 +363,20 @@ func columnCell(st State, c Column, f seatFocus, hint []string, w, h int, sty St
 		chrome = chrome[:h]
 	}
 
-	body := columnText(st, c, w, sty, g)
+	body, anchors := columnLines(st, c, w, sty, g)
 	avail := h - len(chrome)
 	win, above, below := scrollWindow(c, body, avail)
+
+	// The turn coordinate rides on the column the keys move and on no other,
+	// which is §9.12's rule about hints applied to a fact: an unfocused marker
+	// is already spending its cells on `tab to focus`, the one thing a reader
+	// looking at that column can act on, and a turn number in front of it would
+	// crowd the answer to make room for the address.
+	turnUp, turnDown := "", ""
+	if f.hasKeys() {
+		turnUp = turnLabel(anchors, above-1)
+		turnDown = turnLabel(anchors, above+len(win))
+	}
 
 	bodyLines := make([]string, 0, len(win))
 	for i, l := range win {
@@ -377,17 +388,22 @@ func columnCell(st State, c Column, f seatFocus, hint []string, w, h int, sty St
 		switch {
 		case i == 0 && above > 0:
 			bodyLines = append(bodyLines, sty.Muted.Render(padRight(
-				overflowMarker(g.Up, above, "above", hint, w, g), w, g)))
+				overflowMarker(g.Up, above, "above", turnUp, hint, w, g), w, g)))
 		case i == len(win)-1 && below > 0:
 			// The hint is named once per column. On a column with content hidden
 			// both ways it has already been said above, and saying it twice in
 			// one cell is the kind of noise that makes the count harder to find.
+			//
+			// The turn coordinate is NOT the same case and is repeated: the two
+			// markers name two different turns, so the second one is a fact this
+			// cell is the only place to learn rather than a second copy of the
+			// first.
 			h := hint
 			if above > 0 {
 				h = nil
 			}
 			bodyLines = append(bodyLines, sty.Muted.Render(padRight(
-				overflowMarker(g.Down, below, "below", h, w, g), w, g)))
+				overflowMarker(g.Down, below, "below", turnDown, h, w, g), w, g)))
 		default:
 			// fit, not padRight, and this is the ANSI trap §9.5 records rather
 			// than a stylistic choice. Body lines can now carry style — the
@@ -461,7 +477,8 @@ func columnChrome(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 	return append(lines, strings.Repeat(" ", maxInt(0, w)))
 }
 
-// overflowMarker is the "there is more" line, plus the keys that would reach it.
+// overflowMarker is the "there is more" line, plus which turn is behind it and
+// the keys that would reach it.
 //
 // The count alone was a marker that told a reader something was hidden and
 // nothing at all about how to see it — which is how a room with working
@@ -474,11 +491,33 @@ func columnChrome(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 // wants 42 — an all-or-nothing test would have dropped the whole thing in
 // exactly the room this was written for. The count itself is never traded away:
 // how much is hidden outranks how to reach it, the same order turnRule keeps.
-func overflowMarker(mark string, n int, where string, hints []string, w int, g Glyphs) string {
+//
+// `turn` is the transcript coordinate the count needs to be useful (§9.20): at
+// "↑ 509 more above" nobody counts lines, and the number a reader can act on is
+// the one `[` and `]` move by. It is the LOWEST-priority element on this line
+// and therefore the first to shed — below even `f expand`, because it says
+// where you are while the hints say what you can do about it, and a marker that
+// dropped a key to keep a coordinate would be §9.10's trade run backwards.
+func overflowMarker(mark string, n int, where, turn string, hints []string, w int, g Glyphs) string {
 	s := mark + " " + strconv.Itoa(n) + " more " + where
 	sep := "  " + g.Sep + "  "
+	fits := func(tail string) bool {
+		return lipgloss.Width(s)+lipgloss.Width(sep)+lipgloss.Width(tail) <= w
+	}
+	// Widest first, and the turn coordinate only ever rides on the widest hint
+	// form. Pairing it with a SHORTER hint would let it survive a width that
+	// cost the room a key, which is the shedding order this comment forbids.
+	if turn != "" {
+		tail := turn
+		if len(hints) > 0 {
+			tail = turn + sep + hints[0]
+		}
+		if fits(tail) {
+			return s + sep + tail
+		}
+	}
 	for _, h := range hints {
-		if lipgloss.Width(s)+lipgloss.Width(sep)+lipgloss.Width(h) <= w {
+		if fits(h) {
 			return s + sep + h
 		}
 	}
@@ -577,8 +616,28 @@ func scrollWindow(c Column, body []string, avail int) (win []string, above, belo
 // thing this seat was ever asked and there is no second scroll model to keep in
 // step with the first.
 func MaxScroll(st State, idx int) int {
-	if idx < 0 || idx >= len(st.Columns) {
+	lines, _, avail, ok := columnViewport(st, idx)
+	if !ok {
 		return 0
+	}
+	if m := len(lines) - avail; m > 0 {
+		return m
+	}
+	return 0
+}
+
+// columnViewport resolves what one column is actually being drawn into: its
+// transcript, where each turn starts in it, and how many body rows survive the
+// chrome. ok is false for a seat that is not on screen.
+//
+// Factored out when the hop keys needed the same four numbers MaxScroll needed.
+// Two derivations of "how tall is this column's content at this width" is
+// exactly the drift the columnLines comment refuses, one level up: a hop that
+// measured the transcript differently from the clamp applied to it would land
+// off the end of the content only in the geometries nobody tests.
+func columnViewport(st State, idx int) (lines []string, anchors []turnAnchor, avail int, ok bool) {
+	if idx < 0 || idx >= len(st.Columns) {
+		return nil, nil, 0, false
 	}
 	pos := -1
 	for j, v := range st.VisibleColumns() {
@@ -589,7 +648,7 @@ func MaxScroll(st State, idx int) int {
 	}
 	if pos < 0 {
 		// A collapsed seat has no window to scroll.
-		return 0
+		return nil, nil, 0, false
 	}
 	lay := layoutFor(st, GlyphsFor(st.ASCII))
 	w := lay.widthAt(pos)
@@ -601,12 +660,82 @@ func MaxScroll(st State, idx int) int {
 	// different height, or a column with nothing to claim, would otherwise let
 	// the tail scroll past the end of the content — and the constant that used
 	// to sit here was already wrong for the second case.
-	avail := lay.Body - len(columnChrome(st, st.Columns[idx], seatUnfocused, w, sty, gl))
-	n := len(columnText(st, st.Columns[idx], w, sty, gl))
-	if m := n - avail; m > 0 {
-		return m
+	avail = lay.Body - len(columnChrome(st, st.Columns[idx], seatUnfocused, w, sty, gl))
+	lines, anchors = columnLines(st, st.Columns[idx], w, sty, gl)
+	return lines, anchors, avail, true
+}
+
+// TurnHop is where `[` and `]` land the focused column: the scroll offset that
+// puts the neighbouring turn's separator on the viewport's top row.
+//
+// Exported for the program loop beside MaxScroll, and for the same reason —
+// the keystroke is clamped against the geometry the renderer resolved, never
+// against one the loop kept its own copy of.
+//
+// `cur` is the offset the column is reading at now. Backwards is the audio
+// player's previous-track rule: from the middle of a turn it lands on THAT
+// turn's head, and only a second press reaches the one before it. Written as
+// "the last head strictly above where we are", which produces both cases
+// without a special one — and never wraps, because a transcript has a first
+// turn and pretending otherwise would make `[` at the top a jump to the end.
+//
+// ok is false when there is nothing in that direction. The caller decides what
+// that means: backwards it is a no-op, forwards it is the tail (§9.20), which
+// is `G`'s answer to the same question rather than a second one.
+func TurnHop(st State, idx, cur, dir int) (int, bool) {
+	_, anchors, _, ok := columnViewport(st, idx)
+	if !ok {
+		return 0, false
 	}
-	return 0
+	if dir < 0 {
+		for i := len(anchors) - 1; i >= 0; i-- {
+			if anchors[i].Off < cur {
+				return anchors[i].Off, true
+			}
+		}
+		return 0, false
+	}
+	for _, a := range anchors {
+		if a.Off > cur {
+			return a.Off, true
+		}
+	}
+	return 0, false
+}
+
+// turnAt names the turn a line belongs to: the last turn that started at or
+// before it, which is 0 when nothing has started yet.
+//
+// "At or before" is the whole of the semantics, and it is chosen so the
+// coordinate on an overflow marker cannot lie about a turn that is only half
+// hidden (§9.20). The marker asks about the line immediately outside the fold,
+// so what it gets back is the turn that line is part of — which is the turn the
+// user is reading when a long reply runs off the top, not the turn number of
+// the topmost hidden separator several screens above it.
+// turnLabel is the coordinate an overflow marker prints, or empty when there is
+// no turn to name.
+//
+// The words are turnRule's — "turn 4", the same two the separator draws — so
+// the marker and the line it points at agree without a reader having to
+// translate. A column with no turns at all (an unavailable card, a seat that
+// has never been asked anything) prints nothing rather than "turn 0": a
+// coordinate the room does not have is omitted, never invented (§4a.1).
+func turnLabel(anchors []turnAnchor, line int) string {
+	if n := turnAt(anchors, line); n > 0 {
+		return "turn " + strconv.Itoa(n)
+	}
+	return ""
+}
+
+func turnAt(anchors []turnAnchor, line int) int {
+	n := 0
+	for _, a := range anchors {
+		if a.Off > line {
+			break
+		}
+		n = a.N
+	}
+	return n
 }
 
 // columnHeader is one seat and what it is doing: "▸ Claude Code ──── ✓ done 8s".
@@ -791,12 +920,47 @@ func dur(d time.Duration) string {
 // and MaxScroll are the code that was already here, and the transcript is just
 // more lines for them to move through.
 func columnText(st State, c Column, w int, sty Styles, g Glyphs) []string {
+	lines, _ := columnLines(st, c, w, sty, g)
+	return lines
+}
+
+// turnAnchor is where one turn begins in a column's flat line list: the row
+// turnHead drew its separator on, and the number that separator names.
+//
+// It exists because the transcript's unit is the turn and its scroll model's
+// unit is the line (§9.20). Every consumer — the hop keys, the overflow
+// marker's coordinate — takes its offsets from the SAME render pass that
+// produced the lines, rather than recomputing where a turn starts from
+// History: a second derivation would drift from the first the day a card grows
+// a row, and it would drift silently, since both would still be plausible
+// numbers.
+type turnAnchor struct {
+	// N is the turn number as turnRule prints it, not an index.
+	N int
+	// Off is the index of that turn's separator line in columnLines' output.
+	Off int
+}
+
+// columnLines is columnText plus where each turn starts.
+//
+// One function rather than two because the offsets are only meaningful against
+// the exact list of lines they index into: the trace, the cards and the wrap
+// width all decide how tall a turn is, and a caller that asked for "the lines"
+// and "the turn starts" separately could be handed two answers from two
+// geometries without either one being wrong on its own.
+func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []turnAnchor) {
 	if c.Avail != AvailInstalled {
-		return unavailableCard(c, w, sty, g)
+		// No turns, and that is the honest answer rather than an empty slice
+		// standing in for one: a seat that cannot be driven has never been asked
+		// anything, so the hop keys have nowhere to go and say so by doing
+		// nothing (§9.20).
+		return unavailableCard(c, w, sty, g), nil
 	}
 
 	var out []string
+	var anchors []turnAnchor
 	for _, h := range c.History {
+		anchors = append(anchors, turnAnchor{N: h.N, Off: len(out)})
 		// No blank BETWEEN turns any more, and that is a swap rather than a cut:
 		// the row it used to spend now sits between the brief and the answer
 		// (see turnHead). A turn boundary already has the loudest divider this
@@ -813,6 +977,7 @@ func columnText(st State, c Column, w int, sty Styles, g Glyphs) []string {
 		// is chrome that describes exactly this turn — repeating them a row
 		// later would be the room saying the same thing twice. A past turn has
 		// no chrome of its own, which is why the record carries them.
+		anchors = append(anchors, turnAnchor{N: c.TurnN, Off: len(out)})
 		out = append(out, turnHead(c.TurnN, "", c.Prompt, c.Quoted, w, sty, g)...)
 	}
 
@@ -898,7 +1063,7 @@ func columnText(st State, c Column, w int, sty Styles, g Glyphs) []string {
 		// one outcome.
 		out = append(out, wrap("its next brief opens a new session, with the brief re-applied.", w)...)
 	}
-	return out
+	return out, anchors
 }
 
 // turnHead opens one turn: the separator naming it, then the brief that
@@ -1646,6 +1811,17 @@ type hint struct {
 	// thing uses it: the warning mark in front of a transient notice, which is
 	// the same mark-carries-the-hue split the notes and the trace marks make.
 	alarm bool
+	// shed marks a hint that may be dropped whole rather than let the line be
+	// truncated (§9.20).
+	//
+	// The default is false and stays false for everything that was here before:
+	// this is not a licence to hide keys, it is a choice about WHICH cell goes
+	// when the footer runs out of width. Truncation cuts the tail, so the
+	// alternative to shedding is `q quit` and `? help` losing their last letters
+	// to make room for a key added in front of them — the room's way out of the
+	// room, spent on a motion key. A shed hint is one the ellipsis would
+	// otherwise have chosen at random.
+	shed bool
 }
 
 // hints renders the mode line's right-hand side twice: once styled, once plain.
@@ -1733,7 +1909,25 @@ func modeHints(st State, g Glyphs) []hint {
 		return hs
 	}
 
-	hs := []hint{{key: g.Up + g.Down, label: "scroll"}}
+	// The turn hop sits immediately after the line-wise keys, because it is the
+	// same motion at the transcript's own scale and a reader hunting for "how do
+	// I get back to what I asked" should not have to find it three cells later
+	// (§9.20).
+	//
+	// View mode only: `[` and `]` are the letters they type in compose, the same
+	// rule that keeps `q` the letter q there. And offered unconditionally rather
+	// than gated on how many turns this seat has — `↑↓ scroll` is already named
+	// in a room where nothing has been said yet, and a footer cell that appeared
+	// at the first dispatch would be chrome changing under a reader mid-turn,
+	// which §7.1 rule 4 does not budget for.
+	//
+	// It is the one cell on this line marked sheddable: at the tabbed tier the
+	// footer fit its keys exactly, and the honest place to take the cells from
+	// is the key that was added last, not the tail the ellipsis would have eaten.
+	hs := []hint{
+		{key: g.Up + g.Down, label: "scroll"},
+		{key: "[ ]", label: "turn", shed: true},
+	}
 	if several {
 		hs = append(hs, hint{key: "f", label: "expand"}, hint{key: "tab", label: "focus"})
 	}
@@ -1793,8 +1987,25 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 
 // statusLine lays the mode name against its right-anchored hints, and is the one
 // place the two-copy truncation rule lives.
+//
+// It sheds before it truncates, and the order is: everything, then the
+// sheddable cells newest-first, then the ellipsis. §9.20 added a key to a line
+// that fit its narrowest tier exactly, and truncation answers that by cutting
+// the RIGHT-hand end — which is where `? help` and `q quit` live. A footer that
+// buys a scroll hint with the panel's only documented way out is the trade
+// §9.11 spent this line's whole redesign refusing.
 func statusLine(left string, hs []hint, lay Layout, sty Styles, g Glyphs) string {
 	styled, plain := hints(sty, g, hs)
+	fits := func(p string) bool {
+		return lay.Width-lipgloss.Width(left)-lipgloss.Width(p)-2 >= 1
+	}
+	for i := len(hs) - 1; i >= 0 && !fits(plain); i-- {
+		if !hs[i].shed {
+			continue
+		}
+		hs = append(append([]hint{}, hs[:i]...), hs[i+1:]...)
+		styled, plain = hints(sty, g, hs)
+	}
 	gap := lay.Width - lipgloss.Width(left) - lipgloss.Width(plain) - 2
 	if gap < 1 {
 		gap = 1
@@ -1945,7 +2156,14 @@ func helpKeys(sty Styles) []string {
 		"  tab          move focus between columns — in compose too",
 		"  ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too",
 		"  pgup/pgdn    scroll by a screenful, in compose too (space = pgdn in view mode);",
-		"               g / G jump to the first turn or the newest",
+		// The turn keys land on the row that already holds the other jumps rather
+		// than on one of their own, because the budget is hard (17 rows, above)
+		// and this is the row a reader is already on when they are looking for a
+		// way to move by something bigger than a line. "jump to the" went to pay
+		// for it: the line above says `scroll`, so what g / G do is unambiguous
+		// without the verb, and a key documented below the fold is a key nobody
+		// finds (§9.20).
+		"               g / G first turn or newest; [ ] step one turn at a time",
 		"  f            expand the focused column to the full width (in compose, f is text)",
 		"  ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted",
 		// Two keys on one line, because this panel has to fit a 24-row terminal

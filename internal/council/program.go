@@ -875,6 +875,15 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.scrollTo(0)
 	case "end", "G":
 		m.followFocused()
+	case "[":
+		// The transcript's unit is the turn and the scroll keys' unit is the
+		// line, which at "↑ 509 more above" is a number nobody can act on
+		// (§9.20). View mode only: in compose these are the characters `[` and
+		// `]`, and composeKey's own rule — a key that carries text IS text —
+		// keeps them there without a second list to maintain.
+		m.hopTurn(-1)
+	case "]":
+		m.hopTurn(1)
 	}
 	return m, nil
 }
@@ -968,6 +977,41 @@ func (m *Model) applyScroll(c *Column, off, max int) {
 	}
 	c.Follow = false
 	c.Scroll = off
+}
+
+// hopTurn walks the focused column a turn at a time.
+//
+// It reads the current offset the way scrollBy does — a following column is at
+// max, not at its stale Scroll — so a hop out of the tail measures from where
+// the reader actually is, and then hands the landing offset to applyScroll:
+// Follow goes false exactly as it does for every other scroll key, because a
+// column pinned to the tail while displaying turn 3 would be lying about which
+// of the two it is doing.
+//
+// The two ends are deliberately NOT symmetric, and that asymmetry is the same
+// one `g` and `G` already have. Backwards past the first turn does nothing:
+// there is no turn 0, and wrapping to the end would make a key pressed one time
+// too many jump a whole conversation. Forwards past the last turn restores the
+// tail, because "after the last turn" is the live output — the thing G means —
+// rather than a place the transcript does not go.
+func (m *Model) hopTurn(d int) {
+	c := m.focused()
+	if c == nil {
+		return
+	}
+	max := MaxScroll(m.st, m.st.Focus)
+	cur := c.Scroll
+	if c.Follow {
+		cur = max
+	}
+	off, ok := TurnHop(m.st, m.st.Focus, cur, d)
+	if !ok {
+		if d > 0 {
+			m.followFocused()
+		}
+		return
+	}
+	m.applyScroll(c, off, max)
 }
 
 // followFocused pins the focused column back to the newest output.

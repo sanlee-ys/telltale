@@ -12,7 +12,7 @@
    tab          move focus between columns — in compose too                                                             
    ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too                                       
    pgup/pgdn    scroll by a screenful, in compose too (space = pgdn in view mode);                                      
-                g / G jump to the first turn or the newest                                                              
+                g / G first turn or newest; [ ] step one turn at a time                                                 
    f            expand the focused column to the full width (in compose, f is text)                                     
    ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted                                      
    ctrl+c / q   ctrl+c cancels the turn, or quits when idle; q quits (in compose it is text)                            
@@ -21,4 +21,4 @@
    a seat that cannot be driven folds out of the grid, named in one line above.                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      
- VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 
+ VIEW                             ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 
