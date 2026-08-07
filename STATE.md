@@ -25,9 +25,12 @@ binding copies and the argument; this file does not restate either.
 
 ## In flight
 
-Nothing open. Tall-window bottom-anchor is on this branch (ships with this PR):
-short bodies sit above the composer; Follow freezes on scroll-up; `G` restores;
-geometry-only. Ceiling Phases 0–5 remain on main (#88–#95).
+The mid-session control invariant is on this branch (ships with this PR): a rule
+plus an inventory, no behaviour change. [docs/design.md §9.17](docs/design.md)
+is the binding copy — state that changes while the room is open is reachable
+from inside it, flags are for what is true at launch. Six controls were swept;
+five violate it. Surface for the first one is **ruled** (a key on the focused
+seat, not a slash command); the keybinding itself is not built.
 
 ## Closed without code (do not re-open)
 
@@ -57,8 +60,19 @@ geometry-only. Ceiling Phases 0–5 remain on main (#88–#95).
   the measurement does not, and the two are not the same claim. Diagnosis so far
   is unchanged: `cursor-agent` is spawned fresh per turn and `--resume` restores
   context, not process warmth. **Read a trace before optimising anything.**
+  §9.17 offers a candidate explanation for why the measurement never happened:
+  `--trace` is launch-only, so catching a slow turn means having predicted one
+  before the room opened. Unconfirmed — it is a reading of the control surface,
+  not of anyone's actual attempt.
 
 ## Known gaps, not yet owned
+
+- **Five controls violate the §9.17 mid-session rule**, each its own change:
+  `--fresh` (the one that raised it — clearing one seat's thread costs the other
+  three), `--trace`, `--read`, `--auto`, `--vendor`. The inventory and the
+  per-control reasoning are in [docs/design.md §9.17](docs/design.md); it is not
+  restated here. `--brief` was examined and deliberately **not** filed — it is
+  first-turn context by definition, so re-briefing is a separate question.
 
 - **`docs/design.md` §3 does not name the canary set.** §7 now records how drift
   *renders*; §3 still does not say what each adapter actually watches. A canary
