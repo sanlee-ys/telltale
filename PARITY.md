@@ -50,6 +50,57 @@ That means a macOS run is expected to work and has not been shown to. Treat a
 missing or empty adapter on macOS as unverified rather than broken, and record
 what you find here.
 
+## Terminal profile
+
+The same frame reads better on macOS than on Windows, and the reason is not a
+platform difference in telltale — there is one code path, one glyph set, and
+Windows Terminal is the declared reference environment. macOS terminals ship
+with more generous leading and a softer rasterizer. What closes most of that
+gap is the terminal's own configuration, and it is usually untouched.
+
+This profile is the tuned reference. It is additive: keep your existing
+profiles and open this one to compare.
+
+```json
+{
+    "name": "telltale council",
+    "commandline": "pwsh.exe -NoExit -Command \"telltale council\"",
+    "font": {
+        "face": "JetBrainsMono Nerd Font Mono",
+        "size": 12,
+        "weight": "medium",
+        "cellHeight": "1.25"
+    },
+    "padding": "16, 12, 16, 12",
+    "antialiasingMode": "grayscale"
+}
+```
+
+Why each of those, since none of it is obvious:
+
+- **`cellHeight: "1.25"`** is the one that matters. It is the leading macOS
+  gives you by default and Windows Terminal does not, and a grid of character
+  cells with no air between rows is most of what "cramped" means. Requires
+  Windows Terminal 1.19 or newer.
+- **`weight: "medium"`** compensates for DirectWrite drawing thinner stems than
+  CoreText at the same nominal weight. This is the closest a setting gets to
+  the rasterizer difference; it does not eliminate it.
+- **`antialiasingMode: "grayscale"`** rather than ClearType, whose subpixel
+  fringing is what reads as "digital" against a macOS capture.
+- **`padding`** buys margin the frame itself should not have to spend cells on.
+
+**Do not reach for a smaller font to fit more in.** `TestFrameCorpusReportsFill`
+in `internal/council` measures this: an idle four-seat room occupies about six
+rows *regardless of window height*, so every additional row of terminal is one
+more row of rules drawn around nothing — 75% of the frame at 24 rows, 90% at
+60. Shrinking the font makes an idle room emptier, not denser. Going up a size
+is the counterintuitive but measured direction.
+
+**What this cannot fix.** DirectWrite is not CoreText and a TUI cannot reach
+past its terminal's rasterizer. The bar here is the best native result on each
+platform, not pixel parity with the Mac; anything claiming otherwise is
+selling a screenshot.
+
 ## What does not travel between machines
 
 - **The room.** `~/.telltale/council/room.json` holds each vendor's *session
