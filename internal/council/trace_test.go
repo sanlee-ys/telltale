@@ -198,7 +198,7 @@ func TestTraceCommandVocabulary(t *testing.T) {
 // absence of a file rather than the wording of the notice.
 func TestBareTraceReportsAndNeverEnables(t *testing.T) {
 	dir := t.TempDir()
-	m := roomAt(dir)
+	m := roomAt(t, dir)
 
 	m.st.Draft = "/trace"
 	if !m.roomCommand() {
@@ -225,7 +225,7 @@ func TestBareTraceReportsAndNeverEnables(t *testing.T) {
 // short file must not read as a quiet session.
 func TestTraceCommandEnablesAndReportsTheWindow(t *testing.T) {
 	dir := t.TempDir()
-	m := roomAt(dir)
+	m := roomAt(t, dir)
 	m.trace.record(clock(model.VendorCodex, 0, 44*time.Second, 0, false))
 
 	m.st.Draft = "/trace turns.log"
@@ -262,7 +262,7 @@ func TestTraceCommandEnablesAndReportsTheWindow(t *testing.T) {
 // the in-flight turn is still caught.
 func TestTraceDoesNotRefuseMidTurn(t *testing.T) {
 	dir := t.TempDir()
-	m := roomAt(dir)
+	m := roomAt(t, dir)
 	m.turn = &turnState{}
 
 	m.st.Draft = "/trace turns.log"
@@ -283,7 +283,7 @@ func TestTraceDoesNotRefuseMidTurn(t *testing.T) {
 // TestTraceBadPathIsANoticeNotACrash, and the draft survives it — a path is
 // expensive to retype, which is the same reason /cd keeps one.
 func TestTraceBadPathIsANoticeNotACrash(t *testing.T) {
-	m := roomAt(t.TempDir())
+	m := roomAt(t, t.TempDir())
 
 	m.st.Draft = "/trace no-such-dir/turns.log"
 	m.roomCommand()
@@ -302,11 +302,22 @@ func TestTraceBadPathIsANoticeNotACrash(t *testing.T) {
 // roomAt is a room pointed at dir, with nothing dispatched. Named for the
 // workspace rather than the trace because dispatch_test.go already owns
 // traceModel, which is a different fixture entirely.
-func roomAt(dir string) *Model {
+//
+// The Cleanup is load-bearing on Windows and invisible on Linux, which is
+// exactly how it got here: a test that enables a trace and leaves it open
+// passes locally and fails in CI, because Linux unlinks an open file happily
+// and Windows refuses — t.TempDir's own RemoveAll is what reports it, so the
+// failure names the cleanup rather than the test that leaked the handle.
+// Windows is the primary target (ADR-002); closing here means no future test
+// using this fixture has to remember.
+func roomAt(t *testing.T, dir string) *Model {
+	t.Helper()
 	st := room()
 	st.Workspace = dir
 	st.Home = dir
-	return &Model{st: st, glyphs: GlyphsFor(false), trace: newTraceSink()}
+	m := &Model{st: st, glyphs: GlyphsFor(false), trace: newTraceSink()}
+	t.Cleanup(m.trace.close)
+	return m
 }
 
 func readLines(t *testing.T, path string) []string {
