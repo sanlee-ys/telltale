@@ -67,14 +67,41 @@ func Render(st State, sty Styles, g Glyphs) string {
 // resolveLayout, so a scroll key and the renderer can never disagree about how
 // many rows there are.
 func layoutFor(st State, g Glyphs) Layout {
+	vis := st.VisibleColumns()
 	return resolveLayoutIn(layoutInput{
 		Width:    st.Width,
 		Height:   st.Height,
-		Cols:     len(st.VisibleColumns()),
+		Cols:     len(vis),
 		Expanded: st.Expanded,
 		Composer: composerRows(st, g),
 		Notice:   collapsedNotice(st, g) != "",
+		Primary:  framePrimary(st, vis),
 	})
+}
+
+// framePrimary marks which visible seats own the frame this turn.
+//
+// Nil means equal columns. A partial set means those seats share the wide
+// region and the rest sit at stripColumn until the next dispatch.
+func framePrimary(st State, vis []int) []bool {
+	if st.Expanded || len(st.FrameOwners) == 0 || len(vis) < 2 {
+		return nil
+	}
+	out := make([]bool, len(vis))
+	n := 0
+	for j, idx := range vis {
+		for _, o := range st.FrameOwners {
+			if st.Columns[idx].Vendor == o {
+				out[j] = true
+				n++
+				break
+			}
+		}
+	}
+	if n == 0 || n == len(vis) {
+		return nil
+	}
+	return out
 }
 
 // floorMessage is what a terminal too small to draw the room gets. It names the
@@ -235,7 +262,7 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		// extraFor is indexed by POSITION in the row, not by seat: the leftover
 		// cells go to the leftmost drawn column, and a collapsed seat has no
 		// position to give them to.
-		w := lay.ColWidth + lay.extraFor(j)
+		w := lay.widthAt(j)
 		f := seatUnfocused
 		if idx == st.Focus {
 			f = seatFocused
@@ -568,10 +595,7 @@ func MaxScroll(st State, idx int) int {
 		return 0
 	}
 	lay := layoutFor(st, GlyphsFor(st.ASCII))
-	w := lay.ColWidth
-	if lay.Tier == TierColumns {
-		w += lay.extraFor(pos)
-	}
+	w := lay.widthAt(pos)
 	// PlainStyles because only the line COUNT is wanted here, and styling
 	// cannot change it — every style in this package is a wrapper, never a
 	// re-wrap.

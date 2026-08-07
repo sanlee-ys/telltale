@@ -25,11 +25,9 @@ binding copies and the argument; this file does not restate either.
 
 ## In flight
 
-| Work | Owner | Status | Branch / PR |
-|---|---|---|---|
-
-Phases 0–3 landed (#88–#91). Next: phases 4–5. Phase 5 (route-weighted geometry)
-stays gated.
+Nothing open. Council UI ceiling Phases 0–5 landed (#88–#95): frame corpus and
+drift fixes (#88–#91), ungated compile (#93), frame-fit goldens (#94), route-
+weighted column geometry (#95). Phase 4 audit (Codex): no semantic blockers.
 
 ## Closed without code (do not re-open)
 
