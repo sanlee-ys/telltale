@@ -760,6 +760,22 @@ type State struct {
 	// still overrides to one full-width column without clearing this set.
 	FrameOwners []model.VendorID
 
+	// TurnRoute is where the turn IN FLIGHT was sent, or nil between turns.
+	//
+	// A pointer, and that is the zero-vs-absent rule rather than a style choice
+	// (§4a.1): `Route{}` is a real and common route — it is what `@all` parses
+	// to — so a value field could not tell "this turn went to everyone" from
+	// "no turn is running". The same distinction Column.CostUSD draws with the
+	// same mechanism.
+	//
+	// Distinct from Route, which is the DRAFT's routing and is recomputed on
+	// every keystroke: the moment a turn is dispatched the composer clears and
+	// its route falls back to the default, so the live turn's destination has
+	// nowhere else to be read from. Set at dispatch, cleared when the last
+	// column lands, because it is a fact about a turn and not about the room
+	// (§9.21).
+	TurnRoute *Route
+
 	// Spinner advances only while something is genuinely in flight.
 	Spinner int
 
@@ -802,6 +818,28 @@ func (s State) Seated() int {
 	n := 0
 	for _, c := range s.Columns {
 		if s.seats(c) {
+			n++
+		}
+	}
+	return n
+}
+
+// SeatsIn is how many seats a route would actually be DISPATCHED to: seated ∩
+// addressed.
+//
+// Both halves are load-bearing and each one alone would produce a number the
+// room cannot stand behind. A route naming a vendor that is not installed — or
+// one --vendor left out of the room — addresses it and bills nothing, so
+// counting the route's own vendors would quote a price for a seat that will
+// never be spawned. Counting the seated columns alone would ignore the routing
+// entirely. This is the same intersection dispatch loops over before spawning
+// anything, which is why Model.seatedIn now delegates here rather than keeping
+// a second copy: a bill derived from different arithmetic than the dispatch is
+// a bill for a turn that did not happen.
+func (s State) SeatsIn(r Route) int {
+	n := 0
+	for _, c := range s.Columns {
+		if s.seats(c) && r.addresses(c.Vendor) {
 			n++
 		}
 	}
