@@ -1916,13 +1916,18 @@ func helpKeys(sty Styles) []string {
 		// One line, like pgup/pgdn below and for the same reason: the panel has
 		// to fit a 24-row terminal with q and ? still on screen.
 		//
-		// `c` shares the row rather than taking a new one, and the merge is the
-		// honest shape rather than only a saving: these are the two controls that
-		// change the ROOM from inside it instead of addressing the vendors, which
-		// is the distinction design.md §9.17 turned into a rule. The budget is
-		// hard (17 rows, above) and a row added here pushes the `?` line — the
-		// only documented way out of this panel — off a 24-row terminal.
-		"  /cd <dir>    move the room to another repo; c clears the focused seat's thread (y confirms)",
+		// Three controls on one row, and the merge is the honest shape rather than
+		// only a saving: these are the ones that change the ROOM from inside it
+		// instead of addressing the vendors, which is the distinction design.md
+		// §9.17 turned into a rule. Grouped, a reader learns the category; split
+		// across three rows they would read as three unrelated keys.
+		//
+		// It has to be INSIDE the budget. helpBody clips at the body height and
+		// does not scroll, so a row past the fold is invisible on a 24-row
+		// terminal — which is exactly where the posture explanation was standing
+		// when a user asked what "unsandboxed" meant, the failure that split this
+		// panel into two pages. Below the fold is not a cheaper row, it is no row.
+		"  /cd <dir>    move the room; c clears the focused seat's thread (y); /trace <file> times turns",
 		// One row for three keys, and the merge is the honest shape rather than
 		// a saving. The panel's budget is hard (17 rows, above) and yank had to
 		// land inside it — a copy key documented below the fold is a copy key

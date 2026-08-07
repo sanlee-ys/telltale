@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -57,8 +56,14 @@ type Options struct {
 	// A file and not a surface. The room already carries a header, a badge line,
 	// a card and a footer per column, and three more numbers on every one of
 	// them would cost every reader something to answer a question that is asked
-	// on the days a turn is inexplicably slow. Empty — the default — measures
-	// nothing, opens nothing and changes no pixel.
+	// on the days a turn is inexplicably slow.
+	//
+	// "Empty measures nothing" was true and is not any more. The clock always
+	// ran; only the writing was conditional, so a turn nobody had predicted was
+	// measured and then discarded — which is what made this flag the §9.17 case
+	// it became. The room now HOLDS the last turns either way (trace.go), and
+	// `/trace <file>` typed after a slow turn writes that turn. Empty still opens
+	// nothing and changes no pixel; it just no longer throws the numbers away.
 	TracePath string
 }
 
@@ -174,6 +179,13 @@ type Model struct {
 	flowChain *FlowChain
 	// flowDraft is the draft string that produced flowChain (reuse after write gate).
 	flowDraft string
+	// trace is the room's turn-clock sink: a bounded ring of recent records, plus
+	// a file once /trace or --trace opens one. Never nil while the room runs.
+	//
+	// A pointer, and the runner writes to it from the goroutines reading each
+	// vendor's stdout — so nothing about it may be read during Render or touched
+	// from Update without going through its own mutex. See trace.go.
+	trace *traceSink
 	// clearPending names the seat awaiting y/n before its thread is dropped, and
 	// is empty when nothing is pending.
 	//
@@ -232,6 +244,11 @@ func newWithBrief(opts Options, b Brief, hs HookSet, re Reattachment) *Model {
 		roomCancel: cancel,
 		brief:      b,
 		hooks:      hs,
+		// Never nil, so /trace has something to answer with in a model a test
+		// built directly. Run replaces it with the sink it installed into the
+		// runner, because there must be exactly one ring and the runner has to be
+		// writing into the same one /trace reads.
+		trace: newTraceSink(),
 	}
 	m.st.Briefed = b.Loaded()
 	m.reattach(re)
@@ -1028,36 +1045,6 @@ func (m *Model) View() tea.View {
 // twice.
 func wantsHooks(opts Options) bool { return opts.Write && !opts.Auto }
 
-// openTrace opens the turn-clock file, returning the sink that writes to it and
-// the function that closes it.
-//
-// APPEND, never truncate. The thing being chased is a turn that was slow once,
-// so a run that erased the previous run's evidence on open would be the wrong
-// tool for its only job.
-//
-// The writes are serialised here rather than relied on from the runner: seats
-// finish independently, each on its own goroutine, and interleaved lines would
-// be exactly as useless as no lines.
-func openTrace(path string) (runner.Trace, func(), error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return nil, nil, err
-	}
-	var mu sync.Mutex
-	sink := func(c runner.TurnClock) {
-		mu.Lock()
-		defer mu.Unlock()
-		// Best effort, and silent. A full disk must not be able to take a room
-		// down; the trace is a diagnostic and the room is the product.
-		fmt.Fprintln(f, c)
-	}
-	return sink, func() {
-		mu.Lock()
-		defer mu.Unlock()
-		_ = f.Close()
-	}, nil
-}
-
 // Run starts the room.
 //
 // Council is the one telltale mode that dispatches to vendor CLIs. The
@@ -1072,21 +1059,29 @@ func Run(opts Options) error {
 		return err
 	}
 
-	// Opened before the alternate screen for the same reason the brief is: a
-	// path that cannot be written must be a line on stderr, not a card behind a
-	// TUI the user has to quit to read.
+	// The sink is installed for the whole life of the room, with or without a
+	// --trace path, because the clock was ALWAYS running and only the writing was
+	// conditional (trace.go). Holding the last turns in memory is what lets
+	// `/trace <file>`, typed after a turn nobody can explain, write that turn
+	// instead of the next one.
+	trace := newTraceSink()
+	runner.SetTrace(trace.record)
+	defer func() {
+		// Uninstalled before the file is closed, so nothing can write into a
+		// closed handle on the way out.
+		runner.SetTrace(nil)
+		trace.close()
+	}()
+
+	// A --trace path is still opened before the alternate screen, for the same
+	// reason the brief is: a path that cannot be written must be a line on
+	// stderr, not a card behind a TUI the user has to quit to read. Typed at the
+	// room instead, the same failure is a notice, because by then there is a
+	// footer to put it in.
 	if opts.TracePath != "" {
-		sink, closeTrace, terr := openTrace(opts.TracePath)
-		if terr != nil {
+		if _, terr := trace.open(opts.TracePath); terr != nil {
 			return terr
 		}
-		runner.SetTrace(sink)
-		defer func() {
-			// Uninstalled before the file is closed, so nothing can write into a
-			// closed handle on the way out.
-			runner.SetTrace(nil)
-			closeTrace()
-		}()
 	}
 
 	// The room is the persistent object, so reattaching is the DEFAULT: a
@@ -1163,6 +1158,10 @@ func Run(opts Options) error {
 	defer hooks.Cleanup()
 
 	mdl := newWithBrief(opts, b, hooks, re)
+	// One ring, and the runner is already writing into it. The constructor's own
+	// sink is discarded here rather than never made, so a Model built by a test
+	// still has one and /trace never dereferences nil.
+	mdl.trace = trace
 	p := tea.NewProgram(mdl)
 	_, err = p.Run()
 	if err != nil {

@@ -421,6 +421,13 @@ while a turn is in flight, for the same reason `/cd` does. The rule it is the fi
 built to — anything that changes while the room is open is reachable from inside it, and a
 flag is for what is true at launch — is [docs/design.md §9.17](docs/design.md).
 
+**`/trace <file>` records turn timings, including the ones already behind you.** The turn
+clock runs on every turn whether or not anything is writing it down, so the room holds the
+last 200 records and hands them to the file the moment you open one — type it straight after
+a turn you cannot explain and you get *that* turn, not the next one. `/trace off` stops and
+the room keeps measuring; bare `/trace` reports. Council never picks the path: that is what
+keeps `room.json` the only file it writes on its own initiative.
+
 The rest of the account — why execution is argv and never a shell, the silent invocation
 trap each vendor hid, and what is still unverified — is in
 [docs/design.md §9](docs/design.md).

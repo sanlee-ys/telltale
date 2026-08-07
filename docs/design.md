@@ -3866,7 +3866,7 @@ vendor behaviour, which would need measuring.
 |---|---|---|
 | workspace (`--cd` / `/cd`) | **compliant** | the launch flag has an inside-the-room twin; the flag's own help says so |
 | `--fresh` | **violates** | a conversation fills up *by being used*. The only reset is room-wide and launch-time, so clearing one seat costs the other three their threads |
-| `--trace` | **violates** | its own doc says it answers "a question that is asked on the days a turn is inexplicably slow" — a day you identify from inside a slow turn. This is a candidate explanation for STATE.md's standing open question: the instrument shipped and the measurement never happened, and you must predict the slow turn at launch to catch one |
+| `--trace` | **retired by `/trace`** | its own doc said it answers "a question that is asked on the days a turn is inexplicably slow" — a day you identify from inside a slow turn. The flag remains for a run you already intend to measure; see below for what the sweep found underneath it |
 | `--read` (posture) | **violates** | see the refusal above. Note what is *not* an objection: posture is deliberately never restored from the saved room, because "a posture that can arrive from a file is not one anyone typed." A posture typed into the composer is typed |
 | `--auto` | **violates** | whether the gated seat asks before each tool call is a preference you form partway through a batch, not before it |
 | `--vendor` | **violates** | who is *seated* is launch-only. `-@seat` routes one turn and is explicitly "a different control from an @mention" — routing is not reseating |
@@ -3931,7 +3931,49 @@ reading surface to report a vendor-side change would be the room destroying the 
 to show. It retires in `startTurn`: once the brief is sent the seat has a thread again, and a
 marker outliving that would describe a break the room has already healed.
 
+#### `/trace`, and the thing the sweep found underneath it
+
+**The clock was always running.** `runner/clock.go` measures every turn unconditionally —
+`newClock`, `begin` and `end` sit on the ordinary path — and `--trace` only decided whether
+`emitTurnClock` had a sink to hand the record to. So every slow turn anyone ever watched *was*
+measured, at full spawn/wait/stream resolution, and the numbers were dropped on the floor
+because nobody had predicted that turn before the room opened.
+
+That reframes the fix. A `/trace` that merely installed the sink from here on would move the
+prediction from launch to the previous turn rather than retiring it — you would still be waiting
+for the slow turn to happen *again*. So the sink is installed for the life of the room and keeps
+the last **200** records (`maxTraceRing`: `maxHistory`'s 50 turns at four seats, so the trace
+reaches back exactly as far as the transcript that made you want it). Turning the trace on is
+opening a *file*, and the first thing that file receives is what the room already held.
+
+`/trace <file>` enables and reports how many held turns it wrote; `/trace off` stops; bare
+`/trace` reports where it is going, or how many turns are held if it is off. The ring keeps
+filling while the trace is off, so stopping costs nothing and starting again reaches back over
+the gap.
+
+**Three deliberate refusals, each with a reason that is not "consistency":**
+
+- **No council-chosen path.** Bare `/trace` reports and never enables. A no-argument form that
+  picked a file would make council write a second file on its own initiative, and the sentence
+  in `README.md` and `CLAUDE.md` — the only mode that writes anything to disk, one file,
+  `room.json` — would become false. A `--trace`/`/trace` path is one the user named.
+- **It does not refuse mid-turn**, unlike `/cd` and `c`. Those change state the seats are
+  actively using; this opens a file on the room's side and changes nothing any vendor can
+  observe. The turn you cannot explain is usually the one still running, so refusing here would
+  refuse at the only moment that matters — and because the clock emits at `end()`, a trace
+  opened mid-turn still catches that turn.
+- **A relative path resolves against the ROOM's workspace**, not the process's cwd, matching
+  `/cd`. The room is the frame of reference for everything else typed into it.
+
+**The help panel taught the sweep something too.** `/trace` first went in below the panel's hard
+17-row budget, on the theory that a diagnostic can be demoted. It cannot: `helpBody` clips at the
+body height and does not scroll, so a row past the fold is not a cheaper row, it is **no row** —
+the same failure that put the posture explanation out of reach and split this panel into two
+pages. All three room controls now share one row inside the budget, and
+`TestHelpNamesEveryRoomControlAboveTheFold` pins both the fold and the controls, which until now
+were asserted only by a comment.
+
 #### Not decided here
 
-Whether the other four violating controls earn their own surfaces or should be judged one at a
-time against this rule. Each is its own change.
+Whether the other three violating controls — `--read`, `--auto`, `--vendor` — earn their own
+surfaces or should be judged one at a time against this rule. Each is its own change.
