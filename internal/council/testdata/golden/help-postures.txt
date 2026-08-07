@@ -11,8 +11,8 @@
                 was never observed. Weaker than the two above, and says so                                              
    unsandboxed  nothing restricts this vendor at the OS level. MEASURED,                                                
                 not assumed — treat this column as able to change your files                                            
-   WRITES       --write: this column may edit and run things in the workspace                                           
-   gated        --write, and this seat asks first — y approves, n denies                                                
+   WRITES       --write or /write: this column may edit and run in the workspace                                        
+   gated        --write or /write, and this seat asks first — y approves, n denies                                      
                                                                                                                         
    What contains this room is the WORKSPACE above, not any of these words.                                              
    Point council at a throwaway worktree when that matters.                                                             

@@ -197,6 +197,14 @@ type Model struct {
 	// is the only handle on that thread, and no vendor here offers a way back to
 	// one it has been told to forget.
 	clearPending model.VendorID
+	// writePending is true while /write awaits y/n before the room's posture is
+	// loosened, and is the only one of the three room controls that asks.
+	//
+	// It is NOT flowWritePending under another name. That one gates a chain the
+	// user already started, hop by hop; this one gates the room itself, and the
+	// two can never be pending together because a flow hop only exists while a
+	// turn is being assembled and this refuses to arm mid-turn at all.
+	writePending bool
 	// flowWritePending is true while a write hop awaits y/n before any vendor spawn.
 	flowWritePending bool
 	// flowWriteArmed is set by y so the next dispatch may Start the write hop.
@@ -529,6 +537,9 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.clearPending != "" {
 		return m.clearGateKey(msg)
 	}
+	if m.writePending {
+		return m.writeGateKey(msg)
+	}
 	if m.flowWritePending {
 		return m.flowWriteGateKey(msg)
 	}
@@ -556,6 +567,33 @@ func (m *Model) clearGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.st.Notice = "kept — nothing was cleared"
 	default:
 		m.st.Notice = "clear cancelled — y confirms, n declines"
+	}
+	return m, nil
+}
+
+// writeGateKey answers the confirmation armed by /write.
+//
+// Anything that is not y or n cancels, matching clearGateKey rather than the
+// flow gate, and for clearGateKey's reason: this interrupts nothing, so the safe
+// reading of a key nobody meant to press is to leave the room read-only. The
+// flow gate falls through to viewKey because scrolling the columns is part of
+// deciding there; here there is nothing to read — the question is one sentence
+// on screen and the answer does not depend on what any seat said.
+//
+// Cancelling and declining are different sentences on purpose. "n" is a decision
+// and says only that the room was kept; the default branch says what the two
+// keys are, because a user who landed here by accident is the one who does not
+// know what is being asked.
+func (m *Model) writeGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	m.writePending = false
+	switch msg.String() {
+	case "y":
+		m.applyPosture(true)
+		m.st.Notice = "the room writes — seats move on their next turn"
+	case "n":
+		m.st.Notice = "kept read-only"
+	default:
+		m.st.Notice = "cancelled — the room is still read-only · y confirms, n declines"
 	}
 	return m, nil
 }

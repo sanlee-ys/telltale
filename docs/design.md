@@ -3867,7 +3867,7 @@ vendor behaviour, which would need measuring.
 | workspace (`--cd` / `/cd`) | **compliant** | the launch flag has an inside-the-room twin; the flag's own help says so |
 | `--fresh` | **violates** | a conversation fills up *by being used*. The only reset is room-wide and launch-time, so clearing one seat costs the other three their threads |
 | `--trace` | **retired by `/trace`** | its own doc said it answers "a question that is asked on the days a turn is inexplicably slow" — a day you identify from inside a slow turn. The flag remains for a run you already intend to measure; see below for what the sweep found underneath it |
-| `--read` (posture) | **violates** | see the refusal above. Note what is *not* an objection: posture is deliberately never restored from the saved room, because "a posture that can arrive from a file is not one anyone typed." A posture typed into the composer is typed |
+| `--read` (posture) | **retired by `/read` and `/write`** | see the refusal above. Note what is *not* an objection: posture is deliberately never restored from the saved room, because "a posture that can arrive from a file is not one anyone typed." A posture typed into the composer is typed. The flag stays: opening a room that only talks is a real thing to want at launch |
 | `--auto` | **violates** | whether the gated seat asks before each tool call is a preference you form partway through a batch, not before it |
 | `--vendor` | **violates** | who is *seated* is launch-only. `-@seat` routes one turn and is explicitly "a different control from an @mention" — routing is not reseating |
 | `--brief` | **arguable, not filed** | it is defined as first-turn context, so re-briefing is a different feature rather than a missing surface for this one. Left out deliberately; do not fold it in without deciding that question on its own |
@@ -3973,10 +3973,58 @@ pages. All three room controls now share one row inside the budget, and
 `TestHelpNamesEveryRoomControlAboveTheFold` pins both the fold and the controls, which until now
 were asserted only by a comment.
 
+#### `/read` and `/write`, and the two asymmetries in them
+
+The third control built to this rule, and the one the rule was written for: §9.16's refusal of a
+`/flow` write hop into a read-only room "names the flag that would change it", which is this
+defect stated as a feature. The room knew what was wanted, knew what would grant it, and could
+only say *quit and start over*.
+
+**The confirmation is asymmetric, on purpose.** `/read` applies at once; `/write` asks `y`/`n`.
+They are not the same act. Tightening takes authority away from four seats, and the worst case
+of a stray `/read` is a turn re-run. Loosening hands editing and command authority to every seat
+in the room — and in an `--auto` room, hands it with nothing left asking. `c` spends a keystroke
+on its irreversible direction for exactly this reason, and anything that is not `y` cancels here
+for `clearGateKey`'s reason: this gate interrupts nothing, so a key nobody meant to press must
+not be able to arm the room.
+
+**The card names which write you are getting.** Gated write and `--auto` write reach the same
+badge-bearing posture by different routes and only one of them asks first, so the confirmation
+says which — a card promising "claude asks before each change" in an `--auto` room is a promise
+that room cannot keep. §4a.1 applied to a prompt rather than to a gauge.
+
+**Neither direction is offered mid-turn**, which is `/cd`'s refusal rather than a house style.
+Posture is argv, fixed at spawn, so seats already running hold the flags they were launched with
+whatever the room now says. Landing the flip under them would put a read-only badge over a live
+process still holding write flags — the disagreement between claim and process that the
+per-step posture rule exists to forbid. Nothing is killed: `seatProcess` already respawns on a
+posture mismatch under the same measured `--resume` composition it uses for `/cd`, so a `/read`
+that is `/write`d back before anyone dispatches costs nothing at all.
+
+**The badges are rebuilt, not just the flag.** `Sandbox` is computed once in `stateWith` from
+`opts.Write`, so a posture that moved without `applyPosture`'s loop would leave four columns
+advertising authority the room had just taken away — a displayed value no longer coming from
+what is true. `TestPostureFlipRebuildsEveryBadge` asserts on the rendered badge rather than the
+field. The `WRITES` and `gated` glosses were updated in the same change for the same reason:
+both credited `--write` as the only way to reach them, which would send a reader looking for a
+relaunch out of the glossary that explains the thing.
+
+**Only the bare word is a command**, unlike `/cd` and `/trace`. Those take an argument, so
+`/cd ` and `/trace ` are unmistakable; these take none, and both are words a person addresses a
+room with. `/write a test for this` and `/read the design doc first` are ordinary briefs, and
+intercepting them would swallow a turn and run a setting instead — worse than stealing a word,
+because the user watches their brief vanish rather than being told it was a command.
+
+Posture is still never restored from the saved room. `TestReattachDoesNotRestoreWritePosture` is
+unchanged and still holds: "a posture that can arrive from a file is not one anyone typed" —
+and a posture typed into the composer is typed.
+
 #### Not decided here
 
-Whether the other three violating controls — `--read`, `--auto`, `--vendor` — earn their own
-surfaces or should be judged one at a time against this rule. Each is its own change.
+Whether the other two violating controls — `--auto` and `--vendor` — earn their own surfaces or
+should be judged one at a time against this rule. Each is its own change. `--auto`'s open
+question is narrower than it looks: the preference forms while an approval card is on screen, so
+the surface may be a third key on that card rather than a room command at all.
 
 ### 9.18 a strip said four fifths of a name it could have said whole in two letters
 

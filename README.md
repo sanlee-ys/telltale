@@ -361,6 +361,13 @@ folded and why.
 redundant — reattaching is the default), `--write` (accepted, and does nothing —
 writing is the default), `--ascii`, `--no-title`.
 
+**`--read` is the door; `/read` and `/write` are the room.** Typed into the composer,
+`/read` makes the room read-only at once and `/write` asks `y`/`n` before letting it write
+again — the confirmation is on the loosening direction only, because that one hands editing
+and command authority to every seat. Both refuse while a turn is in flight, and neither
+kills anything: seats move on their next turn. Only the bare word is a command, so
+`/write a test for this` is still a brief.
+
 `--vendor <list>` decides who is in the room: `all` keeps every detected seat on screen
 including the ones that cannot be driven, and a comma list (`--vendor claude,codex`) seats
 exactly those and dispatches to nobody else. That is a different control from an
