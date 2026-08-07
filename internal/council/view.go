@@ -2674,7 +2674,7 @@ func helpKeys(sty Styles) []string {
 		// terminal — which is exactly where the posture explanation was standing
 		// when a user asked what "unsandboxed" meant, the failure that split this
 		// panel into two pages. Below the fold is not a cheaper row, it is no row.
-		"  /cd <dir>    move the room; /read /write posture (y); c clears a seat's thread (y); /trace <file> times turns",
+		"  /cd <dir>    move the room; /read /write posture (y); /seat <list>; c clears a thread (y); /trace <file> times",
 		// One row for three keys, and the merge is the honest shape rather than
 		// a saving. The panel's budget is hard (17 rows, above) and yank had to
 		// land inside it — a copy key documented below the fold is a copy key

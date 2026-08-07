@@ -3869,7 +3869,7 @@ vendor behaviour, which would need measuring.
 | `--trace` | **retired by `/trace`** | its own doc said it answers "a question that is asked on the days a turn is inexplicably slow" — a day you identify from inside a slow turn. The flag remains for a run you already intend to measure; see below for what the sweep found underneath it |
 | `--read` (posture) | **retired by `/read` and `/write`** | see the refusal above. Note what is *not* an objection: posture is deliberately never restored from the saved room, because "a posture that can arrive from a file is not one anyone typed." A posture typed into the composer is typed. The flag stays: opening a room that only talks is a real thing to want at launch |
 | `--auto` | **violates** | whether the gated seat asks before each tool call is a preference you form partway through a batch, not before it |
-| `--vendor` | **violates** | who is *seated* is launch-only. `-@seat` routes one turn and is explicitly "a different control from an @mention" — routing is not reseating |
+| `--vendor` | **retired by `/seat`** | who is *seated* was launch-only. `-@seat` routes one turn and is explicitly "a different control from an @mention" — routing is not reseating. The flag stays: opening a room with a chosen set is a real thing to want at launch |
 | `--brief` | **arguable, not filed** | it is defined as first-turn context, so re-briefing is a different feature rather than a missing surface for this one. Left out deliberately; do not fold it in without deciding that question on its own |
 | `--ascii`, `--no-title` | **legitimately launch-only** | properties of the terminal, not of the room. They do not change while it is open |
 | `--resume`, `--write` | **vestigial** | accepted and ignored; kept for muscle memory |
@@ -4019,12 +4019,45 @@ Posture is still never restored from the saved room. `TestReattachDoesNotRestore
 unchanged and still holds: "a posture that can arrive from a file is not one anyone typed" —
 and a posture typed into the composer is typed.
 
+#### `/seat`, and the control it is deliberately NOT
+
+`--vendor`'s twin, taking the same argument for the same reason `/cd` takes `--cd`'s:
+`/seat claude,codex` and `--vendor claude,codex` are one grammar, read through the same alias
+table `@mentions` use. Two tables would let `/seat agy` work and `@agy` not.
+
+**What it does not do is the design.** An unseated seat keeps its thread, keeps its process, and
+keeps every id that would resume it. Only two things change: it is not drawn, and it is not
+dispatched to. Killing the process to reclaim it was considered and rejected on the ruling that
+a returning seat picks up its own thread where it left off:
+
+- **The thread is the thing being protected.** A seat with a live process and no reported
+  session id yet holds its whole conversation *in that process* (§9.8). Killing it there
+  destroys a thread `seatHasThread` calls real — silently, on a command nobody reads as
+  destructive. Dropping a thread is `c`'s job, and `c` asks first.
+- **Nothing is being spent.** An unseated seat is never dispatched to, so an idle process costs
+  a process and no quota. Trading a guaranteed-correct return for a resource nobody is short of
+  is the wrong trade.
+
+So reversibility is by construction rather than by a resume that could fail: `/seat all` puts
+everyone back mid-conversation with nothing to go wrong. What it buys is what the fold-out
+already buys an uninstalled seat — the **width** goes to the seats answering.
+
+**Sitting out is a different control and already exists.** A seat nobody addresses does not
+answer and is not billed; §9.19 renders a long absence as one line rather than ten. `/seat` is
+for the seat you want off the *screen*, not merely quiet — which is why it was worth building
+even though the quota problem it looks like it solves was already solved by the default route.
+
+**It warns when it unseats the default route.** Silence goes to claude, so a room without claude
+answers nothing until every brief is `@mentioned`. Dispatch already refuses a zero-seat route
+per turn; saying it once at `/seat` time is the difference between a rule learned now and one
+discovered on the next enter.
+
 #### Not decided here
 
-Whether the other two violating controls — `--auto` and `--vendor` — earn their own surfaces or
-should be judged one at a time against this rule. Each is its own change. `--auto`'s open
-question is narrower than it looks: the preference forms while an approval card is on screen, so
-the surface may be a third key on that card rather than a room command at all.
+Whether `--auto` earns its own surface. Its open question is narrower than it looks: the
+preference forms while an approval card is on screen, so the surface is likely a third key on
+that card (`y` approve, `n` deny, `a` stop asking) rather than a room command at all. Ruled to
+be the key; not yet built.
 
 ### 9.18 a strip said four fifths of a name it could have said whole in two letters
 

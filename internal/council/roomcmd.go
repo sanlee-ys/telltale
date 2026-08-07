@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/sanlee-ys/telltale/internal/model"
 )
 
 // Room commands: drafts addressed to the ROOM rather than to the vendors.
@@ -74,6 +76,9 @@ func (m *Model) roomCommand() bool {
 	}
 	if parseBareCommand(m.st.Draft, "/write") {
 		return m.postureCommand(true)
+	}
+	if arg, ok := parseCommand(m.st.Draft, "/seat"); ok {
+		return m.seatCommand(arg)
 	}
 	arg, ok := parseRoomCommand(m.st.Draft)
 	if !ok {
@@ -336,6 +341,133 @@ func (m *Model) postureCommand(write bool) bool {
 		m.st.Notice = "let the room write again? y confirms — claude asks before each change, the other seats do not · n keeps it read-only"
 	}
 	return true
+}
+
+// seatCommand decides who is in the room, from inside it. `--vendor`'s twin,
+// and it takes the same argument on purpose — `/seat claude,codex` and
+// `--vendor claude,codex` are one grammar, the way `/cd` is `--cd`'s.
+//
+// WHAT IT DOES NOT DO IS THE DESIGN. An unseated seat keeps its thread, keeps
+// its process, and keeps every id that would resume it; all that changes is
+// whether it is drawn and dispatched to. That was ruled deliberately over the
+// alternative of killing the process to reclaim it:
+//
+//   - The thread is what the user is protecting. A seat with a live process and
+//     no reported session id yet has its whole conversation IN that process
+//     (§9.8) — killing it there destroys a thread that `seatHasThread` would
+//     have called real, silently, on a command nobody thinks of as destructive.
+//     That is `c`'s job, and `c` asks first for exactly this reason.
+//   - Nothing is being spent. An unseated seat is never dispatched to, so an
+//     idle process costs a process and no quota. Trading a guaranteed-correct
+//     return for a resource nobody is short of is the wrong trade.
+//
+// So this is fully reversible by construction: `/seat all` puts everyone back
+// where they were, mid-conversation, with no resume to fail. What it buys is
+// what the fold-out already buys an uninstalled seat — the WIDTH goes to the
+// seats that are answering.
+//
+// Sitting out is a different control and already exists: a seat nobody
+// addresses does not answer and is not billed (§9.19 renders a long absence as
+// one line). This is for the seat you want off the SCREEN, not merely quiet.
+func (m *Model) seatCommand(arg string) bool {
+	if m.turn != nil {
+		// The grid for a turn in flight was decided at dispatch (frameOwnersFor),
+		// so reseating under it would redraw the room around columns that are
+		// mid-answer. /cd's refusal, for /cd's reason.
+		m.st.Notice = "a turn is in flight — /seat changes the room between turns"
+		return true
+	}
+
+	if arg == "" {
+		m.st.Notice = "seated: " + strings.Join(m.seatedLabels(), " ") +
+			" — /seat <list> narrows, /seat all puts everyone back"
+		m.setDraft("")
+		return true
+	}
+
+	if arg == "all" {
+		m.st.Seats = Seats{All: true}
+		m.setDraft("")
+		m.st.Notice = "everyone is seated — threads were kept, so each seat carries on where it left off"
+		return true
+	}
+
+	want, unknown := parseSeatList(arg)
+	if len(unknown) > 0 {
+		// Named but unrecognised is a typo, and a typo that silently seated a
+		// smaller room than asked for would be discovered as a missing answer
+		// several turns later.
+		m.st.Notice = "no seat called " + strings.Join(unknown, " or ") +
+			" — /seat takes claude, codex, agy, cursor, or all"
+		return true
+	}
+	if len(want) == 0 {
+		m.st.Notice = "/seat needs at least one seat — /seat all puts everyone back"
+		return true
+	}
+
+	m.st.Seats = Seats{Only: want}
+	m.setDraft("")
+
+	notice := "seated: " + strings.Join(m.seatedLabels(), " ") + " — the rest keep their threads, /seat all brings them back"
+	// The default route is claude, so a room that unseats claude answers nothing
+	// at all until every brief is @mentioned. Dispatch would say so per turn
+	// (seatedIn == 0); saying it once, here, is the difference between a rule the
+	// user learns now and one they discover on their next enter.
+	if !m.seatsVendor(model.VendorClaude) {
+		notice += ". Unaddressed briefs go to claude, who is not seated — @mention a seat"
+	}
+	m.st.Notice = notice
+	return true
+}
+
+// parseSeatList reads "claude,codex" into vendors, through the SAME alias table
+// @mentions use. Two tables would let /seat agy work and @agy not, or the
+// reverse, and the room would be teaching two vocabularies for one set of names.
+func parseSeatList(arg string) (want []model.VendorID, unknown []string) {
+	aliases := mentionAliases()
+	seen := map[model.VendorID]bool{}
+	for _, f := range strings.Split(arg, ",") {
+		name := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(f, "@")))
+		if name == "" {
+			continue
+		}
+		v, ok := aliases[name]
+		if !ok {
+			unknown = append(unknown, name)
+			continue
+		}
+		if !seen[v] {
+			seen[v] = true
+			want = append(want, v)
+		}
+	}
+	return want, unknown
+}
+
+// seatsVendor reports whether this vendor takes turns in the room as it stands.
+func (m *Model) seatsVendor(v model.VendorID) bool {
+	for _, c := range m.st.Columns {
+		if c.Vendor == v {
+			return m.st.seats(c)
+		}
+	}
+	return false
+}
+
+// seatedLabels names the seats that take turns, in the grid's own order, for a
+// notice that has just changed who they are.
+func (m *Model) seatedLabels() []string {
+	var out []string
+	for _, c := range m.st.Columns {
+		if m.st.seats(c) {
+			out = append(out, c.Label)
+		}
+	}
+	if len(out) == 0 {
+		return []string{"nobody"}
+	}
+	return out
 }
 
 // applyPosture sets the room's posture and rebuilds every column's claim about

@@ -266,7 +266,14 @@ telltale council flags:
                               every seat on screen; a list seats exactly those
                               and dispatches to nobody else. Different from an
                               @mention, which routes one turn.
-  --brief <file>              shared operating context handed to every vendor on
+                              /seat <list> does the same from INSIDE the room,
+                              and /seat all puts everyone back. An unseated seat
+                              keeps its thread AND its process — it stops being
+                              drawn and stops being dispatched to, nothing more,
+                              so coming back cannot fail. Sitting a seat out is
+                              cheaper still: one nobody addresses is already
+                              quiet and already free.
+  --brief <file>            shared operating context handed to every vendor on
                               its first turn — who you are, what the lanes are,
                               whatever convention they would otherwise each guess
                               at separately. Also TELLTALE_COUNCIL_BRIEF. The file
