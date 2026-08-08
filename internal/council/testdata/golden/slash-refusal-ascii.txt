@@ -21,4 +21,4 @@
 [ no turn dispatched yet.               |  no turn dispatched yet.              |  no turn dispatched yet.              
 ========================================================================================================================
   : /unseet codex_                                                                                                      
-  COMPOSE      ! no room command /unseet — a leading space dispatches it · /cd /flow /read /seat /trace /unseat /write  
+  COMPOSE     ! no room command /unseet, a leading space sends it · /arena /cd /flow /read /seat /trace /unseat /write  

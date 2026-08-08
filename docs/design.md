@@ -6157,3 +6157,64 @@ standing beside it.
 
 **Not verified here: macOS.** Every arm ran on Windows 11, and the Mac's ACP seat is unmeasured.
 That belongs in `PARITY.md` rather than in this section.
+
+### 9.37 /arena: the seats race in worktrees, and the human picks the winner
+
+`/arena <brief>` is one brief raced across every seated vendor, each attempt in its own git
+worktree, compared by diff instead of by prose. It is §9.2's thesis — independent answers ARE
+the product — applied to code, where "independent" stops being free: four writers in one shared
+tree are not four answers, they are one trampled tree. The isolation the manager lane built its
+whole category on (Crystal's same-prompt sessions, claudexor's best-of-N envelopes,
+parallel-code's AI Arena) is what makes four *write* attempts comparable at all.
+
+Ruled 2026-08-08, four decisions and their reasons:
+
+- **Per-turn, typed at the room** — not a launch posture. §9.17's rule; a race is something you
+  want *about a brief*, not about a session.
+- **Every attempt is a FRESH session.** All three comparable products race fresh, a continued
+  thread would anchor each seat on its own prior answers, and whether resume even survives a cwd
+  change is measured for none of the spawn-per-turn seats — so fresh is also the only option
+  that costs no new vendor measurements. Mechanically: every seat goes through the `FirstTurn`
+  one-shot it already implements, the persistent seat included. The room's live process, saved
+  ids and conversations are untouched — dispatch guards the session-id capture so a race's
+  throwaway ids can never replace the room's saved threads (the reattach-swap bug, killed in a
+  test before it could exist).
+- **Worktrees are KEPT until the user deletes them**, named `<repo>-arena-t<N>-<vendor>` as
+  SIBLINGS of the workspace with branches `arena/t<N>/<vendor>`. Siblings, not a state
+  directory: kept-until-deleted means the user must SEE what is kept, it matches the README's
+  own worktree convention, and /cd's sibling resolution makes `/cd repo-arena-t7-codex` work
+  with zero new code.
+- **Comparison lands in-column** — `git diff --stat` against a base SHA recorded once before any
+  seat spawned, rendered in the transcript's boundary grammar; `y` yanks the full diff (capped
+  at 1 MB, truncation stated). Three outcomes, three renders: a diff, a measured "no changes
+  against <base>", and "diff unavailable: <why>" — zero, absent and degraded stay three
+  different facts (§4a.1).
+
+Two mechanics carried in from the deep-read of claude-squad's `session/git/diff.go`, because
+they are the difference between a diff surface and a lying one: the diff anchors on the
+**recorded base SHA**, never HEAD, so an attempt that commits mid-turn cannot show an empty
+diff; and `git add -N .` runs before diffing so an attempt whose whole answer is a NEW file
+cannot read as "no changes" — the false zero, again.
+
+Posture is `PostureWrite` for every racing seat, stated rather than hidden: a one-shot process
+has no channel to be asked on, so the gate structurally cannot exist here, and the containment
+is the worktree — which is the whole reason the worktree exists. A read room refuses `/arena`
+with the in-room remedy named (`/write lets it`), per §9.17's tell.
+
+**What council deliberately does not do, having read the competition:** claudexor AUTO-ADOPTS
+the winning patch into the live tree. This room offers the diffs and the human picks — adoption
+is a git command the user runs against a kept branch, never an action taken for them. And a
+race is not routable in v1 (`@codex`-only arenas): the value is the comparison, and a one-seat
+race is an ordinary turn in a worktree, which `/cd` already provides.
+
+Deliberately deferred, each its own change judged against this section: commit-per-turn inside
+arena worktrees, the tab-toggle from stat to a full colored diff, a results line with measured
+finish order, `.worktreeinclude` seeding (the first real arena run on a repo needing `.env` will
+surface it), and a deletion guard stronger than git's own refusal to remove a dirty worktree.
+
+Verification note, honest: the git mechanics (worktree creation from one base, add -N, the
+three collection outcomes, the session-id guard, the renders, the yank) are all pinned by
+offline tests against a real temp repository. **No live vendor has raced yet** — the spawn path
+reuses each vendor's verified FirstTurn invocation, but FirstTurn in a worktree with
+PostureWrite is a combination no live run has exercised, and the first live race is the
+verification this section still owes.

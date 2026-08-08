@@ -1558,7 +1558,42 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		// one outcome.
 		out = append(out, wrap("its next brief opens a new session, with the brief re-applied.", w)...)
 	}
+	if c.Arena != nil {
+		// Below the answer, in the transcript's boundary grammar (labelRule, like
+		// turn separators and the cleared marker): the seat spoke, and THEN its
+		// tree was read. Three outcomes get three different renders, because
+		// collapsing them is the §4a.1 bug — a diff (shown), a measured
+		// nothing-changed (said in words, against the named base), and a diff
+		// that could not be read (the error, never dressed up as "no changes").
+		out = append(out, "")
+		out = append(out, sty.Muted.Render(padRight(labelRule("arena "+c.Arena.Branch, "", w, g), w, g)))
+		out = append(out, styleAll(wrap(abbreviate(c.Arena.Tree, st.Home), w), sty.Muted)...)
+		switch {
+		case c.Arena.Err != "":
+			out = append(out, wrap(c.Arena.Err, w)...)
+		case strings.TrimSpace(c.Arena.Stat) == "":
+			out = append(out, wrap("no changes against "+shortSHA(c.Arena.Base)+".", w)...)
+		default:
+			for _, line := range strings.Split(c.Arena.Stat, "\n") {
+				// fit, not padRight — a body line, and the ANSI trap is about
+				// what a line CAN carry, not what it happens to today.
+				out = append(out, fit(strings.TrimRight(line, " "), w))
+			}
+			if c.Arena.DiffTruncated {
+				out = append(out, wrap("(the yankable diff is truncated at 1 MB — the worktree holds the whole of it)", w)...)
+			}
+		}
+	}
 	return out, anchors
+}
+
+// shortSHA is the seven-character convention, guarded for the synthetic bases
+// tests construct.
+func shortSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
 }
 
 // inFlightBody is what a seat's reading area says for the turn it is on: the
@@ -3296,7 +3331,7 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// A row of its own was never affordable: the budget is hard (17 rows,
 		// above) and a control documented below the fold is a control nobody finds
 		// (§9.20), which is exactly how the room came to be missing this one.
-		"  /cd <dir>    move the room; /read /write posture (y); /seat /unseat <list>; c clears a thread (y); /trace <file>",
+		"  /cd <dir>    move the room; /read /write (y); /seat /unseat; /arena races worktrees; c clears (y); /trace <file>",
 		// One row for three keys, and the merge is the honest shape rather than
 		// a saving. The panel's budget is hard (17 rows, above) and yank had to
 		// land inside it — a copy key documented below the fold is a copy key

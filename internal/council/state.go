@@ -429,6 +429,14 @@ type Column struct {
 	// be claiming a break in a conversation that has since resumed.
 	Cleared bool
 
+	// Arena is this seat's race outcome for the CURRENT turn (arena.go), nil on
+	// every ordinary one. On State because the columns render it; every field is
+	// computed at collection time in finishColumn, so Render stays pure. Reset by
+	// startTurn like every other per-turn fact — the worktree it points at
+	// outlives the marker on purpose (kept until the user deletes it), the
+	// on-screen block does not.
+	Arena *ArenaResult
+
 	// CostSession reports that the figure above is the PROCESS's running total
 	// rather than this turn's spend.
 	//
@@ -505,6 +513,7 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	// here on this seat HAS a thread again, and a "thread cleared" line left
 	// standing would describe a break the room has already healed.
 	c.Cleared = false
+	c.Arena = nil
 	c.CostUSD = nil
 	c.CostSession = false
 	c.Started = time.Time{}

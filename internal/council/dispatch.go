@@ -48,6 +48,14 @@ type turnState struct {
 	// persistent names the columns driven by a long-lived process, whose child
 	// must survive this turn's teardown.
 	persistent map[model.VendorID]bool
+
+	// arena marks a /arena turn: every racing seat is a FRESH one-shot session
+	// in its own worktree (arena.go). The flag gates two things — the session-id
+	// capture in applyEvents, because a race's throwaway ids must never replace
+	// the room's saved threads, and the diff collection in finishColumn.
+	arena      bool
+	arenaBase  string
+	arenaTrees map[model.VendorID]string
 }
 
 type eventBatchMsg struct{ events []runner.Event }
@@ -75,6 +83,7 @@ func (m *Model) dispatch() tea.Cmd {
 	}
 
 	reg := vendors.Registry()
+	arenaMode := false
 
 	// Flows start only when the draft IS the /flow command. Bare "->" in prose
 	// must never become a chain — that would turn ordinary briefs into
@@ -181,7 +190,28 @@ func (m *Model) dispatch() tea.Cmd {
 		}
 	} else {
 		m.endFlowChain()
-		route, prompt = ParseRoute(m.st.Draft)
+		if brief, ok := parseCommand(m.st.Draft, "/arena"); ok {
+			// A race is a dispatch, not room state, so it lives here beside
+			// /flow rather than in roomCommand — and like a flow write hop, it
+			// cannot run in a room that may not write: every racing seat gets
+			// write posture, contained by its worktree rather than by a flag.
+			if !m.st.Write {
+				m.st.Notice = "the room is read-only and /arena races writing seats — /write lets it, between turns"
+				return nil
+			}
+			if strings.TrimSpace(brief) == "" {
+				m.st.Notice = "/arena needs a brief — /arena <brief> races every seat in its own worktree"
+				return nil
+			}
+			arenaMode = true
+			prompt = strings.TrimSpace(brief)
+			// Everyone seated races. Routing a race (@codex-only arenas) is
+			// deliberately absent from v1: the value is the comparison, and a
+			// one-seat race is an ordinary turn in a worktree — /cd does that.
+			route = Route{}
+		} else {
+			route, prompt = ParseRoute(m.st.Draft)
+		}
 	}
 	if route.Mixed {
 		// Checked before the empty-brief case on purpose. A draft that mixes
@@ -233,6 +263,30 @@ func (m *Model) dispatch() tea.Cmd {
 	// State goes through. Not redacted: see promptEcho.
 	echo := sanitize(prompt)
 	next := m.st.Turn + 1
+
+	// Worktrees are added BEFORE any seat spawns, and the base SHA is read once
+	// so all attempts race from the same commit. A workspace that is not a git
+	// repo fails here, wholesale, with git's own sentence; a single seat whose
+	// worktree could not be added is skipped and told why, because a partial
+	// race still answers the brief (§4a.1's degrade-the-field rule, one level
+	// up).
+	var arenaSeatErr map[model.VendorID]string
+	if arenaMode {
+		var racers []model.VendorID
+		for i := range m.st.Columns {
+			c := m.st.Columns[i]
+			if _, ok := reg[c.Vendor]; ok && m.st.seats(c) {
+				racers = append(racers, c.Vendor)
+			}
+		}
+		base, trees, seatErrs, aerr := arenaSetup(m.st.Workspace, next, racers)
+		if aerr != nil {
+			cancel()
+			m.st.Notice = "arena: " + aerr.Error()
+			return nil
+		}
+		ts.arena, ts.arenaBase, ts.arenaTrees, arenaSeatErr = true, base, trees, seatErrs
+	}
 
 	for i := range m.st.Columns {
 		c := &m.st.Columns[i]
@@ -288,7 +342,36 @@ func (m *Model) dispatch() tea.Cmd {
 		// note is carried past the column reset below, because that reset is
 		// what clears the PREVIOUS turn's note and this one is about THIS turn.
 		note := ""
-		if liveSeat(v) {
+		if arenaMode {
+			// Every racing seat — the persistent one included — is a fresh
+			// one-shot session in its worktree, through the same FirstTurn every
+			// vendor already implements. The room's live process and saved
+			// threads are untouched: a race is a parallel universe for one turn,
+			// not a detour the conversation has to survive. PostureWrite for all,
+			// stated plainly: a one-shot process has no channel to be asked on,
+			// so the gate cannot exist here, and the containment is the worktree
+			// — which is the whole reason the worktree exists.
+			tree, ok := ts.arenaTrees[c.Vendor]
+			if !ok {
+				why := arenaSeatErr[c.Vendor]
+				if why == "" {
+					why = "worktree could not be added"
+				}
+				failures = append(failures, dispatchFailedMsg{c.Vendor, "arena: " + why})
+				continue
+			}
+			spec, err := v.FirstTurn(vendorPrompt, tree, c.Binary, vendors.PostureWrite)
+			if err != nil {
+				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
+				continue
+			}
+			h, err := startProcess(ctx, spec, m.events, v.ParseEvent)
+			if err != nil {
+				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
+				continue
+			}
+			ts.handles = append(ts.handles, h)
+		} else if liveSeat(v) {
 			n, err := m.sendPersistentTurn(v, c, vendorPrompt)
 			if err != nil {
 				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
@@ -539,7 +622,11 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			}
 
 		case runner.KindSession:
-			if ev.SessionID != "" {
+			// An arena attempt's id is throwaway BY DESIGN (arena.go): letting it
+			// land here would replace the room's saved thread with a session that
+			// lives in a worktree and dies with the race — the user would quit,
+			// reattach, and find every conversation swapped for a discarded one.
+			if ev.SessionID != "" && !(m.turn != nil && m.turn.arena) {
 				m.sessions[ev.Vendor] = ev.SessionID
 			}
 
@@ -547,7 +634,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			m.queueGate(c, ev.Gate)
 
 		case runner.KindMeta:
-			if ev.SessionID != "" {
+			if ev.SessionID != "" && !(m.turn != nil && m.turn.arena) {
 				m.sessions[ev.Vendor] = ev.SessionID
 			}
 			if ev.CostUSD != nil {
@@ -717,6 +804,21 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 		if m.cancelling {
 			c.Phase = PhaseCancelled
 			c.Note = "cancelled — the output above is partial"
+		}
+	}
+
+	// The race's deliverable is the diff, so it is read the moment this seat
+	// lands — including on a cancelled or failed attempt, whose partial work is
+	// still a receipt in a kept worktree. Synchronous, and deliberately so for
+	// v1: two `git diff` runs against a fresh worktree are milliseconds, and an
+	// async path would add a message type for a stall nobody has measured. If a
+	// monorepo ever makes this visible, that measurement is the trigger to move
+	// it onto a Cmd.
+	if m.turn != nil && m.turn.arena {
+		if tree, ok := m.turn.arenaTrees[c.Vendor]; ok {
+			r := collectArena(tree, m.turn.arenaBase)
+			r.Branch = arenaBranch(c.TurnN, c.Vendor)
+			c.Arena = &r
 		}
 	}
 
