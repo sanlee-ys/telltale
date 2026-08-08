@@ -5015,3 +5015,73 @@ story, since colour is asserted where colour is asserted (§9.5) and never in a 
 as the name, which doubles the ink for a distinction the name already carries. Truecolor, which
 would override the user's scheme. And a fifth hue held in reserve for "the next vendor": a palette
 entry with no seat behind it is a decision nobody has made, recorded as if somebody had.
+
+### 9.29 the seats had positions and no way to address one
+
+`tab` cycles focus, and at the columns tier that is fine: three seats, at most two presses. At
+the **tabbed** tier — the narrow terminal, the one a laptop actually runs — one column is on
+screen and reaching the fourth seat costs three presses, each of which redraws the whole frame
+and shows you a seat you did not want. The room had four seats sitting in a fixed order, drawn in
+that order on every surface, and no way to say *that one*.
+
+**`1`–`4` focus the Nth VISIBLE seat, in seating order.** Positional, exactly like the columns
+are. A room with two seats has keys 1 and 2 and nothing else: `3` there is a **no-op**, not a wrap
+and not a clamp, because a key that quietly lands somewhere else is §7.8's surprise and a wrap
+would make the number stop meaning the position it is printed at. In **compose** a digit is a
+digit — the same contract `q`, `f`, `c` and `[` already keep, and it needs no second list: the
+handler tests whether the key carries text, which is what makes it text in the composer.
+
+**The number is drawn where the key acts.** `▸ 1 CC Claude Code ──────── ✓ done 8s` in the seat
+header, and `▸ 1 CC Claude Code   2 CX Codex` on the tab bar — the two places a seat name heads a
+reading area, which are the two places §9.25 already put the vendor tag for the same reason. The
+number is **muted**, on the tag's own argument: it is chrome and the name is the anchor. It sits
+in FRONT of the tag rather than after the name, because it is what a reader's eye runs down the
+row of headers looking for, and because a number at the far right would sit beside the state word
+where every other number on that line is a duration.
+
+**It sheds last, and that is a new rung reasoned about rather than an appended default.** §9.18's
+ladder drops the clock first, then the focus mark, then the tag. The number goes below all three:
+`1 CC ⚠ unavailable` is exactly eighteen cells, so at `stripColumn` the full form fits every phase
+word, and below that the tag goes before the number does. The argument is the one §9.18 itself
+used — it shed the focus mark because the load-bearing half of that signal had moved somewhere
+free, and it kept the tag because position alone was a weak identity. The number is not a second
+spelling of anything: it is the key that reaches this seat, at the width where reaching seats is
+hardest, and **a key nobody can see is a key nobody presses** (§9.10, which is the whole reason
+this room names keys on its overflow markers at all).
+
+**The footer names `1-N`, not `1-4`.** The range is however many seats are on screen. A
+three-seat room naming a `4` would promise a key that does nothing — §7.8's surprise, which this
+line already refuses in the other direction for `tab` and `f`. It is the **third rung of the shed
+ladder**, appended after `[ ]` and `f` so §9.24's order is untouched, and it is the last of the
+three to go: shedding only bites at the tabbed tier, which is precisely where the number is worth
+most. `[ ]` sheds first because `g` and `G` still reach the ends of the transcript; nothing else
+reaches seat 4 in one keystroke. `? help` and `q quit` remain unsheddable, asserted.
+
+**A room with ONE seat on screen has no numbers at all**, and that is §9.11's rule applied to a
+third key rather than a special case: `f` and `tab` are dropped there because they address a
+choice that does not exist, and a number labelling the only column there is spends a cell on the
+same nothing. `State.SeatNumber` and the footer's cell run off the same predicate, so the key's
+label and its advertisement appear and vanish together — a footer naming a key the header did not
+would be one surprise split across two rows.
+
+**Renumbering, and the still-by-default wrinkle it is.** Because the number is a position, a seat
+folding out **renumbers** every seat after it: with Claude uninstalled, Codex is seat 1. That is a
+label changing under a reader, which §7.1 rule 4 does not hand out lightly — and it is bounded by
+*when* it can happen. A seat collapses, or `--vendor`/`/seat` reseats the room, and both already
+reflow the entire frame: the column widths change, the notice row appears, the grid is visibly a
+different room. There is no path where the numbers move on a frame that was otherwise going to
+look the same, and in particular none mid-turn. The help panel says "by position" rather than
+implying a seat owns its number.
+
+**The help panel merged, not grown.** `tab / 1-4` on the row that already named `tab`, because the
+budget is hard at 17 rows and these are one question asked two ways — step to the next seat, or go
+straight to one. "move" paid for the characters. The `?` row, the panel's only documented way out,
+is exactly where it was, and the `↓ 5 more below` marker's count is unchanged.
+
+**What was declined.** `alt+1`–`4`, so digits could stay digits in both modes: it buys nothing —
+compose already routes text keys to the draft — at the price of a chord nobody discovers and that
+several terminals eat. Numbers on a turn page, which has one reading area and no focus to move.
+Stable per-vendor numbers that never renumber, which would leave gaps (`1`, `3`, `4` on screen)
+and make the printed number disagree with the position it is printed at — the number would then
+be an identity, and identity is what the tag and the hue are for. And a fifth key for a fifth
+seat: `1-N` already says how many there are.

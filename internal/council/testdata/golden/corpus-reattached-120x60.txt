@@ -1,6 +1,6 @@
   council READ  │  ~/code/telltale                                                turn 109  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-▌ ▸ CC Claude Code  ──────────  ○ idle  │    CX Codex  ───────────────  ○ idle  │    AG Antigravity  ─────────  ○ idle  
+▌ ▸ 1 CC Claude Code  ────────  ○ idle  │    2 CX Codex  ─────────────  ○ idle  │    3 AG Antigravity  ───────  ○ idle  
 ▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
                                                                                                                         

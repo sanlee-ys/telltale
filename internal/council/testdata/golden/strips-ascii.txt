@@ -1,6 +1,6 @@
   council READ  |  ~/code/telltale                                                  turn 4  |  4/4 seated  |  no brief  
 ========================================================================================================================
-[ ] CC Claude Code  ----------------  - streaming  |  CX + done           |  AG ! cancelled      |  CU . idle           
+[ ] 1 CC Claude Code  --------------  - streaming  |  2 CX + done         |  3 AG ! cancelled    |  4 CU . idle         
 [   ro:tools  tokens                               |  ro:requested        |  unsandboxed         |  gated               
                                                                                                                         
                                                                                                                         
@@ -17,4 +17,4 @@
 [ Reading resume.go now.                           |    turn 4            |    turn 4            |  yet.                
 ========================================================================================================================
   :                                                                                                                     
-  VIEW                                  ^v scroll  |  [ ] turn  |  f expand  |  tab focus  |  ctrl+c cancel  |  ? help  
+  VIEW                     ^v scroll  |  [ ] turn  |  f expand  |  tab focus  |  1-4 seat  |  ctrl+c cancel  |  ? help  

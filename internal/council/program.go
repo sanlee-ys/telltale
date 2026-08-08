@@ -1031,6 +1031,19 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.navKey(msg.String()) {
 		return m, nil
 	}
+	// A digit is a seat (§9.29). View mode only, and by the same contract that
+	// keeps `q` the letter q in compose: composeKey routes any key carrying text
+	// to the draft, and a digit carries text, so there is no second list to
+	// maintain and no way for the two modes to disagree.
+	//
+	// Handled before the switch rather than as four cases in it, because the
+	// binding is over a RANGE whose top is however many seats are on screen — and
+	// spelling it as `case "1", "2", "3", "4"` would hard-code a room size the
+	// rest of this file takes from VisibleColumns().
+	if n := int(msg.Code - '0'); msg.Text != "" && n >= 1 && n <= 9 {
+		m.focusSeat(n)
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		// Cancels the turn in flight; quits when there is none. Two meanings
@@ -1361,6 +1374,32 @@ func (m *Model) focusBy(d int) {
 		}
 	}
 	m.st.Focus = vis[((pos+d)%len(vis)+len(vis))%len(vis)]
+}
+
+// focusSeat puts the keys on the nth VISIBLE seat, one-based, in seating order
+// (§9.29). It reports whether the key did anything.
+//
+// Positional, exactly like the columns are, which is what lets one keystroke
+// reach a seat instead of tab pressed three times through three full redraws.
+// A room with two seats has keys 1 and 2 and nothing else: `3` in a two-seat
+// room is a no-op rather than a wrap or a clamp, because a key that quietly
+// lands somewhere else is the surprise §7.8 forbids, and a wrap would make the
+// number stop meaning the position it is printed at.
+//
+// Page-gated the same way focusBy is, and from the same argument: a page has one
+// reading area, so focus has nothing to move between, and silently moving it
+// would change what the grid shows the next time `t` is pressed — from a key the
+// mode line says is not there.
+func (m *Model) focusSeat(n int) bool {
+	if m.pageOpen() {
+		return false
+	}
+	vis := m.st.VisibleColumns()
+	if n < 1 || n > len(vis) {
+		return false
+	}
+	m.st.Focus = vis[n-1]
+	return true
 }
 
 // View is a thin wrapper over the pure renderer.

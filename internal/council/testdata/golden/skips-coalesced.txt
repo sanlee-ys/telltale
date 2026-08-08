@@ -1,6 +1,6 @@
   council READ  │  ~/code/telltale                                                  turn 8  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-▌ ▸ CC Claude Code  ───────────────────────────────────────  ⠋ streaming  │  CX ✓ done           │  AG ⚠ cancelled      
+▌ ▸ 1 CC Claude Code  ─────────────────────────────────────  ⠋ streaming  │  2 CX ✓ done         │  3 AG ⚠ cancelled    
 ▌   ro:tools  tokens                                                      │  ro:requested        │  unsandboxed         
 ▌                                                                         │                      │                      
 ▌                                                                         │  ↑ 1 more above      │                      
@@ -21,4 +21,4 @@
 ▌ Reading resume.go.                                                      │    turn 8            │    turn 8            
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
-  VIEW                                  ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help  
+  VIEW                     ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-3 seat  │  ctrl+c cancel  │  ? help  

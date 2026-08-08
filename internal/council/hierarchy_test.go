@@ -217,8 +217,13 @@ func TestTheFocusedSeatIsWeightedApartFromItsNeighbours(t *testing.T) {
 	if !strings.Contains(unfocused, sty.Identity.Render("Claude Code")) {
 		t.Errorf("an unfocused seat name lost its identity hue rather than its weight: %q", unfocused)
 	}
-	if !strings.Contains(focused, sty.Muted.Render("CC ")) {
-		t.Errorf("the vendor tag is not chrome — it competes with the name: %q", focused)
+	// The seat NUMBER joined the tag in that chrome run (§9.29), and it is drawn
+	// in the same breath: both are things the header says ABOUT the seat, and the
+	// name is the seat. A number at the name's weight would be a second anchor on
+	// a row that has one.
+	if !strings.Contains(focused, sty.Muted.Render("1 CC ")) {
+		t.Errorf("the seat number and vendor tag are not chrome — they compete with "+
+			"the name: %q", focused)
 	}
 
 	// The tabbed and expanded tiers address a column the tab bar has already

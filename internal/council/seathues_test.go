@@ -180,7 +180,7 @@ func TestTheTabBarSortsBySeat(t *testing.T) {
 	}
 	// The selected tab still outranks the others by WEIGHT and by the mark, which
 	// is what survives NO_COLOR — the hue is the second signal here as everywhere.
-	if !strings.Contains(stripANSI(frame), g.Focus+" CC Claude Code") {
+	if !strings.Contains(stripANSI(frame), g.Focus+" 1 CC Claude Code") {
 		t.Error("the selected tab lost the focus mark; the hue would be carrying it alone")
 	}
 	if strings.Contains(frame, sty.SeatStrong(model.VendorCodex).Render("Codex")) {
