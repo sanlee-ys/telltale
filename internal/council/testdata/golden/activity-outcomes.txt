@@ -1,6 +1,6 @@
   council READ  │  ~/code/telltale                                                  turn 2  │  3/3 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ▸ Claude Code  ─────────────  ✓ done  │    Codex  ─────────────  ⠋ streaming  │    Antigravity  ─────────  ⠋ waiting  
+  ▸ CC Claude Code  ──────────  ✓ done  │    CX Codex  ──────────  ⠋ streaming  │    AG Antigravity  ──────  ⠋ waiting  
     ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
                                                                                                                         

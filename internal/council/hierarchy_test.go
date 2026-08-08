@@ -202,11 +202,21 @@ func TestTheFocusedSeatIsWeightedApartFromItsNeighbours(t *testing.T) {
 	if focused == unfocused {
 		t.Error("a focused seat header renders exactly like an unfocused one")
 	}
-	if !strings.Contains(focused, sty.Strong.Render(g.Focus+" Claude Code")) {
+	// The mark and the NAME carry the weight; the vendor tag between them is
+	// chrome and stays muted, so the header is three styled runs rather than one.
+	// That split is the point of the tag being permanent (columnHeader) — it is
+	// asserted here rather than assumed, because a tag drawn at the name's weight
+	// would put a two-letter abbreviation in competition with the anchor a reader
+	// is scanning for.
+	if !strings.Contains(focused, sty.Strong.Render(g.Focus+" ")) ||
+		!strings.Contains(focused, sty.Strong.Render("Claude Code")) {
 		t.Errorf("the focused seat name is not at full weight: %q", focused)
 	}
-	if !strings.Contains(unfocused, sty.Identity.Render("  Claude Code")) {
+	if !strings.Contains(unfocused, sty.Identity.Render("Claude Code")) {
 		t.Errorf("an unfocused seat name lost its identity hue rather than its weight: %q", unfocused)
+	}
+	if !strings.Contains(focused, sty.Muted.Render("CC ")) {
+		t.Errorf("the vendor tag is not chrome — it competes with the name: %q", focused)
 	}
 
 	// The tabbed and expanded tiers address a column the tab bar has already

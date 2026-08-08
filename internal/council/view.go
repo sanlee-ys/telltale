@@ -921,10 +921,29 @@ func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 	// A space after the focus mark, and two cells of indent without it, so the
 	// names still line up across the row. "▸Claude Code" saved a cell and spent
 	// it looking like a typo.
-	name := "  " + c.Label
+	//
+	// The two-letter vendor tag rides in front of the name PERMANENTLY, and this
+	// is where §9.18's collapse stops being a narrow-width special case. `CC` and
+	// `CX` were introduced as what identity degrades TO when a strip has no room
+	// for a name — so the abbreviation a reader has to know appeared exactly
+	// where they had the least context to learn it, and vanished at every width
+	// where the room could have taught it. Drawn always, the wide column becomes
+	// the legend for the narrow one: `CC Claude Code` at 37 cells is the sentence
+	// that makes `CC ✓ done` at eighteen readable, and it is the same pairing the
+	// HUD's own grid makes.
+	//
+	// It is chrome and the name is the anchor, so the tag is MUTED while the name
+	// keeps the weight that says which column the keys move. Three cells, spent
+	// on the header row only.
+	lead := "  "
 	if f.marked() {
-		name = g.Focus + " " + c.Label
+		lead = g.Focus + " "
 	}
+	tag := vendorTag(c.Vendor)
+	if tag != "" {
+		tag += " "
+	}
+	name := lead + tag + c.Label
 
 	// The weight now says which seat the keys move, and that is a correction
 	// rather than an addition. §9.11 gave EVERY seat name full weight because a
@@ -958,16 +977,32 @@ func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 	// Idle seats used to get the same ink for nothing to divide: a long ────
 	// between a name and "○ idle" was filling, not separating. Whitespace does
 	// that job and costs no chrome; the name and state still share one line.
+	// The tag and the mark in front of it stay at the NAME's weight; only the
+	// tag recedes. Split here rather than at the call site because the width
+	// arithmetic above is over the plain string and must stay that way (§9.5's
+	// ANSI trap).
+	styledName := func(s string) string {
+		if tag == "" || !strings.HasPrefix(s, lead+tag) {
+			return label.Render(s)
+		}
+		return label.Render(lead) + sty.Muted.Render(tag) +
+			label.Render(strings.TrimPrefix(s, lead+tag))
+	}
+
 	gap := w - lipgloss.Width(name) - lipgloss.Width(status) - 4
 	if gap < 1 {
+		// Identity yields first, and the TAG is the last of it to go — §9.18's
+		// order, now reachable at more widths than the strip. Truncating from the
+		// right takes the spelled-out name and leaves the two letters, which is
+		// exactly the degradation the strip performs in one step.
 		keep := maxInt(1, w-lipgloss.Width(status)-1)
-		return label.Render(truncate(name, keep, g.Ellipsis)) + " " + right
+		return styledName(truncate(name, keep, g.Ellipsis)) + " " + right
 	}
 	mid := strings.Repeat(" ", gap)
 	if headerUsesLeader(c) {
 		mid = sty.Rule().Render(strings.Repeat(g.Rule, gap))
 	}
-	return label.Render(name) + "  " + mid + "  " + right
+	return styledName(name) + "  " + mid + "  " + right
 }
 
 // stripHeader is a seat's header at strip width: who it is, what state it is
@@ -1892,6 +1927,25 @@ func gateCardLines(q []PendingGate, who string, w int, sty Styles, g Glyphs) []s
 // repo's deliberately-rejected list (design.md §8) — council does not get to
 // invent dollars either.
 func badgeRow(c Column, w int, sty Styles, g Glyphs) string {
+	// A seat that is not there makes no claims, and the row stays RESERVED but
+	// empty rather than being dropped (see columnChrome: the grid's rows have to
+	// line up).
+	//
+	// unavailable.txt used to draw `final only` under `⚠ Codex is not seated` —
+	// a granularity badge is a claim about how this vendor behaves DURING a turn,
+	// stated about a vendor that cannot take one. Codex was not found on PATH;
+	// nothing about its streaming was measured, and §4a.1's rule is that a field
+	// nothing sourced is absent rather than filled with a plausible value. It was
+	// plausible — it is what the binary would do if it were installed — which is
+	// precisely the kind of claim this repo exists to refuse. The cost cell goes
+	// with it, for the same reason: a seat that never ran cost nothing, and a
+	// blank is the honest way to say so.
+	//
+	// The card in the column below already says what IS known: which failure it
+	// was, and what to do about it.
+	if c.Avail != AvailInstalled {
+		return ""
+	}
 	if w <= stripWidth {
 		return stripBadges(c, w, sty)
 	}
@@ -2129,13 +2183,23 @@ func tabBar(st State, lay Layout, sty Styles, g Glyphs) string {
 		if c.Avail != AvailInstalled {
 			label += " " + g.Warn
 		}
+		// The tag rides here too, for columnHeader's reason: a tab bar is the
+		// other place a seat NAME heads a reading area, so it is the other place
+		// that has to teach the two letters a strip will later use alone.
+		tag := vendorTag(c.Vendor)
+		if tag != "" {
+			tag += " "
+		}
 		// Same two-cell prefix and the same weight the column header gives a seat
 		// name, so the tab bar and the header underneath it agree about how a
-		// selected seat is drawn rather than each having its own spelling.
+		// selected seat is drawn rather than each having its own spelling. The
+		// tag is chrome on the selected tab as it is on the header; an unselected
+		// tab is already wholly muted, so there is no split to make there.
 		if idx == st.Focus {
-			parts = append(parts, sty.Strong.Render(g.Focus+" "+label))
+			parts = append(parts, sty.Strong.Render(g.Focus+" ")+
+				sty.Muted.Render(tag)+sty.Strong.Render(label))
 		} else {
-			parts = append(parts, sty.Muted.Render("  "+label))
+			parts = append(parts, sty.Muted.Render("  "+tag+label))
 		}
 	}
 	// fit, not padRight: parts are already styled per tab.
@@ -2487,6 +2551,31 @@ func modeHints(st State, g Glyphs) []hint {
 	// It is the one cell on this line marked sheddable: at the tabbed tier the
 	// footer fit its keys exactly, and the honest place to take the cells from
 	// is the key that was added last, not the tail the ellipsis would have eaten.
+	if st.Help != HelpClosed {
+		// The panel replaces the column area, so every motion key on this line
+		// addresses something that is not on screen — and `↑↓` addresses nothing
+		// at all: key() routes no scroll to the help panel, so the room was
+		// advertising a key that does literally nothing in the mode a reader is
+		// in when they went looking for what the keys do. That is §7.8's
+		// surprise pointing the other way, and §9.11 already dropped `f` and
+		// `tab` outright on the same argument in a one-seat room.
+		//
+		// What is left is what actually works here: `?` cycles the pages and
+		// closes the panel, `i` and `enter` leave it for the composer, `q` quits.
+		// The overflow marker inside the panel names no key either, for the same
+		// reason (helpRows) — the honest thing to tell a reader is that there is
+		// more and this terminal is not tall enough, not to point at an arrow
+		// that will not move it.
+		hs := []hint{{key: "?", label: "next page"}, {key: "i", label: "compose"}}
+		if st.Help == HelpPostures {
+			hs[0].label = "close"
+		}
+		if st.Busy() {
+			return append(hs, hint{key: "ctrl+c", label: "cancel"})
+		}
+		return append(hs, hint{key: "q", label: "quit"})
+	}
+
 	hs := []hint{
 		{key: g.Up + g.Down, label: "scroll"},
 		{key: "[ ]", label: "turn", shed: true},
@@ -2697,16 +2786,18 @@ func routeLabel(st State) string { return st.Route.label() }
 // I care that codex and agy are 'unsandboxed'?". Both pages spend the same hard
 // 17-row budget, and each ends with the `?` line that leaves it.
 func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
-	lines := helpKeys(sty)
+	lines := helpKeys(lay, sty, g)
 	if st.Help == HelpPostures {
-		lines = helpPostures(st, lay, sty)
+		lines = helpPostures(st, lay, sty, g)
 	}
+	w := lay.Width - 2*framePad
+	rows := helpRows(lines, lay.Body, w, sty, g)
 
 	var b strings.Builder
 	for i := 0; i < lay.Body; i++ {
-		if i < len(lines) {
+		if i < len(rows) {
 			// fit, not padRight: some help lines are pre-styled.
-			b.WriteString(framePadStr + fit(lines[i], lay.Width-2*framePad) + framePadStr)
+			b.WriteString(framePadStr + fit(rows[i], w) + framePadStr)
 		} else {
 			b.WriteString(strings.Repeat(" ", lay.Width))
 		}
@@ -2717,8 +2808,126 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	return b.String()
 }
 
+// helpRows fits a help page into h rows, saying so when it cannot.
+//
+// **This panel used to clip in silence**, and it was the only surface in the
+// room that did. Everywhere else — every column, every turn page — content that
+// does not fit spends a body row on `↓ N more below`, on the explicit argument
+// that silent clipping is indistinguishable from there being nothing more to
+// say (§4a.1, columnCell). The help panel is 24 rows on page one and 33 on page
+// two against a hard budget of 17, so at the reference machine's own geometry it
+// was dropping seven lines and sixteen lines respectively, with nothing on
+// screen to say so — and it dropped them mid-word, `…the containment, not a`.
+// A panel whose job is to enumerate what the room can do, quietly not
+// enumerating it, is the sharpest version of the defect the marker exists for.
+//
+// **The way out is pinned to the last row**, and that is what makes the marker
+// affordable rather than dangerous. `?` is the only documented way back out of
+// this panel, and on both pages it sits at exactly row 17 of a 17-row budget —
+// so a marker taking the last row the ordinary way would have bought honesty
+// with the exit, which is the trade §9.11's footer pass and helpKeys' own budget
+// comment both refuse by name. Pinning makes the guarantee structural instead of
+// a lucky row count: the exit is chrome, like `columnChrome` above a transcript,
+// and the marker lives inside the scroll below it.
+//
+// The marker costs a row, and page one paid for it the way this panel always
+// pays — by merging two lines that were one category (`ctrl+j` and `esc`, the
+// two compose keys that are not `enter`). Nothing is dropped to make room.
+//
+// **The marker names no key, deliberately.** `↑↓` do nothing over the help panel
+// — `key()` routes no scroll to it — so a hint here would be the false promise
+// §7.8 forbids, and the same reasoning removes `↑↓ scroll` from the mode line
+// while the panel is open (modeHints). What the reader is told is the true
+// thing: there is more, and this terminal is not tall enough for it.
+func helpRows(lines []string, h, w int, sty Styles, g Glyphs) []string {
+	if h <= 0 {
+		return nil
+	}
+	if len(lines) <= h {
+		return lines
+	}
+	exit := helpExit(lines)
+	// Two rows is the floor for the pinned shape: one marker and one exit. Below
+	// it the panel is unusable either way, and the marker alone is still more
+	// honest than a silent cut.
+	if exit < 0 || h < 3 {
+		out := append([]string{}, lines[:h-1]...)
+		return append(out, sty.Muted.Render(overflowMarker(
+			g.Down, len(lines)-(h-1), "below", "", nil, w, g)))
+	}
+	body := append(append([]string{}, lines[:exit]...), lines[exit+1:]...)
+	content := h - 2 // one row for the marker, one for the pinned exit
+	out := append([]string{}, body[:content]...)
+	out = append(out, sty.Muted.Render(overflowMarker(
+		g.Down, len(body)-content, "below", "", nil, w, g)))
+	return append(out, lines[exit])
+}
+
+// helpExit is the index of the page's way out — the entry whose key column is
+// `?`. Both pages carry exactly one, on purpose: `?` cycles, so three presses
+// always return the room, and it is the one row helpKeys' budget comment says
+// may never be spent.
+//
+// Matched on the rendered line rather than declared alongside it because the two
+// page builders are plain []string and three tests already read them that way,
+// looking for this same line as the fold. One spelling of "which line is the way
+// out", read the same way by the renderer and by the tests that guard it.
+func helpExit(lines []string) int {
+	for i, l := range lines {
+		if strings.HasPrefix(strings.TrimSpace(l), "? ") {
+			return i
+		}
+	}
+	return -1
+}
+
+const (
+	// helpIndent is where a help page's PROSE column starts: two cells of
+	// margin, then thirteen for the key or badge in front of it.
+	//
+	// One number because the panel has three things that must line up on it —
+	// the key column on page one, the badge legend on page two, and the
+	// per-seat detail under that legend — and the third was hanging at six while
+	// the first two sat at fifteen. A hard-coded 13 and a hard-coded 15 and a
+	// hard-coded 6 cannot disagree visibly until someone reads the panel, which
+	// is how the misalignment survived.
+	helpIndent = 15
+	// helpHang is helpIndent as the string a continuation row is written with.
+	helpHang = "               "
+)
+
+func init() {
+	// The two spellings of one number, checked once at startup rather than by
+	// eye. A panel whose continuation rows drift a cell from its key column is
+	// the exact defect helpIndent was extracted to end, and it is invisible in
+	// a diff.
+	if len(helpHang) != helpIndent {
+		panic("helpHang must be helpIndent cells wide")
+	}
+}
+
+// helpTitle is a help page's heading, in the grammar every other heading in this
+// room already uses: the name at weight, a rule, and what this page is about
+// anchored at the right.
+//
+// It was `council — one brief, several agents, side by side`, an em dash and a
+// subtitle, and it was **the only heading in the product with no rule on it**.
+// The column header, every turn separator and every seat rule on a turn page all
+// draw labelRule; the panel that teaches the room's vocabulary was the one
+// surface not speaking it.
+//
+// A rule UNDER the title is what a reader might expect and it is not what this
+// room does. §9.11 spent a whole item removing exactly that shape — a heading
+// followed by a horizontal rule three rows later — on the finding that the lower
+// rule said nothing the heading had not, and ruled that a heading carries its own
+// rule instead. So this costs no row, which is what makes it affordable against a
+// budget with none to spare.
+func helpTitle(about string, lay Layout, sty Styles, g Glyphs) string {
+	return strongLabelRule("council", about, lay.Width-2*framePad, sty, g)
+}
+
 // helpKeys is page one: what every key does.
-func helpKeys(sty Styles) []string {
+func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 	// The budget is HARD, and it is 17 rows rather than the 19 this panel used
 	// to spend. Body at a 24-row terminal is 19 with nothing else on screen, but
 	// the collapsed-seat notice costs a row and the narrow tier's tab bar costs
@@ -2728,12 +2937,18 @@ func helpKeys(sty Styles) []string {
 	// room. Anything added here has to be merged into a line that is already
 	// present; two were, to buy the two rows back.
 	return []string{
-		sty.Identity.Render("council") + sty.Muted.Render(" — one brief, several agents, side by side"),
+		helpTitle("one brief, several agents, side by side", lay, sty, g),
 		"",
 		// Merged with the `enter` line it used to sit above. The two described one
 		// key in two rows, which is the cheapest row in the panel to buy back.
 		"  i / enter    compose a brief; enter dispatches — to claude, or whoever is @mentioned (@all = everyone)",
-		"  ctrl+j       newline in the brief — the compose area grows to six rows",
+		// `esc` merged in from its own row, and the row it frees is what pays for
+		// the overflow marker helpRows now spends (§4a.1: this panel used to clip
+		// in silence). The merge is a category rather than a saving, which is the
+		// bar helpKeys' budget comment sets: these are the two compose keys that
+		// are NOT enter — one extends the draft, one leaves it alone — and a
+		// reader hunting for either is in compose looking for the way out of it.
+		"  ctrl+j/esc   ctrl+j puts a newline in the brief (it grows to six rows); esc leaves compose, keeping the draft",
 		// Down from three rows to two. What went is "the others are review, IDE
 		// and tiebreak lanes" — which explains why the fleet is shaped this way
 		// rather than what a key does, and it is in the README and ADR-010 where
@@ -2774,7 +2989,6 @@ func helpKeys(sty Styles) []string {
 		// that is the line that names both. Splitting them into two rows would
 		// have spent a row to make the collision harder to see.
 		"  y / Y        copy this seat's reply, or the whole turn (in turn view, both) — while a gate waits, y/n answer it",
-		"  esc          leave compose (the draft is kept)",
 		// The "in compose too" clauses are the whole of this change on this
 		// panel. These keys always worked; what no one could find out is that
 		// they now work in the mode a finished turn drops you into — which is
@@ -2938,9 +3152,9 @@ func helpGranGloss() map[Granularity]string {
 // makes with its closing paragraph, and the honest residual is the same: at the
 // shortest terminal this room will draw in, the per-seat half is scrolled past
 // rather than absent.
-func helpPostures(st State, lay Layout, sty Styles) []string {
+func helpPostures(st State, lay Layout, sty Styles, g Glyphs) []string {
 	lines := []string{
-		sty.Identity.Render("council") + sty.Muted.Render(" — what the badge on each column means"),
+		helpTitle("what the badge on each column means", lay, sty, g),
 		"",
 		"  Each column states its own posture; there is no room-wide claim.",
 		"",
@@ -2951,10 +3165,11 @@ func helpPostures(st State, lay Layout, sty Styles) []string {
 		// The badge renders in the SAME style it wears on a column, from the
 		// same function, so the legend cannot teach one weight and the room
 		// show another. `unsandboxed` and `WRITES` are loud here too.
-		head := sty.ForSandbox(e.level).Render(b) + strings.Repeat(" ", maxInt(1, 13-len(b)))
+		head := sty.ForSandbox(e.level).Render(b) +
+			strings.Repeat(" ", maxInt(1, helpIndent-2-len(b)))
 		lines = append(lines, "  "+head+sty.Text.Render(e.gloss[0]))
-		for _, g := range e.gloss[1:] {
-			lines = append(lines, "               "+sty.Text.Render(g))
+		for _, l := range e.gloss[1:] {
+			lines = append(lines, helpHang+sty.Text.Render(l))
 		}
 	}
 
@@ -2965,6 +3180,13 @@ func helpPostures(st State, lay Layout, sty Styles) []string {
 		// them is what keeps this room from touching something it should not.
 		"  What contains this room is the WORKSPACE above, not any of these words.",
 		"  Point council at a throwaway worktree when that matters.",
+		// No blank row above the way out, and that is a trade rather than an
+		// oversight. It is wedged against the sentence before it and it should
+		// not be — but `?` sits at exactly row 17 of a 17-row budget, so a blank
+		// here is a row that comes straight out of the legend this page exists
+		// for. §9.11's ranking settles it: a rule outranks a blank, the title now
+		// carries one, and air is the boundary strength this panel can afford to
+		// go without. If the budget ever loosens, this is the first row to spend.
 		"  ?            close",
 	)
 
@@ -2985,9 +3207,16 @@ func helpPostures(st State, lay Layout, sty Styles) []string {
 		seats = append(seats, "",
 			"  "+sty.ForSandbox(c.Sandbox.Level).Render(b)+
 				strings.Repeat(" ", maxInt(1, 13-len(b)))+sty.Muted.Render(c.Label))
-		body := maxInt(20, lay.Width-8)
+		// Hung at the legend's own continuation indent, so a seat's detail sits
+		// UNDER the name it belongs to. It used to hang at six cells while its
+		// own label started at fifteen — the child ten cells LEFT of its parent,
+		// which reads as a new statement rather than as the reason for the one
+		// above it. Every card in this room has had one grammar since §9.11 (a
+		// title at weight, its body hanging under it) and this was the last place
+		// still drawing the shape that rule was written to remove.
+		body := maxInt(20, lay.Width-2*framePad-helpIndent)
 		for _, l := range wrap(c.Sandbox.Detail, body) {
-			seats = append(seats, sty.Muted.Render("      "+l))
+			seats = append(seats, sty.Muted.Render(helpHang+l))
 		}
 		// The other half of that seat's badge line, and the reason this section
 		// grew: §9.14 took the granularity explanation out of the body of every
@@ -3000,9 +3229,9 @@ func helpPostures(st State, lay Layout, sty Styles) []string {
 		// consequences. A seat is never skipped for having no granularity word:
 		// the blank IS the claim (fifth amendment), and it is the one a reader
 		// cannot decode by reading the header.
-		if g, ok := helpGranGloss()[c.Gran]; ok {
-			for _, l := range wrap(g, body) {
-				seats = append(seats, sty.Muted.Render("      "+l))
+		if gloss, ok := helpGranGloss()[c.Gran]; ok {
+			for _, l := range wrap(gloss, body) {
+				seats = append(seats, sty.Muted.Render(helpHang+l))
 			}
 		}
 	}

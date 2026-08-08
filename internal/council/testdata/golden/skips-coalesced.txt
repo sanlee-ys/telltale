@@ -1,6 +1,6 @@
   council READ  │  ~/code/telltale                                                  turn 8  │  3/3 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ▸ Claude Code  ──────────────────────────────────────────  ⠋ streaming  │  CX ✓ done           │  AG ⚠ cancelled      
+  ▸ CC Claude Code  ───────────────────────────────────────  ⠋ streaming  │  CX ✓ done           │  AG ⚠ cancelled      
     ro:tools  tokens                                                      │  ro:requested        │  unsandboxed         
                                                                           │                      │                      
                                                                           │  ↑ 1 more above      │                      

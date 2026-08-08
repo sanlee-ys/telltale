@@ -1,7 +1,7 @@
   council READ  │  ~/code/telltale                                                  turn 4  │  3/3 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ▸ Claude Code    Codex    Antigravity                                                                                 
-    Claude Code  ────────────────────────────────────────────────────────────────────────────────────────  ⠋ streaming  
+  ▸ CC Claude Code    CX Codex    AG Antigravity                                                                        
+    CC Claude Code  ─────────────────────────────────────────────────────────────────────────────────────  ⠋ streaming  
     ro:tools  tokens                                                                                                    
                                                                                                                         
   ↑ 25 more above  │  turn 3  │  ↑↓ scroll  │  f expand                                                                 
