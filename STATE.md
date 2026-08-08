@@ -49,17 +49,37 @@ Nothing claimed.
 
 ## Open questions
 
-- **The 44 seconds is still unattributed.** `telltale council --trace <file>`
-  now splits every turn into spawn / wait / stream per seat, so the question is
-  answerable — but nobody has run it against a slow turn. The instrument exists;
-  the measurement does not, and the two are not the same claim. Diagnosis so far
-  is unchanged: `cursor-agent` is spawned fresh per turn and `--resume` restores
-  context, not process warmth. **Read a trace before optimising anything.**
-  The launch-only excuse is now gone: `/trace <file>` records from inside the
-  room and writes the turns already held, so catching a slow turn no longer
-  needs one predicted before the room opened. **That removes the obstacle, not
-  the question** — the measurement still has not been taken, and whether the
-  flag's shape was ever the real reason is untested either way.
+- **The 44 seconds is half-attributed: measured for `claude`, still open for
+  `cursor`.** First trace taken 2026-08-08, five turns from a live room, written
+  out of the ring by `/trace` rather than predicted in advance:
+
+  ```
+  claude spawn=40ms   wait=6.295s  stream=29.917s   total=36.252s
+  claude spawn=172ms  wait=6.121s  stream=9m8.975s  total=9m15.268s
+  claude spawn=-      wait=77ms    stream=1m49.261s total=1m49.338s
+  claude spawn=-      wait=97ms    stream=28.855s   total=28.951s
+  claude spawn=-      wait=37ms    stream=4.974s    total=5.011s
+  ```
+
+  **What is now measured, for this seat:** spawn is noise (40–172 ms). A COLD
+  process costs ~6.1–6.3 s of `wait`; a warm one costs 37–97 ms, a ~65× gap. The
+  persistent seat is doing exactly what it was built to do — the last three turns
+  spawned nothing at all (`spawn=-`) and reused the process. Everything else is
+  `stream`, which is the model working, not telltale waiting. **There is no
+  overhead left to optimise on this seat.**
+
+  **What is NOT measured, and it is the half the entry was originally about:**
+  every row here is `claude`. Since #99 made silence route to the control plane,
+  an unaddressed turn never reaches the other seats, so a session's worth of
+  ordinary turns produces a trace with no `cursor` or `agy` rows in it at all.
+  The standing diagnosis — `cursor-agent` spawned fresh per turn, `--resume`
+  restoring context rather than process warmth — is **still untested**. Closing
+  it needs one traced `@all` turn, which is now a keystroke rather than a
+  relaunch.
+
+  Method note, because it cost a round trip: `/trace` resolves a relative path
+  against the ROOM's workspace, so the file has to be named relative to the repo
+  for anything confined to it to read the result.
 
 ## Known gaps, not yet owned
 

@@ -1,3 +1,10 @@
 telltale*.exe
 /telltale
 *.test
+
+# Turn traces. `/trace <file>` resolves a relative path against the room's
+# workspace, so the natural place to write one while working in this repo is
+# this repo — and a trace is a measurement of one machine on one evening, not a
+# fact about the product. The numbers worth keeping go in STATE.md with the
+# conditions they were taken under.
+*trace*.txt
