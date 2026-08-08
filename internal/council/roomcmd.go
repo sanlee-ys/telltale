@@ -65,9 +65,41 @@ func parseBareCommand(draft, verb string) bool {
 	return strings.TrimSpace(draft) == verb
 }
 
-// roomCommand handles a room-addressed draft. Returns false when the draft is
-// ordinary and should dispatch.
+// roomCommand handles a room-addressed draft, and is the ONE place a roster
+// change is persisted. Returns false when the draft is ordinary and should
+// dispatch.
+//
+// **The save is here rather than inside the command that made the change**, and
+// that is the whole reason this wrapper exists (§9.32). The room file is what a
+// reattach reads, so a roster held only in memory is undone by quitting — `c`'s
+// argument, in `clearSeat`'s own words, applied to the other thing a user
+// deliberately takes out of the room. `c` could put its `saveRoom` inside
+// itself because there is exactly one way to clear a seat; the roster has `/seat`
+// and `/unseat` and will have whatever narrows it next, and a save per command
+// is a save the third one forgets.
+//
+// So it is written as an OBSERVATION rather than a call: snapshot the roster,
+// run the command, save if it moved. Any command reachable from here inherits
+// persistence without knowing this function exists, which is what lets a
+// `/unseat` written in parallel compose with this without either side being
+// told about the other.
+//
+// Saved only when it MOVED. `/seat` with a typo, `/seat` mid-turn and bare
+// `/seat` all report without reseating, and rewriting the file on each of them
+// would refresh SavedAt — the age a reattach shows — for a room that answered a
+// question and did nothing.
 func (m *Model) roomCommand() bool {
+	before := m.st.Seats
+	handled := m.runRoomCommand()
+	if handled && !sameSeats(before, m.st.Seats) {
+		m.saveRoom()
+	}
+	return handled
+}
+
+// runRoomCommand routes a room-addressed draft to the command that owns it.
+// Every roster-changing command belongs in here, under roomCommand's save.
+func (m *Model) runRoomCommand() bool {
 	if arg, ok := parseCommand(m.st.Draft, "/trace"); ok {
 		return m.traceCommand(arg)
 	}
@@ -379,6 +411,14 @@ func (m *Model) postureCommand(write bool) bool {
 // Sitting out is a different control and already exists: a seat nobody
 // addresses does not answer and is not billed (§9.19 renders a long absence as
 // one line). This is for the seat you want off the SCREEN, not merely quiet.
+//
+// It does not save, and that is not an omission: roomCommand persists any roster
+// this returns having moved (§9.32), so the file follows without this function
+// or its future siblings having to remember to write it. What that does NOT
+// cover is a room that has never dispatched — saveRoom writes nothing at turn 0,
+// because a room with no turns has no keys to save and readRoom refuses one
+// anyway. A `/seat` typed before the first brief rides out on that brief's own
+// save, which is the only save there was ever going to be.
 func (m *Model) seatCommand(arg string) bool {
 	if m.turn != nil {
 		// The grid for a turn in flight was decided at dispatch (frameOwnersFor),

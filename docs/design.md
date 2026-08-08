@@ -5341,6 +5341,139 @@ the band down to one row on a short terminal, covered above. And giving the band
 hue of its own — council adds no hues, and the boundary vocabulary this room already has is what a
 reader has already learned to read.
 
+### 9.32 the room remembered where it was and forgot who was in it
+
+**The ruling, San's, 2026-08-08, and it is the line every field in `room.json` is now cut
+along:**
+
+> `room.json` records the room's **SHAPE** — workspace and roster — and restores it.
+> **AUTHORITY** — write posture, gate cadence — is never restored; it must be typed. The saved
+> posture field exists only for the reattach-mismatch notice, so it records the room **as it
+> stood** (live write + live asking, both sides at once so the notice can't fire spuriously).
+
+Two defects, one on each side of that line, and they are opposite failures of the same file.
+
+**Shape was half-saved.** `/cd` moves the room and the file follows; `/seat` moves the room and
+the file never heard. So `/seat claude,agy,cursor` — evicting a Codex that was dark on quota —
+died with a restart, and Codex walked back into the room and started billing the next
+unaddressed turn. That is the expensive-default defect returning through a reboot, on a control
+built specifically to kill it, and the room said nothing while it happened: the header drew four
+seats and the user had typed three.
+
+**Authority was half-recorded.** `savedPosture(m.st.Write, m.opts.Auto)` reads one live field
+and one launch flag. Press `a` in a gated write room and the file goes on saying `write-gated`
+about a room with nothing left asking. §9.17's own closing rule is the one that was broken —
+*a flag with an in-room twin stops being the answer to "what is the room doing" and becomes
+only the seed* — and §9.17 named this exact call site as a legitimate launch-time read. **This
+section amends that.** `savedPosture` is not a launch-time decision; it is a description of a
+running room, and it is the third miss of the same shape after `/write`'s confirmation card and
+the request path.
+
+#### The roster is keys, not content — which is why it may be saved at all
+
+ADR-008's ninth amendment ratified council writing exactly one file and ruled what may be in
+it: **keys, not content.** A roster passes that test rather than being excused from it. It is
+at most four vendor ids out of the closed set `addressableVendors()` — the same words `--vendor`
+takes on the command line and the footer prints on every frame. It says *who was in the room*
+and not one syllable of what was said in it. If the file leaked, the roster discloses which of
+four public CLI tools the user had on screen, which is strictly less than the workspace path
+sitting beside it already discloses.
+
+`TestTheSavedRoomHoldsKeysAndNeverContent` is the guard, and it fails closed by pinning the
+exact key set — so adding `seats` had to be a deliberate act that broke a test and got read.
+It now also asserts the roster's *content* is names, so a field added to `Seats` later that
+carried a note or a reason reaches this file through the same tag and gets caught there.
+
+#### Saved when it moves, not at the next dispatch
+
+`c`'s rule, in `clearSeat`'s own words: the room file is what a reattach reads, so a change held
+only in memory is undone by quitting — the user ends a thread and finds it waiting for them.
+A roster is the other thing a user deliberately takes out of the room, and it earns the same
+treatment for the same reason.
+
+**The save is an observation on `roomCommand`, not a call inside `seatCommand`.** `c` could put
+its `saveRoom` inside itself because there is exactly one way to clear a seat. The roster has
+`/seat`, has `/unseat`, and will have whatever narrows it next — and a save per command is a
+save the third one forgets. So `roomCommand` snapshots the roster, runs the command, and saves
+if it moved. Any command reachable from there inherits persistence without knowing the wrapper
+exists, which is what let `/unseat` be written in a parallel lane and compose with this without
+either side being told about the other.
+
+Two consequences worth stating rather than discovering:
+
+- **Only a change writes.** Bare `/seat`, a typo, and a `/seat` refused mid-turn all report
+  without reseating. Rewriting the file on those would refresh `saved_at` — the age a reattach
+  shows — for a room that answered a question and did nothing.
+- **A room that has never dispatched still writes nothing.** `saveRoom` returns at turn 0 and
+  `readRoom` refuses a turn-0 file, both unchanged. A `/seat` typed before the first brief rides
+  out on that brief's own save, which is the only save there was ever going to be.
+
+#### `--vendor` overrides the saved roster, and then rewrites it
+
+`--cd`'s rule and `--cd`'s reasoning: **an explicit launch control someone typed today outranks
+a file from yesterday.** `seatsFor` mirrors `Run`'s workspace switch line for line, down to
+sharing the same `re.Active() && !re.Offered` — a room `--fresh` declined restores neither half
+of the shape.
+
+The rewrite needs no code, and that is worth saying because it reads like a missing branch:
+`stateWith` copies the answer into `State.Seats` and `saveRoom` writes `m.st.Seats`, so the
+first completed turn records the room the user actually got. The same one line is what makes
+`/seat` persist. Leaving it out would be worse than not overriding at all — the file would go
+on describing a room that is not on screen, and the *next* launch would restore it.
+
+**Restoring is unconditional on the roster's own content**, including the zero value: the
+default room saved as the default room. A saved roster that could only ever *widen* would be a
+`/seat` you could not undo by quitting.
+
+**Back-compat is the absence of a field, and it is exact.** A `room.json` written before this
+section has no `seats` key; that decodes to the zero `Seats`; the zero `Seats` is the full
+detected table. So an old file opens the room it has always opened, and no version bump is owed
+— `roomVersion` is bumped when a field *changes meaning*, and additive fields are handled by
+the zero value, which is the rule `roomVersion`'s own comment already states. Pinned by a
+hand-written v2 fixture rather than a round-trip, since a file this build saved would carry the
+field and prove nothing.
+
+**An unknown seat name is dropped, not obeyed.** The roster is the one restored field whose
+value is a *name*, so it is the one a hand-edit or a downgrade can fill with a word this build
+has no seat for. Obeying it would seat nobody, fall through the everything-collapsed fallback in
+`VisibleColumns`, and hand the user the default room while the file claimed a narrowed one —
+§4a.1's collapse in the surface this section exists to make trustworthy. Dropped rather than
+refused, because a roster is shape: the sessions are still perfectly reattachable and refusing
+the whole file over the seating plan would cost four conversations to fix a screen.
+
+#### The posture field records the room, and still never restores it
+
+Both arguments are live now — `m.st.Write` and `m.st.Asking()` — and **the writer and every
+reader moved in one change**, because the field has exactly one consumer. A writer reading the
+state while a reader read the flags would compare a description of the live room against a
+description of the launch argv and report a change to a user who made none. That is the
+spurious fire the ruling names, and it would have been *introduced by the fix* had either side
+moved alone.
+
+Recording the room accurately is the opposite of restoring it, and nothing about the restore
+changed. `TestReattachRestoresNoPostureAndNoGate` extends the old
+`TestReattachDoesNotRestoreWritePosture` to the gate as well: a room saved `write` reopens read,
+a room saved with the gate off reopens asking, and the WRITE marker is asserted absent on the
+rendered frame rather than on a field. Both halves are witnessed, so it cannot pass by the room
+being read-only for some reason of its own — the same fixture reopened with `--write --auto`
+gets exactly what was typed. *A posture that can arrive from a file is not one anyone typed*
+survives this section unchanged; what it never said is that the room may not write down what it
+did.
+
+#### Declined
+
+**Restoring the gate.** It is authority, it is on the far side of the ruling's line, and `a`'s
+own section already argues that a safety property whose default is off is the wrong way round
+however carefully the constructor sets it. A gate that can arrive from a file is that mistake
+with a longer fuse.
+
+**Recording *why* the roster is what it is** — flag, command, or file. It is the room's own
+history rather than its shape, `saved_at` already dates it, and a `reason` string is the first
+thing in this file that would be prose.
+
+**Bumping `roomVersion`.** A bump costs every user their reattach, and it is reserved for a
+field that changes meaning. Nothing here changes what an existing key means.
+
 ### 9.33 the cursor seat's per-turn cost, split at last — and the seam that was hidden from `--help`
 
 §9.8 gave the Claude seat one live process and measured what it bought. The obvious next
