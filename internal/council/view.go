@@ -221,7 +221,7 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	// run-on label — which is what a bare space made them.
 	sep := "  " + sty.Rule().Render(g.Sep) + "  "
 	pathWidth := func(r string) int {
-		return lay.Width - lipgloss.Width(left) - lipgloss.Width(r) - 2 - lipgloss.Width(sep)
+		return lay.Width - lipgloss.Width(left) - lipgloss.Width(r) - 2*framePad - lipgloss.Width(sep)
 	}
 
 	// The route sheds BEFORE the workspace and before the seated/briefed counts,
@@ -241,7 +241,7 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 		// own name.
 		affordable := pathWidth(right) > 3
 		if pathWidth(bare) <= 3 {
-			affordable = lay.Width-lipgloss.Width(left)-lipgloss.Width(right)-2 >= 1
+			affordable = lay.Width-lipgloss.Width(left)-lipgloss.Width(right)-2*framePad >= 1
 		}
 		if !affordable {
 			right = bare
@@ -2327,6 +2327,15 @@ type hint struct {
 	// to make room for a key added in front of them — the room's way out of the
 	// room, spent on a motion key. A shed hint is one the ellipsis would
 	// otherwise have chosen at random.
+	//
+	// **Shed order is list order**, so where a hint sits in modeHints' slice is
+	// its rank as well as its position — the leftmost sheddable cell is the
+	// first to go. That used to be a backwards walk, which read as "newest
+	// first" and was not: `[ ]` is the second cell on the view line and `f` the
+	// third, and neither position tracks when it was introduced. Once a second
+	// rung existed the walk direction stopped being incidental and started
+	// deciding which key a narrow room keeps, so it is stated rather than
+	// inherited.
 	shed bool
 }
 
@@ -2483,7 +2492,23 @@ func modeHints(st State, g Glyphs) []hint {
 		{key: "[ ]", label: "turn", shed: true},
 	}
 	if several {
-		hs = append(hs, hint{key: "f", label: "expand"}, hint{key: "tab", label: "focus"})
+		// `f` is the SECOND rung of the shed ladder, after `[ ]`, and the two
+		// cells framePad now spends on the room's margins are what made a second
+		// rung necessary: at 80 columns the view line comes out one cell over
+		// with `[ ]` already gone, and this room sheds whole cells rather than
+		// clipping words (§9.18).
+		//
+		// `f` rather than `tab`, and rather than the tail: `tab` is how you reach
+		// the other seats at the tabbed tier, which is the tier this only bites
+		// at, so shedding it would strand a reader on one column. `f` is the cell
+		// §9.11 already ranked lowest — it is the first thing dropped outright in
+		// a room with one seat on screen, on the argument that it expands a
+		// column to a width it already has, and at the tabbed tier the drawn
+		// column is likewise already the whole frame. What it buys there is the
+		// expanded mode's persistence across a resize, which is the least any
+		// cell on this line offers.
+		hs = append(hs, hint{key: "f", label: "expand", shed: true},
+			hint{key: "tab", label: "focus"})
 	}
 	if st.Busy() {
 		return append(hs, hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
@@ -2558,9 +2583,18 @@ func statusLine(left string, hs []hint, lay Layout, sty Styles, g Glyphs) string
 	fits := func(p string) bool {
 		return lay.Width-lipgloss.Width(left)-lipgloss.Width(p)-2*framePad >= 1
 	}
-	for i := len(hs) - 1; i >= 0 && !fits(plain); i-- {
-		if !hs[i].shed {
-			continue
+	// Forwards, because shed order is list order — see hint.shed. Re-scanning
+	// from the front each time is what lets the slice shrink under the index.
+	for !fits(plain) {
+		i := -1
+		for j, h := range hs {
+			if h.shed {
+				i = j
+				break
+			}
+		}
+		if i < 0 {
+			break
 		}
 		hs = append(append([]hint{}, hs[:i]...), hs[i+1:]...)
 		styled, plain = hints(sty, g, hs)

@@ -310,3 +310,54 @@ func hasToken(s, word string) bool {
 	}
 	return false
 }
+
+// TestAStripSaysItsPhraseOnOneLine is the reason stripColumn stopped being an
+// arithmetic floor and became a reading width.
+//
+// Fourteen was derived from the header: the widest phase word is nine cells, its
+// mark costs two, and the remaining three are exactly a two-letter vendor tag
+// and its space (§9.18). That number is correct about the header and says
+// nothing about the prose underneath — and prose is most of what a strip draws.
+// At fourteen, §9.19's coalesced skip line — on most turns the ONLY content a
+// backgrounded seat has — came out three rows deep as `○ not` / `addressed in` /
+// `turn 4`, with the phrase that carries the meaning split across two of them.
+//
+// Asserted as "these phrases appear on one line", not as a width, so the test
+// says what a reader gets rather than restating the constant.
+func TestAStripSaysItsPhraseOnOneLine(t *testing.T) {
+	g := GlyphsFor(false)
+	st := stripRoom(false)
+
+	var strips []string
+	for _, c := range st.Columns {
+		if c.Vendor == st.FrameOwners[0] {
+			continue
+		}
+		strips = append(strips, columnText(st, c, stripWidth, PlainStyles(), g)...)
+	}
+	if len(strips) == 0 {
+		t.Fatal("the fixture has no strips to read")
+	}
+	joined := strings.Join(strips, "\n")
+
+	// The two things a strip exists to say, each on a line of its own.
+	for _, phrase := range []string{"not addressed", "last: turn"} {
+		found := false
+		for _, l := range strips {
+			if strings.Contains(l, phrase) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%q is broken across lines in a strip — the phrase that carries "+
+				"the meaning does not survive the width:\n%s", phrase, joined)
+		}
+	}
+
+	// And nothing on a strip is a clipped word: it sheds whole or it stays whole
+	// (§9.18), which the wider column must not have quietly traded away.
+	assertWholeWords(t, strips,
+		[]string{"addressed", "streaming", "cancelled", "unavailable", "turn"},
+		"strip")
+}

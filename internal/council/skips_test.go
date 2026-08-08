@@ -242,14 +242,29 @@ func TestAStripWithNoTurnsBehindItSaysNothing(t *testing.T) {
 	}
 }
 
-// TestLastTurnLineShedsItsLabel. Three-digit turns exist in a long room; the
-// number is the fact and `last:` is the label, so the label is what goes.
+// TestLastTurnLineShedsItsLabel. The number is the fact and `last:` is the
+// label, so the label is what goes when the line will not fit.
+//
+// The width where that bites moved when stripColumn went from an arithmetic
+// floor to a reading width: at fourteen a three-digit turn already overflowed,
+// at eighteen it fits whole. Both halves are asserted, because the second is
+// what the wider strip was FOR — §9.19 gave this line "room" as its stated goal
+// and then drew it at a width where a long room wrapped it.
 func TestLastTurnLineShedsItsLabel(t *testing.T) {
 	g := GlyphsFor(false)
 	c := Column{Vendor: model.VendorCodex, Phase: PhaseDone, TurnN: 137}
+
+	// At strip width the whole line fits, label and all, on one row.
 	got := lastTurnLine(c, State{Turn: 140}, stripWidth, PlainStyles(), g)
+	if len(got) != 1 || strings.TrimSpace(got[0]) != "last: turn 137 "+g.ActOK {
+		t.Errorf("lastTurnLine at strip width = %q, want the whole line on one row", got)
+	}
+
+	// Squeezed below it, the label is what yields — never the number and never
+	// the mark, and never by clipping.
+	got = lastTurnLine(c, State{Turn: 140}, 14, PlainStyles(), g)
 	if len(got) != 1 || strings.TrimSpace(got[0]) != "turn 137 "+g.ActOK {
-		t.Errorf("lastTurnLine at three digits = %q, want the label shed", got)
+		t.Errorf("lastTurnLine squeezed = %q, want the label shed whole", got)
 	}
 }
 

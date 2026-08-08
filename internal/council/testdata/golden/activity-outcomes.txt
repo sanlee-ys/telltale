@@ -1,7 +1,7 @@
- council READ  │  ~/code/telltale                                                    turn 2  │  3/3 seated  │  no brief 
+  council READ  │  ~/code/telltale                                                  turn 2  │  3/3 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ─────────────  ✓ done  │    Codex  ──────────────  ⠋ streaming  │    Antigravity  ──────────  ⠋ waiting 
-   ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
+  ▸ Claude Code  ─────────────  ✓ done  │    Codex  ─────────────  ⠋ streaming  │    Antigravity  ─────────  ⠋ waiting  
+    ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -12,13 +12,13 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                                       │                                        │  ⚙ list_dir: C:\ws ?                  
- ⚙ Glob: **/*.go ✓                     │                                        │  ⚙ run_command: pwsh -Command         
- ⚙ Bash: go test ./... ✗               │                                        │    "Get-ChildItem" ✗                  
-     FAIL council 0.3s                 │                                        │      granting access to C:\: Access   
- ⚙ Read: view.go ✓                     │                                        │      is denied.                       
-                                       │  ⚙ go build ./...                      │  working — the steps above are what   
- One test fails.                       │  working…                              │  it has done so far.                  
+                                        │                                       │  ⚙ list_dir: C:\ws ?                  
+  ⚙ Glob: **/*.go ✓                     │                                       │  ⚙ run_command: pwsh -Command         
+  ⚙ Bash: go test ./... ✗               │                                       │    "Get-ChildItem" ✗                  
+      FAIL council 0.3s                 │                                       │      granting access to C:\: Access   
+  ⚙ Read: view.go ✓                     │                                       │      is denied.                       
+                                        │  ⚙ go build ./...                     │  working — the steps above are what   
+  One test fails.                       │  working…                             │  it has done so far.                  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ›                                                                                                                      
- VIEW                                    ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 
+  ›                                                                                                                     
+  VIEW                                  ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help  

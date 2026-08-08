@@ -4566,3 +4566,83 @@ bottom-anchor pad so every frame has one unbroken edge: that pad is the void, an
 Phase 2 was written about. And a per-column rail extent, so a short column's gutter stops early:
 the gutter belongs to the boundary between two columns rather than to either of them, and one of
 the two ending sooner is not a fact about the line between them.
+
+### 9.24 the middle of the grid breathed and its edges did not
+
+§9.23 fixed the frame's continuity. This section is about the space inside it, and about a
+number that was never chosen — it was assumed, in about eighteen places, and the two halves of
+it had to agree by hand.
+
+**The pad was a literal, and so was its twin.** The margin between the terminal's edge and
+anything council draws was a bare `" "` in roughly ten builders — the header, the notice, the
+column grid, the tab bar, the single-column and turn-page bodies, five row shapes in the
+composer, the mode line, the help panel — with its arithmetic twin, a literal `2` meaning
+*pad×2*, in eight more places that subtract it back out to get a usable width. Those two
+families have to agree exactly. A builder that paints more than its arithmetic subtracts pushes
+the row past the terminal edge and `fit` eats the overflow in silence, which is precisely the
+off-by-one §9.11 found in the header's gap.
+
+`framePad` names it and `framePadStr` derives the string from it, so the paint cannot drift
+from the sums. **The extraction shipped as its own commit with the value still 1** — every
+frame byte-identical, not one golden moved — because a refactor that also changes behaviour is
+a refactor nobody can check. A `- 2` that is *not* the frame pad, like `labelRule`'s two cells
+of air around its rule, is deliberately left as a literal; the constant is not a licence to
+unify every 2 in the package.
+
+The extraction turned out to be **incomplete on the first pass**, and the value change is what
+found it: `header`'s `pathWidth` and its affordability test were still subtracting a literal 2.
+At `framePad = 1` that is indistinguishable from correct, which is exactly why it survived —
+the bug is invisible until the constant moves, and it surfaced as the header clipping `no brief`
+to `no brie` at 68 columns. That is the argument for the constant restated as evidence.
+
+**One to two, because a margin narrower than the gutters inside it is the wrong way round.**
+The interior of the grid gave two cells each side of every rail; the frame's own edge gave one.
+So the outermost boundary was the tightest thing on screen, the room read as crowded against
+the terminal, and the middle read loose — the inverse of what a grid wants. The screenshot pass
+that set `gutter` to 2 named that feeling exactly ("rigid / cramped") and fixed it in the one
+place it happened to be looking. `framePad` is now the same two, for the same reason, and the
+room has one number for *air between things* rather than two that disagree.
+
+It costs two cells of total width, and one of them landed somewhere worth recording: **at 80
+columns the view-mode footer came out one cell over.** This room sheds whole cells rather than
+clipping words (§9.18), so `f expand` becomes the second rung of the shed ladder after `[ ]`.
+`f` and not `tab`: `tab` is how a reader reaches the other seats at the tabbed tier, which is
+the only tier this bites at, so shedding it would strand them on one column — while `f` is the
+cell §9.11 already ranked lowest, on the argument that it expands a column to a width it
+already has. Adding a second rung also made the shed *order* load-bearing for the first time,
+so it is now stated — **shed order is list order** — rather than left to a backwards walk that
+read as "newest first" and was not.
+
+**stripColumn goes 14 → 18, from an arithmetic floor to a reading width.** Fourteen was
+derived, and derived correctly: the widest phase word is nine cells, its mark costs two, and
+the remaining three are exactly a two-letter vendor tag and its space (§9.18). That answers
+what a strip's *header* cannot go below. It says nothing about the prose underneath, and prose
+is most of what a strip draws.
+
+At fourteen the prose shredded. §9.19's coalesced skip line — on most turns the **only** content
+a backgrounded seat has — came out three rows deep as `○ not` / `addressed in` / `turn 4`, with
+the phrase that carries the meaning split across two of them. `last: turn 8 ✓`, which §9.19
+introduced with "room" as its stated goal, wrapped in a long room. A column whose every line
+breaks mid-phrase is not narrow, it is unreadable, and the entire point of keeping these seats
+on screen (§9.18) is that a reader takes them in at a glance.
+
+Eighteen is the smallest width that puts `○ not addressed` and `last: turn 137 ✓` each on one
+line. The header floor still holds — fourteen is still where the header itself would break, so
+eighteen clears it by four and §9.18's shedding ladder is untouched. The four cells come out of
+the primary column, and `weightedWidths` refuses the weighted split outright rather than ship a
+primary under `minColumn`, so at a frame narrow enough for four cells to matter the room falls
+back to equal columns instead of trading a readable strip for an unreadable seat.
+
+**The change paid for itself in rows.** `skips-coalesced.txt` is the clearest reading: with each
+block a row or two shorter, the same body height now holds seven more turns of transcript, and
+the overflow marker went from `↑ 8 more above` to `↑ 1 more above`. Wider columns showing *more*
+content is not the trade anyone expected from spending cells, and it is what happens when the
+alternative was spending three rows to say four words.
+
+**What was declined.** A width-dependent pad, so narrow terminals keep one cell and wide ones
+get two: the tier ladder already varies what is *said* by width, and varying the frame's own
+geometry as well would make two different rooms out of one resize. Trimming the footer by
+clipping instead of shedding, which is the trade §9.11's whole footer pass exists to refuse.
+And unifying every literal 2 in the package behind the new constant — `labelRule`'s air around
+its rule is the same number for an unrelated reason, and tying them together would mean a
+future change to one silently moving the other.

@@ -1,4 +1,4 @@
- council READ  │  ~/code/telltale                                                    turn 3  │  3/3 seated  │  no brief 
+  council READ  │  ~/code/telltale                                                  turn 3  │  3/3 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                                         
                                                                                                                         
@@ -9,16 +9,16 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
- turn 3  ────────────────────────────────────────────────────────────────────────────────────────  → claude, codex  41s 
- › what does resume cost by turn five?                                                                                  
+  turn 3  ──────────────────────────────────────────────────────────────────────────────────────  → claude, codex  41s  
+  › what does resume cost by turn five?                                                                                 
                                                                                                                         
- Claude Code  ───────────────────────────────────────────────────────────────────────────────────  ✓ done  41s  $0.0123 
- ⚙ Bash: go test ./... ✓                                                                                                
+  Claude Code  ─────────────────────────────────────────────────────────────────────────────────  ✓ done  41s  $0.0123  
+  ⚙ Bash: go test ./... ✓                                                                                               
                                                                                                                         
- About 30K redundant input tokens per vendor.                                                                           
+  About 30K redundant input tokens per vendor.                                                                          
                                                                                                                         
- Codex  ─────────────────────────────────────────────────────────────────────────────────────────────────  ✗ failed  3s 
- ⚠ the vendor exited before answering                                                                                   
+  Codex  ───────────────────────────────────────────────────────────────────────────────────────────────  ✗ failed  3s  
+  ⚠ the vendor exited before answering                                                                                  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ›                                                                                                                      
- TURN 3/3                                            ↑↓ scroll  │  [ ] turn  │  t grid  │  y yank  │  ? help  │  q quit 
+  ›                                                                                                                     
+  TURN 3/3                                          ↑↓ scroll  │  [ ] turn  │  t grid  │  y yank  │  ? help  │  q quit  
