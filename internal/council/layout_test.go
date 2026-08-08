@@ -39,7 +39,7 @@ func TestColumnsExactlyFillTheWidth(t *testing.T) {
 			if lay.Tier != TierColumns {
 				continue
 			}
-			total := 2 + (lay.Cols-1)*(1+2*gutter) // pads + separators and gutters
+			total := 2*framePad + (lay.Cols-1)*(1+2*gutter) // pads + separators and gutters
 			for i := 0; i < lay.Cols; i++ {
 				total += lay.widthAt(i)
 			}

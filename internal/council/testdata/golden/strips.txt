@@ -1,7 +1,7 @@
- council READ  │  ~/code/telltale                                                    turn 4  │  4/4 seated  │  no brief 
+  council READ  │  ~/code/telltale                                                  turn 4  │  4/4 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ─────────────────────────────────  ⠋ streaming  │  CX ✓ done       │  AG ⚠ cancelled  │  CU ○ idle      
-   ro:tools  tokens                                             │  ro:requested    │  unsandboxed     │  gated          
+  ▸ CC Claude Code  ────────────────  ⠋ streaming  │  CX ✓ done           │  AG ⚠ cancelled      │  CU ○ idle           
+    ro:tools  tokens                               │  ro:requested        │  unsandboxed         │  gated               
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -11,10 +11,10 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
- turn 4  ─────────────────────────────────────────────────────  │  last: turn 3 ✓  │  last: turn 3 ⚠  │                 
- › where does the resume path break?                            │  ○ not           │  ○ not           │  no turn        
-                                                                │    addressed in  │    addressed in  │  dispatched     
- Reading resume.go now.                                         │    turn 4        │    turn 4        │  yet.           
+  turn 4  ───────────────────────────────────────  │                      │                      │                      
+  › where does the resume path break?              │  last: turn 3 ✓      │  last: turn 3 ⚠      │                      
+                                                   │  ○ not addressed in  │  ○ not addressed in  │  no turn dispatched  
+  Reading resume.go now.                           │    turn 4            │    turn 4            │  yet.                
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ›                                                                                                                      
- VIEW                                    ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 
+  ›                                                                                                                     
+  VIEW                                  ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help  

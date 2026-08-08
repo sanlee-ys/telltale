@@ -1,7 +1,7 @@
- council ⚠ WRITE  │  ~/code/telltale                                                 turn 1  │  3/3 seated  │  no brief 
+  council ⚠ WRITE  │  ~/code/telltale                                               turn 1  │  3/3 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ─────────────  ✓ done  │    Codex  ────────────────  ⠋ waiting  │    Antigravity  ──────────  ⠋ waiting 
-   gated  tokens                       │    WRITES  final only                  │    WRITES  final only                 
+  ▸ CC Claude Code  ──────────  ✓ done  │    CX Codex  ────────────  ⠋ waiting  │    AG Antigravity  ──────  ⠋ waiting  
+    gated  tokens                       │    WRITES  final only                 │    WRITES  final only                 
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -13,12 +13,12 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
- ⚙ Write: internal/council/gate.go ✗   │                                        │                                       
-   denied by you                       │                                        │                                       
- ⚙ Bash: go build ./... ✗              │                                        │                                       
-     exit 2: undefined: gateCard       │                                        │                                       
-                                       │                                        │                                       
- I need to add the card renderer.      │  working — the reply arrives whole.    │  working — the reply arrives whole.   
+  ⚙ Write: internal/council/gate.go ✗   │                                       │                                       
+    denied by you                       │                                       │                                       
+  ⚙ Bash: go build ./... ✗              │                                       │                                       
+      exit 2: undefined: gateCard       │                                       │                                       
+                                        │                                       │                                       
+  I need to add the card renderer.      │  working — the reply arrives whole.   │  working — the reply arrives whole.   
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ›                                                                                                                      
- VIEW                                    ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 
+  ›                                                                                                                     
+  VIEW                                  ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help  

@@ -4602,3 +4602,175 @@ bottom-anchor pad so every frame has one unbroken edge: that pad is the void, an
 Phase 2 was written about. And a per-column rail extent, so a short column's gutter stops early:
 the gutter belongs to the boundary between two columns rather than to either of them, and one of
 the two ending sooner is not a fact about the line between them.
+
+### 9.24 the middle of the grid breathed and its edges did not
+
+§9.23 fixed the frame's continuity. This section is about the space inside it, and about a
+number that was never chosen — it was assumed, in about eighteen places, and the two halves of
+it had to agree by hand.
+
+**The pad was a literal, and so was its twin.** The margin between the terminal's edge and
+anything council draws was a bare `" "` in roughly ten builders — the header, the notice, the
+column grid, the tab bar, the single-column and turn-page bodies, five row shapes in the
+composer, the mode line, the help panel — with its arithmetic twin, a literal `2` meaning
+*pad×2*, in eight more places that subtract it back out to get a usable width. Those two
+families have to agree exactly. A builder that paints more than its arithmetic subtracts pushes
+the row past the terminal edge and `fit` eats the overflow in silence, which is precisely the
+off-by-one §9.11 found in the header's gap.
+
+`framePad` names it and `framePadStr` derives the string from it, so the paint cannot drift
+from the sums. **The extraction shipped as its own commit with the value still 1** — every
+frame byte-identical, not one golden moved — because a refactor that also changes behaviour is
+a refactor nobody can check. A `- 2` that is *not* the frame pad, like `labelRule`'s two cells
+of air around its rule, is deliberately left as a literal; the constant is not a licence to
+unify every 2 in the package.
+
+The extraction turned out to be **incomplete on the first pass**, and the value change is what
+found it: `header`'s `pathWidth` and its affordability test were still subtracting a literal 2.
+At `framePad = 1` that is indistinguishable from correct, which is exactly why it survived —
+the bug is invisible until the constant moves, and it surfaced as the header clipping `no brief`
+to `no brie` at 68 columns. That is the argument for the constant restated as evidence.
+
+**One to two, because a margin narrower than the gutters inside it is the wrong way round.**
+The interior of the grid gave two cells each side of every rail; the frame's own edge gave one.
+So the outermost boundary was the tightest thing on screen, the room read as crowded against
+the terminal, and the middle read loose — the inverse of what a grid wants. The screenshot pass
+that set `gutter` to 2 named that feeling exactly ("rigid / cramped") and fixed it in the one
+place it happened to be looking. `framePad` is now the same two, for the same reason, and the
+room has one number for *air between things* rather than two that disagree.
+
+It costs two cells of total width, and one of them landed somewhere worth recording: **at 80
+columns the view-mode footer came out one cell over.** This room sheds whole cells rather than
+clipping words (§9.18), so `f expand` becomes the second rung of the shed ladder after `[ ]`.
+`f` and not `tab`: `tab` is how a reader reaches the other seats at the tabbed tier, which is
+the only tier this bites at, so shedding it would strand them on one column — while `f` is the
+cell §9.11 already ranked lowest, on the argument that it expands a column to a width it
+already has. Adding a second rung also made the shed *order* load-bearing for the first time,
+so it is now stated — **shed order is list order** — rather than left to a backwards walk that
+read as "newest first" and was not.
+
+**stripColumn goes 14 → 18, from an arithmetic floor to a reading width.** Fourteen was
+derived, and derived correctly: the widest phase word is nine cells, its mark costs two, and
+the remaining three are exactly a two-letter vendor tag and its space (§9.18). That answers
+what a strip's *header* cannot go below. It says nothing about the prose underneath, and prose
+is most of what a strip draws.
+
+At fourteen the prose shredded. §9.19's coalesced skip line — on most turns the **only** content
+a backgrounded seat has — came out three rows deep as `○ not` / `addressed in` / `turn 4`, with
+the phrase that carries the meaning split across two of them. `last: turn 8 ✓`, which §9.19
+introduced with "room" as its stated goal, wrapped in a long room. A column whose every line
+breaks mid-phrase is not narrow, it is unreadable, and the entire point of keeping these seats
+on screen (§9.18) is that a reader takes them in at a glance.
+
+Eighteen is the smallest width that puts `○ not addressed` and `last: turn 137 ✓` each on one
+line. The header floor still holds — fourteen is still where the header itself would break, so
+eighteen clears it by four and §9.18's shedding ladder is untouched. The four cells come out of
+the primary column, and `weightedWidths` refuses the weighted split outright rather than ship a
+primary under `minColumn`, so at a frame narrow enough for four cells to matter the room falls
+back to equal columns instead of trading a readable strip for an unreadable seat.
+
+**The change paid for itself in rows.** `skips-coalesced.txt` is the clearest reading: with each
+block a row or two shorter, the same body height now holds seven more turns of transcript, and
+the overflow marker went from `↑ 8 more above` to `↑ 1 more above`. Wider columns showing *more*
+content is not the trade anyone expected from spending cells, and it is what happens when the
+alternative was spending three rows to say four words.
+
+**What was declined.** A width-dependent pad, so narrow terminals keep one cell and wide ones
+get two: the tier ladder already varies what is *said* by width, and varying the frame's own
+geometry as well would make two different rooms out of one resize. Trimming the footer by
+clipping instead of shedding, which is the trade §9.11's whole footer pass exists to refuse.
+And unifying every literal 2 in the package behind the new constant — `labelRule`'s air around
+its rule is the same number for an unrelated reason, and tying them together would mean a
+future change to one silently moving the other.
+
+### 9.25 the panel that lists what the room can do was not listing it
+
+Three of the four items here are the same defect wearing different clothes: a surface that
+knew something and did not say it. The fourth is a surface that said something it did not know.
+
+**The help panel clipped in silence, and it was the only place in the room that did.** Every
+other surface spends a body row on `↓ N more below` when content does not fit, on the explicit
+argument (§9.11, columnCell) that silent clipping is indistinguishable from there being nothing
+more to say. The help panel is 24 rows on page one and 33 on page two against a hard budget of
+17, so at the reference machine's own geometry it was dropping seven lines and sixteen — with
+nothing on screen to say so, and dropping them mid-word: `…the containment, not a`. A panel
+whose whole job is to enumerate what the room can do, quietly not enumerating it, is the
+sharpest available version of §4a.1's rule.
+
+**The marker's row is paid for, and the way out is pinned.** `?` is the only documented way back
+out of this panel, and on both pages it sat at exactly row 17 of a 17-row budget — so a marker
+taking the last row the ordinary way would have bought honesty with the exit, which is the trade
+§9.11's footer pass and helpKeys' own budget comment both refuse by name. The exit is now
+**chrome**, pinned to the last row the way `columnChrome` sits above a transcript, with the
+marker inside the scroll below it. That makes the guarantee structural instead of a lucky row
+count. The marker's own row is paid for the way this panel has always paid — by merging two
+lines that were one category: `ctrl+j` and `esc`, the two compose keys that are not `enter`, one
+extending the draft and one leaving it alone. Nothing was dropped to make room.
+
+**The marker names no key, and neither does the mode line.** `↑↓` do nothing over the help panel
+— `key()` routes no scroll to it — so the room was advertising an arrow that does literally
+nothing in the mode a reader is in *when they went looking for what the keys do*. Wiring a help
+scroll offset was the alternative and it was declined: it buys reachability for a page whose
+overflow is a paragraph of prose, at the cost of new state, new key routing and a new §7.1 rule-4
+surface, when the honest sentence — *there is more, and this terminal is not tall enough* — costs
+one row and no mechanism. So the panel's mode line names only what works there (`?`, `i`, `q`),
+which is §9.11's own footer rule applied to a mode it had not been applied to.
+
+**The title got the room's grammar.** `council — one brief, several agents, side by side` was the
+only heading in the product with no rule on it, while the column header, every turn separator and
+every seat rule on a turn page all draw `labelRule`. A rule *under* the title is what one might
+expect and it is not what this room does: §9.11 spent a whole item removing exactly that shape on
+the finding that a heading followed by a horizontal rule says nothing the heading had not, and
+ruled that a heading carries its own rule. So the title becomes a `labelRule` and costs no row —
+which is what made it affordable against a budget with none to spare.
+
+**The blank above `? close` did not happen, and that is recorded rather than fixed.** It is wedged
+against the sentence before it and it should not be, but the exit sits at row 17 of 17 and a blank
+there comes straight out of the legend the page exists for. §9.11's ranking settles it: a rule
+outranks a blank, the title now carries one, and air is the boundary strength this panel can
+afford to go without. If the budget ever loosens, that is the first row to spend.
+
+**A seat's detail hung ten cells left of its own label.** The per-seat posture section put a seat's
+name at column 15, under a badge legend at column 15, and then hung the seat's measured detail at
+column 6 — the child left of its parent, reading as a new statement rather than as the reason for
+the one above it. Every card in this room has had one grammar since §9.11 (a title at weight, its
+body hanging under it) and this was the last place still drawing the shape that rule was written to
+remove. The three hard-coded numbers that had to agree — 13 for the badge column, 15 for the
+legend's continuation, 6 for the body — are now one `helpIndent`, checked against its own string
+form at init, because a panel whose continuation rows drift a cell from its key column is invisible
+in a diff and obvious on screen.
+
+**The vendor tag is permanent, and the wide column is now the legend for the narrow one.** §9.18
+introduced `CC` / `CX` / `AG` / `CU` as what identity degrades *to* when a strip has no room for a
+name. Read as a whole product that is backwards: the abbreviation a reader has to know appeared
+exactly where they had the least context to learn it, and vanished at every width where the room
+had space to teach it. Drawn always, `CC Claude Code` at 37 cells is the sentence that makes
+`CC ✓ done` at eighteen readable, and it is the same pairing the HUD's own grid already makes.
+
+The tag is **chrome and the name is the anchor**, so the tag is muted while the name keeps the
+weight that says which column the keys move — asserted, because a tag at the name's weight would
+put a two-letter abbreviation in competition with the thing a reader is scanning for. It costs
+three cells of the header row and nothing else, and §9.18's degradation order is unchanged: at
+widths where the header must truncate, the spelled-out name goes and the two letters stay, which
+is the strip's one-step collapse performed gradually.
+
+**Turn pages and the collapsed-seat notice keep bare names**, and that boundary is the rule rather
+than an omission: the tag earns its place where columns are *scanned*, and a turn page's seat rule
+and a notice sentence are prose. `CX Codex (not installed)` inside a sentence is an abbreviation
+introduced where nothing is being compared.
+
+**One stray fact.** `unavailable.txt` drew `final only` under `⚠ Codex is not seated` — a claim
+about how a vendor behaves *during* a turn, stated about a vendor that cannot take one. Codex was
+not found on PATH; nothing about its streaming was measured. It was *plausible* — it is what the
+binary would do if it were installed — which is precisely the class of claim §4a.1 puts at the top
+of its rejected list. The badge row goes empty for an unavailable seat, and the cost cell with it
+(a seat that never ran cost nothing). The row stays **reserved**, because §9.11's argument for
+reserving it is about the grid's rows lining up and is untouched; what changes is that a reserved
+row now holds nothing rather than something invented.
+
+**What was declined.** Wiring `↑↓` to a help scroll offset (above). Giving the help panel its own
+narrower vocabulary of markers — `↓ 7 more below` is the room's existing sentence and a second one
+would be the second alphabet §9.11's phase marks were built to avoid. Dropping the badge row
+entirely for an unavailable seat, which shears the grid for the sake of a row that costs nothing
+to keep. And putting the tag on turn pages "for consistency": consistency across surfaces that are
+doing different jobs is how a room ends up with an abbreviation in the middle of a sentence.

@@ -292,7 +292,7 @@ func TestTheTurnKeysSurviveASCII(t *testing.T) {
 // height and does not scroll, so a row past the fold is not a demoted row, it
 // is an absent one — and the panel's budget is hard at 17.
 func TestTheHelpPanelNamesTheTurnKeysAboveTheFold(t *testing.T) {
-	lines := helpKeys(PlainStyles())
+	lines := helpKeys(layoutFor(room(), GlyphsFor(false)), PlainStyles(), GlyphsFor(false))
 	fold := -1
 	for i, l := range lines {
 		if strings.Contains(l, "? ") && strings.Contains(l, "next page") {

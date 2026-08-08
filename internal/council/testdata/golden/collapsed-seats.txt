@@ -1,8 +1,8 @@
- council READ  │  ~/code/telltale                                               no turn yet  │  1/3 seated  │  no brief 
+  council READ  │  ~/code/telltale                                             no turn yet  │  1/3 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⚠ 2 seats are not on screen: Codex (not installed), Antigravity (installed but not drivable)  │  --vendor all seats t… 
-   Claude Code                                                                                                   ○ idle 
-   ro:tools  tokens                                                                                                     
+  ⚠ 2 seats are not on screen: Codex (not installed), Antigravity (installed but not drivable)  │  --vendor all seats…  
+    CC Claude Code                                                                                              ○ idle  
+    ro:tools  tokens                                                                                                    
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -18,7 +18,7 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
- no turn dispatched yet.                                                                                                
+  no turn dispatched yet.                                                                                               
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ›                                                                                                                      
- VIEW                                                        ↑↓ scroll  │  [ ] turn  │  i compose  │  ? help  │  q quit 
+  ›                                                                                                                     
+  VIEW                                                      ↑↓ scroll  │  [ ] turn  │  i compose  │  ? help  │  q quit  

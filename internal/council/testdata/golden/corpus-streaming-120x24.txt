@@ -1,7 +1,7 @@
- council READ  │  ~/code/telltale                                               no turn yet  │  3/3 seated  │  no brief 
+  council READ  │  ~/code/telltale                                             no turn yet  │  3/3 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ────────  ⠋ streaming  │    Codex  ────────────────  ⠋ waiting  │    Antigravity  ──────────  ⠋ waiting 
-   ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
+  ▸ CC Claude Code  ─────  ⠋ streaming  │    CX Codex  ────────────  ⠋ waiting  │    AG Antigravity  ──────  ⠋ waiting  
+    ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -17,8 +17,8 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
- Reading internal/council/layout.go    │                                        │                                       
- to find the breakpoints.              │  working — the reply arrives whole.    │  working — the reply arrives whole.   
+  Reading internal/council/layout.go    │                                       │                                       
+  to find the breakpoints.              │  working — the reply arrives whole.   │  working — the reply arrives whole.   
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ›                                                                                                                      
- VIEW                                    ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 
+  ›                                                                                                                     
+  VIEW                                  ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help  
