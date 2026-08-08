@@ -942,7 +942,7 @@ func TestARefusedThreadSaysWhatHappensNext(t *testing.T) {
 	m.st.Columns[0].Restored = true
 	m.sessions[model.VendorClaude] = "claude-sess-1"
 	m.unproven[model.VendorClaude] = true
-	m.procs[model.VendorClaude] = &seatProc{resumed: true, sent: 1}
+	m.procs[model.VendorClaude] = &seatProc{wire: claudeWire(), resumed: true, sent: 1}
 
 	m.applyEvents([]runner.Event{{
 		Vendor: model.VendorClaude, Kind: runner.KindError,
@@ -1012,7 +1012,7 @@ func TestAThreadThatAnsweredIsNeverThrownAway(t *testing.T) {
 	m := turnModel(true)
 	m.sessions[model.VendorClaude] = "claude-sess-1"
 	m.unproven[model.VendorClaude] = true
-	m.procs[model.VendorClaude] = &seatProc{resumed: true, sent: 1}
+	m.procs[model.VendorClaude] = &seatProc{wire: claudeWire(), resumed: true, sent: 1}
 
 	m.applyEvents([]runner.Event{{
 		Vendor: model.VendorClaude, Kind: runner.KindMeta,

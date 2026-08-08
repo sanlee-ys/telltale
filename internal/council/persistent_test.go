@@ -7,13 +7,27 @@ import (
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
+	"github.com/sanlee-ys/telltale/internal/council/vendors"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
+// claudeWire is the production wire for the stream-json seat.
+//
+// Tests that drive a live seat build a seatProc by hand, and the wire is part of
+// what a spawn produces — so it is the REAL one rather than a stub. A stub here
+// would assert that a decision was routed rather than that the right bytes were
+// built, which is the substitution this repo's own CLAUDE.md names as its
+// recorded failure mode.
+func claudeWire() seatWire { return streamWire{vendors.Claude{}} }
+
 type decisionSession struct{ sent [][]byte }
 
-func (s *decisionSession) Send(line []byte) error {
-	s.sent = append(s.sent, append([]byte(nil), line...))
+func (s *decisionSession) SendTurn(lines [][]byte) error  { return s.record(lines) }
+func (s *decisionSession) SendAside(lines [][]byte) error { return s.record(lines) }
+func (s *decisionSession) record(lines [][]byte) error {
+	for _, l := range lines {
+		s.sent = append(s.sent, append([]byte(nil), l...))
+	}
 	return nil
 }
 func (*decisionSession) Kill()       {}
@@ -131,7 +145,7 @@ func TestSpawnPerTurnIgnoresTheEndOfTurnLine(t *testing.T) {
 // indistinguishable from one that finished.
 func TestPersistentProcessDeathMidTurnFailsTheColumn(t *testing.T) {
 	m := turnModel(true)
-	m.procs[model.VendorClaude] = &seatProc{}
+	m.procs[model.VendorClaude] = &seatProc{wire: claudeWire()}
 
 	m.applyEvents([]runner.Event{{
 		Vendor: model.VendorClaude, Kind: runner.KindDone, ExitCode: 4,
@@ -159,7 +173,7 @@ func TestPersistentProcessDeathBetweenTurnsIsNotAFailure(t *testing.T) {
 	m := turnModel(true)
 	m.turn = nil
 	m.st.Columns[0].Phase = PhaseDone
-	m.procs[model.VendorClaude] = &seatProc{}
+	m.procs[model.VendorClaude] = &seatProc{wire: claudeWire()}
 
 	m.applyEvents([]runner.Event{{Vendor: model.VendorClaude, Kind: runner.KindDone}})
 
@@ -284,7 +298,7 @@ func TestGatesQueueInArrivalOrder(t *testing.T) {
 func TestBasicGitOpsProceedWithoutAGate(t *testing.T) {
 	m := turnModel(true)
 	sess := &decisionSession{}
-	m.procs[model.VendorClaude] = &seatProc{sess: sess}
+	m.procs[model.VendorClaude] = &seatProc{wire: claudeWire(), sess: sess}
 	g := &runner.Gate{
 		RequestID: "r1", ToolUseID: "t1", Tool: "Bash",
 		Text:  "Bash: git push -u origin feat/handoff",

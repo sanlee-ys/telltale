@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+#
+# DRAFT. Not submitted. See packaging/README.md.
+#
+# Shape: telltale ships as a zip holding a single portable exe, so this is
+# InstallerType: zip + NestedInstallerType: portable — the same shape fzf,
+# ripgrep and zoxide use, and the reason there is no installer to write.
+#
+# ONLY windows_amd64 is listed, and that is deliberate rather than an
+# oversight: winget installs on Windows, and windows/amd64 is the one target
+# this project continuously verifies (ADR-002). windows/arm64 is not built at
+# all (.goreleaser.yaml `ignore`), so there is nothing to list for it.
+PackageIdentifier: sanlee-ys.telltale
+PackageVersion: "{{VERSION}}"
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: telltale.exe
+    PortableCommandAlias: telltale
+ReleaseDate: "{{RELEASE_DATE}}"
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/sanlee-ys/telltale/releases/download/v{{VERSION}}/telltale_{{VERSION}}_windows_amd64.zip
+    InstallerSha256: "{{SHA256}}"
+ManifestType: installer
+ManifestVersion: 1.12.0

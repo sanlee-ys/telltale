@@ -47,7 +47,7 @@ func (s State) YankColumn(idx int) Yank {
 	c := s.Columns[idx]
 
 	// An arena seat's deliverable is its diff, so that is what y copies —
-	// ruled with the mode itself (§9.35): "y yanks the full diff for that
+	// ruled with the mode itself (§9.37): "y yanks the full diff for that
 	// seat". The reply is still on screen and in history; the diff is the
 	// thing the reader takes somewhere else to review or apply.
 	if c.Arena != nil && c.Arena.Diff != "" {

@@ -1266,8 +1266,9 @@ statusline fixture). What it asserts today:
 | HUD behaviour (v1.1) | `internal/hud` | esc unwinding one layer at a time, find mode swallowing the keyboard, selection carried by session key across a re-sort, the pane closing when its session ends |
 | Burn arithmetic | `internal/hud` | the minimum basis, the four refusals, least-squares slope against injected series, rollover detection vs. `resets_at` jitter, sample throttling and eviction |
 | Fixture legality | `internal/hud` | every session behind every golden passes `model.Validate` against its vendor's declared capabilities — a golden may not pin a render of a state the schema forbids |
-| Doc/code sync | `internal/hud` | every render pasted into `docs/design.md` §7.3/§7.11–§7.14 and into `README.md` still matches its golden, and every golden is either embedded or explicitly exempted |
-| Doc/code sync | `internal/council` | the frame pasted into `docs/council.md` is the `activity` golden with its all-blank rows dropped and nothing else changed — the transform the doc claims, asserted rather than trusted |
+| Doc/code sync | `internal/hud` | every render pasted into `docs/design.md` §7.3/§7.11–§7.14 still matches its golden, and every golden is either embedded or explicitly exempted |
+| Picture/code sync | `internal/hud` | `README.md`'s hero picture is re-emitted from the `readme` golden and byte-equal to the committed file, with the characters read back out of the emitted markup and diffed against the render — plus no dollar sign anywhere, and the estimate marker surviving into the picture |
+| Picture/code sync | `internal/council` | the hero picture `README.md` and `docs/council.md` both show is re-emitted from the `activity` golden with its all-blank rows dropped, byte-equal and read back the same way, with exactly one seat wearing the focus mark |
 
 Rules that outrank convenience:
 
@@ -1295,8 +1296,11 @@ Rules that outrank convenience:
 4. ~~Exact Claude/Codex on-disk data sources~~ — **ANSWERED, §3.1–3.3**, with Claude
    verified live and Codex's first live pass run 2026-08-01 (§3.4; short remainder
    itemized there).
-5. Distribution naming (`telltale-hud` on any registry; winget/scoop manifests) — at
-   packaging time. Go binary means npm is optional, not required.
+5. ~~Distribution naming (`telltale-hud` on any registry; winget/scoop manifests) — at
+   packaging time. Go binary means npm is optional, not required.~~ — **ANSWERED
+   2026-08-08, §8 "Packaging decisions":** the bare name `telltale` was free on scoop
+   and winget, so the `telltale-hud` fallback goes unused; winget takes the
+   publisher-qualified `sanlee-ys.telltale`; npm stays skipped rather than renamed.
 6. ~~HUD UI design section~~ — **ANSWERED, §7:** layout grid, colour/threshold tokens
    shared with the statusline, motion rules, degraded-state renders. Written before HUD
    build per ADR-002; every render in §7.3 and every row in §7.7 is a golden/fixture.
@@ -2513,6 +2517,86 @@ these items are ordered by that sequence, not by version number.
    separate store that is not installed on the survey machine and stays unverified and
    out of scope until it is.
 
+#### Packaging decisions (settled 2026-08-08; §6.5 closed here)
+
+Adoption item 1's first piece — prebuilt binaries and a one-command install — is
+**built and not yet fired**. `.goreleaser.yaml` and `.github/workflows/release.yml`
+exist; no tag does. §6.5 deferred distribution naming "to packaging time", and this is
+it, so the rulings are here rather than in the open-questions list.
+
+**Tag day is one command.** `git tag vX.Y.Z && git push origin vX.Y.Z`. A `v*` tag is
+the release workflow's only trigger; merging to main releases nothing. The workflow
+then runs the repo's own gate, builds, and stages a **draft** release. The runbook
+lives in [packaging/README.md](../packaging/README.md) — this section is the argument,
+that file is the procedure, and neither restates the other.
+
+1. **Targets, and each one's label.** Four: `windows/amd64`, `darwin/amd64`,
+   `darwin/arm64`, `linux/amd64`, CGO off. The labels above are binding on the release
+   notes and are printed per download in the release body: Windows **continuously
+   verified**, `darwin/amd64` **smoke-verified on Intel macOS** (point-in-time,
+   `052a9d6` — the Mac that ran it is Intel, and the label says which arch was under
+   the smoke rather than "macOS" flat), `linux/amd64` **built, not verified**.
+   `darwin/arm64` is the one addition to the ADR-005 list and it takes the Linux label
+   verbatim: **built, not verified**. Shipping it was weighed against withholding it —
+   most Macs are Apple Silicon, so refusing to build it replaces a labelled binary with
+   no binary at all, which serves nobody and teaches nobody anything. The label is the
+   whole claim. `windows/arm64` and `linux/arm64` are not built: no verification story
+   and no known user, and an unlabelled binary nobody has run is the packaging form of
+   a rendered guess.
+2. **Names: `telltale` everywhere.** §6.5 named `telltale-hud` as the fallback if the
+   bare name collided. It does not — checked at packaging time against the scoop
+   `Main` and `Extras` buckets and against `microsoft/winget-pkgs`, both clean — so the
+   fallback stays unused and the scoop app is `telltale`. winget needs a
+   publisher-qualified id and gets `sanlee-ys.telltale`, the GitHub-handle convention
+   `junegunn.fzf` and `ajeetdsouza.zoxide` already use. npm remains skipped, not
+   renamed: the bare name there IS taken (an unrelated option parser), and §6.5 already
+   ruled npm optional for a Go binary.
+3. **The scoop bucket is in this repo, `bucket/`.** Rejected: a second repo,
+   `sanlee-ys/scoop-telltale`. The deciding cost is a credential rather than
+   convenience — goreleaser pushing a manifest into a *different* repo needs a
+   cross-repo PAT held as a release secret, while pushing into its own needs only the
+   workflow's built-in `GITHUB_TOKEN`, which the release already holds to upload
+   artifacts. A project whose stated posture is that it reads no credentials should not
+   mint a long-lived write token for one JSON file. `scoop bucket add` accepts any git
+   repo carrying a `bucket/` directory, so the user's command is the same length under
+   either choice, and the second repo buys nothing but a second thing to keep alive.
+4. **The release is a DRAFT and stays one.** goreleaser's job ends at "artifacts and
+   notes are staged"; publishing is outward-facing and is a human action. The honest
+   consequence, recorded rather than glossed: the scoop manifest is committed in the
+   same run, so between that commit and the publish click, `scoop install telltale`
+   points at a URL that 404s. It fails cleanly and installs nothing — but the window is
+   real, and the answer is to publish promptly rather than to pretend it isn't there.
+   `skip_upload: auto` keeps snapshots and prereleases out of the bucket entirely.
+5. **The release runs the repo's own gate, called and not copied.** `release.yml`'s
+   first job is `uses: ./.github/workflows/ci.yml` — vet, the suite, the build and the
+   three binary-level smokes, on `windows-latest`. A release that skips the gate is a
+   false green; a release running a hand-maintained second transcription of it is a
+   subtler one, and that is the only change `ci.yml` took (a `workflow_call` trigger).
+   goreleaser itself runs on `ubuntu-latest`: with CGO off the cross-compile is
+   host-independent, so the build host is a cost question, and what makes the Windows
+   artifact trustworthy is the Windows gate that already passed.
+6. **Changelog: plain `git log`, ascending, ungrouped** — not goreleaser's default
+   Conventional-Commits grouping, and explicitly not `use: github-native`. This repo's
+   commit voice is a lowercase sentence describing the behavior change (CLAUDE.md), not
+   a `feat(x):` label, so CC grouping would file every commit under "Others" beneath
+   three empty headings; squash-merge already makes those subjects the PR titles, which
+   is the changelog anyone would write by hand. `github-native` is rejected for a
+   harder reason: it replaces the entire release body, which would delete the
+   platform-label table — the part of the release that has to be true.
+7. **Not packaged, and why.** No Homebrew tap: macOS is smoke-verified on Intel only,
+   and a tap resolves just as happily on Apple Silicon, which would launder "built, not
+   verified" into "supported". No `.deb`/`.rpm`: a distro package is a support claim
+   Linux has not earned here, and the tarball carries the label a package would drop.
+   No npm, per (2). winget is packaged but **not automated** — submission is a pull
+   request against a Microsoft-owned repository, and a bot opening PRs on someone
+   else's repo every tag is a different thing from cutting a release. The manifest
+   draft (schema 1.12.0, `zip` + nested `portable`, `windows_amd64` only) and the
+   submission flow are in [packaging/winget/](../packaging/winget/).
+
+What this does **not** discharge: the README hero visual and the zero-config first
+frame are the other two pieces of adoption item 1 and are untouched here, and the
+positioning line still lands with the slice, not ahead of it.
+
 Neither track discharges what verification already owes: §3.4's remaining passive-tail
 items stay open (§3.7's first live Gemini pass ran and passed 2026-08-03), and
 adoption work does not buy an exemption from them.
@@ -3072,8 +3156,9 @@ card and fill at once. Quitting the room kills every child, including the persis
 and no longer strands the conversation: a bare `telltale council` reopens the one saved room
 by default, `--fresh` starts over, and `/cd <dir>` typed in the composer moves the room to
 another workspace between turns, with the persistent Claude seat following by respawn on its
-own session id (ADR-008, ninth and eleventh amendments). Multi-turn is native resume for the
-batch seats and one live process for Claude (§9.8).
+own session id (ADR-008, ninth and eleventh amendments). Multi-turn is one live process for
+Claude (§9.8) and for Cursor (§9.36), and native resume for the two seats that are still batch
+programs.
 
 Cross-agent rebuttal (§9.4) and per-column scrollback are **built and shipped**, and the
 scrollback now spans the whole conversation rather than one turn (§9.9): the room keeps a
@@ -3203,6 +3288,13 @@ the one line in the trace that is not a reading of a vendor's words.
 are batch programs — read a prompt, answer, exit. Neither has a channel a question could arrive
 on. Their columns keep `WRITES`; only the seat that asks carries `gated`. Giving all four the
 same badge would be the blanket claim §9.2 exists to refuse, one level up.
+
+**Amended by §9.36, and the amendment is narrower than it looks.** The Cursor seat is now a live
+ACP process and it *can* be asked: `session/request_permission` blocks it until answered, measured
+on both branches. It still does not carry `gated`, because it does not ask about EDITS — measured
+twice, it wrote a file and raised nothing. So the last sentence above holds with one word changed:
+only the seat that asks about **everything that changes anything** carries `gated`. Council answers
+Cursor's requests all the same, because an unanswered one blocks the vendor forever.
 
 `--write --auto` restores the old behaviour for the times nobody is watching: `acceptEdits`,
 the `WRITES` badge, the user's settings left alone — and therefore no injected hooks file
@@ -5805,7 +5897,268 @@ llm-council's stage 3 collapses the answers into one; §9.2's position is that i
 answers ARE the product, and a synthesis is available today as an explicit `/flow` hop the user
 types. Blinding sharpens the comparison; it does not delegate the verdict.
 
-### 9.35 /arena: the seats race in worktrees, and the human picks the winner
+### 9.35 a running chain can be told to stop after this hop
+
+`/flow` shipped with one control over a chain already moving: ctrl+c, the turn-cancel key. That
+is a hard abort — it interrupts the hop mid-sentence — and it was also a lie in three parts,
+which is where this section starts, because the honest baseline had to be measured before a
+gentler control could be designed against it (the flow-autoadvance plan named this gap and
+nothing tracked it).
+
+**What cancelling mid-chain actually did, measured 2026-08-08.** Ctrl+c during hop 1 of 3
+killed the hop and the chain never advanced — that much was right, and stays. Everything around
+it was wrong: the current step stayed `running` forever, the header went on claiming `hop 1/3`
+over a room doing nothing, and the next brief the user typed was **eaten** — dispatch saw a
+live chain, tried to continue it, failed with `flow start error: cannot start step in state
+running`, and threw the user's words away. The second enter worked. And the corpse was not the
+cancel path's alone: **a chain that COMPLETED left the same corpse**, and the first brief after
+a successful flow died as `cannot start step in state returned`. The happy path was charging
+the same tax.
+
+**The fix under everything else: a chain ends whole, or it has not ended.** `endFlowChain`
+retires the chain, its draft, its carry, its pending flags and its header marker in one move,
+and every ending — finished, failed, cancelled, stopped, refused at the write gate, start
+error — goes through it. Half of these paths used to clear only the marker and half only the
+chain; each half-state was a room asserting something false about the other half. The
+teardown in `turnColumnFinished` is the backstop for the endings `finishFlowHop` never sees
+(a cancelled hop, a vendor failure, a hop that returned nothing), because teardown is the one
+place every turn's death already passes through — and it says which death it was: `flow
+cancelled at hop 1/3 — 2 later hops not run` against `flow stopped at hop 1/2 — 1 later hop
+not run`. Cancelled and failed are different facts, and a stopped chain must never render as a
+finished one (§4a.1).
+
+**The control: `s`, stop after the hop that is running now.** The middle ground ctrl+c cannot
+offer: the current hop finishes on its own terms — artifact saved, receipt verified, Returned
+or Published exactly as if nothing had been pressed — and the chain ends there instead of
+handing off. Pressed while the hop streams, because that is when the decision forms: you are
+reading hop 2's output when you learn hops 3 and 4 are no longer worth their quota. Reading
+the columns is part of deciding — §9.16's own argument for its gate — so the key lives in view
+mode where the columns stay scrollable, and interrupts nothing.
+
+The grammar decisions, each against a precedent:
+
+- **A key, not a room command.** `c`'s reason (§9.17): a key takes no vocabulary from the
+  composer, and `/stop` is a word people address vendors with. Not `c`'s confirmation though —
+  `c` spends a `y` because a dropped thread is irreversible, and this destroys nothing: the
+  hop completes, every artifact lands, and the cost of a stray press is one keystroke to undo.
+  So `s` is a toggle, `a`'s shape, and pressing it again re-arms the handoff.
+- **The armed state lives on the chrome, not in the notice.** The WRITE badge's argument: a
+  notice scrolls away and the promise persists. The hop cell reads `hop 2/4 @codex (stops
+  here)` — words, so it survives `--ascii`, and on the hop cell because it is a fact about the
+  hop: this one runs, its successors do not. The busy mode line offers `s stop after hop`
+  while a chain is live and flips to `s continue chain` when armed, the label-renames-itself
+  rule `a` set. `TestFlowStopIsAToggleAndTheArmedStateRenders` pins all four states.
+- **The last hop refuses to arm.** The chain ends there whether or not `s` is pressed; a key
+  that "worked" would claim credit for an outcome it did not cause. The refusal says so —
+  `hop 2/2 is the last — the chain ends here anyway` — and a press with no chain running is
+  answered rather than swallowed, §9.12's attribution rule for a key that did nothing.
+- **Not in helpKeys, deliberately.** The key exists only while a chain runs, and the mode line
+  names it on every frame of exactly those moments — the contextual-control surface `y`/`n`
+  and the card's `a` already use. The help panel's 17-row budget has no row for a key that is
+  dead in every room the panel is usually read in; the §9.17 sweep's rule was about controls
+  reachable from inside the room, and this one is announced there.
+
+**What was declined.** Pausing — a stopped chain that could resume where it left off — is a
+real feature and not this one: the carry artifact is consumed at dispatch, the draft would need
+re-parsing against a chain whose position moved, and stop-then-retype is the honest v1. A stop
+that also killed the current hop was declined because ctrl+c already is that, and two keys with
+one meaning apart is how a keymap grows synonyms. And ctrl+c stays exactly as hard as it was:
+the interrupt semantics did not move, only the lying state it left behind.
+
+The general lesson, in this file's own terms: §9.16 built the chain's authority grammar and
+§9.17 built the room's mid-session controls, and the seam between them — a chain that is
+neither obeying nor gone — belonged to nobody, so nothing asserted on it. The corpse survived
+every ending, including the successful one, because the tests all stopped at "did not
+advance" and none typed the next brief. The regression tests here end by dispatching one.
+### 9.36 the cursor seat re-founded on ACP: what the wider capture said, and what it cost
+
+§9.33 ended with a build verdict, a verified seam and three named decisions. This is the build.
+The ruling that shaped it was **wholesale**: ACP replaces the spawn-per-turn path rather than
+sitting beside it, there is no fallback, and git history is the record of what went. A fallback
+would be a second protocol to keep honest, and the numbers below are the reason nobody would
+want to fall back to it.
+
+**Version pinned, and it is the same one.** `cursor-agent` **2026.08.04-aaa8809**, the version
+§9.33 measured, on Windows 11 — so nothing here is confounded by a bundle change. Instrument: a
+throwaway JSON-RPC client driving `node.exe index.js acp`, every line stamped against launch,
+across **thirteen arms**. Then the finished seat re-verified through the room's own code.
+
+**One environment note, because it cost an arm and will cost the next reader's.** The first
+capture had every tool call blocked by this machine's own `PreToolUse` credential guard, whose
+wrapper fails closed when cursor-agent is launched from a Git Bash parent on Windows (a known
+upstream wrapper bug, agent-ops ADR-012). Nothing was wrong with ACP. **Drive cursor-agent from
+a PowerShell or cmd parent on Windows**, or every tool in the capture will read as failing.
+
+#### Phase 1: what two trivial turns could not have told us
+
+§9.6c's lesson is that a rule is only as general as the capture it came from, and §9.33 flagged
+its own two-turn no-repeat finding as a hypothesis for exactly that reason. So the capture was
+widened first, and the widening changed three conclusions.
+
+| what was asked | trials | what came back |
+|---|---|---|
+| a turn that runs a TOOL | 3 | `tool_call` then `tool_call_update`(in_progress) then `tool_call_update`(completed). `title` always populated; `rawInput` **empty** for Read/Find/grep and populated for shell |
+| several model calls in one turn | 2 | four tool calls and three message segments in one turn, interleaved, with no envelope around a "call" |
+| a long streamed reply | 1 (300 words) | 24 `agent_message_chunk` in 2.6 s — ~95 chars each, ~9 a second |
+| an interrupted turn | 1 | `session/cancel` (a notification) and the open `session/prompt` resolves `{"stopReason":"cancelled"}` **23 ms** later; the process took a further turn 1.1 s after that |
+| resume in a NEW process | 2 | `session/load` works, and **replays the whole prior conversation** onto the update stream before it answers |
+| a dead thread | 2 | `-32602 … Session "…" not found` in **0.45 s**, and the process survives — a fresh `session/new` answered 0.45 s later |
+| cwd binding | 1 | **per SESSION, not per process.** One server ran a session in `ws1` reading ws1's file and another in `ws3` reading ws3's |
+| workspace trust | 2 dirs | **does not apply.** Print mode refused the same directory with "⚠ Workspace Trust Required"; the ACP server wrote a file into it |
+| a permission prompt | 2 | `session/request_permission` **blocks**; `allow-once` ran the command, `reject-once` did not and nothing was created |
+| an edit | 2 | ran ungated — **no permission request at all**, in a never-trusted directory, under the user's own `approvalMode: allowlist` |
+| plan mode | 1 | `session/set_mode {"modeId":"plan"}` accepted; asked to create a file the seat declined and **no file landed** |
+| the dedup hypothesis | every arm | **no whole-message repeat anywhere, and no `model_call_id` field in ACP traffic at all** |
+
+Timings across the twelve arms that ran a handshake: `initialize` **1.43–4.30 s**, `session/new`
+a further **0.85–2.55 s**, `session/load` a further **0.89–1.37 s** — so resume is once again no
+more expensive than a fresh conversation, which is the same shape §9.33 measured for `--resume`.
+Warm turns: **1.12 s, 1.79 s, 1.82 s**, against §9.33's print-mode ~13 s.
+
+**Three of these overturn something.**
+
+**The dedup rule is not carried over, and it is now a measurement rather than a hypothesis.**
+§9.6c's rule exists because print mode sent a model call's deltas and then that call's complete
+message, so appending both rendered the passage twice. Across a turn with four tool calls and
+several model segments, ACP repeated nothing and carries no `model_call_id` at all. §9.33 was
+right to refuse to generalise from two turns; the wider capture is what earns the conclusion.
+
+**The safety net that rule leaned on is gone with it.** §9.6c named the fallback explicitly —
+"the failure mode is a column that fills at the end, never one that is wrong" — because print
+mode's `result` carried the whole reply. An ACP turn resolves with `{"stopReason":…}` and
+nothing else: no reply, and no token usage either. So a broken chunk parser here gives an
+**empty** column, not a late one. There is no mitigation that would not be invented, so it is
+stated instead — in `cursor.go`, in `dispatch.go` where the old special case was, and in
+`STATE.md`.
+
+**Workspace trust does not apply on this path.** This is the one finding that makes a claim
+*worse*, and it is on the badge for that reason. The tightest form of it: the directory print
+mode had just refused was written to over ACP, with no prompt, minutes later.
+
+#### Phase 2: what was built
+
+**runner grew a second protocol shape, and the stream-json path did not move.** `ParseFunc` sees
+a line and has nowhere to reply to, which is enough for a monologue and cannot express ACP: a
+turn cannot be *encoded* until `session/new` answers, the child asks questions that block it,
+and ids come in two independent namespaces. So `runner.Protocol` is a stateful per-process
+driver that owns both directions and returns lines rather than writing them — which keeps it
+replay-testable exactly as a `ParseFunc` is. `StartSession` and `StartRPCSession` are two
+wrappers over one body; the Claude adapter was not touched and its tests did not change.
+
+`Session` grew `SendTurn` and `SendAside` in place of a bare `Send`, and the split is the turn
+clock: an ACP protocol may **take** a turn it cannot yet encode, and the person who pressed
+enter is waiting from that moment whether or not a byte has moved. An answer to a question the
+vendor asked mid-turn goes the other way — it belongs to the turn it is holding up, so it must
+not start a new one.
+
+**The seat.** `vendors.Conversational` is a sibling of `Persistent`, not a subtype: `Open`
+returns a spec plus the protocol. The invocation is now the single word `acp`. Posture arrives
+as `session/set_mode`, the workspace as `session/new`'s `cwd`, and the brief as a JSON string —
+so no prompt text can reach argv by any path, which retires the shell-shim question this seat
+used to have to reason about.
+
+**Re-measured, not inherited.**
+
+| claim | verdict |
+|---|---|
+| granularity `tokens` | **re-earned, with a caveat.** ACP chunks are ~95 chars at ~9/s — coarser than print mode's real tokens ("P", "ONG") and *finer in time* than the Claude seat that already carries this word (§9.7: ~80 chars, ~3/s, flagged there as an overstatement). The word stays with its existing looseness and no new looseness; fixing it is one change to both seats at once, which is why §9.7 left it as a separate change to a separate surface |
+| `ro:requested` | **level unchanged, reasons replaced.** Plan mode did better than print mode's ever did, and it is one trial of a mode the model obeys |
+| `--sandbox enabled` | **gone.** ACP takes no sandbox parameter on any OS, so the badge is no longer split by platform. On Windows nothing was lost — the flag was measured killing the turn. On macOS and Linux what was lost is a *request* whose enforcement was never observed |
+| `gated` | **withheld, deliberately.** `canGate` used to read "is this a live process", off the registry. That was right only while those two questions had one answer. This seat can ask *and does not ask about edits*, and `gated` promises that nothing which changes anything runs without a keystroke — so it keeps `WRITES`, and its detail says what the cards cover and what they do not |
+| the §9.6c dedup rule | **retired**, above |
+| the `result` fallback | **retired**, above |
+
+**The gate, such as it is.** Council answers every `session/request_permission` — an unanswered
+one blocks the vendor forever, which is a column that never finishes. In a write posture the
+request becomes the room's ordinary approval card; in a read posture the adapter refuses it
+itself and records the attempt in the trace, because a read-only seat asking to change something
+is not a question for the user, it is already answered. `allow-always` is never selected in any
+posture: it writes a permanent rule into the user's own `~/.cursor/cli-config.json`, which is
+the line this adapter already declines to cross by never passing `--trust`.
+
+Two shapes fall out of the capture and both are in the code beside the lines that produced them.
+A **rejected** call arrives as `completed` with no output at all — indistinguishable on the wire
+from a completion that said nothing — which is §9.8's `ActDenied` argument in a sharper form: the
+room records the refusal from its own keystroke and `recordAct` refuses to let the echo overwrite
+it. And ACP's rejection carries **no message field**, so unlike the Claude seat this one cannot
+ask the model not to retry; it was measured saying "DONE" afterwards as though nothing had
+happened.
+
+**`session/load` replays history, and dropping it is load-bearing.** A loaded session streams the
+entire prior conversation back — old prompts, old tool calls with their real output, old replies
+— *before* it answers. A parser that appended it would refill a reattached column with the whole
+previous room. The gate is the pending response rather than the `replay-` prefix those ids happen
+to carry: a prefix is a spelling, the pending request is the protocol.
+
+**Two hazards this protocol has that a one-way stream does not, both found in review and both
+ending in a room nobody can quit.** They are recorded because neither is visible from the wire
+format alone.
+
+- **A turn's end is a RESPONSE, so a turn that was never sent can never end.** Anything that
+  holds a brief — the handshake, the `session/set_mode` round trip — is a window in which there
+  is no outstanding `session/prompt` for the vendor to answer or for a cancel to abandon. So the
+  protocol refuses an interrupt in that window rather than reporting a quiet success, which is
+  what makes the room fall through to killing the seat; the alternative was a turn that never
+  ends, a room that then refuses every further brief, and a `q` that will not quit.
+- **A failed handshake is TERMINAL, because the server does not exit on one.** An ACP server that
+  refuses `initialize` answers and stays up — and a live process is exactly what §9.8's stale-exit
+  guard correctly reads as a healthy seat. Without a terminal state the room would keep handing
+  that process briefs forever. The protocol refuses instead, the seat is killed and forgotten, and
+  one retry inside the same dispatch gives the user a working column rather than an error naming a
+  handshake they cannot see. The likeliest trigger is an unauthenticated CLI: somebody's first run.
+
+The same class of care applies to the `set_mode` window in the other direction: a turn *taken*
+there must wait too, or it would go out under the server's default `agent` mode while the badge
+said `ro:requested` — invisibly, because a reply from the wrong mode looks exactly like a reply
+from the right one.
+
+**A refused thread now costs two round trips instead of a process.** The one-attempt rule the
+ninth amendment established is unchanged and is simply cheaper here: the id is spent, the same
+process opens a new conversation 0.45 s later, and the brief still runs. Reattachment therefore
+never fakes a restored thread — if the load is refused the seat honestly starts fresh and
+`settleRestoredThread` says so, exactly as it does for the other three seats.
+
+#### The forks, and the one that was decided rather than measured
+
+§9.33 named three. The first (Persistent cannot express ACP) and the third (every claim was
+measured against the wrong surface) are settled above. The second is a **choice**, and it is
+called out here because a reader would otherwise find a measurement in the code and wonder why
+it was not acted on:
+
+**`cwd` and posture are no longer argv-bound, and the seat is respawned anyway.** Measured: one
+process really did run two sessions in two directories. So a `/cd` *could* cost a new session
+(~1 s) instead of a new process (~3 s). It costs a process — because what a move actually costs
+the user is a new conversation either way; because one rule across four seats is worth more than
+three seconds; and because re-opening a session inside a live process has failure modes (a
+half-moved session, a queued turn addressed to the old one) that nothing has measured. The
+argument is on `seatProc`, the behaviour is pinned by `TestAMovedRoomReplacesTheCursorSeatToo`,
+and it is revisitable with a measurement rather than with a preference.
+
+The **stale-exit guard** (eleventh amendment) applies to this seat unchanged and is re-asserted
+for it: a terminal event names a vendor, not a process, and acting on a predecessor's exit would
+fail the live turn and leave a real process running and invisible.
+
+#### Verification
+
+Fixture replay in the #62 style over synthesized shapes
+(`vendors/testdata/cursor-acp-turn.jsonl`), lifecycle pinned by **process counts** rather than by
+anything the adapter says about itself, and one live multi-turn conversation through the merged
+seat (`-tags=live`):
+
+```
+turn 1  phase=done  elapsed=9.744s  act "Read File" → ok   body: github.com/sanlee-ys/telltale
+turn 2  phase=done  elapsed=1.120s  same process           body: github.com/sanlee-ys/telltale
+```
+
+Turn one read a file it could only have read by running a tool in the workspace; turn two
+answered a question only turn one's history could answer, from the same process, in 1.12 s. That
+is the whole of §9.33's prize, measured through the room rather than through an instrument
+standing beside it.
+
+**Not verified here: macOS.** Every arm ran on Windows 11, and the Mac's ACP seat is unmeasured.
+That belongs in `PARITY.md` rather than in this section.
+
+### 9.37 /arena: the seats race in worktrees, and the human picks the winner
 
 `/arena <brief>` is one brief raced across every seated vendor, each attempt in its own git
 worktree, compared by diff instead of by prose. It is §9.2's thesis — independent answers ARE

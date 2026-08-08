@@ -170,9 +170,10 @@ func (m *Model) dispatch() tea.Cmd {
 		}
 		if err := m.flowChain.Start(m.st.Workspace); err != nil {
 			m.st.Notice = "flow start error: " + err.Error()
-			m.flowChain = nil
-			m.flowWriteArmed = false
-			m.flowWritePending = false
+			// The whole chain, marker included — this used to nil the chain by
+			// hand and leave the header claiming a hop, the half-cleared state
+			// endFlowChain exists to make unrepresentable (§9.35).
+			m.endFlowChain()
 			return nil
 		}
 		m.flowWriteArmed = false
@@ -188,14 +189,7 @@ func (m *Model) dispatch() tea.Cmd {
 			m.flowCarry = ""
 		}
 	} else {
-		m.flowChain = nil
-		m.flowDraft = ""
-		m.flowWriteArmed = false
-		m.flowWritePending = false
-		m.flowReadHop = false
-		m.flowCarry = ""
-		m.flowAdvancePending = false
-		m.clearFlowMarker()
+		m.endFlowChain()
 		if brief, ok := parseCommand(m.st.Draft, "/arena"); ok {
 			// A race is a dispatch, not room state, so it lives here beside
 			// /flow rather than in roomCommand — and like a flow write hop, it
@@ -377,8 +371,8 @@ func (m *Model) dispatch() tea.Cmd {
 				continue
 			}
 			ts.handles = append(ts.handles, h)
-		} else if pv, ok := v.(vendors.Persistent); ok {
-			n, err := m.sendPersistentTurn(pv, c, vendorPrompt)
+		} else if liveSeat(v) {
+			n, err := m.sendPersistentTurn(v, c, vendorPrompt)
 			if err != nil {
 				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 				continue
@@ -654,17 +648,26 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			// `redact(result)+flush` became ALPHAALPHA, and that doubled
 			// body is what /flow saved into the next hop's artifact.
 			// Result text is a complete message; never run it through Feed.
+			//
+			// This branch used to carry a Cursor-only rule: its `result` was the
+			// vendor's authoritative whole reply, so it REPLACED the streamed body
+			// rather than filling an empty one, which is what kept a delta/repeat
+			// pair from corrupting a /flow handoff. That rule is gone with the
+			// protocol it described. The ACP seat's turn resolves with a stop
+			// reason and no text at all (§9.36), so there is nothing authoritative
+			// to prefer — and nothing to repeat either, which is the same
+			// measurement seen from the other side.
+			//
+			// The honest consequence, stated because it is a real loss: this seat
+			// no longer has a fallback for a turn that streamed nothing. §9.6c
+			// leaned on that `result` explicitly — "the failure mode is a column
+			// that fills at the end, never one that is wrong" — and on ACP a
+			// broken chunk parser would give an EMPTY column instead of a late
+			// one. The mitigation would have to be invented, so it is named rather
+			// than faked.
 			c.Body += m.flush(ev.Vendor)
-			if ev.Text != "" {
-				if ev.Vendor == model.VendorCursor {
-					// Cursor's result is the vendor's authoritative whole reply.
-					// Prefer it over provisional deltas so a delta/repeat pair
-					// cannot corrupt a /flow handoff even if ParseEvent drifts.
-					c.Body = m.redactWhole(ev.Text)
-					m.redactors[ev.Vendor] = &Redactor{}
-				} else if c.Body == "" {
-					c.Body = m.redactWhole(ev.Text)
-				}
+			if ev.Text != "" && c.Body == "" {
+				c.Body = m.redactWhole(ev.Text)
 			}
 			// On a persistent seat this line is the ONLY end-of-turn signal:
 			// the process does not exit, so no KindDone is coming.
@@ -842,7 +845,7 @@ func (m *Model) finishFlowHop(c *Column) {
 	if err != nil {
 		_ = m.flowChain.MarkFailed("artifact store: " + err.Error())
 		m.st.Notice = "flow hop failed: artifact store: " + err.Error()
-		m.clearFlowMarker()
+		m.endFlowChain()
 		return
 	}
 	sessID := m.sessions[c.Vendor]
@@ -853,7 +856,7 @@ func (m *Model) finishFlowHop(c *Column) {
 	if err != nil {
 		_ = m.flowChain.MarkFailed("artifact save: " + err.Error())
 		m.st.Notice = "flow hop failed: " + err.Error()
-		m.clearFlowMarker()
+		m.endFlowChain()
 		return
 	}
 	m.st.Notice = "artifact saved: " + path
@@ -864,7 +867,7 @@ func (m *Model) finishFlowHop(c *Column) {
 		if !receipt.Verified {
 			_ = m.flowChain.MarkFailed(receipt.Detail)
 			m.st.Notice = joinNotice(m.st.Notice, "publish failed: "+receipt.Detail)
-			m.clearFlowMarker()
+			m.endFlowChain()
 			return
 		}
 		if err := m.flowChain.MarkPublished(receipt); err != nil {
@@ -880,6 +883,20 @@ func (m *Model) finishFlowHop(c *Column) {
 		m.st.Notice = joinNotice(m.st.Notice, fmt.Sprintf("flow hop %d returned (@%s %s) — not an approval", m.flowChain.CurrentIndex+1, curr.Vendor, curr.Verb))
 	}
 
+	// `s` was pressed while this hop ran. The hop itself finished on its own
+	// terms — artifact saved, receipt verified, Returned or Published exactly as
+	// recorded above — and the chain ends here instead of handing off. Checked
+	// AFTER the hop's record is written, because stopping is about the NEXT hop
+	// and must not cost this one its receipt; and BEFORE the artifact is read
+	// back, because a stopped chain has no successor to feed (§9.35).
+	if m.st.FlowStop {
+		hop, total := m.flowChain.CurrentIndex+1, len(m.flowChain.Steps)
+		m.st.Notice = joinNotice(m.st.Notice, fmt.Sprintf(
+			"flow stopped after hop %d/%d — %s not dispatched", hop, total, hopsWord(total-hop)))
+		m.endFlowChain()
+		return
+	}
+
 	// This hop is already finished — Returned or Published — so a failure reading
 	// its own artifact back stops the CHAIN and leaves the hop's record alone. The
 	// previous spelling called MarkFailed here, which on a published hop would
@@ -892,20 +909,22 @@ func (m *Model) finishFlowHop(c *Column) {
 	artifact, err := store.LoadArtifactBody(sessID, c.TurnN, c.Vendor)
 	if err != nil {
 		m.st.Notice = joinNotice(m.st.Notice, "flow stopped: cannot read this hop's artifact back: "+err.Error())
-		m.clearFlowMarker()
+		m.endFlowChain()
 		return
 	}
 	hasNext, err := m.flowChain.Advance()
 	if err != nil {
 		m.st.Notice = joinNotice(m.st.Notice, "flow stopped: "+err.Error())
-		m.clearFlowMarker()
+		m.endFlowChain()
 		return
 	}
 	if !hasNext {
-		// The last hop returned, so the chain is over. The marker goes with it:
-		// left up, it would report an orchestration still in progress over a room
-		// that is now waiting for whatever the user types next.
-		m.clearFlowMarker()
+		// The last hop returned, so the chain is over. The whole chain goes, not
+		// just the marker: flowChain and flowDraft kept alive here made dispatch
+		// treat the NEXT enter as the chain's, and the user's following brief was
+		// swallowed by "flow start error: cannot start step in state returned" —
+		// a finished chain eating the first message typed after it (§9.35).
+		m.endFlowChain()
 		return
 	}
 	m.flowCarry = FormatFencedArtifact(c.Label, c.TurnN, artifact)
@@ -917,9 +936,41 @@ func (m *Model) finishFlowHop(c *Column) {
 // Called wherever a chain stops advancing — finished, failed, or replaced by an
 // ordinary brief. A marker that outlived its chain would assert that the room is
 // mid-orchestration while it sits idle, which is the one thing this indicator
-// was added to prevent.
+// was added to prevent. FlowStop goes with it: a "stops here" promise about a
+// chain that no longer exists is the same lie one word longer.
 func (m *Model) clearFlowMarker() {
 	m.st.FlowHop, m.st.FlowSteps, m.st.FlowVendor = 0, 0, ""
+	m.st.FlowStop = false
+}
+
+// endFlowChain retires the chain itself, not just its marker.
+//
+// Every way a chain can be over — finished, failed, cancelled, stopped by `s`,
+// refused at its write gate — comes through here, because a chain cleared
+// halfway is worse than one not cleared at all. clearFlowMarker alone left
+// flowChain and flowDraft behind, and dispatch reads exactly those to decide
+// that the next enter belongs to the chain: the corpse swallowed the user's
+// following brief with "flow start error: cannot start step in state returned".
+// Measured (2026-08-08) on a chain that had COMPLETED — the price was being
+// paid on the happy path, not just on cancels.
+func (m *Model) endFlowChain() {
+	m.flowChain = nil
+	m.flowDraft = ""
+	m.flowCarry = ""
+	m.flowReadHop = false
+	m.flowAdvancePending = false
+	m.flowWritePending = false
+	m.flowWriteArmed = false
+	m.clearFlowMarker()
+}
+
+// hopsWord counts the hops a stopped chain will never run, in words a notice
+// can carry.
+func hopsWord(n int) string {
+	if n == 1 {
+		return "1 later hop"
+	}
+	return strconv.Itoa(n) + " later hops"
 }
 
 func flowSessionID(workspace string) string {
@@ -1113,6 +1164,33 @@ func (m *Model) turnColumnFinished(v model.VendorID) {
 	}
 	m.turn.cancel()
 	m.turn = nil
+	// A live chain that did not hand off by the time its turn tore down is over:
+	// the hop was cancelled, its vendor failed, or it returned nothing
+	// finishFlowHop could carry — none of which reach finishFlowHop's own
+	// endings, so this teardown is the one place every such chain passes
+	// through. Before this sweep the chain survived a ctrl+c as a corpse: the
+	// header went on claiming "hop 1/3", and the user's next brief was swallowed
+	// by "flow start error: cannot start step in state running" (measured
+	// 2026-08-08, §9.35). The death is said out loud, and says WHICH death —
+	// cancelled and failed are different facts, and a stopped chain must never
+	// read as a finished one (§4a.1). Checked before cancelling is reset, since
+	// that flag is the difference between the two words.
+	if m.flowChain != nil && !m.flowAdvancePending {
+		curr := m.flowChain.Current()
+		if curr != nil && curr.State != FlowStateReturned && curr.State != FlowStatePublished {
+			hop, total := m.flowChain.CurrentIndex+1, len(m.flowChain.Steps)
+			verb := "stopped"
+			if m.cancelling {
+				verb = "cancelled"
+			}
+			note := fmt.Sprintf("flow %s at hop %d/%d (@%s %s)", verb, hop, total, curr.Vendor, curr.Verb)
+			if rest := total - hop; rest > 0 {
+				note += " — " + hopsWord(rest) + " not run"
+			}
+			m.st.Notice = joinNotice(m.st.Notice, note)
+		}
+		m.endFlowChain()
+	}
 	m.cancelling = false
 	// The route stops being live news the instant the turn is over: each column
 	// has recorded its own participation by now, so a header that went on naming

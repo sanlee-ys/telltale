@@ -207,6 +207,15 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	hop := ""
 	if st.FlowSteps > 0 {
 		hop = "  " + g.Sep + "  hop " + strconv.Itoa(st.FlowHop) + "/" + strconv.Itoa(st.FlowSteps) + " @" + string(st.FlowVendor)
+		// `s` armed: the chain ends after this hop, and the promise lives on the
+		// marker rather than only in the notice that announced it — a notice
+		// scrolls away while the armed state persists, the WRITE badge's own
+		// argument one line up. Words, not a glyph, so it survives --ascii, and
+		// on the hop cell itself because it is a fact ABOUT the hop: this one
+		// runs, its successors do not (§9.35).
+		if st.FlowStop {
+			hop += " (stops here)"
+		}
 	}
 	seated := strconv.Itoa(st.Seated()) + "/" + strconv.Itoa(len(st.Columns)) + " seated"
 	// "no brief" is stated rather than left blank, and that asymmetry is
@@ -2701,6 +2710,27 @@ func hints(sty Styles, g Glyphs, hs []hint) (styled, plain string) {
 	return strings.Join(s, sty.Muted.Render(sep)), strings.Join(p, sep)
 }
 
+// flowStopHint appends the `s` cell wherever a busy line is being built, and
+// only while a chain is live (§9.35).
+//
+// Gated on FlowSteps rather than on Busy alone: a mode line that promises a
+// key which does nothing is §7.8's failure, and `s` without a chain only
+// explains itself. This cell is also the control's whole documentation — it is
+// not in helpKeys, deliberately: the key exists only while a chain runs, the
+// mode line names it on every frame of exactly those moments, and the help
+// panel's 17-row budget has no row for a key that is dead in every room the
+// panel is usually read in. The label flips with the armed state so the line
+// always says what pressing it does NOW — the same rule that renames `a`.
+func flowStopHint(hs []hint, st State) []hint {
+	if st.FlowSteps == 0 {
+		return hs
+	}
+	if st.FlowStop {
+		return append(hs, hint{key: "s", label: "continue chain"})
+	}
+	return append(hs, hint{key: "s", label: "stop after hop"})
+}
+
 // modeHints is what the keys mean in the mode the room is currently in.
 //
 // Two of them are dropped in a room with a single seat on screen, and that is
@@ -2804,7 +2834,7 @@ func modeHints(st State, g Glyphs) []hint {
 			{key: "y", label: "yank", shed: true},
 		}
 		if st.Busy() {
-			return append(hs, hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
+			return append(flowStopHint(hs, st), hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
 		}
 		return append(hs, hint{key: "?", label: "help"}, hint{key: "q", label: "quit"})
 	}
@@ -2844,7 +2874,7 @@ func modeHints(st State, g Glyphs) []hint {
 			hs[0].label = "close"
 		}
 		if st.Busy() {
-			return append(hs, hint{key: "ctrl+c", label: "cancel"})
+			return append(flowStopHint(hs, st), hint{key: "ctrl+c", label: "cancel"})
 		}
 		return append(hs, hint{key: "q", label: "quit"})
 	}
@@ -2904,7 +2934,7 @@ func modeHints(st State, g Glyphs) []hint {
 			label: "seat", shed: true})
 	}
 	if st.Busy() {
-		return append(hs, hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
+		return append(flowStopHint(hs, st), hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
 	}
 	return append(hs, hint{key: "i", label: "compose"},
 		hint{key: "?", label: "help"}, hint{key: "q", label: "quit"})

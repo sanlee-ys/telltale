@@ -178,18 +178,55 @@ func TestActivityIsRedactedWholeAndDoesNotStealTheBodysBuffer(t *testing.T) {
 	}
 }
 
-func TestCursorResultReconcilesDuplicatedStreamBeforeHandoff(t *testing.T) {
-	m := traceModel()
-	m.st.Columns[0].Vendor = model.VendorCursor
-	m.redactors = map[model.VendorID]*Redactor{model.VendorCursor: {}}
-	m.applyEvents([]runner.Event{
-		{Vendor: model.VendorCursor, Kind: runner.KindText, Text: "ALPHA"},
-		{Vendor: model.VendorCursor, Kind: runner.KindText, Text: "ALPHA"},
-		{Vendor: model.VendorCursor, Kind: runner.KindMeta, Text: "ALPHA"},
-	})
+// TestNoVendorsResultOverwritesWhatItAlreadyStreamed replaces
+// TestCursorResultReconcilesDuplicatedStreamBeforeHandoff, whose whole subject
+// was a print-mode behaviour this seat no longer has.
+//
+// That test pinned a Cursor-only rule: its `result` was the vendor's
+// authoritative whole reply, so it REPLACED the streamed body rather than
+// filling an empty one, which is what kept a delta/repeat pair from corrupting a
+// /flow handoff. The rule is gone with the protocol it described — the ACP turn
+// resolves with a stop reason and no text at all, so there is nothing
+// authoritative to prefer, and nothing repeated to reconcile either.
+//
+// What is asserted now is the rule that survived, and it is the same one for all
+// four seats: a result fills a column that streamed nothing, and never overwrites
+// one that streamed something.
+func TestNoVendorsResultOverwritesWhatItAlreadyStreamed(t *testing.T) {
+	for _, v := range []model.VendorID{model.VendorCursor, model.VendorClaude} {
+		t.Run(string(v), func(t *testing.T) {
+			m := traceModel()
+			m.st.Columns[0].Vendor = v
+			m.redactors = map[model.VendorID]*Redactor{v: {}}
+			m.applyEvents([]runner.Event{
+				{Vendor: v, Kind: runner.KindText, Text: "streamed "},
+				{Vendor: v, Kind: runner.KindText, Text: "answer"},
+				{Vendor: v, Kind: runner.KindMeta, Text: "a whole reply from somewhere else"},
+			})
+			if got := m.st.Columns[0].Body; got != "streamed answer" {
+				t.Fatalf("body = %q — a result overwrote text the user already watched arrive", got)
+			}
+		})
+	}
+}
 
-	if got := m.st.Columns[0].Body; got != "ALPHA" {
-		t.Fatalf("Cursor body = %q, want authoritative result exactly once", got)
+// TestATurnThatStreamedNothingStillFillsFromItsResult is the other half, and it
+// is what the Cursor seat NO LONGER HAS.
+//
+// §9.6c leaned on that fallback by name — "the failure mode is a column that
+// fills at the end, never one that is wrong". On ACP there is no final reply to
+// fall back to, so a broken chunk parser gives an EMPTY column rather than a late
+// one. The mechanism is still here for the seats that do send one, and this test
+// says which behaviour belongs to which so nobody re-derives the wrong one.
+func TestATurnThatStreamedNothingStillFillsFromItsResult(t *testing.T) {
+	m := traceModel()
+	m.st.Columns[0].Vendor = model.VendorClaude
+	m.redactors = map[model.VendorID]*Redactor{model.VendorClaude: {}}
+	m.applyEvents([]runner.Event{
+		{Vendor: model.VendorClaude, Kind: runner.KindMeta, Text: "the whole reply"},
+	})
+	if got := m.st.Columns[0].Body; got != "the whole reply" {
+		t.Fatalf("body = %q, want the result to have filled an empty column", got)
 	}
 }
 

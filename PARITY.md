@@ -30,8 +30,28 @@ weaker than a live run, it says so.
 |---|---|---|
 | **Claude Code** | same as elsewhere | No known platform difference. |
 | **Codex** | **`unsandboxed`** | `-s read-only` is not a read/write distinction on Windows — it is a seat that cannot spawn anything at all. Verified against codex-cli 0.146.0 on Windows 11: a sandboxed spawn fails with `CreateProcessAsUserW ... (Windows error 5)`, including one asked merely to list a directory. Both postures therefore pass `danger-full-access` on Windows, and the badge says `unsandboxed` rather than claiming a restriction that is not there. |
-| **Cursor** | sandbox flag unusable | `--sandbox enabled` does not weakly apply on Windows; it kills the turn. Verified 2026-08-04 against cursor-agent 2026.07.23-e383d2b. |
+| **Cursor** | **no sandbox request at all**, and **no workspace-trust screen** | Both are properties of the ACP server this seat now runs on, not of the platform: the protocol has no sandbox parameter and no trust step. The old row said `--sandbox enabled` kills the turn on Windows — true of print mode, verified 2026-08-04 against 2026.07.23-e383d2b, and no longer a flag council passes on any OS. Trust is the sharper half: verified 2026-08-08 against 2026.08.04-aaa8809, a directory print mode refused with "⚠ Workspace Trust Required" was written to over ACP with no prompt. |
 | **Antigravity** | same as elsewhere | `unsandboxed` on every platform — it was asked to write a file under both of its own read-only flags and wrote it. Refuted, not unverified. |
+
+**Cursor's ACP seat is unverified off Windows, 2026-08-08.** Every one of the
+thirteen arms behind that seat ran on Windows 11 against cursor-agent
+2026.08.04-aaa8809. Nothing in the invocation is platform-specific — it is the
+single subcommand `acp`, and detection already resolves the native entry point
+per OS — so a macOS run is *expected* to work and has not been shown to. What is
+worth checking there specifically, because each one is a claim the badge makes:
+that `session/load` reloads a thread into a new process; that `session/set_mode`
+`plan` is accepted and refuses a write; that `session/request_permission` fires
+for a shell command and not for an edit; and that workspace trust is absent on
+that path too, since the Mac is where print mode's trust prompt was least likely
+to be hit. Record what you find here rather than in `docs/design.md §9.36`, which
+is the Windows capture and should stay one.
+
+**Windows launch-parent trap when driving cursor-agent by hand.** Launched from a
+Git Bash parent, this machine's `PreToolUse` credential-guard wrapper fails closed
+and every cursor-agent tool call comes back "Hook blocked with message: … syntax
+error near unexpected token `&`". It looks exactly like a broken vendor and is
+not; it cost an arm of the §9.36 capture. Drive cursor-agent from a PowerShell or
+cmd parent on Windows. Upstream wrapper bug, agent-ops ADR-012.
 
 **Cursor install location, Windows.** `cursor-agent` lives at
 `%LOCALAPPDATA%\cursor-agent\cursor-agent.cmd` and is frequently absent from the

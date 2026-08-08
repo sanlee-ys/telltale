@@ -10,7 +10,7 @@ import (
 
 // /arena: one brief raced across every seat, each in its own git worktree,
 // compared by diff instead of by prose. Ruled 2026-08-08 (STATE.md; the design
-// record is §9.35): per-turn isolation typed at the room, worktrees kept until
+// record is §9.37): per-turn isolation typed at the room, worktrees kept until
 // the user deletes them, comparison lands in-column as `git diff --stat` with
 // the full diff yankable.
 //
