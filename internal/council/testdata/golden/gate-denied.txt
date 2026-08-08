@@ -17,7 +17,7 @@
    denied by you                       │                                        │                                       
  ⚙ Bash: go build ./... ✗              │                                        │                                       
      exit 2: undefined: gateCard       │                                        │                                       
-                                                                                                                        
+                                       │                                        │                                       
  I need to add the card renderer.      │  working — the reply arrives whole.    │  working — the reply arrives whole.   
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      

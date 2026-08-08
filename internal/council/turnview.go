@@ -158,8 +158,11 @@ func pageLines(st State, n, w int, sty Styles, g Glyphs) []string {
 			strconv.Itoa(maxHistory)+" turns per seat.", w), sty.Muted)
 	}
 
-	out := []string{sty.Muted.Render(padRight(
-		turnRule(n, pageMeta(st, entries), w, g), w, g))}
+	// The page's own outline, and the only heading on it that owns every seat
+	// below — so it takes the weight, and the seat rules under it keep theirs.
+	// See strongLabelRule for why the grid's copy of this line does not.
+	out := []string{strongLabelRule("turn "+strconv.Itoa(n),
+		pageMeta(st, entries), w, sty, g)}
 
 	// The brief ONCE. In the grid it is echoed per column because each seat's
 	// prompt is a fact about that seat (§9.9) — a turn can reach two seats and
@@ -235,17 +238,42 @@ func pageSeat(st State, e turnEntry, w int, sty Styles, g Glyphs) []string {
 
 // seatRule is one seat's heading inside a page: the name at weight, a rule, and
 // how that seat's turn ended.
-//
-// labelRule's grammar AND labelRule's arithmetic — the plain line is built there
-// and only then split — so the page cannot drift into a second spelling of a
-// shape this room has drawn since §9.11. The NAME takes weight for the reason
-// every seat name does: it is the anchor a reader scans for, and on a page it is
-// the only thing separating one vendor's prose from the next.
-//
-// fit, not padRight, because this line is assembled from differently-styled
-// pieces. That is §9.5's ANSI trap, and the goldens render PlainStyles and are
-// blind to it.
 func seatRule(label, meta string, w int, sty Styles, g Glyphs) string {
+	return strongLabelRule(label, meta, w, sty, g)
+}
+
+// strongLabelRule draws labelRule with the LABEL at weight and everything after
+// it — the rule and the numbers hanging off its end — muted.
+//
+// labelRule's grammar AND labelRule's arithmetic: the plain line is built there
+// and only then split, so nothing here can drift into a second spelling of a
+// shape this room has drawn since §9.11. The split itself is the figure/ground
+// one the column header and the mode line already make — the thing you scan for
+// at full intensity, the numbers that belong to it receding — applied to a
+// heading instead of to a key.
+//
+// It exists as its own function because a turn page has TWO levels of heading
+// and they were drawn at one volume. §9.22 gives the page a turn rule at the top
+// and a seat rule per participant under it, and the turn rule — the parent, the
+// thing the whole document is about — rendered wholly Muted while its children
+// took Strong. The room's own hierarchy inverted: the outline whispered and the
+// entries shouted, so the eye landed on the four seats and had to hunt upward
+// for which turn it was reading.
+//
+// The GRID's turn separator is untouched, and the asymmetry is the argument
+// rather than an oversight. There a turn rule sits inside a column already
+// headed by a seat name at weight, so it is the child and muted is its correct
+// rank; here it is the root. The same line changes weight because it changed
+// what it is the parent of, which is exactly what swapping the projection means
+// (§9.22).
+//
+// PlainStyles renders both Strong and Muted as the identity function, so this
+// moves no cell and no golden sees it; TestPageTurnRuleOutranksItsSeats asserts
+// it where colour is asserted (§9.5).
+//
+// fit, not padRight, because the line is assembled from differently-styled
+// pieces. That is §9.5's ANSI trap, and the goldens are blind to it.
+func strongLabelRule(label, meta string, w int, sty Styles, g Glyphs) string {
 	plain := labelRule(label, meta, w, g)
 	rest, ok := strings.CutPrefix(plain, label)
 	if !ok {

@@ -2,7 +2,7 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸ Claude Code  ─────────────  ✓ done  │    Codex                       ○ idle  │    Antigravity                 ○ idle 
    ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
-                                                                                                                        
+                                       │                                        │                                       
  line 1 of the reply                   │                                        │                                       
  line 2 of the reply                   │                                        │                                       
  line 3 of the reply                   │                                        │                                       

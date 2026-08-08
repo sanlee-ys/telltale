@@ -16,7 +16,7 @@
                                        │  ⚠ Codex is not seated                 │    argument; set                      
                                        │    not found on PATH (looked for       │    TELLTALE_COUNCIL_AGY_BIN to the    
                                        │    codex)                              │    real executable                    
-                                                                                                                        
+                                       │                                        │                                       
                                        │    the other columns dispatch          │    the other columns dispatch         
  no turn dispatched yet.               │    normally.                           │    normally.                          
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

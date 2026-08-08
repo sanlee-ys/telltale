@@ -2,17 +2,17 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸ Claude Code  ─────────────  ✓ done  │    Codex  ───────────────────  ✓ done  │    Antigravity                 ○ idle 
    ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
-                                                                                                                        
+                                       │                                        │                                       
  ↑ 7 more above  │  ↑↓ scroll          │                                        │                                       
-                                                                                                                        
+                                       │                                        │                                       
  ⚙ Read: dispatch.go ✓                 │                                        │                                       
-                                                                                                                        
+                                       │                                        │                                       
  About 30K redundant input tokens per  │                                        │                                       
  vendor.                               │                                        │                                       
  turn 3  ────────────────────────────  │                                        │                                       
  › @all is the scrollback worth the    │                                        │                                       
    memory?                             │                                        │                                       
-                                                                                                                        
+                                       │                                        │                                       
  Fifty turns is cheap against          │                                        │                                       
  forgetting.                           │  turn 3  ────────────────────────────  │                                       
                                        │  › @all is the scrollback worth the    │                                       

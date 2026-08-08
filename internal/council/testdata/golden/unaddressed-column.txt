@@ -17,7 +17,7 @@
                                                                                                                         
                                                                                                                         
                                        │  An older answer from turn 1.          │                                       
-                                                                                                                        
+                                       │                                        │                                       
  Looking at the resume path now.       │  ○ not addressed in turn 2             │  working — the reply arrives whole.   
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ›                                                                                                                      

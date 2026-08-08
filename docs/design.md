@@ -4492,3 +4492,77 @@ facts (§4a.1).
   marker — into a view whose entire claim is that the turn is the unit, and it would buy
   one thing the grid already does better. v1 lacks it deliberately, and `y`'s behaviour
   here is what falls out of that rather than a limitation worked around.
+
+### 9.23 the frame dashed, and the outline whispered while its entries shouted
+
+§9.11 through §9.22 spent the room's typographic budget on *columns* — a seat's name, its
+state, its cards, its transcript — and every one of them was measured against what a reader
+could find. What none of them looked at is the thing holding the columns apart. Read the
+repository's own goldens as pictures rather than as assertions and the frame is the first
+thing wrong with them.
+
+**The rails were a property of the prose, not of the grid.** The `│` between two columns was
+drawn per row, on the test *does any column have ink on this line*. That predicate exists for
+a real reason: a tall idle window used to draw four bars straight down through an empty screen
+to the footer, and Phase 2 removed them. But the room seats three transcripts of different
+lengths beside each other, and §9.11 spends a blank row as a boundary in three separate
+places — between a seat's chrome and its content, where the speaker changes, where the kind of
+content changes. So the ordinary case is that all three columns are blank on the same line
+several times per screen, and the frame blinked out on every one of them. `transcript.txt`
+broke at rows 11 and 13, `skips-coalesced.txt` at 5, 10 and 13, `unavailable.txt` at 19. The
+per-row rule solved the void and created a stutter, and a stutter is worse: an edge that dashes
+in and out at irregular intervals reads as damage, and it read as damage at precisely the rows
+where the design had placed air on purpose.
+
+**A row carries a rail when some column has content on it, or when it is a lone blank row with
+content above and below.** Two consecutive blanks end the band; the next word starts a new one.
+A separator is *structural* — it says these are different columns — and that claim is as true on
+a quiet row inside a conversation as on a loud one.
+
+**One row is the whole threshold, and it is the room's own number rather than a tuned one.**
+Every deliberate blank this surface draws is exactly one row, and §9.11 names all three of them.
+A one-row gap is therefore a boundary the design placed *between two things it means to keep
+together*, and drawing the rail through it is drawing what was meant. Two rows is nothing the
+design asked for — the bottom-anchor pad, an idle room, a column that ran out of transcript long
+before its neighbour did — and there a separator has nothing to separate.
+
+The **literal** reading was tried first and rejected on the evidence: rails on every row from the
+frame's first word to its last. It is a simpler sentence and it produces a worse room. An idle
+frame at 120×60 has chrome at the top and `no turn dispatched yet.` anchored at the bottom, so
+one span runs fifty-five rows of bar through nothing at all — exactly the shape Phase 2 removed,
+re-derived from a nicer-sounding rule. Contiguity is worth having up to the point where it starts
+asserting a grid over emptiness. `TestTheRailNeverDashes` and `TestRailsDoNotSpearAVoid` hold the
+two ends apart, and the older `TestRailsStopThroughEmptyBody` is kept unchanged as the third
+witness that this pass did not quietly trade one for the other.
+
+**The turn page's outline takes the weight its entries already had.** §9.22 gave a page two levels
+of heading — the turn's own rule at the top, then one labelled rule per participating seat — and
+drew the parent wholly `Muted` while `seatRule` gave every child `Strong`. The room's hierarchy
+upside down: the eye landed on four vendor names and had to hunt *upward* to find out which turn
+it was reading, on the one surface whose entire claim is that the turn is the unit. The turn rule
+now takes the same split every heading in this room takes — the label at weight, the rule and the
+numbers hanging off its end receding — which is the figure/ground rule the column header and the
+mode line already make, applied to a heading instead of to a key.
+
+**The grid's copy of that line is deliberately untouched, and the asymmetry is the argument.**
+Inside a column a turn separator sits under a seat name already at weight; there it is the child,
+and muted is its correct rank. On a page it is the root. The same line changes weight because it
+changed what it is the parent of, which is what swapping the projection means. `strongLabelRule`
+is one implementation for both callers, extracted for `labelRule`'s own reason: the thing being
+kept in step is the grammar, and a second copy would drift from it one narrow-terminal fix at a
+time. Weight costs no cells and `PlainStyles` renders it as the identity function, so this half
+moved no golden — `TestPageTurnRuleOutranksItsSeats` asserts it where colour is asserted (§9.5),
+and asserts the grid's separator did *not* move in the same breath.
+
+**One separator, spelled one way.** The collapsed-seat notice joined its remedy with `" │ "` —
+one cell of air — while the room header, the mode line and the column gutters all use two. §9.11
+argues that number from `--ascii`, where the rule glyph and the spinner's first frame collide at
+one cell, and the notice was the single place in the product spelling the room's only separator a
+second way. It now reads from `gutter`, so it cannot drift again.
+
+**What was declined.** Making the rail's weight or hue say anything — it is chrome, and a frame
+that varied would be competing with the content it exists to bound. Drawing the rail through the
+bottom-anchor pad so every frame has one unbroken edge: that pad is the void, and it is the case
+Phase 2 was written about. And a per-column rail extent, so a short column's gutter stops early:
+the gutter belongs to the boundary between two columns rather than to either of them, and one of
+the two ending sooner is not a fact about the line between them.
