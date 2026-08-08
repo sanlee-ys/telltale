@@ -89,7 +89,7 @@
 
   <text x="344" y="180" class="text-dim">no turn dispatched yet.</text>
   <text x="344" y="210" class="text-dim">Awaiting the next brief —</text>
-  <text x="344" y="235" class="text-dim">unaddressed convenes every seat.</text>
+  <text x="344" y="235" class="text-dim">silence routes to claude alone.</text>
 
   <!-- Column 3: Antigravity -->
   <text x="656" y="110" class="text-bold">▸ Antigravity</text>
@@ -105,7 +105,7 @@
 
   <text x="656" y="180" class="text-dim">no turn dispatched yet.</text>
   <text x="656" y="210" class="text-dim">Awaiting the next brief —</text>
-  <text x="656" y="235" class="text-dim">@agy narrows to this seat.</text>
+  <text x="656" y="235" class="text-dim">@agy names this seat for a turn.</text>
 
   <!-- Footer Line -->
   <line x1="24" y1="380" x2="936" y2="380" stroke="#d0d7de" stroke-width="1" />

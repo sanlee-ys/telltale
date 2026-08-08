@@ -194,31 +194,40 @@ telltale.exe council
 ```
 
 ```
- council  │  ~/code/telltale                                                         turn 1  │  3/3 seated  │  no brief 
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ───────────────  ✓ done │   Codex  ────────────────────  ○ idle │   Antigravity  ──────────────  ○ idle 
-   ro:tools  tokens                     │   ro:requested  final only            │   unsandboxed  final only             
-                                        │                                       │                                       
- ⚙ Glob                                 │ no turn dispatched yet.               │ no turn dispatched yet.               
- ⚙ Read                                 │                                       │                                       
- ⚙ Bash: go test ./...                  │                                       │                                       
-                                        │                                       │                                       
- Tests pass.                            │                                       │                                       
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ›                                                                                                                      
- VIEW                                          ↑↓ scroll  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 
+  council READ  │  ~/code/telltale                                                  turn 1  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▌ ▸ 1 CC Claude Code  ────────  ✓ done  │    2 CX Codex  ─────────────  ○ idle  │    3 AG Antigravity  ───────  ○ idle  
+▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
+▌ ⚙ Glob                                │                                       │                                       
+▌ ⚙ Read                                │                                       │                                       
+▌ ⚙ Bash: go test ./...                 │                                       │                                       
+▌                                       │                                       │                                       
+▌ Tests pass.                           │  no turn dispatched yet.              │  no turn dispatched yet.              
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ›                                                                                                                     
+  VIEW              ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-3 seat  │  i compose  │  ? help  │  q quit  
 ```
 
 That frame is the council test suite's `activity` golden
 (`internal/council/testdata/golden/activity.txt`) with its empty rows dropped, and nothing
-else changed.
+else changed — including the `READ` in its header, because the fixture opens a `--read`
+room. A plain `telltale council` says `⚠ WRITE` there instead.
 
-Each seat's name is bound to the state it is in by a leader rule — the same `label ───
-value` shape the turn separators use further down the transcript — and the state leads
-with a mark: `✓ done`, `✗ failed`, `○ idle`, `⚠ cancelled`, a spinner while a turn is in
-flight. The mark is always a second signal; the word carries the distinction on its own, so
-`--ascii` and a monochrome terminal lose nothing (`docs/design.md` §9.11). Every claim in
-the two header lines is made per vendor, never as a blanket:
+**A seat header names the key that reaches it, the tag it wears everywhere, and the state
+it is in.** `▸ 1 CC Claude Code ──────── ✓ done`: `▸` is focus, `1` is the key that jumps
+straight to this seat, `CC` is the two-letter tag — the HUD's own, character for character,
+so a reader who learned `CX` is Codex from the grid does not meet a second abbreviation
+here — and the name is bound to its state by a leader rule, the same `label ─── value`
+shape the turn separators use further down the transcript. The state leads with a mark:
+`✓ done`, `✗ failed`, `○ idle`, `⚠ cancelled`, a spinner while a turn is in flight. The
+mark is always a second signal; the word carries the distinction on its own, so `--ascii`
+and a monochrome terminal lose nothing (`docs/design.md` §9.11). Each seat's name also
+carries its own hue — the one place council spends a colour it did not inherit, ratified as
+an exception because "which of four agents is speaking" is a distinction the statusline and
+the HUD have no seats to make (§9.28); the tags carry it first, so a terminal scheme that
+renders two of them alike loses nothing that was load-bearing.
+
+Every claim in the two header lines is made per vendor, never as a blanket:
 
 - **The sandbox badge.** `ro:tools` is Claude under `--disallowedTools` plus
   `--strict-mcp-config`, and it claims only that *these named tools are absent, verified* —
@@ -303,6 +312,27 @@ the set the exclusion subtracts from. An exclusion that leaves
 nobody (`-@all`, or naming every seat you have) gets the same "none of the vendors you
 addressed are seated" notice a mention of an unseated vendor already gets.
 
+**The routing cell states the bill before you press enter.** `→ everyone (3 seats)`,
+`→ everyone but codex (2 seats)` — because how much `everyone` is depends on what is
+installed and on what `--vendor` left in the room, which is the part a reader cannot get
+from the word. One seat states no count: `→ claude` already names everything it reaches.
+The number counts seated ∩ addressed through the same call the dispatch gate uses, so it
+never prices a seat that will not be spawned, and a refused route prices nothing at all.
+Once the turn is away the composer's cell resets to the next draft, so the header carries
+the live one instead — `turn 10 → everyone` — and drops back to plain `turn 10` when the
+last column lands, because at that instant the route is history and the transcript is
+where history goes.
+
+**A committee brief is drawn once, not once per seat.** From two seats up, the live turn's
+brief sits full width under the room chrome and the addressed columns stop echoing it —
+one question above four answers instead of the same paragraph across the top of every
+reading area. It spends at most four rows, and when the brief is longer the fourth row
+says how many rows are missing and where the whole of it is, because a reader must never
+have to wonder whether they are looking at their own question or a truncated copy of it.
+Nothing new is stored: this is a rendering rule over the echo each column already held,
+history keeps its per-column copies, and if spending the band would leave the columns
+fewer than eight rows of body it is not spent at all.
+
 Turn 1 is blind. Later turns ride each vendor's own native session resume rather than
 re-sending the transcript, which keeps that guarantee structural: each session holds only
 its own history. `ctrl+r` arms a rebuttal turn — off by default — in which each vendor
@@ -310,22 +340,58 @@ sees the others' last answers, fenced and labelled as untrusted material.
 
 **Reading is a first-class mode.** `↑`/`↓` scroll the focused column, `pgup`/`pgdn` move by
 a screenful, `g` and `G` reach the first turn or the newest, `tab` moves between columns,
-and `f` expands one column to the full width — which is what you want when an answer is
-long rather than when four of them are being compared. All of that works **while
-composing** as well as in view mode, which is the point: a finished turn drops the room
-back into compose, so the mode you are in when four long answers land is the mode you need
-to read in. Keys that can be text stay text there — `j`, `k`, `g`, `G` and `q` are letters
-in the composer — and the mode line says which set is live on every frame. `?` lists all of
-them; `?` again explains what the posture badge on each column means, with your own seats'
-full claims underneath; `?` a third time closes the panel.
+`1`–`N` go straight to the Nth seat on screen, and `f` expands one column to the full width
+— which is what you want when an answer is long rather than when four of them are being
+compared. `[` and `]` walk the focused column **a turn at a time**, landing the turn's
+separator on the top row where the brief and the answer to it read together. The scrollback
+had only ever moved in lines, so `↑ 509 more above` was measured, correct, and counted in a
+unit nobody reads a conversation in — while *how far back is what I asked* was the one
+question a reader actually had, and the only two answers were both ends. All of that works
+**while composing** as well as in view mode, which is the point: a finished turn drops the
+room back into compose, so the mode you are in when four long answers land is the mode you
+need to read in. Keys that can be text stay text there — `j`, `k`, `g`, `G`, `q`, `t`, `c`,
+the digits and the brackets are all just characters in the composer — and the mode line
+says which set is live on every frame. `?` lists all of them and says when it is holding
+more than fits (`↓ 5 more below`); `?` again explains what the posture badge on each column
+means, with your own seats' full claims underneath; `?` a third time closes the panel.
+
+**Two projections, one transcript.** The grid reads by seat. **`t` reads by turn**: one
+page, the brief once at the top, then every seat that took *that* turn under its own
+labelled rule, in seating order, with the turn's own clock — the longest seat's elapsed,
+because a turn is over when its slowest seat lands, and never a sum or a mean council would
+have had to derive. It is the document `Y` already pasted, rendered; both come from the same
+call, because a page and a paste that disagreed about who was in a turn would be two
+honest-looking records with nothing on screen to say which was the room's. A seat that sat
+the turn out does not appear on its page — it still holds an older reply, and filing that
+under this turn's heading would be the room inventing a conversation on the one surface
+built to compare them. `[` and `]` move the page the same way they move the grid, `t` goes
+back, and the mode word says `TURN 10/11` when a newer turn has landed behind you, because
+a turn arriving never moves the page out from under a reader.
 
 **The keys move one column, and the frame says which.** `▸` marks it, its name is the only
-one at full weight, and its overflow marker names the keys that would move it
-(`↑ 51 more above  │  ↑↓ scroll`). A column those keys do *not* reach says so instead —
-`↑ 36 more above  │  tab to focus` — rather than repeating a hint that would be false on
-that seat. That distinction is the whole of `docs/design.md` §9.12: everything scrolled
-correctly, and a reader looking at the third seat had no way to tell that the arrows were
-moving the first.
+one at full weight, the gutter to its left thickens to `▌` for as far as the column's own
+text runs — the one mark on this surface as tall as the thing it describes — and the
+unfocused columns' prose steps back one contrast level. Its overflow
+marker names the keys that would move it and where in the conversation the fold falls
+(`↑ 25 more above  │  turn 3  │  ↑↓ scroll  │  f expand`). A column those keys do *not*
+reach says so instead — `↑ 36 more above  │  tab to focus` — rather than repeating a hint
+that would be false on that seat, and it gets no coordinate, because putting the question
+in front of the answer is how the original bug worked. That distinction is the whole of
+`docs/design.md` §9.12: everything scrolled correctly, and a reader looking at the third
+seat had no way to tell that the arrows were moving the first. Under `--ascii` the rail is
+`[` and the focus mark `]`; under `NO_COLOR` the contrast step is what goes, and every
+other carrier is still there.
+
+**A backgrounded seat says where it left off, once.** Since the default route became one
+seat, the other three sit out most turns — and a column of `⚠ not addressed in turn 2` /
+`turn 3` / `turn 4` buried the answer that seat actually gave. Consecutive skips now
+coalesce at render time into one muted `○ not addressed in turns 2–7`; the mark is `○`
+rather than `⚠` because sitting a turn out is not a failure, and the live turn's skip keeps
+its own line because that one is a decision you are still making. Nothing is written down
+for a turn a seat did not take, so `[` and `]` still hop between real turns, and a run is
+never claimed back past the oldest record the room still holds. Narrowed to a strip, the
+seat carries `last: turn 8 ✓` — the turn it last took and that turn's own mark — above the
+run.
 
 Mouse wheel scrolling is deliberately absent, and the measurement is written down
 (`docs/design.md` §9.10): the terminal protocol has no wheel-only mode, so enabling the
@@ -338,7 +404,9 @@ that produced it at the top, so it pastes into a document as a readable record r
 as four anonymous blocks. Both take the same sanitized text the screen is showing, never the
 raw stream, and a notice says what was copied because the mechanism cannot report back:
 `y` while a vendor is waiting on a gate still means **approve**, and yank simply does not
-exist until you have answered.
+exist until you have answered. On a turn page the two keys produce the same document,
+because a per-seat `y` needs a per-seat focus and a projection whose whole unit is the turn
+deliberately has none.
 
 The mechanism is OSC 52 — an escape sequence handed to your terminal — which needs no
 clipboard library and no temp file. Its honest limit: the sequence carries no
@@ -360,9 +428,9 @@ folded and why.
 
 `telltale council` flags: `--fresh` (start over instead of reattaching), `--cd <dir>`
 (launch-time override of the room's workspace — the daily path never needs it),
-`--vendor <list>`, `--brief <file>`, `--read`, `--auto`, `--resume` (accepted, and
-redundant — reattaching is the default), `--write` (accepted, and does nothing —
-writing is the default), `--ascii`, `--no-title`.
+`--vendor <list>`, `--brief <file>`, `--read`, `--auto`, `--trace <file>`, `--resume`
+(accepted, and redundant — reattaching is the default), `--write` (accepted, and does
+nothing — writing is the default), `--ascii`, `--no-title`.
 
 **`a` on the approval card stops the asking.** `y` approves, `n` denies, `a` approves this
 call and every one after it — on the card rather than in the composer, because that is
