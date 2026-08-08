@@ -338,7 +338,7 @@ func readLines(t *testing.T, path string) []string {
 // (design.md §9.17) has to be named inside that window or it cannot be found
 // without reading the source.
 func TestHelpNamesEveryRoomControlAboveTheFold(t *testing.T) {
-	lines := helpKeys(PlainStyles())
+	lines := helpKeys(layoutFor(room(), GlyphsFor(false)), PlainStyles(), GlyphsFor(false))
 
 	// Where the panel's own way out sits. Everything a reader must find has to be
 	// at or above it, because that is the last row a 24-row terminal draws.

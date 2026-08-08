@@ -1,7 +1,7 @@
   council READ  │  ~/code/telltale                                             no turn yet  │  1/3 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ⚠ 2 seats are not on screen: Codex (not installed), Antigravity (installed but not drivable)  │  --vendor all seats…  
-    Claude Code                                                                                                 ○ idle  
+    CC Claude Code                                                                                              ○ idle  
     ro:tools  tokens                                                                                                    
                                                                                                                         
                                                                                                                         

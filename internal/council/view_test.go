@@ -215,15 +215,27 @@ func TestEveryGranularityIsExplained(t *testing.T) {
 	st := room()
 	st.Help = HelpPostures
 	st.Height = 60 // tall enough to reach below the 24-row fold
-	got := render(st)
-	if !strings.Contains(got, "sends nothing at all until its turn is done") {
+	// Flattened, because what is asserted is that the sentence REACHED the
+	// screen, not where it happened to break. These glosses are wrapped prose in
+	// a panel whose body width is derived (framePad + helpIndent), so pinning a
+	// phrase to one rendered line makes this test fail on any change to the
+	// panel's margins — which is exactly what it did when the per-seat detail
+	// was moved to hang under its own label.
+	if !strings.Contains(flatten(render(st)), "sends nothing at all until its turn is done") {
 		t.Error("the granularity gloss renders nowhere — the same gap §9.13 found in Detail")
 	}
 	// A seat whose granularity was never established still gets its sentence.
 	st.Columns[0].Gran = GranUnknown
-	if !strings.Contains(render(st), "never been established") {
+	if !strings.Contains(flatten(render(st)), "never been established") {
 		t.Error("a seat with no granularity word is left with nothing to explain the blank")
 	}
+}
+
+// flatten collapses a rendered frame to one whitespace-normalized line. Only
+// safe on full-width surfaces (the help panel), where no two columns sit side by
+// side for it to run together. Test-only.
+func flatten(frame string) string {
+	return strings.Join(strings.Fields(frame), " ")
 }
 
 // TestSandboxBadgesAreNeverBlanket guards ADR-008's correction: the UI must
