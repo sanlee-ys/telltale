@@ -793,6 +793,44 @@ the derived-percentage path did not fire on live data (no real session was missi
 `contextUsagePercent` while carrying raw counts), and the corpus is one machine, one day,
 one Cursor version.
 
+### 3.10 The canary set — what each adapter actually watches
+
+Every survey above pins an adapter to a private, unversioned on-disk format. §7 records how
+drift *renders*; this is the other half, and without it the next person re-verifying a vendor
+cannot know what was being watched. `grep -n canary docs/design.md` used to return nothing,
+which was the whole of the gap.
+
+A **canary** is a structural fact the survey established is present on *every* well-formed unit
+of that vendor's corpus. A read that examined units and found no canary is reading a corpus that
+has moved, and says so. `internal/adapter/drift` holds the mechanism; this is the inventory.
+
+| adapter | verified against | canary | fields it feeds |
+|---|---|---|---|
+| Claude Code | `Claude Code 2.1.219` | `sessionId` — on every JSONL record | name, model, workspace |
+| Codex CLI | `codex-cli 0.146.0` | `envelope type` — on every rollout record | model, workspace, quota, context % |
+| | | `session_meta record` — the FIRST record of every rollout | workspace |
+| Gemini CLI | `gemini-cli v0.53.1` | `metadata record` | name, subagents |
+| Antigravity | `agy 1.1.9` | `gen_metadata table` | model |
+| | | `trajectory_metadata_blob table` | workspace |
+| Cursor | `Cursor 3.14.7` | `composerHeaders timestamp columns` | last activity |
+
+The middle column quotes each canary by the **name the adapter gives it**, not a paraphrase, so
+the string in this table is the string in the code — which is what makes the guard tests below
+able to check it at all.
+
+**One table rather than a paragraph in each of §3.1–3.9**, deliberately, and against the first
+instinct that a canary is a survey finding belonging beside its own survey. It is — but the
+question this answers is asked *across* adapters ("what is being watched, and where is the gap"),
+and five copies of the same claim in five subsections is five places for it to drift out of step
+with `internal/adapter`. The survey sections keep the evidence; this keeps the inventory.
+
+**What the columns are not.** `verified against` is CONTEXT, never a trigger — a version
+comparison would fire on every vendor release that did not move a byte, and a report nobody
+reads is worse than none. `fields it feeds` is what degrades when that canary goes missing, which
+is why a canary is the load-bearing subset of a schema fingerprint rather than the fingerprint:
+a vendor ADDING a column costs this program nothing, because every reader here addresses columns
+by name.
+
 ## 4. Adapter contract (v1)
 
 One module per vendor implementing:
