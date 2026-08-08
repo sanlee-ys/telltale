@@ -49,39 +49,55 @@ Nothing claimed.
 
 ## Open questions
 
-- **The 44 seconds is half-attributed: measured for `claude`, still open for
-  `cursor`.** First trace taken 2026-08-08, five turns from a live room, written
-  out of the ring by `/trace` rather than predicted in advance:
-
-  ```
-  claude spawn=40ms   wait=6.295s  stream=29.917s   total=36.252s
-  claude spawn=172ms  wait=6.121s  stream=9m8.975s  total=9m15.268s
-  claude spawn=-      wait=77ms    stream=1m49.261s total=1m49.338s
-  claude spawn=-      wait=97ms    stream=28.855s   total=28.951s
-  claude spawn=-      wait=37ms    stream=4.974s    total=5.011s
-  ```
-
-  **What is now measured, for this seat:** spawn is noise (40–172 ms). A COLD
-  process costs ~6.1–6.3 s of `wait`; a warm one costs 37–97 ms, a ~65× gap. The
-  persistent seat is doing exactly what it was built to do — the last three turns
-  spawned nothing at all (`spawn=-`) and reused the process. Everything else is
-  `stream`, which is the model working, not telltale waiting. **There is no
-  overhead left to optimise on this seat.**
-
-  **What is NOT measured, and it is the half the entry was originally about:**
-  every row here is `claude`. Since #99 made silence route to the control plane,
-  an unaddressed turn never reaches the other seats, so a session's worth of
-  ordinary turns produces a trace with no `cursor` or `agy` rows in it at all.
-  The standing diagnosis — `cursor-agent` spawned fresh per turn, `--resume`
-  restoring context rather than process warmth — is **still untested**. Closing
-  it needs one traced `@all` turn, which is now a keystroke rather than a
-  relaunch.
-
-  Method note, because it cost a round trip: `/trace` resolves a relative path
-  against the ROOM's workspace, so the file has to be named relative to the repo
-  for anything confined to it to read the result.
+Nothing open. The last one here was the 44 seconds, and it was measured
+2026-08-08; the finding and the unowned work left over from it are below.
 
 ## Known gaps, not yet owned
+
+- **ATTRIBUTED, 2026-08-08. Spawning was never the cost; `wait` is, and only on
+  the three seats that are not persistent.** One traced `@all` turn, all four
+  seats, out of a live room's ring:
+
+  ```
+  claude spawn=-     wait=38ms     stream=6.443s   total=6.481s
+  agy    spawn=18ms  wait=6.436s   stream=2.671s   total=9.125s
+  cursor spawn=13ms  wait=10.864s  stream=14.137s  total=25.014s
+  codex  spawn=30ms  wait=3.688s   stream=34.662s  total=38.38s
+  ```
+
+  **The standing diagnosis was right about the mechanism and wrong about the
+  number.** "`cursor-agent` is spawned fresh per turn" is true — and its spawn is
+  **13 ms, the cheapest of all four seats.** Process creation was never where the
+  time went. What costs is `wait`: launch until the first line comes back.
+  `cursor` pays **10.9 s** there, against a warm `claude`'s 38 ms — 286×. So the
+  fix is not "make spawning cheaper"; there is nothing left in spawning to make
+  cheaper.
+
+  **~6 s looks like a CLI cold-start floor**, not a cursor problem alone: a cold
+  `claude` measured 6.1–6.3 s (previous trace) and `agy` measures 6.4 s. `cursor`
+  sits ~4.5 s ABOVE that floor and `codex` 2.4 s below it, so cursor is the one
+  outlier worth a fix and codex is the fastest of the three to first byte.
+
+  **What `wait` cannot tell us**, and the entry should not overclaim: it bundles
+  the vendor's own startup with the model's time-to-first-token, and this
+  instrument cannot separate them. So "10.9 s of overhead" is NOT established —
+  some of it is the model thinking. What IS established is that a warm `claude`
+  crosses the same boundary in 38 ms because its process is already initialised.
+
+  **`claude` is the only vendor implementing `vendors.Persistent`** (the same
+  interface `canGate` reads, which is why it is also the only seat that can be
+  asked). Its own warm-vs-cold gap is measured at 38 ms vs 6.3 s. **Extending
+  persistence to `cursor` is the highest-value optimisation available and now has
+  a number behind it** — but it is a real feature, not a config change, and it is
+  not owned.
+
+  **A fan-out turn costs the SLOWEST seat, not the sum**: 38.4 s here, set by
+  codex's 34.7 s of `stream` — which is the model working and not something to
+  optimise. `claude` finished in 6.5 s and the room waited ~32 s for the rest.
+
+  Method note, because it cost a round trip: `/trace` resolves a relative path
+  against the ROOM's workspace, so a trace has to be named relative to the repo
+  for anything confined to it to read the result.
 
 - **The turn clock's concurrency is argued, not race-verified.** `-race` needs
   cgo, is unavailable on the machine the clock was written on, and is not in the
