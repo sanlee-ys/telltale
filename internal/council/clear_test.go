@@ -18,8 +18,12 @@ type killSession struct {
 	sent   [][]byte
 }
 
-func (s *killSession) Send(line []byte) error {
-	s.sent = append(s.sent, append([]byte(nil), line...))
+func (s *killSession) SendTurn(lines [][]byte) error  { return s.record(lines) }
+func (s *killSession) SendAside(lines [][]byte) error { return s.record(lines) }
+func (s *killSession) record(lines [][]byte) error {
+	for _, l := range lines {
+		s.sent = append(s.sent, append([]byte(nil), l...))
+	}
 	return nil
 }
 func (s *killSession) Kill()       { s.killed = true }
@@ -90,7 +94,7 @@ func TestClearSeatDropsEveryResumeHandle(t *testing.T) {
 func TestClearSeatKillsThePersistentProcessAndDoesNotRearmTheThread(t *testing.T) {
 	m := clearModel()
 	sess := &killSession{}
-	m.procs[model.VendorClaude] = &seatProc{sess: sess}
+	m.procs[model.VendorClaude] = &seatProc{wire: claudeWire(), sess: sess}
 
 	m.clearSeat(model.VendorClaude)
 
@@ -209,7 +213,7 @@ func TestSeatHasThreadCountsALiveProcess(t *testing.T) {
 	if m.seatHasThread(model.VendorClaude) {
 		t.Fatal("a seat with no id and no process reports a thread")
 	}
-	m.procs[model.VendorClaude] = &seatProc{sess: &killSession{}}
+	m.procs[model.VendorClaude] = &seatProc{wire: claudeWire(), sess: &killSession{}}
 	if !m.seatHasThread(model.VendorClaude) {
 		t.Error("a live process is not counted as a thread")
 	}

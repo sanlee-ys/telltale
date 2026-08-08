@@ -24,8 +24,13 @@ func TestLiveFlowCursorThenCodex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Temp dirs trip cursor-agent's workspace-trust prompt and exit with an
-	// empty body. Use the repo root — already trusted on a dogfood machine.
+	// The repo root rather than a temp dir. That used to be forced — print-mode
+	// cursor-agent tripped its workspace-trust prompt in an unfamiliar directory
+	// and exited with an empty body — and on the ACP seat it no longer is: trust
+	// does not apply on that path, measured in §9.36 by writing a file into the
+	// very directory print mode had just refused. It stays because codex is the
+	// second hop and because a live test that runs where the repo lives is easier
+	// to read the failures of.
 	ws, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)

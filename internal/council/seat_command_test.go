@@ -24,7 +24,7 @@ func seatModel() *Model {
 		procs:     map[model.VendorID]*seatProc{},
 	}
 	for v := range m.sessions {
-		m.procs[v] = &seatProc{sess: &killSession{}}
+		m.procs[v] = &seatProc{wire: claudeWire(), sess: &killSession{}}
 	}
 	return m
 }

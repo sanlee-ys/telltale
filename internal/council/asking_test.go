@@ -42,7 +42,7 @@ func askModel(queued int) *Model {
 		unproven:   map[model.VendorID]bool{},
 	}
 	m.st.Write = true
-	m.procs[model.VendorClaude] = &seatProc{sess: &killSession{}}
+	m.procs[model.VendorClaude] = &seatProc{wire: claudeWire(), sess: &killSession{}}
 	for i := 0; i < queued; i++ {
 		m.st.Gates = append(m.st.Gates, PendingGate{
 			Vendor:    model.VendorClaude,
