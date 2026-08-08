@@ -25,7 +25,17 @@ binding copies and the argument; this file does not restate either.
 
 ## In flight
 
-Nothing claimed.
+- **Blind rebuttal** is on `claude/council-herdr-relationship-8gr0s1` (ships with
+  its PR): `ctrl+r` quotes now travel as "participant A/B/C", never vendor
+  names — label-deep anonymisation, user-side attribution unchanged. Binding
+  copy: [docs/design.md §9.34](docs/design.md).
+- **Arena mode is DECIDED and not started** (2026-08-08, for the 9-30 demo):
+  `/arena <brief>` per-turn isolation — each write-capable seat in its own
+  worktree off the room's workspace; worktrees named by turn and kept until the
+  user deletes them; comparison lands in-column as `git diff --stat` with the
+  full diff yankable. The rulings and their reasons get recorded in design.md
+  by the session that builds it; do not re-open the four forks without new
+  evidence.
 
 ## Closed without code (do not re-open)
 
