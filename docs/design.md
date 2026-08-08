@@ -5236,3 +5236,107 @@ Stable per-vendor numbers that never renumber, which would leave gaps (`1`, `3`,
 and make the printed number disagree with the position it is printed at — the number would then
 be an identity, and identity is what the tag and the hue are for. And a fifth key for a fifth
 seat: `1-N` already says how many there are.
+
+### 9.30 one question, asked once, instead of four times across the comparison surface
+
+Council exists to put several answers side by side, and §9.22 built the page that reads a turn
+as one document. What neither of them fixed is what the **grid** does with the question itself.
+§9.9 ruled that the echoed brief is a fact about the COLUMN — a turn can reach two seats and not
+a third, seats skip turns, and a transcript that filled the gaps would be the room inventing a
+conversation — so every addressed column echoes it. On a one-seat route, which is the ordinary
+turn since the default stopped being everyone, that is exactly right. On a committee route it is
+the same paragraph two, three or four times across the top of the reading area, each copy pushing
+the answer it belongs to a row further down, with "+ the other seats' last answers were quoted to
+this one" repeated underneath every one of them on a rebuttal turn. The surface built to compare
+four answers spent its widest rows agreeing with itself about the question.
+
+**So the live turn's brief is drawn once, full width, as a band under the room chrome, and the
+addressed columns stop echoing it while it is up.** Nothing new reaches `State`, nothing is
+stored, and no column records anything different: this is a rendering rule over the same echo
+§9.9 already holds, sanitized and deliberately unredacted for §9.9's own reason — it is the user's
+own typing shown back to the user, and covering it would hide a secret from the one person who
+already has it while doing nothing about the copy just sent to three vendors.
+
+**History is untouched, and that is the boundary rather than a scope limit.** A finished turn's
+echo stays inside the column that took it, because §9.9's argument is about a *record*: turn 4
+is filed on the two seats it reached and absent from the one it did not, and each column's
+transcript is that seat's own conversation read top to bottom. The band speaks for one turn — the
+live one — and it identifies that turn by number (`Column.TurnN == State.Turn`), never by "this
+column has a prompt". A column's prompt block outlives its turn: a seat that answered turn 4 and
+sat out 5 and 6 is still displaying turn 4's brief as its current block, and that is its own
+conversation, not the live turn.
+
+**It appears at dispatch and retires at the next one.** Both are keystrokes, and §7.1 rule 4's
+still-by-default frame is about what moves *without* one. The retirement moment is deliberately
+the push to history and **not** the instant the last column lands: §9.21 retires the live route
+there because the header describes the present, but that landing is a vendor finishing, and a band
+that vanished on it — restoring three per-column echoes and reflowing every column — would be
+precisely the mid-turn layout jump the rule forbids. Tying the band's life to the same block the
+per-column echo already had means there is one reflow point, it is the user's own enter, and the
+frame either side of it is one the reader asked for.
+
+**Two seats is the threshold.** One echo on screen is not duplication, and hoisting it would move
+the user's words away from the answer to them and buy a row of chrome for nothing. The band is
+therefore a columns-tier device: the tabs tier draws one column at a time, `f` resolves to that
+tier, and a one-seat room has nothing to compare — in all three the column keeps its own echo. A
+turn page is excluded for the opposite reason: it already prints the brief once, which is half of
+what it is for. The help panel is excluded because it replaces the column area outright.
+
+**The anatomy is §9.9's echo hoisted, and §9.11's middle boundary under it.** The composer's own
+`›` at full weight, because the glyph carries "you said this" before the colour does and the user's
+words are the anchor a reader navigates by; the rebuttal notice once, muted, underneath, only when
+true, in the same sentence the column prints (one constant, not two spellings); then a **blank
+row**. Of the three boundary strengths this room ranks — a labelled rule where the turn changes, a
+blank where the speaker changes, a blank where the kind of content changes — the band's is the
+second: the user stops and the seats start. A rule was refused. The frame's own full-bleed heavy
+rule sits two rows above it, and a second horizontal line under that would rebuild §9.11's "one
+rule per column instead of two three rows apart" at the room's own scale, with §9.26's
+heavy/light distinction blurred as well. The band also states **no route**: the header already
+carries `turn 10 → everyone` on the cell that names the turn, and repeating it would be the second
+copy this whole section exists to delete. What each column keeps is its own turn separator, which
+is one line saying which turn the lines under it belong to rather than the same paragraph again.
+
+**Four rows, and the fourth is the marker.** A brief worth sending to three agents can be a
+paragraph — the composer grows to six rows for that reason — and a band as tall as the draft would
+eat the reading area it was written to protect. So the band spends at most four rows on the brief,
+and when it needs more the fourth row is a **truncation marker** rather than a fourth row of text:
+how many rows are missing, and that the turn page has the brief whole. Silent clipping is the
+ambiguity §4a.1 forbids, and it is worse here than anywhere else on screen — a reader cannot tell
+their own question from a truncated copy of it. The `t` that opens that page is named on the
+marker in **view mode only**, because `t` is the letter t while composing and a marker advertising
+it there would promise a keystroke that does something else (§7.8, scrollHint's rule for `f`). The
+count and the destination survive in both modes; only the keystroke sheds.
+
+**The band's rows are room chrome, spent where the notice line is spent.** `resolveLayoutIn`
+settles the tier first — §9.5's ordering, unchanged, and the band depends on the tier so it could
+not be spent any earlier — then header, footer chrome, tab bar, collapsed-seat notice, **band**,
+then the composer, which still yields before the body. The band is budgeted before the composer
+and tested against the composer's *floor* rather than its current height, deliberately: a band
+that retired because the draft grew a row would be a layout jump on a keystroke mid-turn, and it
+would jump back on backspace.
+
+**Below a floor the band yields ENTIRELY, and the fallback is a pure function of height.** If
+spending the band would leave the columns fewer than eight body rows, it is not spent at all and
+the columns echo the brief themselves — the pre-band frame, byte for byte. Eight is measured from
+what a column draws before a word of the reply: three rows of `columnChrome` (name, posture claim,
+one blank) and the live turn's own separator, leaving four rows of answer. All-or-nothing rather
+than shedding a row or two off the band, because a half-band is the worst of both: a cut question
+above columns that no longer say what they were asked. One number decides it — `Layout.Band` — and
+the renderer and the columns both read that one number, so a band without suppression (the brief
+three times *and* at the top) and suppression without a band (the brief nowhere on screen at all,
+which is a §4a.1 failure with the user's own words as the missing content) are not states this
+code can reach.
+
+**Scroll detaches from the band, on purpose.** A column scrolled back into history draws its
+history under the band exactly as it always did, and the band stays — including when *every*
+addressed column has been scrolled away. It describes the live turn, which is a fact about the
+room, not about any viewport; a reader who went looking for an older answer is still in the turn
+they dispatched, and the question that produced it does not stop being true because they scrolled.
+
+**What was declined.** Hoisting past turns' briefs the same way, which would flatten §9.9's
+per-column record into a room-level one and lose which seats a turn actually reached. Keeping a
+one-line stub in each column to mark where the brief would have been: it costs the row the band
+was spent to save, once per column, and the turn separator already marks that boundary. Shedding
+the band down to one row on a short terminal, covered above. And giving the band a rule glyph or a
+hue of its own — council adds no hues, and the boundary vocabulary this room already has is what a
+reader has already learned to read.

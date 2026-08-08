@@ -171,7 +171,17 @@ func TestTheHeaderLeaderDoesNotDependOnPhase(t *testing.T) {
 	// neighbours are idle draws the leader on every seat's header, not on some.
 	st = talking()
 	st.Expanded = false
-	row := strings.Split(render(st), "\n")[2] // header, frame rule, first column header
+	// FOUND rather than indexed. talking()'s turn 3 reaches two seats, so the
+	// live band sits between the frame rule and the column headers (§9.30) and a
+	// literal row number would be asserting where the chrome ends rather than
+	// what this row's grammar is.
+	row := ""
+	for _, ln := range strings.Split(render(st), "\n") {
+		if strings.Contains(ln, "Claude Code") {
+			row = ln
+			break
+		}
+	}
 	if !strings.Contains(row, "Claude Code") || !strings.Contains(row, g.Sep) {
 		t.Fatalf("row %q is not the column-header row", row)
 	}

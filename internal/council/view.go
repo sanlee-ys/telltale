@@ -36,6 +36,17 @@ func Render(st State, sty Styles, g Glyphs) string {
 		b.WriteString(fit(framePadStr+noticeLine(st, sty, g, st.Width-2*framePad), st.Width))
 		b.WriteString("\n")
 	}
+	// The live turn's brief, once, above the columns that were asked it (§9.30).
+	// It sits under the notice for the same reason the notice sits under the rule:
+	// the collapsed-seat line is a fact about the ROOM and this is a fact about
+	// the turn, and the room is the larger subject. Both are chrome, and
+	// resolveLayoutIn has already spent both out of one budget.
+	if lay.Band > 0 {
+		for _, l := range bandLines(st, st.Width-2*framePad, sty, g) {
+			b.WriteString(fit(framePadStr+l, st.Width))
+			b.WriteString("\n")
+		}
+	}
 
 	if st.Help != HelpClosed {
 		b.WriteString(helpBody(st, lay, sty, g))
@@ -90,6 +101,16 @@ func layoutFor(st State, g Glyphs) Layout {
 		// seats, and there are no seats side by side here for it to apportion.
 		cols, primary = 1, nil
 	}
+	// The band is asked for only when the body is the GRID. A turn page already
+	// renders the brief once — that is half of what it is for (§9.22) — and the
+	// help panel replaces the column area outright, so a band above it would be
+	// chrome describing content that is not on screen. Both are answered here
+	// rather than inside bandLines, so the content rule and the "which body is
+	// this" rule stay in the two places that own them.
+	band := 0
+	if st.Help == HelpClosed && !st.Page.Open {
+		band = bandRows(st, g)
+	}
 	return resolveLayoutIn(layoutInput{
 		Width:    st.Width,
 		Height:   st.Height,
@@ -98,6 +119,7 @@ func layoutFor(st State, g Glyphs) Layout {
 		Composer: composerRows(st, g),
 		Notice:   collapsedNotice(st, g) != "",
 		Primary:  primary,
+		Band:     band,
 	})
 }
 
@@ -1433,7 +1455,23 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		// later would be the room saying the same thing twice. A past turn has
 		// no chrome of its own, which is why the record carries them.
 		anchors = append(anchors, turnAnchor{N: c.TurnN, Off: len(out)})
-		out = append(out, turnHead(c.TurnN, "", c.Prompt, c.Quoted, w, sty, g)...)
+		// The echo yields to the band, and only the LIVE turn's does (§9.30).
+		// While the band is up the user's words are on screen once, full width,
+		// above every column that was asked them, so repeating them here is the
+		// duplication the band exists to delete. What survives is the separator:
+		// it is this column's own statement of which turn the lines under it
+		// belong to, and it is one line rather than the same paragraph three
+		// times over.
+		//
+		// The turn number is tested rather than assumed. A column's Prompt block
+		// outlives its turn — a seat that answered turn 3 and sat out 4 and 5 is
+		// still showing turn 3's brief here — and that block is that seat's own
+		// conversation, which §9.9 is emphatic belongs to the column.
+		prompt, quoted := c.Prompt, c.Quoted
+		if c.TurnN == st.Turn && bandUp(st, g) {
+			prompt, quoted = "", false
+		}
+		out = append(out, turnHead(c.TurnN, "", prompt, quoted, w, sty, g)...)
 	}
 
 	// The activity trace comes FIRST and is visually distinct, because it is
@@ -1815,12 +1853,18 @@ func promptEcho(prompt string, quoted bool, w int, sty Styles, g Glyphs) []strin
 		// the other seats' answers fenced in front of it. Those are not the
 		// principal's words, so they are reported rather than echoed — the line
 		// above stays the user's, and this one says what rode along with it.
-		out = append(out, styleAll(
-			indentWrap("  ", "+ the other seats' last answers were quoted to this one", w),
-			sty.Muted)...)
+		out = append(out, styleAll(indentWrap("  ", quotedNotice, w), sty.Muted)...)
 	}
 	return out
 }
+
+// quotedNotice is what a rebuttal turn reports rode along with the brief.
+//
+// Named rather than spelled twice, because the live band says it too (§9.30) and
+// two literals would be two spellings of one fact — the drift labelRule's own doc
+// comment refuses one grammar down. Whichever surface a reader sees it on, they
+// are reading the same sentence about the same dispatch.
+const quotedNotice = "+ the other seats' last answers were quoted to this one"
 
 // pastTurn renders a finished turn: what the seat did, what it said, and how it
 // ended.

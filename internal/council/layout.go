@@ -136,6 +136,50 @@ const (
 	// headerRows is the title line plus its rule.
 	headerRows = 2
 
+	// minBandSeats is how many on-screen seats have to be carrying the LIVE
+	// turn's brief before it is drawn once as a band instead of once per column
+	// (§9.30).
+	//
+	// Two, because two is where the duplication starts. A turn routed to one seat
+	// — the ordinary room since the default route stopped being everyone — has one
+	// echo on screen, and hoisting it out of that column would move the user's
+	// words away from the answer to them and buy nothing. The band is a fix for a
+	// comparison surface saying the same thing two to four times, so it appears
+	// exactly where that is true.
+	minBandSeats = 2
+
+	// maxBandBrief is how many rows of wrapped brief the band may spend.
+	//
+	// Four, and the last of the four is the TRUNCATION MARKER when the brief needs
+	// more — so a long brief renders three rows and a line saying how much is left
+	// and where to read it, never four rows that stop mid-sentence. Silent
+	// clipping is the ambiguity §4a.1 forbids: a reader cannot tell a brief that
+	// ended from a brief that was cut.
+	//
+	// It is a ceiling rather than the height. A one-line brief costs one row, which
+	// is the common case, so the band is as tall as the words are and no taller —
+	// the same shape maxComposerRows has, for the same reason: the body pays for
+	// the difference.
+	maxBandBrief = 4
+
+	// minBandBody is how many body rows have to survive the band before it is
+	// spent at all.
+	//
+	// Eight, and it is measured from what a column has to draw before a word of
+	// the reply: columnChrome is three rows (the seat's name, its posture claim,
+	// one blank), and the live turn's own separator is a fourth. A body that kept
+	// fewer than four rows of reply under that is a column showing its chrome and
+	// a ticker — and duplication removed from a reading area there is none of is
+	// not worth a row. Below this the band yields ENTIRELY and the addressed
+	// columns echo the brief themselves, which is the pre-band frame exactly.
+	//
+	// The test is against the band's rows and the composer's FLOOR, never the
+	// composer's current height, so the answer is a pure function of the terminal
+	// and the brief. A band that retired because the draft grew a row would be a
+	// layout jump on a keystroke in the middle of a turn — §7.1 rule 4 — and it
+	// would jump back when the user hit backspace.
+	minBandBody = 8
+
 	// maxComposerRows is how tall the compose area may grow.
 	//
 	// Six, because a brief worth sending to four agents is a paragraph and one
@@ -177,6 +221,11 @@ type Layout struct {
 	// Notice is 1 when a row under the header names the seats that were
 	// collapsed out of the grid, 0 otherwise.
 	Notice int
+	// Band is how many rows the live turn's brief spends as a full-width band
+	// above the columns (§9.30). Zero means no band — and it is the SAME zero the
+	// columns read to decide whether to echo the brief themselves, so the two can
+	// never disagree about where the user's words are.
+	Band int
 }
 
 // layoutInput is everything the frame plan is computed from.
@@ -194,6 +243,11 @@ type layoutInput struct {
 	Composer int
 	// Notice reports that the collapsed-seat line is on screen.
 	Notice bool
+	// Band is how many rows the live-turn band WANTS, before the tier and the
+	// height floor get a say. Zero when the turn addresses fewer than two
+	// on-screen seats, or when the body is not the grid at all — there is no
+	// duplication to remove in either case.
+	Band int
 	// Primary marks which of the Cols drawn columns own the frame this turn.
 	// Nil, empty, or all-true means equal widths. When set, length must equal
 	// Cols; false entries get stripColumn and the rest share what remains.
@@ -256,6 +310,33 @@ func resolveLayoutIn(in layoutInput) Layout {
 	if in.Notice {
 		rows++
 	}
+
+	// The band is room chrome and it is spent HERE — after the tier, out of the
+	// same budget the collapsed-seat notice comes from, and before the composer
+	// (§9.5's ordering, §9.30's band).
+	//
+	// After the tier because it is a COLUMNS-tier device: the tabs tier draws one
+	// column at a time, so the brief is on screen once already and hoisting it
+	// would spend a row to remove a duplication that is not there. `f` (Expanded)
+	// resolves to that tier too, so it needs no test of its own here.
+	//
+	// Before the composer because the composer yields to the body and the band
+	// must not: a band whose survival depended on how much had been typed would
+	// blink in and out under a reader mid-turn. What it yields to instead is a
+	// short terminal, and it yields WHOLE — the columns fall back to echoing the
+	// brief themselves, which is the frame exactly as it was before this feature.
+	// Shedding a row or two off the band instead would leave a truncated brief
+	// above four columns that no longer say what they were asked, which is worse
+	// than either end of the trade.
+	band := in.Band
+	if l.Tier != TierColumns {
+		band = 0
+	}
+	if band > 0 && in.Height-rows-band-1 < minBandBody {
+		band = 0
+	}
+	rows += band
+	l.Band = band
 
 	// The composer takes what it wants, then yields to the floor: at the
 	// minimum height a six-row draft would leave the columns nothing, and a

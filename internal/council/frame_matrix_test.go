@@ -147,6 +147,29 @@ func matrixRooms() map[string]func() State {
 			return st
 		},
 
+		// A live turn on a COMMITTEE route (§9.30): one brief, every on-screen
+		// seat, so the room hoists it into a full-width band and the columns stop
+		// echoing it. The band is the one thing in this package that wraps at the
+		// FRAME's width rather than a column's, and it has a row budget with a
+		// truncation marker hanging off the end of it — so an unbreakable brief
+		// several times too long for that budget is what actually stresses it.
+		// Quoted, because the rebuttal notice is the band's second row.
+		"committee-band": func() State {
+			st := room()
+			st.Turn = 9
+			r := Route{}
+			st.TurnRoute = &r
+			for i := range st.Columns {
+				c := &st.Columns[i]
+				c.startTurn(9, strings.Repeat(unbreakable+" ", 4), true)
+				c.Phase = PhaseStreaming
+			}
+			st.Columns[0].Body = unbreakable + " " + strings.Repeat("word ", 40)
+			st.Columns[1].Phase = PhaseWaiting
+			st.Columns[2].Phase, st.Columns[2].Body = PhaseDone, unbreakable
+			return st
+		},
+
 		"gated-long": func() State {
 			st := room()
 			st.Gates = []PendingGate{{
