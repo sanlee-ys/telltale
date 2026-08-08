@@ -332,11 +332,21 @@ func (m *Model) postureCommand(write bool) bool {
 
 	m.writePending = true
 	// The card names which write the user is about to get, because the two are
-	// materially different and only one of them asks first. A room started with
-	// --auto has no gate to restore, and saying "y approves each change" there
-	// would be a promise this room cannot keep.
-	if m.opts.Auto {
-		m.st.Notice = "let the room write again? y confirms — --auto is on, so no seat will ask before it acts · n keeps it read-only"
+	// materially different and only one of them asks first. An ungated room has
+	// no gate to restore, and saying "y approves each change" there would be a
+	// promise this room cannot keep.
+	//
+	// READ FROM m.st.Asking(), NOT m.opts.Auto. The flag only SEEDS the gate at
+	// launch (stateWith) and `a` has moved it ever since (§9.17's last control),
+	// so a room opened gated and then told to stop asking would have been handed
+	// a card promising a seat would ask — the exact promise this branch exists to
+	// avoid, made in the more dangerous direction, since the user reads "claude
+	// asks before each change" and then nothing does. dispatch.go states the rule
+	// for the request path and this is the same rule on the confirmation path.
+	// The `--auto` wording went with it: the flag is no longer the only route to
+	// an ungated room, so crediting it would name a cause that may not be true.
+	if !m.st.Asking() {
+		m.st.Notice = "let the room write again? y confirms — nothing will ask before it acts · n keeps it read-only"
 	} else {
 		m.st.Notice = "let the room write again? y confirms — claude asks before each change, the other seats do not · n keeps it read-only"
 	}
@@ -481,9 +491,11 @@ func (m *Model) seatedLabels() []string {
 // it may not outlive the claim being true.
 //
 // Recomputed from postureClaim rather than patched in place so the badge and the
-// invocation cannot drift: the same function answers at launch and here, still
-// reading the gate from opts.Auto and the guard from the hooks file that was
-// actually written.
+// invocation cannot drift: the same function answers at launch and here, reading
+// the gate from the room's own Asking() and the guard from the hooks file that
+// was actually written. It said "from opts.Auto" until `a` made the flag a seed
+// rather than the answer; the code already read Asking(), so the comment was the
+// only thing left describing the room council stopped shipping.
 func (m *Model) applyPosture(write bool) {
 	m.st.Write = write
 	windows := runtime.GOOS == "windows"

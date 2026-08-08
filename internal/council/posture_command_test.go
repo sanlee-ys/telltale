@@ -198,11 +198,11 @@ func TestPostureRefusesMidTurn(t *testing.T) {
 	}
 }
 
-// TestTheCardNamesWhichWriteYouGet. --auto and gated write reach the same
-// badge-bearing posture by different routes, and only one of them asks before
-// acting. A card promising "claude asks first" in an --auto room would be a
-// promise that room cannot keep — the honesty rule applied to a confirmation
-// prompt rather than to a gauge.
+// TestTheCardNamesWhichWriteYouGet. An ungated room and a gated one reach the
+// same badge-bearing posture by different routes, and only one of them asks
+// before acting. A card promising "claude asks first" in an ungated room would
+// be a promise that room cannot keep — the honesty rule applied to a
+// confirmation prompt rather than to a gauge.
 func TestTheCardNamesWhichWriteYouGet(t *testing.T) {
 	gated := postureModel(false)
 	gated.applyPosture(false)
@@ -215,13 +215,72 @@ func TestTheCardNamesWhichWriteYouGet(t *testing.T) {
 	auto.roomCommand()
 
 	if gated.st.Notice == auto.st.Notice {
-		t.Fatal("a gated room and an --auto room offer the same card; only one of them asks")
+		t.Fatal("a gated room and an ungated room offer the same card; only one of them asks")
 	}
 	if !strings.Contains(gated.st.Notice, "asks before") {
 		t.Errorf("the gated card does not say the seat asks: %q", gated.st.Notice)
 	}
-	if !strings.Contains(auto.st.Notice, "--auto") {
-		t.Errorf("the --auto card does not say nothing will ask: %q", auto.st.Notice)
+	if !strings.Contains(auto.st.Notice, "nothing will ask") {
+		t.Errorf("the ungated card does not say nothing will ask: %q", auto.st.Notice)
+	}
+	// The wording no longer credits the flag, because the flag is no longer the
+	// only way into this state — `a` is. A card blaming --auto in a room that
+	// was gated at launch names a cause that is not there.
+	if strings.Contains(auto.st.Notice, "--auto") {
+		t.Errorf("the card still credits --auto for a state `a` can also reach: %q", auto.st.Notice)
+	}
+}
+
+// TestTheCardReadsTheRoomAndNotTheFlag. The regression this pins: /write's card
+// read m.opts.Auto, which is only the LAUNCH seed for the gate (stateWith), while
+// `a` has moved m.st.GateOff ever since §9.17's last control landed. So a room
+// opened gated, told to stop asking, then flipped /read → /write handed back a
+// card promising "claude asks before each change" with nothing left to ask —
+// the promise the sibling test exists to forbid, made in the direction that
+// costs the user rather than merely misinforming them.
+//
+// dispatch.go already states the rule for the REQUEST path ("m.st.Asking, not
+// m.opts.Auto: the flag only SEEDS this at launch"); this is the same rule on the
+// confirmation path, and it is a test rather than a comment because the two
+// fields agree in every room nobody pressed `a` in — which is every fixture.
+func TestTheCardReadsTheRoomAndNotTheFlag(t *testing.T) {
+	// Opened GATED: the flag says the seat asks.
+	m := postureModel(false)
+	if !m.st.Asking() {
+		t.Fatal("a room built without --auto did not start asking")
+	}
+
+	// `a` in view mode is the whole point — the gate moves without the flag.
+	m.toggleAsking()
+	if m.st.Asking() {
+		t.Fatal("`a` did not stop the room asking")
+	}
+
+	m.applyPosture(false)
+	m.setDraft("/write")
+	m.roomCommand()
+
+	if strings.Contains(m.st.Notice, "asks before") {
+		t.Errorf("the card promises a seat will ask in a room that has stopped asking: %q", m.st.Notice)
+	}
+	if !strings.Contains(m.st.Notice, "nothing will ask") {
+		t.Errorf("the card does not say nothing will ask: %q", m.st.Notice)
+	}
+
+	// And the other direction, which is the same bug wearing the safer face: a
+	// room opened --auto and then told to ask again must not go on advertising
+	// that nothing will.
+	back := postureModel(true)
+	back.toggleAsking()
+	if !back.st.Asking() {
+		t.Fatal("`a` did not turn asking back on in an --auto room")
+	}
+	back.applyPosture(false)
+	back.setDraft("/write")
+	back.roomCommand()
+
+	if !strings.Contains(back.st.Notice, "asks before") {
+		t.Errorf("an --auto room that was told to ask again still offers the ungated card: %q", back.st.Notice)
 	}
 }
 
