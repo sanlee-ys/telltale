@@ -1046,9 +1046,17 @@ func (m *Model) saveRoom() {
 	}
 	err := SaveRoom(SavedRoom{
 		Workspace: m.st.Workspace,
-		Posture:   savedPosture(m.st.Write, m.opts.Auto),
-		Turn:      m.st.Turn,
-		Sessions:  sessions,
+		// The room's SHAPE, and the half of §9.32's line that comes back: where
+		// it was pointed and who was at the table. Read off State, not off
+		// opts.Seats, because `/seat` has been moving it from inside the room
+		// since §9.17 — the flag is only the seed.
+		Seats: m.st.Seats,
+		// Its AUTHORITY, recorded and never restored. Both arguments are LIVE
+		// state (§9.32): this used to pass m.opts.Auto beside m.st.Write, so a
+		// room told `a` saved a description of a room nobody was in.
+		Posture:  savedPosture(m.st.Write, m.st.Asking()),
+		Turn:     m.st.Turn,
+		Sessions: sessions,
 		// The PATH only. Never the content — see SavedRoom and Brief.
 		BriefPath: m.brief.Path,
 		SavedAt:   time.Now(),

@@ -611,14 +611,50 @@ func (s State) PageTurns() []int {
 // turn, this decides who is seated at all, so a seat left out here is not
 // drawn and not dispatched to. Anything else would spend a quota on a column
 // nobody can see.
+// Since §9.32 this is also SHAPE the room saves: room.json carries the roster
+// verbatim, this struct marshalled into the `seats` field. Both members are
+// `omitempty` so the default room is `{}` in a file a user is meant to be able
+// to read, and so an OLDER file with no roster at all decodes to this exact
+// zero value — which is why a room.json written before §9.32 goes on meaning
+// what it always meant. The json tags live on the render type rather than on a
+// parallel struct in resume.go deliberately: a roster is a roster, and a second
+// shape to translate between would be the thing that drifts.
 type Seats struct {
 	// All keeps every detected seat on screen, including the ones that cannot
 	// be driven. This is the pre-collapse room, available by typing for it.
-	All bool
+	All bool `json:"all,omitempty"`
 	// Only, when non-empty, is the exact set asked for — and asking for a seat
 	// FORCES it on screen even if it is not installed, because a user who named
 	// it is owed the card that says why it is not there.
-	Only []model.VendorID
+	Only []model.VendorID `json:"only,omitempty"`
+}
+
+// typed reports that this roster was ASKED for — by `--vendor` at the door or
+// by `/seat` inside — rather than being the default detected table.
+//
+// The zero value is the default room, which is what makes this the same test
+// `--cd` applies to `opts.Dir != ""` (§9.32): an explicit control someone typed
+// today outranks a file from yesterday, and nothing typed leaves the file in
+// charge.
+func (s Seats) typed() bool { return s.All || len(s.Only) > 0 }
+
+// sameSeats compares two rosters. Seats holds a slice, so `==` does not compile
+// and a roster change cannot be detected by assignment — which is exactly what
+// roomCommand's save choke point needs to ask (§9.32).
+//
+// ORDER-SENSITIVE, on purpose. `/seat claude,codex` and `/seat codex,claude`
+// produce different Only orders, and that order is what the grid draws, so
+// treating them as one roster would be calling two different rooms the same.
+func sameSeats(a, b Seats) bool {
+	if a.All != b.All || len(a.Only) != len(b.Only) {
+		return false
+	}
+	for i := range a.Only {
+		if a.Only[i] != b.Only[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // shows reports whether a column is drawn. The raw rule, without the

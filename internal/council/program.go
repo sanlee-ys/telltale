@@ -366,13 +366,22 @@ func (m *Model) reattach(re Reattachment) {
 		m.st.Notice += " (the room was in " + abbreviate(re.Room.Workspace, m.st.Home) +
 			"; it is now in " + abbreviate(m.st.Workspace, m.st.Home) + ")"
 	}
-	if re.Room.Posture != savedPosture(m.st.Write, m.opts.Auto) {
+	// LIVE on both sides, matching the writer exactly (§9.32). This is the saved
+	// posture's only consumer, which is why the two moved in one change: a reader
+	// asking `m.opts.Auto` about a room `a` can move would compare a description
+	// of the live room against a description of the flags, and report a change to
+	// a user who made none.
+	//
+	// Read at reattach time, where the room is still exactly its defaults plus
+	// its flags — nothing has been typed into it yet — so this is also the point
+	// at which "posture is never restored" is observable: whatever the file says,
+	// m.st.Write and m.st.Asking() here came from Options and nowhere else.
+	if now := savedPosture(m.st.Write, m.st.Asking()); re.Room.Posture != now {
 		// Stated rather than applied. The saved room ran under a different
 		// posture, and a user who reattaches a write room without retyping
 		// --write should learn that from the room instead of from a vendor
 		// refusing to edit a file.
-		m.st.Notice += " (it ran " + re.Room.Posture + "; this room is " +
-			savedPosture(m.st.Write, m.opts.Auto) + ")"
+		m.st.Notice += " (it ran " + re.Room.Posture + "; this room is " + now + ")"
 	}
 	if re.Room.BriefPath != m.brief.Path {
 		// Same treatment as posture, and the same reason the path is stored at
@@ -1536,6 +1545,13 @@ func Run(opts Options) error {
 	}
 	// Threaded through Options so stateWith and the model see the one answer.
 	opts.Dir = ws
+
+	// The roster: --vendor if typed, else who the saved room seated, else the
+	// detected table. Decided HERE, beside the workspace, because they are the
+	// two halves of the same thing — the room's SHAPE, which §9.32 restores and
+	// an explicit launch flag overrides. Neither is restored from a room --fresh
+	// declined; see seatsFor.
+	opts.Seats = seatsFor(opts.Seats, re.Room.Seats, re.Active() && !re.Offered)
 
 	var hooks HookSet
 	if wantsHooks(opts) {

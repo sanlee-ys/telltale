@@ -485,6 +485,11 @@ func TestTheSavedRoomHoldsKeysAndNeverContent(t *testing.T) {
 		Brief{Path: "/home/dev/private/brief.md", Text: secret}, HookSet{}, Reattachment{})
 	m.st.Turn = 2
 	m.st.Draft = draft
+	// A NARROWED roster, so the roster key is actually present below rather than
+	// omitted by the default room. §9.32's claim is that a roster passes the
+	// ninth amendment's keys-not-content test, and the way to assert a claim
+	// about a field is to save a room that has one.
+	m.st.Seats = Seats{Only: []model.VendorID{model.VendorClaude}}
 	m.sessions[model.VendorClaude] = "claude-sess-1"
 	m.st.Columns = []Column{{
 		Vendor: model.VendorClaude, Label: "Claude Code",
@@ -529,6 +534,13 @@ func TestTheSavedRoomHoldsKeysAndNeverContent(t *testing.T) {
 	want := map[string]bool{
 		"version": true, "workspace": true, "posture": true, "turn": true,
 		"sessions": true, "brief_path": true, "saved_at": true,
+		// "seats" was added by §9.32 and this is the deliberate act the comment
+		// above demands. It passes the rule rather than being excused from it: a
+		// roster is four vendor ids out of a closed four-name set — the words
+		// `--vendor` takes and the footer prints — so it says who was in the room
+		// and not one syllable of what was said there. Asserted for content
+		// below, not merely allowed here.
+		"seats": true,
 	}
 	for k := range keys {
 		if !want[k] {
@@ -539,6 +551,20 @@ func TestTheSavedRoomHoldsKeysAndNeverContent(t *testing.T) {
 		if _, ok := keys[k]; !ok && k != "brief_path" {
 			t.Errorf("the saved room is missing key %q", k)
 		}
+	}
+	// The roster holds NAMES, and only names a seat can be called by. A field
+	// added to Seats later that carried anything else — a note, a reason, a
+	// last-brief — would reach this file through the same tag and this is where
+	// it gets caught.
+	var roster struct {
+		All  bool     `json:"all"`
+		Only []string `json:"only"`
+	}
+	if err := json.Unmarshal(keys["seats"], &roster); err != nil {
+		t.Fatalf("the saved roster is not a roster: %v", err)
+	}
+	if len(roster.Only) != 1 || roster.Only[0] != string(model.VendorClaude) {
+		t.Errorf("saved roster = %+v, want claude alone", roster)
 	}
 	_ = home
 }

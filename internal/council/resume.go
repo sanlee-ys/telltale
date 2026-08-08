@@ -60,6 +60,13 @@ var ErrNoSavedRoom = errors.New("council: no saved room")
 // of the file. That demotion is the whole cockpit change: a room per directory
 // was a room the user had to name to enter.
 //
+// §9.32 states the line this struct is now cut along, and every field is on one
+// side of it. **SHAPE — the workspace and the roster — is recorded AND
+// restored. AUTHORITY — write posture, gate cadence — is recorded and never
+// restored; it has to be typed.** Turn, Sessions, BriefPath and SavedAt are
+// neither: they are the keys and the provenance the two halves are described
+// with.
+//
 // The gauges' never-writes contract is untouched: `statusline` and `hud` still
 // write nothing at all (ADR-008 §2). Council was always the exception that
 // spawns processes, and this is the one file it is ratified to write.
@@ -80,13 +87,38 @@ type SavedRoom struct {
 	// ended up, and the next launch reopens there.
 	Workspace string `json:"workspace"`
 
-	// Posture is what the room was opened as: "read", "write" or "write-gated".
+	// Seats is the ROSTER: who was at the table, drawn and dispatched to (§9.9).
 	//
-	// Recorded to be DISPLAYED, never to be re-applied. Restoring write posture
-	// from a file would mean a room that writes to a tree without --write
-	// having been typed — a grant arriving from disk instead of from a
-	// keystroke, which is precisely the thing the third ADR-008 amendment made
-	// visible in the header for the whole session.
+	// SHAPE, not authority — the half of §9.32's line that IS restored. A roster
+	// is keys and not content by the ninth amendment's own test: four vendor ids
+	// out of a closed four-name set, the same words the footer already prints and
+	// the same ones `--vendor` takes on the command line. It says who was in the
+	// room, never one syllable of what was said in it.
+	//
+	// It is restored because losing it costs the user the expensive default this
+	// room exists to refuse: a `/seat` that evicted a quota-dark seat died with
+	// the restart, and the evicted seat walked back in and started billing again
+	// on the next unaddressed turn.
+	//
+	// Absent in a file written before §9.32, which decodes to the zero Seats —
+	// the full detected table, exactly what an old room already did.
+	Seats Seats `json:"seats,omitempty"`
+
+	// Posture is what the room was doing when it was saved: "read", "write" or
+	// "write-gated".
+	//
+	// AUTHORITY, and therefore recorded to be DISPLAYED and never re-applied.
+	// Restoring write posture from a file would mean a room that writes to a
+	// tree without --write having been typed — a grant arriving from disk
+	// instead of from a keystroke, which is precisely the thing the third
+	// ADR-008 amendment made visible in the header for the whole session.
+	//
+	// Its ONE consumer is the reattach-mismatch notice in program.go. That is
+	// what fixes what this field has to hold: the room AS IT STOOD, live write
+	// AND live gate, both sides at once (§9.32). Recorded from the launch flag
+	// on either side, it would describe a room nobody was in — and the notice,
+	// comparing that against a live room, would fire at a user who changed
+	// nothing.
 	Posture string `json:"posture"`
 
 	// Turn is how many turns the saved room dispatched.
@@ -346,7 +378,43 @@ func readRoom(path string, version int) (SavedRoom, string) {
 	if room.Turn <= 0 {
 		return SavedRoom{}, "the saved room records no turns"
 	}
+	room.Seats = knownSeats(room.Seats)
 	return room, ""
+}
+
+// knownSeats drops roster entries this build has no seat for.
+//
+// The roster is the one restored field whose value is a NAME rather than a
+// number or an opaque id, so it is the one a hand-edit or a downgrade can fill
+// with a word that means nothing here. An unrecognised id would not error: it
+// would seat nobody, VisibleColumns' everything-collapsed fallback would draw
+// the whole table, and the user would get the default room while the file
+// claimed a narrowed one — a roster silently disagreeing with the room, which is
+// §4a.1's collapse in the surface §9.32 exists to make trustworthy.
+//
+// Dropped rather than refused, because a roster is SHAPE: the sessions are still
+// perfectly reattachable and refusing the whole file over the seating plan would
+// cost four conversations to fix a screen. An Only list that empties out is
+// treated as absent — the default detected room — for the same reason `/seat`
+// will not empty the room from the composer.
+func knownSeats(s Seats) Seats {
+	if len(s.Only) == 0 {
+		return s
+	}
+	known := map[model.VendorID]bool{}
+	for _, v := range addressableVendors() {
+		known[v] = true
+	}
+	kept := make([]model.VendorID, 0, len(s.Only))
+	for _, v := range s.Only {
+		if known[v] {
+			kept = append(kept, v)
+		}
+	}
+	if len(kept) == 0 {
+		return Seats{All: s.All}
+	}
+	return Seats{All: s.All, Only: kept}
 }
 
 // adoptLegacyRoom seeds the global room from the newest v1 per-workspace file.
@@ -398,10 +466,28 @@ func adoptLegacyRoom() (Reattachment, error) {
 	return Reattachment{Path: bestPath, Room: best, Adopted: true}, nil
 }
 
-// savedPosture names the posture the room was opened with, for the record only.
-func savedPosture(write, auto bool) string {
+// savedPosture names the posture the room STOOD IN, for the record only.
+//
+// "Was opened with" is what it used to say and what it used to mean, and §9.32
+// retired both. It took `auto` — `m.opts.Auto`, the launch flag — while its
+// other argument was `m.st.Write`, which `/read` and `/write` had been moving
+// from inside the room since §9.17. So it recorded a room that was HALF live and
+// half launch: press `a` in a gated write room and the file went on saying
+// "write-gated" about a room with nothing left asking. §9.17's own closing rule
+// is the one that was missed — a flag with an in-room twin is only the SEED, and
+// live state answers what the room is doing — and it named this call site as a
+// legitimate launch-time read, which is the part §9.32 amends.
+//
+// So BOTH sides are live now: `m.st.Write` and `m.st.Asking()`. Both callers had
+// to move together, because the only consumer is a notice that compares this
+// against a live room — a writer reading the flag and a reader reading the state
+// would make the mismatch fire at a user who had changed nothing.
+//
+// Still never re-applied. Recording the room accurately is the opposite of
+// restoring it: a posture that can arrive from a file is not one anyone typed.
+func savedPosture(write, asking bool) string {
 	switch {
-	case write && !auto:
+	case write && asking:
 		return "write-gated"
 	case write:
 		return "write"

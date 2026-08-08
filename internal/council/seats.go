@@ -50,6 +50,32 @@ func ParseSeats(s string) (Seats, error) {
 	return out, nil
 }
 
+// seatsFor decides who is seated at launch: the roster typed at the door, the
+// one the saved room recorded, or the detected table.
+//
+// **A typed `--vendor` OVERRIDES the saved roster and then rewrites it** (§9.32),
+// which is `--cd`'s rule and `--cd`'s reasoning: an explicit launch control
+// someone typed today outranks a file from yesterday, and the next save records
+// the room they actually got rather than leaving the file describing a room that
+// is no longer on screen. Run's workspace switch is the shape this mirrors, down
+// to `restore` being the same `re.Active() && !re.Offered` — a room declined by
+// `--fresh` restores neither field.
+//
+// The rewrite needs no code here and that is worth saying, because it looks like
+// a missing branch: `stateWith` copies this into `State.Seats` and `saveRoom`
+// writes `m.st.Seats`, so the first completed turn records whatever the room
+// ended up with. The same one line is what makes `/seat` persist.
+//
+// Restoring is unconditional on the roster's own content — including the zero
+// value, which is the default room saved as the default room. A saved roster
+// that could only ever widen would be a `/seat` you could not undo by quitting.
+func seatsFor(typed, saved Seats, restore bool) Seats {
+	if typed.typed() || !restore {
+		return typed
+	}
+	return saved
+}
+
 func (s Seats) names(v model.VendorID) bool {
 	for _, id := range s.Only {
 		if id == v {
