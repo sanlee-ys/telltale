@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json
+#
+# DRAFT. Not submitted. See packaging/README.md for the tag-day flow and for
+# what {{VERSION}} is replaced with.
+PackageIdentifier: sanlee-ys.telltale
+PackageVersion: "{{VERSION}}"
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.12.0

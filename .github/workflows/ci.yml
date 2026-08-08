@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Callable, so `release.yml` runs THIS gate rather than a copy of it. A
+  # second hand-maintained transcription of vet/test/build/smokes would drift,
+  # and the release would then be green against the older one.
+  workflow_call:
 
 jobs:
   test:

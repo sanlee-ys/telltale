@@ -2,6 +2,11 @@ telltale*.exe
 /telltale
 *.test
 
+# goreleaser's output. `goreleaser release --snapshot --clean` is how the
+# release config is verified without tagging anything (packaging/README.md);
+# what it produces is a throwaway build of a version that does not exist.
+/dist/
+
 # Turn traces. `/trace <file>` resolves a relative path against the room's
 # workspace, so the natural place to write one while working in this repo is
 # this repo — and a trace is a measurement of one machine on one evening, not a

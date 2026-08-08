@@ -1,0 +1,198 @@
+# goreleaser — the whole of tag day.
+#
+# `git tag v0.1.0 && git push origin v0.1.0` is the only command a release
+# takes; `.github/workflows/release.yml` runs the repo's own gate on
+# windows-latest and then runs this file. Nothing here fires on a merge to
+# main: the workflow's only trigger is a v* tag, so this config is inert until
+# one exists.
+#
+# The packaging decisions behind it — target list, platform labels, the
+# in-repo scoop bucket, the winget draft, and what is deliberately NOT
+# published — are recorded in docs/design.md §8 (adoption track, ADR-005).
+version: 2
+
+project_name: telltale
+
+before:
+  hooks:
+    # Download, never tidy. A release must build the module as committed; a
+    # hook that can rewrite go.mod mid-release makes the artifact a different
+    # thing from the tree the gate just passed.
+    - go mod download
+
+builds:
+  - id: telltale
+    main: ./cmd/telltale
+    binary: telltale
+    env:
+      # CGO off is what makes one Linux runner able to produce all four
+      # binaries, and it costs nothing here: the repo has no cgo dependency
+      # (the SQLite readers for Antigravity and Cursor are written in Go
+      # precisely so there isn't one — design.md §3.8/§3.9).
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      # main.version is the `var version = "dev"` in cmd/telltale/main.go. A
+      # source build says "dev" and a released build says its tag, which is
+      # the same zero-versus-absent distinction the gauges make about data:
+      # `telltale version` must never claim a release number it wasn't given.
+      - -s -w -X main.version={{ .Version }}
+    goos:
+      - windows
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # The target list is deliberately short, and every entry in it is a
+      # platform someone is expected to run telltale on today. windows/arm64
+      # and linux/arm64 have neither a verification story nor a known user,
+      # and an unlabelled binary nobody has run is the packaging version of a
+      # rendered guess.
+      - goos: windows
+        goarch: arm64
+      - goos: linux
+        goarch: arm64
+
+archives:
+  - id: telltale
+    ids: [telltale]
+    # windows_amd64 rather than Windows_x86_64: the winget draft and the scoop
+    # manifest both hard-code these names, so the template is load-bearing and
+    # kept boring.
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+      - docs/council.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  # `goreleaser release --snapshot --clean` is how this file is verified
+  # without tagging anything. The version it stamps says so out loud, so a
+  # snapshot binary can never be mistaken for a release when it prints
+  # `telltale 0.0.1-SNAPSHOT-<sha>`.
+  version_template: "{{ incpatch .Version }}-SNAPSHOT-{{ .ShortCommit }}"
+
+changelog:
+  # Plain git log, ascending, no grouping — NOT goreleaser's default
+  # Conventional-Commits grouping and NOT `use: github-native`.
+  #
+  # Two reasons, both specific to this repo. First, CLAUDE.md's commit voice is
+  # a lowercase sentence describing the behavior change from the user's side
+  # (`council: the gate reads the command, not the punctuation`) and explicitly
+  # not a `feat(x):` label, so every commit would land in goreleaser's "Others"
+  # bucket and the grouping would be three empty headings. Squash-merge means
+  # those subjects are the PR titles, which are already the changelog anyone
+  # would write by hand. Second, `github-native` replaces the entire release
+  # body with GitHub's generated notes, which would delete the platform-label
+  # table below — and that table is the part of the release that has to be
+  # true.
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - '^Merge '
+      - '^chore\(deps\)'
+
+release:
+  github:
+    owner: sanlee-ys
+    name: telltale
+  # Draft, always. Publishing is outward-facing and stays a human action;
+  # goreleaser's job ends at "the artifacts and the notes are staged".
+  draft: true
+  header: |
+    **An honest gauge for your coding agents.**
+
+    ## What each binary is verified to be
+
+    The honest-gauge rule applies to the platforms as well as the numbers: the
+    label says what was measured, not what is expected to work.
+
+    | Download | Verification |
+    |---|---|
+    | `windows_amd64` | **Windows is the continuously verified target.** Every commit runs vet, the suite, the build and binary-level smokes on `windows-latest` (ADR-002), and this release ran that same gate before these artifacts were built. |
+    | `darwin_amd64` | **Smoke-verified on Intel macOS — Windows is the continuously verified target.** Point-in-time: the suite, the build, the statusline smokes, a 53-session live Claude Code read and the HUD all ran on Intel macOS at `052a9d6` (ADR-005, second amendment). CI has never run on macOS, and four of the five adapters have still never met a live macOS corpus. |
+    | `darwin_arm64` | **Built, not verified.** Cross-compiled and never run on Apple Silicon by this project. Shipped rather than withheld because a labelled binary is more useful than no binary — but the label is the claim, and it is the whole claim. |
+    | `linux_amd64` | **Built, not verified.** Cross-compiled and never run on Linux by this project. Same label, same reason. |
+
+    Verify a download against `checksums.txt` before running it.
+  footer: |
+    ## Install
+
+    Windows, via scoop:
+
+    ```
+    scoop bucket add telltale https://github.com/sanlee-ys/telltale
+    scoop install telltale
+    telltale council
+    ```
+
+    Or download the archive for your platform above, unpack it, and put
+    `telltale` on your PATH:
+
+    ```
+    telltale council
+    ```
+
+    `telltale council` is the room this project is for. The two gauges wire in
+    underneath it — see [README](https://github.com/sanlee-ys/telltale#readme)
+    for the statusline block and `telltale hud`.
+
+    `telltale version` prints the tag this binary was built from.
+
+scoops:
+  - name: telltale
+    ids: [telltale]
+    # The bucket lives in THIS repo, under bucket/. Rejected alternative: a
+    # second repo, sanlee-ys/scoop-telltale.
+    #
+    # The deciding cost is a credential, not convenience. goreleaser pushing a
+    # manifest into a *different* repo needs a cross-repo PAT held as a release
+    # secret; pushing into its own repo needs only the workflow's built-in
+    # GITHUB_TOKEN, which the release already has for uploading artifacts. A
+    # project whose stated posture is that it reads no credentials should not
+    # mint a long-lived write token for a one-file manifest. `scoop bucket add`
+    # takes any git repo with a bucket/ directory, so the user-facing command
+    # is the same length either way.
+    repository:
+      owner: sanlee-ys
+      name: telltale
+      branch: main
+      token: "{{ .Env.GITHUB_TOKEN }}"
+    directory: bucket
+    homepage: https://github.com/sanlee-ys/telltale
+    description: An honest gauge for your coding agents — a dispatch room for several vendor CLIs, on a statusline and a cross-vendor HUD where every number is traceable to measured tool output.
+    license: MIT
+    commit_msg_template: "dist: scoop manifest for {{ .ProjectName }} {{ .Tag }}"
+    commit_author:
+      name: goreleaser
+      email: noreply@github.com
+    # auto = skip on snapshots and prereleases. A `--snapshot` verification run
+    # must never touch main, and a `-rc` tag must never move the bucket users
+    # installed from.
+    skip_upload: auto
+
+# Deliberately NOT configured, each for the same reason the gauges refuse a
+# derived number — the package would claim a posture nothing measured:
+#
+#   - homebrews / a brew tap. Homebrew installs by platform, and macOS is
+#     smoke-verified on Intel only. A tap that resolves happily on Apple
+#     Silicon would launder "built, not verified" into "supported".
+#   - nfpms (.deb/.rpm). A distro package is a support claim, and Linux is
+#     "built, not verified". The tarball carries the label; a package would not.
+#   - npm. The bare name `telltale` is taken on the registry by an unrelated
+#     option parser, and a Go binary has no reason to be there — design.md §6.5
+#     recorded npm as optional-not-required, and it is skipped, not renamed.
+#   - winget. Submission is an external PR to microsoft/winget-pkgs and stays a
+#     human action. The manifest draft and the flow are in packaging/winget/.
