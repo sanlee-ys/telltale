@@ -1,24 +1,24 @@
   council READ  │  ~/code/telltale                                                  turn 4  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ▸ CC Claude Code  ────────  ✗ failed  │    CX Codex  ───────────────  ○ idle  │    AG Antigravity  ─────────  ○ idle  
-    ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
+▌ ▸ CC Claude Code  ────────  ✗ failed  │    CX Codex  ───────────────  ○ idle  │    AG Antigravity  ─────────  ○ idle  
+▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
                                                                                                                         
                                                                                                                         
                                                                                                                         
                                                                                                                         
                                                                                                                         
-  turn 4  ────────────────────────────  │                                       │                                       
-  › what changed in the runner?         │                                       │                                       
+▌ turn 4  ────────────────────────────  │                                       │                                       
+▌ › what changed in the runner?         │                                       │                                       
                                                                                                                         
                                                                                                                         
                                                                                                                         
-  thread not restored — starting fresh  │                                       │                                       
-    the first turn on the saved thread  │                                       │                                       
-    failed, so this seat let it go.     │                                       │                                       
-    your next brief opens a new         │                                       │                                       
-    session, with the brief             │                                       │                                       
-    re-applied.                         │  no turn dispatched yet.              │  no turn dispatched yet.              
+▌ thread not restored — starting fresh  │                                       │                                       
+▌   the first turn on the saved thread  │                                       │                                       
+▌   failed, so this seat let it go.     │                                       │                                       
+▌   your next brief opens a new         │                                       │                                       
+▌   session, with the brief             │                                       │                                       
+▌   re-applied.                         │  no turn dispatched yet.              │  no turn dispatched yet.              
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
   VIEW                           ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit  

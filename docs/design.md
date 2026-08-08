@@ -4850,3 +4850,88 @@ the frame is the only thing it needs to *match*. Making the frame's rule brighte
 heavier: §9.23 declined to let the rails' hue mean anything on the argument that chrome competing
 with content is the wrong trade, and an outline is chrome. And keeping the idle leader off "for
 quiet": the quiet was bought by making the room's most stable row the one that changed most.
+
+### 9.27 focus was a mark on one row, in a frame the reader had scrolled past
+
+§9.12 fixed the focus signal by adding the `▸` and moving the load-bearing half onto the seat
+name's *weight*. Both of those live on the column header — row one of a body that is twenty rows
+tall — so a reader forty lines into a transcript, comparing two answers, had nothing on screen at
+all telling them which column `↑↓` would move. The signal was correct and it was in the wrong
+place: it described a column and was as tall as a line.
+
+**The focused column's LEFT rail thickens.** The gutter cell immediately left of the focused
+column draws `▌` (U+258C) instead of `│` — same cell, same width, one glyph heavier — for the
+full height of the band. It is the only mark on this surface that is as tall as the thing it
+describes, which is the whole reason it is worth a glyph. The `▸` and the name's weight stay:
+word/glyph-first means two carriers on two rows, not one carrier moved.
+
+**The leftmost column has no gutter, so the frame's left pad carries its mark.** `framePad` is
+two cells since §9.24, and the mark takes cell one — which leaves exactly one cell of air between
+it and the column, the closest the geometry gets to the gutter's two. Without this, position zero
+would be the one seat the device could not mark, and a signal with a hole in it is a signal a
+reader stops trusting.
+
+**It rides §9.23's band exactly.** The thick rail spans the rows the thin one would and no
+others, so focus cannot spear a void either — an idle 120×60 room still has a bare middle, and
+`TestTheRailRidesTheSameBandTheThinOneDoes` asserts it against the same `bare > 0` test §9.23
+wrote. Focus does not get its own answer to a question the frame already settled.
+
+**Unfocused columns' prose steps back one contrast level.** `Dim` is `Text` + `Faint`, applied to
+the *reading area* of a column the keys do not move: the vendor's reply, the §9.14 stand-in for a
+reply that has not arrived, and the `no turn dispatched yet.` line. That is crush's
+`Focused`/`Blurred` pair applied to prose rather than to a border, and it is the half of this
+pass that costs no cell at all.
+
+**The faint collapse is accepted, and here is the accounting.** Council has two intensities —
+`Text` and `Muted` — so a demoted body renders identically to chrome, and inside an unfocused
+column prose and chrome do arrive at one intensity. What is lost is the *second* signal, on a
+column the reader is not reading: every distinction between them is carried by shape first (a
+turn separator is a labelled rule, a trace entry opens `⚙`, a skip line `○`, a note `⚠`), which is
+§7.1 rule 2 doing exactly the job it was written for. The alternative — a third intensity in
+`internal/theme` — would spend a shared palette token, on a surface the statusline does not have,
+for a distinction only the unread column needs.
+
+**What the demotion does NOT reach, and each exclusion is a rule rather than a taste.**
+- **The chrome above the body.** `columnCell` renders the header, the badge row and the gate card
+  with the room's set and only the body with the seat's. A posture badge is a safety claim, and a
+  claim that faded because the reader was looking at the next column is precisely the defect §9.2
+  wrote the reserved badge row to prevent.
+- **The prompt echo.** The user's own words stay `Strong` in every column. What a seat was *asked*
+  is the thing a reader scrolls looking for (§9.9), and it is not the vendor's prose to demote.
+- **Notes and cards.** A failure note, a reattach card, an unavailable card and the thread-cleared
+  sentence under its rule all keep their own styles. This is the one place the ratified shape was
+  **narrowed** during implementation: the thread-cleared sentence is prose in the reading area by
+  position, but it is the body of a card in the room's grammar and it says what the *next* brief
+  will do — an actionable claim about the seat, in the same category as the reattach card whose
+  wording it shares. Leaving one of that pair full-contrast and demoting the other would be two
+  spellings of one fact.
+
+**The rail is a columns-tier device, and says so.** The tabs tier has one column on screen with a
+tab bar above it already carrying `▸` and the selected tab's weight; a rail there would mark the
+only thing there is. Expanded is the tabs tier by `tierFor`'s own rule, so it inherits that
+answer rather than needing its own. A turn page is one reading area and has no unfocused seat to
+demote.
+
+**Under `NO_COLOR` and `--ascii` the whole distinction still lands**, and that is the test the
+demotion had to pass to be allowed at all: `▌`/`[` in the gutter, `▸`/`]` before the name, and the
+name's own weight all survive both, so a monochrome terminal loses the contrast step and keeps
+every carrier that was doing the work. `[` is the ascii rail — `#`, the obvious candidate, is
+refused for the reason `ActOK` refused it (it is the HUD's ascii gauge fill, and one product means
+one vocabulary), and of what is left `[` is the squarest vertical stroke in the set, faces the
+column it marks, and mirrors `]`, which is already this room's ascii focus mark. The `[` and `]`
+in the mode line are key *names* in the footer's prose, never marks in the grid — the same slot
+argument `Range`'s doc makes for the hyphen.
+
+**Golden churn: the rail only.** `▌` is a character, so every columns-tier golden moved by exactly
+one cell per railed row; `Dim` is an attribute rendered by `PlainStyles` as the identity function,
+so it moved nothing. The whole diff was verified mechanically — every added line with the rail
+glyph mapped back to a space is byte-identical to the line it replaced. One golden is **new**:
+`focus-rail.txt` pins the focused column in the *middle* of the frame, the shape no pre-existing
+golden reached because all of them render with focus at position zero.
+
+**What was declined.** A rail on both sides of the focused column, which is a box and turns a
+gutter shared between two seats into a property of one of them (§9.23's own last item). Colouring
+the rail: chrome that competes with content is the trade §9.23 refused. Running the thick rail the
+full body height so focus always has an unbroken edge: that is the void again. And demoting
+`Muted` chrome a further step in unfocused columns, which would need the third intensity this
+section just declined to buy.

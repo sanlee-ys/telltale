@@ -341,6 +341,11 @@ func collapsedNotice(st State, g Glyphs) string {
 // The vertical separators run in BANDS rather than row by row — see railRows,
 // which owns the rule and the argument for it. Gutters stay blank-width either
 // way so the grid does not shear.
+//
+// One rail in that band is heavier than the rest: the one immediately LEFT of
+// the focused column (§9.27). It is a columns-tier device only — the tabs tier
+// has one column on screen and a tab bar already carrying the marker, so a rail
+// there would mark the only thing there is.
 func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	vis := st.VisibleColumns()
 	cells := make([][]string, len(vis))
@@ -367,18 +372,43 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	sepPad := strings.Repeat(" ", gutter)
 	plainSep := sepPad + g.Sep + sepPad
 	sep := sepPad + sty.Rule().Render(g.Sep) + sepPad
+	// The focused column's LEFT rail thickens (§9.27). Same cell, same width, one
+	// glyph heavier — so the mark is as tall as the column it describes, which is
+	// the one thing `▸` and the name's weight cannot be: both of those sit on the
+	// header row, and a reader forty rows into a transcript has scrolled past
+	// them. The mark is Muted like every other rail, because a rail that also
+	// changed hue would be chrome competing with the content it bounds (§9.23).
+	focusSep := sepPad + sty.Rule().Render(g.FocusRail) + sepPad
 	blankSep := strings.Repeat(" ", lipgloss.Width(plainSep))
+	// The LEFTMOST column has no gutter to its left, so the frame's own left pad
+	// carries the mark for it — cell one of framePad's two, which puts one cell of
+	// air between the mark and the column exactly as the gutter's own arithmetic
+	// would if there were room for two. Without this a focused seat in position
+	// zero would be the one seat the device could not mark, which is the kind of
+	// hole that teaches a reader to stop trusting a signal.
+	focusPad := sty.Rule().Render(g.FocusRail) + strings.Repeat(" ", framePad-1)
 	rails := railRows(cells, lay.Body)
 	var b strings.Builder
 	for row := 0; row < lay.Body; row++ {
-		b.WriteString(framePadStr)
+		// The rail rides §9.23's band and nothing more: it marks the rows the thin
+		// rail would have marked, so focus never asserts a grid over emptiness and
+		// the frame's edge never changes shape when the keys move.
+		lead := framePadStr
+		if rails[row] && len(vis) > 0 && vis[0] == st.Focus {
+			lead = focusPad
+		}
+		b.WriteString(lead)
 		div := blankSep
 		if rails[row] {
 			div = sep
 		}
 		for j := range vis {
 			if j > 0 {
-				b.WriteString(div)
+				d := div
+				if rails[row] && vis[j] == st.Focus {
+					d = focusSep
+				}
+				b.WriteString(d)
 			}
 			b.WriteString(cells[j][row])
 		}
@@ -501,7 +531,12 @@ func columnCell(st State, c Column, f seatFocus, hint []string, w, h int, sty St
 		chrome = chrome[:h]
 	}
 
-	body, anchors := columnLines(st, c, w, sty, g)
+	// The CHROME above renders with the room's own set and the body with the
+	// seat's, which is the whole shape of §9.27's demotion. A posture badge, a
+	// gate card and a seat's name are claims about the seat rather than reading
+	// material, and a claim that faded because the reader was looking at the next
+	// column is the failure §9.2 wrote the badge row to prevent.
+	body, anchors := columnLines(st, c, w, sty.forSeat(f), g)
 	avail := h - len(chrome)
 	win, above, below := scrollWindow(c, body, avail)
 
@@ -1349,9 +1384,10 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 	case c.Phase == PhaseIdle && c.Body == "" && st.Reattached.Active():
 		out = append(out, reattachCard(st, c, w, sty)...)
 	case c.Phase == PhaseIdle && c.Body == "":
-		out = append(out, wrap("no turn dispatched yet.", w)...)
+		out = append(out, dimmable(wrap("no turn dispatched yet.", w), sty)...)
 	default:
-		out = append(out, inFlightBody(c.Phase, c.Gran, c.Body, len(c.Acts) > 0, w)...)
+		out = append(out, dimmable(
+			inFlightBody(c.Phase, c.Gran, c.Body, len(c.Acts) > 0, w), sty)...)
 	}
 
 	// Everything this seat has sat out SINCE its last turn, which is where the
@@ -1732,7 +1768,7 @@ func pastTurn(h TurnRecord, w int, sty Styles, g Glyphs) []string {
 		if len(h.Acts) > 0 {
 			out = append(out, "")
 		}
-		out = append(out, wrap(h.Body, w)...)
+		out = append(out, dimmable(wrap(h.Body, w), sty)...)
 	case len(h.Acts) == 0 && h.Note == "":
 		// It was dispatched to and it said nothing, which is a fact rather than
 		// a gap. An empty run of lines here would read as the transcript
@@ -2167,6 +2203,27 @@ func indentWrap(indent, text string, w int) []string {
 	lines := wrap(text, maxInt(1, w-lipgloss.Width(indent)))
 	for i := range lines {
 		lines[i] = indent + lines[i]
+	}
+	return lines
+}
+
+// dimmable applies the reading area's contrast step (§9.27) to a block of
+// already-wrapped prose, and is a no-op for the focused column and for
+// PlainStyles alike.
+//
+// BLANK rows are left bare, and that is load-bearing rather than tidiness.
+// railRows decides which body rows carry a gutter by testing
+// `strings.TrimSpace(cell) != ""` over the RENDERED cell, so a blank row wearing
+// an escape sequence would read as ink and the frame's rails would differ
+// between a colour terminal and the goldens — a divergence PlainStyles is by
+// construction blind to, which is the same class of trap as §9.5's padRight.
+func dimmable(lines []string, sty Styles) []string {
+	s := sty.Body()
+	for i, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		lines[i] = s.Render(l)
 	}
 	return lines
 }

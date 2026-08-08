@@ -1,24 +1,24 @@
   council READ  │  ~/code/telltale                                                  turn 3  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ▸ CC Claude Code  ─────  ⠋ streaming  │    CX Codex  ────────────  ⠋ waiting  │    AG Antigravity  ─────────  ○ idle  
-    ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
-                                        │                                       │                                       
-  ↑ 3 more above  │  ↑↓ scroll          │                                       │                                       
-  Resume. Re-sending grows input        │                                       │                                       
-  quadratically.                        │                                       │                                       
-  turn 2  ────────────────────────  8s  │                                       │                                       
-  › what does that cost by turn five?   │                                       │                                       
-                                        │                                       │                                       
-  ⚙ Read: dispatch.go ✓                 │                                       │                                       
-                                        │                                       │                                       
-  About 30K redundant input tokens per  │                                       │                                       
-  vendor.                               │                                       │                                       
-  turn 3  ────────────────────────────  │                                       │                                       
-  › @all is the scrollback worth the    │  turn 3  ───────────────────────────  │                                       
-    memory?                             │  › @all is the scrollback worth the   │                                       
-                                        │    memory?                            │                                       
-  Fifty turns is cheap against          │                                       │                                       
-  forgetting.                           │  working — the reply arrives whole.   │  no turn dispatched yet.              
+▌ ▸ CC Claude Code  ─────  ⠋ streaming  │    CX Codex  ────────────  ⠋ waiting  │    AG Antigravity  ─────────  ○ idle  
+▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
+▌                                       │                                       │                                       
+▌ ↑ 3 more above  │  ↑↓ scroll          │                                       │                                       
+▌ Resume. Re-sending grows input        │                                       │                                       
+▌ quadratically.                        │                                       │                                       
+▌ turn 2  ────────────────────────  8s  │                                       │                                       
+▌ › what does that cost by turn five?   │                                       │                                       
+▌                                       │                                       │                                       
+▌ ⚙ Read: dispatch.go ✓                 │                                       │                                       
+▌                                       │                                       │                                       
+▌ About 30K redundant input tokens per  │                                       │                                       
+▌ vendor.                               │                                       │                                       
+▌ turn 3  ────────────────────────────  │                                       │                                       
+▌ › @all is the scrollback worth the    │  turn 3  ───────────────────────────  │                                       
+▌   memory?                             │  › @all is the scrollback worth the   │                                       
+▌                                       │    memory?                            │                                       
+▌ Fifty turns is cheap against          │                                       │                                       
+▌ forgetting.                           │  working — the reply arrives whole.   │  no turn dispatched yet.              
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
   VIEW                                  ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help  
