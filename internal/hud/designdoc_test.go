@@ -27,35 +27,14 @@ var embedded = []string{
 }
 
 // notEmbedded lists goldens deliberately kept out of the design doc, with the
-// reason. "readme" is here because it belongs to README.md instead, and has its
-// own gate below.
+// reason. "readme" is here because it belongs to README.md instead — as the
+// hero picture rather than as quoted text, and gated there.
 var notEmbedded = map[string]string{
 	"floor-width":    "quoted inline in §7.2 as a one-line literal",
 	"floor-height":   "quoted inline in §7.2 as a one-line literal",
 	"stale-scan-90s": "identical layout to stale-scan-47s; only the notice styling differs",
 	"quota-absent":   "described in §7.7; its layout is covered by wide-healthy",
-	"readme":         "pasted into README.md; see TestReadmeHeroFrameMatchesItsGolden",
-}
-
-// The README's hero frame is the project's most public claim about what the HUD
-// shows, and it makes a specific one: two absent cells and an estimate marker
-// that are absent and estimated for real reasons. It is generated, so drift
-// here is a fixable build failure rather than a screenshot that quietly ages.
-func TestReadmeHeroFrameMatchesItsGolden(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	golden, err := os.ReadFile(filepath.Join("testdata", "golden", "readme.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc := strings.ReplaceAll(string(raw), "\r\n", "\n")
-	want := strings.TrimRight(strings.ReplaceAll(string(golden), "\r\n", "\n"), "\n")
-	if !strings.Contains(doc, want) {
-		t.Errorf("README.md's HUD frame is stale.\n"+
-			"Re-paste it from internal/hud/testdata/golden/readme.txt.\n--- expected ---\n%s", want)
-	}
+	"readme":         "drawn into README.md's hero picture; see TestReadmeHeroImagesAreTheHudThatRenders",
 }
 
 // The design doc is a contract, and a contract that drifts from the code is
