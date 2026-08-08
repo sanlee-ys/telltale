@@ -325,11 +325,30 @@ func TestWriteHopInAReadRoomBlocksWithoutDispatch(t *testing.T) {
 	if m.st.Write {
 		t.Error("the room upgraded ITSELF to write to serve the hop")
 	}
-	// It has to name the flag that produced this, not merely that the room is
-	// restricted. Write is the default now, so a user who lands here typed
-	// --read at some point and the notice is where they find that out.
-	if !strings.Contains(m.st.Notice, "--read") {
-		t.Errorf("notice does not say why it stopped: %q", m.st.Notice)
+	// It has to name the REMEDY, not merely that the room is restricted — and
+	// the remedy is /write, not the flag.
+	//
+	// This assertion used to require "--read", on the reasoning that write is the
+	// default so a user who lands here typed --read at some point. Both halves of
+	// that died with §9.17: /read reaches this state too, so the flag may never
+	// have been typed, and §9.17 quotes this very notice as the tell that a
+	// control was trapped at launch — "the notice says the room is read-only and
+	// names the flag that would change it". The sentence outlived the controls
+	// that made it false because this test was holding it in place.
+	if !strings.Contains(m.st.Notice, "/write") {
+		t.Errorf("the refusal does not name /write, the control that would grant it: %q", m.st.Notice)
+	}
+	if strings.Contains(m.st.Notice, "--read") {
+		t.Errorf("the refusal still names the launch flag: %q", m.st.Notice)
+	}
+	if strings.Contains(m.st.Notice, "reopen") {
+		t.Errorf("the refusal still prescribes a relaunch: %q", m.st.Notice)
+	}
+	// The step's own recorded reason travels with the chain and is read back off
+	// the blocked step, so leaving it naming the flag would rebuild the defect
+	// one surface over from the notice that was fixed.
+	if got := m.flowChain.Current().Receipt.Detail; !strings.Contains(got, "/write") {
+		t.Errorf("the blocked step's reason does not name /write: %q", got)
 	}
 
 	// And y must not rescue it either: the block is not a gate.

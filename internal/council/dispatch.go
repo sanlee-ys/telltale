@@ -115,16 +115,26 @@ func (m *Model) dispatch() tea.Cmd {
 		// A write hop in a READ room is refused, not downgraded. Running it
 		// read-only and reporting "returned" would be the room claiming to have
 		// done work it structurally could not do; running it at all would be the
-		// room granting itself authority the user withheld at startup. Checked
-		// ahead of the y/n gate because there is nothing to authorize — no
-		// keystroke here can produce a legal dispatch.
+		// room granting itself authority the user withheld. Checked ahead of the
+		// y/n gate because there is nothing to authorize — no keystroke here can
+		// produce a legal dispatch.
+		//
+		// THE REMEDY IS /write, AND NAMING THE FLAG INSTEAD WAS THE §9.17 DEFECT
+		// ITSELF. §9.17 quotes this very notice — "the notice says the room is
+		// read-only and names the flag that would change it" — as the tell that a
+		// control was trapped in a flag, and `/read`/`/write` were built to close
+		// it. The sentence outlived the fix: the room went on telling a user with
+		// a chain half-typed to quit and start over, which is the one outcome the
+		// whole sweep exists to remove. It reports the POSTURE, not the launch
+		// argv, because /read reaches this state too and "opened with --read"
+		// would then be false as well as useless.
 		if curr.RequiresWriteGate() && !m.st.Write {
 			if curr.State == FlowStateQueued {
-				_ = m.flowChain.MarkAwaitingWrite("this room was opened with --read; write hops need a room that can write")
+				_ = m.flowChain.MarkAwaitingWrite("the room is read-only; write hops need a room that can write — /write lets it")
 			}
 			m.flowWritePending = false
 			m.flowWriteArmed = false
-			m.st.Notice = fmt.Sprintf("flow blocked at step %d: @%s → %s is a write hop and this room was opened with --read — reopen it without that flag",
+			m.st.Notice = fmt.Sprintf("flow blocked at step %d: @%s → %s is a write hop and the room is read-only — /write lets it, between turns",
 				m.flowChain.CurrentIndex+1, curr.Vendor, curr.Path)
 			return nil
 		}

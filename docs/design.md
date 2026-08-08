@@ -3902,7 +3902,14 @@ would let the seat return, the hop report `returned`, and the chain advance past
 never happened — §4a.1's ambiguity with a receipt attached. Upgrading the room would mean a
 program granting itself authority the person who started it withheld. So there is no `y`/`n` card
 here at all: a gate implies a keystroke exists that makes the action legal, and none does. The
-notice says the room is read-only and names the flag that would change it.
+notice says the room is read-only and names **`/write`**, the control that would change it.
+
+That last sentence used to name the *flag*, and §9.17 quotes the older version of it as the
+tell that a control was trapped at launch. It stayed true for exactly as long as a relaunch was
+the only remedy; `/read` and `/write` made it false and nothing was asserting on it, so the
+room went on telling a user with a chain half-typed to quit and start over. Corrected, and
+pinned by `TestAWriteHopIntoAReadRoomNamesTheControlNotARelaunch` — see §9.17's closing note on
+why a fix that lands everywhere except the sentence that motivated it is the shape to look for.
 
 **The gate is before the spawn, and that is now pinned by a test that counts processes.** On a
 write hop, zero vendor processes exist until `y`; `n` cancels with zero. A gate drawn after the
@@ -4202,6 +4209,42 @@ stays, because each names a room you may genuinely want at the door; none of the
 the only way to get one. `--brief` remains deliberately unfiled — it is first-turn context by
 definition, so re-briefing is a separate feature rather than a missing surface for this one, and
 folding it in without deciding that question on its own is still the thing not to do.
+
+#### The sweep built the controls and left two sentences describing the old room
+
+Every control landed and two strings went on describing council as it was before them. Neither
+was cosmetic, and the shape they share is worth more than either fix.
+
+**The refusal that motivated the whole sweep was the last thing to be fixed by it.** §9.16's
+`/flow` write-hop block still said the room "was opened with `--read` — reopen it without that
+flag", which is the §9.17 defect quoted verbatim *as the specification of the bug* and then left
+running. The remedy is `/write`, it was two PRs old, and the notice sent a user with a half-typed
+chain out of the room to fetch a flag they no longer needed. **A refusal is the surface least
+likely to be re-read after the thing it refuses becomes possible**, because it is written once,
+by the person who knows it is correct, and then only ever seen by someone who is already stuck.
+It also now reports the *posture* rather than the launch argv, since `/read` reaches this state
+too and "opened with `--read`" would be false as well as useless.
+
+**And `/write`'s confirmation card was reading the flag instead of the room, which is the one
+that could cost something.** The card exists to say which write you are getting — §4a.1 applied
+to a prompt — and it chose its wording from `m.opts.Auto`. That field is only the *seed*:
+`stateWith` copies it into `GateOff` at launch and `a` has moved it independently ever since.
+So a room opened gated, told to stop asking, then `/read` → `/write`, offered a card promising
+"claude asks before each change" with nothing left to ask. The user reads a promise of a
+checkpoint and gets none — the failure this card was built to prevent, arriving through the
+control that was supposed to prevent it. The `--auto` wording went with the field, because the
+flag is no longer the only route into an ungated room and naming it asserts a cause that may not
+be there.
+
+**The rule, stated once so the next control inherits it: a flag that gains an in-room twin stops
+being the answer to "what is the room doing" and becomes only the seed.** `dispatch.go` already
+says this for the request path — "`m.st.Asking`, not `m.opts.Auto`: the flag only SEEDS this at
+launch" — and the two misses were both places that had not heard. Every `opts.*` read on a
+demoted control is now either a launch-time decision (`wantsHooks`, the `savedPosture` record) or
+a bug, and the way to tell them apart is to ask whether an in-room control can move the state
+underneath it. Both fixes are pinned by tests rather than comments for the same reason: in every
+room nobody typed a control into, the flag and the state agree, so the fixtures cannot tell them
+apart and neither could review.
 
 ### 9.18 a strip said four fifths of a name it could have said whole in two letters
 
