@@ -181,7 +181,7 @@ func runHUD(args []string) error {
 func runCouncil(args []string) error {
 	fs := flag.NewFlagSet("telltale council", flag.ContinueOnError)
 	dir := fs.String("cd", "", "move the room's workspace for this launch (default: where the saved room was, or cwd) — /cd inside the room does the same")
-	seats := fs.String("vendor", "", "who is in the room: a comma list (claude,codex,agy,cursor) or all; default seats every vendor that can be driven")
+	seats := fs.String("vendor", "", "who is in the room: a comma list (claude,codex,agy,cursor) or all (default: who the saved room seated, or every vendor that can be driven) — a typed list overrides the saved roster and is what the room saves from then on")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
 	// The room writes by default, and --read is the opt-out. Posture used to be
@@ -282,14 +282,17 @@ telltale council flags:
                               saved room exists it is named once before the
                               first dispatch replaces it
   --vendor <list>             who is in the room: a comma list of claude, codex,
-                              agy and cursor, or "all". By default a seat that
-                              is not installed — or is installed and cannot be
-                              driven — folds out of the grid, so the seats that
-                              answer get the width, and one line under the
-                              header names what was folded and why. "all" keeps
-                              every seat on screen; a list seats exactly those
-                              and dispatches to nobody else. Different from an
-                              @mention, which routes one turn.
+                              agy and cursor, or "all" (default: who the saved
+                              room seated, or every seat that can be driven).
+                              A typed list overrides the saved roster and is
+                              the room the next save records. A seat that is
+                              not installed — or is installed and cannot be
+                              driven — folds out of the grid, so the seats
+                              that answer get the width, and one line under
+                              the header names what was folded and why. "all"
+                              keeps every seat on screen; a list seats exactly
+                              those and dispatches to nobody else. Different
+                              from an @mention, which routes one turn.
                               /seat <list> does the same from INSIDE the room,
                               and /seat all puts everyone back. An unseated seat
                               keeps its thread AND its process — it stops being
