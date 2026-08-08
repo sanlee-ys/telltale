@@ -5804,3 +5804,77 @@ What this deliberately does not add: a ranking stage, a chairman, or any synthes
 llm-council's stage 3 collapses the answers into one; §9.2's position is that independent
 answers ARE the product, and a synthesis is available today as an explicit `/flow` hop the user
 types. Blinding sharpens the comparison; it does not delegate the verdict.
+
+### 9.35 a running chain can be told to stop after this hop
+
+`/flow` shipped with one control over a chain already moving: ctrl+c, the turn-cancel key. That
+is a hard abort — it interrupts the hop mid-sentence — and it was also a lie in three parts,
+which is where this section starts, because the honest baseline had to be measured before a
+gentler control could be designed against it (the flow-autoadvance plan named this gap and
+nothing tracked it).
+
+**What cancelling mid-chain actually did, measured 2026-08-08.** Ctrl+c during hop 1 of 3
+killed the hop and the chain never advanced — that much was right, and stays. Everything around
+it was wrong: the current step stayed `running` forever, the header went on claiming `hop 1/3`
+over a room doing nothing, and the next brief the user typed was **eaten** — dispatch saw a
+live chain, tried to continue it, failed with `flow start error: cannot start step in state
+running`, and threw the user's words away. The second enter worked. And the corpse was not the
+cancel path's alone: **a chain that COMPLETED left the same corpse**, and the first brief after
+a successful flow died as `cannot start step in state returned`. The happy path was charging
+the same tax.
+
+**The fix under everything else: a chain ends whole, or it has not ended.** `endFlowChain`
+retires the chain, its draft, its carry, its pending flags and its header marker in one move,
+and every ending — finished, failed, cancelled, stopped, refused at the write gate, start
+error — goes through it. Half of these paths used to clear only the marker and half only the
+chain; each half-state was a room asserting something false about the other half. The
+teardown in `turnColumnFinished` is the backstop for the endings `finishFlowHop` never sees
+(a cancelled hop, a vendor failure, a hop that returned nothing), because teardown is the one
+place every turn's death already passes through — and it says which death it was: `flow
+cancelled at hop 1/3 — 2 later hops not run` against `flow stopped at hop 1/2 — 1 later hop
+not run`. Cancelled and failed are different facts, and a stopped chain must never render as a
+finished one (§4a.1).
+
+**The control: `s`, stop after the hop that is running now.** The middle ground ctrl+c cannot
+offer: the current hop finishes on its own terms — artifact saved, receipt verified, Returned
+or Published exactly as if nothing had been pressed — and the chain ends there instead of
+handing off. Pressed while the hop streams, because that is when the decision forms: you are
+reading hop 2's output when you learn hops 3 and 4 are no longer worth their quota. Reading
+the columns is part of deciding — §9.16's own argument for its gate — so the key lives in view
+mode where the columns stay scrollable, and interrupts nothing.
+
+The grammar decisions, each against a precedent:
+
+- **A key, not a room command.** `c`'s reason (§9.17): a key takes no vocabulary from the
+  composer, and `/stop` is a word people address vendors with. Not `c`'s confirmation though —
+  `c` spends a `y` because a dropped thread is irreversible, and this destroys nothing: the
+  hop completes, every artifact lands, and the cost of a stray press is one keystroke to undo.
+  So `s` is a toggle, `a`'s shape, and pressing it again re-arms the handoff.
+- **The armed state lives on the chrome, not in the notice.** The WRITE badge's argument: a
+  notice scrolls away and the promise persists. The hop cell reads `hop 2/4 @codex (stops
+  here)` — words, so it survives `--ascii`, and on the hop cell because it is a fact about the
+  hop: this one runs, its successors do not. The busy mode line offers `s stop after hop`
+  while a chain is live and flips to `s continue chain` when armed, the label-renames-itself
+  rule `a` set. `TestFlowStopIsAToggleAndTheArmedStateRenders` pins all four states.
+- **The last hop refuses to arm.** The chain ends there whether or not `s` is pressed; a key
+  that "worked" would claim credit for an outcome it did not cause. The refusal says so —
+  `hop 2/2 is the last — the chain ends here anyway` — and a press with no chain running is
+  answered rather than swallowed, §9.12's attribution rule for a key that did nothing.
+- **Not in helpKeys, deliberately.** The key exists only while a chain runs, and the mode line
+  names it on every frame of exactly those moments — the contextual-control surface `y`/`n`
+  and the card's `a` already use. The help panel's 17-row budget has no row for a key that is
+  dead in every room the panel is usually read in; the §9.17 sweep's rule was about controls
+  reachable from inside the room, and this one is announced there.
+
+**What was declined.** Pausing — a stopped chain that could resume where it left off — is a
+real feature and not this one: the carry artifact is consumed at dispatch, the draft would need
+re-parsing against a chain whose position moved, and stop-then-retype is the honest v1. A stop
+that also killed the current hop was declined because ctrl+c already is that, and two keys with
+one meaning apart is how a keymap grows synonyms. And ctrl+c stays exactly as hard as it was:
+the interrupt semantics did not move, only the lying state it left behind.
+
+The general lesson, in this file's own terms: §9.16 built the chain's authority grammar and
+§9.17 built the room's mid-session controls, and the seam between them — a chain that is
+neither obeying nor gone — belonged to nobody, so nothing asserted on it. The corpse survived
+every ending, including the successful one, because the tests all stopped at "did not
+advance" and none typed the next brief. The regression tests here end by dispatching one.

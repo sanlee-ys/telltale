@@ -742,16 +742,48 @@ func (m *Model) flowWriteGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.st.Notice = "write hop authorized — dispatching"
 		return m, m.dispatch()
 	case "n":
-		m.flowWritePending = false
-		m.flowWriteArmed = false
-		m.flowChain = nil
-		m.flowDraft = ""
-		m.flowReadHop = false
+		// The whole chain goes, not just the gated hop — a chain whose write was
+		// refused has nothing legal to do next — and it goes through endFlowChain
+		// so the header's hop marker goes with it. This path used to clear the
+		// chain by hand and leave the marker up: a room claiming "hop 1/2" over a
+		// chain the user had just refused, until the next dispatch happened to
+		// clean it (§9.35).
+		m.endFlowChain()
 		m.st.Notice = "flow write hop cancelled"
 		return m, nil
 	}
 	m.st.Notice = "flow write gate — y authorizes, n cancels"
 	return m, nil
+}
+
+// toggleFlowStop arms or disarms stop-after-this-hop for the live chain (§9.35).
+//
+// Arming is a promise about the room's NEXT act, so it does not live only in
+// this notice: the header's hop cell says "stops here" for as long as the
+// promise stands, and the mode line's `s` cell flips to name the reversal. A
+// dead key must say why it did nothing (§9.12's attribution rule), so a press
+// with no chain running is answered rather than swallowed — and the last hop
+// refuses to arm at all, because the chain ends there whether or not `s` is
+// pressed, and a room that let the key "work" would be claiming credit for an
+// outcome it did not cause.
+func (m *Model) toggleFlowStop() {
+	if m.flowChain == nil || m.flowChain.Current() == nil {
+		m.st.Notice = "no flow chain is running — s stops one after its current hop"
+		return
+	}
+	hop, total := m.flowChain.CurrentIndex+1, len(m.flowChain.Steps)
+	if m.st.FlowStop {
+		m.st.FlowStop = false
+		m.st.Notice = fmt.Sprintf("the chain continues — hop %d/%d hands off when it returns", hop, total)
+		return
+	}
+	if hop == total {
+		m.st.Notice = fmt.Sprintf("hop %d/%d is the last — the chain ends here anyway", hop, total)
+		return
+	}
+	m.st.FlowStop = true
+	m.st.Notice = fmt.Sprintf("the chain stops after hop %d/%d — %s will not be dispatched · s continues it",
+		hop, total, hopsWord(total-hop))
 }
 
 // gateKey is the keymap while a vendor is waiting to be told yes or no.
@@ -1121,6 +1153,16 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// View mode only, and that is not an oversight. In compose `c` is the
 		// letter c, which is the same contract `q` and `f` already keep.
 		m.askClearSeat()
+	case "s":
+		// Stop the /flow chain after the hop that is running now (§9.35). A key
+		// rather than a room command for `c`'s reason — no vocabulary leaves the
+		// composer — and pressed WHILE a hop streams, because that is when the
+		// decision is formed: you are reading hop 2's output when you learn hops
+		// 3 and 4 are no longer worth their quota. No y/n gate, unlike `c`,
+		// because nothing is destroyed — the current hop finishes on its own
+		// terms, artifact and receipt included, and `s` again re-arms the
+		// handoff. View mode only: in compose `s` is the letter s.
+		m.toggleFlowStop()
 	case "y":
 		// The focused seat's reply. Reachable here only when nothing is gated:
 		// key() routes a pending gate to gateKey first, and gateKey answers `y`
