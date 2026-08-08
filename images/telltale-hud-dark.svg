@@ -1,144 +1,163 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" width="100%" height="100%">
-  <defs>
-    <style>
-      .bg { fill: #0d1117; rx: 12px; }
-      .header-bg { fill: #161b22; }
-      .border { stroke: #30363d; stroke-width: 1px; fill: none; }
-      .text-title { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 15px; font-weight: bold; fill: #58a6ff; }
-      .text-dim { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 13px; fill: #8b949e; }
-      .text-normal { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 13px; fill: #c9d1d9; }
-      .text-bold { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 13px; font-weight: bold; fill: #f0f6fc; }
-      .text-highlight { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 13px; fill: #3fb950; }
-      .text-warn { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 13px; fill: #d29922; }
-      
-      /* Vendor Badge Colors */
-      .badge-cc { fill: #d97706; font-weight: bold; } /* Claude Orange */
-      .badge-cx { fill: #10b981; font-weight: bold; } /* Codex Green */
-      .badge-ag { fill: #3b82f6; font-weight: bold; } /* Antigravity Blue */
-      .badge-cu { fill: #8b5cf6; font-weight: bold; } /* Cursor Purple */
-      .badge-ge { fill: #ec4899; font-weight: bold; } /* Gemini Pink */
-      
-      /* Progress Bar */
-      .bar-fill { fill: #3fb950; }
-      .bar-bg { fill: #21262d; }
-    </style>
-  </defs>
-
-  <!-- Background Window -->
-  <rect x="0" y="0" width="960" height="480" class="bg" />
-  <rect x="0" y="0" width="960" height="480" rx="12" class="border" />
-
-  <!-- Window Header / Title Bar -->
-  <rect x="0" y="0" width="960" height="38" class="header-bg" rx="12" />
-  <rect x="0" y="26" width="960" height="12" class="header-bg" />
-  <circle cx="20" cy="19" r="6" fill="#ff5f56" />
-  <circle cx="40" cy="19" r="6" fill="#ffbd2e" />
-  <circle cx="60" cy="19" r="6" fill="#27c93f" />
-  <text x="480" y="24" text-anchor="middle" class="text-dim">telltale hud — cross-vendor agent telemetry</text>
-  <line x1="0" y1="38" x2="960" y2="38" stroke="#30363d" stroke-width="1" />
-
-  <!-- Top Status Line Bar -->
-  <text x="24" y="66" class="text-title">telltale</text>
-  <text x="110" y="66" class="text-dim">│  7 sessions  │</text>
-  
-  <text x="230" y="66" class="badge-cc">claude 2</text>
-  <text x="310" y="66" class="badge-cx">codex 2</text>
-  <text x="385" y="66" class="badge-ge">gemini 1</text>
-  <text x="465" y="66" class="badge-ag">agy 1</text>
-  <text x="520" y="66" class="badge-cu">cursor 1</text>
-  
-  <text x="680" y="66" class="text-dim">5h quota:</text>
-  <rect x="750" y="55" width="100" height="12" rx="3" class="bar-bg" />
-  <rect x="750" y="55" width="88" height="12" rx="3" class="bar-fill" />
-  <text x="860" y="66" class="text-bold">88.4%</text>
-  <text x="915" y="66" class="text-dim">↻3h</text>
-
-  <line x1="24" y1="84" x2="936" y2="84" stroke="#30363d" stroke-width="1" />
-
-  <!-- Table Header -->
-  <text x="24" y="110" class="text-dim">  STAT  VENDOR   SESSION / WORKSPACE                          MODEL          CONTEXT WINDOW        AGE</text>
-  <line x1="24" y1="120" x2="936" y2="120" stroke="#21262d" stroke-width="1" />
-
-  <!-- Row 1: Claude Code (Active) -->
-  <circle cx="34" cy="143" r="4" fill="#3fb950" />
-  <text x="48" y="147" class="badge-cc">CC</text>
-  <text x="75" y="147" class="text-dim">│</text>
-  <text x="90" y="147" class="text-bold">telltale</text>
-  <text x="170" y="147" class="text-dim">C:\Users\sanle\code\telltale</text>
-  <text x="510" y="147" class="text-normal">Claude 3.7 Sonnet</text>
-  <text x="660" y="147" class="text-highlight">████████▍─── 68%</text>
-  <text x="900" y="147" class="text-dim">12s</text>
-
-  <!-- Row 2: Cursor (Active) -->
-  <circle cx="34" cy="183" r="4" fill="#3fb950" />
-  <text x="48" y="187" class="badge-cu">CU</text>
-  <text x="75" y="187" class="text-dim">│</text>
-  <text x="90" y="187" class="text-bold">multi-vendor</text>
-  <text x="210" y="187" class="text-dim">C:\Users\sanle\code\agent-ops</text>
-  <text x="510" y="187" class="text-normal">composer-2.5</text>
-  <text x="660" y="187" class="text-warn">████▍─────── 37%</text>
-  <text x="900" y="187" class="text-dim">1m</text>
-
-  <!-- Row 3: Codex (Active) -->
-  <circle cx="34" cy="223" r="4" fill="#3fb950" />
-  <text x="48" y="227" class="badge-cx">CX</text>
-  <text x="75" y="227" class="text-dim">│</text>
-  <text x="90" y="227" class="text-bold">architecture</text>
-  <text x="210" y="227" class="text-dim">C:\Users\sanle\code\architecture</text>
-  <text x="510" y="227" class="text-normal">gpt-5.1-codex</text>
-  <text x="660" y="227" class="text-highlight">███████▋──── ~70%</text>
-  <text x="900" y="227" class="text-dim">1m</text>
-
-  <!-- Row 4: Antigravity (Active) -->
-  <circle cx="34" cy="263" r="4" fill="#3fb950" />
-  <text x="48" y="267" class="badge-ag">AG</text>
-  <text x="75" y="267" class="text-dim">│</text>
-  <text x="90" y="267" class="text-bold">audit-sweep</text>
-  <text x="210" y="267" class="text-dim">C:\Users\sanle\code\portfolio</text>
-  <text x="510" y="267" class="text-normal">Gemini 3.6 Flash</text>
-  <text x="660" y="267" class="text-dim">────────────  —</text>
-  <text x="900" y="267" class="text-dim">2m</text>
-
-  <!-- Row 5: Gemini CLI (Background) -->
-  <circle cx="34" cy="303" r="4" fill="#d29922" />
-  <text x="48" y="307" class="badge-ge">GE</text>
-  <text x="75" y="307" class="text-dim">│</text>
-  <text x="90" y="307" class="text-bold">glossary-tooltips</text>
-  <text x="250" y="307" class="text-dim">C:\Users\sanle\code\learning-notes</text>
-  <text x="510" y="307" class="text-normal">gemini-3-pro</text>
-  <text x="660" y="307" class="text-dim">────────────  —</text>
-  <text x="900" y="307" class="text-dim">3m</text>
-
-  <!-- Row 6: Claude Code (Background) -->
-  <circle cx="34" cy="343" r="4" fill="#d29922" />
-  <text x="48" y="347" class="badge-cc">CC</text>
-  <text x="75" y="347" class="text-dim">│</text>
-  <text x="90" y="347" class="text-bold">defense-news</text>
-  <text x="210" y="347" class="text-dim">C:\Users\sanle\code\dnc</text>
-  <text x="510" y="347" class="text-normal">Sonnet 4.5</text>
-  <text x="660" y="347" class="text-highlight">██████████── 82%</text>
-  <text x="900" y="347" class="text-dim">4m</text>
-
-  <!-- Row 7: Codex (Idle) -->
-  <circle cx="34" cy="383" r="4" fill="#484f58" />
-  <text x="48" y="387" class="badge-cx">CX</text>
-  <text x="75" y="387" class="text-dim">│</text>
-  <text x="90" y="387" class="text-bold">notes-api</text>
-  <text x="180" y="387" class="text-dim">C:\Users\sanle\code\notes-api</text>
-  <text x="510" y="387" class="text-normal">gpt-5.1-codex</text>
-  <text x="660" y="387" class="text-dim">█▍────────── ~12%</text>
-  <text x="900" y="387" class="text-dim">22m</text>
-
-  <!-- Footer Navigation Line -->
-  <line x1="24" y1="420" x2="936" y2="420" stroke="#30363d" stroke-width="1" />
-  <text x="24" y="448" class="text-dim">
-    <tspan fill="#58a6ff">q</tspan> quit   
-    <tspan fill="#58a6ff">/</tspan> filter   
-    <tspan fill="#58a6ff">enter</tspan> detail   
-    <tspan fill="#58a6ff">v</tspan> vendor   
-    <tspan fill="#58a6ff">s</tspan> sort   
-    <tspan fill="#58a6ff">a</tspan> all   
-    <tspan fill="#58a6ff">?</tspan> keys
+<!-- Generated from the render, not drawn by hand. Do not edit:
+     re-emit it with `go test ./internal/council ./internal/hud -update`.
+     See internal/svgframe for why this picture cannot drift. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1113" height="300" viewBox="0 0 1113 300" role="img" aria-labelledby="t">
+  <title id="t">The telltale HUD: seven agent sessions from five vendors, each row naming its vendor, workspace, model, context window and age, with the cells no vendor can source left empty rather than filled in.</title>
+  <rect x="0" y="0" width="1113" height="300" rx="10" fill="#0c0c0c" stroke="#3a3a3a"/>
+  <path d="M0 36 V10 a10 10 0 0 1 10 -10 H1103 a10 10 0 0 1 10 10 V36 Z" fill="#1b1b1b"/>
+  <line x1="0" y1="36" x2="1113" y2="36" stroke="#3a3a3a"/>
+  <text x="21" y="23.4" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="14" fill="#cccccc" fill-opacity="0.55" xml:space="preserve">telltale hud</text>
+  <text y="64.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="99" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> telltale  </tspan>
+    <tspan x="120" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="129" textLength="126" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  7 sessions  </tspan>
+    <tspan x="255" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="264" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="282" textLength="72" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">claude 2</tspan>
+    <tspan x="354" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="372" textLength="63" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">codex 2</tspan>
+    <tspan x="435" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="453" textLength="72" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">gemini 1</tspan>
+    <tspan x="525" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="543" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">agy 1</tspan>
+    <tspan x="588" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="606" textLength="72" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">cursor 1</tspan>
+    <tspan x="678" textLength="135" lengthAdjust="spacingAndGlyphs" fill="#cccccc">               </tspan>
+    <tspan x="813" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">codex</tspan>
+    <tspan x="858" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="867" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">5h</tspan>
+    <tspan x="885" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="894" textLength="63" lengthAdjust="spacingAndGlyphs" fill="#c50f1f">██████▎</tspan>
+    <tspan x="957" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#767676">─</tspan>
+    <tspan x="966" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="975" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#c50f1f">88.4%</tspan>
+    <tspan x="1020" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="1029" textLength="63" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">↻ 3h02m</tspan>
   </text>
-  <text x="760" y="448" class="text-highlight">● 4 active  ◐ 2 bg  ○ 1 idle</text>
+  <text y="82.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="30" textLength="1062" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</tspan>
+  </text>
+  <text y="100.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="72" lengthAdjust="spacingAndGlyphs" fill="#cccccc">        </tspan>
+    <tspan x="93" textLength="612" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">SESSION                                                             </tspan>
+    <tspan x="705" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="723" textLength="117" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">MODEL        </tspan>
+    <tspan x="840" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="858" textLength="171" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">CONTEXT            </tspan>
+    <tspan x="1029" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc">   </tspan>
+    <tspan x="1056" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55"> AGE</tspan>
+  </text>
+  <text y="118.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> ● </tspan>
+    <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">CC</tspan>
+    <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="75" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="84" textLength="639" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> telltale  C:\src\code                                                 </tspan>
+    <tspan x="723" textLength="117" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">Opus 5       </tspan>
+    <tspan x="840" textLength="135" lengthAdjust="spacingAndGlyphs" fill="#cccccc">               </tspan>
+    <tspan x="975" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">     —</tspan>
+    <tspan x="1029" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  12s</tspan>
+  </text>
+  <text y="136.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> ● </tspan>
+    <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">CU</tspan>
+    <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="75" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="84" textLength="639" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> multi-vendor orchestration  C:\src\code                               </tspan>
+    <tspan x="723" textLength="117" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">composer-2.5 </tspan>
+    <tspan x="840" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="858" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#13a10e">████▏</tspan>
+    <tspan x="903" textLength="63" lengthAdjust="spacingAndGlyphs" fill="#767676">───────</tspan>
+    <tspan x="966" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="975" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#13a10e">   37%</tspan>
+    <tspan x="1029" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc">   1m</tspan>
+  </text>
+  <text y="154.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> ● </tspan>
+    <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">CX</tspan>
+    <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="75" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="84" textLength="639" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> example-app  C:\src\code                                              </tspan>
+    <tspan x="723" textLength="117" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">gpt-5.1-codex</tspan>
+    <tspan x="840" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="858" textLength="72" lengthAdjust="spacingAndGlyphs" fill="#c19c00">███████▋</tspan>
+    <tspan x="930" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#767676">────</tspan>
+    <tspan x="966" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="975" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#c19c00">~69.8%</tspan>
+    <tspan x="1029" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc">   1m</tspan>
+  </text>
+  <text y="172.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> ● </tspan>
+    <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">AG</tspan>
+    <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="75" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="84" textLength="639" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> 4c8b21a7  C:\src\code                                                 </tspan>
+    <tspan x="723" textLength="117" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">Gemini 3.6 F…</tspan>
+    <tspan x="840" textLength="135" lengthAdjust="spacingAndGlyphs" fill="#cccccc">               </tspan>
+    <tspan x="975" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">     —</tspan>
+    <tspan x="1029" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc">   2m</tspan>
+  </text>
+  <text y="190.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> ◐ </tspan>
+    <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">GE</tspan>
+    <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="75" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="84" textLength="639" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> glossary tooltips ⑂~2  c:\src\code                                    </tspan>
+    <tspan x="723" textLength="117" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">gemini-3-pro </tspan>
+    <tspan x="840" textLength="135" lengthAdjust="spacingAndGlyphs" fill="#cccccc">               </tspan>
+    <tspan x="975" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">     —</tspan>
+    <tspan x="1029" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc">   3m</tspan>
+  </text>
+  <text y="208.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> ◐ </tspan>
+    <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">CC</tspan>
+    <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="75" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="84" textLength="639" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> acme-api  C:\src\work                                                 </tspan>
+    <tspan x="723" textLength="117" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">Sonnet 4.5   </tspan>
+    <tspan x="840" textLength="135" lengthAdjust="spacingAndGlyphs" fill="#cccccc">               </tspan>
+    <tspan x="975" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">     —</tspan>
+    <tspan x="1029" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc">   4m</tspan>
+  </text>
+  <text y="226.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="30" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">○</tspan>
+    <tspan x="39" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">CX</tspan>
+    <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="75" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="84" textLength="639" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> notes-api  C:\src\code                                                </tspan>
+    <tspan x="723" textLength="117" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">gpt-5.1-codex</tspan>
+    <tspan x="840" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="858" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#13a10e">█▍</tspan>
+    <tspan x="876" textLength="90" lengthAdjust="spacingAndGlyphs" fill="#767676">──────────</tspan>
+    <tspan x="966" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="975" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#13a10e">~12.5%</tspan>
+    <tspan x="1029" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  22m</tspan>
+  </text>
+  <text y="244.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+  </text>
+  <text y="262.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="30" textLength="1062" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</tspan>
+  </text>
+  <text y="280.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="30" textLength="603" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">q quit   / find   enter detail   v vendor   s sort   a all   ? keys</tspan>
+  </text>
 </svg>

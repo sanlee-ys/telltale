@@ -1274,11 +1274,16 @@ func TestFlowHopIsNamedWhileAChainDrivesTheRoom(t *testing.T) {
 	}
 }
 
-// TestActivityTraceIsNotProse is the core distinction this feature rests on.
-// Body is what a vendor SAID; Acts is what it DID. Concatenating them would let
-// a tool name read as part of an answer — the same category error as rendering
-// a quoted reply as the vendor's own words.
-func TestActivityTraceIsNotProse(t *testing.T) {
+// activityRoom is the room the `activity` golden pins: one seat that has
+// finished a turn with a trace behind it, two that have not been asked
+// anything.
+//
+// Named rather than inlined because three things now render it and every one of
+// them has to be the SAME room — the golden, README.md's council frame (which
+// is that golden with its blank rows dropped, TestReadmeCouncilFrameMatchesItsGolden),
+// and the hero pictures in images/ (image_test.go). A second copy of this state
+// is how the pictures drifted from the product the first time.
+func activityRoom() State {
 	st := room()
 	st.Turn = 1
 	st.Columns[0].Phase = PhaseDone
@@ -1286,6 +1291,15 @@ func TestActivityTraceIsNotProse(t *testing.T) {
 		{Text: "Glob"}, {Text: "Read"}, {Text: "Bash: go test ./..."},
 	}
 	st.Columns[0].Body = "Tests pass."
+	return st
+}
+
+// TestActivityTraceIsNotProse is the core distinction this feature rests on.
+// Body is what a vendor SAID; Acts is what it DID. Concatenating them would let
+// a tool name read as part of an answer — the same category error as rendering
+// a quoted reply as the vendor's own words.
+func TestActivityTraceIsNotProse(t *testing.T) {
+	st := activityRoom()
 
 	got := render(st)
 	for _, want := range []string{"Glob", "Read", "go test", "Tests pass."} {
