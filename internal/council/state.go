@@ -664,6 +664,42 @@ func (s State) VisibleColumns() []int {
 	return vis
 }
 
+// SeatNumber is the key that focuses this seat: its one-based position among the
+// VISIBLE columns, or 0 for a seat that is not on screen (§9.29).
+//
+// **Positional, exactly like the columns are.** It is not an identity — a seat
+// does not own its number, it owns the place it is sitting in — which is why a
+// room with two seats has keys 1 and 2 and nothing else, and why the numbers
+// RENUMBER when a seat folds out. That renumbering happens only at events which
+// already reflow the whole frame (a seat collapsing, `--vendor` reseating the
+// room), never mid-turn otherwise, so §7.1 rule 4's still-by-default frame is
+// intact: the room is not quietly relabelling itself while a reply lands.
+//
+// Matched on the vendor rather than carried as a parameter through five
+// builders, on framePrimary's own precedent: a seat is identified by its vendor
+// everywhere else in this package, one seat per vendor, and threading a position
+// through columnCell → columnChrome → columnHeader → stripHeader would put four
+// copies of one fact in flight.
+// Zero in a room with ONE seat on screen, and that is §9.11's rule rather than
+// a special case: `f` and `tab` are dropped outright there because they address
+// a choice that does not exist, and a number labelling the only column there is
+// is the same cell spent on the same nothing. The mode line drops its `1-N seat`
+// cell on exactly this predicate, so the key and its label appear and vanish
+// together — a footer that named a key the header did not would be §7.8's
+// surprise split across two rows.
+func (s State) SeatNumber(c Column) int {
+	vis := s.VisibleColumns()
+	if len(vis) < 2 {
+		return 0
+	}
+	for j, i := range vis {
+		if s.Columns[i].Vendor == c.Vendor {
+			return j + 1
+		}
+	}
+	return 0
+}
+
 // CollapsedColumns is the seats that were folded out of the grid.
 //
 // Never silently: Render turns this into the one line under the header that

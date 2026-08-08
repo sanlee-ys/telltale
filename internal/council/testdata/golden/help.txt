@@ -8,7 +8,7 @@
                  -@codex excludes one. Unaddressed goes to claude. Leading only: "ask @claude" is prose                 
     /cd <dir>    move the room; /read /write posture (y); /seat <list>; c clears a thread (y); /trace <file> times      
     y / Y        copy this seat's reply, or the whole turn (in turn view, both) — while a gate waits, y/n answer it     
-    tab          move focus between columns — in compose too                                                            
+    tab / 1-4    focus between columns — in compose too; 1-4 goes straight to a seat, by position                       
     ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too                                      
     pgup/pgdn    scroll by a screenful, in compose too (space = pgdn in view mode);                                     
                  g / G first turn or newest; [ ] step one turn at a time                                                

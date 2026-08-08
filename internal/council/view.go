@@ -1018,7 +1018,19 @@ func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 	if tag != "" {
 		tag += " "
 	}
-	name := lead + tag + c.Label
+	// The seat's number, which is both a label and a KEY (§9.29). It goes in
+	// front of the tag rather than after the name, because it is the thing a
+	// reader's eye runs down the row of headers looking for — and because a
+	// number at the far right would sit beside the state word, where every other
+	// number on this line is a duration.
+	//
+	// Muted, on the tag's own argument: it is chrome and the name is the anchor.
+	// Two cells, and the header row is the only place they are spent.
+	num := ""
+	if n := st.SeatNumber(c); n > 0 {
+		num = strconv.Itoa(n) + " "
+	}
+	name := lead + num + tag + c.Label
 
 	// The weight now says which seat the keys move, and that is a correction
 	// rather than an addition. §9.11 gave EVERY seat name full weight because a
@@ -1057,11 +1069,12 @@ func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 	// arithmetic above is over the plain string and must stay that way (§9.5's
 	// ANSI trap).
 	styledName := func(s string) string {
-		if tag == "" || !strings.HasPrefix(s, lead+tag) {
+		pre := lead + num + tag
+		if pre == lead || !strings.HasPrefix(s, pre) {
 			return label.Render(s)
 		}
-		return label.Render(lead) + sty.Muted.Render(tag) +
-			label.Render(strings.TrimPrefix(s, lead+tag))
+		return label.Render(lead) + sty.Muted.Render(num+tag) +
+			label.Render(strings.TrimPrefix(s, pre))
 	}
 
 	gap := w - lipgloss.Width(name) - lipgloss.Width(status) - 4
@@ -1069,7 +1082,9 @@ func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 		// Identity yields first, and the TAG is the last of it to go — §9.18's
 		// order, now reachable at more widths than the strip. Truncating from the
 		// right takes the spelled-out name and leaves the two letters, which is
-		// exactly the degradation the strip performs in one step.
+		// exactly the degradation the strip performs in one step. The NUMBER is in
+		// front of both and therefore sheds last of all, which is the order §9.29
+		// wanted anyway: a key nobody can see is a key nobody presses.
 		keep := maxInt(1, w-lipgloss.Width(status)-1)
 		return styledName(truncate(name, keep, g.Ellipsis)) + " " + right
 	}
@@ -1128,11 +1143,35 @@ func stripHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) s
 	}
 
 	tag := vendorTag(c.Vendor)
+	num := ""
+	if n := st.SeatNumber(c); n > 0 {
+		num = strconv.Itoa(n)
+	}
 	state := mark + " " + word
 	// Longest first, widest that fits wins. Same idiom as the overflow marker's
 	// hint list, so a reader of this file meets one shedding shape rather than
 	// three.
+	//
+	// The NUMBER outranks the tag, which is a new rung in §9.18's ladder and the
+	// one place its ordering had to be reasoned about again. §9.18 shed the focus
+	// mark on the finding that the load-bearing half of that signal had moved
+	// somewhere free (weight, and the overflow marker's own words); the tag is
+	// likewise a second spelling of an identity the column's POSITION already
+	// gives. The number is not a second anything — it is the key that reaches
+	// this seat, and at strip width, where a room has four seats and one narrow
+	// column each, it is the fastest way to any of them. A key nobody can see is
+	// a key nobody presses (§9.10).
+	//
+	// At stripColumn the full form fits every phase word — `1 CC ⚠ unavailable`
+	// is exactly eighteen cells — so this ladder only bites below a width §9.24
+	// says the tier ladder does not produce. It is still written out, because the
+	// last time a floor was assumed rather than enforced it was wrong by four.
 	switch {
+	case num != "" && tag != "" &&
+		lipgloss.Width(num)+1+lipgloss.Width(tag)+1+lipgloss.Width(state) <= w:
+		return sty.Muted.Render(num) + " " + label.Render(tag) + " " + style.Render(state)
+	case num != "" && lipgloss.Width(num)+1+lipgloss.Width(state) <= w:
+		return sty.Muted.Render(num) + " " + style.Render(state)
 	case tag != "" && lipgloss.Width(tag)+1+lipgloss.Width(state) <= w:
 		return label.Render(tag) + " " + style.Render(state)
 	case lipgloss.Width(state) <= w:
@@ -2319,6 +2358,15 @@ func tabBar(st State, lay Layout, sty Styles, g Glyphs) string {
 		if c.Avail != AvailInstalled {
 			label += " " + g.Warn
 		}
+		// The seat's number (§9.29). The tab bar is the other place the key acts,
+		// and at this tier it is where it earns most: `tab` walks one seat at a
+		// time through a full-frame redraw each press, while the number goes
+		// straight there. Chrome, like the tag beside it, for the same reason —
+		// the name is the anchor.
+		num := ""
+		if n := st.SeatNumber(c); n > 0 {
+			num = strconv.Itoa(n) + " "
+		}
 		// The tag rides here too, for columnHeader's reason: a tab bar is the
 		// other place a seat NAME heads a reading area, so it is the other place
 		// that has to teach the two letters a strip will later use alone.
@@ -2342,9 +2390,9 @@ func tabBar(st State, lay Layout, sty Styles, g Glyphs) string {
 		// which is the distinction that survives NO_COLOR.
 		if idx == st.Focus {
 			parts = append(parts, sty.SeatStrong(c.Vendor).Render(g.Focus+" ")+
-				sty.Muted.Render(tag)+sty.SeatStrong(c.Vendor).Render(label))
+				sty.Muted.Render(num+tag)+sty.SeatStrong(c.Vendor).Render(label))
 		} else {
-			parts = append(parts, sty.Muted.Render("  "+tag)+
+			parts = append(parts, sty.Muted.Render("  "+num+tag)+
 				sty.SeatIdentity(c.Vendor).Render(label))
 		}
 	}
@@ -2760,6 +2808,21 @@ func modeHints(st State, g Glyphs) []hint {
 		// cell on this line offers.
 		hs = append(hs, hint{key: "f", label: "expand", shed: true},
 			hint{key: "tab", label: "focus"})
+		// The seat numbers, next to the key that does the same job one step at a
+		// time (§9.29). The range is however many seats are on screen rather than
+		// a literal `1-4`: a room with three seats has no `4`, and a footer that
+		// named one would be promising a key that does nothing — §7.8's surprise,
+		// which this line already refuses in the other direction for `tab` and `f`.
+		//
+		// It is the THIRD rung of the shed ladder, after `[ ]` and `f`, so §9.24's
+		// order is untouched and this appends rather than reorders. Last to go of
+		// the three, and that is the argument rather than the default: shedding
+		// only bites at the tabbed tier, which is precisely where one seat is on
+		// screen and reaching the fourth costs three `tab` presses through three
+		// full-frame redraws. `[ ]` sheds first because `g` and `G` still reach the
+		// ends of the transcript; nothing else reaches seat 4 in one keystroke.
+		hs = append(hs, hint{key: "1-" + strconv.Itoa(len(st.VisibleColumns())),
+			label: "seat", shed: true})
 	}
 	if st.Busy() {
 		return append(hs, hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
@@ -3165,7 +3228,13 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// panel. These keys always worked; what no one could find out is that
 		// they now work in the mode a finished turn drops you into — which is
 		// the mode you are in when there is finally something long to read.
-		"  tab          move focus between columns — in compose too",
+		// The seat numbers land on the row that already names the other way to
+		// change focus, rather than on one of their own: the budget is hard (17
+		// rows, above) and these are one question asked two ways — step to the next
+		// seat, or go straight to one. "move" paid for it. The numbers are
+		// POSITIONS, left to right, so they renumber when a seat folds out; the
+		// line says "by position" rather than pretending a seat owns a number.
+		"  tab / 1-4    focus between columns — in compose too; 1-4 goes straight to a seat, by position",
 		"  ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too",
 		"  pgup/pgdn    scroll by a screenful, in compose too (space = pgdn in view mode);",
 		// The turn keys land on the row that already holds the other jumps rather
