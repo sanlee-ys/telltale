@@ -63,11 +63,6 @@ Nothing claimed.
 
 ## Known gaps, not yet owned
 
-- **`docs/design.md` §3 does not name the canary set.** §7 now records how drift
-  *renders*; §3 still does not say what each adapter actually watches. A canary
-  is a survey finding and belongs beside the rest of that adapter's survey, or
-  the next person to re-verify a vendor will not know what was being watched.
-  `grep -n canary docs/design.md` returns nothing, which is the whole gap.
 - **The turn clock's concurrency is argued, not race-verified.** `-race` needs
   cgo, is unavailable on the machine the clock was written on, and is not in the
   CI gate either. The locking in `runner/clock.go` was reasoned through and
