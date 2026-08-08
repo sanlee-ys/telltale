@@ -3258,7 +3258,15 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// terminal — which is exactly where the posture explanation was standing
 		// when a user asked what "unsandboxed" meant, the failure that split this
 		// panel into two pages. Below the fold is not a cheaper row, it is no row.
-		"  /cd <dir>    move the room; /read /write posture (y); /seat <list>; c clears a thread (y); /trace <file> times",
+		// `/unseat` merged onto the row `/seat` already holds, as `/seat /unseat
+		// <list>`, and the merge is the honest shape rather than a saving: they
+		// take one argument in one vocabulary and differ only in direction, so a
+		// reader who finds either has found both. "times" paid for it — the row is
+		// a list of controls, and `/trace <file>` is unambiguous without the verb.
+		// A row of its own was never affordable: the budget is hard (17 rows,
+		// above) and a control documented below the fold is a control nobody finds
+		// (§9.20), which is exactly how the room came to be missing this one.
+		"  /cd <dir>    move the room; /read /write posture (y); /seat /unseat <list>; c clears a thread (y); /trace <file>",
 		// One row for three keys, and the merge is the honest shape rather than
 		// a saving. The panel's budget is hard (17 rows, above) and yank had to
 		// land inside it — a copy key documented below the fold is a copy key

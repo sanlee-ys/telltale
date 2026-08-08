@@ -301,19 +301,27 @@ cell so the way back is never off screen.
 
 ## Controls you reach from inside the room
 
-**`/seat <list>` changes who is in the room**, taking the same argument as `--vendor` and
-reading it through the same alias table `@mentions` use. An unseated seat **keeps its
-thread and its process** — it just stops being drawn and stops being dispatched to, so its
-width goes to the seats that are answering. `/seat all` puts everyone back mid-conversation,
-with nothing to resume and nothing that can fail. That is a different control from sitting
-out: a seat nobody addresses is already quiet and already free.
+**`/seat <list>` changes who is in the room, and `/unseat <list>` names who leaves**, both
+taking the same argument as `--vendor` and reading it through the same alias table
+`@mentions` use. An unseated seat **keeps its thread and its process** — it just stops being
+drawn and stops being dispatched to, so its width goes to the seats that are answering.
+`/seat all` puts everyone back mid-conversation, with nothing to resume and nothing that can
+fail. That is a different control from sitting out: a seat nobody addresses is already quiet
+and already free.
 
 **`--read` is the door; `/read` and `/write` are the room.** Typed into the composer,
 `/read` makes the room read-only at once and `/write` asks `y`/`n` before letting it write
 again — the confirmation is on the loosening direction only, because that one hands editing
 and command authority to every seat. Both refuse while a turn is in flight, and neither
 kills anything: seats move on their next turn. Only the bare word is a command, so
-`/write a test for this` is still a brief.
+`/write a test for this` never changes the posture.
+
+**A slash the room does not know is refused, not sent.** A draft that opens with `/` and
+names no room command used to go to the vendors as a brief, so a mistyped verb cost every
+seated seat a turn. Now nothing spawns, the draft stays in the composer, and the notice names
+the word that failed and lists the room's commands. A brief that genuinely begins with a
+slash — a path, a regex — is sent by typing **one space in front of it**, which the notice
+also says.
 
 **`--fresh` is room-wide; `c` is one seat.** A seat whose context has filled up does not
 need the other three restarted with it, so `c` in view mode clears the **focused** seat's

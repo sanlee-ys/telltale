@@ -20,11 +20,138 @@ import (
 // room is open is reachable from inside it. `/cd` and `/trace` are the two that
 // take an argument, which is why they are commands rather than keys.
 //
-// The restraint that survives is the one about vocabulary. Only a draft that IS
-// a command is intercepted; anything else, including text that merely starts
-// with a slash, dispatches to the vendors as typed. Every word taken here is a
-// word taken out of the conversation, which is the argument that kept `/clear`
-// out of this file (§9.17) — vendors own that one.
+// The restraint about vocabulary survives and its FALL-THROUGH does not (§9.31).
+// Only a draft that IS a command is executed — that half is untouched, and it is
+// what still keeps "/read the design doc" from quietly running a setting. What
+// changed is what happens to the rest. A draft whose first character is a slash
+// used to dispatch as typed, so a mistyped verb was billed to every seated
+// vendor as a brief: `/unseat codex` was typed into a live room before /unseat
+// existed, and three seats spent a turn discussing the string until the user
+// cancelled. A leading slash is almost never prose, and refusing costs nothing —
+// nothing spawns, nothing is billed, and the draft stays in the composer.
+//
+// The escape hatch is a leading SPACE, and addressesRoom is where it lives.
+
+// addressesRoom reports whether a draft is aimed at the room rather than at the
+// vendors: a slash in COLUMN ONE.
+//
+// The column-one test is the whole escape hatch, and it is what lets the refusal
+// below afford to be strict. A brief that genuinely begins with a slash — a
+// POSIX path, a regex — is sent by typing one space first, because
+// sanitizeKeepingSpace deliberately does not trim ("trimming would make the
+// string on screen disagree with the string about to be dispatched") so the
+// leading space survives the composer, the parse and the dispatch untouched.
+// One keystroke, and it is the cheapest honest escape available: nothing else
+// the composer can hold distinguishes "I meant this as text" without inventing a
+// second grammar to learn.
+func addressesRoom(draft string) bool { return strings.HasPrefix(draft, "/") }
+
+// roomVerb is one word this file takes out of the conversation.
+type roomVerb struct {
+	verb string
+	// bare marks a verb recognised ONLY as the whole draft. See
+	// parseBareCommand: /read and /write take no argument and are both words a
+	// person addresses a room with, so "/read the design doc" must not run a
+	// setting.
+	bare bool
+	// run handles the command. NIL for /flow, which is a room word parsed and
+	// dispatched by dispatch.go against the same draft rather than intercepted
+	// here — it still has to sit in this table, because a word missing from the
+	// table is a word the refusal would reject.
+	run func(m *Model, arg string) bool
+}
+
+// roomVerbs is the room's whole vocabulary, and the ONE place that list exists.
+//
+// The refusal reads it and TestTheRefusalListsTheLiveCommandTable walks it, so a
+// command added here cannot go missing from the sentence that teaches it. A
+// hand-kept second copy inside a notice string would be the list that goes stale
+// on the next command — and a refusal is the surface least likely to be re-read
+// after the thing it refuses becomes possible (§9.17's own finding, which is how
+// the /flow write-hop notice went on naming a flag for two releases).
+//
+// Alphabetical, which is also the order the refusal prints: a reader scanning
+// for the word they meant to type finds it by spelling rather than by knowing
+// which feature shipped first.
+func roomVerbs() []roomVerb {
+	return []roomVerb{
+		{verb: "/cd", run: (*Model).cdCommand},
+		{verb: "/flow"},
+		{verb: "/read", bare: true, run: func(m *Model, _ string) bool { return m.postureCommand(false) }},
+		{verb: "/seat", run: (*Model).seatCommand},
+		{verb: "/trace", run: (*Model).traceCommand},
+		{verb: "/unseat", run: (*Model).unseatCommand},
+		{verb: "/write", bare: true, run: func(m *Model, _ string) bool { return m.postureCommand(true) }},
+	}
+}
+
+// match applies this verb's own parse rule to a draft.
+func (rc roomVerb) match(draft string) (arg string, ok bool) {
+	if rc.bare {
+		return "", parseBareCommand(draft, rc.verb)
+	}
+	return parseCommand(draft, rc.verb)
+}
+
+// roomWords is the vocabulary as the refusal prints it.
+func roomWords() []string {
+	vs := roomVerbs()
+	out := make([]string, 0, len(vs))
+	for _, rc := range vs {
+		out = append(out, rc.verb)
+	}
+	return out
+}
+
+// unknownVerbEcho caps the word a refusal quotes back.
+//
+// The notice is one line of the mode bar and it truncates from the RIGHT, so an
+// uncapped echo — a pasted 200-character path is one word — would push the
+// remedy and the vocabulary off the end and leave a refusal that names only the
+// mistake. Capping the part the user already knows is the cheaper loss.
+const unknownVerbEcho = 20
+
+// firstWord is the word a draft opens with, capped for the notice.
+func firstWord(draft, ell string) string {
+	w := draft
+	if i := strings.IndexAny(w, " \t"); i >= 0 {
+		w = w[:i]
+	}
+	return truncate(w, unknownVerbEcho, ell)
+}
+
+// refuseUnknownCommand answers a draft addressed to the room that names nothing
+// the room knows. NOTHING IS DISPATCHED: no process starts, no quota moves, and
+// the draft stays in the composer to be edited — the same handing-back /cd does
+// for a mistyped path, for the same reason.
+//
+// THE ORDER OF THE THREE CLAUSES IS THE DESIGN. What failed, then how to send it
+// anyway, then the vocabulary. This line truncates from the right at narrow
+// widths, so the clause most likely to be lost has to be the one a reader can
+// get elsewhere: `?` lists the room controls, and nothing else on screen teaches
+// the space. A refusal whose remedy is undiscoverable is §9.17's defect wearing
+// a different hat.
+func (m *Model) refuseUnknownCommand() bool {
+	m.st.Notice = "no room command " + firstWord(m.st.Draft, m.glyphs.Ellipsis) +
+		" — a leading space dispatches it · " + strings.Join(roomWords(), " ")
+	return true
+}
+
+// isFlowCommand reports whether a draft IS the /flow command.
+//
+// Through the same vocabulary rule every other room word obeys, rather than the
+// TrimSpace'd prefix test dispatch.go used to run. That one took any draft whose
+// first non-space characters were "/flow", which made "/flowchart the auth path"
+// an orchestration — and, worse, swallowed a path escaped with a leading space
+// (" /flow/gate.log"), which would have made the escape hatch a lie for exactly
+// one prefix. An escape hatch with an exception nobody can see is not one.
+func isFlowCommand(draft string) bool {
+	if !addressesRoom(draft) {
+		return false
+	}
+	_, ok := parseCommand(draft, "/flow")
+	return ok
+}
 
 // parseCommand recognises "<verb>" and "<verb> <arg>". The second return is the
 // argument, trimmed; ok is false for every draft that should dispatch.
@@ -44,11 +171,6 @@ func parseCommand(draft, verb string) (arg string, ok bool) {
 	return "", false
 }
 
-// parseRoomCommand recognises "/cd" and "/cd <dir>".
-func parseRoomCommand(draft string) (arg string, ok bool) {
-	return parseCommand(draft, "/cd")
-}
-
 // parseBareCommand recognises ONLY the argument-less form of a verb.
 //
 // Separate from parseCommand, and the difference is the vocabulary rule this
@@ -58,9 +180,15 @@ func parseRoomCommand(draft string) (arg string, ok bool) {
 // person addresses a ROOM with: "/read the design doc before answering",
 // "/write a test for this" are ordinary briefs, and intercepting them would
 // steal two live verbs out of the conversation to run a setting the user did
-// not ask for. So the bare draft is the command and everything else dispatches
-// untouched, which is the strictest reading of "only a draft that IS a command
-// is intercepted".
+// not ask for. So the bare draft is the command and nothing else runs one,
+// which is the strictest reading of "only a draft that IS a command is
+// intercepted".
+//
+// §9.31 changed what happens to the REST of that set and not this rule. A
+// "/read the design doc" is still not the posture command — the failure this
+// function exists to prevent, a brief vanishing into a setting, is unreachable —
+// but it is no longer dispatched either. It is refused, with the space escape
+// named, which is the outcome that neither swallows the turn nor bills it.
 func parseBareCommand(draft, verb string) bool {
 	return strings.TrimSpace(draft) == verb
 }
@@ -98,24 +226,30 @@ func (m *Model) roomCommand() bool {
 }
 
 // runRoomCommand routes a room-addressed draft to the command that owns it.
-// Every roster-changing command belongs in here, under roomCommand's save.
+// Every roster-changing command belongs in here, under roomCommand's save — and
+// the table below is what makes that true by construction rather than by a
+// reviewer noticing: a command reachable from roomVerbs is reachable from here.
 func (m *Model) runRoomCommand() bool {
-	if arg, ok := parseCommand(m.st.Draft, "/trace"); ok {
-		return m.traceCommand(arg)
-	}
-	if parseBareCommand(m.st.Draft, "/read") {
-		return m.postureCommand(false)
-	}
-	if parseBareCommand(m.st.Draft, "/write") {
-		return m.postureCommand(true)
-	}
-	if arg, ok := parseCommand(m.st.Draft, "/seat"); ok {
-		return m.seatCommand(arg)
-	}
-	arg, ok := parseRoomCommand(m.st.Draft)
-	if !ok {
+	if !addressesRoom(m.st.Draft) {
 		return false
 	}
+	for _, rc := range roomVerbs() {
+		arg, ok := rc.match(m.st.Draft)
+		if !ok {
+			continue
+		}
+		if rc.run == nil {
+			// /flow, which dispatch.go parses against this same draft. Recognised
+			// here only so the refusal below does not reject the room's own word.
+			return false
+		}
+		return rc.run(m, arg)
+	}
+	return m.refuseUnknownCommand()
+}
+
+// cdCommand moves the room's workspace between turns.
+func (m *Model) cdCommand(arg string) bool {
 	if m.turn != nil {
 		// The turn in flight was dispatched against the old directory, and the
 		// spawn-per-turn seats read the workspace at dispatch. Moving it under
@@ -430,7 +564,7 @@ func (m *Model) seatCommand(arg string) bool {
 
 	if arg == "" {
 		m.st.Notice = "seated: " + strings.Join(m.seatedLabels(), " ") +
-			" — /seat <list> narrows, /seat all puts everyone back"
+			" — /seat <list> narrows, /unseat <list> subtracts, /seat all puts everyone back"
 		m.setDraft("")
 		return true
 	}
@@ -456,8 +590,139 @@ func (m *Model) seatCommand(arg string) bool {
 		return true
 	}
 
+	m.applySeats(want)
+	return true
+}
+
+// unseatCommand is /seat's subtractive form: it names who LEAVES.
+//
+// One vocabulary, because it is literally parseSeatList — same aliases, same
+// `@` tolerance, same trailing punctuation, same dedupe. A second list parser is
+// how "/seat agy" would work and "/unseat agy" would not, which is the
+// two-vocabularies defect mentions.go already refuses for `--vendor`.
+//
+// WHY IT IS WORTH A WORD OF ITS OWN. The correction a user actually reaches for
+// mid-session is "not that seat" — one vendor is answering badly, or expensively,
+// and the other three are fine. Spelling that with `/seat` means retyping the
+// complement, which is arithmetic done at the keyboard on the one line where
+// getting it wrong quietly reseats the room around the seats you did not mean.
+// A subtraction reads straight off the screen. It is the same argument `-@`
+// makes against making the user compute the complement of a mention, one
+// control up.
+//
+// It kills nothing, for seatCommand's reasons: an unseated seat keeps its
+// thread, its process and every id that would resume it, so `/seat all` puts it
+// back mid-conversation with no resume to fail. And it refuses mid-turn, because
+// the roster is dispatch state — the grid for a turn in flight was decided at
+// dispatch, and reseating under it would redraw the room around columns that are
+// mid-answer.
+func (m *Model) unseatCommand(arg string) bool {
+	if m.turn != nil {
+		m.st.Notice = "a turn is in flight — /unseat changes the room between turns"
+		return true
+	}
+
+	if arg == "" {
+		// Answers the question it half-asks, the way bare /cd, /trace and /seat
+		// do. The same sentence /seat reports, because it is the same fact.
+		m.st.Notice = "seated: " + strings.Join(m.seatedLabels(), " ") +
+			" — /unseat <list> subtracts, /seat all puts everyone back"
+		m.setDraft("")
+		return true
+	}
+
+	if allAliases[strings.ToLower(strings.TrimSpace(arg))] {
+		// "/unseat all" is a sentence someone will type, and it names an empty
+		// room. Answered here rather than left to parseSeatList, whose honest
+		// report would be "no seat called all" — a spelling complaint about a
+		// word the room understands perfectly well.
+		m.st.Notice = "/unseat all would empty the room — it needs at least one seat"
+		return true
+	}
+
+	drop, unknown := parseSeatList(arg)
+	if len(unknown) > 0 {
+		m.st.Notice = "no seat called " + strings.Join(unknown, " or ") +
+			" — /unseat takes claude, codex, agy or cursor"
+		return true
+	}
+	if len(drop) == 0 {
+		m.st.Notice = "/unseat needs a seat to remove — /unseat <list>, or /seat <list> to name who stays"
+		return true
+	}
+
+	// WHAT COUNTS AS BEING IN THE ROOM IS WHAT THE ROOM SHOWS, not what it can
+	// drive, and the distinction is load-bearing rather than pedantic. `/seat
+	// cursor` FORCES an uninstalled seat on screen — "a user who asked for it is
+	// owed the card explaining why it is not there" — so that seat is in the room
+	// in every sense a subtraction cares about, and a /unseat that could not
+	// remove it would leave the one card a user most wants gone stuck there.
+	dropped := map[model.VendorID]bool{}
+	var absent []string
+	for _, v := range drop {
+		dropped[v] = true
+		if !m.showsVendor(v) {
+			absent = append(absent, string(v))
+		}
+	}
+	if len(absent) > 0 {
+		// Naming a seat that is already out changes nothing, and saying so is
+		// /seat's typo argument rather than pedantry: a command that quietly did
+		// less than it was asked to is discovered several turns later, as a seat
+		// still answering that the user believes they removed.
+		m.st.Notice = "not in the room: " + strings.Join(absent, " ") +
+			" — /seat all puts everyone back"
+		return true
+	}
+
+	var keep []model.VendorID
+	before, after := 0, 0
+	for _, c := range m.st.Columns {
+		if !m.st.shows(c) {
+			continue
+		}
+		if c.Avail == AvailInstalled {
+			before++
+		}
+		if dropped[c.Vendor] {
+			continue
+		}
+		keep = append(keep, c.Vendor)
+		if c.Avail == AvailInstalled {
+			after++
+		}
+	}
+	if len(keep) == 0 {
+		// The last seat. /seat's own refusal, in /seat's words, because it is the
+		// same room being refused — reached by subtraction instead of by naming
+		// nobody.
+		m.st.Notice = "that would empty the room — it needs at least one seat"
+		return true
+	}
+	if before > 0 && after == 0 {
+		// Every seat that could actually answer, gone, leaving only cards that
+		// explain why the rest cannot. The guard is CONDITIONAL on the room having
+		// had one, and that is the honest half: on a machine where nothing is
+		// installed the room was already unable to answer before this was typed,
+		// and refusing there would blame /unseat for a state it did not cause.
+		m.st.Notice = "that would leave no seat that can answer — the room needs at least one seat it can drive"
+		return true
+	}
+
+	m.applySeats(keep)
+	return true
+}
+
+// applySeats installs a roster and says what the room now looks like.
+//
+// Shared by /seat and /unseat so the two cannot describe one room in two voices,
+// and so the default-route warning cannot be taught to one of them and not the
+// other — the room would then have a way to unseat claude that says nothing
+// about it.
+func (m *Model) applySeats(want []model.VendorID) {
 	m.st.Seats = Seats{Only: want}
 	m.setDraft("")
+	m.rehomeFocus()
 
 	notice := "seated: " + strings.Join(m.seatedLabels(), " ") + " — the rest keep their threads, /seat all brings them back"
 	// The default route is claude, so a room that unseats claude answers nothing
@@ -468,7 +733,28 @@ func (m *Model) seatCommand(arg string) bool {
 		notice += ". Unaddressed briefs go to claude, who is not seated — @mention a seat"
 	}
 	m.st.Notice = notice
-	return true
+}
+
+// rehomeFocus puts the keys back on a column the room actually draws.
+//
+// `stateWith` does this once at launch — "focus lands on a column that is
+// actually drawn" — and until now nothing did it again, so unseating the FOCUSED
+// seat left `State.Focus` pointing at a column the grid no longer draws. The
+// focus mark vanished from the room and `f`, the scroll keys and `y` went on
+// addressing the hidden column: keys that still worked, over a transcript
+// nobody could see, which is worse than keys that stop. Same rule as launch and
+// the same first-visible answer, applied wherever the roster moves — /seat can
+// unseat the focused column exactly as easily as /unseat can.
+func (m *Model) rehomeFocus() {
+	vis := m.st.VisibleColumns()
+	for _, i := range vis {
+		if i == m.st.Focus {
+			return
+		}
+	}
+	if len(vis) > 0 {
+		m.st.Focus = vis[0]
+	}
 }
 
 // parseSeatList reads "claude,codex" into vendors, through the SAME alias table
@@ -500,6 +786,19 @@ func (m *Model) seatsVendor(v model.VendorID) bool {
 	for _, c := range m.st.Columns {
 		if c.Vendor == v {
 			return m.st.seats(c)
+		}
+	}
+	return false
+}
+
+// showsVendor reports whether this vendor is IN the room — drawn — which is a
+// wider set than seatsVendor's: a seat named to `--vendor` or `/seat` is forced
+// on screen even when it is not installed. /unseat subtracts from this set,
+// because a card the user asked for is a card they can ask to be rid of.
+func (m *Model) showsVendor(v model.VendorID) bool {
+	for _, c := range m.st.Columns {
+		if c.Vendor == v {
+			return m.st.shows(c)
 		}
 	}
 	return false
