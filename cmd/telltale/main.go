@@ -305,6 +305,13 @@ telltale council flags:
                               watching; it is the one setting that leaves
                               nothing in the room asking permission for
                               anything.
+                              The a key does the same from inside the room, and
+                              it is on the approval CARD rather than in the
+                              composer because that is where you form the
+                              preference: y approves, n denies, a approves this
+                              call and every one after it. a alone in view mode
+                              turns the asking back on, and while it is off the
+                              footer carries a cell that says so.
   --resume                    reattach to the saved room. This is the DEFAULT —
                               the flag is kept for muscle memory and does the
                               same thing. The turn counter continues and each

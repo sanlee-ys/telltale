@@ -361,6 +361,13 @@ folded and why.
 redundant — reattaching is the default), `--write` (accepted, and does nothing —
 writing is the default), `--ascii`, `--no-title`.
 
+**`a` on the approval card stops the asking.** `y` approves, `n` denies, `a` approves this
+call and every one after it — on the card rather than in the composer, because that is
+where you decide you have been asked enough. It drains the queue behind the card rather
+than discarding it, since a pending request is a vendor stopped mid-call. `a` alone in view
+mode turns the asking back on, and while it is off the footer carries an `a not asking`
+cell so the way back is never off screen.
+
 **`/seat <list>` changes who is in the room**, taking the same argument as `--vendor` and
 reading it through the same alias table `@mentions` use. An unseated seat **keeps its
 thread and its process** — it just stops being drawn and stops being dispatched to, so its

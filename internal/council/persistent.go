@@ -255,7 +255,19 @@ func (m *Model) queueGate(c *Column, g *runner.Gate) {
 	if g == nil || g.RequestID == "" {
 		return
 	}
-	if autoApproveRoutine(g) {
+	// Two ways a call is approved without a card, and they are not the same
+	// claim. autoApproveRoutine is a judgement about the CALL — this one is
+	// routine, on a list that has been argued over. !Asking is a decision about
+	// the ROOM: the user said stop asking, so nothing is being classified and
+	// nothing is being trusted, the answer is just yes.
+	//
+	// It is checked here rather than left to the invocation because a process
+	// already running keeps the gate flags it was spawned with. `a` pressed
+	// mid-turn has to hold for the rest of THAT turn, or "stop asking" would
+	// keep asking until the turn ended — the promise broken at the moment it
+	// was made. The respawn that drops the flags happens later, on the next
+	// dispatch, through seatPosture.
+	if !m.st.Asking() || autoApproveRoutine(g) {
 		m.sendDecision(PendingGate{
 			Vendor: c.Vendor, RequestID: g.RequestID, ToolUseID: g.ToolUseID,
 			Text: g.Text,

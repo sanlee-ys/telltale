@@ -1895,7 +1895,12 @@ func gateCardLines(q []PendingGate, who string, w int, sty Styles, g Glyphs) []s
 	// and read as a new statement rather than as the rest of the question.
 	out := styleAll(hangWrap(g.Warn+" ", "waiting on you: "+subject, w), sty.Alert)
 
-	keys := "y approve   n deny"
+	// `a` is on the card and not only in the mode line, because it is the one key
+	// here nobody arrives already knowing. y and n are the two answers anyone
+	// expects from a prompt; "stop asking me" is a third thing the card has to
+	// offer before a user can know it exists — and the moment they want it is
+	// the moment they are staring at this.
+	keys := "y approve   n deny   a stop asking"
 	if n := len(q) - 1; n > 0 {
 		keys += "   +" + strconv.Itoa(n) + " queued"
 	}
@@ -2580,6 +2585,22 @@ func modeHints(st State, g Glyphs) []hint {
 		{key: g.Up + g.Down, label: "scroll"},
 		{key: "[ ]", label: "turn", shed: true},
 	}
+	// A room that has stopped asking says so, on every frame, next to the key
+	// that reverses it.
+	//
+	// This is a hint about STATE rather than about the mode, which no other cell
+	// on this line is — and that is the justification rather than an exception to
+	// it. `a` on the card is announced twice while a card is up and then the card
+	// is gone; without this the room would be permanently ungated with the only
+	// way back undocumented anywhere on screen, which is the §9.17 defect rebuilt
+	// one key later. It is not marked sheddable for the same reason `t grid` is
+	// not: shedding it would drop the way out of a state, not a convenience.
+	//
+	// Only when the gate is OFF. The asking room is the default and needs no cell
+	// to say a card will arrive — the card says that itself.
+	if !st.Asking() && st.Write {
+		hs = append(hs, hint{key: "a", label: "not asking"})
+	}
 	if several {
 		// `f` is the SECOND rung of the shed ladder, after `[ ]`, and the two
 		// cells framePad now spends on the room's margins are what made a second
@@ -2624,6 +2645,12 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 				{key: gateLabel(st)},
 				{key: "y", label: "approve"},
 				{key: "n", label: "deny"},
+				// The mode line is the contract: it announces what every key means
+				// on every frame, and this mode gives `a` a meaning it does not
+				// have anywhere else (§7.8). Leaving it to the card alone would put
+				// a key that silences the room's only guard in the one place a
+				// scrolled column can hide.
+				{key: "a", label: "stop asking"},
 				{key: "ctrl+c", label: "cancel the turn"},
 			},
 			lay, sty, g)
