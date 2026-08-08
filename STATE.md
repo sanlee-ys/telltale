@@ -78,18 +78,52 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   sits ~4.5 s ABOVE that floor and `codex` 2.4 s below it, so cursor is the one
   outlier worth a fix and codex is the fastest of the three to first byte.
 
-  **What `wait` cannot tell us**, and the entry should not overclaim: it bundles
-  the vendor's own startup with the model's time-to-first-token, and this
-  instrument cannot separate them. So "10.9 s of overhead" is NOT established —
-  some of it is the model thinking. What IS established is that a warm `claude`
-  crosses the same boundary in 38 ms because its process is already initialised.
+  **What `wait` could not tell us has now been measured separately, and the
+  split is in [design.md §9.33](docs/design.md).** `wait` bundled the vendor's
+  own startup with the model's time-to-first-token; stamping raw stdout lines
+  separates them, because `system/init` lands before the model is called.
+  On `cursor-agent` **2026.08.04-aaa8809**, two trials per arm:
+
+  - **~5.6 s** launch → `system/init` — pure CLI startup, no model involved. Of
+    it, node is 0.08 s and loading the bundle ~1.13 s; the remaining ~4.4 s is
+    the vendor resolving auth, config, trust and workspace.
+  - **4.3–5.8 s** `init` → `result` — the model, confirmed by the vendor's own
+    `duration_ms` on every trial. Persistence cannot touch this.
+  - **~2.5 s** `result` → exit — the process lingers after answering.
+
+  So **~8.1 s per turn is process cost and none of it is the model**, and it is
+  paid again on every turn. `--resume` is NOT the expensive half: resumed
+  startup (5.196 s, 5.551 s) is no larger than cold (5.666 s, 5.617 s), so
+  restoring a conversation is free and the standing diagnosis was right.
+  Proportion stated honestly rather than at its most flattering: 8.1 s is ~60%
+  of a trivial turn but ~32% of the 25.0 s real turn traced above.
 
   **`claude` is the only vendor implementing `vendors.Persistent`** (the same
   interface `canGate` reads, which is why it is also the only seat that can be
   asked). Its own warm-vs-cold gap is measured at 38 ms vs 6.3 s. **Extending
-  persistence to `cursor` is the highest-value optimisation available and now has
-  a number behind it** — but it is a real feature, not a config change, and it is
-  not owned.
+  persistence to `cursor` is the highest-value optimisation available**, it now
+  has a number behind it, and **the seam it needs has been found and driven
+  live** — but it is a real feature, not a config change, and it is not owned.
+
+- **UNOWNED, and no longer blocked on a question. The Cursor seat has a verified
+  multi-turn seam: a `cursor-agent acp` subcommand that `--help` does not list.**
+  Print mode can never be the channel — measured, it drains stdin to EOF and
+  joins the whole of it into one prompt, so the EOF that starts a turn destroys
+  the channel for the next. The hidden `acp` subcommand ("Start the Cursor Agent
+  as an ACP (Agent Client Protocol) server") is JSON-RPC over stdio and was
+  driven live: **two turns through one pid on one session, with the second turn
+  costing 1.18 s against print mode's ~13 s**, because the ~8.1 s of process cost
+  is paid once at `initialize` and never again.
+
+  What stops this from being picked up as a mechanical port, and why it wants a
+  session of its own: **ACP is a different protocol, not the same one with an
+  open stdin**, so §9.8's shape does not mirror onto it. Three decisions are
+  named in [design.md §9.33](docs/design.md) rather than guessed at — that
+  `vendors.Persistent`'s stateless `Turn` cannot express ACP's handshake and that
+  `runner.Session` correlates nothing (shared plumbing, not one adapter); that
+  `cwd` and posture stop being argv-bound, which un-founds `persistent.go`'s
+  respawn rules; and that every measured claim on this seat — the §9.6c dedup
+  rule included — was measured against a surface ACP does not use.
 
   **A fan-out turn costs the SLOWEST seat, not the sum**: 38.4 s here, set by
   codex's 34.7 s of `stream` — which is the model working and not something to
