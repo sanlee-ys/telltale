@@ -1,9 +1,9 @@
- telltale  │  2 of 4 sessions  │  claude 3  codex 1         claude 5h ███─────   42% ↻ 2h13m  7d █▎──────   18% ↻ 5d02h
+ telltale  │  1 session  │  codex 1
+                      ag gemini-weekly 38% ↻ 3h00m  │  cc 5h 42% ↻ 2h13m  7d 6% ↻ 5d00h · 2h ago  │  cx 7d 79% ↻ 22h48m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-        SESSION                                                      MODEL          CONTEXT                 COST    AGE
- ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
- ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
+        SESSION                                                                                    MODEL            AGE
+ ◐ CX │ notes-api  C:\src\code                                                                     gpt-5.1-codex │   4m
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- /api_                                                                                          esc clear   enter apply
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys

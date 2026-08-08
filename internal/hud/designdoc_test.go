@@ -22,6 +22,8 @@ var embedded = []string{
 	"find-active", "find-applied",
 	// shape drift — §7.3 render M and the fourth vendor word beside the third.
 	"shape-drift", "empty-drifted",
+	// the quota relay — §7.15's generated render.
+	"quota-fleet",
 }
 
 // notEmbedded lists goldens deliberately kept out of the design doc, with the

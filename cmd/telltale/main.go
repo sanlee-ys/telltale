@@ -9,8 +9,10 @@
 //	telltale council      dispatch room: one brief to several vendor CLIs at once
 //
 // The two GAUGES — statusline and hud — share the normalized session model and
-// internal/theme's numbers, and nothing else. Neither writes, calls the network
-// or sends anything to a running agent. council is the deliberate exception
+// internal/theme's numbers, and nothing else. Neither calls the network or
+// sends anything to a running agent; their one write is the statusline's quota
+// relay (internal/quotacache, design.md §7.15) — numbers-only, under
+// ~/.telltale/, after the render. council is the deliberate exception
 // (ADR-008): it spawns vendor CLIs, states each one's read-only posture on
 // screen, and shares no keybinding with the HUD. It reuses internal/theme and
 // nothing else from the gauges, so that seam is unchanged.
@@ -29,6 +31,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	agyadapter "github.com/sanlee-ys/telltale/internal/adapter/antigravity"
 	"github.com/sanlee-ys/telltale/internal/adapter/claudecode"
@@ -40,6 +43,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/council"
 	"github.com/sanlee-ys/telltale/internal/hud"
 	"github.com/sanlee-ys/telltale/internal/model"
+	"github.com/sanlee-ys/telltale/internal/quotacache"
 	"github.com/sanlee-ys/telltale/internal/statusline"
 )
 
@@ -103,6 +107,7 @@ func runStatusline() {
 			os.Exit(0)
 		}
 		fmt.Println(statusline.RenderAntigravity(in, statusline.Options{NoColor: noColor}))
+		relayQuota(string(model.VendorAntigravity), quotacache.FromAntigravity(in.Quota, time.Now()))
 		return
 	}
 	in, err := claude.Parse(bytes.NewReader(raw))
@@ -113,6 +118,25 @@ func runStatusline() {
 		os.Exit(0)
 	}
 	fmt.Println(statusline.Render(in, statusline.Options{NoColor: noColor}))
+	relayQuota(string(model.VendorClaude), quotacache.FromClaude(in.RateLimits, time.Now()))
+}
+
+// relayQuota is the statusline's one write: the quota reading it just
+// rendered, relayed for the HUD (internal/quotacache package doc; design.md
+// §7.15). It runs AFTER the line is on stdout so its cost can never delay the
+// render, and it is best-effort by rule — a gauge must never fail its render
+// over its cache, so the error goes nowhere. Payloads without quota (API-key
+// logins) relay nothing; the previous reading, if any, ages out on the read
+// side rather than being erased by an absence.
+func relayQuota(vendor string, windows []quotacache.Window) {
+	if len(windows) == 0 {
+		return
+	}
+	dir, err := quotacache.Dir()
+	if err != nil {
+		return
+	}
+	_ = quotacache.Write(dir, vendor, windows, time.Now())
 }
 
 func runHUD(args []string) error {
@@ -336,10 +360,12 @@ telltale council flags:
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
 
-statusline and hud read vendor files and never write, never call the network,
-and never send anything to a running agent. council is the deliberate
-exception: it spawns vendor CLIs, and each column states its own posture on
-screen. It is also the only mode that writes
-anything at all — one room file, ~/.telltale/council/room.json, holding the
-session ids reattaching needs and no transcript, output or brief content.`)
+statusline and hud read vendor files, never call the network, and never send
+anything to a running agent. telltale's own state lives under ~/.telltale/ and
+is keys and numbers only: the statusline relays the quota it just rendered
+(quota/<vendor>.json) so the hud can attribute account quota per vendor, and
+council keeps one room file (council/room.json) holding the session ids
+reattaching needs — no transcript, output or brief content in either. council
+is the deliberate exception to reading only: it spawns vendor CLIs, and each
+column states its own posture on screen.`)
 }

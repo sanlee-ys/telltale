@@ -2,9 +2,10 @@
 // CLIs at once, their replies streaming side by side.
 //
 // It is the one telltale subcommand that is not a gauge. `statusline` and `hud`
-// read vendor files and never write, never call the network and never send
-// anything to a running agent; that guarantee is unchanged and council does not
-// live behind any of their keybindings. Council spawns vendor CLIs on purpose,
+// read vendor files, never call the network and never send anything to a
+// running agent (their one write is the statusline's numbers-only quota relay,
+// design.md §7.15); that guarantee is unchanged and council does not live
+// behind any of their keybindings. Council spawns vendor CLIs on purpose,
 // says so on screen, and is entered as its own mode (ADR-008).
 //
 // The house rules from internal/hud carry over unchanged, because they are what
