@@ -17,7 +17,7 @@
                                                                                                                         
  * Read: internal/council/view.go +    |                                        |                                       
  * Write: internal/council/gate.go     |                                        |                                       
-                                                                                                                        
+                                       |                                        |                                       
  I need to add the card renderer.      |  working — the reply arrives whole.    |  working — the reply arrives whole.   
 ------------------------------------------------------------------------------------------------------------------------
  :                                                                                                                      

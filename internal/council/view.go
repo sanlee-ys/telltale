@@ -318,17 +318,21 @@ func collapsedNotice(st State, g Glyphs) string {
 	// the first thing a narrow terminal should drop. It is also in --help and in
 	// the help panel, so truncating here loses a convenience rather than the
 	// only copy of it.
+	// Two cells of air each side of the bar, not one. Every other │ in this
+	// product — the room header, the mode line, the gutters between columns —
+	// is spaced that way (§9.11 argues the number from --ascii, where the rule
+	// glyph and the spinner's first frame collide at one cell), and this was the
+	// single place spelling the room's one separator a second way.
 	return g.Warn + " " + lead + strings.Join(parts, ", ") +
-		" " + g.Sep + " --vendor all seats them anyway"
+		strings.Repeat(" ", gutter) + g.Sep + strings.Repeat(" ", gutter) +
+		"--vendor all seats them anyway"
 }
 
 // columnsBody draws the seats side by side.
 //
-// Vertical separators appear only on rows that carry content in any column.
-// A tall idle window used to draw │ through every empty body row down to the
-// footer — four spears through a void. Bottom-anchor adds a second void
-// between chrome and transcript; the same per-row rule keeps that pad
-// sep-free. Gutters stay blank-width so the grid does not shear.
+// The vertical separators run in BANDS rather than row by row — see railRows,
+// which owns the rule and the argument for it. Gutters stay blank-width either
+// way so the grid does not shear.
 func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	vis := st.VisibleColumns()
 	cells := make([][]string, len(vis))
@@ -356,14 +360,12 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	plainSep := sepPad + g.Sep + sepPad
 	sep := sepPad + sty.Rule().Render(g.Sep) + sepPad
 	blankSep := strings.Repeat(" ", lipgloss.Width(plainSep))
+	rails := railRows(cells, lay.Body)
 	var b strings.Builder
 	for row := 0; row < lay.Body; row++ {
 		b.WriteString(" ")
-		// Rails only on rows that carry content in any column. Bottom-anchor
-		// puts blank pad between chrome and transcript; drawing │ through that
-		// pad would recreate the void spears Phase 2 removed below the content.
 		div := blankSep
-		if rowHasContent(cells, row) {
+		if rails[row] {
 			div = sep
 		}
 		for j := range vis {
@@ -380,14 +382,68 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	return b.String()
 }
 
-// rowHasContent reports that any drawn column has non-blank text on this row.
-func rowHasContent(cells [][]string, row int) bool {
+// railRows decides, for the whole frame at once, which body rows carry the │
+// between columns.
+//
+// **A row carries a rail when some column has content on it, or when it is a
+// LONE blank row with content above and below.** Two consecutive blank rows end
+// the band; the next word starts a new one.
+//
+// The rule this replaces tested each row on its own — a rail wherever some
+// column had ink on that line, nothing anywhere else. It was answering a real
+// question, one row at a time. The question was the tall idle window that drew
+// │ down through every empty row to the footer, four spears through a void, and
+// that half is unchanged here: corpus-idle-120x60 still has a bare middle, and
+// TestRailsStopThroughEmptyBody still fails the build if it does not.
+//
+// What the per-row form ALSO did, unasked, was punch a hole in the frame every
+// time three transcripts of different lengths happened to be blank on the same
+// line. transcript.txt broke at rows 11 and 13, skips-coalesced.txt at 5, 10 and
+// 13, unavailable.txt at 19. Those are not voids — they are the air §9.11
+// deliberately spends, and every one of them is a single row. A frame whose edge
+// dashes in and out at the exact rows the design put air in reads as damage, and
+// it made the rail look like a property of the prose rather than of the grid.
+//
+// **One row is the whole threshold, and it is the room's own number rather than
+// a tuned one.** Every deliberate blank this surface draws is exactly one row,
+// three times over (§9.11): between a seat's chrome and its content, where the
+// speaker changes, where the kind of content changes. A one-row gap is therefore
+// a boundary the design placed BETWEEN two things it means to keep together, and
+// bridging it is drawing what was meant. Two rows is nothing the design asked
+// for — the bottom-anchor pad, an idle room, a column that ran out of transcript
+// long before its neighbour did — and a separator has nothing to separate there.
+//
+// The alternative considered and rejected was the literal reading: rails on
+// every row from the frame's first word to its last. It is a simpler sentence
+// and it produces a worse room — an idle 120x60 frame has chrome at the top and
+// `no turn dispatched yet.` at the bottom, so a single span would run fifty-five
+// rows of bar through nothing at all, which is precisely the shape Phase 2
+// removed. Contiguity is worth having up to the point where it starts asserting
+// a grid over emptiness.
+//
+// TrimSpace, not len: every cell is padded to its column width, so a blank row
+// is a run of spaces rather than an empty string.
+func railRows(cells [][]string, rows int) []bool {
+	ink := make([]bool, rows)
 	for _, col := range cells {
-		if row >= 0 && row < len(col) && strings.TrimSpace(col[row]) != "" {
-			return true
+		for row := 0; row < rows && row < len(col); row++ {
+			if strings.TrimSpace(col[row]) != "" {
+				ink[row] = true
+			}
 		}
 	}
-	return false
+	out := make([]bool, rows)
+	copy(out, ink)
+	// A lone blank between two content rows is air, not a void. Bounded on both
+	// sides on purpose: a single blank row hanging off either end of the frame
+	// has content on one side only and stays bare, so the band never overshoots
+	// the last word by a row.
+	for row := 1; row < rows-1; row++ {
+		if !ink[row] && ink[row-1] && ink[row+1] {
+			out[row] = true
+		}
+	}
+	return out
 }
 
 // seatFocus is how a column stands in relation to the keys, which is two

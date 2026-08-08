@@ -2,15 +2,15 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸ Claude Code  ────────  ⠋ streaming  │    Codex  ────────────────  ⠋ waiting  │    Antigravity                 ○ idle 
    ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
-                                                                                                                        
+                                       │                                        │                                       
  ↑ 3 more above  │  ↑↓ scroll          │                                        │                                       
  Resume. Re-sending grows input        │                                        │                                       
  quadratically.                        │                                        │                                       
  turn 2  ────────────────────────  8s  │                                        │                                       
  › what does that cost by turn five?   │                                        │                                       
-                                                                                                                        
+                                       │                                        │                                       
  ⚙ Read: dispatch.go ✓                 │                                        │                                       
-                                                                                                                        
+                                       │                                        │                                       
  About 30K redundant input tokens per  │                                        │                                       
  vendor.                               │                                        │                                       
  turn 3  ────────────────────────────  │                                        │                                       

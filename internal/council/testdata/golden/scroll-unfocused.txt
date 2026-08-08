@@ -2,7 +2,7 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ▸ Claude Code  ─────────────  ✓ done  │    Codex  ───────────────────  ✓ done  │    Antigravity  ─────────────  ✓ done 
    ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
-                                                                                                                        
+                                       │                                        │                                       
  ↑ 20 more above  │  ↑↓ scroll         │  ↑ 20 more above  │  tab to focus      │  ↑ 20 more above  │  tab to focus     
  line 22 of the reply                  │  line 22 of the reply                  │  line 22 of the reply                 
  line 23 of the reply                  │  line 23 of the reply                  │  line 23 of the reply                 
