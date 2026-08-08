@@ -1267,6 +1267,7 @@ statusline fixture). What it asserts today:
 | Burn arithmetic | `internal/hud` | the minimum basis, the four refusals, least-squares slope against injected series, rollover detection vs. `resets_at` jitter, sample throttling and eviction |
 | Fixture legality | `internal/hud` | every session behind every golden passes `model.Validate` against its vendor's declared capabilities — a golden may not pin a render of a state the schema forbids |
 | Doc/code sync | `internal/hud` | every render pasted into `docs/design.md` §7.3/§7.11–§7.14 and into `README.md` still matches its golden, and every golden is either embedded or explicitly exempted |
+| Doc/code sync | `internal/council` | the frame pasted into `docs/council.md` is the `activity` golden with its all-blank rows dropped and nothing else changed — the transform the doc claims, asserted rather than trusted |
 
 Rules that outrank convenience:
 
@@ -2579,6 +2580,10 @@ plane by default or to the explicitly `@mentioned` seats, replies streaming side
 `@all` convenes every seated vendor when independent answers are the point. It exists
 because the alternative is four terminals and a clipboard.
 
+[council.md](council.md) is the room's user-facing guide — the badge vocabulary, the
+routing grammar, the reading keys, every flag. This section is the record underneath it:
+what was measured on each vendor, what each finding cost, and what is still unverified.
+
 It is the one subcommand that is not a gauge, and the boundary is worth stating precisely
 rather than hand-waving. §7.8's invariant — no keybinding may mutate vendor state or send
 anything to a running agent — is **unchanged and unweakened**; it is a rule about the
@@ -3666,7 +3671,7 @@ flag that produced it. This is §7.1's rule about glyph-word-number ordering app
 prose: the distinction goes first and the evidence reinforces it.
 
 **The question's third clause got an answer too, and it is the one that mattered.** *Must
-they remain that way?* The README's new badge table answers it where a first-time reader
+they remain that way?* The badge table answers it where a first-time reader
 is, and the answer is not about flags: **no badge is what keeps this room out of your
 files — the workspace is.** `unsandboxed` on Codex is not a setting anyone chose to leave
 off; both sandboxed modes were measured failing every process spawn there, so read-only was
