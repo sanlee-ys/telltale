@@ -1,5 +1,5 @@
   council READ  │  ~/code/telltale                                                  turn 1  │  3/3 seated  │  no brief  
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ▸ CC Claude Code    CX Codex    AG Antigravity                                                                        
     CC Claude Code  ──────────────────────────────────────────────────────────────────────────────────────────  ✓ done  
     ro:tools  tokens                                                                                                    
@@ -19,6 +19,6 @@
                                                                                                                         
   Resume beats re-sending the transcript, because input grows quadratically against metered quotas and the blind-round  
   guarantee stops being structural.                                                                                     
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
   VIEW                           ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit  

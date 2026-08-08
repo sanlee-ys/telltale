@@ -161,8 +161,15 @@ func pageLines(st State, n, w int, sty Styles, g Glyphs) []string {
 	// The page's own outline, and the only heading on it that owns every seat
 	// below — so it takes the weight, and the seat rules under it keep theirs.
 	// See strongLabelRule for why the grid's copy of this line does not.
+	//
+	// It is also the one line INSIDE the frame drawn at the heavy rule weight
+	// (§9.26). The page is a projection where the turn is the unit, and the two
+	// full-bleed rules that close the frame are the only other lines that bound a
+	// whole document rather than a part of one; §9.23 gave this line the weight
+	// of a root and this gives it the FORM of one. The grid's turn separator is
+	// untouched for §9.23's own reason: there the turn is a child.
 	out := []string{strongLabelRule("turn "+strconv.Itoa(n),
-		pageMeta(st, entries), w, sty, g)}
+		pageMeta(st, entries), w, g.RuleHeavy, sty)}
 
 	// The brief ONCE. In the grid it is echoed per column because each seat's
 	// prompt is a fact about that seat (§9.9) — a turn can reach two seats and
@@ -238,8 +245,14 @@ func pageSeat(st State, e turnEntry, w int, sty Styles, g Glyphs) []string {
 
 // seatRule is one seat's heading inside a page: the name at weight, a rule, and
 // how that seat's turn ended.
+//
+// The LIGHT rule, and that is the half of §9.26 this line exists to demonstrate.
+// A seat rule is a child of the page's turn rule directly above it; giving both
+// the heavy form would restate the hierarchy problem §9.23 fixed by weight, one
+// level down. Two weights buy one distinction — outline against interior — and
+// spending the heavy one on a heading inside the outline would spend it twice.
 func seatRule(label, meta string, w int, sty Styles, g Glyphs) string {
-	return strongLabelRule(label, meta, w, sty, g)
+	return strongLabelRule(label, meta, w, g.Rule, sty)
 }
 
 // strongLabelRule draws labelRule with the LABEL at weight and everything after
@@ -273,8 +286,8 @@ func seatRule(label, meta string, w int, sty Styles, g Glyphs) string {
 //
 // fit, not padRight, because the line is assembled from differently-styled
 // pieces. That is §9.5's ANSI trap, and the goldens are blind to it.
-func strongLabelRule(label, meta string, w int, sty Styles, g Glyphs) string {
-	plain := labelRule(label, meta, w, g)
+func strongLabelRule(label, meta string, w int, ruleGlyph string, sty Styles) string {
+	plain := labelRuleIn(label, meta, w, ruleGlyph)
 	rest, ok := strings.CutPrefix(plain, label)
 	if !ok {
 		return fit(sty.Muted.Render(plain), w)

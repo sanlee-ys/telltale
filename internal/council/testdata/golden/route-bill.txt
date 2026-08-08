@@ -1,6 +1,6 @@
   council READ  │  ~/code/telltale                                      turn 10 → everyone  │  3/3 seated  │  no brief  
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ▸ CC Claude Code  ─────  ⠋ streaming  │    CX Codex  ────────────  ⠋ waiting  │    AG Antigravity             ○ idle  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ▸ CC Claude Code  ─────  ⠋ streaming  │    CX Codex  ────────────  ⠋ waiting  │    AG Antigravity  ─────────  ○ idle  
     ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
                                                                                                                         
@@ -19,6 +19,6 @@
                                                                                                                         
                                                                                                                         
                                         │  working — the reply arrives whole.   │  no turn dispatched yet.              
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   › @all where does this leave the gate?_                                                                               
   COMPOSE              → everyone (3 seats)  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut  

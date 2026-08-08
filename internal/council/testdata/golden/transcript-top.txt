@@ -1,6 +1,6 @@
   council READ  │  ~/code/telltale                                                  turn 3  │  3/3 seated  │  no brief  
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ▸ CC Claude Code  ─────  ⠋ streaming  │    CX Codex  ────────────  ⠋ waiting  │    AG Antigravity             ○ idle  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ▸ CC Claude Code  ─────  ⠋ streaming  │    CX Codex  ────────────  ⠋ waiting  │    AG Antigravity  ─────────  ○ idle  
     ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                         │                                       │                                       
   turn 1  ──────────────  12s  $0.0123  │                                       │                                       
@@ -19,6 +19,6 @@
   turn 3  ────────────────────────────  │    memory?                            │                                       
   › @all is the scrollback worth the    │                                       │                                       
   ↓ 3 more below  │  ↑↓ scroll          │  working — the reply arrives whole.   │  no turn dispatched yet.              
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
   VIEW                                  ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help  

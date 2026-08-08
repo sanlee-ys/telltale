@@ -136,15 +136,17 @@ func TestPhaseMarksSurviveASCII(t *testing.T) {
 // left and a bare word at the far right with twenty-five dead cells between,
 // which reads as two unrelated labels rather than as a seat with a state.
 //
-// Idle seats bind with whitespace — a leader rule there was ink with nothing to
-// divide. Active seats keep the turn-rule grammar (same shape as turnRule) so a
-// reader still learns one line form for "a label and the numbers that belong
-// to it" wherever a seat is actually working.
+// EVERY seat binds with the leader, idle included (§9.26). The old rule made it
+// conditional on phase, which drew the seats' header band as one continuous line
+// across the working half of the frame and blank across the idle half — one row,
+// two grammars, re-texturing itself on every dispatch. The leader is now the
+// interior weight rather than "the rule", and its claim on this row — this name
+// and this state belong to one seat — does not depend on what the seat is doing.
 func TestTheSeatNameAndItsStateAreOneLine(t *testing.T) {
 	g := UnicodeGlyphs()
 	idle := headerRow(room(), g)
-	if strings.Contains(idle, g.Rule) {
-		t.Errorf("an idle header still fills with a leader rule: %q", idle)
+	if !strings.Contains(idle, "Claude Code  "+g.Rule) {
+		t.Errorf("an idle header no longer binds its name to its state: %q", idle)
 	}
 	if !strings.Contains(idle, "Claude Code") || !strings.Contains(idle, g.Idle+" idle") {
 		t.Errorf("an idle header lost the name or the state: %q", idle)

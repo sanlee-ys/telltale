@@ -14,6 +14,11 @@ import (
 // agree with a renderer that had gone wrong. A body row is never all rule glyphs
 // (it carries at least the frame pad and a gutter), so the two lines that are
 // bracket the body exactly.
+//
+// The rule handed in is the HEAVY one since §9.26: the frame's two edges are the
+// only lines in the room drawn at that weight, which makes this search stricter
+// than it was rather than merely different — a column header's leader can no
+// longer be mistaken for a frame edge at any width.
 func frameBody(t *testing.T, frame string, rule string) []string {
 	t.Helper()
 	lines := strings.Split(frame, "\n")
@@ -70,7 +75,7 @@ func TestTheRailNeverDashes(t *testing.T) {
 		{"skips", func() State { return skipRoom(false) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			body := frameBody(t, render(tc.st()), g.Rule)
+			body := frameBody(t, render(tc.st()), g.RuleHeavy)
 			railed := make([]bool, len(body))
 			any := false
 			for i, ln := range body {
@@ -102,7 +107,7 @@ func TestRailsDoNotSpearAVoid(t *testing.T) {
 	g := UnicodeGlyphs()
 	st := room()
 	st.Width, st.Height = 120, 60
-	body := frameBody(t, render(st), g.Rule)
+	body := frameBody(t, render(st), g.RuleHeavy)
 
 	bare := 0
 	for _, ln := range body {

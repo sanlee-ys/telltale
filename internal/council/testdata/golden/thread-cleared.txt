@@ -1,6 +1,6 @@
   council READ  │  ~/code/telltale                                                  turn 3  │  3/3 seated  │  no brief  
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ▸ CC Claude Code  ──────────  ✓ done  │    CX Codex  ───────────────  ✓ done  │    AG Antigravity             ○ idle  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ▸ CC Claude Code  ──────────  ✓ done  │    CX Codex  ───────────────  ✓ done  │    AG Antigravity  ─────────  ○ idle  
     ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                         │                                       │                                       
   ↑ 7 more above  │  ↑↓ scroll          │                                       │                                       
@@ -19,6 +19,6 @@
   thread cleared  ────────────────────  │    memory?                            │                                       
   its next brief opens a new session,   │                                       │                                       
   with the brief re-applied.            │                                       │  no turn dispatched yet.              
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
   VIEW                           ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit  

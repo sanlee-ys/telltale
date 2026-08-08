@@ -1,6 +1,6 @@
   council READ  │  ~/code/telltale                                                  turn 3  │  3/3 seated  │  no brief  
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ▸ CC Claude Code              ○ idle  │    CX Codex                   ○ idle  │    AG Antigravity             ○ idle  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ▸ CC Claude Code  ──────────  ○ idle  │    CX Codex  ───────────────  ○ idle  │    AG Antigravity  ─────────  ○ idle  
     ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
                                                                                                                         
@@ -19,6 +19,6 @@
                                         │                                       │  no thread came back for this seat.   
   this seat's thread came back. the     │  this seat's thread came back. the    │  its next brief opens a new session,  
   next brief continues it.              │  next brief continues it.             │  with the brief re-applied.           
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
   VIEW         ⚠ reattached from ~/.telltale/council/room.json — turn 3 was the last, saved 2h ago, 2/3 seats restored  

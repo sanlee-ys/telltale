@@ -4774,3 +4774,79 @@ would be the second alphabet §9.11's phase marks were built to avoid. Dropping 
 entirely for an unavailable seat, which shears the grid for the sake of a row that costs nothing
 to keep. And putting the tag on turn pages "for consistency": consistency across surfaces that are
 doing different jobs is how a room ends up with an abbreviation in the middle of a sentence.
+
+### 9.26 one rule glyph was doing four jobs, and the header band re-textured on every dispatch
+
+§9.23 made the frame continuous and §9.24 made its margins breathe. What neither looked at is
+that the room draws horizontal lines at **one weight**, and asks that one weight to be four
+different things: the frame's own edge, a column header's leader, a turn separator inside a
+transcript, a seat's heading on a turn page. Every one of them is `─`, so a reader scanning for
+*where does the room end and the content start* gets the same ink as a reader scanning for
+*where does turn 3 begin*. A grid with no outline is a grid you have to reconstruct from its
+contents.
+
+**Two weights, one distinction: outline against interior.** `RuleHeavy` is `━` (U+2501) and `=`
+in the reduced set, and it is spent on **exactly three lines** — the two full-bleed rules that
+close the frame above and below the reading area, and the turn separator at the top of a turn
+page. Everything else keeps `─`. Three weights would be a hierarchy nobody can hold in their
+head; the value of the second one is entirely in its scarcity, which is why the list is closed
+and `TestOnlyTheFrameAndTheTurnPageDrawTheHeavyRule` asserts it as a *count* on the rendered
+frame rather than as a property of the three call sites.
+
+**Why the turn page's rule is the third.** It is the only line inside the frame that bounds a
+whole document rather than a part of one. §9.23 gave it the *weight* of a root — the label at
+full intensity while its seat rules recede — on the finding that the page's outline whispered
+while its entries shouted; this gives it the *form* of one. The grid's copy of that same line is
+untouched, for §9.23's own reason: there a turn separator sits inside a column already headed by
+a seat name, so it is the child. The seat rules on a page and the help panel's title stay light
+for the same test — a heading *inside* the outline that matched the outline would restate §9.23's
+hierarchy defect one level down.
+
+**The weight is a parameter, not a flag.** `labelRuleIn` takes the fill glyph and `labelRule`
+passes `g.Rule`; a caller that wants the heavy rule has to name it at the call site. That is what
+makes "exactly three lines" checkable by *reading* the three call sites rather than by grepping
+for a bool, and it keeps one implementation of the grammar — a label, a rule, optional numbers,
+two cells of air each side — which is `labelRule`'s own extraction argument.
+
+**It is a character before it is a style.** `--ascii` gets `=`, not a fallback to `-`, so the
+outline survives on exactly the terminals least able to infer it; `NO_COLOR` never touched it,
+because weight of this kind is a glyph rather than an attribute. `=` is the one unclaimed mark
+left in the reduced set — `-` is the light rule, the `Range` joiner and the first spinner frame,
+`|` the separator, `>` the ellipsis, `]` focus, `!` the warning prefix, `^`/`v` the overflow
+markers, `*` Act, `.` Idle, `:` the prompt, `_` the caret, `+`/`x`/`?` the outcome marks, `/`
+and `\` the remaining spinner frames, and `#` the HUD's gauge fill. It is also the only
+unclaimed character that reads as a *doubled* `-` rather than as a different symbol, which is
+the one property a second rule weight needs.
+`TestTheHeavyRuleHasAnUnclaimedASCIIPartner` enumerates that whole list so the next glyph cannot
+be added without meeting it.
+
+**The header leader stops depending on phase.** `headerUsesLeader` was false for an idle seat, on
+an argument that was true at one rule weight: a long `────` between `Claude Code` and `○ idle`
+was *filling* rather than separating, whitespace does that job for free, and a room with a single
+rule weight cannot afford ink on nothing. With two weights the leader is no longer "the rule" —
+it is the interior weight, and its claim on that row is *this name and this state belong to one
+seat*, which is as true of an idle seat as of a streaming one.
+
+The observable defect is the sharper half of the argument. A room where one seat is answering
+drew the seats' header band as one continuous ruled line across part of the frame and blank
+across the rest — **one row, two grammars** — and re-textured itself the moment a turn started
+and again when it ended. §7.1 rule 4 keeps this room still by default, and a band that changes
+shape on every dispatch is the loudest still-frame change on screen, spent on a fact the state
+word beside it already states. The air the old comment wanted is not lost: `labelRule` keeps two
+cells each side of its rule, which is the gap that keeps an ascii spinner (`-`) legible against
+an ascii leader (`-`).
+
+**Golden churn is the whole visible change, and it is two lines per frame plus one.** Every
+frame's two rules, and every idle seat's header row. Nothing else moved — `PlainStyles` renders
+both weights as themselves because they are characters, so unlike §9.23's weight half this pass
+*is* visible in the goldens and had to be read frame by frame. The three test helpers that found
+the frame by searching for a run of `─` (`fullWidthRule`, `frameBody`) now search for `━`, which
+makes them stricter rather than merely different: a column header's leader can no longer be
+mistaken for a frame edge at any width.
+
+**What was declined.** A third weight, or a double rule (`═`), for the turn page — the page's
+rule is already distinguished from its seat rules by its label, its position and its meta, and
+the frame is the only thing it needs to *match*. Making the frame's rule brighter as well as
+heavier: §9.23 declined to let the rails' hue mean anything on the argument that chrome competing
+with content is the wrong trade, and an outline is chrome. And keeping the idle leader off "for
+quiet": the quiet was bought by making the room's most stable row the one that changed most.

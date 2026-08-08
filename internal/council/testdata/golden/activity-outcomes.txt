@@ -1,5 +1,5 @@
   council READ  │  ~/code/telltale                                                  turn 2  │  3/3 seated  │  no brief  
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ▸ CC Claude Code  ──────────  ✓ done  │    CX Codex  ──────────  ⠋ streaming  │    AG Antigravity  ──────  ⠋ waiting  
     ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
@@ -19,6 +19,6 @@
   ⚙ Read: view.go ✓                     │                                       │      is denied.                       
                                         │  ⚙ go build ./...                     │  working — the steps above are what   
   One test fails.                       │  working…                             │  it has done so far.                  
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
   VIEW                                  ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help  
