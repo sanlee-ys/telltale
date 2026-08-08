@@ -4935,3 +4935,83 @@ the rail: chrome that competes with content is the trade §9.23 refused. Running
 full body height so focus always has an unbroken edge: that is the void again. And demoting
 `Muted` chrome a further step in unfocused columns, which would need the third intensity this
 section just declined to buy.
+
+### 9.28 the room's one hue exception, and exactly how far it goes
+
+`internal/council` has said "adds no hues of its own" since §9.11, and the rule was right: a
+dispatch room that invented a sixth colour drifts from the visual language the statusline and the
+HUD share, so council spent WEIGHT (§9.11) and CONTRAST (§9.27) instead, both attributes rather
+than hues. **This is the one ratified exception (San, 2026-08-07), and it is an exception to the
+rule rather than a repeal of it.**
+
+**The concept the other two surfaces do not have is the SEAT.** Everything council renders that
+theme already has a token for — severity, identity, chrome — keeps that token. What has no token
+is *which of four agents is speaking*, because `telltale statusline` and `telltale hud` have no
+seats to distinguish. `seatHue` returns one ANSI index per vendor: claude `5` (magenta), codex `6`
+(cyan — theme's identity hue, kept by the seat that already had it), agy `4` (blue), cursor `12`
+(bright blue), and `theme.ColorIdentity` for anything else.
+
+**Why it lives in `internal/council` and not in `internal/theme` — and the stdlib rule is NOT the
+reason.** These are plain strings; they would compile in theme perfectly well, and citing ADR-002
+here would send the next reader to fix the wrong thing. The reason is theme's *own* contract: one
+hue, one meaning, across every surface that imports it. A per-vendor hue promoted to theme is a
+token that means nothing on two of the three surfaces, which is how a shared palette stops being
+shared.
+
+**Why 4-bit indices.** theme.go's own argument, unchanged and reused rather than restated: the
+terminal resolves an index against the scheme the user already chose, so the room looks native in
+Windows Terminal's default and in a light scheme with no second palette and **no `isDark` fork**.
+A hex triple would be council asserting a colour over the user's own.
+
+**What is off limits, and it is a fence rather than a guideline.** The severity family — `1`/`2`/`3`
+and their bright twins `9`/`10`/`11` — is the green/yellow/red ramp on every surface, and a seat
+wearing red would read as a seat that failed, on a row where `✗ failed` is the thing beside it.
+The chrome family — `0`/`7`/`8`/`15` — is the gauge track and the terminal's own fore/background.
+That leaves 4, 5, 6, 12, 13, 14; this spends four of them, and `TestNoSeatHueIsASeverity` fails
+the build if that stops being true.
+
+**The honest weakness: 4 and 12 are one hue at two intensities.** agy and cursor are blue and
+bright blue, which some terminal schemes render close together and a reader can miss. That is
+acceptable **here and only here**, because §9.25 made the two-letter tags permanent — `AG` and
+`CU` appear beside every seat name the room scans — so the hue is the second signal it is supposed
+to be and the tag is carrying the distinction. If a fifth seat arrives wanting blue, the tag is
+what still works and the hue is what has to be argued for.
+`TestSeatHuesAreExhaustive` asserts the room seats exactly four vendors, so a fifth cannot be added
+without somebody reading this paragraph.
+
+**Three sites, and the list is closed.**
+1. **A turn page's seat rules** (`seatRule`). The highest payoff by a distance: a page stacks every
+   participating seat in one column, one block after another, so position answers *nothing* about
+   who is speaking — which is the exact condition under which a hue earns its place.
+2. **The tab bar.** `SeatStrong` selected, `SeatIdentity` unselected, replacing the wholly-muted
+   unselected tab. That is a *promotion*, and the opposite of what §9.27 does to an unfocused
+   column's prose, deliberately: prose in a column you are not reading is content you are not
+   reading, while an unselected tab is a **destination**. It is the one row on that tier whose job
+   is "here are the other seats, pick one", and a menu whose entries are faint makes you read it
+   twice. The selected tab still outranks the rest by weight and by the `▸` in front of it, which
+   is what survives NO_COLOR.
+3. **The collapsed-seat notice**, names only. The `⚠` keeps `SevWarn`, the reason in parentheses
+   and the remedy after the bar stay chrome, and nothing there gains weight — it is a sentence, and
+   a sentence with four bold words in it is not one. §9.25's boundary is untouched: the two-letter
+   *tag* stays out of prose, because an abbreviation introduced mid-sentence is one nobody can
+   learn there. A hue is not an abbreviation — it costs no cell and teaches nothing new.
+
+**Where it is deliberately NOT spent.**
+- **Grid column headers.** Position already answers which seat this is, and four coloured names
+  across one row is the circus row this rule exists to prevent — the room's newest signal spent on
+  the one question the layout had already settled.
+- **Phase marks and status words.** Severity owns those cells (§9.7).
+- **Rules, leaders, badge rows and every other piece of chrome.** A posture badge is a safety claim
+  (§9.2) and must not compete with a name for the eye.
+
+**Constructed to be invisible to the goldens, rather than checked to be.** `SeatIdentity` and
+`SeatStrong` are `Identity` and `Strong` *retinted*, through one `retint` helper that returns the
+base style untouched when `Plain` is set. A second pair of literal constructors would have to
+remember that and would forget it the first time one grew a second attribute. So **golden churn on
+this pass is zero, and any golden diff on it is a bug** — which is also the whole verification
+story, since colour is asserted where colour is asserted (§9.5) and never in a golden.
+
+**What was declined.** A hue on the grid's column headers (above). Hue on the vendor tag as well
+as the name, which doubles the ink for a distinction the name already carries. Truecolor, which
+would override the user's scheme. And a fifth hue held in reserve for "the next vendor": a palette
+entry with no seat behind it is a decision nobody has made, recorded as if somebody had.

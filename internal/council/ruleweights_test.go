@@ -3,6 +3,8 @@ package council
 import (
 	"strings"
 	"testing"
+
+	"github.com/sanlee-ys/telltale/internal/model"
 )
 
 // §9.26: the room draws horizontal lines at two weights, and the heavy one is
@@ -121,7 +123,8 @@ func TestTheGridsInteriorRulesStayLight(t *testing.T) {
 		line string
 	}{
 		{"the grid's turn separator", turnRule(2, "8s", 40, g)},
-		{"a seat rule on a turn page", seatRule("Claude Code", "✓ done  8s", 60, sty, g)},
+		{"a seat rule on a turn page",
+			seatRule(model.VendorClaude, "Claude Code", "✓ done  8s", 60, sty, g)},
 		{"the help panel's title", helpTitle("keys", resolveLayout(120, 40, 3, false), sty, g)},
 		{"a column header's leader", headerRow(talking(), g)},
 	} {

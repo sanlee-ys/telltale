@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -204,7 +206,7 @@ func pageLines(st State, n, w int, sty Styles, g Glyphs) []string {
 // what actually happened — a turn that broke is one of the two a reader is
 // scrolling back for.
 func pageSeat(st State, e turnEntry, w int, sty Styles, g Glyphs) []string {
-	out := []string{seatRule(e.Label, seatMeta(st, e, g), w, sty, g)}
+	out := []string{seatRule(e.Vendor, e.Label, seatMeta(st, e, g), w, sty, g)}
 	// Where this seat's CONTENT starts. The rule is a label for what follows,
 	// not a block the next thing has to be separated from — the same relation
 	// turnHead's separator has to the brief under it — so a seat whose whole
@@ -251,8 +253,15 @@ func pageSeat(st State, e turnEntry, w int, sty Styles, g Glyphs) []string {
 // the heavy form would restate the hierarchy problem §9.23 fixed by weight, one
 // level down. Two weights buy one distinction — outline against interior — and
 // spending the heavy one on a heading inside the outline would spend it twice.
-func seatRule(label, meta string, w int, sty Styles, g Glyphs) string {
-	return strongLabelRule(label, meta, w, g.Rule, sty)
+//
+// The name takes the SEAT's own hue (§9.28), and this is the site with the
+// highest payoff of the three: a turn page stacks every participating seat in
+// one column, one after another, so position answers nothing about who is
+// speaking. In the grid a column's x-coordinate has already answered it before
+// the eye reaches the name — which is exactly why the grid's own headers are on
+// the closed list of places this hue is NOT spent.
+func seatRule(v model.VendorID, label, meta string, w int, sty Styles, g Glyphs) string {
+	return labelledRule(label, meta, w, g.Rule, sty.SeatStrong(v), sty)
 }
 
 // strongLabelRule draws labelRule with the LABEL at weight and everything after
@@ -287,12 +296,23 @@ func seatRule(label, meta string, w int, sty Styles, g Glyphs) string {
 // fit, not padRight, because the line is assembled from differently-styled
 // pieces. That is §9.5's ANSI trap, and the goldens are blind to it.
 func strongLabelRule(label, meta string, w int, ruleGlyph string, sty Styles) string {
+	return labelledRule(label, meta, w, ruleGlyph, sty.Strong, sty)
+}
+
+// labelledRule is strongLabelRule with the LABEL's style supplied, so a seat's
+// rule can carry that seat's own hue (§9.28) without a second copy of the
+// split — which is the same argument labelRule makes for its own arithmetic.
+//
+// head is applied to the label and Muted to everything after it, always. The
+// figure/ground relation is the grammar; only which figure is being drawn
+// changes.
+func labelledRule(label, meta string, w int, ruleGlyph string, head lipgloss.Style, sty Styles) string {
 	plain := labelRuleIn(label, meta, w, ruleGlyph)
 	rest, ok := strings.CutPrefix(plain, label)
 	if !ok {
 		return fit(sty.Muted.Render(plain), w)
 	}
-	return fit(sty.Strong.Render(label)+sty.Muted.Render(rest), w)
+	return fit(head.Render(label)+sty.Muted.Render(rest), w)
 }
 
 // seatMeta is the numbers that belong to one seat's rule: how its turn ended,
