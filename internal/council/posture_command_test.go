@@ -143,10 +143,17 @@ func TestOnlyYLoosensTheRoom(t *testing.T) {
 // TestBareWordOnly is the vocabulary rule, and it is the reason these two
 // commands parse differently from /cd and /trace.
 //
-// "/write a test for this" and "/read the design doc first" are ordinary briefs
-// a person addresses a room with. Intercepting them would silently swallow a
-// turn and run a setting instead — worse than stealing the word, because the
-// user watches their brief vanish rather than being told it was a command.
+// The rule this pins is that NONE of these runs a setting. "/write a test for
+// this" and "/read the design doc first" are ordinary briefs a person addresses
+// a room with, and intercepting them as the posture command would silently
+// swallow a turn and change the room instead — the user watching their brief
+// vanish rather than being told anything.
+//
+// What §9.31 changed is where they go instead, and it is deliberately not the
+// vendors: a draft opening with a slash is refused with the space escape named,
+// so a slip costs a notice rather than three seats' quota. Both halves are
+// asserted here, in one test, because the failure to avoid is either of them
+// alone — a "/read the design doc" that ran the setting, or one that was billed.
 func TestBareWordOnly(t *testing.T) {
 	for _, draft := range []string{
 		"/write a test for this",
@@ -155,16 +162,23 @@ func TestBareWordOnly(t *testing.T) {
 		"/reading list",
 	} {
 		m := postureModel(false)
+		was := m.st.Write
 		m.setDraft(draft)
 
-		if m.roomCommand() {
-			t.Errorf("%q was intercepted as a command; it is a brief", draft)
+		if !m.roomCommand() {
+			t.Errorf("%q was dispatched to the vendors; a slash-leading slip is refused", draft)
 		}
 		if m.writePending {
 			t.Errorf("%q armed the write gate", draft)
 		}
+		if m.st.Write != was {
+			t.Errorf("%q moved the room's posture", draft)
+		}
 		if m.st.Draft != draft {
-			t.Errorf("%q was altered on its way to the vendors: %q", draft, m.st.Draft)
+			t.Errorf("%q was altered rather than handed back: %q", draft, m.st.Draft)
+		}
+		if !strings.Contains(m.st.Notice, "leading space") {
+			t.Errorf("%q was refused without naming the way to send it: %q", draft, m.st.Notice)
 		}
 	}
 }

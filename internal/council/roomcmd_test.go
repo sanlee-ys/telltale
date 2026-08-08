@@ -10,6 +10,12 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
+// TestParseRoomCommand is the PARSER's contract, which is narrower than the
+// room's: leading whitespace is still trimmed here, and roomCommand no longer
+// reaches this function when a draft carries any — a leading space is the escape
+// hatch that sends a slash-leading brief to the vendors (§9.31,
+// TestALeadingSpaceSendsASlashBriefToTheVendors). The trimming that still
+// matters is the trailing kind.
 func TestParseRoomCommand(t *testing.T) {
 	cases := []struct {
 		draft string
@@ -28,9 +34,9 @@ func TestParseRoomCommand(t *testing.T) {
 		{"", "", false},
 	}
 	for _, c := range cases {
-		arg, ok := parseRoomCommand(c.draft)
+		arg, ok := parseCommand(c.draft, "/cd")
 		if ok != c.ok || arg != c.arg {
-			t.Errorf("parseRoomCommand(%q) = %q, %v — want %q, %v", c.draft, arg, ok, c.arg, c.ok)
+			t.Errorf("parseCommand(%q, \"/cd\") = %q, %v — want %q, %v", c.draft, arg, ok, c.arg, c.ok)
 		}
 	}
 }

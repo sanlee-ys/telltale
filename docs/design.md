@@ -5346,6 +5346,147 @@ the band down to one row on a short terminal, covered above. And giving the band
 hue of its own — council adds no hues, and the boundary vocabulary this room already has is what a
 reader has already learned to read.
 
+### 9.31 a word the room did not know was billed to three vendors
+
+**The rule: a draft that opens with `/` and names no room command is refused, not dispatched.**
+Refusing is free — nothing spawns, nothing is billed, the draft stays in the composer — and the
+alternative is not free at all.
+
+**The field report.** Turn 53 of a real room: `/unseat codex` was typed. There was no `/unseat`;
+§9.17 shipped `/seat <list>` and nothing else. `roomcmd.go` recognised no command, so the draft
+fell through **as a brief**, and the committee was billed to discuss the string `/unseat codex`
+until the user cancelled the turn. Nothing malfunctioned. Every line of that was the documented
+behaviour: "only a draft that IS a command is intercepted; anything else, including text that
+merely starts with a slash, dispatches to the vendors as typed."
+
+That fall-through was the right call for the *vocabulary* question and the wrong call for the
+*typo* question, and the two had never been separated. The vocabulary rule exists so the room does
+not steal words out of the conversation — the argument that kept `/clear` out of `roomcmd.go`,
+since `/clear` is a real Claude Code command a person means for a vendor. It says what must not be
+**executed**. It says nothing about what should happen to a draft that executes nothing, and
+dispatching was only ever the default that was already sitting there.
+
+**A leading slash is almost never prose.** It is a command the room does not have, a command a
+*vendor* has, or a typo for one of ours. Against that, dispatching costs a turn on every seated
+vendor — on the scarce independence pool as readily as on the cheap lane — for a line the user will
+retype in five seconds. `addressesRoom` is the whole test: a slash in **column one**.
+
+#### The escape hatch is one space, and it had to be
+
+A brief that legitimately opens with a slash is a real thing to type — a POSIX path, a regex,
+`/etc/hosts is wrong`. Prefixing one space sends it, unmodified, to the vendors.
+
+It is the cheapest honest escape available, and it is honest because nothing between the composer
+and the spawn trims it. `sanitizeKeepingSpace` deliberately does not trim ("trimming would make the
+string on screen disagree with the string about to be dispatched", §7.14's rule applied to the
+composer), `ParseRoute` returns an unconsumed draft unchanged, and `dispatch` echoes what it sends.
+The space the user typed is the space the seat receives, and
+`TestALeadingSpaceSendsASlashBriefToTheVendors` asserts that at the seat rather than at the parser.
+
+**The refusal has to say so, in few words.** §9.17's own defect shape is a refusal whose remedy is
+undiscoverable — the `/flow` write-hop notice that went on naming a flag for two releases after
+`/write` made it wrong. So the notice carries three clauses **in this order**: what failed, how to
+send it anyway, then the vocabulary.
+
+> `no room command /unseet — a leading space dispatches it · /cd /flow /read /seat /trace /unseat /write`
+
+The order is load-bearing. This notice replaces the entire hint stack on the mode line, which
+truncates from the *right*, so the clause a narrow room loses has to be the one a reader can get
+elsewhere. `?` lists the room controls; nothing else on screen teaches the space. The quoted word is
+capped (`unknownVerbEcho`) for the same reason — a pasted 200-character path is one word, and an
+uncapped echo would push both the remedy and the vocabulary off the end, leaving a refusal that
+names only the mistake.
+
+**The vocabulary in that notice is walked, never written twice.** `roomVerbs` is the one table; the
+notice reads it and `TestTheRefusalListsTheLiveCommandTable` walks it. A hardcoded list in either
+place is the copy that goes stale on the next command — and this feature would have been its first
+victim, shipping `/unseat` with a refusal that did not mention `/unseat`.
+
+**What this does to the bare-word rule, which is the one deliberate consequence.** §9.17 made
+`/read` and `/write` bare-only so that "/read the design doc first" could not silently swallow a
+turn and run a setting. That rule is untouched: those drafts still do not reach `postureCommand`.
+What changes is where they go instead — refused with the space named, rather than billed. Both
+halves are now one test (`TestBareWordOnly`), because either alone is a defect: a "/read the design
+doc" that ran the setting, and a "/read the design doc" that cost three seats a turn.
+
+**`/flow` came along with it.** `dispatch.go` matched `strings.HasPrefix(TrimSpace(draft), "/flow")`
+— any draft whose first non-space characters were those five letters. So `/flowchart the auth path`
+was an orchestration, and, worse, `" /flow/gate.log is the file I mean"` would have been swallowed
+*after* being escaped, making the hatch a lie for exactly one prefix. An escape hatch with an
+invisible exception is not one. `isFlowCommand` applies the room's single vocabulary rule there too.
+
+#### `/unseat <list>`: `/seat` spelled the other way round
+
+The typo that started this was reaching for a control that should have existed. `/seat` names who
+**stays**; `/unseat` names who **leaves**, and it is the argument `-@` makes one control up: the
+correction a user reaches for mid-session is "not that seat" — one vendor is answering badly or
+expensively and the other three are fine — and making them retype the complement is arithmetic done
+at the keyboard, on the one line where getting it wrong quietly reseats the room around seats they
+did not mean.
+
+It is `parseSeatList`, literally: same aliases, same `@` tolerance, same trailing punctuation, same
+dedupe. A second list parser is how `/seat agy` would work and `/unseat agy` would not.
+
+Everything §9.17 ruled for `/seat` holds unchanged, and mostly by sharing the code rather than by
+sharing the intention:
+
+- **It kills nothing.** An unseated seat keeps its thread, its process and every id that would
+  resume it. `/seat all` puts it back mid-conversation, with no resume to fail.
+- **It refuses mid-turn.** The roster is dispatch state — `frameOwnersFor` decided this turn's grid
+  — so reseating under a live turn would redraw the room around columns that are mid-answer.
+- **It warns when it removes the default route**, because unaddressed briefs go to claude. The
+  warning lives in `applySeats`, shared with `/seat`, precisely so the subtractive spelling cannot
+  be the one that says nothing.
+- **Bare `/unseat` reports**, the way bare `/cd`, `/trace` and `/seat` do: a command that half-asks
+  a question answers it rather than doing something.
+
+Three refusals are its own. **The last seat**: a room with no seats can answer nothing, so the
+subtraction that would empty it is refused in `/seat`'s words for `/seat`'s reason. **`/unseat
+all`**: a sentence someone will type, answered as the empty room it names rather than left to
+`parseSeatList`, whose honest report would be "no seat called all" — a spelling complaint about a
+word the room understands perfectly well. **A seat that is not in the room**: distinguished from a
+typo, and both change nothing, on `/seat`'s argument that a command which quietly did less than it
+was asked is discovered several turns later as a seat still answering.
+
+**Membership is what the room SHOWS, not what it can drive**, and that line took a CI failure to
+find. `/seat cursor` *forces* an uninstalled seat on screen — "a user who asked for it is owed the
+card explaining why it is not there" — so that seat is in the room in every sense a subtraction
+cares about, and the first spelling, which tested membership with `seatsVendor`, could not remove
+the one card a user is most likely to want gone. On a machine where nothing is installed it could
+not remove anything at all: every `/unseat` was answered "not in the room" and the roster never
+moved. Local runs passed because the developer's machine has four vendors on `PATH`; CI, which has
+none, is the one that reads the rule as written.
+
+**So the two questions are separated, and only the second guards the last seat.** *Is it in the
+room?* is `shows`. *Can it answer?* is `Avail == AvailInstalled`, and the refusal built on it is
+**conditional on the room having had one**: a room with nothing installed could not answer before
+this was typed either, and refusing there would blame `/unseat` for a state it did not cause. An
+empty roster is refused unconditionally, because that is `/seat`'s own "at least one seat" reached
+by subtraction.
+
+#### The focus bug underneath it
+
+`/seat` has been able to unseat the **focused** column since §9.17, and nothing moved focus when it
+did. `State.Focus` indexes `Columns`, so it went on pointing at a seat the grid no longer draws: the
+focus mark vanished from the room, and `f`, the scroll keys and `y` went on addressing the hidden
+column. Keys that still work over a transcript nobody can see are worse than keys that stop, because
+nothing on screen says anything is wrong.
+
+`stateWith` already does this once, at launch — "focus lands on a column that is actually drawn" —
+and the fix is that same rule applied wherever the roster moves (`rehomeFocus`), not a rule of
+`/unseat`'s own. It is called from `applySeats`, so `/seat` gets it too; a helper that fixed only
+the new command would have left the older one holding the bug that made the new one worth writing a
+test for.
+
+#### The help row
+
+`/unseat` merged onto the row `/seat` already holds, as `/seat /unseat <list>`. The panel's budget is
+hard — 17 rows to the `?` line on a 24-row terminal — and `helpBody` clips without scrolling, so a
+control named past the fold is not a demoted control, it is an absent one (§9.20). The merge is also
+the honest shape rather than only a saving: the two take one argument in one vocabulary and differ
+only in direction, so a reader who finds either has found both. "times" paid for the width — the row
+is a list of controls, and `/trace <file>` is unambiguous without the verb.
+
 ### 9.32 the room remembered where it was and forgot who was in it
 
 **The ruling, San's, 2026-08-08, and it is the line every field in `room.json` is now cut

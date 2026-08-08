@@ -76,11 +76,15 @@ func (m *Model) dispatch() tea.Cmd {
 
 	reg := vendors.Registry()
 
-	// Flows start only with an explicit /flow prefix. Bare "->" in prose must
-	// never become a chain — that would turn ordinary briefs into orchestrations.
+	// Flows start only when the draft IS the /flow command. Bare "->" in prose
+	// must never become a chain — that would turn ordinary briefs into
+	// orchestrations — and neither may a word that merely opens with those five
+	// letters: isFlowCommand applies roomcmd.go's one vocabulary rule here so
+	// "/flowchart the auth path" is prose and " /flow/gate.log" is the escape
+	// hatch §9.31 promises rather than a syntax error.
 	var route Route
 	var prompt string
-	if activeFlow || strings.HasPrefix(strings.TrimSpace(m.st.Draft), "/flow") {
+	if activeFlow || isFlowCommand(m.st.Draft) {
 		// Reuse an in-progress chain when the user just authorized a write gate
 		// against the same draft; otherwise parse fresh.
 		if !activeFlow {

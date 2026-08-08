@@ -228,10 +228,12 @@ func TestAnUnchangedRosterIsNotSavedByAnotherRoomCommand(t *testing.T) {
 // TestEveryRosterChangeGoesThroughOneChokePoint.
 //
 // The persistence is on roomCommand rather than inside seatCommand so that a
-// narrowing command written later — `/unseat` is the one in flight — inherits it
-// without being told this wrapper exists. Asserted by driving the roster through
-// the wrapper the way any such command would and checking the file followed,
-// including the subtractive direction that `/unseat` will take.
+// narrowing command written later inherits it without being told this wrapper
+// exists. `/unseat` was the one in flight when this was written and has since
+// landed (§9.31) having needed no change here, which is the prediction coming
+// good; TestUnseatIsPersistedByTheChokePoint asserts it against the file. This
+// one stays on `/seat` alone, so the choke point is still pinned by a test that
+// does not depend on which commands happen to exist.
 func TestEveryRosterChangeGoesThroughOneChokePoint(t *testing.T) {
 	m := dispatchedRoom(t, Options{})
 	for _, step := range []struct {
