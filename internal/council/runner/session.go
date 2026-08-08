@@ -77,6 +77,33 @@ const sendQueue = 8
 // guards Start therefore has nothing to guard here, because there is no path by
 // which prompt text could reach argv.
 func StartSession(ctx context.Context, spec Spec, out chan<- Event, parse ParseFunc) (*Session, error) {
+	// A one-way parser adapted to the two-way shape below. It never replies,
+	// which is the whole difference between this path and StartRPCSession, and
+	// stating it as a nil return rather than as a second code path is what keeps
+	// the stream-json seats running through byte-identical machinery.
+	return startSession(ctx, spec, out, func(line []byte) ([]Event, [][]byte) {
+		if ev, ok := parse(line); ok {
+			return []Event{ev}, nil
+		}
+		return nil, nil
+	}, nil)
+}
+
+// StartRPCSession launches a spec as a long-lived child that speaks a
+// request/response protocol on stdin/stdout.
+//
+// Identical to StartSession in every process guarantee — same job object, same
+// bounded channel, same turn clock, no prompt anywhere in argv — and different
+// in exactly one way: the parser may answer. See Protocol for why that
+// difference cannot be papered over, and design.md §9.36 for the measurement
+// that forced it.
+func StartRPCSession(ctx context.Context, spec Spec, out chan<- Event, proto Protocol) (*Session, error) {
+	return startSession(ctx, spec, out, proto.Inbound, proto.Opening())
+}
+
+// startSession is the shared body. handle sees every line and may return lines
+// to write back; opening is written once the child is up, before any turn.
+func startSession(ctx context.Context, spec Spec, out chan<- Event, handle handlerFunc, opening [][]byte) (*Session, error) {
 	ck := newClock(spec.Vendor)
 	cmd := exec.Command(spec.Binary, spec.Args...)
 	cmd.Dir = spec.Dir
@@ -141,10 +168,54 @@ func StartSession(ctx context.Context, spec Spec, out chan<- Event, parse ParseF
 		}
 	}()
 
+	// The handshake goes out before the first turn and WITHOUT touching the
+	// clock: queued through write rather than Send, so the room's own opening
+	// cannot be billed to a turn nobody has typed yet.
+	//
+	// A failure here is FATAL to the session rather than shrugged off. An opening
+	// that did not go out leaves a process nobody has spoken to, which will
+	// answer nothing forever — and reporting that as a launch error puts it in
+	// the column as a dispatch failure instead of as a turn that never ends.
+	for _, line := range opening {
+		if err := s.write(line); err != nil {
+			s.Kill()
+			return nil, err
+		}
+	}
+
 	errTail := &ringBuffer{limit: stderrTail}
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() { defer wg.Done(); pumpStdout(stdout, spec.Vendor, out, parse, ck) }()
+	// A reply produced by the parser goes back down the SAME queue a turn uses,
+	// and through write rather than Send: an answer to a question the vendor
+	// asked mid-turn belongs to the turn already in progress, and starting a new
+	// one on it would time the room's own keystroke as a fresh wait.
+	//
+	// A failure is REPORTED, and that is the difference between a visible fault
+	// and a hang. write is non-blocking by construction — a vendor that stopped
+	// reading its stdin must not be able to stall the room's input handling — so
+	// its failure mode is a refusal, and the lines it refuses are the ones a
+	// blocked vendor is waiting on: a permission answer, a handshake step. Dropped
+	// silently, each of those is a column that never finishes.
+	go func() {
+		defer wg.Done()
+		pumpStdout(stdout, spec.Vendor, out, handle, ck, func(lines [][]byte) {
+			for _, l := range lines {
+				err := s.write(l)
+				if err == nil {
+					continue
+				}
+				select {
+				case out <- Event{
+					Vendor: spec.Vendor, Kind: KindError, EndsTurn: true, Err: err,
+					Note: "this seat could not be answered: " + err.Error(),
+				}:
+				case <-ctx.Done():
+				}
+				return
+			}
+		})
+	}()
 	go func() { defer wg.Done(); errTail.consume(stderr) }()
 
 	// The lifecycle goroutine, identical in shape to Start's: drain the readers,
@@ -199,6 +270,51 @@ func StartSession(ctx context.Context, spec Spec, out chan<- Event, parse ParseF
 // caller is the UI loop and a vendor that has stopped reading must not be able
 // to take the room's input handling down with it.
 func (s *Session) Send(line []byte) error {
+	if err := s.write(line); err != nil {
+		return err
+	}
+	// The turn's clock starts where the room let go of it, not where the writer
+	// goroutine gets to it — the queue is a detail of this type, and time spent
+	// in it is still time the user is waiting. A write that lands mid-turn (a
+	// gate decision, an interrupt) finds a turn already open and leaves it
+	// alone; see clock.begin.
+	s.clock.begin(time.Now())
+	return nil
+}
+
+// SendTurn hands one turn over, as however many lines the protocol makes of it.
+//
+// ZERO lines is legal and is the case this method exists for. An RPC protocol
+// may TAKE a turn it cannot yet encode — cursor-agent's ACP server has no
+// `sessionId` to put in a `session/prompt` until it has answered `session/new`
+// — and the turn clock still has to start, because the person who pressed enter
+// is waiting from that moment whether or not a byte has moved. Routing that
+// through Send with an empty line would put a blank line on the vendor's stdin;
+// routing it through write would lose the clock.
+func (s *Session) SendTurn(lines [][]byte) error {
+	s.clock.begin(time.Now())
+	for _, line := range lines {
+		if err := s.write(line); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SendAside writes lines that are NOT a turn: an interrupt, a gate decision, a
+// protocol reply. The clock is left alone, so an answer typed mid-turn stays
+// inside the turn it answers.
+func (s *Session) SendAside(lines [][]byte) error {
+	for _, line := range lines {
+		if err := s.write(line); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// write queues one line without touching the turn clock.
+func (s *Session) write(line []byte) error {
 	s.mu.Lock()
 	closed := s.closed
 	s.mu.Unlock()
@@ -214,12 +330,6 @@ func (s *Session) Send(line []byte) error {
 
 	select {
 	case s.sendQ <- buf:
-		// The turn's clock starts where the room let go of it, not where the
-		// writer goroutine gets to it — the queue is a detail of this type, and
-		// time spent in it is still time the user is waiting. A write that lands
-		// mid-turn (a gate decision, an interrupt) finds a turn already open and
-		// leaves it alone; see clock.begin.
-		s.clock.begin(time.Now())
 		return nil
 	default:
 		return ErrSendBacklog

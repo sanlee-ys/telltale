@@ -108,36 +108,36 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   Proportion stated honestly rather than at its most flattering: 8.1 s is ~60%
   of a trivial turn but ~32% of the 25.0 s real turn traced above.
 
-  **`claude` is the only vendor implementing `vendors.Persistent`** (the same
-  interface `canGate` reads, which is why it is also the only seat that can be
-  asked). Its own warm-vs-cold gap is measured at 38 ms vs 6.3 s. **Extending
-  persistence to `cursor` is the highest-value optimisation available**, it now
-  has a number behind it, and **the seam it needs has been found and driven
-  live** — but it is a real feature, not a config change, and it is not owned.
-
-- **UNOWNED, and no longer blocked on a question. The Cursor seat has a verified
-  multi-turn seam: a `cursor-agent acp` subcommand that `--help` does not list.**
-  Print mode can never be the channel — measured, it drains stdin to EOF and
-  joins the whole of it into one prompt, so the EOF that starts a turn destroys
-  the channel for the next. The hidden `acp` subcommand ("Start the Cursor Agent
-  as an ACP (Agent Client Protocol) server") is JSON-RPC over stdio and was
-  driven live: **two turns through one pid on one session, with the second turn
-  costing 1.18 s against print mode's ~13 s**, because the ~8.1 s of process cost
-  is paid once at `initialize` and never again.
-
-  What stops this from being picked up as a mechanical port, and why it wants a
-  session of its own: **ACP is a different protocol, not the same one with an
-  open stdin**, so §9.8's shape does not mirror onto it. Three decisions are
-  named in [design.md §9.33](docs/design.md) rather than guessed at — that
-  `vendors.Persistent`'s stateless `Turn` cannot express ACP's handshake and that
-  `runner.Session` correlates nothing (shared plumbing, not one adapter); that
-  `cwd` and posture stop being argv-bound, which un-founds `persistent.go`'s
-  respawn rules; and that every measured claim on this seat — the §9.6c dedup
-  rule included — was measured against a surface ACP does not use.
+  **`cursor` was the outlier and is not one any more.** It has been re-founded on
+  the hidden `cursor-agent acp` server ([design.md §9.36](docs/design.md)):
+  one live process, a handshake paid once, and a warm turn measured at
+  **1.12 s through the merged seat** against the ~13 s above. What remains on
+  this bullet is `codex` and `agy`, which are batch programs with no seam anyone
+  has found — their `wait` is a CLI cold-start floor nothing in this repo can
+  move.
 
   **A fan-out turn costs the SLOWEST seat, not the sum**: 38.4 s here, set by
   codex's 34.7 s of `stream` — which is the model working and not something to
   optimise. `claude` finished in 6.5 s and the room waited ~32 s for the rest.
+
+- **The ACP seat reports no token usage, and has no fallback for a turn that
+  streams nothing.** Both are losses the switch paid for and neither has a fix in
+  sight, so they are gaps rather than todos. Print mode's `result` line carried a
+  usage block and the whole final reply; an ACP turn resolves with a stop reason
+  and nothing else. The second one is the sharper: §9.6c leaned on that reply by
+  name as the safety net for a column that streamed nothing, so a chunk parser
+  that broke here would give an EMPTY column rather than a late one. (Cost was
+  never available on this vendor and still is not — it publishes no monetary
+  figure anywhere.)
+
+- **The Cursor seat's `plan` posture rests on ONE trial, and its workspace-trust
+  screen is gone.** Asked to create a file in plan mode the seat declined and
+  nothing landed — better evidence than print mode ever produced — but one trial
+  of a mode the model obeys is not a layer that stops it, which is why the badge
+  still says `ro:requested`. Separately and worse: print mode refused to run in an
+  untrusted directory and the ACP server wrote a file into the same one. There is
+  no trust parameter in the protocol. Both facts are on the column's own badge
+  detail; neither is fixable from here.
 
   Method note, because it cost a round trip: `/trace` resolves a relative path
   against the ROOM's workspace, so a trace has to be named relative to the repo

@@ -2,6 +2,7 @@ package council
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -23,6 +24,14 @@ var startSession = func(ctx context.Context, spec runner.Spec, out chan<- runner
 	return runner.StartSession(ctx, spec, out, parse)
 }
 
+// startRPCSession is the same spawn for a seat whose protocol answers back.
+// Behind its own var for the same reason startSession is: the security tests
+// count spawns, and a second call site that escaped the count would be a hole in
+// exactly the assertion those tests exist to make.
+var startRPCSession = func(ctx context.Context, spec runner.Spec, out chan<- runner.Event, proto runner.Protocol) (seatSession, error) {
+	return runner.StartRPCSession(ctx, spec, out, proto)
+}
+
 var startProcess = runner.Start
 
 // seatSession is the slice of runner.Session the seat logic drives.
@@ -32,9 +41,44 @@ var startProcess = runner.Start
 // would be spawning processes to check a branch. runner.Session is the only
 // production implementation.
 type seatSession interface {
-	Send(line []byte) error
+	SendTurn(lines [][]byte) error
+	SendAside(lines [][]byte) error
 	Kill()
 	Alive() bool
+}
+
+// seatWire is how the room says something to a live seat.
+//
+// Two shapes implement it and the room does not care which: a stateless
+// stream-json adapter, wrapped by streamWire below, and a per-process
+// runner.Protocol. Turning both into "here are the lines to write" at this
+// boundary is what keeps a single dispatch path — the alternative was an
+// `if conversational` at three call sites, each of which would have to be kept
+// in step with the other two.
+type seatWire interface {
+	Turn(prompt string) ([][]byte, error)
+	Interrupt(id string) ([][]byte, error)
+	Decide(requestID string, allow bool, reason string, input map[string]any) ([][]byte, error)
+}
+
+// streamWire adapts a Persistent adapter, whose methods each produce exactly one
+// line and can produce it at any time, to the many-lines-or-none shape an RPC
+// protocol needs.
+type streamWire struct{ v vendors.Persistent }
+
+func (w streamWire) Turn(prompt string) ([][]byte, error) { return oneLine(w.v.Turn(prompt)) }
+
+func (w streamWire) Interrupt(id string) ([][]byte, error) { return oneLine(w.v.Interrupt(id)) }
+
+func (w streamWire) Decide(requestID string, allow bool, reason string, input map[string]any) ([][]byte, error) {
+	return oneLine(w.v.Decide(requestID, allow, reason, input))
+}
+
+func oneLine(line []byte, err error) ([][]byte, error) {
+	if err != nil {
+		return nil, err
+	}
+	return [][]byte{line}, nil
 }
 
 // seatProc is one seat's long-lived vendor process.
@@ -43,6 +87,12 @@ type seatSession interface {
 // and the job object kills it again if telltale itself dies first.
 type seatProc struct {
 	sess seatSession
+	// wire is how this process is spoken to. Held per PROCESS rather than looked
+	// up per call, because for a Conversational seat it IS the process's state:
+	// the session id, the turns queued behind a handshake, and the ids of the
+	// questions the vendor is currently blocked on all live on it, and a fresh
+	// one looked up from the registry would know none of them.
+	wire seatWire
 	// sent counts turns handed to THIS process. Zero means the next one is its
 	// first, which is what decides whether the shared brief goes with it.
 	//
@@ -61,25 +111,58 @@ type seatProc struct {
 	// here — that is settleRestoredThread's question, and it is asked the same
 	// way for all four seats rather than twice in two places.
 	resumed bool
-	// dir is the workspace this process was spawned in. cwd is fixed at spawn
-	// — verified against the live headless docs: the stream-json envelope has
-	// no cwd field and nothing changes it mid-session — so when the room's
-	// workspace moves (/cd), a mismatch here is what tells seatProcess the
-	// process cannot follow and has to be respawned where the room now is.
-	dir string
-	// posture is what this process was SPAWNED with. Like cwd, it is fixed at
-	// spawn — the permission flags are argv, and nothing in the stream-json
-	// envelope changes them mid-session — so a hop that needs a different
-	// posture than this process was launched with cannot be served by it. The
-	// mismatch is what tells seatProcess to respawn rather than send the turn
-	// down a pipe whose authority does not match what the room promised.
+	// dir is the workspace this process was spawned in, and posture is what it
+	// was spawned with. A mismatch against what the room now wants is what tells
+	// seatProcess this process cannot serve the turn and has to be replaced.
+	//
+	// On the stream-json seat both are ARGV and the rule is forced: verified
+	// against the live headless docs, the envelope has no cwd field and no way to
+	// change the permission flags mid-session, so the documented way to move a
+	// conversation is to respawn under --resume (§9.16, ninth amendment).
+	//
+	// On the ACP seat neither is argv, and the rule is therefore a CHOICE — one
+	// worth naming here rather than leaving as an accident of shared code.
+	// MEASURED (§9.36): `cwd` is a session/new parameter and the posture mode is
+	// a session/set_mode call, and one process really did run two sessions in two
+	// different directories, each reading its own file. So a move could cost a
+	// new SESSION (~1s) instead of a new PROCESS (~3s). It costs a process
+	// anyway, deliberately: what a move actually costs the user is a new
+	// conversation either way, one rule across four seats is worth more than
+	// three seconds, and re-opening a session inside a live process has failure
+	// modes — a half-moved session, a queued turn addressed to the old one — that
+	// nothing has measured. Revisit with a measurement, not with a preference.
+	dir     string
 	posture vendors.Posture
 }
 
 // sendPersistentTurn hands one turn to a seat's process, starting one if there
 // is none. The returned string is a note for the column, empty when nothing
 // worth saying happened.
-func (m *Model) sendPersistentTurn(v vendors.Persistent, c *Column, prompt string) (string, error) {
+func (m *Model) sendPersistentTurn(v vendors.Vendor, c *Column, prompt string) (string, error) {
+	note, err := m.handTurnToSeat(v, c, prompt)
+	if !errors.Is(err, vendors.ErrACPHandshakeFailed) {
+		return note, err
+	}
+	// ONE retry, and only against this one error, which names a process that is
+	// UP and useless.
+	//
+	// The retry is what makes the recovery whole rather than half. The seat has
+	// just been killed and forgotten by the attempt above, so a second attempt
+	// spawns a fresh process — and without it the user would spend one brief
+	// discovering the seat was dead, get an error naming a handshake they cannot
+	// see, and only then get a working column on the brief after that. The usual
+	// cause is an unauthenticated CLI, which they may well have fixed between the
+	// two.
+	//
+	// It cannot loop. A just-spawned protocol has not failed a handshake, so the
+	// only error that reaches this line comes from a process that no longer
+	// exists, and the second attempt's failure — whatever it is — is returned.
+	return m.handTurnToSeat(v, c, prompt)
+}
+
+// handTurnToSeat is one attempt: find or launch the process, brief it if it is
+// new, and hand it the turn.
+func (m *Model) handTurnToSeat(v vendors.Vendor, c *Column, prompt string) (string, error) {
 	p, note, err := m.seatProcess(v, c)
 	if err != nil {
 		return "", err
@@ -97,11 +180,22 @@ func (m *Model) sendPersistentTurn(v vendors.Persistent, c *Column, prompt strin
 		prompt = m.brief.Apply(prompt)
 	}
 
-	line, err := v.Turn(prompt)
+	lines, err := p.wire.Turn(prompt)
 	if err != nil {
+		// The protocol will not take another turn. On the ACP seat that means the
+		// handshake failed, which leaves a process that is UP and useless — and a
+		// live process is exactly what the stale-exit guard reads as "this seat is
+		// fine", so leaving it registered would hand it every subsequent brief and
+		// hang on each one.
+		p.sess.Kill()
+		m.dropProcess(c.Vendor)
 		return "", err
 	}
-	if err := p.sess.Send(line); err != nil {
+	// SendTurn rather than a write per line, and it starts the clock even when
+	// there are NO lines: an ACP protocol may take a turn it cannot encode until
+	// its handshake finishes, and the person who pressed enter is waiting from
+	// this moment either way.
+	if err := p.sess.SendTurn(lines); err != nil {
 		// The process is there but will not take the turn. Dropping the seat
 		// means the next brief starts a fresh one rather than writing into a
 		// pipe nobody reads.
@@ -112,11 +206,45 @@ func (m *Model) sendPersistentTurn(v vendors.Persistent, c *Column, prompt strin
 	return note, nil
 }
 
+// liveSeat reports whether this vendor is driven as one long-lived process, by
+// either of the two shapes that can be.
+//
+// One predicate rather than two interface assertions repeated at every call
+// site: the room's question is "does this seat keep a process", and which
+// protocol answers turns on that process is nobody's business above this file.
+func liveSeat(v vendors.Vendor) bool {
+	switch v.(type) {
+	case vendors.Conversational, vendors.Persistent:
+		return true
+	}
+	return false
+}
+
 // seatProcess returns the seat's process, launching one if it has none or if
 // the one it had has gone.
-func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string, error) {
+// spawnPosture collapses the postures a given seat's PROCESS cannot tell apart.
+//
+// It exists because seatProcess respawns on a posture mismatch, and for the ACP
+// seat two of the three postures produce a byte-identical process: `agent` mode
+// either way, and whether a permission request becomes a card or an automatic
+// yes is a decision the ROOM makes when one arrives, not a flag the process was
+// launched with. Without this, pressing `a` mid-room would cost that seat a
+// process and a session reload, and the column would announce "this hop needs a
+// different posture" about a change its authority never saw.
+//
+// The stream-json seat is left alone, where the distinction IS argv: the gated
+// posture passes three flags the ungated one does not, one of which is what
+// makes the vendor ask at all.
+func spawnPosture(v vendors.Vendor, p vendors.Posture) vendors.Posture {
+	if _, ok := v.(vendors.Conversational); ok && p == vendors.PostureWriteGated {
+		return vendors.PostureWrite
+	}
+	return p
+}
+
+func (m *Model) seatProcess(v vendors.Vendor, c *Column) (*seatProc, string, error) {
 	existing, had := m.procs[c.Vendor]
-	want := m.seatPosture()
+	want := spawnPosture(v, m.seatPosture())
 	moved := false
 	repostured := false
 	if had && existing.sess.Alive() {
@@ -148,41 +276,27 @@ func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string,
 		}
 	}
 
-	// The hooks file is handed over on every spawn rather than only the first.
-	// A seat whose process died and was replaced is a stranger again — it is
-	// already re-briefed for that reason — and a replacement that came back
-	// unscreened while the badge still said the guard was wired would be the
-	// quietest false claim in the room.
-	spec, err := v.Session(m.st.Workspace, c.Binary, m.hooks.Path, want)
-	if err != nil {
-		return nil, "", err
-	}
 	// A thread restored from a saved room is spent HERE, on the first process
 	// this seat opens, and forgotten whether or not it works.
 	//
-	// One attempt, never a loop, and that is the load-bearing part. A stale id
-	// makes the vendor exit immediately (measured: `No conversation found with
-	// session ID`, exit 1, no model turn spent), so a seat that retried it would
-	// refuse every brief for the rest of the session with the same error. Spent
-	// once, the next dispatch opens a new conversation and briefs it, which is
-	// the behaviour seatProcess already had for a seat whose process died.
-	resumed := false
-	if id := m.resumeIDs[c.Vendor]; id != "" {
+	// One attempt, never a loop, and that is the load-bearing part. A stale id is
+	// refused immediately by both protocols — the stream-json seat exits 1 with
+	// `No conversation found with session ID` and no model turn spent, the ACP
+	// seat answers `-32602 … Session "…" not found` in 0.45s and stays up — so a
+	// seat that retried it would refuse every brief for the rest of the session
+	// with the same error. Spent once, the next dispatch opens a new conversation
+	// and briefs it, which is the behaviour seatProcess already had for a seat
+	// whose process died.
+	resumeID := m.resumeIDs[c.Vendor]
+	if resumeID != "" {
 		delete(m.resumeIDs, c.Vendor)
-		if rs, rerr := v.SessionResume(m.st.Workspace, c.Binary, m.hooks.Path,
-			id, want); rerr == nil {
-			spec = rs
-			resumed = true
-		}
 	}
-	// The ROOM's context, never the turn's. A turn that is cancelled must not
-	// take this process with it — that is the entire point of keeping it — so
-	// only quitting the room cancels this.
-	sess, err := startSession(m.roomCtx, spec, m.events, v.ParseEvent)
+
+	sess, wire, resumed, err := m.spawnSeat(v, c, resumeID, want)
 	if err != nil {
 		return nil, "", err
 	}
-	p := &seatProc{sess: sess, resumed: resumed, dir: m.st.Workspace, posture: want}
+	p := &seatProc{sess: sess, wire: wire, resumed: resumed, dir: m.st.Workspace, posture: want}
 	m.procs[c.Vendor] = p
 
 	if resumed {
@@ -214,6 +328,75 @@ func (m *Model) seatProcess(v vendors.Persistent, c *Column) (*seatProc, string,
 	return p, "", nil
 }
 
+// spawnSeat launches one live seat, by whichever of the two protocols it speaks.
+//
+// The branch is here and nowhere else. Everything either side of it —
+// probation, the brief, the notes, teardown — is one path for all four seats,
+// which is the property worth protecting: a room that behaved differently
+// depending on a vendor's wire format would be a room whose rules nobody could
+// state.
+func (m *Model) spawnSeat(v vendors.Vendor, c *Column, resumeID string, want vendors.Posture) (seatSession, seatWire, bool, error) {
+	// The ROOM's context, never the turn's. A turn that is cancelled must not
+	// take this process with it — that is the entire point of keeping it — so
+	// only quitting the room cancels this.
+	if cv, ok := v.(vendors.Conversational); ok {
+		spec, proto, err := cv.Open(m.st.Workspace, c.Binary, resumeID, want)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		if proto == nil {
+			// Unreachable today — Cursor.Open always returns one — and checked
+			// because the alternative failure is a nil dereference on the seat's
+			// first turn rather than a column that says what went wrong.
+			return nil, nil, false, errNotALiveSeat
+		}
+		sess, err := startRPCSession(m.roomCtx, spec, m.events, proto)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		// resumed is claimed from the ATTEMPT, exactly as the stream-json branch
+		// claims it: the id was handed to a protocol that will try to load it.
+		// Whether it WORKED is settleRestoredThread's question, asked the same way
+		// for all four seats — and if the load is refused the protocol opens a new
+		// conversation in the same process, so the turn still runs and the seat
+		// still reports honestly that its thread did not come back.
+		return sess, proto, resumeID != "", nil
+	}
+
+	pv, ok := v.(vendors.Persistent)
+	if !ok {
+		return nil, nil, false, errNotALiveSeat
+	}
+	// The hooks file is handed over on every spawn rather than only the first.
+	// A seat whose process died and was replaced is a stranger again — it is
+	// already re-briefed for that reason — and a replacement that came back
+	// unscreened while the badge still said the guard was wired would be the
+	// quietest false claim in the room.
+	spec, err := pv.Session(m.st.Workspace, c.Binary, m.hooks.Path, want)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	resumed := false
+	if resumeID != "" {
+		if rs, rerr := pv.SessionResume(m.st.Workspace, c.Binary, m.hooks.Path,
+			resumeID, want); rerr == nil {
+			spec = rs
+			resumed = true
+		}
+	}
+	sess, err := startSession(m.roomCtx, spec, m.events, pv.ParseEvent)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	return sess, streamWire{pv}, resumed, nil
+}
+
+// errNotALiveSeat is unreachable through dispatch, which asks liveSeat before it
+// gets here. It exists so that a future seat added to the registry without a
+// protocol fails loudly at its first brief rather than silently taking a path
+// meant for a different one.
+var errNotALiveSeat = errors.New("council: this seat has no live-process protocol")
+
 // dropProcess forgets a seat's process. The kill is separate on purpose: a
 // process that died on its own does not need killing, and one the room is
 // tearing down is killed by teardown.
@@ -232,13 +415,9 @@ func (m *Model) interruptSeat(v model.VendorID) {
 	if !ok {
 		return
 	}
-	pv, ok := vendors.Registry()[v].(vendors.Persistent)
-	if !ok {
-		return
-	}
 	m.interrupts++
-	line, err := pv.Interrupt("telltale-interrupt-" + strconv.Itoa(m.interrupts))
-	if err == nil && p.sess.Send(line) == nil {
+	lines, err := p.wire.Interrupt("telltale-interrupt-" + strconv.Itoa(m.interrupts))
+	if err == nil && p.sess.SendAside(lines) == nil {
 		return
 	}
 	p.sess.Kill()
@@ -573,15 +752,14 @@ func (m *Model) sendDecision(pending PendingGate, allow bool, input map[string]a
 	if !ok {
 		return
 	}
-	pv, ok := vendors.Registry()[pending.Vendor].(vendors.Persistent)
-	if !ok {
-		return
-	}
-	line, err := pv.Decide(pending.RequestID, allow, denialText, input)
+	lines, err := p.wire.Decide(pending.RequestID, allow, denialText, input)
 	if err != nil {
 		return
 	}
-	if err := p.sess.Send(line); err != nil && m.column(pending.Vendor) != nil {
+	// SendAside, not Send: an answer to a question the vendor asked mid-turn
+	// belongs to the turn it is holding up, and starting a new one on it would
+	// time the user's keystroke as a fresh wait.
+	if err := p.sess.SendAside(lines); err != nil && m.column(pending.Vendor) != nil {
 		m.column(pending.Vendor).Note = "the decision could not be delivered: " + err.Error()
 	}
 }

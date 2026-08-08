@@ -269,6 +269,15 @@ type Spec struct {
 // model without failing the turn.
 type ParseFunc func(line []byte) (Event, bool)
 
+// handlerFunc is the general form pumpStdout actually runs: one line in, any
+// number of events out, plus any lines to write back.
+//
+// A ParseFunc is the special case that never replies and never emits more than
+// one event, and it is adapted into this shape rather than given a pump of its
+// own — one reader loop is what keeps the turn clock, the bounded channel and
+// the long-line handling from drifting apart between the two protocols.
+type handlerFunc func(line []byte) ([]Event, [][]byte)
+
 // ErrShellShimWithArgvPrompt is the refusal that keeps prompt text away from
 // cmd.exe.
 //
@@ -366,7 +375,18 @@ func Start(ctx context.Context, spec Spec, out chan<- Event, parse ParseFunc) (*
 	errTail := &ringBuffer{limit: stderrTail}
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() { defer wg.Done(); pumpStdout(stdout, spec.Vendor, out, parse, ck) }()
+	// A batch child has no channel to be answered on — its stdin was written and
+	// closed before the first token arrived — so the reply sink is nil here, and
+	// the ParseFunc adapter can never produce one anyway.
+	go func() {
+		defer wg.Done()
+		pumpStdout(stdout, spec.Vendor, out, func(line []byte) ([]Event, [][]byte) {
+			if ev, ok := parse(line); ok {
+				return []Event{ev}, nil
+			}
+			return nil, nil
+		}, ck, nil)
+	}()
 	go func() { defer wg.Done(); errTail.consume(stderr) }()
 
 	// One goroutine owns the lifecycle: it waits for the readers to drain, then
@@ -445,7 +465,25 @@ func (h *Handle) Done() <-chan struct{} { return h.done }
 // ck sees every event just BEFORE it is queued, which is what keeps the turn
 // clock honest: the channel is bounded, so a slow consumer stalls this loop, and
 // stamping after the send would bill that stall to the vendor.
-func pumpStdout(r io.Reader, vendor model.VendorID, out chan<- Event, parse ParseFunc, ck *clock) {
+// reply is where lines the handler wants written back go, or nil on the
+// one-way path where a handler can never produce any.
+func pumpStdout(r io.Reader, vendor model.VendorID, out chan<- Event, handle handlerFunc, ck *clock, reply func([][]byte)) {
+	deliver := func(line []byte) {
+		evs, replies := handle(line)
+		// Answered BEFORE the events are queued. The channel is bounded, so a
+		// busy room can stall this loop for as long as it takes to redraw — and
+		// a vendor blocked on a question it has already been answered would be
+		// held up by the room's own paint. The room learns about the call from
+		// the events either way; the vendor learns nothing until it is told.
+		if len(replies) > 0 && reply != nil {
+			reply(replies)
+		}
+		for _, ev := range evs {
+			ev.Vendor = vendor
+			ck.observe(ev)
+			out <- ev
+		}
+	}
 	br := bufio.NewReaderSize(r, 64<<10)
 	var acc []byte
 	for {
@@ -455,22 +493,14 @@ func pumpStdout(r io.Reader, vendor model.VendorID, out chan<- Event, parse Pars
 			if acc[len(acc)-1] == '\n' || len(acc) >= maxLine {
 				line := trimEOL(acc)
 				acc = nil
-				if ev, ok := parse(line); ok {
-					ev.Vendor = vendor
-					ck.observe(ev)
-					out <- ev
-				}
+				deliver(line)
 			}
 		}
 		if err != nil {
 			// A final line with no trailing newline is still a line. Dropping it
 			// would lose the last thing a vendor said on a clean exit.
 			if len(acc) > 0 {
-				if ev, ok := parse(trimEOL(acc)); ok {
-					ev.Vendor = vendor
-					ck.observe(ev)
-					out <- ev
-				}
+				deliver(trimEOL(acc))
 			}
 			return
 		}

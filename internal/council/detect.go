@@ -454,15 +454,6 @@ func kindOf(path string) BinaryKind {
 	}
 }
 
-// sandboxFor is the posture council will apply to a vendor, as a claim stated
-// per vendor rather than as a blanket promise (ADR-008 §3).
-//
-// These are the claims the scaffold renders; the flags that back them arrive
-// with each vendor's adapter. Codex is the seat where that split is widest:
-// `-s read-only` is OS-enforced on macOS and Linux and reads Enforced there,
-// while on Windows council passes no read-only flag at all and the badge says
-// `unsandboxed` — claiming a posture we have not seen would be the exact
-// overstatement this product exists to refuse, in either direction.
 // postureClaim is what a column advertises, given the room's posture.
 //
 // In write mode the columns that cannot ask all carry the SAME loud badge, and
@@ -473,11 +464,12 @@ func kindOf(path string) BinaryKind {
 // the badge says the plain thing and the header repeats it.
 //
 // One column breaks that uniformity, and only because it earned a real
-// difference rather than a nicer word: it asks first. gated is given to exactly
-// the seat that can be driven as a live process, because that is what a
-// permission request needs — somewhere to arrive and somewhere for the answer
-// to go back. The other three are batch CLIs and get the badge that describes
-// what they actually do.
+// difference rather than a nicer word: it asks first, about everything that
+// changes anything. Being a live process is what MAKES that possible — a
+// permission request needs somewhere to arrive and somewhere for the answer to
+// go back — but it is not what earns the badge, and the Cursor seat is now the
+// case that separates the two: it is a live ACP process, it can be asked, and it
+// does not ask about edits. See canGate.
 // The gate's detail takes one more argument than the rest, and it is not a
 // stylistic wrinkle: hooked is read from whether a hooks file actually exists,
 // so the sentence about the guard cannot outlive the thing it describes. A
@@ -492,14 +484,50 @@ func postureClaim(v model.VendorID, windows, write, gated, hooked bool) SandboxC
 		}
 	}
 	if write {
-		return SandboxClaim{
-			Level: SandboxWrite,
-			Detail: "this column may edit and run things in the workspace above. " +
-				"Containment is that directory, not a flag — point council at a " +
-				"worktree if that matters. --read opens a room that only talks",
-		}
+		return SandboxClaim{Level: SandboxWrite, Detail: writeDetail(v, gated)}
 	}
 	return sandboxFor(v, windows)
+}
+
+// writeDetail is the sentence behind WRITES.
+//
+// Shared by three of the four seats, and that uniformity is the point made
+// above: once the answer to "how much read-only did we manage to ask for" is
+// "none", grading them would imply a safety difference that does not exist.
+//
+// One seat needs a clause the others do not, and it is an addition rather than a
+// grade. The Cursor column really does raise approval cards in this posture —
+// its ACP server asks about shell commands its own allowlist does not cover, and
+// the room answers — so a user who sees a card there and finds nothing in the
+// posture page explaining it would reasonably conclude the room was doing
+// something it had not told them about.
+//
+// asking is in the signature for the same reason gatedDetail takes `hooked`: the
+// clause is a claim about what this room will DO, and with `a` pressed the room
+// answers those requests itself and draws no card at all. Promising cards to the
+// one user who has switched them off would be a false claim in the branch where
+// it matters most.
+//
+// Either way the clause ends on what the cards do NOT cover, which is the part
+// that survives both branches: this seat wrote a file with no card, measured
+// twice, in a directory it had never been told to trust.
+func writeDetail(v model.VendorID, asking bool) string {
+	const shared = "this column may edit and run things in the workspace above. " +
+		"Containment is that directory, not a flag — point council at a " +
+		"worktree if that matters. --read opens a room that only talks"
+	if v != model.VendorCursor {
+		return shared
+	}
+	const limit = " It does NOT ask about file edits — measured twice, it wrote a file " +
+		"with no card, in a directory it had never been told to trust. The boundary " +
+		"is still the directory, not the cards"
+	if asking {
+		return shared + ". This seat sometimes asks first, and the room answers: its " +
+			"ACP server raises an approval card for a shell command its own allowlist " +
+			"does not cover." + limit
+	}
+	return shared + ". This seat's ACP server does ask about some shell commands, and " +
+		"with asking off the room answers yes for you without drawing a card." + limit
 }
 
 // gatedDetail is what the gated column defends, and the two branches differ in
@@ -531,16 +559,43 @@ func gatedDetail(hooked bool) string {
 		"copy — so the calls the gate is not asked about have nothing screening them"
 }
 
-// canGate reports whether a seat can be asked to ask.
+// canGate reports whether a seat can be asked to ask about EVERYTHING that
+// changes something.
 //
-// Read from the registry rather than from a list here, so the badge and the
-// invocation can never disagree about which seats gate: both answer the
-// question "is this vendor drivable as a live process".
+// It used to read "is this vendor drivable as a live process", off the registry,
+// and that was right for as long as those two questions had the same answer. It
+// stopped being right the moment the Cursor seat became a live ACP process
+// (§9.36), and it is worth being precise about how, because "Cursor cannot ask"
+// would be just as false as "Cursor gates":
+//
+//   - It CAN ask. `session/request_permission` blocks the vendor until an answer
+//     goes back down the same pipe, and both branches were measured — a rejection
+//     left the command unrun.
+//   - It does not ask about EDITS. Asked to create a file, in a directory it had
+//     never been told to trust, it wrote the file and raised nothing. Twice.
+//
+// The `gated` badge's whole sentence is "nothing that changes anything runs
+// without your keystroke". A seat that writes files silently and asks about
+// shell commands cannot carry it — so it keeps WRITES, and the fact that it asks
+// about some things is stated in that badge's detail rather than promoted into a
+// claim it would break. Council still ANSWERS every request: an unanswered one
+// blocks the vendor forever, which is a column that never finishes.
+//
+// A list rather than an interface assertion, therefore, because what qualifies a
+// seat here is a MEASUREMENT of its coverage and not a property of its type.
 func canGate(v model.VendorID) bool {
-	_, ok := vendors.Registry()[v].(vendors.Persistent)
-	return ok
+	return v == model.VendorClaude
 }
 
+// sandboxFor is the read-posture claim, stated per vendor rather than as a
+// blanket promise (ADR-008 §3).
+//
+// These are the claims the scaffold renders; what backs them arrives with each
+// vendor's adapter. Codex is the seat where that split is widest: `-s read-only`
+// is OS-enforced on macOS and Linux and reads Enforced there, while on Windows
+// council passes no read-only flag at all and the badge says `unsandboxed` —
+// claiming a posture we have not seen would be the exact overstatement this
+// product exists to refuse, in either direction.
 func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 	switch v {
 	case model.VendorClaude:
@@ -625,50 +680,50 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 				"shell. The workspace above is the containment, not a flag",
 		}
 	case model.VendorCursor:
-		// Still the weakest badge in the room, and now for a REASON rather than
-		// for an absence of evidence. The seat was signed in on 2026-08-04 and
-		// four live turns ran; what they measured made the claim worse, not
-		// better, and the detail has to carry that.
+		// Re-measured end to end on 2026-08-08 against the ACP server (§9.36),
+		// because §9.33's third fork said outright that every claim on this seat
+		// had been measured against a surface it no longer uses. The badge LEVEL
+		// is unchanged and the reasons under it are almost all new.
 		//
-		// What was learned, and could only be learned by running it:
+		// Two things got BETTER, and neither is enough to move the level:
 		//
-		//   - `--sandbox enabled` does not weakly apply on Windows. It KILLS
-		//     the turn, before any model call: "Sandbox mode is enabled but not
-		//     available on this system. Sandbox requires macOS or Linux",
-		//     exit 1. So the flag that looked like the stronger half of this
-		//     posture was, on this OS, the reason the seat could never have
-		//     answered. It is not passed here — see vendors.Cursor.baseArgs.
-		//   - `--mode plan` did not stop the agent from DISPATCHING a shell
-		//     command. Asked to read a file, it issued `cat …` and then `ls -1`
-		//     as shellToolCall invocations; both were stopped by a hook on this
-		//     machine rather than by the mode. Whether plan mode would have
-		//     refused them on its own is therefore still unobserved — but the
-		//     tool was selected and sent, which is further than a "no edits"
-		//     mode reads like it would allow.
+		//   - The read posture is now `session/set_mode` with modeId `plan`,
+		//     accepted by the server, and asked to create a file the seat refused
+		//     — "Plan mode is still on, so I can't create the file yet" — and no
+		//     file landed. That is strictly better evidence than print mode ever
+		//     produced, where the same mode was measured DISPATCHING `cat` and
+		//     `ls -1` as shell calls. It is still one trial, and the refusal is
+		//     worded as the model obeying its mode rather than as a layer stopping
+		//     it, so `requested` is what it has earned.
+		//   - A permission request that arrives in this posture is REFUSED by the
+		//     adapter without troubling the user. A read-posture seat asking to
+		//     change something is not a question; it is already answered.
 		//
-		// The one thing that has not changed: the self-report cannot settle it
-		// later either. system/init's permissionMode is a hardcoded "default"
-		// literal in the bundle, confirmed against captured output — every one
-		// of the four turns reported "default" regardless of flags. The trick
-		// that caught Claude's --allowedTools does not work on this vendor.
-		if windows {
-			return SandboxClaim{
-				Level: SandboxRequested,
-				Detail: "treat this column as able to run things: --mode plan is requested " +
-					"and nothing is enforced. Under plan mode this vendor was still measured " +
-					"issuing shell commands — a hook stopped them, not the mode. --sandbox is " +
-					"deliberately NOT passed on Windows: the CLI rejects it outright there " +
-					"(\"Sandbox requires macOS or Linux\") and the turn dies before any model " +
-					"call, so passing it would kill the seat rather than restrict it",
-			}
-		}
+		// One thing got WORSE, and it is the sentence a user most needs:
+		//
+		//   - Workspace trust does not apply on this path. Print mode refuses a
+		//     turn in a directory it has not been told to trust — "⚠ Workspace
+		//     Trust Required" — and the ACP server, in THE SAME directory, wrote a
+		//     file into it. That is not a flag council chose; there is no trust
+		//     parameter in the protocol. The screen this seat used to have on the
+		//     way in is gone, and the badge says so rather than letting a reader
+		//     carry over an assumption from the old path.
+		//
+		// The sandbox request is gone with the flag: ACP takes no sandbox
+		// parameter, on any OS, which is why this branch is no longer split by
+		// platform. On Windows nothing was lost — `--sandbox enabled` was measured
+		// killing the turn there, so it was already not passed. On macOS and Linux
+		// what was lost is a REQUEST whose enforcement was never observed.
 		return SandboxClaim{
 			Level: SandboxRequested,
-			Detail: "asked for, never proven: --mode plan --sandbox enabled are requested " +
-				"and what they actually enforce was not observed. The install ships a real " +
-				"cursorsandbox.exe, but every live turn behind this claim ran on Windows, " +
-				"where that sandbox does not exist. Cursor's own help says print mode has " +
-				"access to write and shell tools, so treat this column as able to run things",
+			Detail: "asked for, and one trial says it held: this seat is put in the ACP " +
+				"server's `plan` mode, and asked to create a file it declined and created " +
+				"nothing. Treat it as able to run things anyway — that is one trial, and " +
+				"a mode the model obeys is not a layer that stops it. Two things this " +
+				"column can NOT claim: there is no sandbox request at all any more (the " +
+				"ACP protocol has no such parameter, on any OS), and workspace trust does " +
+				"not apply here — the same directory that print mode refused to run in " +
+				"was written to over ACP without a prompt",
 		}
 	default:
 		return SandboxClaim{}
@@ -695,25 +750,31 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 // exactly why its explanation lives on the help page rather than in the body of
 // every waiting turn (§9.14).
 //
-// Cursor was the first vendor to land on GranUnknown, and it has now been
-// promoted the only way this repo promotes anything: someone watched the pipe.
+// Cursor was the first vendor to land on GranUnknown, was promoted to
+// GranTokens the only way this repo promotes anything — someone watched the pipe
+// — and has now had that promotion RE-EARNED against a different protocol, which
+// is the part worth reading before touching this line.
 //
-// It was held at Unknown because `--stream-partial-output`'s help says
-// "individual text deltas" and the bundle emits per chunk — neither of which is
-// a measurement, with Antigravity standing as the warning that a field named
-// text_delta can carry a whole reply at once. On 2026-08-04, signed in, a
-// one-word reply came down as
+// The print-mode measurement (2026-08-04) really was token-level: a one-word
+// reply came down as `"P"` then `"ONG"`, and a sentence as "I", " said", " P",
+// "ONG", ".". That surface is gone. The word could have been inherited; §9.33's
+// third fork says explicitly that it must not be, so it was measured again.
 //
-//	{"type":"assistant",...,"text":"P","timestamp_ms":…}
-//	{"type":"assistant",...,"text":"ONG","timestamp_ms":…}
+// ACP, 2026-08-08, a 300-word reply: 24 `agent_message_chunk` notifications over
+// 2.6 seconds — about 95 characters each, about nine a second. Coarser than
+// print mode's tokens and finer, in time, than the Claude seat that already
+// carries this word: §9.7 measured Claude's deltas at ~80 characters, about
+// three a second, and flagged in the same breath that "tokens" overstates them.
 //
-// and a sentence came down as "I", " said", " P", "ONG", ".". That is
-// token-level, so this column claims GranTokens and opens in PhaseStreaming
-// alongside Claude.
+// So the word stays, with its existing looseness and no new looseness: this
+// column streams text as the vendor writes it, in the same units and faster than
+// the seat beside it. If §9.7's flagged overstatement is ever fixed, it is one
+// change to one word on both seats at once, which is exactly why it was left as
+// a separate change to a separate surface rather than quietly corrected here.
 //
-// The same capture is what put the delta trap in the parser: cursor-agent
-// repeats the COMPLETE message as one more assistant event after the deltas,
-// and concatenating it would have rendered "PONGPONG". See vendors/cursor.go.
+// The delta trap this capture used to carry is GONE with the protocol: ACP
+// repeats nothing, and there is no `model_call_id` in its traffic. See
+// vendors/cursoracp.go.
 func granularityFor(v model.VendorID) Granularity {
 	switch v {
 	case model.VendorClaude, model.VendorCursor:

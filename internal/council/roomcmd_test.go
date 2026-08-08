@@ -154,9 +154,10 @@ type fakeSession struct {
 	killed bool
 }
 
-func (f *fakeSession) Send([]byte) error { return nil }
-func (f *fakeSession) Kill()             { f.killed = true; f.alive = false }
-func (f *fakeSession) Alive() bool       { return f.alive }
+func (f *fakeSession) SendTurn([][]byte) error  { return nil }
+func (f *fakeSession) SendAside([][]byte) error { return nil }
+func (f *fakeSession) Kill()                    { f.killed = true; f.alive = false }
+func (f *fakeSession) Alive() bool              { return f.alive }
 
 // TestAMovedRoomRespawnsThePersistentSeatOnItsOwnThread is the Claude-seat
 // half of /cd. cwd is fixed at spawn — the stream-json envelope has no cwd
@@ -168,7 +169,7 @@ func TestAMovedRoomRespawnsThePersistentSeatOnItsOwnThread(t *testing.T) {
 	m, _, b := cdRoom(t)
 	m.sessions[model.VendorClaude] = "claude-sess-1"
 	old := &fakeSession{alive: true}
-	m.procs[model.VendorClaude] = &seatProc{sess: old, sent: 2, dir: m.st.Workspace}
+	m.procs[model.VendorClaude] = &seatProc{wire: claudeWire(), sess: old, sent: 2, dir: m.st.Workspace}
 
 	m.setDraft("/cd " + b)
 	if !m.roomCommand() {
@@ -217,7 +218,7 @@ func TestAMovedRoomRespawnsThePersistentSeatOnItsOwnThread(t *testing.T) {
 func TestAStaleExitDoesNotFailTheLiveSeat(t *testing.T) {
 	m, _, _ := cdRoom(t)
 	live := &fakeSession{alive: true}
-	m.procs[model.VendorClaude] = &seatProc{sess: live, sent: 1, dir: m.st.Workspace}
+	m.procs[model.VendorClaude] = &seatProc{wire: claudeWire(), sess: live, sent: 1, dir: m.st.Workspace}
 	m.sessions[model.VendorClaude] = "claude-sess-1"
 	m.st.Columns = []Column{{
 		Vendor: model.VendorClaude, Label: "Claude Code",
@@ -291,7 +292,7 @@ func TestRunRejectsAMissingCdDirectory(t *testing.T) {
 func TestAnUnmovedRoomKeepsItsProcess(t *testing.T) {
 	m, _, _ := cdRoom(t)
 	sess := &fakeSession{alive: true}
-	p := &seatProc{sess: sess, sent: 1, dir: m.st.Workspace}
+	p := &seatProc{wire: claudeWire(), sess: sess, sent: 1, dir: m.st.Workspace}
 	m.procs[model.VendorClaude] = p
 
 	seat := &recordingSeat{}

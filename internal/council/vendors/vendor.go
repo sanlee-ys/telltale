@@ -48,6 +48,32 @@ const (
 	PostureWriteGated
 )
 
+// Conversational is a seat driven as ONE live process whose protocol is a
+// CONVERSATION rather than a stream.
+//
+// It is a sibling of Persistent, not a subtype of it, and the split is the
+// measurement rather than a taste in interfaces. A Persistent seat's turn is a
+// line the room can encode whenever it likes and write down a pipe; a
+// Conversational seat's turn cannot be built until the vendor has answered a
+// request of the room's own, and the vendor asks questions back on the same
+// pipe. cursor-agent's ACP server is the second kind — design.md §9.36 — and
+// trying to express it through Persistent's `Turn(prompt) ([]byte, error)` was
+// the first of the three forks §9.33 declined to guess at.
+//
+// So everything stateful lives on runner.Protocol, which exists for exactly one
+// process, and this interface is only the door to it.
+type Conversational interface {
+	Vendor
+
+	// Open returns the invocation and the per-process protocol driver.
+	//
+	// sessionID is a thread to reload, or empty for a new conversation. Unlike
+	// Persistent's Session/SessionResume pair it is one method, because unlike
+	// there the two cases are the same invocation: resuming changes a JSON-RPC
+	// method the protocol picks later, not argv.
+	Open(workspace, binary, sessionID string, p Posture) (runner.Spec, runner.Protocol, error)
+}
+
 // Persistent is a vendor that can be driven as ONE process taking many turns,
 // rather than a fresh child per turn.
 //
@@ -58,6 +84,9 @@ const (
 // and neither has a channel on which to ask a question mid-turn. Their columns
 // keep spawn-per-turn, and their badges keep saying exactly what they did
 // before — the honest alternative to pretending the room is uniform.
+//
+// The Cursor seat used to be a third batch column and is now neither: it is
+// Conversational, above.
 type Persistent interface {
 	Vendor
 
@@ -126,6 +155,10 @@ func Registry() map[model.VendorID]Vendor {
 		// "is there an adapter for this seat", detection answers "can this
 		// machine drive it". Conflating them is how the same platform quirk
 		// would come back as "no adapter yet" on a Mac, where the seat works.
+		//
+		// It satisfies Vendor only formally: its batch entry points return
+		// ErrCursorIsLiveOnly, because the seat is Conversational and there is no
+		// spawn-per-turn invocation of it any more.
 		model.VendorCursor: Cursor{},
 	}
 }

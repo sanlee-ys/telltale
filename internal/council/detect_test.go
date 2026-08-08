@@ -481,16 +481,18 @@ func TestCursorNativeEntryPointIsLeftAlone(t *testing.T) {
 	}
 }
 
-// TestCursorClaimsNoMoreThanRequested replaces the version of this test that
-// pinned "nothing could be measured because the CLI is not signed in".
+// TestCursorClaimsNoMoreThanRequested, re-asked against the protocol that
+// replaced the one it was written for.
 //
-// It IS signed in now, four turns ran, and the badge still says `ro:requested`
-// — for a better reason than before. Measuring it made the claim worse:
-// `--sandbox enabled` aborts the turn on Windows rather than restricting it, so
-// council stops asking for it there; and under `--mode plan` the agent was seen
-// dispatching shell commands, stopped by a hook rather than by the mode. A
-// badge above "requested" would now be contradicted by a capture, not merely
-// unsupported by one.
+// The level has survived two rewrites of this seat and it is the same level for
+// a third set of reasons. Under ACP, plan mode did better than print mode's ever
+// did — asked to create a file the seat declined and nothing landed — and the
+// badge still says `requested`, because one trial of a mode the model obeys is
+// not a layer that stops it.
+//
+// The two assertions below are the things a reader could otherwise carry over
+// from the old path and be wrong about, both in the direction this product
+// refuses to be wrong in.
 func TestCursorClaimsNoMoreThanRequested(t *testing.T) {
 	for _, win := range []bool{true, false} {
 		claim := sandboxFor(model.VendorCursor, win)
@@ -501,16 +503,54 @@ func TestCursorClaimsNoMoreThanRequested(t *testing.T) {
 			t.Errorf("cursor (windows=%v) has a badge with no explanation behind it", win)
 		}
 	}
-	// The Windows detail must say the sandbox flag is NOT passed. A user reading
-	// `ro:requested` there and assuming a sandbox was asked for would be wrong in
-	// the one direction this product refuses to be wrong in.
-	if d := sandboxFor(model.VendorCursor, true).Detail; !strings.Contains(d, "NOT passed on Windows") {
-		t.Errorf("the windows detail does not say the sandbox flag is withheld: %q", d)
+	d := sandboxFor(model.VendorCursor, true).Detail
+	// There is no sandbox request at all any more: ACP takes no such parameter,
+	// on any OS. A reader who assumed one was still being asked for would be
+	// assuming a protection nothing provides.
+	if !strings.Contains(d, "no sandbox request") {
+		t.Errorf("the detail does not say the sandbox request is gone: %q", d)
 	}
-	// And it must not read as a read-only promise, because plan mode was
-	// measured letting a shell command through to the permission layer.
-	if d := sandboxFor(model.VendorCursor, true).Detail; !strings.Contains(d, "shell") {
-		t.Errorf("the windows detail does not carry what plan mode failed to stop: %q", d)
+	// And workspace trust does not apply on this path. Print mode refused to run
+	// in an untrusted directory; the ACP server wrote a file into the SAME
+	// directory without a prompt. That screen is gone and the badge has to say so.
+	if !strings.Contains(d, "trust") {
+		t.Errorf("the detail does not say workspace trust no longer applies: %q", d)
+	}
+	// The badge is now the same on every OS, because the thing that used to split
+	// it — a flag — no longer exists.
+	if sandboxFor(model.VendorCursor, false).Detail != d {
+		t.Error("the cursor badge is still split by OS; nothing in the ACP invocation differs by platform")
+	}
+}
+
+// TestOnlyTheSeatThatAsksAboutEverythingIsBadgedGated.
+//
+// canGate used to read "is this vendor drivable as a live process", off the
+// registry, and that was right for exactly as long as those two questions had
+// the same answer. The Cursor seat is a live ACP process now and CAN ask —
+// session/request_permission blocks it, measured on both branches — and it does
+// NOT ask about edits: it wrote a file, twice, in a directory it had never been
+// told to trust, raising nothing.
+//
+// `gated` promises that nothing which changes anything runs without a keystroke.
+// A seat that writes files silently cannot carry it, however much of a live
+// process it is.
+func TestOnlyTheSeatThatAsksAboutEverythingIsBadgedGated(t *testing.T) {
+	for _, v := range []model.VendorID{
+		model.VendorClaude, model.VendorCodex, model.VendorAntigravity, model.VendorCursor,
+	} {
+		claim := postureClaim(v, true, true, true, true)
+		gated := claim.Level == SandboxGated
+		if want := v == model.VendorClaude; gated != want {
+			t.Errorf("%s: gated = %v, want %v — the badge is a measured coverage claim, not a fact about the transport",
+				v, gated, want)
+		}
+	}
+	// The seat that asks about SOME things says so where the badge's argument
+	// lives, rather than being promoted into a claim it would break.
+	d := postureClaim(model.VendorCursor, true, true, true, true).Detail
+	if !strings.Contains(d, "does NOT ask about file edits") {
+		t.Errorf("the cursor write detail hides what its cards do not cover: %q", d)
 	}
 }
 

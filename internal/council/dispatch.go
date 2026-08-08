@@ -288,8 +288,8 @@ func (m *Model) dispatch() tea.Cmd {
 		// note is carried past the column reset below, because that reset is
 		// what clears the PREVIOUS turn's note and this one is about THIS turn.
 		note := ""
-		if pv, ok := v.(vendors.Persistent); ok {
-			n, err := m.sendPersistentTurn(pv, c, vendorPrompt)
+		if liveSeat(v) {
+			n, err := m.sendPersistentTurn(v, c, vendorPrompt)
 			if err != nil {
 				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 				continue
@@ -561,17 +561,26 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			// `redact(result)+flush` became ALPHAALPHA, and that doubled
 			// body is what /flow saved into the next hop's artifact.
 			// Result text is a complete message; never run it through Feed.
+			//
+			// This branch used to carry a Cursor-only rule: its `result` was the
+			// vendor's authoritative whole reply, so it REPLACED the streamed body
+			// rather than filling an empty one, which is what kept a delta/repeat
+			// pair from corrupting a /flow handoff. That rule is gone with the
+			// protocol it described. The ACP seat's turn resolves with a stop
+			// reason and no text at all (§9.36), so there is nothing authoritative
+			// to prefer — and nothing to repeat either, which is the same
+			// measurement seen from the other side.
+			//
+			// The honest consequence, stated because it is a real loss: this seat
+			// no longer has a fallback for a turn that streamed nothing. §9.6c
+			// leaned on that `result` explicitly — "the failure mode is a column
+			// that fills at the end, never one that is wrong" — and on ACP a
+			// broken chunk parser would give an EMPTY column instead of a late
+			// one. The mitigation would have to be invented, so it is named rather
+			// than faked.
 			c.Body += m.flush(ev.Vendor)
-			if ev.Text != "" {
-				if ev.Vendor == model.VendorCursor {
-					// Cursor's result is the vendor's authoritative whole reply.
-					// Prefer it over provisional deltas so a delta/repeat pair
-					// cannot corrupt a /flow handoff even if ParseEvent drifts.
-					c.Body = m.redactWhole(ev.Text)
-					m.redactors[ev.Vendor] = &Redactor{}
-				} else if c.Body == "" {
-					c.Body = m.redactWhole(ev.Text)
-				}
+			if ev.Text != "" && c.Body == "" {
+				c.Body = m.redactWhole(ev.Text)
 			}
 			// On a persistent seat this line is the ONLY end-of-turn signal:
 			// the process does not exit, so no KindDone is coming.

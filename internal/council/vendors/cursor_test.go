@@ -2,7 +2,8 @@ package vendors
 
 import (
 	"bytes"
-	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,95 +13,158 @@ import (
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 )
 
-// TestCursorFlagsMatchTheInstalledCLI pins the first-turn flags against
-// cursor-agent 2026.07.23-e383d2b's own --help.
+// The Cursor seat's tests, rewritten wholesale with the seat.
 //
-// These flags are now RUN flags rather than read flags: this exact combination
-// produced four live turns on 2026-08-04. The one that did not survive contact
-// is asserted separately in TestCursorDropsTheSandboxFlagOnWindows.
-func TestCursorFlagsMatchTheInstalledCLI(t *testing.T) {
-	spec := mustCursorFirst(t, "brief")
+// Everything here replays SHAPES captured live on 2026-08-08 against
+// cursor-agent 2026.08.04-aaa8809 (design.md §9.36) with the ids, paths and
+// prose synthesized — this repository is public and its fixtures are never real
+// session content.
+//
+// The tests this file replaced were all about print mode: the `--` separator
+// that kept a dash-leading brief from being read as a flag, the `--sandbox`
+// branch, the whole-message repeat and the `model_call_id` that discriminated
+// it. None of those surfaces exist on this seat any more. git history is the
+// record of what they asserted.
 
-	for _, want := range []string{"-p", "--output-format", "stream-json", "--mode", "plan"} {
-		if !slices.Contains(spec.Args, want) {
-			t.Errorf("missing %q in %v", want, spec.Args)
+// drive replays a stream through one protocol, collecting what came out in both
+// directions.
+//
+// It is the #62 fixture-replay shape adapted to a two-way protocol: a test can
+// assert on the room's events AND on the answers that would have gone back down
+// the pipe, with no process anywhere near it.
+type driven struct {
+	events  []runner.Event
+	replies [][]byte
+	body    string
+	acts    []runner.ActCall
+}
+
+func drive(p runner.Protocol, lines ...string) *driven {
+	d := &driven{}
+	d.replies = append(d.replies, p.Opening()...)
+	for _, line := range lines {
+		evs, out := p.Inbound([]byte(line))
+		d.events = append(d.events, evs...)
+		d.replies = append(d.replies, out...)
+		for _, ev := range evs {
+			if ev.Kind == runner.KindText {
+				d.body += ev.Text
+			}
+			d.acts = append(d.acts, ev.Acts...)
 		}
 	}
-	// --stream-partial-output is rejected by the CLI unless the format is
-	// stream-json, so the pair travels together or not at all.
-	if slices.Contains(spec.Args, "--stream-partial-output") &&
-		!slices.Contains(spec.Args, "stream-json") {
-		t.Error("--stream-partial-output without stream-json; the CLI rejects that combination")
+	return d
+}
+
+// sent reports whether any line written back names this method.
+func (d *driven) sent(method string) bool { return d.find(method) != nil }
+
+func (d *driven) find(method string) map[string]any {
+	for _, r := range d.replies {
+		var m map[string]any
+		if json.Unmarshal(r, &m) != nil {
+			continue
+		}
+		if m["method"] == method {
+			return m
+		}
+	}
+	return nil
+}
+
+func (d *driven) kinds() []runner.EventKind {
+	var out []runner.EventKind
+	for _, ev := range d.events {
+		out = append(out, ev.Kind)
+	}
+	return out
+}
+
+func fixture(t *testing.T, name string) []string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, l := range strings.Split(string(raw), "\n") {
+		if strings.TrimSpace(l) != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+const initOK = `{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true}}}`
+const newOK = `{"jsonrpc":"2.0","id":2,"result":{"sessionId":"sess-fixture-1"}}`
+
+// TestCursorIsDrivenAsALiveProcessAndNothingElse is the wholesale ruling as an
+// assertion.
+//
+// The batch entry points survive only because Vendor requires them. If either
+// ever returns a Spec again, something has quietly rebuilt the spawn-per-turn
+// path that §9.33 measured at ~13s a turn and §9.36 replaced.
+func TestCursorIsDrivenAsALiveProcessAndNothingElse(t *testing.T) {
+	if _, err := (Cursor{}).FirstTurn("brief", "/ws", "cursor-agent", PostureRead); !errors.Is(err, ErrCursorIsLiveOnly) {
+		t.Errorf("FirstTurn err = %v, want ErrCursorIsLiveOnly — a batch invocation of this seat is gone", err)
+	}
+	if _, err := (Cursor{}).NextTurn("brief", "/ws", "cursor-agent", "sess-1", PostureRead); !errors.Is(err, ErrCursorIsLiveOnly) {
+		t.Errorf("NextTurn err = %v, want ErrCursorIsLiveOnly", err)
+	}
+	if _, ok := (Cursor{}).ParseEvent([]byte(`{"jsonrpc":"2.0"}`)); ok {
+		t.Error("ParseEvent claimed a line; the ACP stream is only meaningful on the per-process protocol")
+	}
+	if _, ok := any(Cursor{}).(Persistent); ok {
+		t.Error("Cursor satisfies Persistent, so the room will drive it with Turn()/Send() and never open a session")
+	}
+}
+
+// TestCursorInvokesTheHiddenACPSubcommandAndNothingElse.
+//
+// One argument. Every flag the print-mode invocation carried belonged to a
+// surface this seat no longer uses, and each one that reappeared here would be
+// rejected by a subcommand that does not take it.
+func TestCursorInvokesTheHiddenACPSubcommandAndNothingElse(t *testing.T) {
+	for _, p := range []Posture{PostureRead, PostureWrite, PostureWriteGated} {
+		spec, proto, err := Cursor{}.Open("/ws", "/usr/local/bin/cursor-agent", "", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(spec.Args, []string{"acp"}) {
+			t.Errorf("posture %v args = %v, want exactly [acp]", p, spec.Args)
+		}
+		if spec.StdinPrompt != "" {
+			t.Error("a stdin prompt appeared; every turn is a JSON-RPC request now")
+		}
+		if spec.Dir != "/ws" {
+			t.Errorf("Dir = %q, want the workspace", spec.Dir)
+		}
+		if proto == nil {
+			t.Fatal("Open returned no protocol; the seat would have no way to speak")
+		}
 	}
 }
 
 // TestCursorNeverPassesTheSkipPermissionsFlags is the safety rule for this
-// vendor, in both postures.
+// vendor, kept across the rewrite rather than retired with the flags it names.
 //
 // -f/--force and --yolo are cursor-agent's "run everything" flags, --trust
 // accepts a workspace trust prompt on the user's behalf, and --approve-mcps
-// auto-approves servers that reach OUTSIDE the directory council was pointed
-// at. --write widens the workspace; it does not pre-approve whatever a model
-// decides to try, and it does not consent to anything on the user's behalf.
+// auto-approves servers that reach OUTSIDE the directory council was pointed at.
+// None of them is reachable from an argv that is one word — which is exactly why
+// the assertion stays: it is now cheap, and the day somebody adds a flag here is
+// the day it is worth having.
 func TestCursorNeverPassesTheSkipPermissionsFlags(t *testing.T) {
-	for _, p := range []Posture{PostureRead, PostureWrite} {
-		specs := []runner.Spec{
-			mustCursorFirstPosture(t, "brief", p),
-			mustCursorNextPosture(t, "brief", "sess-1", p),
+	for _, p := range []Posture{PostureRead, PostureWrite, PostureWriteGated} {
+		spec, _, err := Cursor{}.Open("/ws", "/usr/local/bin/cursor-agent", "sess-1", p)
+		if err != nil {
+			t.Fatal(err)
 		}
-		for _, spec := range specs {
-			for _, banned := range []string{"-f", "--force", "--yolo", "--trust", "--approve-mcps"} {
-				if slices.Contains(spec.Args, banned) {
-					t.Errorf("posture %v passes %q; that is a consent decision this adapter does not get to make", p, banned)
-				}
+		for _, banned := range []string{"-f", "--force", "--yolo", "--trust", "--approve-mcps"} {
+			if slices.Contains(spec.Args, banned) {
+				t.Errorf("posture %v passes %q; that is a consent decision this adapter does not get to make", p, banned)
 			}
 		}
-	}
-}
-
-// TestCursorWritePostureDropsTheReadOnlyRequests: --write has to actually widen
-// the vendor rather than merely change a badge.
-func TestCursorWritePostureDropsTheReadOnlyRequests(t *testing.T) {
-	for _, windows := range []bool{true, false} {
-		read := cursorBaseArgs(PostureRead, windows)
-		if !slices.Contains(read, "plan") {
-			t.Errorf("windows=%v read posture asks for nothing: %v", windows, read)
-		}
-		write := cursorBaseArgs(PostureWrite, windows)
-		if slices.Contains(write, "plan") || slices.Contains(write, "--sandbox") {
-			t.Errorf("windows=%v write posture kept the read-only requests: %v", windows, write)
-		}
-		// Dropping the flags rather than passing --sandbox disabled: council is
-		// declining to ask for a restriction, not overriding a user's own config
-		// to remove one.
-		if slices.Contains(write, "disabled") {
-			t.Error("write posture overrides the user's sandbox config instead of leaving it alone")
-		}
-	}
-}
-
-// TestCursorDropsTheSandboxFlagOnWindows is a measurement, not a portability
-// nicety, and it is the difference between a seat that answers and one that
-// cannot.
-//
-// Captured 2026-08-04: `--sandbox enabled` on Windows does not weakly apply, it
-// aborts before any model call —
-//
-//	Error: Sandbox mode is enabled but not available on this system.
-//	Sandbox requires macOS or Linux.
-//
-// with exit 1. Passing it there would fail every read-posture turn, which is
-// how the strongest-looking half of this posture would have silently become the
-// reason the column never spoke. Off Windows it stays: the install ships a real
-// cursorsandbox.exe and the flag at least does not refuse.
-func TestCursorDropsTheSandboxFlagOnWindows(t *testing.T) {
-	if args := cursorBaseArgs(PostureRead, true); slices.Contains(args, "--sandbox") {
-		t.Errorf("windows read posture passes --sandbox: %v — the CLI exits 1 on that flag here", args)
-	}
-	args := cursorBaseArgs(PostureRead, false)
-	i := slices.Index(args, "--sandbox")
-	if i < 0 || i+1 >= len(args) || args[i+1] != "enabled" {
-		t.Errorf("non-windows read posture dropped --sandbox enabled: %v", args)
 	}
 }
 
@@ -109,609 +173,814 @@ func TestCursorDropsTheSandboxFlagOnWindows(t *testing.T) {
 //
 // Detection resolves this vendor to the node.exe that cursor-agent.cmd would
 // have run; the adapter has to hand that node its JavaScript entry point as the
-// FIRST argument, or it starts a REPL and the turn hangs. The bundle is derived
-// from the binary rather than passed alongside it, so the two can never
-// disagree about which install is being driven.
+// FIRST argument, or it starts a REPL and the room waits forever on a handshake
+// nobody is reading. The bundle is derived from the binary rather than passed
+// alongside it, so the two can never disagree about which install is driven.
 func TestCursorRunsTheBundleThroughNodeDirectly(t *testing.T) {
-	node := filepath.Join(`C:\Users\dev\AppData\Local\cursor-agent\versions\2026.07.23-e383d2b`, "node.exe")
-	spec, err := Cursor{}.FirstTurn("brief", `C:\ws`, node, PostureRead)
+	node := filepath.Join(`C:\Users\dev\AppData\Local\cursor-agent\versions\2026.08.04-aaa8809`, "node.exe")
+	spec, _, err := Cursor{}.Open(`C:\ws`, node, "", PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := filepath.Join(filepath.Dir(node), "index.js")
-	if len(spec.Args) == 0 || spec.Args[0] != want {
-		t.Fatalf("Args[0] = %v, want the bundle %q", spec.Args, want)
-	}
-	// Still argv, still last, still no stdin — the transport did not change,
-	// only the shell that used to be in front of it.
-	if spec.Args[len(spec.Args)-1] != "brief" {
-		t.Errorf("the prompt is no longer the final argument: %v", spec.Args)
-	}
-	if spec.StdinPrompt != "" {
-		t.Error("a stdin prompt appeared on a CLI that has no stdin path for one")
-	}
-	// The flags still have to come between the bundle and the prompt.
-	if !slices.Contains(spec.Args, "-p") || !slices.Contains(spec.Args, "stream-json") {
-		t.Errorf("flags were lost when the bundle was prepended: %v", spec.Args)
-	}
-
-	// The resume path takes the same treatment; a bundle on turn one and not on
-	// turn two would be a seat that answers once.
-	next, err := Cursor{}.NextTurn("follow up", `C:\ws`, node, "sess-1", PostureRead)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(next.Args) == 0 || next.Args[0] != want {
-		t.Errorf("NextTurn lost the bundle: %v", next.Args)
+	if !slices.Equal(spec.Args, []string{want, "acp"}) {
+		t.Fatalf("Args = %v, want [%q acp]", spec.Args, want)
 	}
 }
 
-// TestCursorLeavesANativeEntryPointAlone: on macOS and Linux the resolved
-// binary IS cursor-agent, and prepending a JavaScript path to its argv would
-// make the first thing it sees a file it was never asked to read.
+// TestCursorLeavesANativeEntryPointAlone: on macOS and Linux the resolved binary
+// IS cursor-agent, and prepending a JavaScript path to its argv would make the
+// first thing it sees a file it was never asked to read.
 func TestCursorLeavesANativeEntryPointAlone(t *testing.T) {
-	spec, err := Cursor{}.FirstTurn("brief", "/ws", "/usr/local/bin/cursor-agent", PostureRead)
+	spec, _, err := Cursor{}.Open("/ws", "/usr/local/bin/cursor-agent", "", PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.Args[0] != "-p" {
-		t.Errorf("Args[0] = %q, want the first flag — nothing should be prepended here: %v", spec.Args[0], spec.Args)
+	if !slices.Equal(spec.Args, []string{"acp"}) {
+		t.Errorf("Args = %v — nothing should be prepended to a native entry point", spec.Args)
 	}
 }
 
-// TestCursorSeparatesTheBriefFromTheFlags closes the hazard ADR-008's fifth
-// amendment recorded as unresolved, with the run it asked for.
+// TestACPHandshakeIsSequencedByResponsesAndReleasesTheHeldTurn is the property
+// that could not be expressed through Persistent at all, and the reason runner
+// grew a Protocol.
 //
-// The prompt is a variadic positional, so a brief opening with "-" is read as
-// an option. Measured 2026-08-04:
-//
-//	… --workspace <ws> "--seriously reply with OK"
-//	    → error: unknown option '--seriously reply with OK'
-//	… --workspace <ws> -- "--seriously reply with OK"
-//	    → a normal turn, result "OK"
-//
-// The separator was left out originally because getting it wrong breaks every
-// brief rather than a rare one. It is in now because both forms were run.
-func TestCursorSeparatesTheBriefFromTheFlags(t *testing.T) {
-	for _, spec := range []runner.Spec{
-		mustCursorFirst(t, "-- not a flag"),
-		mustCursorNext(t, "-- not a flag", "sess-1"),
-	} {
-		n := len(spec.Args)
-		if n < 2 || spec.Args[n-2] != "--" {
-			t.Errorf("no -- immediately before the prompt: %v", spec.Args)
-		}
-		if spec.Args[n-1] != "-- not a flag" {
-			t.Errorf("the brief was altered: %q", spec.Args[n-1])
-		}
-	}
-}
+// A turn taken before there is a session is HELD, not refused and not dropped:
+// the room has already told the user this seat is working. It goes out the
+// moment session/new answers, carrying the id that only that answer could
+// supply.
+func TestACPHandshakeIsSequencedByResponsesAndReleasesTheHeldTurn(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureWrite)
 
-// TestCursorPromptIsTheFinalArgument. The prompt is cursor-agent's variadic
-// positional — print mode's own guard is "No prompt provided for print mode"
-// against the joined argv — so anything appended after it would be swallowed
-// into the prompt text, and any flag placed after it would be read as prose.
-func TestCursorPromptIsTheFinalArgument(t *testing.T) {
-	for _, spec := range []runner.Spec{
-		mustCursorFirst(t, "the brief"),
-		mustCursorNext(t, "the brief", "sess-1"),
-	} {
-		if got := spec.Args[len(spec.Args)-1]; got != "the brief" {
-			t.Errorf("last arg = %q, want the prompt, in %v", got, spec.Args)
-		}
+	opening := p.Opening()
+	if len(opening) != 1 || !bytes.Contains(opening[0], []byte(`"initialize"`)) {
+		t.Fatalf("opening = %s, want one initialize request", opening)
 	}
-}
 
-// TestCursorPromptGoesInArgvAndSaysSo is the honest inverse of Codex's rule.
-//
-// This CLI has no stdin path for the prompt: there is no `-` sentinel, no
-// --prompt-file, and no code in the shipped bundle that reads stdin for it.
-// StdinPrompt must therefore stay EMPTY — which is precisely what makes
-// runner.ErrShellShimWithArgvPrompt refuse the Windows .cmd, and why detection
-// marks that seat unusable instead of letting the refusal arrive as a mystery
-// failed turn.
-func TestCursorPromptGoesInArgvAndSaysSo(t *testing.T) {
-	spec := mustCursorFirst(t, "brief")
-	if spec.StdinPrompt != "" {
-		t.Error("the adapter claims a stdin path this CLI does not have; a shim would then be driven through cmd.exe")
-	}
-	if !slices.Contains(spec.Args, "brief") {
-		t.Errorf("the prompt is in neither channel: %v", spec.Args)
-	}
-}
-
-// TestCursorShimIsRefusedByTheRunner: the rule that made this seat unusable is
-// still armed, and must stay armed.
-//
-// Detection no longer hands the adapter a .cmd — it resolves the bundled node
-// the .cmd would have run — but nothing about the refusal changed, and the
-// refusal is what makes the resolution matter. If detection ever regressed to
-// passing the shim through, the runner is the backstop that still says no
-// rather than putting a brief through cmd.exe.
-func TestCursorShimIsRefusedByTheRunner(t *testing.T) {
-	spec, err := Cursor{}.FirstTurn("brief", `C:\ws`, `C:\Users\dev\AppData\Local\cursor-agent\cursor-agent.cmd`, PostureRead)
+	lines, err := p.Turn("the brief")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runner.Start(context.Background(), spec, make(chan runner.Event, 1), func([]byte) (runner.Event, bool) {
-		return runner.Event{}, false
-	}); err != runner.ErrShellShimWithArgvPrompt {
-		t.Fatalf("runner accepted an argv prompt on a .cmd: err = %v", err)
+	if len(lines) != 0 {
+		t.Fatalf("a turn went out before there was a session to put it in: %s", lines)
+	}
+
+	_, out := p.Inbound([]byte(initOK))
+	if len(out) != 1 || !bytes.Contains(out[0], []byte(`"session/new"`)) {
+		t.Fatalf("initialize did not lead to session/new: %s", out)
+	}
+	// Nothing about session/new needs initialize's result, so a pipelined client
+	// would have sent both at once. It is sequenced deliberately: a failed
+	// handshake must not be followed by a session request to a server that has
+	// already said no.
+	if bytes.Contains(out[0], []byte(`"session/prompt"`)) {
+		t.Error("the turn went out beside session/new, before there was a session id")
+	}
+
+	evs, out := p.Inbound([]byte(newOK))
+	if len(evs) != 1 || evs[0].Kind != runner.KindSession || evs[0].SessionID != "sess-fixture-1" {
+		t.Fatalf("session/new did not announce the thread: %+v", evs)
+	}
+	if len(out) != 1 || !bytes.Contains(out[0], []byte(`"session/prompt"`)) {
+		t.Fatalf("the held turn was not released: %s", out)
+	}
+	if !bytes.Contains(out[0], []byte("sess-fixture-1")) {
+		t.Error("the released turn does not carry the session id it was waiting for")
+	}
+	if !bytes.Contains(out[0], []byte("the brief")) {
+		t.Error("the released turn lost its prompt")
 	}
 }
 
-func TestCursorNextTurnResumesRatherThanResends(t *testing.T) {
-	spec := mustCursorNext(t, "follow up", "0198c0de-1234-4321-8888-abcdefabcdef")
-	i := slices.Index(spec.Args, "--resume")
-	if i < 0 || i+1 >= len(spec.Args) {
-		t.Fatalf("no --resume in %v", spec.Args)
-	}
-	// Unlike codex's positional session id, cursor-agent's is the VALUE of
-	// --resume.
-	if spec.Args[i+1] != "0198c0de-1234-4321-8888-abcdefabcdef" {
-		t.Errorf("session id does not follow --resume in %v", spec.Args)
-	}
-	// Only the new turn is sent; the vendor replays its own history.
-	if got := spec.Args[len(spec.Args)-1]; got != "follow up" {
-		t.Errorf("resume carries more than the new turn: %q", got)
-	}
-}
-
-func TestCursorNextTurnWithoutASessionRefuses(t *testing.T) {
-	if _, err := (Cursor{}).NextTurn("p", "", "cursor-agent", "", PostureRead); err != ErrNoResume {
-		t.Errorf("err = %v, want ErrNoResume", err)
-	}
-}
-
-// TestCursorOmitsWorkspaceWhenThereIsNone: --workspace "" would make the CLI
-// treat the empty string as a path or a saved workspace name rather than
-// defaulting to the working directory.
-func TestCursorOmitsWorkspaceWhenThereIsNone(t *testing.T) {
-	spec, err := Cursor{}.FirstTurn("brief", "", "cursor-agent", PostureRead)
-	if err != nil {
+// TestACPReadPostureSetsPlanModeBeforeTheTurnRuns.
+//
+// MEASURED: session/set_mode with modeId `plan` is accepted, and a seat in that
+// mode declined to create a file. The ORDER is the assertion here — a brief
+// dispatched beside the mode change would race the posture it is supposed to run
+// under, and the race would be invisible, because a reply from the wrong mode
+// looks exactly like a reply from the right one.
+func TestACPReadPostureSetsPlanModeBeforeTheTurnRuns(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureRead)
+	p.Opening()
+	if _, err := p.Turn("the brief"); err != nil {
 		t.Fatal(err)
 	}
-	if slices.Contains(spec.Args, "--workspace") {
-		t.Errorf("--workspace passed with no workspace: %v", spec.Args)
-	}
-	if spec.Args[len(spec.Args)-1] != "brief" {
-		t.Errorf("prompt lost its final position when the workspace was empty: %v", spec.Args)
-	}
-}
+	p.Inbound([]byte(initOK))
 
-// --- Parser tests, over lines CAPTURED from live turns on 2026-08-04. ---
-//
-// The previous version of this block said the opposite: nothing below had been
-// run, because the CLI was not signed in. It is signed in now and these lines
-// are off the wire, abridged only where a field is irrelevant to the assertion.
-// The two places where the wire disagreed with the bundle — the tool_call
-// discriminator and the whole-message repeat — each have their own test, and
-// each says which is which.
-//
-// One shape here is still bundle-derived rather than captured, and it is
-// labelled at its own case: a SUCCESSFUL tool call. Every tool call on the
-// probe machine was blocked by a hook, so `result.success` has never actually
-// come down this pipe.
-
-func TestCursorParseInitCarriesTheSessionID(t *testing.T) {
-	line := []byte(`{"type":"system","subtype":"init","apiKeySource":"login","cwd":"C:\\ws","session_id":"0198c0de-1234-4321-8888-abcdefabcdef","model":"Sonnet 4","permissionMode":"default"}`)
-	ev, ok := Cursor{}.ParseEvent(line)
-	if !ok || ev.Kind != runner.KindSession {
-		t.Fatalf("got (%v, %v), want a KindSession", ev, ok)
+	_, out := p.Inbound([]byte(newOK))
+	if len(out) != 1 || !bytes.Contains(out[0], []byte(`"session/set_mode"`)) {
+		t.Fatalf("read posture did not ask for a mode: %s", out)
 	}
-	if ev.SessionID != "0198c0de-1234-4321-8888-abcdefabcdef" {
-		t.Errorf("SessionID = %q", ev.SessionID)
+	if !bytes.Contains(out[0], []byte(`"plan"`)) {
+		t.Errorf("read posture asked for the wrong mode: %s", out[0])
 	}
-}
-
-func TestCursorParseAssistantText(t *testing.T) {
-	line := []byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"OK"}]},"session_id":"s1","timestamp_ms":1}`)
-	ev, ok := Cursor{}.ParseEvent(line)
-	if !ok || ev.Kind != runner.KindText {
-		t.Fatalf("got (%v, %v), want a KindText", ev, ok)
-	}
-	if ev.Text != "OK" {
-		t.Errorf("Text = %q", ev.Text)
-	}
-}
-
-// TestCursorDoesNotRenderTheEchoedPrompt is the trap in this schema: print mode
-// emits council's OWN brief back as a user event on the same stream. Rendering
-// it would put the user's words into the column as though the vendor had said
-// them.
-func TestCursorDoesNotRenderTheEchoedPrompt(t *testing.T) {
-	line := []byte(`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Reply with exactly: OK"}]},"session_id":"s1"}`)
-	if ev, ok := (Cursor{}).ParseEvent(line); ok {
-		t.Errorf("the echoed prompt produced a %v event carrying %q", ev.Kind, ev.Text)
-	}
-}
-
-// TestCursorDoesNotRenderTheWholeMessageRepeat is the bug a live run found and
-// no amount of bundle reading would have.
-//
-// cursor-agent sends its text deltas AND then the complete message as one more
-// assistant event. Captured, in full, from a turn asked to reply "PONG":
-//
-//	…"text":"P"…,"timestamp_ms":1785855682260}
-//	…"text":"ONG"…,"timestamp_ms":1785855682264}
-//	…"text":"PONG"…}          ← no timestamp_ms
-//
-// Appending all three renders "PONGPONG". The absence of timestamp_ms held on
-// all three captured turns of that shape — every one of which was a turn with
-// no tool call in it, which is why it read as the whole rule and was not. See
-// TestCursorSegmentedTurnRendersEachPassageOnce for the half it missed; this
-// test is kept unchanged because that half must not be fixed by breaking this
-// one.
-func TestCursorDoesNotRenderTheWholeMessageRepeat(t *testing.T) {
-	var body string
-	for _, line := range [][]byte{
-		[]byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"P"}]},"session_id":"s1","timestamp_ms":1785855682260}`),
-		[]byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ONG"}]},"session_id":"s1","timestamp_ms":1785855682264}`),
-		[]byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"PONG"}]},"session_id":"s1"}`),
-	} {
-		if ev, ok := (Cursor{}).ParseEvent(line); ok && ev.Kind == runner.KindText {
-			body += ev.Text
+	for _, l := range out {
+		if bytes.Contains(l, []byte(`"session/prompt"`)) {
+			t.Fatal("the turn was dispatched beside the mode change rather than after it")
 		}
 	}
-	if body != "PONG" {
-		t.Errorf("body = %q, want %q — the whole-message repeat was concatenated onto its own deltas", body, "PONG")
+
+	_, out = p.Inbound([]byte(`{"jsonrpc":"2.0","id":3,"result":{}}`))
+	if len(out) != 1 || !bytes.Contains(out[0], []byte(`"session/prompt"`)) {
+		t.Fatalf("the turn was not released once the mode landed: %s", out)
 	}
 }
 
-// TestCursorSegmentedTurnRendersEachPassageOnce replays a real turn, whole,
-// and is the test the "X X Y" the owner saw would have failed.
+// TestACPRefusedModeFailsTheTurnRatherThanRunningItAnyway.
 //
-// The rule above — drop the assistant event with no timestamp_ms — was derived
-// from turns that used no tools, and every such turn is ONE model call with one
-// whole-message repeat at its end. A turn that runs a tool is several model
-// calls, and each of THEM ends in a repeat of its own segment. Those mid-turn
-// repeats carry timestamp_ms like any delta, so the old rule passed them
-// straight through and the column rendered the segment, then the segment again,
-// then the next one.
-//
-// What separates them is model_call_id, present on the repeat and absent from
-// every delta. The assertion is not a substring count picked to fit: the deltas
-// alone must reconstruct the reply the vendor itself put in the `result` event,
-// which is the same turn's own answer to what it said.
-func TestCursorSegmentedTurnRendersEachPassageOnce(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("testdata", "cursor-segmented-turn.jsonl"))
-	if err != nil {
-		t.Fatal(err)
-	}
+// The alternative — dispatch anyway — is the silent upgrade dispatch.go refuses
+// one layer up: the column's badge would claim a posture the seat is not in.
+func TestACPRefusedModeFailsTheTurnRatherThanRunningItAnyway(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureRead)
+	p.Opening()
+	p.Turn("the brief")
+	p.Inbound([]byte(initOK))
+	p.Inbound([]byte(newOK))
 
-	var body, whole string
-	var segments int
-	for _, line := range bytes.Split(raw, []byte("\n")) {
-		ev, ok := Cursor{}.ParseEvent(line)
-		if !ok {
-			continue
-		}
-		switch ev.Kind {
-		case runner.KindText:
-			body += ev.Text
-		case runner.KindMeta:
-			whole = ev.Text
+	evs, out := p.Inbound([]byte(
+		`{"jsonrpc":"2.0","id":3,"error":{"code":-32602,"message":"Invalid params","data":{"message":"no such mode"}}}`))
+	for _, l := range out {
+		if bytes.Contains(l, []byte(`"session/prompt"`)) {
+			t.Fatal("the brief ran under a posture the seat could not be put in")
 		}
 	}
-	if whole == "" {
-		t.Fatal("the fixture carried no result event; the invariant below has nothing to check against")
+	if len(evs) != 1 || evs[0].Kind != runner.KindError || !evs[0].EndsTurn {
+		t.Fatalf("a refused mode did not end the turn visibly: %+v", evs)
 	}
-	if body != whole {
-		t.Errorf("streamed body and the vendor's own result disagree:\n body   = %q\n result = %q", body, whole)
-	}
-
-	// Named explicitly as well, because "the two agree" would also be satisfied
-	// if a future change doubled BOTH. This is the passage the owner watched
-	// render twice.
-	const passage = "Beginning the survey of this repository now."
-	if n := strings.Count(body, passage); n != 1 {
-		t.Errorf("the first segment appears %d times in the body, want 1", n)
-	}
-	segments = strings.Count(whole, "The Read tool hit a hook error")
-	if segments != 1 {
-		t.Errorf("fixture drifted: the middle segment appears %d times in the result", segments)
+	if !strings.Contains(evs[0].Note, "no such mode") {
+		t.Errorf("the note drops the vendor's own words: %q", evs[0].Note)
 	}
 }
 
-// TestCursorWholeMessageRepeatIsDroppedByModelCallID pins the discriminator on
-// its own, at one line, so a failure says which of the two rules broke.
+// TestACPWritePostureAssertsNoMode: `agent` is the server's own default on every
+// captured session/new, so sending a set_mode to reassert it would be a request
+// the room then has to defend, for no change in behaviour.
+func TestACPWritePostureAssertsNoMode(t *testing.T) {
+	for _, posture := range []Posture{PostureWrite, PostureWriteGated} {
+		p := newACPProtocol("/ws", "", posture)
+		p.Opening()
+		p.Turn("the brief")
+		p.Inbound([]byte(initOK))
+		_, out := p.Inbound([]byte(newOK))
+		for _, l := range out {
+			if bytes.Contains(l, []byte(`"session/set_mode"`)) {
+				t.Errorf("posture %v asks for a mode it already has: %s", posture, l)
+			}
+		}
+	}
+}
+
+// TestACPTurnReplaysAsOneReadingOfEachPassage is the §9.6c property, re-asked
+// against the protocol that replaced the one it was written for.
 //
-// Copied from the fixture. It carries timestamp_ms — that is the whole point,
-// and is why the older rule let it through — and it carries model_call_id,
-// which no delta in 108 captured assistant events ever did.
-func TestCursorWholeMessageRepeatIsDroppedByModelCallID(t *testing.T) {
-	repeat := []byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Beginning the survey of this repository now."}]},"session_id":"s1","model_call_id":"mc-0","timestamp_ms":1785894419785}`)
-	if ev, ok := (Cursor{}).ParseEvent(repeat); ok && ev.Kind == runner.KindText {
-		t.Fatalf("a mid-turn whole-message repeat rendered as a delta: %q", ev.Text)
+// Print mode sent a model call's deltas and then that call's COMPLETE message,
+// so appending both rendered the passage twice, and the parser needed
+// `model_call_id` to tell them apart. §9.33 saw no repeat across two ACP turns
+// and said outright that two turns is a hypothesis rather than a rule. This
+// fixture is a turn with two tool calls and three message segments in it — the
+// shape §9.6c says the thin capture could not have ruled on — and the assertion
+// is that the streamed body is the passages in order, once each.
+func TestACPTurnReplaysAsOneReadingOfEachPassage(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureWrite)
+	p.Turn("count the lines")
+	d := drive(p, fixture(t, "cursor-acp-turn.jsonl")...)
+
+	const want = "Looking it up: second line is bravo, 2 lines total."
+	if d.body != want {
+		t.Errorf("streamed body =\n%q\nwant\n%q", d.body, want)
 	}
-	delta := []byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Beginning"}]},"session_id":"s1","timestamp_ms":1785894418573}`)
-	ev, ok := Cursor{}.ParseEvent(delta)
-	if !ok || ev.Kind != runner.KindText || ev.Text != "Beginning" {
-		t.Fatalf("the delta beside it was dropped too: (%v, %v)", ev, ok)
+	// The thought chunks are the vendor reasoning out loud: not its answer and
+	// not a thing it did, so they belong in neither the body nor the trace.
+	if strings.Contains(d.body, "Reading the notes file") {
+		t.Error("reasoning leaked into the column body")
+	}
+	// Chrome for an interactive client. available_commands_update alone is
+	// kilobytes on every session and would bury the turn beside it.
+	if strings.Contains(d.body, "Fixture Turn") || strings.Contains(d.body, "rename-chat") {
+		t.Error("client chrome was rendered as though the vendor had said it")
 	}
 }
 
-// TestCursorFinalOnlyTurnStillRendersThroughTheResult is why the discriminator
-// above is safe to be wrong about.
+// TestACPTurnEndsOnTheResponseAndCarriesNoCost.
 //
-// Without --stream-partial-output the vendor sends ONLY the whole message, with
-// no timestamp_ms — so the rule above drops everything. Captured that way on
-// purpose. The column is not empty, because the result event carries the entire
-// reply and the room uses it whenever a column streamed nothing: the failure
-// mode of this field changing upstream is a column that fills at the end, not
-// one that is wrong.
-func TestCursorFinalOnlyTurnStillRendersThroughTheResult(t *testing.T) {
-	whole := []byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"OK"}]},"session_id":"s1"}`)
-	if ev, ok := (Cursor{}).ParseEvent(whole); ok && ev.Kind == runner.KindText {
-		t.Fatalf("the whole-message event rendered as a delta: %q", ev.Text)
-	}
-	res := []byte(`{"type":"result","subtype":"success","is_error":false,"result":"OK","session_id":"s1"}`)
-	ev, ok := Cursor{}.ParseEvent(res)
-	if !ok || ev.Kind != runner.KindMeta || ev.Text != "OK" {
-		t.Fatalf("the result did not carry the reply as a fallback: (%v, %v)", ev, ok)
-	}
-}
-
-// TestCursorToolActivityUsesTheWireDiscriminator. The first version of this
-// adapter looked for `tool_call.tool.case`, because the bundle tests
-// `"shellToolCall" === e.tool.case` internally. On the wire the protobuf oneof
-// is FLATTENED to an object key, so that lookup matched nothing and every trace
-// entry read "tool call". This line is copied from a capture.
-func TestCursorToolActivityUsesTheWireDiscriminator(t *testing.T) {
-	line := []byte(`{"type":"tool_call","subtype":"started","call_id":"c1","tool_call":{"shellToolCall":{"args":{"command":"ls -1","workingDirectory":"C:\\ws"}},"toolCallId":"c1","startedAtMs":"1785855754954"},"session_id":"s1"}`)
-	ev, ok := Cursor{}.ParseEvent(line)
-	if !ok || ev.Kind != runner.KindActivity {
-		t.Fatalf("got (%v, %v), want a KindActivity", ev, ok)
-	}
-	// Acts, not Text: the room reads tool news off Acts and an adapter that set
-	// Text alone would produce a permanently empty trace. That is what the old
-	// version did.
-	if len(ev.Acts) != 1 {
-		t.Fatalf("Acts = %v, want exactly one call", ev.Acts)
-	}
-	if ev.Acts[0].Text != "shell: ls -1" {
-		t.Errorf("Text = %q, want the tool and its command", ev.Acts[0].Text)
-	}
-	if ev.Acts[0].ID != "c1" {
-		t.Errorf("ID = %q; without it the result cannot resolve this entry", ev.Acts[0].ID)
-	}
-	if ev.Acts[0].Outcome != runner.ActPending {
-		t.Errorf("Outcome = %v, want ActPending — an announced call has not resolved", ev.Acts[0].Outcome)
-	}
-	// The metadata keys beside the discriminator must not be mistaken for it.
-	if strings.Contains(ev.Acts[0].Text, "toolCallId") || strings.Contains(ev.Acts[0].Text, "startedAtMs") {
-		t.Errorf("a metadata key was read as the tool name: %q", ev.Acts[0].Text)
-	}
-}
-
-// TestCursorToolOutcomesLandOnTheSameEntry. Both halves of a call are taken
-// now, correlated by call_id: "started" opens the entry, "completed" resolves
-// it. Taking only the announcement was right while the trace was append-only
-// and is wrong now that a running command has to read differently from a failed
-// one.
+// The end-of-turn signal is the ROOM'S OWN REQUEST being answered — there is no
+// line on the stream that means "done" — which is the plainest statement of why
+// a ParseFunc could not have driven this seat.
 //
-// Every failure shape below was captured. There are two of them for `error`
-// alone — readToolCall sends {"errorMessage":…} and grepToolCall sends
-// {"error":…} — on the same stream, which is why the text is dug out rather
-// than declared.
-func TestCursorToolOutcomesLandOnTheSameEntry(t *testing.T) {
-	cases := []struct {
+// And what the answer does not carry is the other half. Print mode's `result`
+// held the whole reply and a token usage block; this holds a stop reason. Cost
+// was already absent for this vendor forever; the tokens are gone now too, and
+// so is the fallback a column that streamed nothing used to have.
+func TestACPTurnEndsOnTheResponseAndCarriesNoCost(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureWrite)
+	p.Turn("count the lines")
+	d := drive(p, fixture(t, "cursor-acp-turn.jsonl")...)
+
+	var end *runner.Event
+	for i := range d.events {
+		if d.events[i].EndsTurn {
+			end = &d.events[i]
+		}
+	}
+	if end == nil {
+		t.Fatal("no event ended the turn; on a persistent seat the column would wait forever")
+	}
+	if end.Kind != runner.KindMeta {
+		t.Errorf("a clean end_turn was reported as %v", end.Kind)
+	}
+	if end.CostUSD != nil {
+		t.Error("a cost appeared; this vendor publishes no monetary figure anywhere")
+	}
+	if end.Text != "" {
+		t.Error("the turn's end carries reply text; ACP has no final whole reply and inventing one would be a fabrication")
+	}
+}
+
+// TestACPToolCallsCarryTheirOutcomes, including the one that says nothing.
+//
+// The last row is the important one and it is not a hypothetical: a call the
+// user REJECTED at the permission prompt arrives as `completed` with no
+// rawOutput at all. On the wire a denial is indistinguishable from a completion
+// that said nothing — so it must not become ActOK, and the room's own ActDenied,
+// recorded from the keystroke, is what actually names it.
+func TestACPToolCallsCarryTheirOutcomes(t *testing.T) {
+	for _, tc := range []struct {
 		name    string
-		line    string
+		rawOut  string
 		want    runner.ActStatus
-		detail  string
-		actText string
+		wantDet string
 	}{
-		{
-			name:    "rejected by a hook",
-			line:    `{"type":"tool_call","subtype":"completed","call_id":"c1","tool_call":{"shellToolCall":{"result":{"rejected":{"command":"ls -1","reason":"Hook blocked with message: nope"}}}},"session_id":"s1"}`,
-			want:    runner.ActFailed,
-			detail:  "Hook blocked with message: nope",
-			actText: "shell",
-		},
-		{
-			name:    "errorMessage shape",
-			line:    `{"type":"tool_call","subtype":"completed","call_id":"c2","tool_call":{"readToolCall":{"result":{"error":{"errorMessage":"could not open the file"}}}},"session_id":"s1"}`,
-			want:    runner.ActFailed,
-			detail:  "could not open the file",
-			actText: "read",
-		},
-		{
-			name:    "error shape",
-			line:    `{"type":"tool_call","subtype":"completed","call_id":"c3","tool_call":{"grepToolCall":{"result":{"error":{"error":"pattern was rejected"}}}},"session_id":"s1"}`,
-			want:    runner.ActFailed,
-			detail:  "pattern was rejected",
-			actText: "grep",
-		},
-		{
-			// The oneof's third case, read off the bundle's own field
-			// descriptors ({no:1,name:"success",kind:"message",oneof:"result"}).
-			// NOT captured: every tool call on the probe machine was stopped by
-			// a hook, so no success ever came down the pipe. Recorded here as
-			// the bundle-derived half of this parser.
-			name:    "success",
-			line:    `{"type":"tool_call","subtype":"completed","call_id":"c4","tool_call":{"readToolCall":{"result":{"success":{"content":"…"}}}},"session_id":"s1"}`,
-			want:    runner.ActOK,
-			actText: "read",
-		},
-		{
-			// Ended, and said nothing about how. ActUnknown rather than ActOK:
-			// inventing a success on a vendor's behalf is the one move this
-			// trace is built to refuse.
-			name:    "no result at all",
-			line:    `{"type":"tool_call","subtype":"completed","call_id":"c5","tool_call":{"someFutureToolCall":{}},"session_id":"s1"}`,
-			want:    runner.ActUnknown,
-			actText: "someFuture",
-		},
-	}
-	for _, tc := range cases {
+		{"a file was read", `"rawOutput":{"content":"alpha\n"}`, runner.ActOK, ""},
+		{"a shell command ran", `"rawOutput":{"exitCode":0,"stdout":"ok\n"}`, runner.ActOK, ""},
+		{"an edit landed", `"content":[{"type":"diff","path":"notes.txt"}]`, runner.ActOK, ""},
+		{"it failed", `"rawOutput":{"error":"Hook blocked with message: nope"}`, runner.ActFailed, "Hook blocked with message: nope"},
+		{"it said nothing at all", `"status":"completed"`, runner.ActUnknown, ""},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ev, ok := Cursor{}.ParseEvent([]byte(tc.line))
-			if !ok || len(ev.Acts) != 1 {
-				t.Fatalf("got (%v, %v), want one act", ev, ok)
+			line := `{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{` +
+				`"sessionUpdate":"tool_call_update","toolCallId":"call-1","status":"completed",` + tc.rawOut + `}}}`
+			p := newACPProtocol("/ws", "", PostureWrite)
+			d := drive(p, line)
+			if len(d.acts) != 1 {
+				t.Fatalf("acts = %+v, want one", d.acts)
 			}
-			got := ev.Acts[0]
-			if got.Outcome != tc.want {
-				t.Errorf("Outcome = %v, want %v", got.Outcome, tc.want)
+			if d.acts[0].Outcome != tc.want {
+				t.Errorf("outcome = %v, want %v", d.acts[0].Outcome, tc.want)
 			}
-			if tc.detail != "" && got.Detail != tc.detail {
-				t.Errorf("Detail = %q, want the vendor's own words %q", got.Detail, tc.detail)
-			}
-			if got.Text != tc.actText {
-				t.Errorf("Text = %q, want %q", got.Text, tc.actText)
-			}
-			// ActDenied is council's record of ITS OWN gate keystroke. A refusal
-			// read off a vendor's stream is not that, and rendering it as one
-			// would claim the user was asked something they never saw.
-			if got.Outcome == runner.ActDenied {
-				t.Error("a vendor-reported refusal was rendered as a council gate denial")
+			if tc.wantDet != "" && d.acts[0].Detail != tc.wantDet {
+				t.Errorf("detail = %q, want %q", d.acts[0].Detail, tc.wantDet)
 			}
 		})
 	}
 }
 
-// TestCursorCompletedWithoutAnAnnouncementStillLands: captured — a taskToolCall
-// arrived already resolved, with no "started" before it. The room appends that
-// as a finished entry, but only if the adapter names it; an act with no text is
-// dropped upstream and the step disappears.
-func TestCursorCompletedWithoutAnAnnouncementStillLands(t *testing.T) {
-	line := []byte(`{"type":"tool_call","subtype":"completed","call_id":"c9","tool_call":{"taskToolCall":{"result":{"error":{"error":"Task blocked by preToolUse hook"}}}},"session_id":"s1"}`)
-	ev, ok := Cursor{}.ParseEvent(line)
-	if !ok || len(ev.Acts) != 1 || ev.Acts[0].Text == "" {
-		t.Fatalf("an unannounced completion produced %v (%v); it must still name itself", ev, ok)
+// TestACPNamesACallByTheVendorsOwnTitle.
+//
+// `title` is the only naming field always populated — rawInput came back EMPTY
+// for Read, Find and grep on the live announcements — and for a shell call the
+// title IS the command, which the vendor writes in backticks for a chat client.
+// The backticks come off: the trace renders plain text beside three vendors that
+// send none.
+func TestACPNamesACallByTheVendorsOwnTitle(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureWrite)
+	d := drive(p, fixture(t, "cursor-acp-turn.jsonl")...)
+
+	var names []string
+	for _, a := range d.acts {
+		if a.Text != "" {
+			names = append(names, a.Text)
+		}
+	}
+	if !slices.Contains(names, "Read File") {
+		t.Errorf("a tool whose rawInput was empty lost its name: %v", names)
+	}
+	if !slices.Contains(names, "wc -l notes.txt") {
+		t.Errorf("a shell call is not named by its command, or kept its markdown backticks: %v", names)
 	}
 }
 
-// TestCursorCallIDsSurviveTheirEmbeddedNewline. These ids really do contain a
-// literal \n — "call-ab9b…-0\nfc_88e2…_0" — and both halves of a call carry the
-// identical string. It looks like corruption and is not; correlation depends on
-// it being passed through untouched.
-func TestCursorCallIDsSurviveTheirEmbeddedNewline(t *testing.T) {
-	const id = "call-ab9b3fba-8b2f-4bb2-aaae-bf7d4e845eb7-0\nfc_88e24da8-008f-98fe-b3b2-16e7b20caf7b_0"
-	started := []byte(`{"type":"tool_call","subtype":"started","call_id":"call-ab9b3fba-8b2f-4bb2-aaae-bf7d4e845eb7-0\nfc_88e24da8-008f-98fe-b3b2-16e7b20caf7b_0","tool_call":{"readToolCall":{"args":{"path":"C:\\ws\\note.txt"}}},"session_id":"s1"}`)
-	ev, ok := Cursor{}.ParseEvent(started)
-	if !ok || len(ev.Acts) != 1 {
-		t.Fatalf("got (%v, %v)", ev, ok)
+// TestACPCallIDsSurviveTheirEmbeddedNewline.
+//
+// These ids contain a literal newline in the middle —
+// "call-aaaaaaaa-0\nfc_bbbbbbbb_0" — exactly as print mode's call_id did. It
+// looks like corruption and is not: both halves of a call carry the identical
+// string, so correlation works, and the id is never rendered.
+func TestACPCallIDsSurviveTheirEmbeddedNewline(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureWrite)
+	d := drive(p, fixture(t, "cursor-acp-turn.jsonl")...)
+
+	var read []runner.ActCall
+	for _, a := range d.acts {
+		if strings.HasPrefix(a.ID, "call-aaaaaaaa") {
+			read = append(read, a)
+		}
 	}
-	if ev.Acts[0].ID != id {
-		t.Errorf("ID = %q, want it passed through unaltered", ev.Acts[0].ID)
+	if len(read) < 2 {
+		t.Fatalf("the announcement and its outcome did not share an id: %+v", d.acts)
 	}
-	// clipArg collapses whitespace, so the newline cannot reach the column as a
-	// second trace line even though it is in the id.
-	if strings.Contains(ev.Acts[0].Text, "\n") {
-		t.Errorf("a newline reached the rendered text: %q", ev.Acts[0].Text)
+	if !strings.Contains(read[0].ID, "\n") {
+		t.Error("the embedded newline was stripped; the halves would no longer match")
+	}
+	if read[len(read)-1].Outcome != runner.ActOK {
+		t.Errorf("the outcome did not land on the announced call: %+v", read)
 	}
 }
 
-// TestCursorUnparsedToolCallStillCountsAsActivity: a column that went quiet
-// during the part of the turn it was busiest reads as hung. An unrecognised
-// shape is still a thing that happened.
-func TestCursorUnparsedToolCallStillCountsAsActivity(t *testing.T) {
-	line := []byte(`{"type":"tool_call","subtype":"started","call_id":"c1","tool_call":{"something":"else"},"session_id":"s1"}`)
-	ev, ok := Cursor{}.ParseEvent(line)
-	if !ok || ev.Kind != runner.KindActivity {
-		t.Fatalf("got (%v, %v), want a KindActivity", ev, ok)
+// TestACPDropsTheHistoryALoadedSessionReplays is the trap this protocol has that
+// print mode did not, and it is the one that would have been most visible.
+//
+// MEASURED, twice: `session/load` streams the ENTIRE prior conversation back as
+// ordinary session/update notifications BEFORE it answers — the old user
+// prompts, the old tool calls with their real output, the old replies. A parser
+// that appended them would refill a reattached column with the whole previous
+// room and then answer the new brief underneath it.
+func TestACPDropsTheHistoryALoadedSessionReplays(t *testing.T) {
+	p := newACPProtocol("/ws", "old-thread-1", PostureWrite)
+	p.Turn("what did you say before?")
+
+	d := drive(p,
+		initOK,
+		// Everything from here to the load's own response is history.
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"old-thread-1","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"the previous brief"}}}}`,
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"old-thread-1","update":{"sessionUpdate":"tool_call","toolCallId":"replay-0-1","title":"Read File","kind":"read","status":"pending"}}}`,
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"old-thread-1","update":{"sessionUpdate":"tool_call_update","toolCallId":"replay-0-1","status":"completed","rawOutput":{"content":"old file body"}}}}`,
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"old-thread-1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"the previous answer"}}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"modes":{"currentModeId":"agent"}}}`,
+		// Live again.
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"old-thread-1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"the new answer"}}}}`,
+		`{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}`,
+	)
+
+	if d.body != "the new answer" {
+		t.Errorf("body = %q — the reattached column was refilled with the previous room", d.body)
 	}
-	if len(ev.Acts) != 1 || ev.Acts[0].Text == "" {
-		t.Errorf("an activity line with no text renders as a blank step: %v", ev.Acts)
+	if len(d.acts) != 0 {
+		t.Errorf("replayed tool calls landed in the trace: %+v", d.acts)
+	}
+	// The loaded session keeps the id it was loaded with; there is no new one in
+	// the response, which is what keeps the saved-room file valid across repeated
+	// reattaches.
+	if len(d.events) == 0 || d.events[0].Kind != runner.KindSession || d.events[0].SessionID != "old-thread-1" {
+		t.Errorf("a loaded thread did not report its own id: %+v", d.events)
+	}
+	if !d.sent("session/load") {
+		t.Error("a restored thread was not loaded")
 	}
 }
 
-// TestCursorResultCarriesNoCost is the honest-numbers rule, pinned. The usage
-// object carries token counts and no monetary figure anywhere in the bundle, so
-// CostUSD must stay nil rather than being derived from tokens.
-func TestCursorResultCarriesNoCost(t *testing.T) {
-	line := []byte(`{"type":"result","subtype":"success","duration_ms":1200,"duration_api_ms":1200,"is_error":false,"result":"OK","session_id":"s1","request_id":"r1","usage":{"inputTokens":10,"outputTokens":2}}`)
-	ev, ok := Cursor{}.ParseEvent(line)
-	if !ok || ev.Kind != runner.KindMeta {
-		t.Fatalf("got (%v, %v), want a KindMeta", ev, ok)
+// TestACPDeadThreadOpensAFreshSessionInTheSameProcess.
+//
+// MEASURED: a fabricated id comes back `-32602 … Session "…" not found` in
+// 0.45s, and — the part that decides the design — THE PROCESS SURVIVES. A fresh
+// session opened in the same process 0.45s later and answered.
+//
+// So the one-attempt rule the ninth amendment established still holds and is now
+// cheap: the id is spent, a new conversation opens immediately, and the brief
+// still runs. The print-mode path paid a whole process to learn the same thing
+// by exiting.
+func TestACPDeadThreadOpensAFreshSessionInTheSameProcess(t *testing.T) {
+	p := newACPProtocol("/ws", "dead-thread", PostureWrite)
+	p.Turn("the brief")
+	d := drive(p,
+		initOK,
+		`{"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"Invalid params","data":{"message":"Session \"dead-thread\" not found"}}}`,
+		`{"jsonrpc":"2.0","id":3,"result":{"sessionId":"fresh-thread"}}`,
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"fresh-thread","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"FRESH"}}}}`,
+	)
+	if !d.sent("session/new") {
+		t.Fatal("a refused load did not open a new conversation; the brief would be lost")
 	}
-	if ev.CostUSD != nil {
-		t.Errorf("CostUSD = %v; cursor-agent reports no cost, so absent must stay absent", *ev.CostUSD)
+	if d.body != "FRESH" {
+		t.Errorf("body = %q — the turn did not run on the replacement session", d.body)
 	}
-	// The whole reply, carried as the fallback for a turn that streamed nothing
-	// — which, given this vendor's unestablished granularity, may be every turn.
-	if ev.Text != "OK" {
-		t.Errorf("Text = %q, want the final result as a fallback", ev.Text)
+	var ids []string
+	for _, ev := range d.events {
+		if ev.Kind == runner.KindSession {
+			ids = append(ids, ev.SessionID)
+		}
+	}
+	if !slices.Contains(ids, "fresh-thread") {
+		t.Errorf("the replacement thread was never announced: %v", ids)
+	}
+	if slices.Contains(ids, "dead-thread") {
+		t.Error("the room was told it had restored a thread the vendor refused")
+	}
+	// A second load would rebuild the same doomed request on every turn for the
+	// life of the room, which is the wedge the one-attempt rule exists to stop.
+	var loads int
+	for _, r := range d.replies {
+		if bytes.Contains(r, []byte(`"session/load"`)) {
+			loads++
+		}
+	}
+	if loads != 1 {
+		t.Errorf("session/load was sent %d times; a dead id must be spent exactly once", loads)
 	}
 }
 
-// TestCursorErrorResultIsNotRenderedAsAnAnswer. No failure-emitting result path
-// was found in the bundle, which suggests failures ride stderr and the exit
-// code. is_error is parsed anyway, because the cost of being wrong in the other
-// direction is showing an error message as the vendor's opinion.
-func TestCursorErrorResultIsNotRenderedAsAnAnswer(t *testing.T) {
-	line := []byte(`{"type":"result","subtype":"error","is_error":true,"result":"the model refused","session_id":"s1"}`)
-	ev, ok := Cursor{}.ParseEvent(line)
-	if !ok || ev.Kind != runner.KindError {
-		t.Fatalf("got (%v, %v), want a KindError", ev, ok)
+const permRequest = `{"jsonrpc":"2.0","id":0,"method":"session/request_permission","params":{` +
+	`"sessionId":"s","toolCall":{"toolCallId":"call-9","title":"` + "`mkdir zzz`" + `","kind":"execute",` +
+	`"content":[{"type":"content","content":{"type":"text","text":"Not in allowlist: mkdir"}}]},` +
+	`"options":[{"optionId":"allow-once","name":"Allow once","kind":"allow_once"},` +
+	`{"optionId":"allow-always","name":"Allow always","kind":"allow_always"},` +
+	`{"optionId":"reject-once","name":"Reject","kind":"reject_once"}]}}`
+
+// TestACPPermissionRequestIsHandedToTheRoomAndNotAnsweredBehindIt.
+//
+// The vendor is BLOCKED until this is answered — measured, both branches, with a
+// rejection leaving the command unrun — and that block is the entire value of
+// the card. So the protocol emits the question and writes NOTHING: an adapter
+// that answered here would be deciding on the user's behalf while their card was
+// still on screen.
+func TestACPPermissionRequestIsHandedToTheRoomAndNotAnsweredBehindIt(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureWrite)
+	evs, out := p.Inbound([]byte(permRequest))
+	if len(out) != 0 {
+		t.Fatalf("the protocol answered a question the user is being shown: %s", out)
 	}
-	if ev.Note != "the model refused" {
-		t.Errorf("Note = %q", ev.Note)
+	if len(evs) != 1 || evs[0].Kind != runner.KindGate || evs[0].Gate == nil {
+		t.Fatalf("no gate was raised: %+v", evs)
+	}
+	g := evs[0].Gate
+	if g.RequestID == "" {
+		t.Error("the gate has no id to answer with")
+	}
+	if g.ToolUseID != "call-9" {
+		t.Errorf("ToolUseID = %q — the card and its trace entry are two things on screen", g.ToolUseID)
+	}
+	if g.Text != "mkdir zzz" {
+		t.Errorf("Text = %q, want the command with its markdown backticks off", g.Text)
+	}
+	// Claude's Input exists because ITS protocol requires the tool's whole
+	// argument blob echoed back on an approval. ACP's answer is an option id, so
+	// carrying the blob would be a copy of a Write's entire file content held for
+	// no purpose.
+	if g.Input != nil {
+		t.Error("the gate carries an argument blob nothing will ever send")
+	}
+
+	lines, err := p.Decide(g.RequestID, true, denialTextForTest, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 1 || !bytes.Contains(lines[0], []byte("allow-once")) {
+		t.Fatalf("the approval did not go back: %s", lines)
+	}
+	if !bytes.Contains(lines[0], []byte(`"id":0`)) {
+		t.Errorf("the answer does not carry the vendor's own request id: %s", lines[0])
 	}
 }
 
-// TestCursorUnknownEventsAreIgnoredNotFatal: upstream will add event types, and
-// a parser that failed on an unrecognised one would turn every cursor-agent
-// release into a broken column.
-func TestCursorUnknownEventsAreIgnoredNotFatal(t *testing.T) {
-	lines := [][]byte{
-		[]byte(`{"type":"thinking","subtype":"delta","text":"hmm","session_id":"s1"}`),
-		[]byte(`{"type":"system","subtype":"task_notification","task_id":"t1","status":"running","title":"x","session_id":"s1"}`),
-		[]byte(`{"type":"some.future.thing","payload":{"a":1}}`),
-		[]byte(`{"type":"system","subtype":"init"}`), // no session id
-		[]byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":""}]}}`),
-		[]byte(`not json at all`),
-		[]byte(``),
-		[]byte(`Error: Authentication required. Please run 'agent login' first.`), // the real stderr-shaped line
-	}
-	var c Cursor
-	for _, l := range lines {
-		if ev, ok := c.ParseEvent(l); ok {
-			t.Errorf("line produced an event it should have ignored: %s -> %v", l, ev.Kind)
+const denialTextForTest = "denied by the person running this council room"
+
+// TestACPNeverSelectsAllowAlways is a rule rather than a default.
+//
+// `allow-always` writes a PERMANENT rule into the user's own
+// ~/.cursor/cli-config.json. Council reaching into somebody's config to widen
+// what an agent may do without being asked again is the same line this adapter
+// already declines to cross by never passing --trust.
+func TestACPNeverSelectsAllowAlways(t *testing.T) {
+	for _, allow := range []bool{true, false} {
+		p := newACPProtocol("/ws", "", PostureWrite)
+		evs, _ := p.Inbound([]byte(permRequest))
+		lines, err := p.Decide(evs[0].Gate.RequestID, allow, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(lines[0], []byte("allow-always")) {
+			t.Errorf("allow=%v selected allow-always, which edits the user's own config: %s", allow, lines[0])
+		}
+		want := "reject-once"
+		if allow {
+			want = "allow-once"
+		}
+		if !bytes.Contains(lines[0], []byte(want)) {
+			t.Errorf("allow=%v did not select %s: %s", allow, want, lines[0])
 		}
 	}
 }
 
-// TestCursorParserSurvivesATruncatedStream: a cancelled turn cuts the pipe
-// mid-line, so half a JSON object is a normal thing to see, not a crash.
-func TestCursorParserSurvivesATruncatedStream(t *testing.T) {
-	var c Cursor
-	for _, partial := range [][]byte{
-		[]byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"te`),
-		[]byte(`{"type":"system","subtype":"in`),
-		[]byte(`{`),
+// TestACPReadPostureAnswersAPermissionRequestItself.
+//
+// A read-posture seat asking to change something is not a question for the user;
+// it is already answered. Raising a card would offer authority this posture
+// withheld — the same silent upgrade dispatch.go refuses when a write hop lands
+// in a read room.
+//
+// It is still REPORTED. A seat that tried and was stopped is a thing that
+// happened, and a column that hid it would read as one that never tried.
+func TestACPReadPostureAnswersAPermissionRequestItself(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureRead)
+	evs, out := p.Inbound([]byte(permRequest))
+	if len(out) != 1 || !bytes.Contains(out[0], []byte("reject-once")) {
+		t.Fatalf("a read-posture seat's request was not refused: %s", out)
+	}
+	if len(evs) != 1 || evs[0].Kind != runner.KindActivity {
+		t.Fatalf("the refusal was hidden from the trace: %+v", evs)
+	}
+	if evs[0].Acts[0].Outcome != runner.ActFailed {
+		t.Errorf("outcome = %v, want the call recorded as stopped", evs[0].Acts[0].Outcome)
+	}
+	if !strings.Contains(evs[0].Acts[0].Detail, "read-only") {
+		t.Errorf("the trace does not say why: %q", evs[0].Acts[0].Detail)
+	}
+	for _, ev := range evs {
+		if ev.Kind == runner.KindGate {
+			t.Error("a read-only room offered the user write authority it never granted")
+		}
+	}
+}
+
+// TestACPUnknownServerRequestIsAnsweredRatherThanIgnored.
+//
+// `cursor/create_plan` was captured in plan mode and is a vendor extension. A
+// request left unanswered blocks the vendor FOREVER, which on a persistent seat
+// is a column that never finishes and a room that never lets go of the turn. An
+// empty object is the smallest well-formed thing that unblocks it — and the
+// vendor accepted it, with the call it belonged to completing immediately after.
+// Guessing at a payload would be council inventing a side of a protocol it has
+// not read.
+func TestACPUnknownServerRequestIsAnsweredRatherThanIgnored(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureWrite)
+	evs, out := p.Inbound([]byte(`{"jsonrpc":"2.0","id":7,"method":"cursor/create_plan","params":{"plan":"…"}}`))
+	if len(out) != 1 {
+		t.Fatalf("an unknown request was left hanging: %s", out)
+	}
+	if !bytes.Contains(out[0], []byte(`"id":7`)) {
+		t.Errorf("the answer does not name the request: %s", out[0])
+	}
+	if bytes.Contains(out[0], []byte("optionId")) {
+		t.Errorf("an unknown request was answered as though it were a permission prompt: %s", out[0])
+	}
+	if len(evs) != 0 {
+		t.Errorf("a protocol detail was rendered to the user: %+v", evs)
+	}
+}
+
+// TestACPCancelIsANotificationAndLeavesTheProcessAlive.
+//
+// VERIFIED LIVE: `session/cancel` carries no id and gets no response; what
+// confirms it is the outstanding session/prompt resolving with
+// `{"stopReason":"cancelled"}` 23ms later. The process took a further turn 1.1s
+// after that.
+//
+// And `cancelled` is not a failure — it is the user's own keystroke coming back
+// — so it must not reach the column as one. finishColumn's cancellation check is
+// what words it.
+func TestACPCancelIsANotificationAndLeavesTheProcessAlive(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureWrite)
+	p.Opening()
+	p.Turn("the brief")
+	p.Inbound([]byte(initOK))
+	p.Inbound([]byte(newOK))
+
+	lines, err := p.Interrupt("telltale-interrupt-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 1 || !bytes.Contains(lines[0], []byte(`"session/cancel"`)) {
+		t.Fatalf("cancel = %s", lines)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(lines[0], &m); err != nil {
+		t.Fatal(err)
+	}
+	if _, has := m["id"]; has {
+		t.Error("cancel was sent as a request; it is a notification and nothing answers it")
+	}
+
+	evs, _ := p.Inbound([]byte(`{"jsonrpc":"2.0","id":3,"result":{"stopReason":"cancelled"}}`))
+	if len(evs) != 1 || !evs[0].EndsTurn {
+		t.Fatalf("a cancelled turn did not end: %+v", evs)
+	}
+	if evs[0].Kind == runner.KindError {
+		t.Error("the user's own keystroke was reported as a vendor failure")
+	}
+
+	// The process is still there, so the next brief is a turn and not a respawn.
+	next, err := p.Turn("another brief")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(next) != 1 || !bytes.Contains(next[0], []byte(`"session/prompt"`)) {
+		t.Fatalf("the seat would not take a turn after a cancel: %s", next)
+	}
+}
+
+// TestACPInterruptOfAHeldTurnDropsItAndAsksToBeKilled covers BOTH windows in
+// which a turn is held, and the second one is the one that was wrong.
+//
+// A brief the user cancelled must not be delivered to a session that opens
+// moments later. The first guard keyed that on "is there a session yet", which
+// missed the read-posture seat's OTHER wait — the session/set_mode round trip,
+// which happens after the session id exists — so a cancelled brief in that
+// window was dispatched anyway.
+//
+// And the interrupt must report an ERROR rather than a clean nothing. There is
+// no outstanding session/prompt here, so no response is coming, so nothing would
+// ever end the turn: the room would refuse every later brief and refuse to quit.
+// The error is what makes interruptSeat fall through to its kill, which is the
+// documented fallback for a cancel that could not be delivered — and nothing is
+// lost by taking it, because no conversation has started.
+func TestACPInterruptOfAHeldTurnDropsItAndAsksToBeKilled(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		posture Posture
+		before  []string
+	}{
+		{"before the session exists", PostureWrite, []string{}},
+		{"inside the set_mode window", PostureRead, []string{initOK, newOK}},
 	} {
-		if _, ok := c.ParseEvent(partial); ok {
-			t.Errorf("a truncated line produced an event: %s", partial)
+		t.Run(tc.name, func(t *testing.T) {
+			p := newACPProtocol("/ws", "", tc.posture)
+			p.Opening()
+			p.Turn("the brief")
+			for _, l := range tc.before {
+				p.Inbound([]byte(l))
+			}
+
+			if _, err := p.Interrupt("x"); !errors.Is(err, ErrACPTurnNotStarted) {
+				t.Fatalf("Interrupt err = %v, want ErrACPTurnNotStarted — nothing else would end this turn", err)
+			}
+
+			// Whatever is still owed by the handshake must not carry the brief.
+			var out [][]byte
+			for _, l := range []string{initOK, newOK, `{"jsonrpc":"2.0","id":3,"result":{}}`} {
+				_, o := p.Inbound([]byte(l))
+				out = append(out, o...)
+			}
+			for _, l := range out {
+				if bytes.Contains(l, []byte(`"session/prompt"`)) {
+					t.Fatalf("a cancelled brief was dispatched anyway: %s", l)
+				}
+			}
+		})
+	}
+}
+
+// TestACPTurnTakenInsideTheModeWindowStillWaitsForIt.
+//
+// The sequencing comment on session/set_mode claims a brief can never race the
+// posture it is supposed to run under. Queueing on "is there a session yet" did
+// not deliver that: once session/new answered, a turn arriving before the mode
+// landed went straight out — under the server's default `agent`, while the
+// column's badge said `ro:requested`. Invisible, because a reply from the wrong
+// mode looks exactly like a reply from the right one.
+func TestACPTurnTakenInsideTheModeWindowStillWaitsForIt(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureRead)
+	p.Opening()
+	p.Inbound([]byte(initOK))
+	p.Inbound([]byte(newOK)) // session open, set_mode in flight
+
+	lines, err := p.Turn("the brief")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 0 {
+		t.Fatalf("a brief went out under an unconfirmed posture: %s", lines)
+	}
+
+	_, out := p.Inbound([]byte(`{"jsonrpc":"2.0","id":3,"result":{}}`))
+	if len(out) != 1 || !bytes.Contains(out[0], []byte(`"session/prompt"`)) {
+		t.Fatalf("the brief was not released once the mode landed: %s", out)
+	}
+}
+
+// TestACPInterruptRejectsWhateverTheVendorIsBlockedOn.
+//
+// A pending session/request_permission holds the vendor still until it is
+// answered. Whether session/cancel releases one has never been measured;
+// rejection has — reject-once resolves the call and the command does not run. So
+// the refusals go FIRST and the cancel reaches a vendor that is listening rather
+// than one waiting on a question nobody will now answer.
+//
+// Rejecting is also what ctrl+c means for a call the user was being asked about.
+// Approving on the way out would run the thing they just stopped.
+func TestACPInterruptRejectsWhateverTheVendorIsBlockedOn(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureWrite)
+	p.Opening()
+	p.Inbound([]byte(initOK))
+	p.Inbound([]byte(newOK))
+	p.Turn("the brief")
+	p.Inbound([]byte(permRequest))
+
+	lines, err := p.Interrupt("x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("lines = %s, want a refusal and then the cancel", lines)
+	}
+	if !bytes.Contains(lines[0], []byte("reject-once")) {
+		t.Errorf("the blocked call was not refused first: %s", lines[0])
+	}
+	if bytes.Contains(lines[0], []byte("allow")) {
+		t.Errorf("cancelling ran the call the user was being asked about: %s", lines[0])
+	}
+	if !bytes.Contains(lines[1], []byte(`"session/cancel"`)) {
+		t.Errorf("the turn was not cancelled after the vendor was unblocked: %s", lines[1])
+	}
+	// And the request is forgotten, so a later decision cannot answer it twice.
+	if _, err := p.Decide("acp-perm-1", true, "", nil); !errors.Is(err, ErrACPUnknownRequest) {
+		t.Errorf("the refused request is still answerable: %v", err)
+	}
+}
+
+// TestAFailedHandshakeIsTerminalRatherThanASilentQueue is the wedge this state
+// exists to prevent, and it is worth spelling out because the failure is a room
+// nobody can quit.
+//
+// An ACP server that refuses `initialize` does NOT exit. So the room's stale-exit
+// guard correctly reads a live process, keeps the seat, and hands it the next
+// brief — which would be queued against a handshake that has already finished
+// failing. Nothing answers, the turn never ends, no further brief can be
+// dispatched, and `q` refuses to quit. The likeliest trigger is an
+// unauthenticated CLI: somebody's first run.
+func TestAFailedHandshakeIsTerminalRatherThanASilentQueue(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureWrite)
+	p.Opening()
+	p.Turn("the first brief")
+
+	evs, _ := p.Inbound([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"not signed in"}}`))
+	if len(evs) != 1 || !evs[0].EndsTurn {
+		t.Fatalf("the failed handshake did not end the turn it was dispatched for: %+v", evs)
+	}
+
+	lines, err := p.Turn("the next brief")
+	if !errors.Is(err, ErrACPHandshakeFailed) {
+		t.Fatalf("Turn err = %v, want ErrACPHandshakeFailed — a queued brief here never ends", err)
+	}
+	if len(lines) != 0 {
+		t.Errorf("a dead protocol produced lines: %s", lines)
+	}
+}
+
+// TestACPUnknownStopReasonIsNotRenderedAsAnAnswer.
+//
+// `refusal`, `max_tokens` and `max_turn_requests` are in the schema and none was
+// observed here. The word is QUOTED rather than paraphrased: this adapter has
+// never seen one and has no business translating it.
+func TestACPUnknownStopReasonIsNotRenderedAsAnAnswer(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureWrite)
+	p.Opening()
+	p.Turn("the brief")
+	p.Inbound([]byte(initOK))
+	p.Inbound([]byte(newOK))
+	evs, _ := p.Inbound([]byte(`{"jsonrpc":"2.0","id":3,"result":{"stopReason":"max_tokens"}}`))
+	if len(evs) != 1 || evs[0].Kind != runner.KindError || !evs[0].EndsTurn {
+		t.Fatalf("an unobserved stop reason passed as a clean turn: %+v", evs)
+	}
+	if !strings.Contains(evs[0].Note, "max_tokens") {
+		t.Errorf("the vendor's own word was dropped: %q", evs[0].Note)
+	}
+}
+
+// TestACPHandshakeFailureEndsTheTurnRatherThanHanging.
+//
+// EndsTurn is set even though no turn ever reached the vendor. The room
+// dispatched to this seat; a column left streaming would wait forever on a
+// process that is up and useless.
+func TestACPHandshakeFailureEndsTheTurnRatherThanHanging(t *testing.T) {
+	for _, tc := range []struct{ name, line string }{
+		{"initialize refused", `{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"not signed in"}}`},
+		{"session refused", `{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"internal"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newACPProtocol("/ws", "", PostureWrite)
+			p.Opening()
+			p.Turn("the brief")
+			if strings.Contains(tc.line, `"id":2`) {
+				p.Inbound([]byte(initOK))
+			}
+			evs, _ := p.Inbound([]byte(tc.line))
+			if len(evs) != 1 || evs[0].Kind != runner.KindError || !evs[0].EndsTurn {
+				t.Fatalf("a dead handshake left the column waiting: %+v", evs)
+			}
+		})
+	}
+}
+
+// TestACPSurvivesGarbageOnTheStream: a wrapper's log line, a truncated object, a
+// response to an id we never sent. None of them may fail the turn — the same
+// rule every parser in this package follows, so that an upstream addition
+// cannot break a column.
+func TestACPSurvivesGarbageOnTheStream(t *testing.T) {
+	p := newACPProtocol("/ws", "", PostureWrite)
+	d := drive(p,
+		"some wrapper wrote a plain line",
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","upda`,
+		`{"jsonrpc":"2.0","id":998,"result":{"stopReason":"end_turn"}}`,
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"something_new_upstream","content":{"type":"text","text":"x"}}}}`,
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"still here"}}}}`,
+	)
+	if d.body != "still here" {
+		t.Errorf("body = %q — noise on the stream cost the column its reply", d.body)
+	}
+	// An id we never issued must not end a turn: on a persistent seat that would
+	// retire a column while the vendor was still talking.
+	for _, k := range d.kinds() {
+		if k == runner.KindMeta {
+			t.Error("a response to an unknown id was read as this turn's end")
 		}
 	}
-}
-
-func mustCursorFirst(t *testing.T, prompt string) runner.Spec {
-	t.Helper()
-	return mustCursorFirstPosture(t, prompt, PostureRead)
-}
-
-func mustCursorFirstPosture(t *testing.T, prompt string, p Posture) runner.Spec {
-	t.Helper()
-	s, err := Cursor{}.FirstTurn(prompt, `C:\ws`, "cursor-agent", p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return s
-}
-
-func mustCursorNext(t *testing.T, prompt, sess string) runner.Spec {
-	t.Helper()
-	return mustCursorNextPosture(t, prompt, sess, PostureRead)
-}
-
-func mustCursorNextPosture(t *testing.T, prompt, sess string, p Posture) runner.Spec {
-	t.Helper()
-	s, err := Cursor{}.NextTurn(prompt, `C:\ws`, "cursor-agent", sess, p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return s
 }

@@ -27,18 +27,25 @@ import (
 // exists so "nothing was spawned" can be asserted without paying for a spawn.
 type spawnLog struct {
 	specs []runner.Spec
+	// protos holds the protocol handed to each RPC spawn, indexed alongside
+	// specs. It exists because the Cursor seat's POSTURE is no longer visible in
+	// argv: `acp` is the whole invocation and the mode is a session/set_mode
+	// request the protocol sends after its handshake. A test that could only read
+	// argv would have nothing left to witness there.
+	protos map[int]runner.Protocol
 }
 
 type deadSession struct{}
 
-func (deadSession) Send([]byte) error { return nil }
-func (deadSession) Kill()             {}
-func (deadSession) Alive() bool       { return true }
+func (deadSession) SendTurn([][]byte) error  { return nil }
+func (deadSession) SendAside([][]byte) error { return nil }
+func (deadSession) Kill()                    {}
+func (deadSession) Alive() bool              { return true }
 
 func countSpawns(t *testing.T) *spawnLog {
 	t.Helper()
-	log := &spawnLog{}
-	origProcess, origSession := startProcess, startSession
+	log := &spawnLog{protos: map[int]runner.Protocol{}}
+	origProcess, origSession, origRPC := startProcess, startSession, startRPCSession
 	startProcess = func(_ context.Context, spec runner.Spec, _ chan<- runner.Event, _ runner.ParseFunc) (*runner.Handle, error) {
 		log.specs = append(log.specs, spec)
 		return &runner.Handle{}, nil
@@ -47,7 +54,18 @@ func countSpawns(t *testing.T) *spawnLog {
 		log.specs = append(log.specs, spec)
 		return deadSession{}, nil
 	}
-	t.Cleanup(func() { startProcess, startSession = origProcess, origSession })
+	// The third spawn, and it has to be counted here or the assertion this whole
+	// file makes has a hole in it: the Cursor seat is a live ACP process now, and
+	// a spawn that escaped the count would let "nothing was spawned" pass over a
+	// vendor that had been launched.
+	startRPCSession = func(_ context.Context, spec runner.Spec, _ chan<- runner.Event, proto runner.Protocol) (seatSession, error) {
+		log.protos[len(log.specs)] = proto
+		log.specs = append(log.specs, spec)
+		return deadSession{}, nil
+	}
+	t.Cleanup(func() {
+		startProcess, startSession, startRPCSession = origProcess, origSession, origRPC
+	})
 	return log
 }
 
@@ -262,39 +280,77 @@ func TestFailedFlowHopDoesNotAdvance(t *testing.T) {
 
 // (d) A read hop gets READ posture even in a --write room.
 //
-// Asserted on the spec that was actually handed to the spawn, compared against
-// the two specs the vendor itself builds for the two postures. Asserting
-// m.posture() would prove only that a helper agrees with itself.
+// The witness moved with the seat, and the new one is strictly better. This test
+// used to compare the spawned argv against the two argvs the Cursor adapter
+// builds for the two postures — a proxy, and one that stopped existing when the
+// invocation became the single word `acp`. What is checked now is the request
+// that actually reaches the vendor: the protocol, driven through its handshake,
+// asking for `plan` mode before it will release the brief.
+//
+// @cursor rather than @codex for the reason it always was: on Windows codex's
+// read and write sandbox flags collapse to the same value (measured,
+// codexSandboxFor), so codex cannot witness a posture on this machine.
 func TestReadHopGetsReadPostureInAWriteRoom(t *testing.T) {
 	log := countSpawns(t)
 	m := flowRoom(t, true)
-	// @cursor rather than @codex: on Windows, codex's read and write sandbox
-	// flags collapse to the same value (measured, codexSandboxFor), so codex
-	// argv cannot witness a posture on this machine. Cursor's `--mode plan`
-	// can, on both.
 	m.st.Draft = "/flow @cursor review security -> @claude summarize"
 	m.dispatch()
 
 	if log.n() != 1 {
 		t.Fatalf("%d spawns, want 1: %+v", log.n(), log.specs)
 	}
-	v := vendors.Registry()[model.VendorCursor]
-	readSpec, err := v.FirstTurn("security", m.st.Workspace, string(model.VendorCursor), vendors.PostureRead)
-	if err != nil {
-		t.Fatal(err)
+	proto := log.protos[0]
+	if proto == nil {
+		t.Fatal("the cursor seat was spawned without a protocol; it would never speak")
 	}
-	writeSpec, err := v.FirstTurn("security", m.st.Workspace, string(model.VendorCursor), vendors.PostureWrite)
-	if err != nil {
-		t.Fatal(err)
+	// argv can no longer witness this, and saying so out loud is the point: a
+	// future reader tempted to assert on it would be asserting on nothing.
+	if strings.Join(log.specs[0].Args, " ") != "acp" {
+		t.Errorf("the ACP invocation grew flags: %v", log.specs[0].Args)
 	}
-	readArgs := strings.Join(readSpec.Args, " ")
-	writeArgs := strings.Join(writeSpec.Args, " ")
-	if readArgs == writeArgs {
-		t.Fatal("this vendor's read and write invocations are identical, so this test could not fail — pick a vendor whose posture is visible in argv")
+
+	proto.Opening()
+	proto.Inbound([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}`))
+	_, out := proto.Inbound([]byte(`{"jsonrpc":"2.0","id":2,"result":{"sessionId":"s-1"}}`))
+
+	var asked string
+	for _, l := range out {
+		if strings.Contains(string(l), "session/set_mode") {
+			asked = string(l)
+		}
+		if strings.Contains(string(l), "session/prompt") {
+			t.Error("the read hop's brief went out before the posture it was supposed to run under")
+		}
 	}
-	got := strings.Join(log.specs[0].Args, " ")
-	if got != readArgs {
-		t.Errorf("read hop in a --write room was spawned as:\n  %s\nwant the read invocation:\n  %s", got, readArgs)
+	if asked == "" {
+		t.Fatalf("a read hop in a --write room asked for no mode at all: %s", out)
+	}
+	if !strings.Contains(asked, `"plan"`) {
+		t.Errorf("read hop asked for the wrong mode: %s", asked)
+	}
+}
+
+// TestAWriteHopAsksForNoModeInAWriteRoom is (d)'s mirror, and it is what makes
+// (d) mean something: `agent` is the server's own default, so a write hop's
+// posture is visible as the ABSENCE of the request above. Without this, (d)
+// would pass against an adapter that asked for plan mode always.
+func TestAWriteHopAsksForNoModeInAWriteRoom(t *testing.T) {
+	log := countSpawns(t)
+	m := flowRoom(t, true)
+	m.st.Draft = "@cursor review this"
+	m.dispatch()
+
+	if log.n() != 1 {
+		t.Fatalf("%d spawns, want 1: %+v", log.n(), log.specs)
+	}
+	proto := log.protos[0]
+	proto.Opening()
+	proto.Inbound([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}`))
+	_, out := proto.Inbound([]byte(`{"jsonrpc":"2.0","id":2,"result":{"sessionId":"s-1"}}`))
+	for _, l := range out {
+		if strings.Contains(string(l), "session/set_mode") {
+			t.Errorf("a write-room seat asked to be restricted: %s", l)
+		}
 	}
 }
 

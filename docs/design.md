@@ -3156,8 +3156,9 @@ card and fill at once. Quitting the room kills every child, including the persis
 and no longer strands the conversation: a bare `telltale council` reopens the one saved room
 by default, `--fresh` starts over, and `/cd <dir>` typed in the composer moves the room to
 another workspace between turns, with the persistent Claude seat following by respawn on its
-own session id (ADR-008, ninth and eleventh amendments). Multi-turn is native resume for the
-batch seats and one live process for Claude (§9.8).
+own session id (ADR-008, ninth and eleventh amendments). Multi-turn is one live process for
+Claude (§9.8) and for Cursor (§9.36), and native resume for the two seats that are still batch
+programs.
 
 Cross-agent rebuttal (§9.4) and per-column scrollback are **built and shipped**, and the
 scrollback now spans the whole conversation rather than one turn (§9.9): the room keeps a
@@ -3287,6 +3288,13 @@ the one line in the trace that is not a reading of a vendor's words.
 are batch programs — read a prompt, answer, exit. Neither has a channel a question could arrive
 on. Their columns keep `WRITES`; only the seat that asks carries `gated`. Giving all four the
 same badge would be the blanket claim §9.2 exists to refuse, one level up.
+
+**Amended by §9.36, and the amendment is narrower than it looks.** The Cursor seat is now a live
+ACP process and it *can* be asked: `session/request_permission` blocks it until answered, measured
+on both branches. It still does not carry `gated`, because it does not ask about EDITS — measured
+twice, it wrote a file and raised nothing. So the last sentence above holds with one word changed:
+only the seat that asks about **everything that changes anything** carries `gated`. Council answers
+Cursor's requests all the same, because an unanswered one blocks the vendor forever.
 
 `--write --auto` restores the old behaviour for the times nobody is watching: `acceptEdits`,
 the `WRITES` badge, the user's settings left alone — and therefore no injected hooks file
@@ -5962,3 +5970,190 @@ The general lesson, in this file's own terms: §9.16 built the chain's authority
 neither obeying nor gone — belonged to nobody, so nothing asserted on it. The corpse survived
 every ending, including the successful one, because the tests all stopped at "did not
 advance" and none typed the next brief. The regression tests here end by dispatching one.
+### 9.36 the cursor seat re-founded on ACP: what the wider capture said, and what it cost
+
+§9.33 ended with a build verdict, a verified seam and three named decisions. This is the build.
+The ruling that shaped it was **wholesale**: ACP replaces the spawn-per-turn path rather than
+sitting beside it, there is no fallback, and git history is the record of what went. A fallback
+would be a second protocol to keep honest, and the numbers below are the reason nobody would
+want to fall back to it.
+
+**Version pinned, and it is the same one.** `cursor-agent` **2026.08.04-aaa8809**, the version
+§9.33 measured, on Windows 11 — so nothing here is confounded by a bundle change. Instrument: a
+throwaway JSON-RPC client driving `node.exe index.js acp`, every line stamped against launch,
+across **thirteen arms**. Then the finished seat re-verified through the room's own code.
+
+**One environment note, because it cost an arm and will cost the next reader's.** The first
+capture had every tool call blocked by this machine's own `PreToolUse` credential guard, whose
+wrapper fails closed when cursor-agent is launched from a Git Bash parent on Windows (a known
+upstream wrapper bug, agent-ops ADR-012). Nothing was wrong with ACP. **Drive cursor-agent from
+a PowerShell or cmd parent on Windows**, or every tool in the capture will read as failing.
+
+#### Phase 1: what two trivial turns could not have told us
+
+§9.6c's lesson is that a rule is only as general as the capture it came from, and §9.33 flagged
+its own two-turn no-repeat finding as a hypothesis for exactly that reason. So the capture was
+widened first, and the widening changed three conclusions.
+
+| what was asked | trials | what came back |
+|---|---|---|
+| a turn that runs a TOOL | 3 | `tool_call` then `tool_call_update`(in_progress) then `tool_call_update`(completed). `title` always populated; `rawInput` **empty** for Read/Find/grep and populated for shell |
+| several model calls in one turn | 2 | four tool calls and three message segments in one turn, interleaved, with no envelope around a "call" |
+| a long streamed reply | 1 (300 words) | 24 `agent_message_chunk` in 2.6 s — ~95 chars each, ~9 a second |
+| an interrupted turn | 1 | `session/cancel` (a notification) and the open `session/prompt` resolves `{"stopReason":"cancelled"}` **23 ms** later; the process took a further turn 1.1 s after that |
+| resume in a NEW process | 2 | `session/load` works, and **replays the whole prior conversation** onto the update stream before it answers |
+| a dead thread | 2 | `-32602 … Session "…" not found` in **0.45 s**, and the process survives — a fresh `session/new` answered 0.45 s later |
+| cwd binding | 1 | **per SESSION, not per process.** One server ran a session in `ws1` reading ws1's file and another in `ws3` reading ws3's |
+| workspace trust | 2 dirs | **does not apply.** Print mode refused the same directory with "⚠ Workspace Trust Required"; the ACP server wrote a file into it |
+| a permission prompt | 2 | `session/request_permission` **blocks**; `allow-once` ran the command, `reject-once` did not and nothing was created |
+| an edit | 2 | ran ungated — **no permission request at all**, in a never-trusted directory, under the user's own `approvalMode: allowlist` |
+| plan mode | 1 | `session/set_mode {"modeId":"plan"}` accepted; asked to create a file the seat declined and **no file landed** |
+| the dedup hypothesis | every arm | **no whole-message repeat anywhere, and no `model_call_id` field in ACP traffic at all** |
+
+Timings across the twelve arms that ran a handshake: `initialize` **1.43–4.30 s**, `session/new`
+a further **0.85–2.55 s**, `session/load` a further **0.89–1.37 s** — so resume is once again no
+more expensive than a fresh conversation, which is the same shape §9.33 measured for `--resume`.
+Warm turns: **1.12 s, 1.79 s, 1.82 s**, against §9.33's print-mode ~13 s.
+
+**Three of these overturn something.**
+
+**The dedup rule is not carried over, and it is now a measurement rather than a hypothesis.**
+§9.6c's rule exists because print mode sent a model call's deltas and then that call's complete
+message, so appending both rendered the passage twice. Across a turn with four tool calls and
+several model segments, ACP repeated nothing and carries no `model_call_id` at all. §9.33 was
+right to refuse to generalise from two turns; the wider capture is what earns the conclusion.
+
+**The safety net that rule leaned on is gone with it.** §9.6c named the fallback explicitly —
+"the failure mode is a column that fills at the end, never one that is wrong" — because print
+mode's `result` carried the whole reply. An ACP turn resolves with `{"stopReason":…}` and
+nothing else: no reply, and no token usage either. So a broken chunk parser here gives an
+**empty** column, not a late one. There is no mitigation that would not be invented, so it is
+stated instead — in `cursor.go`, in `dispatch.go` where the old special case was, and in
+`STATE.md`.
+
+**Workspace trust does not apply on this path.** This is the one finding that makes a claim
+*worse*, and it is on the badge for that reason. The tightest form of it: the directory print
+mode had just refused was written to over ACP, with no prompt, minutes later.
+
+#### Phase 2: what was built
+
+**runner grew a second protocol shape, and the stream-json path did not move.** `ParseFunc` sees
+a line and has nowhere to reply to, which is enough for a monologue and cannot express ACP: a
+turn cannot be *encoded* until `session/new` answers, the child asks questions that block it,
+and ids come in two independent namespaces. So `runner.Protocol` is a stateful per-process
+driver that owns both directions and returns lines rather than writing them — which keeps it
+replay-testable exactly as a `ParseFunc` is. `StartSession` and `StartRPCSession` are two
+wrappers over one body; the Claude adapter was not touched and its tests did not change.
+
+`Session` grew `SendTurn` and `SendAside` in place of a bare `Send`, and the split is the turn
+clock: an ACP protocol may **take** a turn it cannot yet encode, and the person who pressed
+enter is waiting from that moment whether or not a byte has moved. An answer to a question the
+vendor asked mid-turn goes the other way — it belongs to the turn it is holding up, so it must
+not start a new one.
+
+**The seat.** `vendors.Conversational` is a sibling of `Persistent`, not a subtype: `Open`
+returns a spec plus the protocol. The invocation is now the single word `acp`. Posture arrives
+as `session/set_mode`, the workspace as `session/new`'s `cwd`, and the brief as a JSON string —
+so no prompt text can reach argv by any path, which retires the shell-shim question this seat
+used to have to reason about.
+
+**Re-measured, not inherited.**
+
+| claim | verdict |
+|---|---|
+| granularity `tokens` | **re-earned, with a caveat.** ACP chunks are ~95 chars at ~9/s — coarser than print mode's real tokens ("P", "ONG") and *finer in time* than the Claude seat that already carries this word (§9.7: ~80 chars, ~3/s, flagged there as an overstatement). The word stays with its existing looseness and no new looseness; fixing it is one change to both seats at once, which is why §9.7 left it as a separate change to a separate surface |
+| `ro:requested` | **level unchanged, reasons replaced.** Plan mode did better than print mode's ever did, and it is one trial of a mode the model obeys |
+| `--sandbox enabled` | **gone.** ACP takes no sandbox parameter on any OS, so the badge is no longer split by platform. On Windows nothing was lost — the flag was measured killing the turn. On macOS and Linux what was lost is a *request* whose enforcement was never observed |
+| `gated` | **withheld, deliberately.** `canGate` used to read "is this a live process", off the registry. That was right only while those two questions had one answer. This seat can ask *and does not ask about edits*, and `gated` promises that nothing which changes anything runs without a keystroke — so it keeps `WRITES`, and its detail says what the cards cover and what they do not |
+| the §9.6c dedup rule | **retired**, above |
+| the `result` fallback | **retired**, above |
+
+**The gate, such as it is.** Council answers every `session/request_permission` — an unanswered
+one blocks the vendor forever, which is a column that never finishes. In a write posture the
+request becomes the room's ordinary approval card; in a read posture the adapter refuses it
+itself and records the attempt in the trace, because a read-only seat asking to change something
+is not a question for the user, it is already answered. `allow-always` is never selected in any
+posture: it writes a permanent rule into the user's own `~/.cursor/cli-config.json`, which is
+the line this adapter already declines to cross by never passing `--trust`.
+
+Two shapes fall out of the capture and both are in the code beside the lines that produced them.
+A **rejected** call arrives as `completed` with no output at all — indistinguishable on the wire
+from a completion that said nothing — which is §9.8's `ActDenied` argument in a sharper form: the
+room records the refusal from its own keystroke and `recordAct` refuses to let the echo overwrite
+it. And ACP's rejection carries **no message field**, so unlike the Claude seat this one cannot
+ask the model not to retry; it was measured saying "DONE" afterwards as though nothing had
+happened.
+
+**`session/load` replays history, and dropping it is load-bearing.** A loaded session streams the
+entire prior conversation back — old prompts, old tool calls with their real output, old replies
+— *before* it answers. A parser that appended it would refill a reattached column with the whole
+previous room. The gate is the pending response rather than the `replay-` prefix those ids happen
+to carry: a prefix is a spelling, the pending request is the protocol.
+
+**Two hazards this protocol has that a one-way stream does not, both found in review and both
+ending in a room nobody can quit.** They are recorded because neither is visible from the wire
+format alone.
+
+- **A turn's end is a RESPONSE, so a turn that was never sent can never end.** Anything that
+  holds a brief — the handshake, the `session/set_mode` round trip — is a window in which there
+  is no outstanding `session/prompt` for the vendor to answer or for a cancel to abandon. So the
+  protocol refuses an interrupt in that window rather than reporting a quiet success, which is
+  what makes the room fall through to killing the seat; the alternative was a turn that never
+  ends, a room that then refuses every further brief, and a `q` that will not quit.
+- **A failed handshake is TERMINAL, because the server does not exit on one.** An ACP server that
+  refuses `initialize` answers and stays up — and a live process is exactly what §9.8's stale-exit
+  guard correctly reads as a healthy seat. Without a terminal state the room would keep handing
+  that process briefs forever. The protocol refuses instead, the seat is killed and forgotten, and
+  one retry inside the same dispatch gives the user a working column rather than an error naming a
+  handshake they cannot see. The likeliest trigger is an unauthenticated CLI: somebody's first run.
+
+The same class of care applies to the `set_mode` window in the other direction: a turn *taken*
+there must wait too, or it would go out under the server's default `agent` mode while the badge
+said `ro:requested` — invisibly, because a reply from the wrong mode looks exactly like a reply
+from the right one.
+
+**A refused thread now costs two round trips instead of a process.** The one-attempt rule the
+ninth amendment established is unchanged and is simply cheaper here: the id is spent, the same
+process opens a new conversation 0.45 s later, and the brief still runs. Reattachment therefore
+never fakes a restored thread — if the load is refused the seat honestly starts fresh and
+`settleRestoredThread` says so, exactly as it does for the other three seats.
+
+#### The forks, and the one that was decided rather than measured
+
+§9.33 named three. The first (Persistent cannot express ACP) and the third (every claim was
+measured against the wrong surface) are settled above. The second is a **choice**, and it is
+called out here because a reader would otherwise find a measurement in the code and wonder why
+it was not acted on:
+
+**`cwd` and posture are no longer argv-bound, and the seat is respawned anyway.** Measured: one
+process really did run two sessions in two directories. So a `/cd` *could* cost a new session
+(~1 s) instead of a new process (~3 s). It costs a process — because what a move actually costs
+the user is a new conversation either way; because one rule across four seats is worth more than
+three seconds; and because re-opening a session inside a live process has failure modes (a
+half-moved session, a queued turn addressed to the old one) that nothing has measured. The
+argument is on `seatProc`, the behaviour is pinned by `TestAMovedRoomReplacesTheCursorSeatToo`,
+and it is revisitable with a measurement rather than with a preference.
+
+The **stale-exit guard** (eleventh amendment) applies to this seat unchanged and is re-asserted
+for it: a terminal event names a vendor, not a process, and acting on a predecessor's exit would
+fail the live turn and leave a real process running and invisible.
+
+#### Verification
+
+Fixture replay in the #62 style over synthesized shapes
+(`vendors/testdata/cursor-acp-turn.jsonl`), lifecycle pinned by **process counts** rather than by
+anything the adapter says about itself, and one live multi-turn conversation through the merged
+seat (`-tags=live`):
+
+```
+turn 1  phase=done  elapsed=9.744s  act "Read File" → ok   body: github.com/sanlee-ys/telltale
+turn 2  phase=done  elapsed=1.120s  same process           body: github.com/sanlee-ys/telltale
+```
+
+Turn one read a file it could only have read by running a tool in the workspace; turn two
+answered a question only turn one's history could answer, from the same process, in 1.12 s. That
+is the whole of §9.33's prize, measured through the room rather than through an instrument
+standing beside it.
+
+**Not verified here: macOS.** Every arm ran on Windows 11, and the Mac's ACP seat is unmeasured.
+That belongs in `PARITY.md` rather than in this section.
