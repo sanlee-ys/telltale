@@ -5340,3 +5340,153 @@ was spent to save, once per column, and the turn separator already marks that bo
 the band down to one row on a short terminal, covered above. And giving the band a rule glyph or a
 hue of its own — council adds no hues, and the boundary vocabulary this room already has is what a
 reader has already learned to read.
+
+### 9.33 the cursor seat's per-turn cost, split at last — and the seam that was hidden from `--help`
+
+§9.8 gave the Claude seat one live process and measured what it bought. The obvious next
+question was whether the Cursor seat could have the same thing, and the standing instruction in
+`STATE.md` was to read a trace before optimising anything. This is that reading.
+
+**Version pinned first, because the last capture's lesson was that a rule is only as general as
+the capture it came from (§9.6c).** Everything below is `cursor-agent` **2026.08.04-aaa8809**, the
+bundle's own `--version`, on Windows 11. That is **not** the version the rest of this seat was
+measured against — `vendors/cursor.go` cites 2026.07.23-e383d2b throughout — and one of the
+findings is a direct consequence of the gap.
+
+**Instrument:** the vendor's own `node.exe` against `index.js`, argv identical to the seat's read
+posture, with every stdout line stamped against the moment of launch. Two trials per arm. The
+`result` event carries the vendor's own `duration_ms`, which is the cross-check: it agrees with
+`system/init` → `result` on every trial, so the split below is the vendor's arithmetic as much as
+this instrument's.
+
+#### What the 44 seconds actually decomposes into
+
+`STATE.md` already established that spawn is 13 ms and that `wait` is where the time goes, and
+said outright what it could not do: `wait` bundles the vendor's startup with the model's
+time-to-first-token, and nothing then in the room could separate them. Stamping raw lines
+separates them, because `system/init` lands *before* the model is called.
+
+Print mode, no `--resume` — trivial prompt, `reply with exactly: OK`:
+
+| trial | launch → `system/init` | `init` → `result` (vendor `duration_ms`) | `result` → exit | total |
+|---|---|---|---|---|
+| 1 | 5.666s | 5.779s | 2.299s | 13.742s |
+| 2 | 5.617s | 5.361s | 1.818s | 12.792s |
+
+Print mode, `--resume` against a real prior session (created by the trials above, so nothing of
+anyone's real work is in this record):
+
+| trial | launch → `system/init` | `init` → `result` | `result` → exit | total |
+|---|---|---|---|---|
+| 1 | 5.196s | 5.042s | 3.104s | 13.337s |
+| 2 | 5.551s | 4.298s | 3.080s | 12.928s |
+
+And the startup itself, taken apart with progressively less work asked of the same bundle:
+
+| what ran | to first output |
+|---|---|
+| `node.exe -e "console.log('x')"` — interpreter only | 0.078s |
+| `node.exe index.js --version` — interpreter + bundle load + arg parse | 1.204s |
+| a turn in an **untrusted** directory (aborts at the trust check, before any model call) | 2.139s |
+| a real turn, to `system/init` | ~5.6s |
+
+**Three things follow, and only the first was already known.**
+
+**The standing diagnosis was right, and `--resume` is not the expensive half.** "`--resume`
+restores context, not process warmth" is confirmed and now has a number against it: resumed
+startup (5.196s, 5.551s) is *no larger* than cold startup (5.666s, 5.617s). Restoring a
+conversation is free. What costs is the fixed startup underneath it, paid identically either way.
+
+**Process cost is ~8.1s per turn and none of it is the model.** ~5.6s before `system/init` plus
+~2.5s after `result` — the process lingers after answering — against a model turn the vendor
+itself clocks at 4.3–5.8s. Of the ~5.6s startup, node is 0.08s and loading the bundle is ~1.13s;
+the remaining ~4.4s is the vendor resolving auth, config, trust and workspace, and it is the
+largest single item in the seat's budget.
+
+**The honest proportion, stated so the number is not oversold.** On these trivial prompts the
+8.1s is ~60% of the turn, but a trivial prompt is the arm that flatters the finding most. Against
+the real room traced in `STATE.md`, where `cursor` totalled 25.014s, the same fixed 8.1s is ~32%.
+The *absolute* figure is what is load-bearing: it does not shrink as the question gets harder, and
+it is paid again on every single turn.
+
+#### The seam: what print mode cannot do, and what the hidden subcommand can
+
+Persistence needs two halves. The output half the seat already has — `--output-format stream-json`
+is what §9.6c parses. The input half is the one that decides it: a way to hand turn N+1 to a
+process that is already running.
+
+**Print mode cannot be that channel, and the measurement is unambiguous.** Turn one was written to
+an open stdin and then the pipe was *held*. Nothing happened for sixty seconds. Only when stdin was
+closed did `system/init` appear, 3.6s later, and the turn ran — one turn, on the joined contents of
+stdin, then exit. **Print mode drains stdin to EOF and treats the whole of it as one prompt, so the
+EOF that starts the turn is the same EOF that destroys the channel for the next one.** There is no
+`--input-format` in `--help`, and none in the bundle either: enumerating every flag the bundle
+defines turns up hidden development flags (`--ian-dev`, `--sb-debug`, `--tool-gallery`), which is
+what makes that absence evidence rather than an unsearched corner.
+
+**One correction to this repo's own record falls out of the same probe.** `vendors/cursor.go` said
+no code path in the bundle reads the prompt from stdin, and that there is no `-` sentinel and no
+`--prompt-file`. That was true when it was measured; at 2026.08.04-aaa8809 the first clause is
+**false** — a prompt piped in with no positional argument produced a normal turn. Nothing in the
+seat depends on it (council always passes the prompt in argv), so this changed no code; the comment
+is corrected because a stale measurement left standing is how the next reader inherits a wrong
+premise.
+
+**The channel exists, and `--help` does not mention it.** The bundle registers a subcommand marked
+hidden:
+
+```
+Ce.command("acp",{hidden:!0}).description("Start the Cursor Agent as an ACP (Agent Client Protocol) server")
+```
+
+This is the `--permission-prompt-tool stdio` situation from §9.8 exactly — absent from the help
+text and real — so it was driven live rather than believed. **Two turns, one process, one session:**
+
+| trial | `initialize` | `session/new` | turn 1 | turn 2 |
+|---|---|---|---|---|
+| 1 | 1.944s | +0.994s | 5.285s | 5.335s (this turn ran a tool call) |
+| 2 | 1.701s | +1.040s | 5.365s | **1.177s** |
+
+The shape, recorded rather than the content: JSON-RPC 2.0, newline-delimited, on stdin/stdout.
+`initialize` returns `agentCapabilities` — including `loadSession: true`, the resume equivalent.
+`session/new` takes a `cwd` and returns a `sessionId` plus `configOptions`, among them a `mode`
+select whose values are `agent`, `plan` and `ask`. Turns are `session/prompt` requests carrying
+that `sessionId`; output arrives as `session/update` notifications (`agent_message_chunk`,
+`agent_thought_chunk`, `tool_call`, `tool_call_update`) and the request resolves with a
+`stopReason`. The second turn correctly answered a question about the first, from the same pid, so
+this is one conversation in one process and not two conversations that happened to share a parent.
+
+**The prize, stated as measured:** a follow-up turn costs **1.18s** where a print-mode turn costs
+~13s, because the ~8.1s of process cost is paid once at `initialize` and never again.
+
+#### What this section does NOT authorise, and why it stops here
+
+The gate this work was run against was "build persistence only if the cost is process warmth *and*
+a live-verified seam exists." Both are now true, so the finding is **build**, and it is worth
+building. What the measurement also established is that the build is **not** the change it was
+expected to be — mirroring §9.8's shape onto this seat — because ACP is a *different protocol*, not
+the same protocol with an open stdin. Three forks come out of that, each a design decision rather
+than a detail, and each one is recorded here instead of guessed at:
+
+- **`Persistent` as written cannot express ACP.** `Turn(prompt) ([]byte, error)` is stateless: it
+  returns the line for a turn. ACP needs `initialize`, then `session/new`, then a `sessionId`
+  captured out of a *response* before any turn can be encoded at all — and `runner.Session` pipes
+  lines and correlates nothing. Server→client requests (ACP's `session/request_permission`, the
+  natural home for §9.8's gate) have no channel back at all today. That is a change to shared
+  runner plumbing, not to one adapter.
+- **Posture and cwd stop being argv-bound, which un-founds the respawn rules.** `persistent.go`
+  respawns a seat when the room moves or a `/flow` hop needs a different posture, and the comments
+  there rest on both being fixed at spawn. In ACP, `cwd` is a `session/new` parameter and `mode` is
+  a session `configOption` — so a `/cd` could open a new *session* in the same live process, and a
+  posture change might not need a respawn either. Whether it *should* is a product question about
+  what the badge is allowed to promise, not a mechanical one.
+- **Every measured claim on this seat was measured against print mode.** The §9.6c dedup rule, the
+  `tool_call` oneof wire shape, the `--mode plan` badge and the Windows sandbox finding are all
+  facts about a surface ACP does not use. Worth noting precisely because it is *not* yet a finding:
+  across these two ACP turns, `agent_message_chunk` arrived once per turn with **no whole-message
+  repeat** — which would mean the dedup rule is unnecessary here. That is a two-turn capture with
+  one tool call in it, and §9.6c is the standing warning against generalising exactly that. It is
+  a hypothesis for whoever builds this, not a rule.
+
+So the seat keeps its print-mode invocation for now, and the next lane starts with a number, a
+verified seam, and three named decisions instead of a guess.

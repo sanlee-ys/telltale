@@ -153,8 +153,22 @@ func cursorBaseArgs(p Posture, windows bool) []string {
 // The prompt is cursor-agent's variadic positional argument. That is not a
 // preference: print mode's own guard in the bundle is
 // `t.trim() || "Error: No prompt provided for print mode"`, where t is the
-// joined argv, and no code path anywhere in the bundle reads the prompt from
-// stdin. There is no `-` sentinel and no --prompt-file.
+// joined argv. There is no `-` sentinel and no --prompt-file.
+//
+// This comment used to add "and no code path anywhere in the bundle reads the
+// prompt from stdin". That was measured on 2026.07.23-e383d2b and is FALSE on
+// 2026.08.04-aaa8809: a prompt piped in with no positional argument runs a
+// normal turn. Nothing here depends on it — council always passes the prompt in
+// argv, which is why this is a comment fix and not a code one — but the stale
+// half is removed rather than left standing, because the next reader would have
+// inherited it as a premise.
+//
+// What stdin CANNOT do is carry a second turn, and that is the load-bearing
+// fact for anyone eyeing this seat for §9.8-style persistence: print mode
+// drains stdin to EOF and joins the whole of it into ONE prompt. Measured — a
+// turn written to a held-open stdin produced nothing for sixty seconds, and ran
+// only once the pipe was closed. The EOF that starts the turn is the EOF that
+// ends the channel. §9.33 has the numbers and names the seam that does work.
 //
 // The bare "--" separator in front of it is now SETTLED, and it was left open
 // as "run both forms once" precisely because getting it wrong breaks every
