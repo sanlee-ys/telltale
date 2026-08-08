@@ -23,6 +23,26 @@ type Glyphs struct {
 	Down     string // "there is more below" marker
 	Act      string // prefixes a tool call / command in the activity trace
 
+	// RuleHeavy is the room's second rule weight, and it is spent on exactly
+	// three lines: the two full-bleed rules that close the frame above and below
+	// the reading area, and the turn separator at the top of a turn page.
+	//
+	// A room that draws every horizontal line at one weight has no way to say
+	// which of them is the OUTLINE. §9.11 gave this surface one rule glyph and
+	// then asked it to be four different things — the frame's own edge, a column
+	// header's leader, a turn separator in a transcript, a seat's heading on a
+	// page — so a reader scanning for "where does the room end and the content
+	// start" got the same ink as a reader scanning for "where does turn 3 begin".
+	// Two weights make that one distinction and stop there; a third would be a
+	// hierarchy nobody can hold in their head.
+	//
+	// It is a WEIGHT rather than a hue, so it costs the palette nothing and
+	// survives NO_COLOR intact — and the ASCII partner is a different character
+	// rather than a fallback to the light rule, so --ascii keeps the distinction
+	// too. `=` is the one unclaimed mark left in the reduced set: the block below
+	// enumerates what every other candidate already means here.
+	RuleHeavy string
+
 	// Range joins the ends of a span of turn numbers — "turns 2–7" (§9.19).
 	//
 	// Punctuation rather than a mark, which is why it may be the hyphen in the
@@ -73,7 +93,12 @@ func UnicodeGlyphs() Glyphs {
 	return Glyphs{
 		Sep:      "│", // │
 		Rule:     "─", // ─
-		Ellipsis: "…", // …
+		// U+2501, the box-drawing set's own heavy form of U+2500. The pair is
+		// the whole reason this is two glyphs rather than a colour: a terminal
+		// that can draw one draws the other, and they are legibly the same line
+		// at two weights rather than two different marks.
+		RuleHeavy: "━", // ━
+		Ellipsis:  "…", // …
 		Caret:    "_",
 		Warn:     "⚠", // ⚠
 		Focus:    "▸", // ▸
@@ -100,11 +125,22 @@ func UnicodeGlyphs() Glyphs {
 // ASCIIGlyphs is for legacy consoles, non-UTF-8 code pages and piped output.
 func ASCIIGlyphs() Glyphs {
 	return Glyphs{
-		Sep:      "|",
-		Rule:     "-",
-		Ellipsis: ">",
-		Caret:    "_",
-		Warn:     "!",
+		Sep:  "|",
+		Rule: "-",
+		// The heavy rule has to dodge the same list the outcome marks dodged, and
+		// by the time this glyph was needed that list had grown: "-" is the light
+		// rule, the Range joiner and the first spinner frame, "|" the separator,
+		// ">" the ellipsis, "]" focus, "!" the warning prefix, "^"/"v" the
+		// overflow markers, "*" Act, "." Idle, ":" the prompt, "_" the caret,
+		// "+"/"x"/"?" the outcome marks, "/" and "\" the remaining spinner
+		// frames, and "#" is the HUD's gauge fill. "=" is unclaimed, and it is
+		// also the only unclaimed character that reads as a DOUBLED "-" rather
+		// than as a different symbol — which is the one property a second rule
+		// weight needs. TestTheHeavyRuleHasAnUnclaimedASCIIPartner holds it.
+		RuleHeavy: "=",
+		Ellipsis:  ">",
+		Caret:     "_",
+		Warn:      "!",
 		// Focus cannot be ">": that is already the ASCII ellipsis here, and a
 		// mark that also means "truncated" is not a mark. Same reasoning, and
 		// the same answer, as the HUD's cursor.

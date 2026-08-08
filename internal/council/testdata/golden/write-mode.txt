@@ -1,6 +1,6 @@
   council ⚠ WRITE  │  ~/code/telltale                                          no turn yet  │  3/3 seated  │  no brief  
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ▸ CC Claude Code              ○ idle  │    CX Codex                   ○ idle  │    AG Antigravity             ○ idle  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ▸ CC Claude Code  ──────────  ○ idle  │    CX Codex  ───────────────  ○ idle  │    AG Antigravity  ─────────  ○ idle  
     WRITES  tokens                      │    WRITES  final only                 │    WRITES  final only                 
                                                                                                                         
                                                                                                                         
@@ -19,6 +19,6 @@
                                                                                                                         
                                                                                                                         
   no turn dispatched yet.               │  no turn dispatched yet.              │  no turn dispatched yet.              
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
   VIEW                           ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit  

@@ -1,5 +1,5 @@
   council ⚠ WRITE  │  ~/code/telltale                                               turn 1  │  3/3 seated  │  no brief  
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ▸ CC Claude Code  ─────  ⠋ streaming  │    CX Codex  ────────────  ⠋ waiting  │    AG Antigravity  ──────  ⠋ waiting  
     gated  tokens                       │    WRITES  final only                 │    WRITES  final only                 
   ⚠ waiting on you: Write:              │                                       │                                       
@@ -19,6 +19,6 @@
   ⚙ Write: internal/council/gate.go     │                                       │                                       
                                         │                                       │                                       
   I need to add the card renderer.      │  working — the reply arrives whole.   │  working — the reply arrives whole.   
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
   GATE                 Write: internal/council/gate.go (+2 queued)  │  y approve  │  n deny  │  ctrl+c cancel the turn  

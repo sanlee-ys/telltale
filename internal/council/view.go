@@ -134,11 +134,19 @@ func floorMessage(st State, sty Styles) string {
 	return sty.Muted.Render(want + got)
 }
 
+// rule is the frame's own edge: the full-bleed line under the header and the
+// one above the composer. Together they are the only closed shape on screen, so
+// they draw at the HEAVY weight and everything inside them stays light (§9.26).
+//
+// It is still `Rule()`, i.e. muted, and that is deliberate. Weight says which
+// line is the outline; intensity would say the outline matters more than the
+// content it bounds, which is the trade §9.23 refused when it declined to let
+// the rails' hue mean anything.
 func rule(w int, sty Styles, g Glyphs) string {
 	if w <= 0 {
 		return ""
 	}
-	return sty.Rule().Render(strings.Repeat(g.Rule, w))
+	return sty.Rule().Render(strings.Repeat(g.RuleHeavy, w))
 }
 
 // header names the workspace and the round.
@@ -1108,12 +1116,34 @@ func vendorTag(v model.VendorID) string {
 	}
 }
 
-// headerUsesLeader reports whether the column header fills its gap with the
-// turn-rule glyph. Idle has nothing to bind; every other phase does (and
-// streaming/waiting need the air around a rule so an ascii spinner stays
-// distinct).
+// headerUsesLeader reports whether a column header fills the gap between the
+// seat's name and its state with the rule glyph. It always does.
+//
+// It used to be false for an idle seat, on an argument that was correct at ONE
+// rule weight: a long ──── between `Claude Code` and `○ idle` was *filling*
+// rather than separating, whitespace does that job for free, and a room with a
+// single rule weight cannot spend ink on nothing.
+//
+// §9.26 is what retires it. The frame now closes on the heavy rule and every
+// line inside it is the lighter of two, so the header leader is no longer "the
+// rule" — it is the interior weight, and its job on this row is to say that the
+// name at the left and the state at the right belong to one seat. That claim is
+// as true of an idle seat as of a streaming one.
+//
+// The observable defect the old form produced is the sharper argument. A room
+// where one seat is answering and its neighbour is not drew the seats' header
+// band as one continuous ruled line across half the frame and blank across the
+// other half — one row, two grammars, re-texturing itself the moment a turn
+// started and again when it ended. §7.1 rule 4 keeps this room still by default;
+// a header band that changes shape on every dispatch is the loudest still-frame
+// change on screen, spent on a fact the state word beside it already states.
+//
+// The air the old comment wanted is not lost: labelRule keeps two cells each
+// side of its rule, which is the gap that keeps an ascii spinner ("-") legible
+// against an ascii leader ("-").
 func headerUsesLeader(c Column) bool {
-	return c.Phase != PhaseIdle || c.Avail != AvailInstalled
+	_ = c
+	return true
 }
 
 // columnStatus is the state word with its mark and, where there is one, the
@@ -1592,6 +1622,18 @@ func turnRule(n int, meta string, w int, g Glyphs) string {
 // the GRAMMAR — a label, a rule, optional numbers, two cells of air each side —
 // and a second copy would drift from it one narrow-terminal fix at a time.
 func labelRule(label, meta string, w int, g Glyphs) string {
+	return labelRuleIn(label, meta, w, g.Rule)
+}
+
+// labelRuleIn is labelRule with the fill glyph named by the caller, so the one
+// line in the room that draws this grammar at the heavy weight (§9.26, the turn
+// page's own rule) shares the arithmetic rather than reimplementing it.
+//
+// The weight is a PARAMETER rather than a flag on Glyphs because the set of
+// lines that carry it is closed and small: a caller that wants the heavy rule
+// has to say so at the call site, which is what makes "exactly three lines"
+// checkable by reading rather than by grepping a bool.
+func labelRuleIn(label, meta string, w int, ruleGlyph string) string {
 	fill := func(m string) int {
 		if m == "" {
 			return w - lipgloss.Width(label) - 2
@@ -1606,7 +1648,7 @@ func labelRule(label, meta string, w int, g Glyphs) string {
 	if n2 < 1 {
 		return label
 	}
-	s := label + "  " + strings.Repeat(g.Rule, n2)
+	s := label + "  " + strings.Repeat(ruleGlyph, n2)
 	if meta != "" {
 		s += "  " + meta
 	}
@@ -2922,8 +2964,12 @@ func init() {
 // rule said nothing the heading had not, and ruled that a heading carries its own
 // rule instead. So this costs no row, which is what makes it affordable against a
 // budget with none to spare.
+//
+// The LIGHT rule. The help panel is drawn INSIDE the frame's two heavy rules,
+// so its own title is interior by construction (§9.26) — a heading that matched
+// the frame would claim to bound the room rather than to head a page in it.
 func helpTitle(about string, lay Layout, sty Styles, g Glyphs) string {
-	return strongLabelRule("council", about, lay.Width-2*framePad, sty, g)
+	return strongLabelRule("council", about, lay.Width-2*framePad, g.Rule, sty)
 }
 
 // helpKeys is page one: what every key does.

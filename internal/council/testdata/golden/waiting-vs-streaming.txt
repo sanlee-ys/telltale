@@ -1,6 +1,6 @@
   council READ  │  ~/code/telltale                                                  turn 1  │  3/3 seated  │  no brief  
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ▸ CC Claude Code  ───────  ⠋ waiting  │    CX Codex                   ○ idle  │    AG Antigravity             ○ idle  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ▸ CC Claude Code  ───────  ⠋ waiting  │    CX Codex  ───────────────  ○ idle  │    AG Antigravity  ─────────  ○ idle  
     ro:tools  final only                │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
                                                                                                                         
@@ -19,6 +19,6 @@
                                                                                                                         
                                                                                                                         
   working — the reply arrives whole.    │  no turn dispatched yet.              │  no turn dispatched yet.              
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
   VIEW                                  ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help  

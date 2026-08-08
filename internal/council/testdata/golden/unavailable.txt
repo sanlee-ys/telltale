@@ -1,6 +1,6 @@
   council READ  │  ~/code/telltale                                             no turn yet  │  1/3 seated  │  no brief  
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ▸ CC Claude Code              ○ idle  │    CX Codex  ────────  ⚠ unavailable  │    AG Antigravity  ──  ⚠ unavailable  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ▸ CC Claude Code  ──────────  ○ idle  │    CX Codex  ────────  ⚠ unavailable  │    AG Antigravity  ──  ⚠ unavailable  
     ro:tools  tokens                    │                                       │                                       
                                                                                                                         
                                                                                                                         
@@ -19,6 +19,6 @@
                                         │                                       │                                       
                                         │    the other columns dispatch         │    the other columns dispatch         
   no turn dispatched yet.               │    normally.                          │    normally.                          
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
   VIEW                           ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit  

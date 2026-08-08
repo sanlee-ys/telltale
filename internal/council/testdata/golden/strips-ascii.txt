@@ -1,5 +1,5 @@
   council READ  |  ~/code/telltale                                                  turn 4  |  4/4 seated  |  no brief  
-------------------------------------------------------------------------------------------------------------------------
+========================================================================================================================
   ] CC Claude Code  ----------------  - streaming  |  CX + done           |  AG ! cancelled      |  CU . idle           
     ro:tools  tokens                               |  ro:requested        |  unsandboxed         |  gated               
                                                                                                                         
@@ -15,6 +15,6 @@
   : where does the resume path break?              |  last: turn 3 +      |  last: turn 3 !      |                      
                                                    |  . not addressed in  |  . not addressed in  |  no turn dispatched  
   Reading resume.go now.                           |    turn 4            |    turn 4            |  yet.                
-------------------------------------------------------------------------------------------------------------------------
+========================================================================================================================
   :                                                                                                                     
   VIEW                                  ^v scroll  |  [ ] turn  |  f expand  |  tab focus  |  ctrl+c cancel  |  ? help  

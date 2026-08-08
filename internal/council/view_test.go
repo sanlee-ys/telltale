@@ -425,16 +425,22 @@ func TestRailsStopThroughEmptyBody(t *testing.T) {
 	}
 }
 
-// fullWidthRule is true when a line is the room's horizontal rule — every cell
-// is g.Rule at st.Width — as opposed to the shorter rules drawn under a seat
-// name in column chrome.
+// fullWidthRule is true when a line is one of the room's two frame edges — every
+// cell is g.RuleHeavy at st.Width — as opposed to the shorter, lighter rules
+// drawn on a seat's header, a turn separator or a card.
+//
+// It reads the HEAVY glyph since §9.26. That is not a rename: it is the reason
+// the heavy weight was worth adding. The frame's edge and a column header's
+// leader used to be the same character, so "is this line the frame" was a
+// question about width and this helper had to say so out loud; now it is a
+// question about which glyph, and the width check is belt and braces.
 func fullWidthRule(line string, width int, g Glyphs) bool {
 	rs := []rune(line)
 	if len(rs) != width {
 		return false
 	}
 	for _, r := range rs {
-		if string(r) != g.Rule {
+		if string(r) != g.RuleHeavy {
 			return false
 		}
 	}
