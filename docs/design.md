@@ -5628,3 +5628,38 @@ than a detail, and each one is recorded here instead of guessed at:
 
 So the seat keeps its print-mode invocation for now, and the next lane starts with a number, a
 verified seam, and three named decisions instead of a guess.
+
+### 9.34 the rebuttal stopped naming its authors
+
+A `ctrl+r` turn used to quote each seat's answer under its vendor's name: *"quoted reply from
+Codex"*. The fence's security framing was right and is untouched (quote.go); what was wrong is
+subtler — **the receiving model was told who wrote what**, and models weigh an argument
+differently when it arrives under a name they recognise. That is the self-preference /
+identity-bias class that peer-review setups blind for, and the reason llm-council anonymises its
+review stage before models rank each other. A rebuttal exists to test the argument, so the
+argument is now what crosses: *"quoted reply from participant A"*.
+
+The mechanics, because each carries a decision:
+
+- **Labels are positional per receiver** — seat order with self skipped — and a seat with
+  nothing to quote this turn keeps its letter reserved, so a quiet seat does not shuffle every
+  neighbour's identity. The letters exist so a multi-turn argument stays attached to a
+  consistent speaker; letters that agreed BETWEEN receivers would need a shared assignment
+  written somewhere the models could correlate, and nothing downstream may join on them anyway.
+- **The blinding is label-deep, and says so.** A reply whose content self-identifies ("as
+  Claude Code, I…") has identified itself, and editing another participant's words to hide it
+  would be the censorship the fence refuses — the room shows what was said. Best-effort
+  blinding, stated as such, over silent redaction.
+- **The user is not blinded.** Columns stay labelled by vendor; the blind applies to what the
+  models read, never to what the person sees. Nothing in the room's rendering changed at all.
+- **One test inverted, on purpose.** `TestQuotedMaterialIsFencedAsUntrusted` used to fail with
+  "quoted material is not attributed to its author"; attribution to the model is now the
+  defect. The name-absence checks in the nothing-quotable test were re-grounded on the fence
+  itself at the same time, because a vendor-name check passes vacuously against a prompt that
+  never contains vendor names — a guard that cannot fail is not a guard (the same one-level-up
+  rule the architecture repo's test policy states).
+
+What this deliberately does not add: a ranking stage, a chairman, or any synthesis hop.
+llm-council's stage 3 collapses the answers into one; §9.2's position is that independent
+answers ARE the product, and a synthesis is available today as an explicit `/flow` hop the user
+types. Blinding sharpens the comparison; it does not delegate the verdict.
