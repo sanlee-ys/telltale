@@ -43,6 +43,25 @@ type Glyphs struct {
 	// enumerates what every other candidate already means here.
 	RuleHeavy string
 
+	// FocusRail is the gutter cell to the LEFT of the focused column, drawn
+	// instead of Sep — the vertical answer to RuleHeavy's horizontal one.
+	//
+	// It is a SECOND carrier of a fact the room already states (§9.27). Focus is
+	// spelled by the `▸` before the seat's name and by that name's weight, and
+	// both of those live on one row at the top of a column; a reader scrolling a
+	// transcript forty rows down had nothing on screen saying which column the
+	// keys move. The rail is the only mark on this surface that is as tall as the
+	// thing it describes, which is why it is worth a glyph.
+	//
+	// It rides §9.23's band exactly: the thick rail spans the rows the thin one
+	// would and no others, so focus never asserts a grid over emptiness either.
+	//
+	// Same East-Asian-Ambiguous width caveat as every other glyph here (§7.10) —
+	// U+258C measures one cell in Windows Terminal, the reference renderer, and a
+	// terminal configured to render ambiguous as wide shears this row the way it
+	// already shears the rules.
+	FocusRail string
+
 	// Range joins the ends of a span of turn numbers — "turns 2–7" (§9.19).
 	//
 	// Punctuation rather than a mark, which is why it may be the hyphen in the
@@ -98,6 +117,10 @@ func UnicodeGlyphs() Glyphs {
 		// that can draw one draws the other, and they are legibly the same line
 		// at two weights rather than two different marks.
 		RuleHeavy: "━", // ━
+		// U+258C LEFT HALF BLOCK. The heaviest one-cell vertical mark that is
+		// still a RULE rather than a symbol — it reads as `│` with more ink,
+		// which is the whole claim the rail makes.
+		FocusRail: "▌", // ▌
 		Ellipsis:  "…", // …
 		Caret:    "_",
 		Warn:     "⚠", // ⚠
@@ -138,6 +161,18 @@ func ASCIIGlyphs() Glyphs {
 		// than as a different symbol — which is the one property a second rule
 		// weight needs. TestTheHeavyRuleHasAnUnclaimedASCIIPartner holds it.
 		RuleHeavy: "=",
+		// "[" for the focused column's rail, and "#" — the obvious candidate —
+		// is refused for the same reason ActOK refused it: it is the HUD's ascii
+		// gauge fill, and one product means one vocabulary. Of what is left, "["
+		// is the squarest vertical stroke in the set, so it reads as a thickened
+		// "|" rather than as a different symbol; it faces the column it marks;
+		// and its mirror "]" is already this room's ascii focus mark, so the two
+		// spell ONE meaning in two slots instead of two meanings.
+		//
+		// The `[` and `]` in the mode line are key NAMES in the footer's prose,
+		// never marks in the grid — the same slot argument Range's doc makes for
+		// the hyphen, and the reason this is reuse rather than a collision.
+		FocusRail: "[",
 		Ellipsis:  ">",
 		Caret:     "_",
 		Warn:      "!",

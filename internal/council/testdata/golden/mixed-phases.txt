@@ -1,7 +1,7 @@
   council READ  │  ~/code/telltale                                                  turn 2  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ▸ CC Claude Code  ──────────  ✓ done  │    CX Codex  ─────────────  ✗ failed  │    AG Antigravity  ────  ⚠ cancelled  
-    ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
+▌ ▸ CC Claude Code  ──────────  ✓ done  │    CX Codex  ─────────────  ✗ failed  │    AG Antigravity  ────  ⚠ cancelled  
+▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -15,10 +15,10 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                                        │                                       │  Partly agree, though the             
-  Use the native resume path.           │                                       │                                       
-  Re-sending the transcript grows       │  ⚠ exit 1: not signed in — run        │  ⚠ cancelled — output above is        
-  input quadratically.                  │    `codex login`                      │    partial                            
+▌                                       │                                       │  Partly agree, though the             
+▌ Use the native resume path.           │                                       │                                       
+▌ Re-sending the transcript grows       │  ⚠ exit 1: not signed in — run        │  ⚠ cancelled — output above is        
+▌ input quadratically.                  │    `codex login`                      │    partial                            
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     
   VIEW                           ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit  
