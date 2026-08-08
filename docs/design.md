@@ -3868,7 +3868,7 @@ vendor behaviour, which would need measuring.
 | `--fresh` | **violates** | a conversation fills up *by being used*. The only reset is room-wide and launch-time, so clearing one seat costs the other three their threads |
 | `--trace` | **retired by `/trace`** | its own doc said it answers "a question that is asked on the days a turn is inexplicably slow" — a day you identify from inside a slow turn. The flag remains for a run you already intend to measure; see below for what the sweep found underneath it |
 | `--read` (posture) | **retired by `/read` and `/write`** | see the refusal above. Note what is *not* an objection: posture is deliberately never restored from the saved room, because "a posture that can arrive from a file is not one anyone typed." A posture typed into the composer is typed. The flag stays: opening a room that only talks is a real thing to want at launch |
-| `--auto` | **violates** | whether the gated seat asks before each tool call is a preference you form partway through a batch, not before it |
+| `--auto` | **retired by `a`** | whether the gated seat asks before each tool call is a preference you form partway through a batch, not before it — so the surface is a third key on the card, not a room command. The flag stays: opening a room you already know you will not be watching is a real thing to want at launch |
 | `--vendor` | **retired by `/seat`** | who is *seated* was launch-only. `-@seat` routes one turn and is explicitly "a different control from an @mention" — routing is not reseating. The flag stays: opening a room with a chosen set is a real thing to want at launch |
 | `--brief` | **arguable, not filed** | it is defined as first-turn context, so re-briefing is a different feature rather than a missing surface for this one. Left out deliberately; do not fold it in without deciding that question on its own |
 | `--ascii`, `--no-title` | **legitimately launch-only** | properties of the terminal, not of the room. They do not change while it is open |
@@ -4052,12 +4052,48 @@ answers nothing until every brief is `@mentioned`. Dispatch already refuses a ze
 per turn; saying it once at `/seat` time is the difference between a rule learned now and one
 discovered on the next enter.
 
-#### Not decided here
+#### `a`, and the field that was nearly a landmine
 
-Whether `--auto` earns its own surface. Its open question is narrower than it looks: the
-preference forms while an approval card is on screen, so the surface is likely a third key on
-that card (`y` approve, `n` deny, `a` stop asking) rather than a room command at all. Ruled to
-be the key; not yet built.
+The last control on the sweep, and the only one whose surface is **not** a room command. The
+preference forms while a card is on screen — you decide to stop being asked at the eleventh
+identical card, not at a shell prompt — so `a` sits beside `y` and `n`, where the question is.
+It approves the card in front of you as well as the ones after it: an `a` that turned asking off
+and left the current request pending would answer the general question and not the one on
+screen.
+
+**The queue is drained, not discarded.** A pending gate is a vendor *stopped* mid-call, and
+`queueGate`'s own rule is that nothing may quietly drop a request — a dropped queue leaves
+columns waiting forever with no card left to explain why. So every card behind the current one
+is approved, and the notice says how many.
+
+**It takes effect on the REQUEST, not on the next spawn.** A process already running keeps the
+gate flags it was launched with, so it goes on sending requests after `a` is pressed. If those
+queued, "stop asking" would keep asking until the turn ended — the promise broken at the moment
+it was made. `queueGate` reads the room's state per request and answers immediately; the respawn
+that drops the flags happens later, through `seatPosture`, on the next dispatch.
+
+**It is not a one-way door.** `a` alone in view mode turns asking back on, and the footer carries
+a permanent `a not asking` cell whenever the gate is off. Without that cell the room would sit
+ungated with the way back documented nowhere on screen — the §9.17 defect rebuilt one key later.
+The cell is not sheddable, for `t grid`'s reason: shedding it would drop the way out of a state
+rather than a convenience.
+
+**And the field is stored negated, which is the finding worth keeping.** The obvious shape is
+`Asking bool` — whose zero value is *does not ask*. Every `State` built as a literal would have
+been a silently ungated room, and the reason that was caught at all is that five existing gate
+tests build their State by hand and went green while asserting nothing. A safety property whose
+default is off is the wrong way round however carefully the constructor sets it. `GateOff bool`
+read through `Asking()` makes the zero value the guarded room and turning the gate off an act.
+`TestTheZeroStateAsks` pins it.
+
+#### Nothing left on this list
+
+Every control the §9.17 sweep found in violation now has an in-room surface: `--fresh`→`c`,
+`--trace`→`/trace`, `--read`→`/read`/`/write`, `--vendor`→`/seat`, `--auto`→`a`. Every flag
+stays, because each names a room you may genuinely want at the door; none of them is any longer
+the only way to get one. `--brief` remains deliberately unfiled — it is first-turn context by
+definition, so re-briefing is a separate feature rather than a missing surface for this one, and
+folding it in without deciding that question on its own is still the thing not to do.
 
 ### 9.18 a strip said four fifths of a name it could have said whole in two letters
 

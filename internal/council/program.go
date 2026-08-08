@@ -414,6 +414,7 @@ func stateWith(opts Options, hooked bool) State {
 	st := NewState()
 	st.ASCII = opts.ASCII
 	st.Write = opts.Write
+	st.GateOff = opts.Auto
 	st.Seats = opts.Seats
 	st.Now = time.Now()
 
@@ -431,7 +432,7 @@ func stateWith(opts Options, hooked bool) State {
 			Avail:   info.Avail,
 			Binary:  info.Binary,
 			Note:    info.Note,
-			Sandbox: postureClaim(info.Vendor, windows, opts.Write, !opts.Auto, hooked),
+			Sandbox: postureClaim(info.Vendor, windows, opts.Write, st.Asking(), hooked),
 			Gran:    granularityFor(info.Vendor),
 			Phase:   PhaseIdle,
 			Follow:  true,
@@ -569,6 +570,54 @@ func (m *Model) clearGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.st.Notice = "clear cancelled — y confirms, n declines"
 	}
 	return m, nil
+}
+
+// stopAsking turns the approval card off for the rest of the room, and clears
+// every card already queued behind the one being answered.
+//
+// The queue is drained rather than left standing, and that is the whole
+// difference between this and a setting. The cards behind the current one are
+// the same question asked again; leaving them would make `a` mean "stop asking
+// after these four", which is not what anybody presses it for.
+//
+// Approved, not discarded. A pending gate is a vendor STOPPED mid-call
+// (queueGate's own comment: nothing here may quietly drop a request), so
+// dropping the queue would leave columns waiting forever with no card left to
+// explain why.
+func (m *Model) stopAsking() {
+	m.st.GateOff = true
+	n := len(m.st.Gates)
+	for len(m.st.Gates) > 0 {
+		m.decideGate(true)
+	}
+	m.applyPosture(m.st.Write)
+	m.st.Notice = "approved " + itoa(n) + " " + plural(n, "call") +
+		" — nothing will ask again this session · a starts asking"
+}
+
+// toggleAsking is the way back, and the reason `a` is one key rather than a
+// one-way door.
+//
+// In view mode rather than as a room command: `a` already means this on the
+// card, and teaching one letter in two places beats spending a word out of the
+// composer on the same idea (roomcmd.go's vocabulary rule). A room that could
+// only ever stop asking would be the §9.17 defect rebuilt — a decision you can
+// make once, in one direction, and then have to relaunch to undo.
+func (m *Model) toggleAsking() {
+	m.st.GateOff = !m.st.GateOff
+	m.applyPosture(m.st.Write)
+	if m.st.Asking() {
+		if !m.st.Write {
+			// Honest about the fact that nothing will ask, because in a
+			// read-only room there is nothing to ask ABOUT. Reporting "the seat
+			// asks again" here would promise a card that cannot arrive.
+			m.st.Notice = "the seat will ask again once the room writes — /write lets it"
+			return
+		}
+		m.st.Notice = "claude asks before each change again — y approves, n denies, a stops asking"
+		return
+	}
+	m.st.Notice = "nothing will ask before it acts — a starts asking again"
 }
 
 // writeGateKey answers the confirmation armed by /write.
@@ -710,10 +759,21 @@ func (m *Model) gateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "n":
 		m.decideGate(false)
 		return m, nil
+	case "a":
+		// The third key, and the §9.17 surface for --auto. It is on the CARD
+		// rather than in the composer because this is the one preference nobody
+		// forms before the room opens: you decide to stop being asked while
+		// looking at the eleventh identical card, not at a shell prompt.
+		//
+		// It approves the card in front of you as well as the ones after it.
+		// An `a` that turned asking off and left the current request pending
+		// would answer the general question and not the one on screen.
+		m.stopAsking()
+		return m, nil
 	case "i", "enter":
 		// Composing here would swallow y and n as text while a vendor sat
 		// blocked behind a card the user could no longer answer.
-		m.st.Notice = "a vendor is waiting on you — y approves, n denies"
+		m.st.Notice = "a vendor is waiting on you — y approves, n denies, a stops asking"
 		return m, nil
 	}
 	// Everything else keeps meaning what it meant: scrolling, focus, expand,
@@ -994,6 +1054,14 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.teardown()
 		return m, tea.Quit
+	case "a":
+		// Same letter as the card's, deliberately. There it answers the question
+		// in front of you; here it reports and reverses. Safe with a turn in
+		// flight, unlike /cd and /seat: queueGate reads Asking per REQUEST, so a
+		// running seat starts or stops being carded on its next call rather than
+		// needing the process it is mid-turn on to be replaced.
+		m.toggleAsking()
+		return m, nil
 	case "?":
 		m.st.Help = m.st.Help.next()
 	case "i", "enter":

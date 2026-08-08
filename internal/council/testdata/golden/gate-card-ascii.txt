@@ -4,7 +4,7 @@
    gated  tokens                       |    WRITES  final only                  |    WRITES  final only                 
  ! waiting on you: Write:              |                                        |                                       
    internal/council/gate.go            |                                        |                                       
-   y approve   n deny                  |                                        |                                       
+   y approve   n deny   a stop asking  |                                        |                                       
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -21,4 +21,4 @@
  I need to add the card renderer.      |  working — the reply arrives whole.    |  working — the reply arrives whole.   
 ------------------------------------------------------------------------------------------------------------------------
  :                                                                                                                      
- GATE                               Write: internal/council/gate.go  |  y approve  |  n deny  |  ctrl+c cancel the turn 
+ GATE             Write: internal/council/gate.go  |  y approve  |  n deny  |  a stop asking  |  ctrl+c cancel the turn 

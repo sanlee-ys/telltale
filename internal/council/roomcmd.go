@@ -489,7 +489,7 @@ func (m *Model) applyPosture(write bool) {
 	windows := runtime.GOOS == "windows"
 	for i := range m.st.Columns {
 		c := &m.st.Columns[i]
-		c.Sandbox = postureClaim(c.Vendor, windows, write, !m.opts.Auto, m.hooks.Wired())
+		c.Sandbox = postureClaim(c.Vendor, windows, write, m.st.Asking(), m.hooks.Wired())
 	}
 }
 

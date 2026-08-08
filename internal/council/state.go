@@ -840,7 +840,27 @@ type State struct {
 	// conversation, in either direction. What changed is only which way it
 	// defaults, once the approval card started guarding the calls the flag used
 	// to guard the room against.
+	// The paragraph above was written when posture WAS launch-only and is now
+	// wrong in its second half: §9.17 made it reachable from inside the room,
+	// and /read and /write are the keystrokes it says do not exist. Kept rather
+	// than deleted, because the reasoning it records — that what may act on a
+	// working tree must be visible in the header for the whole session — is
+	// still the rule. Only the "not reachable" claim was overruled.
 	Write bool
+
+	// GateOff records that the user has told the room to stop asking, and is
+	// stored in the NEGATIVE on purpose.
+	//
+	// The obvious field is `Asking bool`, and it is a landmine: its zero value
+	// is "does not ask", so every State built as a literal — which is most of
+	// them in tests, and would be the first hand-built one in production —
+	// silently gets an ungated room. A safety property whose default is off is
+	// the wrong way round no matter how well the constructor sets it. Written
+	// this way, the zero value is the guarded room and turning the gate off has
+	// to be an act.
+	//
+	// Read it through Asking(), never directly.
+	GateOff bool
 
 	// FlowHop / FlowSteps / FlowVendor describe where a /flow chain stands, and
 	// exist because the room started dispatching without a keystroke.
@@ -913,6 +933,15 @@ type State struct {
 func NewState() State {
 	return State{Mode: ModeComposing, Focus: 0, Route: defaultRoute()}
 }
+
+// Asking reports whether the gated seat still raises a card before each change.
+//
+// Derived rather than stored, which is `Gating()`'s idiom two fields down and is
+// here for the stronger of its two reasons: the safe answer is the one you get
+// by default. --auto seeds it at launch and `a` moves it either way, and the
+// invocation, the badge and queueGate all read THIS — so the three can never
+// disagree about whether anything is asking.
+func (s State) Asking() bool { return !s.GateOff }
 
 // Busy reports whether any column is still working. Drives the spinner and the
 // meaning of ctrl+c.

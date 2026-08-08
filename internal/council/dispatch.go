@@ -419,7 +419,11 @@ func (m *Model) seatPosture() vendors.Posture {
 	if m.flowReadHop {
 		return vendors.PostureRead
 	}
-	if m.st.Write && !m.opts.Auto {
+	// m.st.Asking, not m.opts.Auto: the flag only SEEDS this at launch, and `a`
+	// moves it afterwards. Reading the flag here would spawn a gated process for
+	// a room that has stopped asking, so the seat would raise cards nobody is
+	// answering — a gate whose only effect is to block.
+	if m.st.Write && m.st.Asking() {
 		return vendors.PostureWriteGated
 	}
 	return m.posture()
