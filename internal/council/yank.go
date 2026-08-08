@@ -46,6 +46,18 @@ func (s State) YankColumn(idx int) Yank {
 	}
 	c := s.Columns[idx]
 
+	// An arena seat's deliverable is its diff, so that is what y copies —
+	// ruled with the mode itself (§9.35): "y yanks the full diff for that
+	// seat". The reply is still on screen and in history; the diff is the
+	// thing the reader takes somewhere else to review or apply.
+	if c.Arena != nil && c.Arena.Diff != "" {
+		notice := "copied " + c.Label + "'s arena diff (turn " + itoa(c.TurnN) + ")"
+		if c.Arena.DiffTruncated {
+			notice += " — truncated at 1 MB; the worktree holds the whole of it"
+		}
+		return Yank{Text: c.Arena.Diff, Notice: notice}
+	}
+
 	text, turn := strings.TrimSpace(c.Body), c.TurnN
 	if text == "" {
 		// Newest first: History is oldest-first, so this walks backwards to the

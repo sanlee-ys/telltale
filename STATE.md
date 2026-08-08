@@ -25,17 +25,16 @@ binding copies and the argument; this file does not restate either.
 
 ## In flight
 
-- **Blind rebuttal** is on `claude/council-herdr-relationship-8gr0s1` (ships with
-  its PR): `ctrl+r` quotes now travel as "participant A/B/C", never vendor
-  names — label-deep anonymisation, user-side attribution unchanged. Binding
-  copy: [docs/design.md §9.34](docs/design.md).
-- **Arena mode is DECIDED and not started** (2026-08-08, for the 9-30 demo):
-  `/arena <brief>` per-turn isolation — each write-capable seat in its own
-  worktree off the room's workspace; worktrees named by turn and kept until the
-  user deletes them; comparison lands in-column as `git diff --stat` with the
-  full diff yankable. The rulings and their reasons get recorded in design.md
-  by the session that builds it; do not re-open the four forks without new
-  evidence.
+- **/arena is BUILT and on this branch** (ships with its PR; blind rebuttal
+  merged as #132): one brief raced across every seat, each attempt a fresh
+  session in its own kept sibling worktree, compared in-column by `git diff
+  --stat` against one recorded base, full diff on `y`. Binding copy —
+  the four rulings, the two claude-squad diff mechanics, and the deferred
+  follow-ups list: [docs/design.md §9.35](docs/design.md). **The section's own
+  verification note is the open item: no live vendor has raced yet.** The git
+  mechanics are test-pinned offline; FirstTurn-in-a-worktree is a combination
+  no live run has exercised. First live race before the 9-30 demo is the
+  check that has not happened.
 
 ## Closed without code (do not re-open)
 

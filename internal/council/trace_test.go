@@ -357,7 +357,7 @@ func TestHelpNamesEveryRoomControlAboveTheFold(t *testing.T) {
 	}
 
 	above := strings.Join(lines[:fold+1], "\n")
-	for _, control := range []string{"/cd", "c clears", "/trace"} {
+	for _, control := range []string{"/cd", "c clears", "/trace", "/arena"} {
 		if !strings.Contains(above, control) {
 			t.Errorf("%q is not named above the fold — it cannot be discovered in the UI", control)
 		}
