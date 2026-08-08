@@ -1266,8 +1266,9 @@ statusline fixture). What it asserts today:
 | HUD behaviour (v1.1) | `internal/hud` | esc unwinding one layer at a time, find mode swallowing the keyboard, selection carried by session key across a re-sort, the pane closing when its session ends |
 | Burn arithmetic | `internal/hud` | the minimum basis, the four refusals, least-squares slope against injected series, rollover detection vs. `resets_at` jitter, sample throttling and eviction |
 | Fixture legality | `internal/hud` | every session behind every golden passes `model.Validate` against its vendor's declared capabilities — a golden may not pin a render of a state the schema forbids |
-| Doc/code sync | `internal/hud` | every render pasted into `docs/design.md` §7.3/§7.11–§7.14 and into `README.md` still matches its golden, and every golden is either embedded or explicitly exempted |
-| Doc/code sync | `internal/council` | the frame pasted into `docs/council.md` is the `activity` golden with its all-blank rows dropped and nothing else changed — the transform the doc claims, asserted rather than trusted |
+| Doc/code sync | `internal/hud` | every render pasted into `docs/design.md` §7.3/§7.11–§7.14 still matches its golden, and every golden is either embedded or explicitly exempted |
+| Picture/code sync | `internal/hud` | `README.md`'s hero picture is re-emitted from the `readme` golden and byte-equal to the committed file, with the characters read back out of the emitted markup and diffed against the render — plus no dollar sign anywhere, and the estimate marker surviving into the picture |
+| Picture/code sync | `internal/council` | the hero picture `README.md` and `docs/council.md` both show is re-emitted from the `activity` golden with its all-blank rows dropped, byte-equal and read back the same way, with exactly one seat wearing the focus mark |
 
 Rules that outrank convenience:
 

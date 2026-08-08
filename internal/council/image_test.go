@@ -9,8 +9,9 @@ import (
 	"github.com/sanlee-ys/telltale/internal/svgframe"
 )
 
-// README.md's hero pictures are generated from this package's own render, and
-// this is the gate that keeps them that way.
+// The hero pictures — README.md's, and docs/council.md's since the guide
+// stopped quoting a second copy of the same frame as text — are generated from
+// this package's own render, and this is the gate that keeps them that way.
 //
 // They were hand-drawn once, and by PR #125 the council picture was showing a
 // room that had not existed for months: a focus mark on every column at once —
@@ -25,16 +26,18 @@ import (
 // how the room looks and this fails until the pictures are re-emitted, exactly
 // as a golden does.
 
-// heroFrame is the council frame the README shows, and therefore the one the
-// picture shows: the `activity` golden with its all-blank rows dropped.
+// heroFrame is the council frame every surface shows: the `activity` golden
+// with its all-blank rows dropped. The blank rows are the room's empty
+// scrollback — real in a live terminal, dead weight in a picture.
 //
-// The drop is the same transform TestReadmeCouncilFrameMatchesItsGolden
-// asserts on the README's code block, for the same reason it gives — the blank
-// rows are the room's empty scrollback, real in a live terminal and dead weight
-// in a picture. Repeated here rather than shared because the two live on
-// opposite sides of the same claim: if this transform and that one ever
-// disagree, the README's frame and the README's picture would show different
-// rooms, and one of the two tests has to be the one that notices.
+// This used to be one of two implementations. The other lived in a test
+// asserting the same drop against a copy of the frame quoted as text, first in
+// README.md and then in docs/council.md, and the duplication was deliberate:
+// if the two transforms ever disagreed, the quoted frame and the picture would
+// show different rooms, and one of the two tests would be the one to notice.
+// Both quoted copies are gone — a page carrying the same render twice was
+// redundancy, and the picture is the copy that carries colour — so there is
+// nothing left to disagree with, and this is the only place the drop happens.
 func heroFrame(styled string) []string {
 	var kept []string
 	for _, line := range strings.Split(styled, "\n") {
