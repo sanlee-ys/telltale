@@ -946,6 +946,14 @@ type State struct {
 	FlowHop, FlowSteps int
 	FlowVendor         model.VendorID
 
+	// FlowStop is `s` armed: the chain ends after the hop that is running now,
+	// and later hops are not dispatched. On State rather than on Model because
+	// it is a promise about the room's next act, and a promise held only in a
+	// notice scrolls away while the state it describes persists — the WRITE
+	// badge's argument (§9.35). The header's hop cell renders it; clearFlowMarker
+	// retires it with the marker, so it can never outlive the chain it stops.
+	FlowStop bool
+
 	// Gates are the tool calls waiting on a decision, OLDEST FIRST.
 	//
 	// A queue rather than a single value, because one assistant message really
