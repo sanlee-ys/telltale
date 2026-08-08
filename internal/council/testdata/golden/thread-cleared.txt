@@ -1,23 +1,23 @@
   council READ  │  ~/code/telltale                                                  turn 3  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  › @all is the scrollback worth the memory?                                                                            
+                                                                                                                        
 ▌ ▸ 1 CC Claude Code  ────────  ✓ done  │    2 CX Codex  ─────────────  ✓ done  │    3 AG Antigravity  ───────  ○ idle  
 ▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
 ▌                                       │                                       │                                       
-▌ ↑ 7 more above  │  ↑↓ scroll          │                                       │                                       
+▌ ↑ 6 more above  │  ↑↓ scroll          │                                       │                                       
+▌ › what does that cost by turn five?   │                                       │                                       
 ▌                                       │                                       │                                       
 ▌ ⚙ Read: dispatch.go ✓                 │                                       │                                       
 ▌                                       │                                       │                                       
 ▌ About 30K redundant input tokens per  │                                       │                                       
 ▌ vendor.                               │                                       │                                       
 ▌ turn 3  ────────────────────────────  │                                       │                                       
-▌ › @all is the scrollback worth the    │                                       │                                       
-▌   memory?                             │                                       │                                       
-▌                                       │                                       │                                       
 ▌ Fifty turns is cheap against          │                                       │                                       
-▌ forgetting.                           │  turn 3  ───────────────────────────  │                                       
-▌                                       │  › @all is the scrollback worth the   │                                       
-▌ thread cleared  ────────────────────  │    memory?                            │                                       
-▌ its next brief opens a new session,   │                                       │                                       
+▌ forgetting.                           │                                       │                                       
+▌                                       │                                       │                                       
+▌ thread cleared  ────────────────────  │                                       │                                       
+▌ its next brief opens a new session,   │  turn 3  ───────────────────────────  │                                       
 ▌ with the brief re-applied.            │                                       │  no turn dispatched yet.              
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ›                                                                                                                     

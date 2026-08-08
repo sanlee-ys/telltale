@@ -1,9 +1,12 @@
   council READ  |  ~/code/telltale                                                  turn 3  |  3/3 seated  |  no brief  
 ========================================================================================================================
+  : @all is the scrollback worth the memory?                                                                            
+                                                                                                                        
 [ ] 1 CC Claude Code  ---  - streaming  |    2 CX Codex  ----------  - waiting  |    3 AG Antigravity  -------  . idle  
 [   ro:tools  tokens                    |    ro:requested  final only           |    unsandboxed  final only            
 [                                       |                                       |                                       
-[ ^ 3 more above  |  ^v scroll          |                                       |                                       
+[ ^ 2 more above  |  ^v scroll          |                                       |                                       
+[                                       |                                       |                                       
 [ Resume. Re-sending grows input        |                                       |                                       
 [ quadratically.                        |                                       |                                       
 [ turn 2  ------------------------  8s  |                                       |                                       
@@ -14,10 +17,7 @@
 [ About 30K redundant input tokens per  |                                       |                                       
 [ vendor.                               |                                       |                                       
 [ turn 3  ----------------------------  |                                       |                                       
-[ : @all is the scrollback worth the    |  turn 3  ---------------------------  |                                       
-[   memory?                             |  : @all is the scrollback worth the   |                                       
-[                                       |    memory?                            |                                       
-[ Fifty turns is cheap against          |                                       |                                       
+[ Fifty turns is cheap against          |  turn 3  ---------------------------  |                                       
 [ forgetting.                           |  working — the reply arrives whole.   |  no turn dispatched yet.              
 ========================================================================================================================
   :                                                                                                                     
