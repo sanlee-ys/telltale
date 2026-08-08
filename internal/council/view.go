@@ -282,9 +282,41 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 func noticeLine(st State, sty Styles, g Glyphs, w int) string {
 	n := truncate(collapsedNotice(st, g), w, g.Ellipsis)
 	if rest, ok := strings.CutPrefix(n, g.Warn); ok {
-		return sty.SevWarn.Render(g.Warn) + sty.Muted.Render(rest)
+		return sty.SevWarn.Render(g.Warn) + noticeProse(st, rest, sty)
 	}
-	return sty.Muted.Render(n)
+	return noticeProse(st, n, sty)
+}
+
+// noticeProse renders the collapsed-seat sentence Muted, with each named seat in
+// that seat's own hue (§9.28).
+//
+// The NAMES only. The mark keeps SevWarn because the notice is a warning, the
+// reason in parentheses and the remedy after the bar stay chrome, and nothing
+// here gains weight — this is a sentence, and a sentence with four bold words in
+// it is not one. §9.25's boundary is untouched: the two-letter TAG stays off
+// prose, because an abbreviation introduced mid-sentence is where nothing is
+// being compared. A hue is not an abbreviation; it costs no cell and asks the
+// reader to learn nothing they have not already learned from the tab bar.
+//
+// Scanned in CollapsedColumns' order, which is the order collapsedNotice writes
+// them in, so one forward walk finds each name once. A name that did not survive
+// truncation is simply not found and the text stays muted — the honest outcome,
+// and the reason this cannot resurrect a clipped word.
+func noticeProse(st State, text string, sty Styles) string {
+	var b strings.Builder
+	rest := text
+	for _, i := range st.CollapsedColumns() {
+		c := st.Columns[i]
+		k := strings.Index(rest, c.Label)
+		if k < 0 {
+			continue
+		}
+		b.WriteString(sty.Muted.Render(rest[:k]))
+		b.WriteString(sty.SeatIdentity(c.Vendor).Render(c.Label))
+		rest = rest[k+len(c.Label):]
+	}
+	b.WriteString(sty.Muted.Render(rest))
+	return b.String()
 }
 
 // displayPath abbreviates the home prefix. Display only — the dispatched
@@ -2297,13 +2329,23 @@ func tabBar(st State, lay Layout, sty Styles, g Glyphs) string {
 		// Same two-cell prefix and the same weight the column header gives a seat
 		// name, so the tab bar and the header underneath it agree about how a
 		// selected seat is drawn rather than each having its own spelling. The
-		// tag is chrome on the selected tab as it is on the header; an unselected
-		// tab is already wholly muted, so there is no split to make there.
+		// tag is chrome on the selected tab as it is on the header.
+		//
+		// Both names now carry the SEAT's own hue (§9.28), and the unselected one
+		// stops being wholly Muted to get it. That is a promotion, and it is the
+		// opposite of what §9.27 does to an unfocused column's prose — deliberately:
+		// prose in a column you are not reading is content you are not reading,
+		// while an unselected tab is a DESTINATION. It is the one row on this tier
+		// whose entire job is "here are the other seats, pick one", and a menu
+		// whose entries are faint is a menu that makes you read it twice. The
+		// selected tab still outranks it by weight and by the mark in front of it,
+		// which is the distinction that survives NO_COLOR.
 		if idx == st.Focus {
-			parts = append(parts, sty.Strong.Render(g.Focus+" ")+
-				sty.Muted.Render(tag)+sty.Strong.Render(label))
+			parts = append(parts, sty.SeatStrong(c.Vendor).Render(g.Focus+" ")+
+				sty.Muted.Render(tag)+sty.SeatStrong(c.Vendor).Render(label))
 		} else {
-			parts = append(parts, sty.Muted.Render("  "+tag+label))
+			parts = append(parts, sty.Muted.Render("  "+tag)+
+				sty.SeatIdentity(c.Vendor).Render(label))
 		}
 	}
 	// fit, not padRight: parts are already styled per tab.

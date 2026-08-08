@@ -3,6 +3,8 @@ package council
 import (
 	"strings"
 	"testing"
+
+	"github.com/sanlee-ys/telltale/internal/model"
 )
 
 // frameBody is the rows between the header rule and the footer rule — the part
@@ -140,8 +142,14 @@ func TestPageTurnRuleOutranksItsSeats(t *testing.T) {
 	frame := Render(paged(), sty, g)
 
 	for _, want := range []string{
-		sty.Strong.Render("turn 3"),      // the page's outline
-		sty.Strong.Render("Claude Code"), // a seat under it, unchanged
+		// The page's outline, at the room's own identity hue: the turn belongs to
+		// the room rather than to any seat.
+		sty.Strong.Render("turn 3"),
+		// A seat under it, still at weight — now in that seat's own hue (§9.28).
+		// What this test is about is the RANK, and the rank is unchanged: parent
+		// and child are both at weight, and the child's rule and numbers still
+		// recede while the parent's do.
+		sty.SeatStrong(model.VendorClaude).Render("Claude Code"),
 	} {
 		if !strings.Contains(frame, want) {
 			t.Errorf("the turn page does not render %q at weight", stripANSI(want))

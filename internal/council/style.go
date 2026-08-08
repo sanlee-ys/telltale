@@ -3,6 +3,7 @@ package council
 import (
 	"charm.land/lipgloss/v2"
 
+	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/theme"
 )
 
@@ -11,8 +12,15 @@ import (
 // internal/theme stays stdlib-only so the statusline binary never links a TUI
 // framework (ADR-002).
 //
-// Council adds no hues of its own. A dispatch room that invented a sixth colour
-// would drift from the visual language the statusline and HUD share.
+// Council adds no hues of its own, with ONE ratified exception. A dispatch room
+// that invented a sixth colour would drift from the visual language the
+// statusline and HUD share, and that rule stands for every concept this package
+// has. The exception is the SEAT, which is the one concept council has that the
+// other two surfaces do not — see seatHue, which carries the ratification, the
+// closed list of places it is spent, and the weakness it is honest about
+// (§9.28). It is an exception to a rule, not a repeal of it: nothing else in
+// this package may add a hue, and the seat hue itself is spent only where seat
+// names are what the eye is sorting.
 //
 // What it does add is WEIGHT and CONTRAST, both attributes rather than hues and
 // therefore costing the palette nothing. The room had exactly one typographic
@@ -206,6 +214,83 @@ func (s Styles) ForSandbox(l SandboxLevel) lipgloss.Style {
 	default:
 		return s.Muted
 	}
+}
+
+// seatHue is one seat's own ANSI palette index — the RATIFIED exception to
+// "council adds no hues of its own" (San, 2026-08-07; design.md §9.28).
+//
+// **Why council and not internal/theme.** The stdlib-only rule (ADR-002) is not
+// the reason and citing it here would send the next reader to fix the wrong
+// thing: these are plain strings and would compile in theme just fine. The
+// reason is theme's OWN contract — one hue, one meaning, across every surface —
+// and `internal/statusline` and `internal/hud` have no seats. A per-vendor hue
+// promoted to theme would be a token that means nothing on two of the three
+// surfaces that import it, which is how a shared palette stops being shared.
+//
+// **Why 4-bit indices.** theme.go's own argument, unchanged: the terminal
+// resolves an index against the scheme the user already chose, so council looks
+// native in Windows Terminal's default and in a light scheme without a second
+// palette and without an isDark fork. A hex triple would be council asserting a
+// colour over the user's own.
+//
+// **What is OFF LIMITS, and it is not a guideline.** The severity family — 1/2/3
+// and their bright twins 9/10/11 — belongs to the green/yellow/red ramp, and a
+// seat that happened to wear red would be a seat that reads as failed. The
+// chrome family — 0/7/8/15 — is the gauge track and the terminal's own
+// foreground/background. That leaves 4, 5, 6, 12, 13, 14, and this function
+// spends four of them. TestNoSeatHueIsASeverity fails the build if that ever
+// stops being true.
+//
+// **The honest weakness.** agy is 4 and cursor is 12: one hue at two
+// intensities, which is a distinction a reader can miss and which some terminal
+// schemes render closer together than others. That is acceptable HERE and only
+// here, because the two-letter tags §9.25 made permanent — `AG` and `CU` — carry
+// the real distinction on every surface a seat name appears on, and the hue is
+// the second signal it is supposed to be. If a fifth vendor arrives wanting
+// blue, the tag is what still works and the hue is what has to be argued for.
+func seatHue(v model.VendorID) string {
+	switch v {
+	case model.VendorClaude:
+		return "5" // magenta
+	case model.VendorCodex:
+		return "6" // cyan — theme's identity hue, kept for the seat that had it
+	case model.VendorAntigravity:
+		return "4" // blue
+	case model.VendorCursor:
+		return "12" // bright blue
+	default:
+		// Gemini and anything added since. A seat with no hue of its own renders
+		// in the identity hue every seat name used to have, which is a seat that
+		// looks exactly as it did rather than a seat that looks broken.
+		return theme.ColorIdentity
+	}
+}
+
+// SeatIdentity is Identity retinted to this seat's own hue, and SeatStrong is
+// Strong retinted the same way.
+//
+// Derived from the base styles rather than built beside them, so PlainStyles
+// stays the identity set BY CONSTRUCTION: `s.Identity` is the empty style there,
+// and retinting is skipped outright, so no golden can see any of this. A second
+// pair of literal constructors would have to remember that, and would forget it
+// the first time one of them grew a second attribute.
+func (s Styles) SeatIdentity(v model.VendorID) lipgloss.Style {
+	return s.retint(s.Identity, v)
+}
+
+// SeatStrong is Strong at this seat's hue — the seat name at weight, where seat
+// names are what the eye is sorting.
+func (s Styles) SeatStrong(v model.VendorID) lipgloss.Style {
+	return s.retint(s.Strong, v)
+}
+
+// retint is the one place a seat hue reaches a style, and the Plain guard is
+// what keeps every layout golden blind to §9.28.
+func (s Styles) retint(st lipgloss.Style, v model.VendorID) lipgloss.Style {
+	if s.Plain {
+		return st
+	}
+	return st.Foreground(lipgloss.Color(seatHue(v)))
 }
 
 // ForAvailability returns the style an unavailable column's card renders in.
