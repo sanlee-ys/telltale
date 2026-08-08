@@ -18,6 +18,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/adapter/drift"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
 	"github.com/sanlee-ys/telltale/internal/model"
+	"github.com/sanlee-ys/telltale/internal/quotacache"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden renders")
@@ -240,6 +241,40 @@ func healthyState(w, h int) State {
 			watching(model.VendorCodex, `%USERPROFILE%\.codex`, fullCaps),
 		},
 		At: pinned,
+	}
+	return st
+}
+
+// fleetQuotaState is the header speaking for every vendor it can honestly
+// source at once: Codex from its own transcripts (the scan-fresh reading, so
+// it alone may forecast), Claude and agy from the statusline relay (§7.15) —
+// Claude's reading two hours old and saying so, agy's fresh enough to say
+// nothing.
+func fleetQuotaState(w, h int) State {
+	st := NewState()
+	st.Now = pinned
+	st.Width, st.Height = w, h
+	st.Snap = Snapshot{
+		At: pinned,
+		Sessions: []*model.Session{
+			sess(model.VendorCodex, "0f00dbaa-1234-4a77-9b02-000000000042",
+				`C:\src\code\notes-api`, "gpt-5.1-codex", 4*time.Minute,
+				withName("notes-api"),
+				withQuota(window("seven_day", "7d", 79, 22*time.Hour+48*time.Minute))),
+		},
+		Vendors: []VendorView{
+			watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`, fullCaps),
+			watching(model.VendorCodex, `%USERPROFILE%\.codex`, fullCaps),
+		},
+		Account: []quotacache.Account{
+			{Vendor: model.VendorClaude, WrittenAt: pinned.Add(-2 * time.Hour), Windows: []model.QuotaWindow{
+				window("five_hour", "5h", 42, 2*time.Hour+13*time.Minute),
+				window("seven_day", "7d", 6, 5*24*time.Hour),
+			}},
+			{Vendor: model.VendorAntigravity, WrittenAt: pinned.Add(-time.Minute), Windows: []model.QuotaWindow{
+				window("gemini-weekly", "gemini-weekly", 38, 3*time.Hour),
+			}},
+		},
 	}
 	return st
 }
@@ -562,6 +597,15 @@ func goldenCases() []goldenCase {
 				burnSeries("seven_day", 18, 18.1, 18*time.Minute, 7, &resets7),
 			}}
 			return st
+		}},
+
+		// Every vendor the header can honestly speak for, at once: Codex
+		// transcript-sourced, Claude and agy relayed (§7.15). At 120 columns
+		// three vendors and four windows shed the gauges — the cascade keeps
+		// every fact (vendor, window, reading, reset, and the stale reading's
+		// age) and spends the bars first.
+		{name: "quota-fleet", state: func() State {
+			return fleetQuotaState(120, 9)
 		}},
 
 		// Find mode: the footer becomes the query line and says how to leave.
@@ -1245,6 +1289,10 @@ func TestForecastClockUsesTheStateLocation(t *testing.T) {
 	}
 }
 
+// Attribution survives every width. The full vendor name renders wherever it
+// fits (the tighter window join bought it room the first fix's tag spent);
+// where it cannot, the two-letter tag carries the same fact — an unlabeled
+// `7d 79%` reading as "the fleet" is the defect this pin exists to prevent.
 func TestQuotaBlockNamesItsVendor(t *testing.T) {
 	st := healthyState(120, 9)
 	got := quotaBlock(st, PlainStyles(), UnicodeGlyphs(), st.Width)
@@ -1255,12 +1303,112 @@ func TestQuotaBlockNamesItsVendor(t *testing.T) {
 		t.Fatalf("quota block still unattributed: %q", got)
 	}
 
-	got = quotaBlock(st, PlainStyles(), UnicodeGlyphs(), 60)
-	if !strings.HasPrefix(got, "cc ") {
-		t.Fatalf("narrow quota block missing compact vendor label: %q", got)
+	// Narrow enough that no full-name level fits: the tag takes over rather
+	// than the name vanishing, and the line never overflows the budget.
+	for _, w := range []int{55, 50, 40} {
+		got = quotaBlock(st, PlainStyles(), UnicodeGlyphs(), w)
+		if !strings.HasPrefix(got, "cc ") {
+			t.Fatalf("width %d: quota block lost its vendor: %q", w, got)
+		}
+		if lipgloss.Width(got) > w {
+			t.Fatalf("width %d: quota block is %d columns: %q", w, lipgloss.Width(got), got)
+		}
 	}
-	if lipgloss.Width(got) > 60 {
-		t.Fatalf("narrow quota block is %d columns: %q", lipgloss.Width(got), got)
+}
+
+// One block per vendor with a reading, each labelled — the count of blocks is
+// itself a measurement of how many vendors telltale can honestly speak for.
+func TestRelayedQuotaRendersEveryVendorItCanSpeakFor(t *testing.T) {
+	// At 120 three vendors and four windows fit only at the tag level — every
+	// vendor still present, every reading intact.
+	st := fleetQuotaState(120, 9)
+	got := quotaBlock(st, PlainStyles(), UnicodeGlyphs(), st.Width)
+	for _, want := range []string{"ag ", "cc ", "cx ", "gemini-weekly", "79%", "42%", "38%"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("quota line missing %q: %q", want, got)
+		}
+	}
+	// Wide enough and the full names come back, gauges and all.
+	got = quotaBlock(st, PlainStyles(), UnicodeGlyphs(), 160)
+	for _, want := range []string{"claude", "codex", "agy"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("wide quota line missing %q: %q", want, got)
+		}
+	}
+}
+
+// The line never outruns any frame: the dress cascade sheds decoration first,
+// and when even the barest level cannot fit, whole trailing blocks go and the
+// ellipsis says so (the footer's dropping-is-never-silent rule).
+func TestRelayedQuotaNeverOutrunsTheFrame(t *testing.T) {
+	st := fleetQuotaState(120, 9)
+	for _, w := range []int{MinWidth, 64, 72, 80, 99, 120, 148} {
+		got := quotaBlock(st, PlainStyles(), UnicodeGlyphs(), w)
+		if lipgloss.Width(got) > w {
+			t.Errorf("width %d: quota line is %d columns: %q", w, lipgloss.Width(got), got)
+		}
+	}
+	// At the floor the fleet cannot fit whole; the drop must be marked.
+	got := quotaBlock(st, PlainStyles(), UnicodeGlyphs(), MinWidth)
+	if !strings.Contains(got, "…") {
+		t.Errorf("blocks were dropped with no ellipsis saying so: %q", got)
+	}
+}
+
+// A relayed reading past quotaAgeShown carries its age — the §7.12 basis rule:
+// the scope of a claim travels with the number, and "42%" alone would present
+// a two-hour-old reading as now. A fresh relay and the scan-fresh transcript
+// reading say nothing, because "just now" is noise, not information.
+func TestARelayedReadingCarriesItsAge(t *testing.T) {
+	st := fleetQuotaState(120, 9)
+	got := quotaBlock(st, PlainStyles(), UnicodeGlyphs(), st.Width)
+	if !strings.Contains(got, "2h ago") {
+		t.Errorf("the stale claude reading hides its age: %q", got)
+	}
+	if n := strings.Count(got, "ago"); n != 1 {
+		t.Errorf("want exactly one age marker (fresh readings say nothing), got %d: %q", n, got)
+	}
+}
+
+// One vendor, one block: when a vendor's quota is both in a transcript and in
+// the relay, the transcript wins — it is re-measured every scan, while the
+// relay is as old as the last statusline render.
+func TestTheTranscriptReadingOutranksTheRelayForOneVendor(t *testing.T) {
+	st := fleetQuotaState(120, 9)
+	st.Snap.Account = append(st.Snap.Account, quotacache.Account{
+		Vendor:    model.VendorCodex,
+		WrittenAt: pinned.Add(-3 * time.Hour),
+		Windows:   []model.QuotaWindow{window("seven_day", "7d", 55, 20*time.Hour)},
+	})
+	got := quotaBlock(st, PlainStyles(), UnicodeGlyphs(), st.Width)
+	if strings.Contains(got, "55%") {
+		t.Errorf("the stale relayed codex reading rendered over the transcript's: %q", got)
+	}
+	if n := strings.Count(got, "codex")+strings.Count(got, "cx "); n != 1 {
+		t.Errorf("codex appears %d times, want one block: %q", n, got)
+	}
+}
+
+// Window ids collide across vendors — Claude and Codex both have a
+// "seven_day" — so a projection may only ever render inside the block whose
+// windows actually fed the sampler. A forecast beside the relayed Claude 7d
+// would be Codex's slope pinned to Claude's account.
+func TestAForecastNeverCrossesVendors(t *testing.T) {
+	st := fleetQuotaState(148, 9)
+	resets := pinned.Add(22*time.Hour + 48*time.Minute)
+	st.Burn = Burn{
+		Source: "codex/0f00dbaa-1234-4a77-9b02-000000000042",
+		Series: []BurnSeries{burnSeries("seven_day", 60, 79, 18*time.Minute, 7, &resets)},
+	}
+	got := quotaBlock(st, PlainStyles(), UnicodeGlyphs(), 200)
+	if n := strings.Count(got, "basis"); n != 1 {
+		t.Fatalf("want exactly one forecast on the line, got %d: %q", n, got)
+	}
+	blocks := strings.Split(got, "│")
+	for _, b := range blocks {
+		if strings.Contains(b, "basis") && !strings.Contains(b, "codex") {
+			t.Errorf("a forecast rendered outside the sampled vendor's block: %q", b)
+		}
 	}
 }
 

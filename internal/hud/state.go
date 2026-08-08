@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/model"
+	"github.com/sanlee-ys/telltale/internal/quotacache"
 )
 
 // Filter is the vendor filter. It cycles rather than opening a menu: with a
@@ -185,6 +186,12 @@ type VendorView struct {
 type Snapshot struct {
 	Sessions []*model.Session
 	Vendors  []VendorView
+	// Account is the statusline-relayed account quota, one entry per vendor
+	// whose reading survived the cache's expiry rules (design.md §7.15). It
+	// is not folded into Sessions because it is not one: rate limits are a
+	// property of the account, and pinning them to a fabricated session row
+	// would assert per-session quota, the claim §7.1 exists to forbid.
+	Account []quotacache.Account
 	// At is when the scan completed. The zero value means no scan has ever
 	// completed, which is a different thing from a scan that completed and
 	// found nothing.

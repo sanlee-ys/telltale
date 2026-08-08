@@ -6,7 +6,9 @@
 //   - derived displays (reset countdown) are arithmetic on a sourced value.
 //
 // This path has a single-digit-millisecond budget (ADR-002): stdlib only,
-// no TUI framework, no I/O beyond the already-read stdin.
+// no TUI framework, no reads beyond the already-read stdin. Render itself
+// does no I/O at all; the quota relay (design.md §7.15) is the cmd layer's,
+// and it runs after the line is already on stdout.
 package statusline
 
 import (
@@ -129,8 +131,8 @@ func windowSegment(label string, w *claude.Window, opts Options) (string, bool) 
 
 // dirSegment shows the working folder's basename, sourced from the stdin
 // payload only — no filesystem or git calls on this path. Git branch is
-// deliberately NOT here: it would need an exec, and the statusline path does
-// no I/O beyond stdin (docs/design.md §2).
+// deliberately NOT here: it would need an exec, and the statusline path
+// reads nothing beyond stdin (docs/design.md §2).
 func dirSegment(in *claude.StatuslineInput, opts Options) (string, bool) {
 	dir := in.Cwd
 	if in.Workspace != nil && in.Workspace.CurrentDir != "" {

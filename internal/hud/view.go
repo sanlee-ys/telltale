@@ -305,75 +305,186 @@ func vendorCounts(st State, sty Styles) string {
 	return strings.Join(out, "  ")
 }
 
-// quotaBlock renders account-level quota, ONCE, labelled with the vendor whose
-// session supplied the windows.
+// quotaAgeShown is when a relayed account reading starts carrying its age.
+// Below it the statusline is firing often enough that "just now" would be
+// noise; from it on, the age IS the honesty — a relayed percentage without
+// its measurement time presents a possibly-hours-old reading as fresh, the
+// exact claim the staleness constants above exist to prevent for scans.
+const quotaAgeShown = 5 * time.Minute
+
+// quotaVendorBlock is one vendor's account quota as the header speaks it.
+type quotaVendorBlock struct {
+	vendor  model.VendorID
+	windows []model.QuotaWindow
+	// age is how old a RELAYED reading is; zero for a transcript-sourced
+	// block, whose freshness is the scan's and already governed by the
+	// header-wide staleness dim.
+	age     time.Duration
+	relayed bool
+	// forecasts marks the one block whose windows feed the burn sampler.
+	// Relayed blocks never forecast: re-reading an unchanged cache file is
+	// not a new observation, and window ids collide across vendors (both
+	// Claude and Codex have a "seven_day"), so a cross-block Forecast call
+	// would pin one vendor's projection to another's gauge.
+	forecasts bool
+}
+
+// quotaVendors assembles the header's account-quota blocks from both sources:
+// the most recently active quota-bearing session (Codex today — its store
+// carries quota) and the statusline relay (§7.15 — vendors whose quota exists
+// only on their statusline stdin). One block per vendor, transcript reading
+// preferred when both exist (it is re-measured every scan; the relay is as
+// old as the last statusline render), ordered by vendor id like the vendor
+// table so the blocks cannot reshuffle between frames.
+func quotaVendors(st State) []quotaVendorBlock {
+	var out []quotaVendorBlock
+	windows, source := accountQuotaSource(st)
+	var srcVendor model.VendorID
+	if i := strings.IndexByte(source, '/'); i > 0 {
+		srcVendor = model.VendorID(source[:i])
+	}
+	if len(windows) > 0 {
+		out = append(out, quotaVendorBlock{vendor: srcVendor, windows: windows, forecasts: true})
+	}
+	for _, a := range st.Snap.Account {
+		if a.Vendor == srcVendor {
+			continue
+		}
+		age := st.Now.Sub(a.WrittenAt)
+		if age < 0 {
+			age = 0
+		}
+		out = append(out, quotaVendorBlock{vendor: a.Vendor, windows: a.Windows, age: age, relayed: true})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].vendor < out[j].vendor })
+	return out
+}
+
+// quotaDress is one level of the quota line's shed cascade.
+type quotaDress struct {
+	gauges     bool
+	countdowns bool
+	forecasts  bool
+	fullNames  bool
+}
+
+// quotaDressLevels is the shed order, most dressed first. What sheds is
+// decoration and what never sheds is fact, in the grid's own cascade
+// grammar (COST goes, then the gauge, the number never does): forecasts
+// first (a derived projection), then full vendor names down to the
+// established two-letter tags, then the bars (the percentage beside each
+// bar says the same thing), then countdowns. Names shed before gauges on
+// purpose — the tag carries the same fact in two cells, while a gauge
+// dropped is the product's glanceability gone. Every level keeps vendor,
+// window label, reading, and — for relayed blocks — the reading's age,
+// because shedding the age would re-present a stale number as fresh,
+// which is worse than showing nothing.
+var quotaDressLevels = []quotaDress{
+	{gauges: true, countdowns: true, forecasts: true, fullNames: true},
+	{gauges: true, countdowns: true, fullNames: true},
+	{gauges: true, countdowns: true},
+	{countdowns: true},
+	{},
+}
+
+// quotaBlock renders account-level quota, one labelled block per vendor that
+// has a reading.
 //
 // rate_limits is a property of the account, not of the session: repeating it
-// per row would assert per-session quota, which is false (§7.1). If no adapter
-// can source it, the block is absent — not zeroed.
+// per row would assert per-session quota, which is false (§7.1). A vendor
+// with no sourceable quota is absent — not zeroed — so the block count is
+// itself a measurement: it shows exactly as many vendors as telltale can
+// honestly speak for.
 //
-// v1 still shows one vendor's windows (most recently active session that has
-// any). The vendor id prefixes the block so an unlabeled `7d 79%` cannot be
-// read as "the fleet" when it is Codex's weekly. A second vendor needs a
-// per-vendor block — layout change, not schema.
+// The line tries each dress level in order and renders the first that fits.
+// If even the barest level overflows, whole trailing blocks are dropped and
+// the ellipsis says so — the footer's fitNotices rule: dropping is never
+// silent, and half a vendor's quota is a worse claim than a marked absence.
 func quotaBlock(st State, sty Styles, g Glyphs, width int) string {
-	windows, source := accountQuotaSource(st)
-	if len(windows) == 0 {
+	blocks := quotaVendors(st)
+	if len(blocks) == 0 {
 		return ""
 	}
-	vendor := ""
-	if i := strings.IndexByte(source, '/'); i > 0 {
-		vendor = source[:i]
-	}
-
-	parts := make([]string, 0, len(windows))
-	for i := range windows {
-		w := windows[i]
-		cell := sty.Muted.Render(w.Label) + " " + gauge(w.UsedPercent, quotaGauge, g, sty) + " "
-		hasReading := w.UsedPercent != nil && *w.UsedPercent >= 0 && *w.UsedPercent <= 100
-		if hasReading {
-			p := float64(*w.UsedPercent)
-			cell += sty.Sev(p).Render(padLeft(theme.Percent(p), 5, g))
-		} else {
-			cell += sty.Absent().Render(padLeft(g.Absent, 5, g))
+	var line string
+	for _, d := range quotaDressLevels {
+		line = renderQuotaLine(blocks, d, st, sty, g)
+		if lipgloss.Width(line) <= width {
+			return line
 		}
-		if w.ResetsAt != nil {
-			if d := w.ResetsAt.Sub(st.Now); d > 0 {
+	}
+	for len(blocks) > 1 {
+		blocks = blocks[:len(blocks)-1]
+		line = renderQuotaLine(blocks, quotaDress{}, st, sty, g) +
+			" " + sty.Muted.Render(g.Ellipsis)
+		if lipgloss.Width(line) <= width {
+			return line
+		}
+	}
+	return line
+}
+
+func renderQuotaLine(blocks []quotaVendorBlock, d quotaDress, st State, sty Styles, g Glyphs) string {
+	parts := make([]string, 0, len(blocks))
+	for i := range blocks {
+		parts = append(parts, renderQuotaVendor(blocks[i], d, st, sty, g))
+	}
+	return strings.Join(parts, "  "+sty.Muted.Render(g.Sep)+"  ")
+}
+
+func renderQuotaVendor(b quotaVendorBlock, d quotaDress, st State, sty Styles, g Glyphs) string {
+	name := string(b.vendor)
+	if !d.fullNames {
+		name = strings.ToLower(vendorTag(b.vendor))
+	}
+	cells := make([]string, 0, len(b.windows))
+	for i := range b.windows {
+		w := b.windows[i]
+		cell := sty.Muted.Render(w.Label)
+		hasReading := w.UsedPercent != nil && *w.UsedPercent >= 0 && *w.UsedPercent <= 100
+		if d.gauges {
+			cell += " " + gauge(w.UsedPercent, quotaGauge, g, sty) + " "
+			if hasReading {
+				cell += sty.Sev(float64(*w.UsedPercent)).Render(padLeft(theme.Percent(float64(*w.UsedPercent)), 5, g))
+			} else {
+				cell += sty.Absent().Render(padLeft(g.Absent, 5, g))
+			}
+		} else {
+			// No gauge, no fixed-width percent cell: below the gauge tier the
+			// line is fighting for columns and the padding buys alignment
+			// nothing here — blocks are variable-width already.
+			if hasReading {
+				cell += " " + sty.Sev(float64(*w.UsedPercent)).Render(theme.Percent(float64(*w.UsedPercent)))
+			} else {
+				cell += " " + sty.Absent().Render(g.Absent)
+			}
+		}
+		if d.countdowns && w.ResetsAt != nil {
+			if dur := w.ResetsAt.Sub(st.Now); dur > 0 {
 				// A space between the glyph and the digits: fonts render ↻ at
 				// ambiguous width, and glued to the countdown it reads as one
 				// garbled token (dogfood finding, 2026-08-02).
-				cell += " " + sty.Muted.Render(g.Reset+" "+theme.Countdown(d))
+				cell += " " + sty.Muted.Render(g.Reset+" "+theme.Countdown(dur))
 			}
 		}
 		// The forecast only renders beside a current reading: a window that is
 		// present without a usage figure THIS scan shows an em dash, and a
 		// live-looking projection next to a dash asserts a trend for a value we
 		// just said we don't have (review finding).
-		if hasReading {
+		if d.forecasts && b.forecasts && hasReading {
 			if f, ok := st.Burn.Forecast(w.ID, st.Now); ok {
 				cell += "  " + sty.Muted.Render(forecastText(f, st.Now, g))
 			}
 		}
-		parts = append(parts, cell)
+		cells = append(cells, cell)
 	}
-	if len(parts) == 0 {
-		return ""
+	out := sty.Muted.Render(name) + " " + strings.Join(cells, "  ")
+	if b.relayed && b.age >= quotaAgeShown {
+		// The basis rule (§7.12): the scope of a claim travels with the
+		// number. "6% · 2h ago" is a measurement with its time attached;
+		// "6%" alone would be the relay presenting last night as now.
+		out += " " + sty.Muted.Render(g.Mid+" "+theme.Age(b.age)+" ago")
 	}
-	if vendor == "" {
-		return strings.Join(parts, "   "+sty.Muted.Render(g.Sep)+"   ")
-	}
-
-	// Keep the full vendor name whenever it fits. At the 60-column floor the
-	// established two-letter vendor tag plus a separator with one less padding
-	// cell preserves attribution without pushing the header past the terminal.
-	wideBody := strings.Join(parts, "   "+sty.Muted.Render(g.Sep)+"   ")
-	full := sty.Muted.Render(vendor) + " " + wideBody
-	if lipgloss.Width(full) <= width {
-		return full
-	}
-	compactBody := strings.Join(parts, "  "+sty.Muted.Render(g.Sep)+"   ")
-	tag := strings.ToLower(vendorTag(model.VendorID(vendor)))
-	return sty.Muted.Render(tag) + " " + compactBody
+	return out
 }
 
 // accountQuota picks the windows the header block speaks for.

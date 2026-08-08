@@ -165,15 +165,18 @@ Cursor reaches telltale both ways: a built-in HUD adapter because its seam is on
 and a council seat driven through `cursor-agent`'s own bundled `node.exe` — the `cursor`
 binary on PATH is only the editor launcher and council never drives it.)
 
-**The gauges never write.** `telltale statusline` and `telltale hud` read vendor files,
-make no network calls, read no credentials, and no keybinding can mutate vendor state or
-send anything to a running agent. `telltale council` is the deliberate exception, and it
-is labelled as one everywhere it can be: it spawns vendor CLIs, it is entered only by
-typing the subcommand, it is not reachable from the HUD, and it shares no keybinding with
-it. It is also the only mode
-that writes anything to disk — one room file, `~/.telltale/council/room.json`, holding
-the vendor session ids reattaching needs, the room's current workspace, and no
-transcript, output or brief content.
+**The gauges never write to anything that isn't theirs.** `telltale statusline` and
+`telltale hud` read vendor files, make no network calls, read no credentials, and no
+keybinding can mutate vendor state or send anything to a running agent. What telltale
+writes to disk is two files of its own under `~/.telltale/`, both keys and numbers,
+never content: council's room file (`council/room.json` — the vendor session ids
+reattaching needs and the room's workspace, no transcript, output or brief content)
+and the statusline's quota relay (`quota/<vendor>.json` — the rate-limit windows it
+just rendered, so the HUD can show account quota per vendor instead of only for
+vendors whose stores carry it; [docs/design.md §7.15](docs/design.md)). `telltale
+council` remains the one mode that acts on the world, and it is labelled as one
+everywhere it can be: it spawns vendor CLIs, it is entered only by typing the
+subcommand, it is not reachable from the HUD, and it shares no keybinding with it.
 "Reads no credentials" stopped being free with the Cursor adapter — that vendor
 keeps its access tokens, refresh tokens and OAuth secrets in the *same SQLite file* as
 its session state — so it is enforced there as a read allowlist with a test that plants

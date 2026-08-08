@@ -26,6 +26,7 @@ jobs:
           $out = Get-Content internal/statusline/testdata/apikey.json -Raw | ./telltale.exe statusline
           if ($out -notmatch 'Sonnet') { throw "unexpected statusline output: $out" }
           if ($out -match '5h|7d') { throw "honest-gauge violation: quota rendered without rate_limits: $out" }
+          if (Test-Path "$env:USERPROFILE\.telltale\quota") { throw "quota relay wrote for a payload with no rate_limits" }
       - name: Smoke (Antigravity routing through the real binary)
         shell: pwsh
         run: |
@@ -34,3 +35,13 @@ jobs:
           if ($out -match '\$') { throw "honest-gauge violation: cost rendered for a vendor with no cost field: $out" }
           $claude = Get-Content internal/statusline/testdata/full.json -Raw | ./telltale.exe statusline
           if ($claude -notmatch 'Opus') { throw "Claude payload misrouted after the product probe: $claude" }
+      - name: Smoke (quota relay through the real binary)
+        shell: pwsh
+        run: |
+          # The two payloads above carried quota; the relay must now hold one
+          # numbers-only entry per vendor (design.md §7.15).
+          $cc = Get-Content "$env:USERPROFILE\.telltale\quota\claude.json" -Raw
+          if ($cc -notmatch '"seven_day"') { throw "claude quota relay missing its window: $cc" }
+          if ($cc -match 'transcript|myproject') { throw "quota relay carried content, not numbers: $cc" }
+          $ag = Get-Content "$env:USERPROFILE\.telltale\quota\agy.json" -Raw
+          if ($ag -notmatch 'gemini-weekly') { throw "agy quota relay missing its bucket: $ag" }

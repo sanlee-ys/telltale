@@ -65,8 +65,11 @@ statusline links no TUI framework.
 | Folder | stdin `workspace.current_dir` (fallback `cwd`), basename only — no filesystem/git calls | hide segment | **built** |
 
 Deliberately not shown **on this path**: git branch (would require an exec; the
-statusline path does no I/O beyond stdin — revisit only with a measured budget),
+statusline path reads nothing beyond stdin — revisit only with a measured budget),
 permission mode (not in the stdin payload; same call the predecessor script made).
+The path's one write is the quota relay (§7.15): after the line is on stdout, the
+payload's rate-limit windows go to `~/.telltale/quota/` for the HUD — numbers only,
+best-effort, never ahead of the render.
 
 > Both exclusions are properties of the **stdin seam**, not of Claude Code. The
 > transcript carries `gitBranch` and `permissionMode` directly, so the HUD's disk path
@@ -1364,11 +1367,12 @@ Five rules, in priority order. Where polish and a rule conflict, the rule wins.
    `internal/theme` (§7.5), not by coincidence.
 
 A sixth rule that is a consequence of #1 and worth stating on its own: **account-level
-quota appears once, in the header, never per row.** `rate_limits` is a property of the
-account, not the session; repeating it on every row would assert per-session quota, which
-is false. If no adapter can source it, the block is absent — not zeroed. *(v1 limitation:
-the block shows the windows from the most recently active session that has any. With one
-quota-bearing vendor that is exact; a second one needs a per-vendor block.)*
+quota appears once per vendor, in the header, never per row.** `rate_limits` is a
+property of the account, not the session; repeating it on every row would assert
+per-session quota, which is false. If no source can honestly supply it, that vendor's
+block is absent — not zeroed — so the block count is itself a measurement: the header
+shows exactly as many vendors as telltale can speak for. Where the readings come from
+and how the line fits them is §7.15.
 
 ### 7.2 Anatomy
 
@@ -1475,7 +1479,7 @@ vendor that declares every capability, so the whole grid is exercised; render I 
 shows what the real v1 capability mix produces.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1         claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  4 sessions  │  claude 3  codex 1              claude 5h ███─────   42% ↻ 2h13m  7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
@@ -1494,7 +1498,7 @@ columns. Nothing about it looks like zero.
 
 ```
  telltale  │  4 sessions  │  claude 3  codex 1
-               claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+                    claude 5h ███─────   42% ↻ 2h13m  7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────
         SESSION                           MODEL          CONTEXT            AGE
  ● CC │ telltale  C:\src\code             Opus 5         █████▉──  84.2% │  12s
@@ -1509,7 +1513,7 @@ columns. Nothing about it looks like zero.
 
 ```
  telltale  │  4 sessions  │  cc 3  cx 1
-       claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+            claude 5h ███─────   42% ↻ 2h13m  7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────
         SESSION                             MODEL            CTX    AGE
  ● CC │ telltale  C:\src\code               Opus 5         84.2% │  12s
@@ -1567,7 +1571,7 @@ is never used for notices — it holds identity and quota only, which keeps it f
 overflowing at any width.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1         claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  4 sessions  │  claude 3  codex 1              claude 5h ███─────   42% ↻ 2h13m  7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
@@ -1583,7 +1587,7 @@ contradict the per-vendor totals beside it. Non-default filter/sort is stated in
 footer, because a monitor that silently hides rows is a liar.
 
 ```
- telltale  │  3 of 4 sessions  │  claude 3  codex 1    claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  3 of 4 sessions  │  claude 3  codex 1         claude 5h ███─────   42% ↻ 2h13m  7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
@@ -1674,7 +1678,7 @@ that revealed it. The ordinary case is render M. The fourth word:
 floating panel on a monitor obscures the thing being monitored.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1         claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  4 sessions  │  claude 3  codex 1              claude 5h ███─────   42% ↻ 2h13m  7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
         q      quit  (also ctrl+c)
@@ -1739,7 +1743,7 @@ real precision loss in the bar and acceptable only because the number beside it 
 the precision.
 
 ```
- telltale  |  4 sessions  |  claude 3  codex 1         claude 5h ###-----   42% ~ 2h13m   |   7d #-------   18% ~ 5d02h
+ telltale  |  4 sessions  |  claude 3  codex 1              claude 5h ###-----   42% ~ 2h13m  7d #-------   18% ~ 5d02h
  ----------------------------------------------------------------------------------------------------------------------
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  * CC | telltale  C:\src\code                                        Opus 5         #########---  84.2%    $2.41 |  12s
@@ -1764,7 +1768,7 @@ detail pane alike. A warning that came and went with whichever pane was open wou
 a reader could not trust to be there.
 
 ```
- telltale  │  4 sessions  │  claude 3  codex 1         claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  4 sessions  │  claude 3  codex 1              claude 5h ███─────   42% ↻ 2h13m  7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
@@ -2235,7 +2239,7 @@ quota is a property of the account):
 
 ```
  telltale  │  4 sessions  │  claude 3  codex 1
-                                   claude 5h ███─────   42% ↻ 2h13m  ~13:27 · 18m basis   │   7d █▎──────   18% ↻ 5d02h
+                                        claude 5h ███─────   42% ↻ 2h13m  ~13:27 · 18m basis  7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ telltale  C:\src\code                                        Opus 5         █████████▎──  84.2%    $2.41 │  12s
@@ -2313,7 +2317,7 @@ sourced number in the same visual class as a missing one.
 query and hands the keyboard back; `esc` clears it.
 
 ```
- telltale  │  2 of 4 sessions  │  claude 3  codex 1    claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  2 of 4 sessions  │  claude 3  codex 1         claude 5h ███─────   42% ↻ 2h13m  7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
@@ -2327,7 +2331,7 @@ query and hands the keyboard back; `esc` clears it.
 and once applied, with the mode left:
 
 ```
- telltale  │  2 of 4 sessions  │  claude 3  codex 1    claude 5h ███─────   42% ↻ 2h13m   │   7d █▎──────   18% ↻ 5d02h
+ telltale  │  2 of 4 sessions  │  claude 3  codex 1         claude 5h ███─────   42% ↻ 2h13m  7d █▎──────   18% ↻ 5d02h
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                      MODEL          CONTEXT                 COST    AGE
  ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
@@ -2357,6 +2361,72 @@ find it.
 
 `/` is a mode, and it is the product's only one — which is why it takes over the whole
 footer instead of quietly changing what an unmodified key does.
+
+### 7.15 The quota relay — every vendor the header can honestly speak for
+
+Added 2026-08-07, San's ruling. The header's quota block was one vendor (Codex) because
+Codex is the only vendor whose quota exists on disk where a passive reader can see it:
+Claude's `rate_limits` arrive **only** on its statusline stdin payload (§3.1 — the live
+corpus was grepped, nothing quota-shaped reaches the transcripts), and agy's named
+buckets exist only in its statusline payload the same way (§3.8). Cursor's store holds
+plan-entitlement constants that must never render as usage (§3.9), and Gemini has
+nothing — so those two vendors have no quota **anywhere**, relay or not.
+
+**The mechanism: the statusline relays what it just rendered.** After the line is on
+stdout, `telltale statusline` writes the payload's quota windows to
+`~/.telltale/quota/<vendor>.json` (`internal/quotacache`), and the HUD's scan reads
+every surviving entry alongside the vendor stores. This is a deliberate, scoped
+amendment to "the gauges never write" (§1, CLAUDE.md):
+
+- **numbers only, never content** — vendor id, timestamp, window ids/labels,
+  percentages, reset instants. The same keys-not-content standard as council's
+  `room.json`, pinned by a test that walks the serialized form field by field.
+- **atomic and best-effort** — temp + rename in the same directory, error ignored
+  after the render is delivered; the cache can never cost a statusline frame or a
+  torn read.
+- **self-expiring** — the reader drops a window whose reset has passed (its
+  percentage is not stale, it is *false*), and whole entries past 24h or stamped
+  from the future beyond clock-jitter tolerance.
+- **age travels with the reading** — past 5 minutes a relayed block carries
+  `· 2h ago` at every dress level, the §7.12 basis rule applied to time: shedding
+  the age would re-present a stale number as fresh.
+
+**One block per vendor, transcript outranks relay.** A vendor sourced from its own
+store (Codex) is re-measured every scan; its relay entry, if one ever exists, is as old
+as the last statusline render. The scan-fresh reading wins and the vendor renders once.
+Only the transcript-sourced block may carry a burn forecast — window ids collide across
+vendors (Claude and Codex both have a `seven_day`), and re-reading an unchanged cache
+file is not a new observation, so a forecast on a relayed block would be one vendor's
+slope pinned to another's account.
+
+**The line fits by shedding decoration, never fact.** Dress levels, tried in order
+until one fits: full (names, gauges, countdowns, forecasts) → drop forecasts → names
+to two-letter tags → drop gauges (the percentage beside each bar says the same thing)
+→ drop countdowns. Vendor, window label, reading, and a stale reading's age survive
+every level. If even the barest level overflows, whole trailing blocks are dropped and
+an ellipsis says so — the footer's dropping-is-never-silent rule. The generated render
+(`quota-fleet` golden):
+
+```
+ telltale  │  1 session  │  codex 1
+                      ag gemini-weekly 38% ↻ 3h00m  │  cc 5h 42% ↻ 2h13m  7d 6% ↻ 5d00h · 2h ago  │  cx 7d 79% ↻ 22h48m
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                                                    MODEL            AGE
+ ◐ CX │ notes-api  C:\src\code                                                                     gpt-5.1-codex │   4m
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+```
+
+At 120 columns three vendors and four windows already shed to tags-without-gauges;
+the full dress needs ~145. That is the honest trade as measured, not a bug: the bars
+went first precisely so every fact could stay.
+
+What the relay does **not** change: the statusline's own display (it renders from
+stdin as before, the write happens after), the HUD's read-only posture toward *vendor*
+files, and the absence rule — a vendor whose statusline never fires simply never
+appears, and one that stops firing ages out.
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 

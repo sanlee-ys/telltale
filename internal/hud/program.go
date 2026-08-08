@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/sanlee-ys/telltale/internal/model"
+	"github.com/sanlee-ys/telltale/internal/quotacache"
 )
 
 // pollInterval is the tick cadence. 1 s is affordable because the poll is
@@ -105,7 +106,16 @@ func (m *Model) scanCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		return scanResultMsg{snap: Scan(ctx, adapters, time.Now())}
+		snap := Scan(ctx, adapters, time.Now())
+		// The statusline's relayed quota rides the same scan cadence as the
+		// vendor stores (design.md §7.15). Read here, off the Update goroutine
+		// and outside Render, so the render path stays pure over State; a
+		// missing dir or unreadable entry contributes nothing, same as an
+		// absent vendor.
+		if dir, err := quotacache.Dir(); err == nil {
+			snap.Account = quotacache.ReadAll(dir, snap.At)
+		}
+		return scanResultMsg{snap: snap}
 	}
 }
 

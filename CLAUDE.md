@@ -114,14 +114,18 @@ This is the thing the whole codebase optimizes for, more than idiomatic Go. Read
 
 ## The read/write boundary
 
-**The gauges never write.** `telltale statusline` and `telltale hud` read vendor
-files, make no network calls, read no credentials, and no keybinding mutates
-vendor state. `telltale council` is the **single deliberate exception** — it
-spawns vendor CLIs, and it is the only mode that writes anything to disk (one
-file, `~/.telltale/council/room.json`, holding session ids and workspace — never
-transcript or brief content). If you're adding a feature to `internal/hud` or
-`internal/statusline` that would write a file, shell out, or touch a credential
-store, that is almost certainly the wrong package for it.
+**The gauges never write to anything that isn't theirs.** `telltale statusline`
+and `telltale hud` read vendor files, make no network calls, read no credentials,
+and no keybinding mutates vendor state. Two deliberate, bounded exceptions exist,
+both under `~/.telltale/` and both numbers-and-keys only, never content:
+`telltale council` (spawns vendor CLIs; writes `council/room.json` — session ids
+and workspace, never transcript or brief content) and the **statusline's quota
+relay** (`quota/<vendor>.json` — the rate-limit windows it just rendered, written
+after the line is on stdout so the HUD can attribute account quota per vendor;
+design.md §7.15, amended 2026-08-07). Each carries a test pinning the serialized
+form to keys and numbers. If you're adding a feature to `internal/hud` or
+`internal/statusline` that would write anywhere else, shell out, or touch a
+credential store, that is almost certainly the wrong package for it.
 
 The Cursor adapter (`internal/adapter/cursor`) is the sharpest version of this
 boundary: its on-disk store holds OAuth/refresh tokens in the *same SQLite file*
