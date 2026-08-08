@@ -14,22 +14,15 @@ unverified.
 telltale.exe council
 ```
 
-```
-  council READ  │  ~/code/telltale                                                  turn 1  │  3/3 seated  │  no brief  
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-▌ ▸ 1 CC Claude Code  ────────  ✓ done  │    2 CX Codex  ─────────────  ○ idle  │    3 AG Antigravity  ───────  ○ idle  
-▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
-▌ ⚙ Glob                                │                                       │                                       
-▌ ⚙ Read                                │                                       │                                       
-▌ ⚙ Bash: go test ./...                 │                                       │                                       
-▌                                       │                                       │                                       
-▌ Tests pass.                           │  no turn dispatched yet.              │  no turn dispatched yet.              
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ›                                                                                                                     
-  VIEW              ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-3 seat  │  i compose  │  ? help  │  q quit  
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../images/telltale-council-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="../images/telltale-council-light.svg">
+    <img alt="telltale council dispatch room showing multi-agent panel" src="../images/telltale-council-dark.svg">
+  </picture>
+</p>
 
-That frame is the council test suite's `activity` golden
+That picture is emitted from the council test suite's `activity` golden
 (`internal/council/testdata/golden/activity.txt`) with its empty rows dropped, and nothing
 else changed — including the `READ` in its header, because the fixture opens a `--read`
 room. A plain `telltale council` says `⚠ WRITE` there instead.
