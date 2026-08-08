@@ -20,6 +20,12 @@
 internal/hud/testdata/golden/*.txt -text
 internal/council/testdata/golden/*.txt -text
 
+# README.md's hero pictures are goldens too, and for the same reason: they are
+# emitted from those renders (internal/svgframe) and compared byte for byte
+# against the committed file, so a CRLF checkout would make every one of them
+# differ on the platform CI runs on.
+images/*.svg -text
+
 # SQLite fixtures are binary: page headers, b-tree pointers and WAL checksums.
 # A single byte rewritten in transit fails a checksum, and a checkpoint's worth
 # of frames would be silently dropped by the very reader under test.
