@@ -33,7 +33,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 	b.WriteString(rule(st.Width, sty, g))
 	b.WriteString("\n")
 	if lay.Notice > 0 {
-		b.WriteString(fit(" "+noticeLine(st, sty, g, st.Width-2), st.Width))
+		b.WriteString(fit(framePadStr+noticeLine(st, sty, g, st.Width-2*framePad), st.Width))
 		b.WriteString("\n")
 	}
 
@@ -254,11 +254,11 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 		mid = sep + sty.Muted.Render(elideLeft(displayPath(st), pathw, g.Ellipsis))
 	}
 
-	gap := lay.Width - lipgloss.Width(left) - lipgloss.Width(mid) - lipgloss.Width(right) - 2
+	gap := lay.Width - lipgloss.Width(left) - lipgloss.Width(mid) - lipgloss.Width(right) - 2*framePad
 	if gap < 1 {
 		gap = 1
 	}
-	return " " + left + mid + strings.Repeat(" ", gap) + right + " "
+	return framePadStr + left + mid + strings.Repeat(" ", gap) + right + framePadStr
 }
 
 // noticeLine is the collapsed-seat notice, truncated honestly.
@@ -363,7 +363,7 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	rails := railRows(cells, lay.Body)
 	var b strings.Builder
 	for row := 0; row < lay.Body; row++ {
-		b.WriteString(" ")
+		b.WriteString(framePadStr)
 		div := blankSep
 		if rails[row] {
 			div = sep
@@ -374,7 +374,7 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 			}
 			b.WriteString(cells[j][row])
 		}
-		b.WriteString(" ")
+		b.WriteString(framePadStr)
 		if row < lay.Body-1 {
 			b.WriteString("\n")
 		}
@@ -2139,7 +2139,7 @@ func tabBar(st State, lay Layout, sty Styles, g Glyphs) string {
 		}
 	}
 	// fit, not padRight: parts are already styled per tab.
-	return " " + fit(strings.Join(parts, "  "), lay.Width-2) + " "
+	return framePadStr + fit(strings.Join(parts, "  "), lay.Width-2*framePad) + framePadStr
 }
 
 func tabBody(st State, lay Layout, sty Styles, g Glyphs) string {
@@ -2166,7 +2166,7 @@ func tabBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	cell := columnCell(st, st.Columns[idx], seatAddressed, scrollHint(st, g), lay.ColWidth, lay.Body, sty, g)
 	var b strings.Builder
 	for i, l := range cell {
-		b.WriteString(" " + l + " ")
+		b.WriteString(framePadStr + l + framePadStr)
 		if i < len(cell)-1 {
 			b.WriteString("\n")
 		}
@@ -2179,7 +2179,7 @@ func promptWidth(width int, g Glyphs) int {
 	// The prompt glyph plus its space. One cell in both glyph sets, but measured
 	// rather than assumed, because a set that changed it would silently shift
 	// every wrap in the composer.
-	w := width - 2 - lipgloss.Width(g.Prompt+" ")
+	w := width - 2*framePad - lipgloss.Width(g.Prompt+" ")
 	if w < 1 {
 		w = 1
 	}
@@ -2230,8 +2230,8 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 		// so repeating "goes to everyone" here was footer noise on an empty draft
 		// — the exact chrome the Windows screenshot spent body on.
 		return padRows([]string{
-			" " + sty.Muted.Render(prefix) +
-				sty.Muted.Render(padRight("type a brief"+g.Caret, w, g)) + " ",
+			framePadStr + sty.Muted.Render(prefix) +
+				sty.Muted.Render(padRight("type a brief"+g.Caret, w, g)) + framePadStr,
 		}, lay, w, sty, g)
 	}
 
@@ -2250,7 +2250,7 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 			text = elideLeft(text, w, g.Ellipsis)
 		}
 		return padRows([]string{
-			" " + sty.Muted.Render(prefix) + sty.Text.Render(padRight(text, w, g)) + " ",
+			framePadStr + sty.Muted.Render(prefix) + sty.Text.Render(padRight(text, w, g)) + framePadStr,
 		}, lay, w, sty, g)
 	}
 
@@ -2270,8 +2270,8 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 	if elided > 0 {
 		// The same words the column overflow marker uses, deliberately: one
 		// vocabulary for "there is content you cannot see", wherever it appears.
-		out = append(out, " "+sty.Muted.Render(padRight(
-			g.Up+" "+strconv.Itoa(elided)+" more above", w+2, g))+" ")
+		out = append(out, framePadStr+sty.Muted.Render(padRight(
+			g.Up+" "+strconv.Itoa(elided)+" more above", w+2, g))+framePadStr)
 	}
 	for i, r := range rows {
 		// Continuation rows are indented to the prefix, so a wrapped brief reads
@@ -2280,7 +2280,7 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 		if i == 0 && elided == 0 {
 			p = prefix
 		}
-		out = append(out, " "+sty.Muted.Render(p)+sty.Text.Render(padRight(r, w, g))+" ")
+		out = append(out, framePadStr+sty.Muted.Render(p)+sty.Text.Render(padRight(r, w, g))+framePadStr)
 	}
 	return padRows(out, lay, w, sty, g)
 }
@@ -2289,7 +2289,7 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 // frame is the number of lines the terminal has whatever the draft is doing.
 func padRows(rows []string, lay Layout, w int, sty Styles, g Glyphs) []string {
 	for len(rows) < lay.Prompt {
-		rows = append(rows, " "+sty.Muted.Render("  ")+sty.Text.Render(padRight("", w, g))+" ")
+		rows = append(rows, framePadStr+sty.Muted.Render("  ")+sty.Text.Render(padRight("", w, g))+framePadStr)
 	}
 	return rows[:lay.Prompt]
 }
@@ -2556,7 +2556,7 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 func statusLine(left string, hs []hint, lay Layout, sty Styles, g Glyphs) string {
 	styled, plain := hints(sty, g, hs)
 	fits := func(p string) bool {
-		return lay.Width-lipgloss.Width(left)-lipgloss.Width(p)-2 >= 1
+		return lay.Width-lipgloss.Width(left)-lipgloss.Width(p)-2*framePad >= 1
 	}
 	for i := len(hs) - 1; i >= 0 && !fits(plain); i-- {
 		if !hs[i].shed {
@@ -2565,13 +2565,13 @@ func statusLine(left string, hs []hint, lay Layout, sty Styles, g Glyphs) string
 		hs = append(append([]hint{}, hs[:i]...), hs[i+1:]...)
 		styled, plain = hints(sty, g, hs)
 	}
-	gap := lay.Width - lipgloss.Width(left) - lipgloss.Width(plain) - 2
+	gap := lay.Width - lipgloss.Width(left) - lipgloss.Width(plain) - 2*framePad
 	if gap < 1 {
 		gap = 1
 		styled = sty.Muted.Render(truncate(plain,
-			maxInt(1, lay.Width-lipgloss.Width(left)-3), g.Ellipsis))
+			maxInt(1, lay.Width-lipgloss.Width(left)-2*framePad-1), g.Ellipsis))
 	}
-	return " " + left + strings.Repeat(" ", gap) + styled + " "
+	return framePadStr + left + strings.Repeat(" ", gap) + styled + framePadStr
 }
 
 // gateLabel names what is waiting, and how much else is behind it.
@@ -2672,7 +2672,7 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	for i := 0; i < lay.Body; i++ {
 		if i < len(lines) {
 			// fit, not padRight: some help lines are pre-styled.
-			b.WriteString(" " + fit(lines[i], lay.Width-2) + " ")
+			b.WriteString(framePadStr + fit(lines[i], lay.Width-2*framePad) + framePadStr)
 		} else {
 			b.WriteString(strings.Repeat(" ", lay.Width))
 		}
