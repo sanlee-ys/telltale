@@ -1,24 +1,24 @@
- council READ  │  ~/code/telltale                                                    turn 8  │  3/3 seated  │  no brief 
+  council READ  │  ~/code/telltale                                                  turn 8  │  3/3 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ────────────────────────────────────────────────────  ⠋ streaming  │  CX ✓ done       │  AG ⚠ cancelled 
-   ro:tools  tokens                                                                │  ro:requested    │  unsandboxed    
-                                                                                   │                  │                 
-                                                                                   │  ↑ 8 more above  │                 
-                                                                                   │  turn 3  ──────  │  turn 2  ────── 
-                                                                                   │  › brief for     │  › brief for    
-                                                                                   │    turn 3        │    turn 2       
-                                                                                   │                  │                 
-                                                                                   │  answer to turn  │  answer to turn 
-                                                                                   │  3               │  2              
-                                                                                   │                  │                 
-                                                                                   │  last: turn 3 ✓  │  last: turn 2 ⚠ 
-                                                                                   │  ○ not           │  ○ not          
-                                                                                   │    addressed in  │    addressed in 
-                                                                                   │    turns 4–7     │    turns 3–7    
- turn 8  ────────────────────────────────────────────────────────────────────────  │                  │                 
- › and now the resume path                                                         │  ○ not           │  ○ not          
-                                                                                   │    addressed in  │    addressed in 
- Reading resume.go.                                                                │    turn 8        │    turn 8       
+  ▸ Claude Code  ──────────────────────────────────────────  ⠋ streaming  │  CX ✓ done           │  AG ⚠ cancelled      
+    ro:tools  tokens                                                      │  ro:requested        │  unsandboxed         
+                                                                          │                      │                      
+                                                                          │  ↑ 1 more above      │                      
+                                                                          │                      │                      
+                                                                          │  answer to turn 1    │                      
+                                                                          │  ○ not addressed in  │                      
+                                                                          │    turn 2            │                      
+                                                                          │  turn 3  ──────────  │  turn 2  ──────────  
+                                                                          │  › brief for turn 3  │  › brief for turn 2  
+                                                                          │                      │                      
+                                                                          │  answer to turn 3    │  answer to turn 2    
+                                                                          │                      │                      
+                                                                          │  last: turn 3 ✓      │  last: turn 2 ⚠      
+                                                                          │  ○ not addressed in  │  ○ not addressed in  
+  turn 8  ──────────────────────────────────────────────────────────────  │    turns 4–7         │    turns 3–7         
+  › and now the resume path                                               │                      │                      
+                                                                          │  ○ not addressed in  │  ○ not addressed in  
+  Reading resume.go.                                                      │    turn 8            │    turn 8            
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ›                                                                                                                      
- VIEW                                    ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 
+  ›                                                                                                                     
+  VIEW                                  ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help  

@@ -1,7 +1,7 @@
- council READ  │  ~/code/telltale                                                    turn 1  │  3/3 seated  │  no brief 
+  council READ  │  ~/code/telltale                                                  turn 1  │  3/3 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code                 ○ idle  │    Codex                       ○ idle  │    Antigravity  ────  ⠋ waiting 1m13s 
-   ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
+  ▸ Claude Code                 ○ idle  │    Codex                      ○ idle  │    Antigravity  ───  ⠋ waiting 1m13s  
+    ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -18,7 +18,7 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
- no turn dispatched yet.               │  no turn dispatched yet.               │  working — the reply arrives whole.   
+  no turn dispatched yet.               │  no turn dispatched yet.              │  working — the reply arrives whole.   
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ›                                                                                                                      
- VIEW                                    ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help 
+  ›                                                                                                                     
+  VIEW                                  ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  ctrl+c cancel  │  ? help  

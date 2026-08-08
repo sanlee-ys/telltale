@@ -32,6 +32,42 @@ const (
 	// which side-by-side comparison stops beating tabs.
 	columnsBreak = 96
 
+	// framePad is the margin between the terminal's edge and anything the room
+	// draws — one value, applied on BOTH sides of every line.
+	//
+	// It was a bare " " literal in about ten builders (the header, the notice,
+	// the column grid, the tab bar, the single-column and turn-page bodies, the
+	// composer's five row shapes, the mode line, the help panel) with its
+	// arithmetic twin — a literal 2, being pad×2 — in eight more places that
+	// subtract it back out to get a usable width. Those two families have to
+	// agree exactly: a builder that padded more than its width arithmetic
+	// subtracted would push the row past the terminal edge, which is the
+	// off-by-one §9.11 found in the header's gap and fit was quietly eating.
+	// Naming it makes that agreement checkable instead of a coincidence
+	// maintained by hand.
+	//
+	// Sites that subtract it use framePad*2 rather than a literal, so the two
+	// move together. A `- 2` NOT written that way is something else — labelRule's
+	// two cells of air around its rule, for instance — and is deliberately left
+	// alone.
+	//
+	// **Two, and it is the same two `gutter` is.** The room had it at one, so the
+	// interior of the grid breathed and its edges did not: two cells each side of
+	// every rail, one cell at the terminal's edge. That is a margin narrower than
+	// the gutters inside it, which is the inverse of what a grid wants — the eye
+	// reads the outer boundary as the tightest thing on screen and the whole
+	// frame as crowded against the terminal, while the middle reads loose. The
+	// screenshot pass that set `gutter` to 2 named exactly this feeling ("rigid /
+	// cramped") and fixed it in the one place it was looking.
+	//
+	// It costs 2 cells of total width, which is the same trade `gutter` made and
+	// is bounded the same way: `minColumn` and `stripColumn` are floors on what a
+	// column may shrink to, and the tier drops to tabs before a column crosses
+	// them, so the cells come out of reading width at wide frames and out of
+	// nothing at narrow ones. `TestColumnsExactlyFillTheWidth` recomputes the
+	// chrome from this constant, so the arithmetic cannot drift from the paint.
+	framePad = 2
+
 	// gutter is the space each side of the vertical separator between columns.
 	//
 	// Two, not one: a single cell left prose welded to the │ on Windows
@@ -46,28 +82,49 @@ const (
 	minColumn = 24
 
 	// stripColumn is the width of a seat that is on screen but not owning the
-	// frame this turn (unaddressed under a narrow route). Wide enough for a
-	// two-letter vendor tag + phase mark + the phase word; narrow enough that
-	// the addressed seats get real reading width. Intent-controlled — see
-	// State.FrameOwners.
-	stripColumn = 14
+	// frame this turn (unaddressed under a narrow route). Intent-controlled —
+	// see State.FrameOwners.
+	//
+	// **Eighteen, and it is a READING width rather than an arithmetic floor.**
+	// It was fourteen, and fourteen was derived — the widest phase word
+	// (`streaming`, `cancelled`) is nine cells, its mark costs two more, and the
+	// remaining three are exactly a two-letter vendor tag and the space after
+	// it. That arithmetic is correct and it answers the wrong question. It says
+	// what a strip's HEADER cannot go below; it says nothing about the prose
+	// underneath, and prose is most of what a strip draws.
+	//
+	// At fourteen the prose shredded. §9.19's coalesced skip line — the ordinary
+	// content of a backgrounded seat, on most turns the ONLY content it has —
+	// came out as `○ not` / `addressed in` / `turn 4`, three lines to say one
+	// short sentence, with the phrase that carries the meaning split across two
+	// of them. §9.19's `last: turn 8 ✓` was likewise wrapping. A column whose
+	// every line breaks mid-phrase is not narrow, it is unreadable, and the
+	// point of keeping these seats on screen at all (§9.18) is that a reader can
+	// take them in at a glance.
+	//
+	// Eighteen is the smallest width that lets `○ not addressed` sit on one line
+	// and `last: turn 8 ✓` sit on one line — the two things a strip exists to
+	// say. The header floor is still a floor and still holds: fourteen remains
+	// the width below which the header itself would break, so eighteen clears it
+	// by four and the shedding ladder §9.18 built is untouched.
+	//
+	// It costs four cells, taken from the primary column's reading width, and
+	// `weightedWidths` refuses the split outright rather than shipping a primary
+	// under `minColumn` — so at a width where four cells would matter, the frame
+	// falls back to equal columns instead of trading a readable strip for an
+	// unreadable seat.
+	stripColumn = 18
 
 	// stripWidth is the width at or below which a column stops rendering as a
 	// seat and renders as a STRIP: identity collapses to its two-letter vendor
 	// tag, the clock and the cost leave, and the badge row keeps only a posture
 	// word that fits whole (view.go, stripHeader / stripBadges).
 	//
-	// It is stripColumn itself, and the arithmetic is why it cannot be anything
-	// else. The widest thing a header must still say WHOLE is its phase word —
-	// `streaming` and `cancelled` are nine cells — and the mark in front of it
-	// costs two more. Fourteen minus eleven is three: exactly a two-letter tag
-	// and the space after it. One more cell of indent and the tag would not fit;
-	// one fewer cell of column and the phase word would clip, which §9.11 rules
-	// is not a word at all.
+	// It is stripColumn itself, so the two cannot disagree about what a strip is.
 	//
 	// Nothing else in this package can land here. A PRIMARY column never falls
 	// below minColumn (24) — the tier drops to tabs first — and a tabbed column
-	// is the frame minus two pads, so MinWidth already floors it at 58. So a
+	// is the frame minus two pads, so MinWidth already floors it at 56. So a
 	// column at or under this width is a strip, and no second predicate is
 	// needed to say so.
 	stripWidth = stripColumn
@@ -88,6 +145,10 @@ const (
 	// Body pays for the difference, which is why the ceiling exists at all.
 	maxComposerRows = 6
 )
+
+// framePadStr is framePad as the string the builders actually write. Derived
+// rather than spelled, so the literal and the arithmetic cannot disagree.
+var framePadStr = strings.Repeat(" ", framePad)
 
 // Layout is the resolved plan for one frame.
 type Layout struct {
@@ -181,7 +242,7 @@ func resolveLayoutIn(in layoutInput) Layout {
 		return l
 	}
 
-	chrome := 2 + (in.Cols-1)*(1+2*gutter)
+	chrome := 2*framePad + (in.Cols-1)*(1+2*gutter)
 	if l.Tier == TierColumns && (in.Width-chrome)/in.Cols < minColumn {
 		// Every column would fall under the readability floor. Tabs.
 		l.Tier = TierTabs
@@ -219,7 +280,7 @@ func resolveLayoutIn(in layoutInput) Layout {
 	}
 
 	if l.Tier == TierTabs {
-		l.Cols, l.ColWidth = 1, in.Width-2 // one pad each side
+		l.Cols, l.ColWidth = 1, in.Width-2*framePad // one pad each side
 		if l.ColWidth < 1 {
 			l.ColWidth = 1
 		}
@@ -253,7 +314,7 @@ func weightedWidths(width, cols int, primary []bool) ([]int, bool) {
 	if nPrim == 0 || nPrim == cols {
 		return nil, false
 	}
-	chrome := 2 + (cols-1)*(1+2*gutter)
+	chrome := 2*framePad + (cols-1)*(1+2*gutter)
 	usable := width - chrome
 	nStrip := cols - nPrim
 	if nStrip*stripColumn >= usable {
@@ -299,7 +360,7 @@ func (l Layout) extraFor(idx int) int {
 	if l.Tier != TierColumns || l.Cols == 0 {
 		return 0
 	}
-	chrome := 2 + (l.Cols-1)*(1+2*gutter)
+	chrome := 2*framePad + (l.Cols-1)*(1+2*gutter)
 	rem := (l.Width - chrome) - l.Cols*l.ColWidth
 	if idx == 0 {
 		return rem

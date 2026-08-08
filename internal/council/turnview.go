@@ -514,7 +514,7 @@ func pageBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	cell := pageCell(st, lay.ColWidth, lay.Body, sty, g)
 	var b strings.Builder
 	for i, l := range cell {
-		b.WriteString(" " + l + " ")
+		b.WriteString(framePadStr + l + framePadStr)
 		if i < len(cell)-1 {
 			b.WriteString("\n")
 		}

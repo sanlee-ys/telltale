@@ -1,4 +1,4 @@
- council READ  |  ~/code/telltale                                                    turn 4  |  3/3 seated  |  no brief 
+  council READ  |  ~/code/telltale                                                  turn 4  |  3/3 seated  |  no brief  
 ------------------------------------------------------------------------------------------------------------------------
                                                                                                                         
                                                                                                                         
@@ -6,19 +6,19 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
- turn 4  --------------------------------------------------------------------------------------------------  → everyone 
- : what does resume cost by turn five?                                                                                  
+  turn 4  ------------------------------------------------------------------------------------------------  → everyone  
+  : what does resume cost by turn five?                                                                                 
                                                                                                                         
- Claude Code  ---------------------------------------------------------------------------------------  - streaming  12s 
- Considering the tradeoffs.                                                                                             
+  Claude Code  -------------------------------------------------------------------------------------  - streaming  12s  
+  Considering the tradeoffs.                                                                                            
                                                                                                                         
- Codex  -----------------------------------------------------------------------------------------------  - waiting  12s 
- working — the reply arrives whole.                                                                                     
+  Codex  ---------------------------------------------------------------------------------------------  - waiting  12s  
+  working — the reply arrives whole.                                                                                    
                                                                                                                         
- Antigravity  -----------------------------------------------------------------------------------------  - waiting  12s 
- * Read: docs/design.md +                                                                                               
+  Antigravity  ---------------------------------------------------------------------------------------  - waiting  12s  
+  * Read: docs/design.md +                                                                                              
                                                                                                                         
- working — the steps above are what it has done so far.                                                                 
+  working — the steps above are what it has done so far.                                                                
 ------------------------------------------------------------------------------------------------------------------------
- :                                                                                                                      
- TURN 4/4                                     ^v scroll  |  [ ] turn  |  t grid  |  y yank  |  ctrl+c cancel  |  ? help 
+  :                                                                                                                     
+  TURN 4/4                                   ^v scroll  |  [ ] turn  |  t grid  |  y yank  |  ctrl+c cancel  |  ? help  

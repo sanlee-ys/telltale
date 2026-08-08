@@ -33,7 +33,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 	b.WriteString(rule(st.Width, sty, g))
 	b.WriteString("\n")
 	if lay.Notice > 0 {
-		b.WriteString(fit(" "+noticeLine(st, sty, g, st.Width-2), st.Width))
+		b.WriteString(fit(framePadStr+noticeLine(st, sty, g, st.Width-2*framePad), st.Width))
 		b.WriteString("\n")
 	}
 
@@ -221,7 +221,7 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	// run-on label — which is what a bare space made them.
 	sep := "  " + sty.Rule().Render(g.Sep) + "  "
 	pathWidth := func(r string) int {
-		return lay.Width - lipgloss.Width(left) - lipgloss.Width(r) - 2 - lipgloss.Width(sep)
+		return lay.Width - lipgloss.Width(left) - lipgloss.Width(r) - 2*framePad - lipgloss.Width(sep)
 	}
 
 	// The route sheds BEFORE the workspace and before the seated/briefed counts,
@@ -241,7 +241,7 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 		// own name.
 		affordable := pathWidth(right) > 3
 		if pathWidth(bare) <= 3 {
-			affordable = lay.Width-lipgloss.Width(left)-lipgloss.Width(right)-2 >= 1
+			affordable = lay.Width-lipgloss.Width(left)-lipgloss.Width(right)-2*framePad >= 1
 		}
 		if !affordable {
 			right = bare
@@ -254,11 +254,11 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 		mid = sep + sty.Muted.Render(elideLeft(displayPath(st), pathw, g.Ellipsis))
 	}
 
-	gap := lay.Width - lipgloss.Width(left) - lipgloss.Width(mid) - lipgloss.Width(right) - 2
+	gap := lay.Width - lipgloss.Width(left) - lipgloss.Width(mid) - lipgloss.Width(right) - 2*framePad
 	if gap < 1 {
 		gap = 1
 	}
-	return " " + left + mid + strings.Repeat(" ", gap) + right + " "
+	return framePadStr + left + mid + strings.Repeat(" ", gap) + right + framePadStr
 }
 
 // noticeLine is the collapsed-seat notice, truncated honestly.
@@ -363,7 +363,7 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	rails := railRows(cells, lay.Body)
 	var b strings.Builder
 	for row := 0; row < lay.Body; row++ {
-		b.WriteString(" ")
+		b.WriteString(framePadStr)
 		div := blankSep
 		if rails[row] {
 			div = sep
@@ -374,7 +374,7 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 			}
 			b.WriteString(cells[j][row])
 		}
-		b.WriteString(" ")
+		b.WriteString(framePadStr)
 		if row < lay.Body-1 {
 			b.WriteString("\n")
 		}
@@ -2139,7 +2139,7 @@ func tabBar(st State, lay Layout, sty Styles, g Glyphs) string {
 		}
 	}
 	// fit, not padRight: parts are already styled per tab.
-	return " " + fit(strings.Join(parts, "  "), lay.Width-2) + " "
+	return framePadStr + fit(strings.Join(parts, "  "), lay.Width-2*framePad) + framePadStr
 }
 
 func tabBody(st State, lay Layout, sty Styles, g Glyphs) string {
@@ -2166,7 +2166,7 @@ func tabBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	cell := columnCell(st, st.Columns[idx], seatAddressed, scrollHint(st, g), lay.ColWidth, lay.Body, sty, g)
 	var b strings.Builder
 	for i, l := range cell {
-		b.WriteString(" " + l + " ")
+		b.WriteString(framePadStr + l + framePadStr)
 		if i < len(cell)-1 {
 			b.WriteString("\n")
 		}
@@ -2179,7 +2179,7 @@ func promptWidth(width int, g Glyphs) int {
 	// The prompt glyph plus its space. One cell in both glyph sets, but measured
 	// rather than assumed, because a set that changed it would silently shift
 	// every wrap in the composer.
-	w := width - 2 - lipgloss.Width(g.Prompt+" ")
+	w := width - 2*framePad - lipgloss.Width(g.Prompt+" ")
 	if w < 1 {
 		w = 1
 	}
@@ -2230,8 +2230,8 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 		// so repeating "goes to everyone" here was footer noise on an empty draft
 		// — the exact chrome the Windows screenshot spent body on.
 		return padRows([]string{
-			" " + sty.Muted.Render(prefix) +
-				sty.Muted.Render(padRight("type a brief"+g.Caret, w, g)) + " ",
+			framePadStr + sty.Muted.Render(prefix) +
+				sty.Muted.Render(padRight("type a brief"+g.Caret, w, g)) + framePadStr,
 		}, lay, w, sty, g)
 	}
 
@@ -2250,7 +2250,7 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 			text = elideLeft(text, w, g.Ellipsis)
 		}
 		return padRows([]string{
-			" " + sty.Muted.Render(prefix) + sty.Text.Render(padRight(text, w, g)) + " ",
+			framePadStr + sty.Muted.Render(prefix) + sty.Text.Render(padRight(text, w, g)) + framePadStr,
 		}, lay, w, sty, g)
 	}
 
@@ -2270,8 +2270,8 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 	if elided > 0 {
 		// The same words the column overflow marker uses, deliberately: one
 		// vocabulary for "there is content you cannot see", wherever it appears.
-		out = append(out, " "+sty.Muted.Render(padRight(
-			g.Up+" "+strconv.Itoa(elided)+" more above", w+2, g))+" ")
+		out = append(out, framePadStr+sty.Muted.Render(padRight(
+			g.Up+" "+strconv.Itoa(elided)+" more above", w+2, g))+framePadStr)
 	}
 	for i, r := range rows {
 		// Continuation rows are indented to the prefix, so a wrapped brief reads
@@ -2280,7 +2280,7 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 		if i == 0 && elided == 0 {
 			p = prefix
 		}
-		out = append(out, " "+sty.Muted.Render(p)+sty.Text.Render(padRight(r, w, g))+" ")
+		out = append(out, framePadStr+sty.Muted.Render(p)+sty.Text.Render(padRight(r, w, g))+framePadStr)
 	}
 	return padRows(out, lay, w, sty, g)
 }
@@ -2289,7 +2289,7 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 // frame is the number of lines the terminal has whatever the draft is doing.
 func padRows(rows []string, lay Layout, w int, sty Styles, g Glyphs) []string {
 	for len(rows) < lay.Prompt {
-		rows = append(rows, " "+sty.Muted.Render("  ")+sty.Text.Render(padRight("", w, g))+" ")
+		rows = append(rows, framePadStr+sty.Muted.Render("  ")+sty.Text.Render(padRight("", w, g))+framePadStr)
 	}
 	return rows[:lay.Prompt]
 }
@@ -2327,6 +2327,15 @@ type hint struct {
 	// to make room for a key added in front of them — the room's way out of the
 	// room, spent on a motion key. A shed hint is one the ellipsis would
 	// otherwise have chosen at random.
+	//
+	// **Shed order is list order**, so where a hint sits in modeHints' slice is
+	// its rank as well as its position — the leftmost sheddable cell is the
+	// first to go. That used to be a backwards walk, which read as "newest
+	// first" and was not: `[ ]` is the second cell on the view line and `f` the
+	// third, and neither position tracks when it was introduced. Once a second
+	// rung existed the walk direction stopped being incidental and started
+	// deciding which key a narrow room keeps, so it is stated rather than
+	// inherited.
 	shed bool
 }
 
@@ -2483,7 +2492,23 @@ func modeHints(st State, g Glyphs) []hint {
 		{key: "[ ]", label: "turn", shed: true},
 	}
 	if several {
-		hs = append(hs, hint{key: "f", label: "expand"}, hint{key: "tab", label: "focus"})
+		// `f` is the SECOND rung of the shed ladder, after `[ ]`, and the two
+		// cells framePad now spends on the room's margins are what made a second
+		// rung necessary: at 80 columns the view line comes out one cell over
+		// with `[ ]` already gone, and this room sheds whole cells rather than
+		// clipping words (§9.18).
+		//
+		// `f` rather than `tab`, and rather than the tail: `tab` is how you reach
+		// the other seats at the tabbed tier, which is the tier this only bites
+		// at, so shedding it would strand a reader on one column. `f` is the cell
+		// §9.11 already ranked lowest — it is the first thing dropped outright in
+		// a room with one seat on screen, on the argument that it expands a
+		// column to a width it already has, and at the tabbed tier the drawn
+		// column is likewise already the whole frame. What it buys there is the
+		// expanded mode's persistence across a resize, which is the least any
+		// cell on this line offers.
+		hs = append(hs, hint{key: "f", label: "expand", shed: true},
+			hint{key: "tab", label: "focus"})
 	}
 	if st.Busy() {
 		return append(hs, hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
@@ -2556,22 +2581,31 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 func statusLine(left string, hs []hint, lay Layout, sty Styles, g Glyphs) string {
 	styled, plain := hints(sty, g, hs)
 	fits := func(p string) bool {
-		return lay.Width-lipgloss.Width(left)-lipgloss.Width(p)-2 >= 1
+		return lay.Width-lipgloss.Width(left)-lipgloss.Width(p)-2*framePad >= 1
 	}
-	for i := len(hs) - 1; i >= 0 && !fits(plain); i-- {
-		if !hs[i].shed {
-			continue
+	// Forwards, because shed order is list order — see hint.shed. Re-scanning
+	// from the front each time is what lets the slice shrink under the index.
+	for !fits(plain) {
+		i := -1
+		for j, h := range hs {
+			if h.shed {
+				i = j
+				break
+			}
+		}
+		if i < 0 {
+			break
 		}
 		hs = append(append([]hint{}, hs[:i]...), hs[i+1:]...)
 		styled, plain = hints(sty, g, hs)
 	}
-	gap := lay.Width - lipgloss.Width(left) - lipgloss.Width(plain) - 2
+	gap := lay.Width - lipgloss.Width(left) - lipgloss.Width(plain) - 2*framePad
 	if gap < 1 {
 		gap = 1
 		styled = sty.Muted.Render(truncate(plain,
-			maxInt(1, lay.Width-lipgloss.Width(left)-3), g.Ellipsis))
+			maxInt(1, lay.Width-lipgloss.Width(left)-2*framePad-1), g.Ellipsis))
 	}
-	return " " + left + strings.Repeat(" ", gap) + styled + " "
+	return framePadStr + left + strings.Repeat(" ", gap) + styled + framePadStr
 }
 
 // gateLabel names what is waiting, and how much else is behind it.
@@ -2672,7 +2706,7 @@ func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	for i := 0; i < lay.Body; i++ {
 		if i < len(lines) {
 			// fit, not padRight: some help lines are pre-styled.
-			b.WriteString(" " + fit(lines[i], lay.Width-2) + " ")
+			b.WriteString(framePadStr + fit(lines[i], lay.Width-2*framePad) + framePadStr)
 		} else {
 			b.WriteString(strings.Repeat(" ", lay.Width))
 		}

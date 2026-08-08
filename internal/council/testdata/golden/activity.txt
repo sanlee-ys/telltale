@@ -1,7 +1,7 @@
- council READ  │  ~/code/telltale                                                    turn 1  │  3/3 seated  │  no brief 
+  council READ  │  ~/code/telltale                                                  turn 1  │  3/3 seated  │  no brief  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ▸ Claude Code  ─────────────  ✓ done  │    Codex                       ○ idle  │    Antigravity                 ○ idle 
-   ro:tools  tokens                    │    ro:requested  final only            │    unsandboxed  final only            
+  ▸ Claude Code  ─────────────  ✓ done  │    Codex                      ○ idle  │    Antigravity                ○ idle  
+    ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -14,11 +14,11 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
- ⚙ Glob                                │                                        │                                       
- ⚙ Read                                │                                        │                                       
- ⚙ Bash: go test ./...                 │                                        │                                       
-                                       │                                        │                                       
- Tests pass.                           │  no turn dispatched yet.               │  no turn dispatched yet.              
+  ⚙ Glob                                │                                       │                                       
+  ⚙ Read                                │                                       │                                       
+  ⚙ Bash: go test ./...                 │                                       │                                       
+                                        │                                       │                                       
+  Tests pass.                           │  no turn dispatched yet.              │  no turn dispatched yet.              
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ›                                                                                                                      
- VIEW                             ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit 
+  ›                                                                                                                     
+  VIEW                           ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  i compose  │  ? help  │  q quit  
