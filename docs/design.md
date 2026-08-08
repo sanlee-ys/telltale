@@ -1296,8 +1296,11 @@ Rules that outrank convenience:
 4. ~~Exact Claude/Codex on-disk data sources~~ — **ANSWERED, §3.1–3.3**, with Claude
    verified live and Codex's first live pass run 2026-08-01 (§3.4; short remainder
    itemized there).
-5. Distribution naming (`telltale-hud` on any registry; winget/scoop manifests) — at
-   packaging time. Go binary means npm is optional, not required.
+5. ~~Distribution naming (`telltale-hud` on any registry; winget/scoop manifests) — at
+   packaging time. Go binary means npm is optional, not required.~~ — **ANSWERED
+   2026-08-08, §8 "Packaging decisions":** the bare name `telltale` was free on scoop
+   and winget, so the `telltale-hud` fallback goes unused; winget takes the
+   publisher-qualified `sanlee-ys.telltale`; npm stays skipped rather than renamed.
 6. ~~HUD UI design section~~ — **ANSWERED, §7:** layout grid, colour/threshold tokens
    shared with the statusline, motion rules, degraded-state renders. Written before HUD
    build per ADR-002; every render in §7.3 and every row in §7.7 is a golden/fixture.
@@ -2513,6 +2516,86 @@ these items are ordered by that sequence, not by version number.
    reverse-engineering `status` out of the store; and the `cursor-agent` CLI keeps a
    separate store that is not installed on the survey machine and stays unverified and
    out of scope until it is.
+
+#### Packaging decisions (settled 2026-08-08; §6.5 closed here)
+
+Adoption item 1's first piece — prebuilt binaries and a one-command install — is
+**built and not yet fired**. `.goreleaser.yaml` and `.github/workflows/release.yml`
+exist; no tag does. §6.5 deferred distribution naming "to packaging time", and this is
+it, so the rulings are here rather than in the open-questions list.
+
+**Tag day is one command.** `git tag vX.Y.Z && git push origin vX.Y.Z`. A `v*` tag is
+the release workflow's only trigger; merging to main releases nothing. The workflow
+then runs the repo's own gate, builds, and stages a **draft** release. The runbook
+lives in [packaging/README.md](../packaging/README.md) — this section is the argument,
+that file is the procedure, and neither restates the other.
+
+1. **Targets, and each one's label.** Four: `windows/amd64`, `darwin/amd64`,
+   `darwin/arm64`, `linux/amd64`, CGO off. The labels above are binding on the release
+   notes and are printed per download in the release body: Windows **continuously
+   verified**, `darwin/amd64` **smoke-verified on Intel macOS** (point-in-time,
+   `052a9d6` — the Mac that ran it is Intel, and the label says which arch was under
+   the smoke rather than "macOS" flat), `linux/amd64` **built, not verified**.
+   `darwin/arm64` is the one addition to the ADR-005 list and it takes the Linux label
+   verbatim: **built, not verified**. Shipping it was weighed against withholding it —
+   most Macs are Apple Silicon, so refusing to build it replaces a labelled binary with
+   no binary at all, which serves nobody and teaches nobody anything. The label is the
+   whole claim. `windows/arm64` and `linux/arm64` are not built: no verification story
+   and no known user, and an unlabelled binary nobody has run is the packaging form of
+   a rendered guess.
+2. **Names: `telltale` everywhere.** §6.5 named `telltale-hud` as the fallback if the
+   bare name collided. It does not — checked at packaging time against the scoop
+   `Main` and `Extras` buckets and against `microsoft/winget-pkgs`, both clean — so the
+   fallback stays unused and the scoop app is `telltale`. winget needs a
+   publisher-qualified id and gets `sanlee-ys.telltale`, the GitHub-handle convention
+   `junegunn.fzf` and `ajeetdsouza.zoxide` already use. npm remains skipped, not
+   renamed: the bare name there IS taken (an unrelated option parser), and §6.5 already
+   ruled npm optional for a Go binary.
+3. **The scoop bucket is in this repo, `bucket/`.** Rejected: a second repo,
+   `sanlee-ys/scoop-telltale`. The deciding cost is a credential rather than
+   convenience — goreleaser pushing a manifest into a *different* repo needs a
+   cross-repo PAT held as a release secret, while pushing into its own needs only the
+   workflow's built-in `GITHUB_TOKEN`, which the release already holds to upload
+   artifacts. A project whose stated posture is that it reads no credentials should not
+   mint a long-lived write token for one JSON file. `scoop bucket add` accepts any git
+   repo carrying a `bucket/` directory, so the user's command is the same length under
+   either choice, and the second repo buys nothing but a second thing to keep alive.
+4. **The release is a DRAFT and stays one.** goreleaser's job ends at "artifacts and
+   notes are staged"; publishing is outward-facing and is a human action. The honest
+   consequence, recorded rather than glossed: the scoop manifest is committed in the
+   same run, so between that commit and the publish click, `scoop install telltale`
+   points at a URL that 404s. It fails cleanly and installs nothing — but the window is
+   real, and the answer is to publish promptly rather than to pretend it isn't there.
+   `skip_upload: auto` keeps snapshots and prereleases out of the bucket entirely.
+5. **The release runs the repo's own gate, called and not copied.** `release.yml`'s
+   first job is `uses: ./.github/workflows/ci.yml` — vet, the suite, the build and the
+   three binary-level smokes, on `windows-latest`. A release that skips the gate is a
+   false green; a release running a hand-maintained second transcription of it is a
+   subtler one, and that is the only change `ci.yml` took (a `workflow_call` trigger).
+   goreleaser itself runs on `ubuntu-latest`: with CGO off the cross-compile is
+   host-independent, so the build host is a cost question, and what makes the Windows
+   artifact trustworthy is the Windows gate that already passed.
+6. **Changelog: plain `git log`, ascending, ungrouped** — not goreleaser's default
+   Conventional-Commits grouping, and explicitly not `use: github-native`. This repo's
+   commit voice is a lowercase sentence describing the behavior change (CLAUDE.md), not
+   a `feat(x):` label, so CC grouping would file every commit under "Others" beneath
+   three empty headings; squash-merge already makes those subjects the PR titles, which
+   is the changelog anyone would write by hand. `github-native` is rejected for a
+   harder reason: it replaces the entire release body, which would delete the
+   platform-label table — the part of the release that has to be true.
+7. **Not packaged, and why.** No Homebrew tap: macOS is smoke-verified on Intel only,
+   and a tap resolves just as happily on Apple Silicon, which would launder "built, not
+   verified" into "supported". No `.deb`/`.rpm`: a distro package is a support claim
+   Linux has not earned here, and the tarball carries the label a package would drop.
+   No npm, per (2). winget is packaged but **not automated** — submission is a pull
+   request against a Microsoft-owned repository, and a bot opening PRs on someone
+   else's repo every tag is a different thing from cutting a release. The manifest
+   draft (schema 1.12.0, `zip` + nested `portable`, `windows_amd64` only) and the
+   submission flow are in [packaging/winget/](../packaging/winget/).
+
+What this does **not** discharge: the README hero visual and the zero-config first
+frame are the other two pieces of adoption item 1 and are untouched here, and the
+positioning line still lands with the slice, not ahead of it.
 
 Neither track discharges what verification already owes: §3.4's remaining passive-tail
 items stay open (§3.7's first live Gemini pass ran and passed 2026-08-03), and

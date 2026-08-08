@@ -37,11 +37,56 @@ council`** seats the 4-vendor fleet, and every sandbox and streaming claim in it
 measured against a live run of that CLI rather than read off its `--help`
 ([docs/design.md §9](docs/design.md)).
 
-Build from source:
+## Install
+
+**First release pending.** v1 is held until council settles (above), so nothing is
+tagged yet and the two package-manager lines below do not resolve today. They are
+written down rather than promised later because the packaging is built and exercised:
+`.goreleaser.yaml` and `.github/workflows/release.yml` cut all four binaries, the
+checksums and the scoop manifest from a `v*` tag, and the whole path has been run end
+to end in snapshot mode. Until the tag, build from source — one command, and it needs
+nothing but Go.
+
+**From source** — works now:
 
 ```
 go build -o telltale.exe ./cmd/telltale
+./telltale.exe council
 ```
+
+**Windows, scoop** — once the first release is published:
+
+```
+scoop bucket add telltale https://github.com/sanlee-ys/telltale
+scoop install telltale
+telltale council
+```
+
+**Windows, winget** — pending submission to `microsoft/winget-pkgs`; the manifest
+draft and the flow are in [packaging/](packaging/):
+
+```
+winget install sanlee-ys.telltale
+telltale council
+```
+
+**Direct download** — each release attaches archives for `windows_amd64`,
+`darwin_amd64`, `darwin_arm64` and `linux_amd64` with a `checksums.txt`. Unpack one,
+put `telltale` on your PATH, and:
+
+```
+telltale council
+```
+
+**The binaries do not all claim the same thing, and each release says so per
+download.** Windows is the **continuously verified target** — every commit runs the
+suite, the build and binary-level smokes on `windows-latest`. `darwin_amd64` is
+**smoke-verified on Intel macOS**, point-in-time and SHA-bearing. `darwin_arm64` and
+`linux_amd64` are **built, not verified**: cross-compiled and never run by this
+project. That is the same flagged-limitation rule the gauges apply to a segment,
+applied to a platform ([docs/design.md §8](docs/design.md)).
+
+`telltale version` prints the tag a binary was built from; a source build says `dev`.
 
 `telltale.exe council` opens the room, which is the mode this project is for and has its
 own section below. The two gauges wire in underneath it.

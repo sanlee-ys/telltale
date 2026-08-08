@@ -1,0 +1,51 @@
+name: release
+
+# A v* tag is the ONLY trigger. Nothing here runs on a merge to main, and
+# nothing publishes: goreleaser stages a DRAFT release (`.goreleaser.yaml`,
+# release.draft) and a human presses publish.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  # Uploading the release artifacts, and committing the scoop manifest into
+  # this repo's own bucket/ directory. Nothing needs a cross-repo token —
+  # that was the deciding argument for the in-repo bucket (design.md §8).
+  contents: write
+
+jobs:
+  # The repo's own gate, called rather than copied. `.github/workflows/ci.yml`
+  # is the single definition of what "green" means here — vet, the suite, the
+  # build, and three binary-level smokes on windows-latest — and a release that
+  # ran a second, hand-maintained copy of it would be green against a gate that
+  # had drifted. A release that skips the gate is a false green; a release that
+  # runs a stale copy of it is a subtler one.
+  gate:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: gate
+    # ubuntu-latest, while the gate above runs windows-latest. Windows is the
+    # primary target (ADR-002) and it is where the binary is actually exercised
+    # — but with CGO off, cross-compilation is host-independent, so the build
+    # host is a cost question rather than a correctness one. The Windows
+    # artifact is byte-identical whichever runner produces it; what makes it
+    # trustworthy is the gate that already passed on Windows.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # goreleaser reads the tag history to build the changelog; a shallow
+          # clone produces a release whose notes are silently empty.
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
