@@ -59,9 +59,12 @@ func TestReadmeHeroImagesAreTheHudThatRenders(t *testing.T) {
 	} {
 		t.Run(tc.palette.Name, func(t *testing.T) {
 			// Verbatim, blank row and all — unlike council's frame, which drops
-			// its empty scrollback. README.md quotes this golden whole
-			// (TestReadmeHeroFrameMatchesItsGolden), and the picture shows what
-			// the README shows.
+			// its empty scrollback. README.md used to quote this golden as text
+			// beside the picture; two copies of one render on one screen was
+			// redundancy, not belt-and-braces, and the picture is the copy that
+			// carries colour. So this is now the only place the frame appears
+			// there, and the readback below is what stands in for the text gate
+			// the quoted copy used to provide.
 			lines := strings.Split(strings.TrimRight(Render(state(), NewStyles(tc.isDark), g), "\n"), "\n")
 			got, err := svgframe.Render(svgframe.Frame{
 				Caption: "telltale hud",
