@@ -244,13 +244,13 @@ own configuration. One keystroke settles it on your machine — press `y`, then 
 
 ## The room remembers
 
-Each column keeps its whole conversation, oldest turn first: a
-separator naming the turn, the brief *you* typed as that seat received it, then what it
-answered, with the time and cost that turn reported. Dispatching a new turn files the
-finished one rather than erasing it, so `↑`/`↓` and `g` scroll back through the whole
-argument instead of through one reply — and the overflow marker names those keys where
-the eye already is, next to the count of what is hidden. The compose area grows with the draft — `ctrl+j` puts a
-newline in it, `enter` still dispatches — up to six rows.
+Each column keeps its whole conversation, oldest turn first: a separator naming the turn,
+the brief *you* typed as that seat received it, then what it answered, with the time and
+cost that turn reported. Dispatching a new turn files the finished one rather than erasing
+it, so `↑`/`↓` and `g` scroll back through the whole argument instead of through one reply
+— and the overflow marker names those keys where the eye already is, next to the count of
+what is hidden. The compose area grows with the draft — `ctrl+j` puts a newline in it,
+`enter` still dispatches — up to six rows.
 
 A seat that is not installed, or that is installed and cannot be driven, folds out of the
 grid so the seats that answer get the width; one line under the header names what was
@@ -266,9 +266,8 @@ property of the room, not of the launch: `/cd <dir>` typed in the composer moves
 — absolute, relative to the current workspace, or a sibling of it — and every seat
 follows on the next dispatch. **Posture is never restored** — it comes from this launch's
 flags or from the default, never from the saved file, because a posture that can arrive
-from a file is not one anyone typed. And one
-room shared by every terminal means two councils open at once share one state file —
-last save wins.
+from a file is not one anyone typed. And one room shared by every terminal means two
+councils open at once share one state file — last save wins.
 
 ## Write posture, and what actually contains the room
 

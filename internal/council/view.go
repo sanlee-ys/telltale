@@ -3230,8 +3230,8 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		"  ctrl+j/esc   ctrl+j puts a newline in the brief (it grows to six rows); esc leaves compose, keeping the draft",
 		// Down from three rows to two. What went is "the others are review, IDE
 		// and tiebreak lanes" — which explains why the fleet is shaped this way
-		// rather than what a key does, and it is in the README and ADR-010 where
-		// that argument belongs.
+		// rather than what a key does, and it is in docs/design.md §9.11 and
+		// ADR-010 where that argument belongs.
 		//
 		// The exclusion form was folded into the SAME two rows rather than given
 		// a third: this panel's budget is hard (17 rows, above), and a feature
