@@ -551,6 +551,35 @@ func toolArg(in map[string]any) string {
 	return ""
 }
 
+// editHalves reads the before and after of a structured file edit out of a
+// permission payload — the measured input to the gate card's preview (§9.41).
+//
+// `old_string` and `new_string` are Claude Code's own key names for the Edit
+// tool, captured live at 2.1.226 (the request is quoted whole on runner.Gate).
+// Nothing else in the payload is treated as an edit: `content` — the Write
+// tool's single field, captured in the same session — is deliberately NOT read
+// here, because a payload carrying only the AFTER cannot say what the file
+// holds now, and a preview that showed one half as if it were a diff would be
+// council inventing the other.
+//
+// BOTH OR NEITHER, and that is the guard rather than a nicety. The renderer's
+// whole test for "may I draw a preview" is that these two differ, so a function
+// that filled one from a payload carrying one would turn a Write into a green
+// block of added lines against an empty file it never measured.
+//
+// An empty `new_string` beside a non-empty `old_string` is a legal, measured
+// DELETION and passes: the pair was carried, the halves differ, and the preview
+// is all removals. Two equal halves — an edit that changes nothing — return as
+// they are and the renderer draws nothing, because there is nothing to show.
+func editHalves(in map[string]any) (string, string, bool) {
+	oldS, oldOK := in["old_string"].(string)
+	newS, newOK := in["new_string"].(string)
+	if !oldOK || !newOK {
+		return "", "", false
+	}
+	return oldS, newS, true
+}
+
 // clipArg bounds one trace line. A heredoc or a generated patch can run to
 // thousands of characters, and a trace that scrolls the answer off screen has
 // defeated its own purpose.
@@ -692,6 +721,13 @@ func (Claude) ParseEvent(line []byte) (runner.Event, bool) {
 			Tool:      sl.Request.ToolName,
 			Text:      sl.Request.ToolName,
 			Input:     sl.Request.Input,
+		}
+		// The two halves of an edit, when the vendor sent both. Read here rather
+		// than in council because the KEY NAMES are this vendor's, exactly as
+		// Text's formatting is: the room renders a preview, and only the adapter
+		// knows which fields of which payload carry one.
+		if oldS, newS, ok := editHalves(sl.Request.Input); ok {
+			g.OldContent, g.NewContent = oldS, newS
 		}
 		if arg := toolArg(sl.Request.Input); arg != "" {
 			// The same formatting the activity trace uses, on purpose: the card

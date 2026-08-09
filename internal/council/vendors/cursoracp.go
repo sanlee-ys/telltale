@@ -620,6 +620,14 @@ func (a *acpProtocol) serverRequest(msg acpLine) ([]runner.Event, [][]byte) {
 			// approval; ACP's answer is an option id. Carrying a blob nothing
 			// sends would be a copy of a Write's entire file content held in
 			// memory for no purpose.
+			//
+			// OldContent/NewContent are left empty for the same reason, and the
+			// consequence is stated rather than hidden: this seat's cards carry
+			// NO before/after preview (§9.41). `session/request_permission`'s
+			// captured params name the call — a title and a kind — and carry
+			// neither half of an edit, so there is nothing measured to draw. The
+			// seat also does not ask about edits at all (§9.36), which is why
+			// this is a smaller hole than it sounds.
 		},
 	}}, nil
 }

@@ -2320,6 +2320,12 @@ func gateCardLines(q []PendingGate, who string, w int, sty Styles, g Glyphs) []s
 	// and read as a new statement rather than as the rest of the question.
 	out := styleAll(hangWrap(g.Warn+" ", "waiting on you: "+subject, w), sty.Alert)
 
+	// The edit itself, when the vendor's payload carried both halves of it — and
+	// nothing at all when it did not (§9.41). It sits between the question and
+	// the keys because that is the order the decision is made in: what is being
+	// asked, what it would do, how to answer.
+	out = append(out, gatePreview(q[0], w, sty, g)...)
+
 	// `a` is on the card and not only in the mode line, because it is the one key
 	// here nobody arrives already knowing. y and n are the two answers anyone
 	// expects from a prompt; "stop asking me" is a third thing the card has to
@@ -2335,6 +2341,115 @@ func gateCardLines(q []PendingGate, who string, w int, sty Styles, g Glyphs) []s
 	// already is. Indented with the rest of the card's body, because they belong
 	// to the question above rather than to the reply below.
 	return append(out, styleAll(indentWrap("  ", keys, w), sty.Identity)...)
+}
+
+// gatePreviewHalfLines is how many lines of each half of an edit the card shows
+// before it starts counting instead.
+//
+// Three, and the number is a budget rather than a taste. The card is CHROME —
+// columnChrome hands it to columnCell, which clips chrome to the cell's height
+// and gives the rest to the vendor's own output — so every line spent here is a
+// line of the reply the user cannot see while deciding. Three per half plus two
+// possible count lines is eight rows at worst, against a card that was four,
+// which leaves the transcript the majority of a 24-row terminal in the one state
+// where the room is stopped anyway.
+const gatePreviewHalfLines = 3
+
+// gatePreview is the before and after of the edit the card is asking about:
+// removed lines, then added lines, in the patch convention every reader of a
+// diff already owns (§9.41).
+//
+// **It renders ONLY what the payload carried.** PendingGate.Old and .New are
+// filled as a pair or not at all (see the adapter's editHalves), so the test is
+// whether they differ — and a call whose payload had no such pair, which is
+// every Bash, every Read, every Write and every request from the Cursor seat,
+// draws nothing here. Council never opens the file to fill the gap, never
+// reconstructs a before from a diff, and never shows one half as if it were
+// two. §4a.1's rule is that a field nothing sourced is absent rather than
+// plausible, and this is the card that guards a write: an invented line here
+// would be the room asking the user to approve something it made up.
+//
+// **The prefixes carry it, the colour only seconds it.** `-` and `+` are the
+// whole signal, exactly as they are on §9.37's raw patch lines, which is why
+// this reads identically under --ascii and NO_COLOR and why the goldens — which
+// render PlainStyles — are the proof of that rather than an approximation of it.
+// The styling reuses Styles.ForDiffLine, the same classifier those patch lines
+// go through, so council adds no hue for this: green-for-added and red-for-
+// removed is one convention spent twice, not a second vocabulary.
+//
+// What is classified is the COMPOSED line — the mark, a space, then the
+// vendor's own text — never the text alone, and the space between them is doing
+// real work. ForDiffLine matches `---`, `+++` and `@@` as headers BEFORE it
+// matches the change markers, precisely so a patch's file headers do not wear
+// the addition's green; a removed line whose own content happens to start with
+// `--` would otherwise compose to `---…` and be painted as chrome. `- --foo`
+// cannot, because the mark is always followed by a space.
+//
+// The `-`/`+` marks are patch punctuation and NOT entries in the Glyphs
+// alphabet, which matters because ASCII's set already spends `+` on ActOK and
+// `-` on the light rule. They do not collide: those are marks that stand alone
+// in a slot, and these only ever open a line inside this block, the same slot
+// argument Glyphs.Range makes for the hyphen.
+//
+// **Bounded, and it says so.** Each half shows at most gatePreviewHalfLines
+// lines and then a plain count of what it did not show — a per-half count
+// rather than one total, because a long removal would otherwise eat the whole
+// budget and the additions would vanish with no line admitting it. The count
+// line carries no glyph on purpose: `…` has an ASCII partner of `>`, and
+// `> 2 more removed lines` reads as a comparison rather than a truncation.
+//
+// Long lines are cut with truncate and the ellipsis glyph, on the PLAIN text,
+// before the style is applied — classify, truncate, style, and only then let
+// columnChrome's fit pad. fit alone would clip silently and would do it to a
+// string already carrying ANSI, which is §9.5's trap read backwards.
+func gatePreview(p PendingGate, w int, sty Styles, g Glyphs) []string {
+	if !p.HasPreview() {
+		return nil
+	}
+	var out []string
+	out = append(out, gatePreviewHalf(p.Old, "-", "removed", w, sty, g)...)
+	return append(out, gatePreviewHalf(p.New, "+", "added", w, sty, g)...)
+}
+
+// gatePreviewHalf renders one side of the edit: its lines, then what it left out.
+//
+// An empty half is zero lines and no count — an edit that only deletes has no
+// added side to draw, and "0 more added lines not shown" would be the room
+// filling a slot rather than answering a question.
+func gatePreviewHalf(content, mark, word string, w int, sty Styles, g Glyphs) []string {
+	if content == "" {
+		return nil
+	}
+	// TrimRight before splitting: the trailing newline of a block of file
+	// content is not a line, and an empty row wearing a `-` would claim a
+	// deletion the payload never described. (queueGate already trims, so this
+	// holds a hand-typed State to the same shape the live path produces.)
+	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
+	shown := lines
+	if len(lines) > gatePreviewHalfLines {
+		shown = lines[:gatePreviewHalfLines]
+	}
+	// The indent binds the block to the question above it, the same two cells
+	// the keys line below uses. It stays OUTSIDE the styled span so a coloured
+	// line begins at its own mark rather than two cells early.
+	const indent = "  "
+	inner := maxInt(1, w-lipgloss.Width(indent))
+	out := make([]string, 0, len(shown)+1)
+	for _, l := range shown {
+		body := strings.TrimRight(mark+" "+l, " ")
+		out = append(out, indent+sty.ForDiffLine(body).Render(truncate(body, inner, g.Ellipsis)))
+	}
+	if n := len(lines) - len(shown); n > 0 {
+		count := itoa(n) + " more " + word + " lines not shown"
+		if n == 1 {
+			count = "1 more " + word + " line not shown"
+		}
+		// Muted, and with no mark of its own: this is the card counting, not the
+		// vendor's content, and a `-` in front of it would put a line into the
+		// removal block that the payload does not contain.
+		out = append(out, styleAll(indentWrap(indent, count, w), sty.Muted)...)
+	}
+	return out
 }
 
 // badgeRow is the seat's claim about itself: what its sandbox actually is, how

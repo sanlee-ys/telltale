@@ -7438,3 +7438,121 @@ places a seat hue is spent stays closed; it was ratified as closed, and a fourth
 decision for whoever wants to reopen it rather than a side effect of this line. Under `--ascii`
 and `NO_COLOR` the strip reads exactly the same, which is the property every distinction this UI
 makes has to have: `NEEDS YOU` is the signal, and the mark and the weight only make it findable.
+
+### 9.41 the gate asked about an edit and would not show it (2026-08-09)
+
+The approval card (§9.8) names the call — `⚠ waiting on you: Edit: internal/council/gate.go` —
+and that is the whole of what a user has to decide on. For a `Bash` it is enough: the command
+*is* the action. For an edit it is not even close. The path says which file is about to change
+and says nothing about *what changes*, so the only two answers available are "yes, because I
+trust it" and "no, because I don't" — which is the gate reduced to a mood. **The card now shows
+the edit itself, as a red/green before/after, when the vendor's payload carried one.**
+
+```
+⚠ waiting on you: Edit:
+  internal/council/gate.go
+  - func gateCard() {
+  -  return nil
+  - }
+  + func gateCard() []string {
+  +  return lines
+  + }
+  y approve   n deny   a stop asking
+```
+
+#### What it renders is what was measured, and nothing else
+
+This is §4a.1 on the one card in the product that guards a write, so the rule is stricter here
+than anywhere: **council never opens the file, never reconstructs a before from an after, and
+never shows one half as if it were two.** A preview is drawn only when the vendor's own
+permission request carried *both* halves. Everything else — every `Bash`, every `Read`, every
+`Write`, every request from the Cursor seat — renders the card exactly as it rendered before
+this section existed, and `TestAPayloadWithoutABeforeShowsNoPreview` pins that by comparing
+against the *existing* `gate-card` golden rather than a new one of its own.
+
+Which payloads carry both was measured on 2026-08-09 against **Claude Code 2.1.226** on Windows,
+driving the gated invocation (`--permission-prompt-tool stdio`, `--permission-mode manual`,
+`--setting-sources ""`) in a throwaway directory. Two requests from that session, quoted whole
+on `runner.Gate` and replayed verbatim as tests:
+
+| tool | what the payload carries | what the card draws |
+|---|---|---|
+| **Edit** | `old_string` **and** `new_string` (plus a `replace_all` the room has no use for) | the before/after |
+| **Write** | `file_path` and `content` — the after, and no before at all | nothing |
+| **Cursor / ACP** (`session/request_permission`) | a title, a kind, and an options list (§9.36's capture) | nothing |
+
+`content` is deliberately *not* read as a new half. A Write knows what the file will say and
+says nothing about what it says now, so treating it as an addition would paint a green block
+against a before council never saw — a plausible value where §4a.1 requires an absent one. The
+Cursor seat is the same refusal one level up, and a smaller hole than it sounds: that seat does
+not ask about edits at all (§9.36), so the card it does raise is about a command, where the
+command is already the whole decision.
+
+**The two halves are a pair or neither.** `editHalves` fills both or returns nothing, which
+makes the renderer's test simply *do they differ* — and that one question folds in three "show
+nothing" cases honestly: no halves at all, an edit that changes nothing, and an edit whose only
+difference was a redacted secret. An empty `new_string` beside a non-empty `old_string` is a
+legal, measured **deletion** and draws all removals and no added-side count; "0 more added
+lines" would be the card filling a slot rather than answering a question.
+
+#### The one thing that crosses the Input boundary, and why it is two strings
+
+`runner.Gate.Input` is the vendor's whole argument blob, held only to be echoed back on an
+approval, and it has always been kept **off** `State` on purpose: for a Write it is the entire
+file content, one careless line away from the screen. That rule is not repealed here. What
+crosses is a **projection** — two named strings, `PendingGate.Old` and `.New` — because two
+fields with one purpose cannot be reached for by accident the way a map can. They are read by
+the *adapter*, not by council, for the same reason the card's `Text` is composed there: the key
+names are that vendor's, and the room renders a preview without knowing whose spelling produced
+it.
+
+They are redacted on the way through, and that matters more here than on the argument line the
+existing redaction was written for. A command is a *likely* place for a token to appear; the
+body of a file being edited is where one actually lives — and this lands in chrome that does not
+scroll away. Each half is redacted separately because each is rendered separately. Only trailing
+newlines are trimmed, never leading whitespace: an indent is content, and a preview that
+silently unindented the code it is asking about would be showing an edit nobody requested.
+
+#### The prefixes carry it; the colour only seconds it
+
+`-` and `+` are the entire signal, exactly as they are on §9.37's raw patch lines — which is why
+the preview reads identically under `--ascii` and `NO_COLOR`, and why the goldens, which render
+`PlainStyles`, are the *proof* of that rather than an approximation. The styling reuses
+`Styles.ForDiffLine`, the same classifier those patch lines already go through, so **council adds
+no hue for this**: green-for-added and red-for-removed is one convention spent twice, not a
+second vocabulary, and §9.28's closed list is untouched.
+
+The marks are patch punctuation and **not** entries in the `Glyphs` alphabet, which is worth
+saying because the ASCII set already spends `+` on `ActOK` and `-` on the light rule. They do not
+collide, on `Glyphs.Range`'s own slot argument: those are marks that stand alone in a slot, and
+these only ever open a line inside this block.
+
+#### Bounded, per half, and it says what it dropped
+
+The card is **chrome** — it costs body lines, `MaxScroll` derives the ceiling from it, and every
+row spent here is a row of the reply the user cannot read while deciding. So each half shows at
+most **three** lines and then counts: `2 more removed lines not shown`.
+
+The count is **per half**, not one total, because a long removal would otherwise spend the whole
+budget and take the additions with it, with no line admitting the additions had ever been there.
+It carries no glyph of its own: `…` has an ASCII partner of `>`, and `> 2 more removed lines`
+reads as a comparison rather than as a truncation — a marker that can be misread as a number is
+worse than a longer sentence. Long *lines* are cut with the ellipsis glyph on the plain text
+**before** the style is applied — classify, truncate, style, and only then let `fit` pad — because
+`fit` alone clips silently and would be clipping a string that now genuinely carries ANSI, which
+is §9.5's trap read backwards.
+
+#### What is deliberately not here
+
+**No intra-line diff.** The unit is the line, because that is the unit the payload arrives in;
+highlighting *which words* changed inside a line would be council computing a diff rather than
+displaying one, and the first thing it would get wrong is the case it was added for.
+
+**No scrolling the preview.** A card with its own viewport is a second scroll surface in a room
+that already has one per column plus a turn page, and the keys to move it would have to be taken
+from a mode whose whole contract is that `y` and `n` mean one thing each (§7.8). The bound plus
+an honest count is the trade; the whole edit is in the file the moment it is approved.
+
+**No preview on a denial or after the fact.** The trace still says `✗ denied by you` and nothing
+more. What the seat *would* have written is not what happened, and a room that showed it
+afterwards would be displaying a file state that never existed.

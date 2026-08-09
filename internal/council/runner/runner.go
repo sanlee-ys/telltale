@@ -209,6 +209,35 @@ type Gate struct {
 	// shows Text. Keeping it off the renderer's side of the boundary means
 	// there is no way for it to reach the screen by accident.
 	Input map[string]any
+
+	// OldContent and NewContent are the two halves of a structured file EDIT,
+	// and they are the only part of Input that may cross onto State (§9.41).
+	//
+	// They are a PAIR, filled by the adapter only when the vendor's own payload
+	// carried both halves as strings, and left empty in every other case. That
+	// is the whole honesty of the preview the gate card draws from them: a card
+	// showing a red/green before/after is claiming the vendor told council what
+	// the file says now AND what it would say after — and §4a.1's rule is that a
+	// field nothing sourced is absent rather than filled with a plausible value.
+	// Nothing here is ever read off disk and nothing is ever reconstructed; a
+	// payload carrying only the new half renders no preview at all.
+	//
+	// Measured against Claude Code 2.1.226 on Windows, driving the gated
+	// invocation (--permission-prompt-tool stdio, --permission-mode manual,
+	// --setting-sources "") in a throwaway directory. The Edit request, whole:
+	//
+	//	{"type":"control_request","request_id":"d0b6b7ee-…","request":{"subtype":"can_use_tool","tool_name":"Edit","display_name":"Edit","input":{"file_path":"…\\greeting.txt","old_string":"hello world","new_string":"goodbye world","replace_all":false},"description":"greeting.txt","permission_suggestions":[…],"tool_use_id":"toolu_012agqh64EdJ6VZYiGJ5gfHA"}}
+	//
+	// and the Write request captured in the same session, which carries the new
+	// content and NO old half — the case that must render nothing:
+	//
+	//	…"tool_name":"Write","input":{"file_path":"…\\note.txt","content":"PONG\n"}…
+	//
+	// Both halves are carried WHOLE rather than pre-clipped. Bounding is the
+	// renderer's job, because the count in "3 more removed lines not shown" is a
+	// claim about the payload, and a payload already cut here would make that
+	// number a lie about a number.
+	OldContent, NewContent string
 }
 
 // Event is one thing that happened to one vendor.
