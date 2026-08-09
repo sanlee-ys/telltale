@@ -207,6 +207,19 @@ type Model struct {
 	// recovery path it never renders — a stray `u` in view mode has to cost a
 	// y before it costs an attempt.
 	undoPending model.VendorID
+	// giveUpPending names the racing seat awaiting y/n before its racer is
+	// killed mid-race (`x`, §9.37 amended 2026-08-09), empty when nothing is.
+	//
+	// Confirmed for clearPending's reason, at clearPending's stake: y kills a
+	// process and retires a column, and no keystroke can restart the attempt —
+	// a stray `x` in view mode has to cost a y before it costs a racer. The
+	// measurement that forced the key is the second live /arena (2026-08-09,
+	// Windows box): three seats landed, the fourth streamed for 26m40s with
+	// the live stat honestly reading "no changes yet", and the operator sat
+	// ~20 minutes after the race was decided because ctrl+c — the only exit —
+	// cancels every seat at once. The room displayed the truth and offered no
+	// per-seat act on it.
+	giveUpPending model.VendorID
 	// adoptPending names the racer awaiting y/n before its arena branch is
 	// merged into the room's repo (/adopt, lifecycle.go), empty when nothing is.
 	//
@@ -606,6 +619,9 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.undoPending != "" {
 		return m.undoGateKey(msg)
 	}
+	if m.giveUpPending != "" {
+		return m.giveUpGateKey(msg)
+	}
 	if m.adoptPending != "" {
 		return m.adoptGateKey(msg)
 	}
@@ -910,6 +926,114 @@ func (m *Model) undoSeat(v model.VendorID) {
 	}
 	r.Undone = true
 	m.st.Notice = c.Label + "'s attempt undone — " + r.Branch + " and its worktree are back at " + shortSHA(r.Base)
+}
+
+// askGiveUpSeat arms the confirmation for giving up on the focused RACING seat
+// mid-turn (§9.37, amended 2026-08-09) — the one per-seat act that runs while
+// a turn is in flight, because mid-flight is the only time it means anything.
+// The measurement that forced it: the second live /arena raced four seats,
+// three landed in 5–27 minutes, and the fourth streamed for 26m40s with its
+// live stat honestly reading "no changes yet against <base>" the whole time —
+// so the operator sat ~20 minutes after the race was decided, because ctrl+c
+// is the only exit and it cancels EVERYTHING. One stuck racer held the whole
+// turn hostage while the room displayed the truth and offered no act on it.
+//
+// The refusals are each their own sentence because they are different facts
+// with different remedies (askUndoSeat's rule): no turn in flight (there is
+// nothing running to give up on), an ordinary turn (its seats share one fate
+// by design — this key is arena-only, and ctrl+c remains the whole-turn act),
+// and a seat that already landed (its result is settled; killing a corpse is
+// not a way to make it more finished). The help panel's room-controls row is
+// at its exact 114-cell budget and does not name this key: it is taught by
+// these refusals and by §9.37's amendment, the same way /adopt and
+// /arena drop are taught by theirs.
+func (m *Model) askGiveUpSeat() {
+	if m.turn == nil {
+		m.st.Notice = "no turn is in flight — x gives up on one racing seat mid-race"
+		return
+	}
+	if !m.turn.arena {
+		m.st.Notice = "this turn is not a race — an ordinary seat has nothing to give up on; ctrl+c cancels the whole turn"
+		return
+	}
+	c := m.focused()
+	if c == nil {
+		m.st.Notice = "no seat is focused"
+		return
+	}
+	if !m.turn.live[c.Vendor] {
+		m.st.Notice = c.Label + " already landed — there is nothing racing to give up on"
+		return
+	}
+	m.giveUpPending = c.Vendor
+	m.st.Notice = "give up on " + c.Label + "? y kills its racer and lands the column cancelled — anything it wrote stays in the diff · n lets it race"
+}
+
+// giveUpGateKey answers the confirmation armed by `x`. Anything that is not y
+// or n cancels rather than falling through to viewKey — clearGateKey's rule,
+// for clearGateKey's reason: this gate interrupts nothing, so the safe reading
+// of a key nobody meant to press is to leave the racer running.
+func (m *Model) giveUpGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	v := m.giveUpPending
+	m.giveUpPending = ""
+	switch msg.String() {
+	case "y":
+		m.giveUpSeat(v)
+	case "n":
+		m.st.Notice = "kept — the seat races on"
+	default:
+		m.st.Notice = "give-up cancelled — y confirms, n declines"
+	}
+	return m, nil
+}
+
+// giveUpSeat kills ONE racing seat's process and lands its column cancelled,
+// leaving the rest of the race running — which is the entire point: the turn's
+// live set drains through finishColumn exactly as it does for a seat that
+// landed on its own, so the turn can end when the others do.
+//
+// The kill lands on the RACER's side of the two-processes-one-vendor-id split
+// (applyEvents' KindDone attribution rule): the ephemeral session or the
+// keyed one-shot handle, both minted by dispatch's arena branch and both on
+// the TURN — never m.procs, so a room seat idling behind the same vendor id
+// survives its racer being given up on. The ephemeral kill is repeated by
+// finishColumn moments later (it kills before reading the diff, so the
+// receipt is a snapshot of a stopped attempt); both Kill implementations are
+// idempotent by contract, and the double call is cheaper than a second code
+// path finishColumn's ordering comment would have to carry.
+//
+// The events the dead process already queued arrive later and land inert:
+// its exit is a KindDone whose column is already terminal, eaten by the
+// stale-exit guard when a room process wears the id and a no-op through
+// finishColumn (once-only collection, idempotent live-set delete) when none
+// does. A kill this function performs is never re-labelled a vendor failure —
+// runner.Handle reports a killed child as a clean exit for exactly this case.
+func (m *Model) giveUpSeat(v model.VendorID) {
+	c := m.column(v)
+	// Re-checked, not trusted: events drain between the card arming and the y,
+	// so the seat can land — or the whole turn end — while the question is up.
+	// A give-up that ran anyway would re-finish a settled column.
+	if m.turn == nil || !m.turn.arena || c == nil || !m.turn.live[v] {
+		m.st.Notice = "the seat landed while the question was up — nothing was killed"
+		return
+	}
+	if es, ok := m.turn.arenaEphemeral[v]; ok {
+		es.Kill()
+	} else if h, ok := m.turn.arenaHandles[v]; ok {
+		h.Kill()
+	}
+	// The KindDone exit path's own retirement steps, in its order: flush the
+	// redactor's held tail (a give-up must not eat the racer's last word),
+	// stamp the clock, name what happened, then finishColumn does everything
+	// already built — kill-before-diff, collect, commit-per-turn, rank (a DNF
+	// finished too, and the render welds the rank to the phase word so
+	// "4th · cancelled" cannot read as a result), clear the interim stat, and
+	// drain this seat from the turn's live set.
+	c.Body += m.flush(v)
+	c.Elapsed = time.Since(c.Started)
+	c.Note = "given up after " + dur(c.Elapsed) + " — anything it wrote is in the diff"
+	m.finishColumn(c, PhaseCancelled)
+	m.st.Notice = "gave up on " + c.Label + " — its racer is dead and its column landed cancelled"
 }
 
 // flowWriteGateKey authorizes or cancels a /flow write hop before any seat is spawned.
@@ -1427,6 +1551,19 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// back. View mode only: in compose `u` is the letter u, the contract
 		// q, f and c already keep.
 		m.askUndoSeat()
+	case "x":
+		// Give up on the focused RACING seat, mid-turn (§9.37, amended
+		// 2026-08-09): kill that racer only, land its column cancelled, let
+		// the race run on — the per-seat exit the second live /arena measured
+		// the room lacking, when one stuck racer held a decided race hostage
+		// for ~20 minutes because ctrl+c cancels everything. `x` because it
+		// is free in view mode and unclaimed by any gate or nav key, and the
+		// act is a cross-out, not an undo — `u` takes back what a FINISHED
+		// attempt wrote; `x` stops an attempt still running. y/n-confirmed
+		// like `c` and `u`: y kills a process nothing can restart. View mode
+		// only: in compose `x` is the letter x, the contract q, f and c
+		// already keep.
+		m.askGiveUpSeat()
 	case "c":
 		// Clear the focused seat's thread — the first control built to §9.17's
 		// rule, and a key rather than a room command for a reason recorded
