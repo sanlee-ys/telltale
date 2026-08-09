@@ -110,8 +110,8 @@ type Glyphs struct {
 // hatch.
 func UnicodeGlyphs() Glyphs {
 	return Glyphs{
-		Sep:      "│", // │
-		Rule:     "─", // ─
+		Sep:  "│", // │
+		Rule: "─", // ─
 		// U+2501, the box-drawing set's own heavy form of U+2500. The pair is
 		// the whole reason this is two glyphs rather than a colour: a terminal
 		// that can draw one draws the other, and they are legibly the same line
@@ -122,15 +122,15 @@ func UnicodeGlyphs() Glyphs {
 		// which is the whole claim the rail makes.
 		FocusRail: "▌", // ▌
 		Ellipsis:  "…", // …
-		Caret:    "_",
-		Warn:     "⚠", // ⚠
-		Focus:    "▸", // ▸
-		Prompt:   "›", // ›
-		Up:       "↑", // ↑
-		Down:     "↓", // ↓
-		Act:      "⚙", // ⚙
-		Range:    "–", // en dash, the typographic joiner for a numeric span
-		Idle:     "○", // ○
+		Caret:     "_",
+		Warn:      "⚠", // ⚠
+		Focus:     "▸", // ▸
+		Prompt:    "›", // ›
+		Up:        "↑", // ↑
+		Down:      "↓", // ↓
+		Act:       "⚙", // ⚙
+		Range:     "–", // en dash, the typographic joiner for a numeric span
+		Idle:      "○", // ○
 		// ✓ / ✗ / ? — the third is an ordinary question mark on purpose. It is
 		// the one character that reads as "not known" to everybody without a
 		// legend, and unlike a middle dot or an em dash it cannot be mistaken

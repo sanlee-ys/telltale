@@ -1384,7 +1384,7 @@ func TestTheTranscriptReadingOutranksTheRelayForOneVendor(t *testing.T) {
 	if strings.Contains(got, "55%") {
 		t.Errorf("the stale relayed codex reading rendered over the transcript's: %q", got)
 	}
-	if n := strings.Count(got, "codex")+strings.Count(got, "cx "); n != 1 {
+	if n := strings.Count(got, "codex") + strings.Count(got, "cx "); n != 1 {
 		t.Errorf("codex appears %d times, want one block: %q", n, got)
 	}
 }

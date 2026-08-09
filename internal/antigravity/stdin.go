@@ -34,14 +34,14 @@ import (
 const Product = "antigravity"
 
 type StatuslineInput struct {
-	Cwd            string     `json:"cwd"`
-	ConversationID string     `json:"conversation_id"`
-	SessionID      string     `json:"session_id"` // documented back-compat alias
-	TranscriptPath string     `json:"transcript_path"`
-	Version        string     `json:"version"`
-	Product        string     `json:"product"`
-	Model          Model      `json:"model"`
-	Workspace      *Workspace `json:"workspace,omitempty"`
+	Cwd            string         `json:"cwd"`
+	ConversationID string         `json:"conversation_id"`
+	SessionID      string         `json:"session_id"` // documented back-compat alias
+	TranscriptPath string         `json:"transcript_path"`
+	Version        string         `json:"version"`
+	Product        string         `json:"product"`
+	Model          Model          `json:"model"`
+	Workspace      *Workspace     `json:"workspace,omitempty"`
 	ContextWindow  *ContextWindow `json:"context_window,omitempty"`
 	// Quota is a map of bucket id to window; bucket ids are vendor-defined
 	// (two weekly buckets observed on the Starter tier) and are rendered
@@ -71,11 +71,11 @@ type Workspace struct {
 }
 
 type ContextWindow struct {
-	TotalInputTokens    int64        `json:"total_input_tokens"`
-	TotalOutputTokens   int64        `json:"total_output_tokens"`
-	ContextWindowSize   int64        `json:"context_window_size"`
-	UsedPercentage      *float64     `json:"used_percentage,omitempty"`
-	RemainingPercentage *float64     `json:"remaining_percentage,omitempty"`
+	TotalInputTokens    int64         `json:"total_input_tokens"`
+	TotalOutputTokens   int64         `json:"total_output_tokens"`
+	ContextWindowSize   int64         `json:"context_window_size"`
+	UsedPercentage      *float64      `json:"used_percentage,omitempty"`
+	RemainingPercentage *float64      `json:"remaining_percentage,omitempty"`
 	CurrentUsage        *CurrentUsage `json:"current_usage,omitempty"`
 }
 
