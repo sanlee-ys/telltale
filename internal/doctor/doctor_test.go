@@ -244,7 +244,7 @@ func TestSilentSuccessIsAFailure(t *testing.T) {
 // has for every seat.
 func TestALiveProbeAtANonexistentPathFailsAndDoesNotPanic(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "no-such-vendor.exe")
-	res := ExecProbe(2 * time.Second)(missing, []string{"--version"})
+	res := ExecProbe(2*time.Second)(missing, []string{"--version"})
 	if res.Err == nil {
 		t.Fatal("spawning a binary that does not exist returned no error")
 	}
@@ -284,7 +284,7 @@ func TestFirstLineKeepsOneLine(t *testing.T) {
 		"codex-cli 0.147.0\r\n":                     "codex-cli 0.147.0",
 		"  1.1.11  ":                                "1.1.11",
 		"grok 1.0.0 (3cd0d0cbce) [stable]\nupdate!": "grok 1.0.0 (3cd0d0cbce) [stable]",
-		"":                                          "",
+		"": "",
 	}
 	for in, want := range cases {
 		if got := firstLine(in); got != want {

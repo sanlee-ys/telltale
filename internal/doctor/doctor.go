@@ -104,7 +104,7 @@ func (s Status) Word() string {
 // Check is one question the preflight asked, and what came back.
 type Check struct {
 	// Name is the question, in one lower-case word.
-	Name string
+	Name   string
 	Status Status
 	// Value is MEASURED output and nothing else — a path that was stat'd, the
 	// line a vendor printed. It is empty on every status but Passed, and
