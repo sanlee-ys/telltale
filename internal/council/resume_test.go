@@ -786,9 +786,15 @@ func TestFirstDispatchAfterReattachResumesTheThread(t *testing.T) {
 	})
 
 	c := &Column{Vendor: model.VendorCodex, Binary: "codex", Avail: AvailInstalled}
-	spec, err := m.specFor(vendors.Codex{}, c, "next question")
+	spec, resumed, err := m.specFor(vendors.Codex{}, c, "next question")
 	if err != nil {
 		t.Fatal(err)
+	}
+	// The id is reported back as well as spent, because it is the requested half
+	// of §9.43's comparison and no caller can dig it back out of a
+	// vendor-specific argv position.
+	if resumed != "codex-thread-1" {
+		t.Errorf("the resumed id was not reported to the caller: %q", resumed)
 	}
 	joined := strings.Join(spec.Args, " ")
 	if !strings.Contains(joined, "resume") || !strings.Contains(joined, "codex-thread-1") {
@@ -832,9 +838,15 @@ func TestAVendorThatCannotBuildAResumeStartsFreshAndIsBriefed(t *testing.T) {
 	})
 
 	c := &Column{Vendor: model.VendorClaude, Binary: "claude", Avail: AvailInstalled}
-	spec, err := m.specFor(refusingVendor{}, c, "next question")
+	spec, resumed, err := m.specFor(refusingVendor{}, c, "next question")
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Nothing was asked to be resumed, so nothing is reported — a turn that fell
+	// back to FirstTurn must not leave an id for §9.43 to compare against, or the
+	// fresh conversation it opens would be read as a fork.
+	if resumed != "" {
+		t.Errorf("a fallback first turn reported a resumed id: %q", resumed)
 	}
 	if strings.Contains(strings.Join(spec.Args, " "), "long-expired") {
 		t.Error("a refused id still reached the invocation")
@@ -1000,6 +1012,174 @@ func TestARefusedThreadSaysWhatHappensNext(t *testing.T) {
 	}
 }
 
+// --- the seat whose resume fails by succeeding (§9.43) --------------------
+
+// agyForkModel is a room with one agy column mid-turn, dispatched on a restored
+// thread, with the fork comparison armed exactly as dispatch arms it.
+//
+// Built by hand rather than driven through Dispatch because the seam under test
+// is the comparison, not the spawn: a real dispatch here would need an installed
+// `agy` on the box running CI, which is the dependency the wire fixtures exist
+// to remove.
+func agyForkModel(asked string) *Model {
+	m := &Model{
+		st: State{Columns: []Column{{
+			Vendor: model.VendorAntigravity, Label: "Antigravity",
+			Avail: AvailInstalled, Phase: PhaseWaiting, Binary: "agy",
+			Restored: true, Started: time.Now().Add(-time.Second),
+		}}},
+		sessions:   map[model.VendorID]string{model.VendorAntigravity: asked},
+		resumeIDs:  map[model.VendorID]string{},
+		unproven:   map[model.VendorID]bool{model.VendorAntigravity: true},
+		threadLost: map[model.VendorID]bool{},
+		forkWatch:  map[model.VendorID]string{},
+		failure:    map[model.VendorID]runner.FailureClass{},
+		redactors:  map[model.VendorID]*Redactor{},
+		procs:      map[model.VendorID]*seatProc{},
+	}
+	m.turn = &turnState{
+		cancel:     func() {},
+		live:       map[model.VendorID]bool{model.VendorAntigravity: true},
+		persistent: map[model.VendorID]bool{},
+	}
+	if asked != "" {
+		m.forkWatch[model.VendorAntigravity] = asked
+	}
+	return m
+}
+
+// TestAForkedAgyThreadIsSaidOutLoudAndTheNewOneIsKept is the honesty gap this
+// seat carried in STATE.md until it was owned.
+//
+// MEASURED 2026-08-09, agy 1.1.11: handed a `--conversation` id it does not
+// hold, that CLI does not refuse it — it opens a NEW conversation, answers, and
+// reports `status: "SUCCESS"` with exit 0 and a different `conversation_id`.
+// Every other seat either resumes or says the history is gone. Read on status
+// and exit code alone this turn is indistinguishable from a clean resume, so
+// before this the room rendered a continued conversation over a reply that had
+// no history behind it.
+//
+// The three properties, in the order a user meets them: the reply survives, the
+// card says the history did not come with it, and the conversation the vendor
+// actually answered in becomes this seat's thread.
+func TestAForkedAgyThreadIsSaidOutLoudAndTheNewOneIsKept(t *testing.T) {
+	m := agyForkModel("agy-saved-thread")
+
+	// The turn as it really arrives: init names the new conversation, the reply
+	// streams, and the result reports success in that same new conversation.
+	m.applyEvents([]runner.Event{
+		{Vendor: model.VendorAntigravity, Kind: runner.KindSession, SessionID: "agy-brand-new"},
+		{Vendor: model.VendorAntigravity, Kind: runner.KindText, Text: "ok "},
+		{Vendor: model.VendorAntigravity, Kind: runner.KindMeta, Text: "ok", SessionID: "agy-brand-new"},
+	})
+
+	c := m.st.Columns[0]
+	// The turn SUCCEEDED. Failing the column to punish a bookkeeping mismatch
+	// would throw away an answer the user paid for.
+	if c.Phase == PhaseFailed {
+		t.Error("a successful turn was failed because its thread forked")
+	}
+	if !strings.Contains(c.Body, "ok") {
+		t.Errorf("the reply was discarded: %q", c.Body)
+	}
+	// The established calm card, reused rather than reinvented: the fact is the
+	// same one settleRestoredThread states when a reattach is refused.
+	if !strings.Contains(c.Note, "not restored") {
+		t.Errorf("the card title does not name the outcome: %q", c.Note)
+	}
+	if !c.NoteCalm {
+		t.Error("the fork rendered as a warning; it is the same calm fact as a refused reattach")
+	}
+	if !strings.Contains(c.NoteDetail, "new conversation") {
+		t.Errorf("the body does not say where the answer actually came from: %q", c.NoteDetail)
+	}
+	if c.Restored {
+		t.Error("the column still claims a restored thread after the vendor answered somewhere else")
+	}
+	// The new id is ADOPTED. The reply happened inside it, so discarding it
+	// would orphan a real turn and rebuild the same forking invocation next time.
+	if got := m.sessions[model.VendorAntigravity]; got != "agy-brand-new" {
+		t.Errorf("the seat's thread = %q, want the conversation the vendor actually answered in", got)
+	}
+	if m.unproven[model.VendorAntigravity] {
+		t.Error("the seat is still on probation for an id that is gone")
+	}
+	if !m.threadLost[model.VendorAntigravity] {
+		t.Error("the turn's later events are free to overwrite the one line that says the history is gone")
+	}
+	// One card, not two. Both the init and the result frame carry an id, and the
+	// second must not restate the first.
+	if _, still := m.forkWatch[model.VendorAntigravity]; still {
+		t.Error("the comparison stayed armed after firing and would raise the card again")
+	}
+}
+
+// TestAnAgyResumeThatWorkedSaysNothing. The card is a measured claim, so it must
+// stay silent on the ordinary case: a resume the vendor honoured echoes the id
+// it was given back, which is the shape agy.go's NextTurn comment records from a
+// live round trip (same conversation_id, step_index continued, num_turns 2).
+func TestAnAgyResumeThatWorkedSaysNothing(t *testing.T) {
+	m := agyForkModel("agy-saved-thread")
+
+	m.applyEvents([]runner.Event{
+		{Vendor: model.VendorAntigravity, Kind: runner.KindSession, SessionID: "agy-saved-thread"},
+		{Vendor: model.VendorAntigravity, Kind: runner.KindMeta, Text: "ok", SessionID: "agy-saved-thread"},
+	})
+
+	if note := m.st.Columns[0].Note; note != "" {
+		t.Errorf("a thread that resumed was reported lost: %q", note)
+	}
+	if m.threadLost[model.VendorAntigravity] {
+		t.Error("a working resume was flagged as a lost thread")
+	}
+	if got := m.sessions[model.VendorAntigravity]; got != "agy-saved-thread" {
+		t.Errorf("the seat's thread = %q, want the id it resumed", got)
+	}
+}
+
+// TestAFreshAgyTurnIsNotAForkedThread. A first turn asks to resume nothing, so
+// the new conversation id it comes back with is simply this seat's thread. The
+// gate is the empty forkWatch, which is what dispatch leaves behind whenever
+// specFor fell through to FirstTurn — without it every opening turn in the room
+// would announce a lost thread.
+func TestAFreshAgyTurnIsNotAForkedThread(t *testing.T) {
+	m := agyForkModel("")
+	m.st.Columns[0].Restored = false
+	delete(m.unproven, model.VendorAntigravity)
+	delete(m.sessions, model.VendorAntigravity)
+
+	m.applyEvents([]runner.Event{
+		{Vendor: model.VendorAntigravity, Kind: runner.KindSession, SessionID: "agy-brand-new"},
+	})
+
+	if note := m.st.Columns[0].Note; note != "" {
+		t.Errorf("a first turn was reported as a lost thread: %q", note)
+	}
+	if got := m.sessions[model.VendorAntigravity]; got != "agy-brand-new" {
+		t.Errorf("a first turn did not record its own thread: %q", got)
+	}
+}
+
+// TestOnlyAMeasuredVendorArmsTheForkComparison pins the honesty gate where it
+// actually lives — at dispatch, on the vendor's own declaration — rather than
+// only in the seat that happens to make the claim today.
+//
+// The comparison is vendor-neutral arithmetic; what is NOT neutral is the
+// conclusion drawn from it. A vendor that re-keys a resumed thread while keeping
+// its history would look identical on the wire, so a room that compared ids for
+// everybody would announce lost threads it never measured (§4a.1).
+func TestOnlyAMeasuredVendorArmsTheForkComparison(t *testing.T) {
+	var declared []model.VendorID
+	for id, v := range vendors.Registry() {
+		if _, ok := v.(vendors.SilentResumeFork); ok {
+			declared = append(declared, id)
+		}
+	}
+	if len(declared) != 1 || declared[0] != model.VendorAntigravity {
+		t.Fatalf("seats declaring a silent resume fork = %v, want agy alone — every other one would need its own capture first", declared)
+	}
+}
+
 // TestAThreadThatAnsweredIsNeverThrownAway is the other half of the probation
 // rule, and the more important half.
 //
@@ -1105,9 +1285,12 @@ func TestAStaleIdOnASpawnPerTurnSeatIsDroppedAfterOneTurn(t *testing.T) {
 	// And the NEXT turn is therefore a first turn, briefed, rather than another
 	// resume of a conversation that is not there.
 	c := &Column{Vendor: model.VendorCodex, Binary: "codex", Avail: AvailInstalled}
-	spec, err := m.specFor(vendors.Codex{}, c, "next question")
+	spec, resumed, err := m.specFor(vendors.Codex{}, c, "next question")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if resumed != "" {
+		t.Errorf("the dropped id was still reported as resumed: %q", resumed)
 	}
 	if strings.Contains(strings.Join(spec.Args, " "), "long-expired") {
 		t.Error("the dead id was rebuilt into the next invocation")

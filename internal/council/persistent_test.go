@@ -49,6 +49,7 @@ func turnModel(persistent bool) *Model {
 		resumeIDs:  map[model.VendorID]string{},
 		unproven:   map[model.VendorID]bool{},
 		threadLost: map[model.VendorID]bool{},
+		forkWatch:  map[model.VendorID]string{},
 		failure:    map[model.VendorID]runner.FailureClass{},
 		redactors:  map[model.VendorID]*Redactor{},
 		procs:      map[model.VendorID]*seatProc{},

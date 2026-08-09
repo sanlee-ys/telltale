@@ -7635,3 +7635,74 @@ The words are read off `granularityFor` and `canGate` rather than restated, so t
 cannot drift from the room's own badges. Worth the line at all because "installed" and "will
 stream to you" are different promises, and the seat a user is most likely to think is broken is
 the one that is working and silent until the end of the turn (§9.14).
+
+### 9.43 the agy seat stops pretending a lost thread resumed (2026-08-09)
+
+`STATE.md` carried this as an unowned gap for as long as it took to write the entry. **The agy
+seat could not tell a lost thread from a resumed one, and the stream would not say.** Measured
+2026-08-09 against agy 1.1.11 during the wire-fixture capture (PR #174; the record is
+`internal/council/vendors/testdata/wire/README.md`, under *what could NOT be captured, and why*):
+handed a `--conversation` id it does not hold, that CLI **does not error**. It opens a NEW
+conversation, answers the brief normally, and reports `status: "SUCCESS"`, exit 0.
+
+That is the whole difficulty in one sentence. Every other seat resolves the question for the
+room: Claude Code returns a `result` frame whose `errors` array says *"No conversation found with
+session ID: …"* (PR #178); codex writes `no rollout found` to stderr and exits 1; grok
+does the same with a 404; the Cursor seat answers `session/load` with -32602 and opens a fresh
+one in the same process (§9.36). agy claims success either way — so a room reading status and
+exit code, which is every honest thing the seat did before this, rendered **a continued
+conversation over a reply that had no history behind it.** Not a crash and not an empty column:
+a plausible answer under a `restored` mark that was no longer true.
+
+**The tell, and it is the only one the capture surfaced: the `conversation_id` that comes back is
+not the one that was asked for.** Nothing read it. Reading it is this change.
+
+**The comparison lives in council, not in the adapter, because neither half is where the other
+is.** `ParseEvent` sees one line at a time and never learns which id the turn requested; dispatch
+knows the request and never sees the stream. So `specFor` now *returns* the id it asked to
+resume — the one fact a caller cannot re-derive, since it is buried in a vendor-specific argv
+position — dispatch records it, and `adoptSession` compares it against the id the vendor names
+on its own session event.
+
+**The vendor gate is structural, and that is the honesty argument rather than a taste in
+plumbing.** The arithmetic (`asked != returned`) is vendor-neutral; the *conclusion* is not. A
+CLI that re-keys a resumed thread while keeping its history would look identical on the wire, so
+a room that compared ids for everybody would announce lost threads it had never measured — §4a.1's
+inference, wearing a comparison's clothes. The claim is therefore made by the seat, through
+`vendors.SilentResumeFork`, whose one method returns **the build the fork was measured against**
+rather than being a bare marker: a seat cannot make the claim without naming its evidence, and a
+vendor bump that fixes the behaviour leaves a version string that no longer matches the fixture
+beside it. Only agy implements it. `TestOnlyAMeasuredVendorArmsTheForkComparison` pins that it
+stays alone until somebody captures a second case, and the gate is applied at *dispatch* — a seat
+that never enters `forkWatch` cannot raise the card at all.
+
+**Three rulings on what the room then does, each of which had a plausible alternative.**
+
+| | what happens | the alternative, and why not |
+|---|---|---|
+| the reply | **renders, untouched** | failing the column would throw away an answer the user paid for, to punish a bookkeeping mismatch. The turn succeeded; what was false was only the claim that it was informed by everything before it |
+| the new id | **adopted as this seat's thread** | discarding it orphans a real turn — the reply happened *inside* that conversation — and leaves the room rebuilding the same forking invocation on every later turn |
+| the card | **the calm lost-thread card already in use** | a second card would say the same fact in different words. The outcome is identical to a refused reattach — this seat is starting fresh — and only the body differs, because there the turn failed and the id was let go, here it succeeded in a thread nobody asked for |
+
+So the column reads *"thread not restored — starting fresh"*, quietly, with the mechanics
+demoted underneath it: the seat asked to resume its saved thread, the vendor answered in a new
+conversation instead and reported success, the reply below is real and the history behind it is
+not, and the next brief continues from this turn. **No warning mark**, for the reason
+`settleRestoredThread` states: this is the same fact `reattachCard` says calmly at idle when no
+thread came back, discovered a turn later, and spending the ⚠ on it blunts the mark that carries
+real failures. The seat's probation ends here too — the restored id is gone by evidence rather
+than by a turn's outcome, so `settleRestoredThread` has nothing left to decide and a later
+failure on the *new* thread cannot be blamed on a reattach that was already reported.
+
+**The fixture is derived, and it is labelled derived.** `testdata/agy-forked-conversation.jsonl`
+is the real 1.1.11 capture with one textual substitution — every `conversation_id` value moved
+from `2222…` to `3333…`, nothing else, not a key and not a token count. It sits **outside**
+`testdata/wire/`, whose contract is real captures only: the forked turn itself was measured, but
+that probe's stream was not kept, and a hand-edited file among the captures would silently
+restate a measurement nobody re-ran. What it proves is the narrow thing it can: a turn that looks
+entirely successful still delivers the mismatched id to the room.
+
+**What was not done, and is not claimed: no live agy turn was driven for this change.** The
+behaviour rests on the 2026-08-09 capture, and the code rests on that capture's fixture. A
+re-measurement against a later build is what would retire `SilentResumeForkMeasuredAt`, and
+until somebody runs one, this seat's claim names 1.1.11 and no other build.

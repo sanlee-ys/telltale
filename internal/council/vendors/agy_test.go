@@ -1,11 +1,14 @@
 package vendors
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
+	"github.com/sanlee-ys/telltale/internal/model"
 )
 
 // Every fixture line below is real captured stdout from `agy --output-format
@@ -548,6 +551,101 @@ func TestAgyParserSurvivesATruncatedStream(t *testing.T) {
 	partial := []byte(`{"event":"step_update","step_update":{"conversation_id":"2b18de13","state":"ACTIVE","step_type":"agent_res`)
 	if _, ok := a.ParseEvent(partial); ok {
 		t.Error("a truncated line produced an event")
+	}
+}
+
+// TestAgyDeclaresItsSilentResumeFork. The seat's claim about the fork is what
+// arms the room's comparison, so the claim itself is pinned here rather than
+// left implicit in a type assertion three packages away.
+//
+// The version string is asserted to name the build, because that is the point of
+// requiring one (vendors.SilentResumeFork): a claim about vendor behaviour in
+// this repository carries the measurement it rests on, and a bump that fixes the
+// fork has to leave this method looking stale.
+func TestAgyDeclaresItsSilentResumeFork(t *testing.T) {
+	f, ok := any(Antigravity{}).(SilentResumeFork)
+	if !ok {
+		t.Fatal("the agy seat no longer declares the silent resume fork; the room's lost-thread card would stop firing for it")
+	}
+	if got := f.SilentResumeForkMeasuredAt(); !strings.Contains(got, agyWireVersion) {
+		t.Errorf("the fork claim names %q, which is not the build the wire fixture pins (%s) — one of the two was re-measured and the other was not",
+			got, agyWireVersion)
+	}
+	// Nothing else may claim it. The measurement is agy's; asserting it for a
+	// vendor nobody probed would make the card fire on an inference.
+	for id, v := range Registry() {
+		if id == model.VendorAntigravity {
+			continue
+		}
+		if _, ok := any(v).(SilentResumeFork); ok {
+			t.Errorf("%s declares a silent resume fork with no capture behind it", id)
+		}
+	}
+}
+
+// TestAgyForkedConversationSurfacesTheNewID is the parser half of the tell.
+//
+// The room compares the id it ASKED to resume against the id the stream reports.
+// The comparison lives in council (§9.43) because ParseEvent sees one line at a
+// time and never learns what was requested — but it is only possible if the
+// returned id reaches the room at all, on a turn that looks entirely successful.
+// That is what this pins.
+//
+// **The fixture is DERIVED, not captured, and that is stated because it matters.**
+// `testdata/agy-forked-conversation.jsonl` is a byte-for-byte copy of the real
+// 1.1.11 capture in `testdata/wire/` with ONE textual substitution: every
+// `conversation_id` value changed from `2222…` to `3333…`. Nothing else moved —
+// not a key, not a token count, not the status. It is deliberately NOT in
+// `testdata/wire/`, whose contract is real captures only: the forked turn itself
+// was measured (README, "Antigravity has no error frame reachable this way"), but
+// that probe's stream was not kept, and a hand-edited file sitting among the
+// captures would restate a measurement nobody re-ran.
+func TestAgyForkedConversationSurfacesTheNewID(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "agy-forked-conversation.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const requested = "22222222-2222-4222-8222-222222222222"
+	const returned = "33333333-3333-4333-8333-333333333333"
+
+	var ids []string
+	var status runner.EventKind = runner.KindError
+	body := ""
+	for _, l := range strings.Split(string(raw), "\n") {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		ev, ok := Antigravity{}.ParseEvent([]byte(l))
+		if !ok {
+			continue
+		}
+		if ev.SessionID != "" {
+			ids = append(ids, ev.SessionID)
+		}
+		if ev.Kind == runner.KindText {
+			body += ev.Text
+		}
+		if ev.Kind == runner.KindMeta {
+			status = ev.Kind
+		}
+	}
+
+	if status != runner.KindMeta {
+		t.Fatal("the forked turn did not come back as an ordinary successful result; the whole difficulty is that it does")
+	}
+	if strings.TrimSpace(body) != "ok" {
+		t.Errorf("streamed body = %q, want %q — the reply is real and must still render", body, "ok")
+	}
+	if len(ids) == 0 {
+		t.Fatal("no conversation id reached the room; the mismatch could never be seen")
+	}
+	for _, id := range ids {
+		if id == requested {
+			t.Errorf("the stream reported the REQUESTED id %q; the fixture no longer models a fork", requested)
+		}
+		if id != returned {
+			t.Errorf("session id = %q, want the new conversation %q", id, returned)
+		}
 	}
 }
 

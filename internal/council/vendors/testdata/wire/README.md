@@ -96,6 +96,12 @@ produced is recorded here as absent, not invented.
   reports a DIFFERENT `conversation_id`, `status: "SUCCESS"` and exit 0. So the
   room cannot tell a resumed thread from a lost one on this vendor by reading the
   stream — there is no error to capture because the vendor does not raise one.
+  The one tell that IS on the wire — the returned id is not the requested one —
+  is now read by the room rather than left as a note (design.md §9.43). The
+  fixture that exercises it is `../agy-forked-conversation.jsonl`, deliberately
+  outside this directory: it is this capture with only its `conversation_id`
+  values changed, and a hand-edited file among these would restate a measurement
+  nobody re-ran.
 - **No zero-token or empty-usage turn was observed on any vendor**, so none is
   fixtured. The one measured ZERO shape in this directory is Claude Code's
   resume-not-found frame, which carries `total_cost_usd: 0`, an all-zero usage
