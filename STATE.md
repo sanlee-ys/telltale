@@ -59,11 +59,79 @@ the argument; this file does not restate either.
   run: all four seats raced, agy finished live for the first time, codex ended
   with "nothing pushed" under the conduct preamble, a stalled cursor was cut
   loose live with `x`, the colored patch toggle read cleanly, and the winner
-  went through `/adopt` → `/arena drop` → a merged PR. Still unverified
-  against a live room: `u` undo on a real racer commit, `.worktreeinclude`
-  seeding, and §9.38's composer paste (expect one insertion, zero sends) —
-  small enough to fold into any future race rather than owing a session of
-  their own.
+  went through `/adopt` → `/arena drop` → a merged PR. **The design doc's own
+  per-amendment verification notes were reconciled against t9 on 2026-08-09**
+  (six of eight had gone stale in the other direction, still claiming debts t9
+  had paid — including §9.37 telling you no live `/adopt` had run three
+  paragraphs above an open question filed *from* the first live `/adopt`).
+
+  **What is genuinely still unpaid, and how to pay it.** Four items, in
+  ascending cost. Nothing here needs a session of its own; items 1 and 2 cost
+  no API spend at all.
+
+  1. **The symlink refusal in `.worktreeinclude` seeding is unverified on the
+     primary target.** `TestSeedSymlinksAreNamedNotFollowed` SKIPS on this box
+     — *"A required privilege is not held by the client"* — so the one claim
+     whose stated reason is that Windows differs is the one claim Windows never
+     checks. It does run on CI's ubuntu `-race` job. To pay it: enable Windows
+     Developer Mode (Settings → System → For developers), then
+     `go test ./internal/council -run TestSeedSymlinksAreNamedNotFollowed -v`
+     and confirm it PASSES rather than skips. Cost: zero, one minute. Parity
+     detail in [PARITY.md](PARITY.md).
+  2. **§9.38's composer paste** (design.md §9.38's own "live verification
+     owed"). No vendors, no race, no spend: open `telltale council` in Windows
+     Terminal, copy a three-line snippet, paste. Expect ONE insertion, three
+     composer rows, ZERO dispatches; then enter sends it as one brief. A paste
+     that lands as separate turns means the terminal did not bracket it —
+     record the Windows Terminal build in `PARITY.md`, because that is a
+     vendor fact, not a council bug.
+  3. **`.worktreeinclude` seeding** and 4. **`u` undo on a real racer commit**
+     — both need one live race, and **one race pays both**. The design doc
+     frames the seeding debt as needing "a repo that actually needs a `.env`";
+     it does not. This repo can pay it with a throwaway git-ignored file:
+
+     ```
+     mkdir dist && echo probe > dist/arena-seed-probe.txt   # /dist/ is ignored
+     printf 'dist/arena-seed-probe.txt\n.env\n' > .worktreeinclude
+     ```
+
+     Two lines on purpose: the first matches, the second matches nothing, so
+     one race shows both `seeded 1 files` and the named no-match notice — the
+     seed line's zero-vs-absent rule, live. (Verified 2026-08-09 that
+     `git ls-files --others` in this repo does enumerate that path, which is
+     the candidate set `loadSeedPlan` reads.) Then, in the room:
+
+     - `telltale council --fresh --vendor claude` — **seat one vendor.** A race
+       is not routable, so the roster IS the cost control; the four-seat
+       default is roughly 4× the spend for nothing this debt needs.
+     - `/arena add a one-line comment to the top of internal/council/glyphs.go
+       saying nothing but the date` — a brief that reliably CHANGES a file.
+       Watch the `arena · so far` block appear and **grow** (that pays the
+       remaining half of §9.37's live-stat note), and check the column says
+       `seeded 1 files` plus the no-match notice.
+     - When it lands: expect a diff stat and `committed <sha>.`
+     - **Between turns** (`u` refuses while a turn is in flight): `esc` to view
+       mode, focus that seat, press `u`, then `y`. Expect the card to name the
+       base, then the stat to STAY on the column under an "undone" line, and
+       `git -C ../telltale-arena-t9-claude log --oneline -1` to be back at the
+       base. That pays item 4. Press `u` again to see the already-undone
+       refusal, which costs nothing.
+     - Clean up: `/arena drop claude!`, then `rm .worktreeinclude` and
+       `rm -r dist`. **Then put the roster back** — a typed `--vendor` list is
+       saved as the room's roster, so the next launch is still one seat until
+       `/seat all` or `--vendor all`.
+
+     Cost: one short brief to one seat — cents, and a few minutes. Note the
+     race will mint **t9** again: t9's branches were dropped but t8's survive,
+     and the number comes from the refs.
+
+  **Housekeeping this turned up, not owned:** 27 `arena/t<N>/<vendor>` branches
+  and 28 sibling `telltale-arena-t*` worktrees from races t2–t8 are still on
+  the reference box (`telltale-arena-t5-codex` is at a detached HEAD — the
+  residue of the racer that pushed its own PR). Kept-until-deleted is the
+  ruling, so this is a decision to make rather than a bug: `/arena drop` only
+  reaches the current room's race, so clearing older ones is
+  `git worktree remove` + `git branch -D` by hand.
 
 - **QUEUED, unowned — the post-audit build list (2026-08-09).** The steal
   sweep's survivors, reconciled against an independent read-only second-model

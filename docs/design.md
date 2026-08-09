@@ -6711,11 +6711,15 @@ event-triggered diff refresh (codeg's), rebuilt under this room's honesty rules
 Verification note: the mechanics — arming, the throttle, single-flight, the three interim
 renders, replacement by the final, stop-on-turn-end and stop-on-repeated-failure, the
 `add -N` false-zero property of the interim read — are pinned by offline tests
-(`arenalive_test.go`), the git ones against a real temp repository. **No live race has
-watched the stat move yet**: what is owed is one `/arena` run against a real brief that
-changes files, confirming the "so far" block appears mid-race, grows, and swaps for the
-settled block at each finish — the same debt the original section carried, and it is stated
-here rather than implied paid.
+(`arenalive_test.go`), the git ones against a real temp repository. ~~No live race has
+watched the stat move yet~~ **Half paid, 2026-08-09, and the halves are worth keeping
+apart.** The block APPEARING mid-race and reading honestly is live-verified by the give-up
+amendment's own race below: the stuck cursor racer's `arena · so far` read "no changes yet
+against \<base\>" for 26m40s, which is the interim empty state observed live for longer
+than anyone wanted. What is still owed is the other half — a "so far" block that GROWS and
+then swaps for the settled block at the finish — because no live race is recorded as having
+watched a NON-empty interim stat change. One `/arena` against a brief that changes files
+pays it, and it is stated here rather than implied paid.
 **Amendment, 2026-08-09: the cursor seat races too, on a throwaway session.** The deferred
 follow-up the verification note filed is built, in the shape it predicted. For an arena turn —
 and only there — dispatch recognises the Conversational seat and, instead of the `FirstTurn`
@@ -6760,8 +6764,15 @@ was welded to the room seat's lifecycle the seam extracted was placement, not pr
 Verified offline only: fixture-driven tests (arena_cursor_test.go) pin the spawn choice, the
 untouched room thread, the kill on finish / protocol failure / cancel / teardown, both
 degraded exits, and the exit-echo not re-ranking the race. cursor-agent was not installed
-where this was built, so **this amendment owes a live race on the Windows box** — the same
-debt the core paid above, carried the same way until it is.
+where this was built, so ~~this amendment owes a live race on the Windows box~~ **the
+amendment owed a live race; two have now run it, and what they paid is narrower than the
+word "verified" would suggest.** The throwaway racer has been spawned live and rooted in
+its own worktree — it streamed for 26m40s on the race the give-up amendment below records,
+and was cut loose mid-race with `x` on race t9 — so the spawn, the live interim read
+against its tree, and the kill path are measured. **A clean completion is still owed**: no
+live race is recorded in which this seat's own `session/prompt` resolved and the racer was
+killed at its own finish line with its diff read. Until then the *finishing* half of this
+amendment stands on `arena_cursor_test.go` alone, and that is the honest split.
 **Amendment, 2026-08-09: every attempt survives as a commit, and `u` takes one back.** The
 commit-per-turn deferral came off the list, and it brought the rollback it makes possible
 (mechanics stolen with attribution: Crystal's commit-per-turn checkpoint, cc-haha's turn-level
@@ -6809,10 +6820,15 @@ Verification note, on the same terms as the section's own: the git mechanics —
 landing on the branch with the racer's files, the per-seat degrade, the zero-diff skip, the
 self-committed tip, the undo round-trip (files restored, created files gone, branch back at
 base), the path guard, and every refusal sentence — are pinned by offline tests against real
-temp repositories. **No live race has exercised either half yet.** The debt is one live
-`/arena` run that adopts an attempt from its arena branch after deleting the worktree, and one
-that `u`-undoes an attempt — same shape as the 2026-08-09 live run above, which is what paid
-this section's first verification note.
+temp repositories. ~~No live race has exercised either half yet.~~ **Commit-per-turn is
+paid; the undo is not, and it is now the last unpaid item in this section.** Race t9
+(Windows box, 2026-08-09) landed the claude racer's attempt as `cf69634` — subject
+`arena t9: write table-driven tests for the small render helpers …`, parent `e1bf983`,
+which is the base the race recorded — onto `arena/t9/claude`; that commit outlived
+`/adopt`, `/arena drop` of its worktree, and a merged PR (#164), with the branch
+`adopt/t9-claude-helpers` left as the receipt. **`u` has still never run against a real
+racer commit.** The debt is one `/arena` against a brief that changes files, then `u` on
+the finisher between turns.
 
 **Amendment, 2026-08-09: `.worktreeinclude` — a race carries the files git ignores, when the
 repo names them.** The seeding deferral came off the list, on the schedule the original note
@@ -6913,11 +6929,16 @@ claude-squad's adopt, Pane's deletion guard — with one deliberate fork each:
 The help panel's room-commands row is at its width budget and does not name the two verbs;
 they are taught by the slash refusal (which lists `/adopt` in the live table), by bare
 `/adopt` and bare `/arena drop` answering with usage, and by every guard refusal naming its
-remedy. Verification owed, same debt shape the race itself carried until 2026-08-09: the git
+remedy. Verification, ~~owed~~ **paid 2026-08-09**: the git
 mechanics — merge, commit-then-merge, conflict abort, both guards, the force, the path check,
 `drop all`'s partial degrade — are pinned by offline tests against real temp repositories
-(`lifecycle_test.go`), but no live adopt has run on the Windows box. The first one pays this
-note the way turn 4 paid the last one.
+(`lifecycle_test.go`), and ~~no live adopt has run on the Windows box~~ **race t9's winner
+went through `/adopt` and then `/arena drop` on the Windows box**, which is why no
+`arena/t9/*` branch and no `telltale-arena-t9-*` sibling exist on it while every earlier
+race's leftovers sit exactly where they were left. What that adoption then cost in hand-run
+git is the open question at the end of this section, filed rather than ruled. Two guard
+paths a SUCCESSFUL adopt cannot reach still rest on `lifecycle_test.go` alone: a merge that
+conflicts, and a drop refused for unmerged commits.
 
 **Amendment, 2026-08-09: the race numbers itself off the refs, and a failed race says why.**
 A live `/arena` at turn 3 (Windows box, real room) failed on all four seats, and each column's
@@ -6958,9 +6979,12 @@ Both fixes are pinned by offline tests against real temp repositories: the two-l
 collision fixture (the live transcript, replayed), renumbering past stale `t3` branches with
 every seat racing clean, the turn-number floor on a failed scan, the residual-collision
 sentence, and adopt/drop/undo driven end to end against a race whose number outran its turn —
-leftovers untouched throughout. **The live re-race is owed**: one `/arena` on the Windows box
-over the same leftover state that failed, confirming the seats race clean at the renumbered
-`t<N>` — the same debt shape every amendment here has carried, paid the same way.
+leftovers untouched throughout. ~~The live re-race is owed~~ **The live re-race ran, and has
+kept running ever since**: every race after the fix has been numbered over a growing pile of
+leftovers — 27 `arena/t<N>/<vendor>` branches and 28 sibling worktrees, t2 through t8, are
+still on the reference box — and race t9 raced all four seats clean over them, which is the
+claim. One consequence worth knowing before the next race: t9's branches were dropped, so
+the highest surviving `arena/t<N>` is t8 and the scan will mint `t9` again.
 
 **Amendment, 2026-08-09: `x` gives up on one racing seat, and the race runs on.** The second
 live `/arena` (same day, Windows box) measured the gap: four seats raced, three landed
@@ -7005,9 +7029,11 @@ tests (giveup_test.go) pin the ephemeral kill and the cancelled landing with ran
 committed receipt, the keyed one-shot kill with every other racer's handle surviving, the
 room process surviving its racer's give-up and the exit echo landing inert, the turn ending
 when the remaining seats land, all three refusals, the y/n/stray gate, and compose leaving
-`x` a letter. **A live give-up on the Windows box is owed** — one `/arena` where a stuck seat
-is given up mid-race and the turn ends the moment the others land, the same debt every
-amendment here has carried, paid the same way.
+`x` a letter. ~~A live give-up on the Windows box is owed~~ **Paid on race t9** (Windows box,
+2026-08-09): the cursor throwaway racer stalled, was cut loose mid-race with `x`, and the
+turn ended when the remaining seats landed — which is the whole claim, measured. The three
+refusals and the y/n/stray gate stay offline-pinned, and always will be: a live race has no
+way to exercise a refusal it never trips.
 
 **Amendment, 2026-08-09: the brief carries the conduct line — the one place the room adds
 words.** A write-posture racer's confinement is its worktree, but the machine's git and gh
@@ -7027,8 +7053,11 @@ every racer on every race, prepended so a long brief cannot bury it, leaving the
 comparison undisturbed — and recorded here rather than discoverable only in a wire capture.
 Stated honestly for what it is: an instruction, not a control. A vendor can ignore it, and
 the mechanical version of this boundary — credentials a racer cannot reach — is a different,
-harder change that this amendment deliberately does not claim. The live measurement owed:
-the next race showing the codex seat stopping at its commit.
+harder change that this amendment deliberately does not claim. ~~The live measurement owed:
+the next race showing the codex seat stopping at its commit.~~ **Measured on race t9**: the
+codex seat raced under the preamble and ended with "nothing pushed." One race is one race —
+an instruction a vendor obeyed once is still an instruction, so the sentence above stands
+exactly as written and this measurement does not promote it to a control.
 
 **Open question, 2026-08-09: where should an adoption land?** Filed from the first live
 `/adopt` rather than decided, because the answer depends on a convention the room cannot see.

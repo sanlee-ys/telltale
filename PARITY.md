@@ -70,6 +70,21 @@ error near unexpected token `&`". It looks exactly like a broken vendor and is
 not; it cost an arm of the §9.36 capture. Drive cursor-agent from a PowerShell or
 cmd parent on Windows. Upstream wrapper bug, agent-ops ADR-012.
 
+**One test SKIPS on Windows, and it is the one whose claim is about Windows.**
+`TestSeedSymlinksAreNamedNotFollowed` (`internal/council/arena_seed_test.go`)
+pins `.worktreeinclude` seeding's refusal to follow a symlink. Creating a
+symlink needs `SeCreateSymbolicLinkPrivilege`, which an ordinary Windows shell
+does not hold, so on this box the test skips with *"A required privilege is not
+held by the client"* — measured 2026-08-09. It runs for real on CI's
+`ubuntu-latest` race job; whether the `windows-latest` job skips it too is not
+visible, because that job runs `go test` without `-v`. The sting is that
+design.md §9.37's stated reason for refusing symlinks is *"Windows is primary
+and symlink semantics differ per platform"* — so the platform the claim is
+about is the platform that never checks it. To close it here: enable Windows
+Developer Mode (Settings → System → For developers), then
+`go test ./internal/council -run TestSeedSymlinksAreNamedNotFollowed -v` and
+confirm PASS rather than SKIP. An unrun test is not a pass.
+
 **Cursor install location, Windows.** `cursor-agent` lives at
 `%LOCALAPPDATA%\cursor-agent\cursor-agent.cmd` and is frequently absent from the
 PATH of the shell running the detection. A seat that folds out as "not
