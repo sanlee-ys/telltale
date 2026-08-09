@@ -1,6 +1,6 @@
 # telltale — design doc
 
-Status: v1 surface built; v1 itself is held until council settles (§1). The honest-gauge
+Status: v1 surface built; v1 cuts when the snapshot gates hold (§1). The honest-gauge
 rule requires every segment's data source to be named here before that segment ships; the
 tables below are the authority the eval harness tests against.
 
@@ -16,11 +16,30 @@ against (§5), and council inherits both — it renders through the same `intern
 vocabulary and `internal/theme` palette the two gauge paths share. They are finished, they
 are load-bearing, and they are not the thing this is for.
 
-**v1 is held until council settles.** The gauges are finished and unreleased. The standing
-alternative — cut v1 as gauges only, statusline and HUD with declared vendor version pins
-— is rejected, because a v1 that named the gauges would name the wrong product. Council's
-surface is still moving week to week, so the version waits on §9 rather than on §2, §3
-and §7.
+**v1 is a snapshot, not a freeze — it cuts when three gates hold, not when the room goes
+quiet (re-cut 2026-08-08, owner's ruling).** The original hold said "until council
+settles," and the first attempt to operationalize that — five consecutive days with no
+merged PR touching council's visible surface — was falsified within a day: this project is
+driven daily by its owner, so a quietness clock measures abandonment, not stability. What
+the hold was actually protecting is narrower and checkable: a stranger who reads the
+launch post and installs must find the room the post described. So v1 cuts when, on the
+day of the tag:
+
+1. **Nothing on the surface is half-finished or landed-but-never-driven** — every
+   recently re-founded piece (a seat's protocol, a new command) has been used by the
+   owner for real work for a few days;
+2. **The README is verified against tip** — every claim, keybinding and badge checked
+   against the code, with the frame-freshness tests holding the renders;
+3. **No breaking change to the routing grammar, room commands or keymap is planned** —
+   churn after the tag is welcome; a *known upcoming* contract break is not.
+
+The owner's dogfood bar (two weeks of daily use, clock from 2026-08-01) still applies and
+closes no earlier than 2026-08-15. Development never pauses for any of this: work merged
+after the tag becomes the next minor version, and the tag itself is one command (§8).
+
+The standing alternative — cut v1 as gauges only, statusline and HUD with declared vendor
+version pins — remains rejected, because a v1 that named the gauges would name the wrong
+product.
 
 Two gauge surfaces over one data layer:
 
@@ -2439,7 +2458,7 @@ Rigor stays the floor; features and front-end craft are the priority axis from h
 Each item names its incumbent inspiration and the honest-gauge twist that makes it ours.
 Sources rule unchanged: a segment ships only when this doc names its source.
 
-Read the version numbers below against §1: v1 is held until council settles, so an item
+Read the version numbers below against §1: v1 cuts on the snapshot gates, so an item
 marked for v1 is not an item waiting on the gauges. They are done.
 
 ADR-005 adds a second axis: external adoption is now an explicit product goal alongside
