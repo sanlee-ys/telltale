@@ -65,27 +65,20 @@ the argument; this file does not restate either.
   had paid — including §9.37 telling you no live `/adopt` had run three
   paragraphs above an open question filed *from* the first live `/adopt`).
 
-  **What is genuinely still unpaid, and how to pay it.** Four items, in
-  ascending cost. Nothing here needs a session of its own; items 1 and 2 cost
-  no API spend at all.
+  **What is genuinely still unpaid, and how to pay it.** Three items, in
+  ascending cost. Nothing here needs a session of its own; item 1 costs no API
+  spend at all. **The symlink-refusal item that led this list is paid** —
+  Developer Mode went on 2026-08-09 and the test PASSES on this box; the
+  measurement and its two mechanics live in [PARITY.md](PARITY.md).
 
-  1. **The symlink refusal in `.worktreeinclude` seeding is unverified on the
-     primary target.** `TestSeedSymlinksAreNamedNotFollowed` SKIPS on this box
-     — *"A required privilege is not held by the client"* — so the one claim
-     whose stated reason is that Windows differs is the one claim Windows never
-     checks. It does run on CI's ubuntu `-race` job. To pay it: enable Windows
-     Developer Mode (Settings → System → For developers), then
-     `go test ./internal/council -run TestSeedSymlinksAreNamedNotFollowed -v`
-     and confirm it PASSES rather than skips. Cost: zero, one minute. Parity
-     detail in [PARITY.md](PARITY.md).
-  2. **§9.38's composer paste** (design.md §9.38's own "live verification
+  1. **§9.38's composer paste** (design.md §9.38's own "live verification
      owed"). No vendors, no race, no spend: open `telltale council` in Windows
      Terminal, copy a three-line snippet, paste. Expect ONE insertion, three
      composer rows, ZERO dispatches; then enter sends it as one brief. A paste
      that lands as separate turns means the terminal did not bracket it —
      record the Windows Terminal build in `PARITY.md`, because that is a
      vendor fact, not a council bug.
-  3. **`.worktreeinclude` seeding** and 4. **`u` undo on a real racer commit**
+  2. **`.worktreeinclude` seeding** and 3. **`u` undo on a real racer commit**
      — both need one live race, and **one race pays both**. The design doc
      frames the seeding debt as needing "a repo that actually needs a `.env`";
      it does not. This repo can pay it with a throwaway git-ignored file:
@@ -114,7 +107,7 @@ the argument; this file does not restate either.
        mode, focus that seat, press `u`, then `y`. Expect the card to name the
        base, then the stat to STAY on the column under an "undone" line, and
        `git -C ../telltale-arena-t9-claude log --oneline -1` to be back at the
-       base. That pays item 4. Press `u` again to see the already-undone
+       base. That pays item 3. Press `u` again to see the already-undone
        refusal, which costs nothing.
      - Clean up: `/arena drop claude!`, then `rm .worktreeinclude` and
        `rm -r dist`. **Then put the roster back** — a typed `--vendor` list is
