@@ -61,7 +61,7 @@ func TestArenaSetupRacesFromOneBase(t *testing.T) {
 	ws := gitRepo(t)
 	seats := []model.VendorID{model.VendorCodex, model.VendorAntigravity}
 
-	base, trees, _, seatErr, err := arenaSetup(ws, 7, seats)
+	_, base, trees, _, seatErr, err := arenaSetup(ws, 7, seats)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,9 +93,145 @@ func TestArenaSetupRefusesOutsideARepo(t *testing.T) {
 	if _, err := gitOut(".", "--version"); err != nil {
 		t.Skip("git not available")
 	}
-	_, _, _, _, err := arenaSetup(t.TempDir(), 1, []model.VendorID{model.VendorCodex})
+	_, _, _, _, _, err := arenaSetup(t.TempDir(), 1, []model.VendorID{model.VendorCodex})
 	if err == nil {
 		t.Fatal("a non-repo workspace was accepted — the race would have nowhere to diff against")
+	}
+}
+
+// TestGitOutSurfacesTheFatalLineNotProgressChatter is the 2026-08-09 live
+// failure as a fixture. `git worktree add -b <existing branch>` prints its
+// "Preparing worktree" progress line BEFORE the fatal line and exits nonzero
+// — the exact two-line stderr the live race produced on all four seats — and
+// the error gitOut returns must carry git's own fatal sentence, not the
+// chatter printed above it.
+func TestGitOutSurfacesTheFatalLineNotProgressChatter(t *testing.T) {
+	ws := gitRepo(t)
+	// The branch exists first — an older room's leftover, minted by hand the
+	// way the old room's arenaSetup minted it.
+	if _, err := gitOut(ws, "branch", "arena/t3/claude"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := gitOut(ws, "worktree", "add", "-b", "arena/t3/claude",
+		arenaTree(ws, 3, model.VendorClaude), "HEAD")
+	if err == nil {
+		t.Fatal("worktree add over an existing branch succeeded — the fixture lost its collision")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("the error does not carry git's fatal line: %q", err)
+	}
+	if strings.Contains(err.Error(), "Preparing") {
+		t.Errorf("the error is progress chatter again — the live lie, back: %q", err)
+	}
+}
+
+// TestGitErrLineFallsBackWhenGitMarksNothing: some git refusals print bare
+// prose with no fatal:/error: prefix, and those must keep surfacing as the
+// first non-empty line rather than as an empty error.
+func TestGitErrLineFallsBackWhenGitMarksNothing(t *testing.T) {
+	if got := gitErrLine("Preparing worktree (new branch 'arena/t3/claude')\nfatal: a branch named 'arena/t3/claude' already exists\n"); got != "fatal: a branch named 'arena/t3/claude' already exists" {
+		t.Errorf("the marked line was not preferred: %q", got)
+	}
+	if got := gitErrLine("\nplain refusal, no prefix\n"); got != "plain refusal, no prefix" {
+		t.Errorf("the fallback lost the only line there was: %q", got)
+	}
+	if got := gitErrLine("   \n"); got != "" {
+		t.Errorf("blank stderr invented a sentence: %q", got)
+	}
+}
+
+// TestArenaRaceNumbersItselfPastLeftovers is the other half of the same live
+// failure: arena branches and worktrees outlive the room, the turn counter
+// does not, so a fresh room's turn 3 collided with an older room's t3 and
+// every seat failed at worktree add. The race number is READ from the repo's
+// arena refs — a fresh room racing at turn 3 over stale t3 branches numbers
+// itself t4 and every seat races clean.
+func TestArenaRaceNumbersItselfPastLeftovers(t *testing.T) {
+	ws := gitRepo(t)
+	// The old room's residue: branches only — its worktrees may or may not
+	// still exist, and its in-memory receipt is gone either way.
+	for _, leftover := range []string{"arena/t3/claude", "arena/t3/codex"} {
+		if _, err := gitOut(ws, "branch", leftover); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seats := []model.VendorID{model.VendorClaude, model.VendorCodex}
+
+	raceN, base, trees, _, seatErr, err := arenaSetup(ws, 3, seats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seatErr) != 0 {
+		t.Fatalf("stale branches still fail the seats — the collision is back: %v", seatErr)
+	}
+	if raceN != 4 {
+		t.Errorf("raceN = %d, want 4 — one past the leftovers' t3", raceN)
+	}
+	for _, v := range seats {
+		if want := arenaTree(ws, 4, v); trees[v] != want {
+			t.Errorf("%s tree = %q, want %q", v, trees[v], want)
+		}
+		if got, _ := gitOut(trees[v], "branch", "--show-current"); got != "arena/t4/"+string(v) {
+			t.Errorf("%s branch = %q, want the renumbered arena/t4/%s", v, got, v)
+		}
+		if got, gerr := gitOut(trees[v], "rev-parse", "HEAD"); gerr != nil || got != base {
+			t.Errorf("%s worktree HEAD = %q (%v), want the shared base", v, got, gerr)
+		}
+	}
+	// The leftovers are not touched: numbering past them is the whole fix,
+	// deleting them is the user's call (/arena drop could never reach these).
+	if out, _ := gitOut(ws, "branch", "--list", "arena/t3/*"); !strings.Contains(out, "arena/t3/claude") {
+		t.Error("the scan deleted an older room's branch")
+	}
+}
+
+// TestArenaRaceNumberFloorsAtTheTurn: with no arena refs the race is t<turn>
+// (the original naming), and a scan that cannot run at all — here, no repo —
+// degrades to the same floor rather than bricking /arena.
+func TestArenaRaceNumberFloorsAtTheTurn(t *testing.T) {
+	ws := gitRepo(t)
+	if got := arenaRaceNumber(ws, 3); got != 3 {
+		t.Errorf("a repo with no arena refs numbered the race %d, want the turn 3", got)
+	}
+	if got := arenaRaceNumber(t.TempDir(), 3); got != 3 {
+		t.Errorf("a failed scan numbered the race %d, want the turn-number floor", got)
+	}
+}
+
+// TestArenaResidualCollisionNamesTheFatalLineAndTheRemedy: the scan reads
+// refs, so a sibling DIRECTORY an old room left behind with no branch to be
+// scanned still collides at worktree add. That seat's error must now be
+// git's own fatal line (fix one) plus the named remedy — never the
+// "Preparing worktree" chatter the live race showed.
+func TestArenaResidualCollisionNamesTheFatalLineAndTheRemedy(t *testing.T) {
+	ws := gitRepo(t)
+	// A non-empty directory squatting on the exact tree name this race will
+	// mint (no refs exist, so the race numbers itself t1).
+	squat := arenaTree(ws, 1, model.VendorCodex)
+	if err := os.MkdirAll(squat, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(squat, "stale.txt"), []byte("old room\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, trees, _, seatErr, err := arenaSetup(ws, 1, []model.VendorID{model.VendorCodex})
+	if err != nil {
+		t.Fatalf("a per-seat collision escaped to the race channel: %v", err)
+	}
+	if _, ok := trees[model.VendorCodex]; ok {
+		t.Fatal("the squatted seat still races")
+	}
+	why := seatErr[model.VendorCodex]
+	if !strings.Contains(why, "already exists") {
+		t.Errorf("the seat's error is not git's fatal line: %q", why)
+	}
+	if strings.Contains(why, "Preparing") {
+		t.Errorf("the seat's error is progress chatter — the live lie, back: %q", why)
+	}
+	if !strings.Contains(why, "git worktree remove") {
+		t.Errorf("the collision does not name its remedy: %q", why)
 	}
 }
 
@@ -104,7 +240,7 @@ func TestArenaSetupRefusesOutsideARepo(t *testing.T) {
 // read "no changes" — a false zero, the exact class §4a.1 exists to prevent.
 func TestCollectArenaSeesNewFiles(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, _, err := arenaSetup(ws, 1, []model.VendorID{model.VendorCodex})
+	_, base, trees, _, _, err := arenaSetup(ws, 1, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +265,7 @@ func TestCollectArenaSeesNewFiles(t *testing.T) {
 // nothing; an unreadable one is a failure. The two must not meet in the middle.
 func TestCollectArenaZeroAndErrorAreDifferent(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
+	_, base, trees, _, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +395,7 @@ func TestArenaCommandRefusals(t *testing.T) {
 func TestArenaRanksAreHostObserved(t *testing.T) {
 	ws := gitRepo(t)
 	seats := []model.VendorID{model.VendorClaude, model.VendorCodex}
-	base, trees, _, _, err := arenaSetup(ws, 4, seats)
+	raceN, base, trees, _, _, err := arenaSetup(ws, 4, seats)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,6 +409,7 @@ func TestArenaRanksAreHostObserved(t *testing.T) {
 		live:       map[model.VendorID]bool{model.VendorClaude: true, model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
 		arena:      true,
+		arenaRaceN: raceN,
 		arenaBase:  base,
 		arenaTrees: trees,
 		cancel:     func() {},
@@ -403,7 +540,7 @@ func TestArenaCommitMsgIsATurnLabel(t *testing.T) {
 // what rev-parse reported, and the room's own repo has not moved an inch.
 func TestArenaCommitMakesTheAttemptDurable(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, _, err := arenaSetup(ws, 5, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, _, err := arenaSetup(ws, 5, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,7 +562,7 @@ func TestArenaCommitMakesTheAttemptDurable(t *testing.T) {
 	m.turn = &turnState{
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
-		arena:      true, arenaBase: base, arenaTrees: trees,
+		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
 	}
 	m.finishColumn(c, PhaseDone)
@@ -509,7 +646,7 @@ func TestArenaCommitFallsBackToALocalIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	base, trees, _, _, err := arenaSetup(ws, 1, []model.VendorID{model.VendorClaude})
+	_, base, trees, _, _, err := arenaSetup(ws, 1, []model.VendorID{model.VendorClaude})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -541,7 +678,7 @@ func TestArenaCommitFallsBackToALocalIdentity(t *testing.T) {
 func TestArenaCommitFailureDegradesTheSeatAlone(t *testing.T) {
 	ws := gitRepo(t)
 	seats := []model.VendorID{model.VendorClaude, model.VendorCodex}
-	base, trees, _, _, err := arenaSetup(ws, 3, seats)
+	raceN, base, trees, _, _, err := arenaSetup(ws, 3, seats)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,7 +702,7 @@ func TestArenaCommitFailureDegradesTheSeatAlone(t *testing.T) {
 	m.turn = &turnState{
 		live:       map[model.VendorID]bool{model.VendorClaude: true, model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
-		arena:      true, arenaBase: base, arenaTrees: trees,
+		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
 	}
 	m.finishColumn(&m.st.Columns[0], PhaseDone)
@@ -608,7 +745,7 @@ func TestArenaCommitFailureDegradesTheSeatAlone(t *testing.T) {
 // branch stays at base and the "no changes" sentence stays the whole story.
 func TestArenaZeroDiffCommitsNothing(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -620,7 +757,7 @@ func TestArenaZeroDiffCommitsNothing(t *testing.T) {
 	m.turn = &turnState{
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
-		arena:      true, arenaBase: base, arenaTrees: trees,
+		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
 	}
 	m.finishColumn(c, PhaseDone)
@@ -647,7 +784,7 @@ func TestArenaZeroDiffCommitsNothing(t *testing.T) {
 // commit on top.
 func TestArenaSelfCommittedAttemptKeepsItsOwnTip(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, _, err := arenaSetup(ws, 6, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, _, err := arenaSetup(ws, 6, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -670,7 +807,7 @@ func TestArenaSelfCommittedAttemptKeepsItsOwnTip(t *testing.T) {
 	m.turn = &turnState{
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
-		arena:      true, arenaBase: base, arenaTrees: trees,
+		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
 	}
 	m.finishColumn(c, PhaseDone)
@@ -698,7 +835,7 @@ func TestArenaSelfCommittedAttemptKeepsItsOwnTip(t *testing.T) {
 // never moves.
 func TestUndoTakesTheWholeTurnBack(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, _, err := arenaSetup(ws, 7, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, _, err := arenaSetup(ws, 7, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -720,7 +857,7 @@ func TestUndoTakesTheWholeTurnBack(t *testing.T) {
 	m.turn = &turnState{
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
-		arena:      true, arenaBase: base, arenaTrees: trees,
+		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
 	}
 	m.finishColumn(c, PhaseDone)
@@ -821,7 +958,7 @@ func TestUndoRefusalsEachNameTheirReason(t *testing.T) {
 // not measure happening.
 func TestUndoResetFailureSurfacesGitsOwnSentence(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, _, err := arenaSetup(ws, 8, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, _, err := arenaSetup(ws, 8, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -839,7 +976,7 @@ func TestUndoResetFailureSurfacesGitsOwnSentence(t *testing.T) {
 	m.turn = &turnState{
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
-		arena:      true, arenaBase: base, arenaTrees: trees,
+		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
 	}
 	m.finishColumn(c, PhaseDone)
@@ -881,7 +1018,7 @@ func TestUndoNeverTouchesTheRoomRepo(t *testing.T) {
 	m.st.Focus = 0
 	c := &m.st.Columns[0]
 	c.TurnN = 2
-	c.Arena = &ArenaResult{Tree: ws, Base: base, Branch: "arena/t2/claude", Stat: " a.txt | 1 +"}
+	c.Arena = &ArenaResult{Tree: ws, Base: base, Branch: "arena/t2/claude", RaceN: 2, Stat: " a.txt | 1 +"}
 
 	m.askUndoSeat()
 	if m.undoPending == "" {
@@ -916,7 +1053,7 @@ func TestUndoGateKeepsAndCancels(t *testing.T) {
 			c.TurnN = 1
 			c.Arena = &ArenaResult{
 				Tree: arenaTree(m.st.Workspace, 1, model.VendorClaude),
-				Base: "abcdef1234", Stat: " a.txt | 1 +",
+				Base: "abcdef1234", RaceN: 1, Stat: " a.txt | 1 +",
 			}
 			m.askUndoSeat()
 			if m.undoPending != model.VendorClaude {
@@ -949,5 +1086,78 @@ func TestUndoIsViewModeOnly(t *testing.T) {
 	}
 	if !strings.Contains(m.st.Draft, "u") {
 		t.Errorf("u was swallowed instead of typed: draft = %q", m.st.Draft)
+	}
+}
+
+// TestARaceThatOutranItsTurnStillCommitsAndUndoes drives the diverged-number
+// case end to end: an older room's t3 leftover pushes a turn-3 race to t4, so
+// Column.TurnN (3) and the race number (4) disagree — and everything that
+// derives a name must read the RECORDED race number, or the receipt claims a
+// branch that does not exist and undo's path guard refuses a legitimate tree.
+func TestARaceThatOutranItsTurnStillCommitsAndUndoes(t *testing.T) {
+	ws := gitRepo(t)
+	if _, err := gitOut(ws, "branch", "arena/t3/codex"); err != nil {
+		t.Fatal(err)
+	}
+	raceN, base, trees, _, seatErr, err := arenaSetup(ws, 3, []model.VendorID{model.VendorCodex})
+	if err != nil || len(seatErr) != 0 {
+		t.Fatalf("setup: %v %v", err, seatErr)
+	}
+	if raceN != 4 {
+		t.Fatalf("fixture: raceN = %d, want 4", raceN)
+	}
+	tree := trees[model.VendorCodex]
+	if werr := os.WriteFile(filepath.Join(tree, "a.txt"), []byte("two\n"), 0o644); werr != nil {
+		t.Fatal(werr)
+	}
+
+	m := clearModel()
+	m.st.Workspace = ws
+	m.st.Focus = 1
+	c := &m.st.Columns[1]
+	c.Phase = PhaseStreaming
+	c.TurnN = 3 // the room's own turn — deliberately NOT the race number
+	c.Prompt = "race past the leftovers"
+	m.turn = &turnState{
+		live:       map[model.VendorID]bool{model.VendorCodex: true},
+		persistent: map[model.VendorID]bool{},
+		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
+		cancel: func() {},
+	}
+	m.finishColumn(c, PhaseDone)
+
+	r := c.Arena
+	if r == nil {
+		t.Fatal("no arena result")
+	}
+	// The receipt carries the race's names, not the turn's.
+	if r.Branch != "arena/t4/codex" || r.RaceN != 4 {
+		t.Fatalf("receipt = branch %q raceN %d, want the renumbered arena/t4/codex", r.Branch, r.RaceN)
+	}
+	if r.CommitErr != "" || r.Commit == "" {
+		t.Fatalf("the attempt did not commit: %q %q", r.Commit, r.CommitErr)
+	}
+	if got, _ := gitOut(ws, "rev-parse", "arena/t4/codex"); got != r.Commit {
+		t.Errorf("arena/t4/codex = %q, want the receipt's %q", got, r.Commit)
+	}
+	if subject, _ := gitOut(tree, "log", "-1", "--format=%s"); !strings.HasPrefix(subject, "arena t4: ") {
+		t.Errorf("commit subject = %q, want the race's t4, not the turn's t3", subject)
+	}
+
+	// Undo's path guard recomputes from the RECORDED race number and matches.
+	m.askUndoSeat()
+	if m.undoPending != model.VendorCodex {
+		t.Fatalf("undo did not arm: %q", m.st.Notice)
+	}
+	m.undoGateKey(key("y"))
+	if !r.Undone {
+		t.Fatalf("the diverged numbers refused a legitimate undo: %q", m.st.Notice)
+	}
+	if got, _ := gitOut(ws, "rev-parse", "arena/t4/codex"); got != base {
+		t.Errorf("the branch did not come back to base: %q", got)
+	}
+	// The old room's leftover was never this race's to touch.
+	if got, _ := gitOut(ws, "rev-parse", "arena/t3/codex"); got != base {
+		t.Errorf("the leftover branch moved: %q", got)
 	}
 }

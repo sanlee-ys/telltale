@@ -24,7 +24,7 @@ func racedModel(t *testing.T, seats ...model.VendorID) (*Model, string) {
 	if _, err := gitOut(ws, "config", "commit.gpgsign", "false"); err != nil {
 		t.Fatal(err)
 	}
-	base, trees, _, seatErr, err := arenaSetup(ws, 4, seats)
+	raceN, base, trees, _, seatErr, err := arenaSetup(ws, 4, seats)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func racedModel(t *testing.T, seats ...model.VendorID) (*Model, string) {
 	}
 	m := clearModel()
 	m.st.Workspace = ws
-	m.lastRace = &arenaRace{workspace: ws, turn: 4, base: base, trees: trees}
+	m.lastRace = &arenaRace{workspace: ws, raceN: raceN, base: base, trees: trees}
 	return m, ws
 }
 
@@ -430,5 +430,60 @@ func TestAdoptGateOutranksTheComposer(t *testing.T) {
 	}
 	if n, _ := gitOut(ws, "rev-list", "--count", "HEAD..arena/t4/codex"); n != "0" {
 		t.Error("the gate's y did not merge")
+	}
+}
+
+// TestAdoptAndDropReachARaceThatOutranItsTurn: an older room's leftover pushes
+// the race number past the turn (arenaRaceNumber), and both end-of-life verbs
+// must derive branch and tree from the RECORDED race number — a verb reading a
+// turn counter here would merge or delete names this race never created. The
+// leftover itself stays untouched throughout: it belongs to a room whose
+// receipt is gone, and hand-run git is its only legitimate owner.
+func TestAdoptAndDropReachARaceThatOutranItsTurn(t *testing.T) {
+	ws := gitRepo(t)
+	if _, err := gitOut(ws, "config", "commit.gpgsign", "false"); err != nil {
+		t.Fatal(err)
+	}
+	// The old room's residue at the exact number this room's turn would mint.
+	if _, err := gitOut(ws, "branch", "arena/t4/codex"); err != nil {
+		t.Fatal(err)
+	}
+	raceN, base, trees, _, seatErr, err := arenaSetup(ws, 4, []model.VendorID{model.VendorCodex})
+	if err != nil || len(seatErr) != 0 {
+		t.Fatalf("setup: %v %v", err, seatErr)
+	}
+	if raceN != 5 {
+		t.Fatalf("fixture: raceN = %d, want 5", raceN)
+	}
+	m := clearModel()
+	m.st.Workspace = ws
+	m.lastRace = &arenaRace{workspace: ws, raceN: raceN, base: base, trees: trees}
+	scribble(t, m, model.VendorCodex, "answer.go", "package answer\n")
+
+	adopt(t, m, "codex", "")
+	if !strings.Contains(m.st.Notice, "git merge --no-ff arena/t5/codex") {
+		t.Fatalf("the gate's question names the wrong branch: %q", m.st.Notice)
+	}
+	m.adoptGateKey(key("y"))
+	if !strings.Contains(m.st.Notice, "adopted codex") {
+		t.Fatalf("adopt failed against the renumbered race: %q", m.st.Notice)
+	}
+	if n, _ := gitOut(ws, "rev-list", "--count", "HEAD..arena/t5/codex"); n != "0" {
+		t.Errorf("the renumbered branch still holds unreachable commits: %q", n)
+	}
+
+	drop(t, m, "codex")
+	if !strings.Contains(m.st.Notice, "dropped codex") {
+		t.Fatalf("drop failed against the renumbered race: %q", m.st.Notice)
+	}
+	if out, _ := gitOut(ws, "branch", "--list", "arena/t5/codex"); out != "" {
+		t.Errorf("the race's own branch survived the drop: %q", out)
+	}
+	// The leftover was never this room's to merge or delete.
+	if out, _ := gitOut(ws, "branch", "--list", "arena/t4/codex"); out == "" {
+		t.Error("the verbs deleted an older room's branch")
+	}
+	if got, _ := gitOut(ws, "rev-parse", "arena/t4/codex"); got != base {
+		t.Errorf("the older room's branch moved: %q", got)
 	}
 }

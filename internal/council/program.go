@@ -878,11 +878,15 @@ func (m *Model) undoGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 //
 // The path guard is the whole safety argument, so it is explicit rather than
 // trusted: the reset runs ONLY on a path that equals arenaTree(workspace,
-// turn, vendor) recomputed from the room's own current state — the one name
-// this room would have created for this seat this turn, and a name that can
-// never equal the workspace itself (the -arena-t<N>-<vendor> suffix sees to
-// that). A recorded Tree that does not match — a forged fixture, a room that
-// /cd'd away since the race, state damaged in any way — refuses without
+// raceN, vendor) recomputed from the room's current workspace and the RACE
+// number recorded on the result — the one name this room's arena would have
+// minted for this seat this race, and a name that can never equal the
+// workspace itself (the -arena-t<N>-<vendor> suffix sees to that). The race
+// number, not c.TurnN: the race numbers itself past older rooms' leftovers
+// (arenaRaceNumber, §9.37 amended 2026-08-09), so a guard recomputing from
+// the turn would refuse every legitimate undo the moment the two numbers
+// diverge. A recorded Tree that does not match — a forged fixture, a room
+// that /cd'd away since the race, state damaged in any way — refuses without
 // running git at all, because `reset --hard` pointed at the wrong directory
 // is the exact irreversible act the confirm gate exists to price.
 //
@@ -896,8 +900,8 @@ func (m *Model) undoSeat(v model.VendorID) {
 		return
 	}
 	r := c.Arena
-	if r.Tree != arenaTree(m.st.Workspace, c.TurnN, v) {
-		m.st.Notice = "undo refused: " + r.Tree + " is not an arena tree this room made this turn — nothing was reset"
+	if r.Tree != arenaTree(m.st.Workspace, r.RaceN, v) {
+		m.st.Notice = "undo refused: " + r.Tree + " is not an arena tree this room's race made — nothing was reset"
 		return
 	}
 	if err := undoArena(r.Tree, r.Base); err != nil {

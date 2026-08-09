@@ -89,13 +89,14 @@ func TestArenaInterimMarksItselfAndNeverTheFinal(t *testing.T) {
 // for the settled block in the same land.
 func TestArenaFinalReplacesTheInterim(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, _, err := arenaSetup(ws, 5, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, _, err := arenaSetup(ws, 5, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	m := clearModel()
 	ls := arenaLiveTurn(m)
+	m.turn.arenaRaceN = raceN
 	m.turn.arenaBase = base
 	m.turn.arenaTrees = trees
 	_ = ls
@@ -321,7 +322,7 @@ func TestArenaStreamActivityArmsTheRefresh(t *testing.T) {
 // measured zero, and an unreadable tree reports rather than pretends.
 func TestCollectArenaStatSeesNewFilesZeroAndError(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, _, err := arenaSetup(ws, 9, []model.VendorID{model.VendorCodex})
+	_, base, trees, _, _, err := arenaSetup(ws, 9, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}

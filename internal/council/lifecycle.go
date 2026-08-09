@@ -52,8 +52,14 @@ type arenaRace struct {
 	// read from m.st.Workspace at use time, because /cd may have moved the room
 	// since and every branch and tree here belongs to the repo that raced.
 	workspace string
-	turn      int
-	base      string
+	// raceN is the number the race's names carry (the t<N> in every branch
+	// and tree) — the value arenaSetup minted against the repo's existing
+	// arena refs, which is NOT always the turn the race ran on: leftovers
+	// from an older room push it past (arenaRaceNumber). Both verbs re-derive
+	// branch and tree names from THIS number; deriving from a turn counter
+	// here would aim adopt/drop at names the race never created.
+	raceN int
+	base  string
 	// trees maps each racer to its worktree, exactly as arenaSetup created
 	// them. Entries leave this map only via a successful drop, so "raced but
 	// already dropped" and "never raced" answer differently.
@@ -83,7 +89,7 @@ func (m *Model) adoptCommand(arg string) bool {
 		if race == nil {
 			m.st.Notice = "no race has run — /arena <brief> races the seats, then /adopt <seat> takes the winner"
 		} else {
-			m.st.Notice = "the last race is turn " + itoa(race.turn) +
+			m.st.Notice = "the last race is t" + itoa(race.raceN) +
 				" — /adopt <seat> merges that seat's arena branch into the room"
 		}
 		m.setDraft("")
@@ -103,7 +109,7 @@ func (m *Model) adoptCommand(arg string) bool {
 	if !raced {
 		// Covers a seat that never raced AND one whose tree was already
 		// dropped — either way there is no kept worktree to adopt from.
-		m.st.Notice = string(v) + " has no kept worktree from turn " + itoa(race.turn) + " — nothing to adopt"
+		m.st.Notice = string(v) + " has no kept worktree from race t" + itoa(race.raceN) + " — nothing to adopt"
 		return true
 	}
 
@@ -150,7 +156,7 @@ func (m *Model) adoptCommand(arg string) bool {
 	// precedes the merge is named too: it writes to the racer's own branch,
 	// but a y that quietly ran two commands after promising one would be the
 	// card lying about its own scope.
-	branch := arenaBranch(race.turn, v)
+	branch := arenaBranch(race.raceN, v)
 	m.adoptPending = v
 	q := "adopt " + string(v) + "? y runs git merge --no-ff " + branch
 	if len(dirty) > 0 {
@@ -194,9 +200,9 @@ func (m *Model) adoptSeat(v model.VendorID) string {
 	}
 	tree, ok := race.trees[v]
 	if !ok {
-		return string(v) + " has no kept worktree from turn " + itoa(race.turn)
+		return string(v) + " has no kept worktree from race t" + itoa(race.raceN)
 	}
-	branch := arenaBranch(race.turn, v)
+	branch := arenaBranch(race.raceN, v)
 
 	dirty, err := worktreePorcelain(tree)
 	if err != nil {
@@ -206,7 +212,7 @@ func (m *Model) adoptSeat(v model.VendorID) string {
 		if _, err := gitOut(tree, "add", "-A"); err != nil {
 			return "adopt: " + err.Error()
 		}
-		if _, err := gitOut(tree, "commit", "-m", string(v)+"'s arena attempt, turn "+itoa(race.turn)); err != nil {
+		if _, err := gitOut(tree, "commit", "-m", string(v)+"'s arena attempt, race t"+itoa(race.raceN)); err != nil {
 			return "adopt: the attempt could not be committed to " + branch + " — " + err.Error()
 		}
 	}
@@ -302,7 +308,7 @@ func (m *Model) arenaDrop(word string, force bool) {
 			}
 		}
 		if len(targets) == 0 {
-			m.st.Notice = "every worktree from turn " + itoa(race.turn) + " is already dropped"
+			m.st.Notice = "every worktree from race t" + itoa(race.raceN) + " is already dropped"
 			m.setDraft("")
 			return
 		}
@@ -313,7 +319,7 @@ func (m *Model) arenaDrop(word string, force bool) {
 			return
 		}
 		if _, raced := race.trees[v]; !raced {
-			m.st.Notice = string(v) + " has no kept worktree from turn " + itoa(race.turn)
+			m.st.Notice = string(v) + " has no kept worktree from race t" + itoa(race.raceN)
 			return
 		}
 		targets = []model.VendorID{v}
@@ -361,8 +367,8 @@ func (m *Model) arenaDrop(word string, force bool) {
 func (m *Model) dropRacer(v model.VendorID, force bool) string {
 	race := m.lastRace
 	tree := race.trees[v]
-	branch := arenaBranch(race.turn, v)
-	if want := arenaTree(race.workspace, race.turn, v); tree != want {
+	branch := arenaBranch(race.raceN, v)
+	if want := arenaTree(race.workspace, race.raceN, v); tree != want {
 		return string(v) + ": " + tree + " is not this race's worktree — refusing to remove it"
 	}
 
@@ -425,7 +431,7 @@ func worktreePorcelain(dir string) ([]string, error) {
 // recorded base, because "unadopted" is a fact about where the ROOM is now: a
 // branch already merged counts zero even though it is ahead of the base.
 func unadoptedCount(race *arenaRace, v model.VendorID) (int, error) {
-	out, err := gitOut(race.workspace, "rev-list", "--count", "HEAD.."+arenaBranch(race.turn, v))
+	out, err := gitOut(race.workspace, "rev-list", "--count", "HEAD.."+arenaBranch(race.raceN, v))
 	if err != nil {
 		return 0, err
 	}
