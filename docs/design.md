@@ -6223,16 +6223,14 @@ is a git command the user runs against a kept branch, never an action taken for 
 race is not routable in v1 (`@codex`-only arenas): the value is the comparison, and a one-seat
 race is an ordinary turn in a worktree, which `/cd` already provides.
 
-Deliberately deferred, each its own change judged against this section: ~~commit-per-turn inside
-arena worktrees~~ (landed 2026-08-09, with its undo — second amendment below), `.worktreeinclude`
-seeding (the first real arena run on a repo needing `.env` will surface it), and a deletion guard
-stronger than git's own refusal to remove a dirty worktree. Two of the original deferrals landed
-the day after (amendment below).
-Deliberately deferred, each its own change judged against this section: commit-per-turn inside
-arena worktrees, ~~`.worktreeinclude` seeding (the first real arena run on a repo needing `.env`
-will surface it)~~ (landed 2026-08-09 — second amendment below), and a deletion guard stronger
-than git's own refusal to remove a dirty worktree. Two of the original deferrals landed the day
-after (amendment below).
+Deliberately deferred, each its own change judged against this section — and every one has now
+landed, each as its own change (the 2026-08-09 amendments below): ~~commit-per-turn inside arena
+worktrees~~ (with its undo), ~~`.worktreeinclude` seeding (the first real arena run on a repo
+needing `.env` will surface it)~~ (landed on exactly that argument, ahead of that repo showing
+up), and ~~a deletion guard stronger than git's own refusal to remove a dirty worktree~~ (landed
+as `/arena drop`'s counted refusals, beside `/adopt`). This paragraph briefly existed as two
+half-struck copies of itself — two same-day changes each struck their own item and a text merge
+kept both variants — collapsed back to one on the same day.
 
 Verification note: the git mechanics (worktree creation from one base, add -N, the three
 collection outcomes, the session-id guard, the renders, the yank) are all pinned by offline

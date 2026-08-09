@@ -5,7 +5,8 @@ side — **Claude Code**, **Codex**, **Antigravity**, and **Cursor**, each in it
 in your terminal. It exists because the alternative is four terminals and a clipboard.
 
 This file is the room's own guide: what each mark on the frame means, how a turn is routed,
-how to read four answers at once, and how to get one back out. [README.md](../README.md) is
+how to read four answers at once, how to get one back out — and how to race one brief
+across every seat and keep the attempt you like. [README.md](../README.md) is
 the front door and states the project's claims; [design.md §9](design.md) is the record
 behind this one — what was measured on each vendor, what each seam cost, and what is still
 unverified.
@@ -170,8 +171,8 @@ question a reader actually had, and the only two answers were both ends. All of 
 **while composing** as well as in view mode, which is the point: a finished turn drops the
 room back into compose, so the mode you are in when four long answers land is the mode you
 need to read in. Keys that can be text stay text there — `j`, `k`, `g`, `G`, `q`, `t`, `c`,
-the digits and the brackets are all just characters in the composer — and the mode line
-says which set is live on every frame. `?` lists all of them and says when it is holding
+`d`, `u`, the digits and the brackets are all just characters in the composer — and the mode
+line says which set is live on every frame. `?` lists all of them and says when it is holding
 more than fits (`↓ 5 more below`); `?` again explains what the posture badge on each column
 means, with your own seats' full claims underneath; `?` a third time closes the panel.
 
@@ -227,7 +228,11 @@ the same sanitized text the screen is showing, never the raw stream, and a notic
 was copied because the mechanism cannot report back: `y` while a vendor is waiting on a gate
 still means **approve**, and yank simply does not exist until you have answered. On a turn
 page the two keys produce the same document, because a per-seat `y` needs a per-seat focus
-and a projection whose whole unit is the turn deliberately has none.
+and a projection whose whole unit is the turn deliberately has none. One exception, ruled
+with the race itself: **on a seat that raced this turn, `y` copies its diff**, not its
+prose — the diff is that seat's deliverable, and the notice says so (`copied Codex's arena
+diff (turn 7)`), naming the 1 MB truncation when it applied. The reply is still on screen;
+an attempt that changed nothing has no diff, so `y` copies the reply as usual.
 
 The mechanism is OSC 52 — an escape sequence handed to your terminal — which needs no
 clipboard library and no temp file. Its honest limit: the sequence carries no
@@ -261,6 +266,37 @@ follows on the next dispatch. **Posture is never restored** — it comes from th
 flags or from the default, never from the saved file, because a posture that can arrive
 from a file is not one anyone typed. And one room shared by every terminal means two
 councils open at once share one state file — last save wins.
+
+## Pasting into the composer
+
+**A paste lands in the draft whole, and never sends.** Enter — a keystroke, from a person
+— remains the only way a brief leaves the room: a paste never dispatches, never answers a
+gate, never quits, and a pasted control character cannot act (a pasted ctrl+c is not a
+cancel, a pasted `q` is the letter q). Newlines are kept exactly as pasted — the composer
+has been a block since `ctrl+j` existed, so a pasted paragraph renders as the rows it is
+and dispatches with its real newlines. The one lossy rewrite is stated rather than hidden:
+a tab becomes one space, because a cell grid cannot budget a tab; a snippet whose
+indentation is load-bearing belongs in a file the brief names.
+
+**Pasting from view mode inserts and opens compose.** View mode's letters are commands
+because they are keys; pasted text can only be material, and the only place material goes
+is the draft — the mode line states the switch on the next frame. The exception is a
+pending y/n: the paste is refused by name (`the paste was not inserted`) and the question
+stays exactly where it was, because nothing about a pending request happens implicitly.
+
+**A paste that would put the draft past 8,192 characters is refused whole**, not
+truncated — a composer that kept the first half of a paste would send the vendors a brief
+you never wrote. The notice carries both numbers and the remedy: `paste refused: 20481
+chars against the composer's 8192 — put long text in a file and name the path in the
+brief`. The cap is anchored to the narrowest pipe a brief must fit through (one seat's
+prompt rides a Windows command line); typing can still pass it, as it always could.
+
+One honest limit, carried from the record: all of this is measured against the runtime's
+own pinned source, and it holds in any terminal that brackets its pastes — Windows
+Terminal, the reference environment, does. **A terminal with no bracketed paste replays a
+paste as keystrokes**, and there each pasted newline is an Enter and dispatches; council
+cannot tell that replay from typing without guessing, so on such a terminal the fix is
+the terminal ([design.md §9.38](design.md)).
 
 ## Write posture, and what actually contains the room
 
@@ -330,6 +366,123 @@ last 200 records and hands them to the file the moment you open one — type it 
 a turn you cannot explain and you get *that* turn, not the next one. `/trace off` stops and
 the room keeps measuring; bare `/trace` reports. Council never picks the path: that is what
 keeps `room.json` the only file it writes on its own initiative.
+
+## The race: /arena
+
+**`/arena <brief>` races one brief across every seated vendor, each attempt in its own git
+worktree, compared by diff instead of by prose.** Four writers in one shared tree are not
+four answers; the worktree is what makes four *write* attempts comparable at all. Every
+attempt is a **fresh session** — the room's own conversations are untouched, and a race's
+throwaway session ids can never replace the threads the room reattaches to. Even the seat
+driven as a live process races on a throwaway session of its own, killed at its own finish
+line, its room thread untouched by construction. A race is not routable — `@codex`-only
+arenas deliberately do not exist, because the value is the comparison, and a one-seat race
+is an ordinary turn in a worktree, which `/cd` already provides.
+
+Every racer writes — that is the point — so a `--read` room refuses the race and names the
+way in: `/write lets it, between turns`. The containment is the worktree, stated on the
+column rather than implied: a one-shot process has no channel to be asked on, so the gate
+structurally cannot exist here.
+
+**The worktrees are kept until you delete them, and they are siblings you can see.** Each
+one is named `<repo>-arena-t<N>-<vendor>` beside the workspace, on branch
+`arena/t<N>/<vendor>` — so `/cd telltale-arena-t7-codex` walks into one by name, and a room
+reopened after a quit can finish the lifecycle by hand with plain git. Every diff answers
+against **one base commit recorded before any seat spawned**, and files a racer *created*
+count too — an attempt whose whole answer is a new file can never read as "no changes". A
+workspace that is not a git repo refuses the whole race with git's own sentence; one seat
+whose worktree could not be added is skipped and told why, and the others race on. One
+thing to know about the block itself: it belongs to the seat's *current* turn, so the next
+brief you dispatch to that seat clears it from the screen. The worktree, the branch and
+the commit are the record that outlives it — which is exactly what the two lifecycle verbs
+below act on.
+
+**While the race runs, each racing column shows the diff growing.** Stream activity on a
+seat arms a re-read of its worktree (at most one every two seconds), and the block is
+labelled **`arena · so far`** — the "so far" is the honesty marker, because a mid-race read
+is a measurement of a moment already past. It keeps zero, absent and broken apart: no read
+yet draws nothing at all; a read that found nothing says `no changes yet against <base>.`;
+a failed read carries git's own first line, and after three consecutive failures the block
+says it stopped re-reading — the finish-time diff still runs either way.
+
+**Every finisher carries a finish line: `2nd of 4 · done · 25s`.** The rank is the order
+the *room* saw seats land — a vendor's own claim about when it finished is never consulted
+— and it is welded to the phase word on purpose: `2nd · failed` and `2nd · done` are
+different facts, and a bare number would let a fast crash read as a podium. The elapsed is
+the column's own clock. Below it, the settled block replaces the interim one outright: a
+diff stat, a measured `no changes against <base>.`, or `diff unavailable: <why>` — three
+outcomes, never collapsed.
+
+**Every attempt that changed something survives as a commit.** The moment a racer lands,
+its whole tree is committed onto its arena branch and the column shows the receipt —
+`committed <sha>.`, exactly what git reported — so the attempt stays diffable, adoptable
+and rollbackable even after its worktree is deleted. An attempt that changed nothing
+commits nothing and shows no commit line either: `no changes against <base>.` is the whole
+story, and an empty commit would be a receipt claiming work that did not happen. A commit
+that could not land degrades that one seat's receipt — `not committed: <git's reason>` —
+and touches nothing else.
+
+**`d` flips the focused seat's arena block from the stat to the full patch**, and back —
+per column, because reading one seat's stat against another's whole diff is a legitimate
+way to compare. The frame shows at most 400 patch lines, and the cutoff names what it
+dropped and both routes to the rest: `y` copies the whole diff (capped at 1 MB, truncation
+stated), and the worktree holds all of it. `d` refuses with the reason named when there is
+nothing to flip to — no race this turn, an attempt that changed nothing, or a diff that
+could not be read.
+
+**`u` takes the focused seat's attempt back — y/n-gated, like `c`.** A stray keystroke
+must cost a `y` before it costs an attempt: the card names exactly what happens (`y resets
+its worktree and branch to <base>`), and the reset runs inside that racer's worktree only,
+behind a mechanical path check that refuses anything that is not a tree this room made
+this turn. After an undo the stat stays on the column — the measured record of what the
+attempt changed — under a line saying the tree and branch no longer hold it. `u` refuses
+while a turn is in flight, when no race is on the seat's current turn, when the attempt
+changed nothing, and when it is already undone — pressing again is not more undone.
+
+**A `.worktreeinclude` at the repo root seeds each racer with the files git ignores.**
+A fresh worktree is a clean checkout, which is also the trap: the `.env` a project needs
+to run is exactly what git does not carry. Name such files in `.worktreeinclude` —
+gitignore-style patterns, one per line — and every racer's tree gets a copy before it
+races; the column says `seeded 3 files`, a count of what actually landed in *that* tree.
+Only untracked files are copied (a tracked file already arrives with the checkout, and
+seeding the room's possibly-dirty copy would plant your own edits in every seat's diff),
+symlinks are never followed, and the total is capped at 64 MiB per seat so one over-broad
+pattern fails loud instead of copying a dependency tree four times. A pattern that matches
+nothing is named on the column rather than silently skipped; a copy that fails skips that
+seat with the reason, and its half-seeded worktree stays on disk with the other receipts.
+Copy only, never execute: the repo cannot run code on your machine by containing a file.
+
+**`/adopt <seat>` takes the winner — as a merge, behind a y/n card that names the exact
+command.** `y` runs `git merge --no-ff arena/t<N>/<seat>` in the room's repo, on the
+branch you are already standing on — never a checkout, so your own branch and HEAD stay
+where they were, plus one merge commit saying where the work came from. When the attempt's
+worktree still holds uncommitted work, the card says the commit comes first, and names
+both commands. Adopt refuses while a turn is in flight, refuses a racer that changed
+nothing (an empty merge commit would claim work that does not exist), and refuses — with
+the path count — while the room's own tree is dirty, because a merge must never eat your
+uncommitted work. A merge that conflicts is aborted, your tree restored, the attempt
+intact on its branch, and the notice hands the merge to a human; one that failed before
+starting says the tree is untouched instead — two different endings, kept apart.
+
+**`/arena drop <seat>` deletes a racer's worktree and branch, and the force is a spelling,
+not a keystroke.** Drop refuses while a worktree holds uncommitted changes (counted), and
+while the arena branch holds commits the room has not merged (counted, with
+`/adopt <seat>` offered beside the alternative). The force form is a trailing bang —
+`/arena drop codex!` — retyped by you, chosen over a second y/n on purpose: the bang
+travels in the command and records that destruction was asked for, and a stray key can
+never produce it. `/arena drop all` degrades per seat — clean trees go, survivors are
+named with their reasons. Only the exact two-word form is the verb; anything longer after
+`/arena` is a brief and races as prose. Both lifecycle verbs run on your own keystroke,
+not a vendor's, so they work in a `--read` room too — and both answer with usage when
+typed bare.
+
+The record behind all of this — the rulings, what the first live race on 2026-08-09
+verified, and what is still owed — is [design.md §9.37](design.md). Read it before
+trusting the edges: the core race, its ranks and its honest zeros are **live-verified**;
+the live `arena · so far` stat, the throwaway-session racer for the cursor seat, the
+seeding, and the adopt/undo round-trips are pinned by offline tests against real git
+repositories but have not yet been exercised by a live race, and the guide says so rather
+than rounding them up to settled.
 
 ## Flags
 
