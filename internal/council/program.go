@@ -528,6 +528,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		return m.key(msg)
 
+	case tea.PasteMsg:
+		// Bracketed paste, delivered whole. This case is what makes a paste
+		// exist at all: before it, PasteMsg fell through this switch and the
+		// clipboard's offer was silently discarded (see paste.go). PasteStartMsg
+		// and PasteEndMsg still fall through unhandled, deliberately — the
+		// content between them arrives inside this one message, so the markers
+		// carry nothing the room needs.
+		return m.paste(msg)
+
 	case eventBatchMsg:
 		m.applyEvents(msg.events)
 		if m.turn == nil {
@@ -1009,11 +1018,12 @@ func (m *Model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+j":
 		// A deliberate newline. It goes in RAW rather than through
 		// sanitizeKeepingSpace, which is the whole change: that filter flattens
-		// every newline to a space precisely so a PASTED one cannot tear the
-		// footer apart, and it still does. What it must not do is flatten the
-		// one the user asked for by name — a keystroke is not a paste, and a
-		// composer where the newline key inserts a space is a composer nobody
-		// can write a paragraph in.
+		// every newline that arrives as key TEXT — decoder noise, or a paste
+		// being replayed keystroke by keystroke in a terminal with no bracketed
+		// paste. What it must not do is flatten the one the user asked for by
+		// name — a keystroke is not noise, and a composer where the newline key
+		// inserts a space is a composer nobody can write a paragraph in. (A
+		// bracketed paste keeps its newlines through the other door: paste.go.)
 		m.setDraft(m.st.Draft + "\n")
 		m.st.Notice = ""
 	case "enter":
