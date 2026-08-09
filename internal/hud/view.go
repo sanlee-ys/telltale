@@ -829,6 +829,13 @@ func vendorTag(v model.VendorID) string {
 		return "AG"
 	case model.VendorCursor:
 		return "CU"
+	case model.VendorGrok:
+		// Listed even though no adapter reports grok sessions, so no HUD row
+		// carries this id today. It is here because council's copy of this map
+		// spells it GR and the two are asserted equal by literal — one product,
+		// one vocabulary. The fallback below would answer "GR" anyway; saying
+		// it out loud is what keeps the two maps comparable by eye.
+		return "GR"
 	default:
 		s := strings.ToUpper(string(v))
 		if len(s) > 2 {

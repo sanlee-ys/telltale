@@ -153,6 +153,7 @@ func TestStripTagsMatchTheHUDSpelling(t *testing.T) {
 		model.VendorGemini:      "GE",
 		model.VendorAntigravity: "AG",
 		model.VendorCursor:      "CU",
+		model.VendorGrok:        "GR",
 	}
 	for v, tag := range want {
 		if got := vendorTag(v); got != tag {

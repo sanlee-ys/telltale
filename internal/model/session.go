@@ -57,6 +57,18 @@ const (
 	// most people call Cursor, and the HUD's job is to say which TOOL a row
 	// came from (decisions/007).
 	VendorCursor VendorID = "cursor"
+	// VendorGrok is xAI's Grok CLI. The id is the binary's own name, which is
+	// also the product's — the one case in this list where the two questions
+	// decisions/006 and decisions/007 had to answer separately have the same
+	// answer, so there is nothing to choose between.
+	//
+	// It names a COUNCIL seat and nothing else today: there is no
+	// internal/adapter/grok, so no HUD row will ever carry this id until one is
+	// written. That asymmetry is deliberate and is the cheaper half of the
+	// split this repo already draws — the council registry answers "can a seat
+	// be driven", the adapters answer "can a session be observed", and the two
+	// have never had to arrive together.
+	VendorGrok VendorID = "grok"
 )
 
 // Field enumerates the optional fields of a Session: exactly those a vendor may
