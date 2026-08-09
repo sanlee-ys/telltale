@@ -112,9 +112,35 @@ func (Antigravity) baseArgs(_ Posture) []string {
 		// Deliberately absent: --dangerously-skip-permissions. It would
 		// auto-approve every tool request. The tradeoff is real and is left
 		// unmade on purpose — a turn that hits an "ask" permission has no TTY to
-		// answer it and will sit until agy's own --print-timeout (default 5m)
-		// expires. That default is also a ceiling on a long turn; it is left at
-		// the vendor's value rather than guessed at here.
+		// answer it and will sit until --print-timeout expires.
+		//
+		// --print-timeout is RAISED from the vendor's 5m0s default, and the
+		// history of that sentence is the reason the ledger has to be stated:
+		// this comment used to say the default "is left at the vendor's value
+		// rather than guessed at here", and that was the right call when a
+		// turn was 6–40 seconds (§9.33's traces). /arena changed the
+		// arithmetic. Three consecutive live races (2026-08-09, Windows box,
+		// agy invoked through this exact argv) killed this seat at 5m07s,
+		// 5m09s and 5m05s — the default expiring, measured three times, on
+		// turns whose competitors legitimately ran 7m51s and 26m28s. A racer
+		// with a 5-minute ceiling DNFs every substantial brief no matter what
+		// it does; on the third race it had already written and committed its
+		// whole attempt (82ae915, +174 lines) and died waiting on the brief's
+		// own `go test`.
+		//
+		// 30m, because a bound should sit past every turn actually measured
+		// (longest: 26m28s, t5) and because the ceiling's real owner changed:
+		// the room now has a per-seat give-up (`x`, §9.37), so a turn worth
+		// abandoning is the operator's one keystroke rather than a vendor
+		// default's guess. The ask-permission cost moves with it and is
+		// restated rather than hidden: a turn stuck on a permission it cannot
+		// answer now sits up to 30m instead of 5m — but it sits with zero
+		// acts on a column whose live stat reads "no changes yet", which is
+		// exactly the shape `x` exists to end. Flag syntax measured off
+		// `agy --help` 2026-08-09 ("--print-timeout  Timeout for print mode
+		// wait (default 5m0s)" — a Go duration), and like every flag here it
+		// must precede -p or it becomes part of the prompt.
+		"--print-timeout", "30m",
 	}
 }
 
