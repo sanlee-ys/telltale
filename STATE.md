@@ -159,14 +159,6 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   against the ROOM's workspace, so a trace has to be named relative to the repo
   for anything confined to it to read the result.
 
-- **The turn clock's concurrency is argued, not race-verified.** `-race` needs
-  cgo, is unavailable on the machine the clock was written on, and is not in the
-  CI gate either. The locking in `runner/clock.go` was reasoned through and
-  reviewed; it has not been run under the detector.
-- **CI actions are pinned to a deprecated runtime.** `actions/checkout@v4` and
-  `actions/setup-go@v5` target Node 20, which now force-runs on Node 24.
-  Cosmetic today, a broken gate eventually.
-
 Cross-platform and cross-machine status has its own file: [PARITY.md](PARITY.md).
 
 The conventions a fresh session would otherwise re-derive — golden-test traps,
