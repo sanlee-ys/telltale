@@ -7265,3 +7265,42 @@ Claude-format hooks do not run in front of it, and it has its own hook system (`
 / `hooks-trust`) that nothing has been installed into. Per ADR-012 that is an open obligation
 and not a reason to route work away from the seat; closing it is agent-ops work rather than
 telltale's, and it is filed rather than done here.
+
+**Amended 2026-08-09, same day, from a live room: the seat could not take a briefed turn at
+all.** It was merged green and failed on its first real dispatch — `✗ failed 0s`, every seat
+answering but this one. The whole of it:
+
+```
+error: unexpected argument '--- operating context ---
+  You are in a room...' found
+  tip: to pass '...' as a value, use '-- ...'
+```
+
+`-p` was passed SEPARATED from its value. `Brief.Apply` prepends a fence to every first turn,
+so council's real prompt begins with `---`, and clap will not accept a hyphen-leading token as
+a flag's value unless that flag opts into `allow_hyphen_values` — which this one does not. So
+grok read the entire brief as an unknown flag and exited 2 before emitting a single event.
+Exit 2 with an empty stdout is the failure shape this adapter already documents for a bad
+resume id, so the room reported it correctly; there was simply nothing to report but a dead
+turn.
+
+The fix is one token: `--single=<prompt>`, attached. Everything after the first `=` is the
+value, hyphens and newlines included. Verified against the exact failing shape on the first
+turn, and composed with `--resume`, where the resumed turn recalled a codeword only the first
+turn carried. The long spelling is deliberate — clap's attached form for a SHORT flag is
+`-pVALUE`, not `-p=VALUE`, so `--single=` is the unambiguous one. `--resume` keeps the
+separated form, because a session id is a UUID and cannot begin with a hyphen.
+
+**The lesson is about the live test, not about clap.** This seat shipped WITH an end-to-end
+live test that ran the real argv, and that test passed — because its prompt was
+`"Reply with exactly: LIVEOK"`, which begins with a letter. The test exercised the transport
+and never the shape the product actually sends. That is a narrower version of the same
+mistake §9.39 was written to avoid: a claim verified against a case nobody ships is not
+verified. `grok_live_test.go` now sends a fenced prompt on both turns, and
+`TestGrokAttachesThePromptToItsFlag` pins the property offline — no argv element may be a bare
+`-p`/`--single`, and none may be the naked prompt.
+
+Worth stating for the next adapter, because it generalises past this vendor: **a probe prompt
+should be shaped like a brief, not like a greeting.** Three of this file's captures used
+friendly one-liners, and the one hazard they could never have surfaced is the one that took
+the seat down on its first real turn.
