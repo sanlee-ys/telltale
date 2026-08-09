@@ -30,11 +30,16 @@ binding copies and the argument; this file does not restate either.
   session in its own kept sibling worktree, compared in-column by `git diff
   --stat` against one recorded base, full diff on `y`. Binding copy —
   the four rulings, the two claude-squad diff mechanics, and the deferred
-  follow-ups list: [docs/design.md §9.37](docs/design.md). **The section's own
-  verification note is the open item: no live vendor has raced yet.** The git
-  mechanics are test-pinned offline; FirstTurn-in-a-worktree is a combination
-  no live run has exercised. First live race before the 9-30 demo is the
-  check that has not happened.
+  follow-ups list: [docs/design.md §9.37](docs/design.md). **The first live
+  race ran 2026-08-09 and the core held** — three seats raced, ranks and
+  honest zeros rendered, room threads intact. It measured two seat defects,
+  both recorded in §9.37's verification note and both unowned: the **cursor
+  seat cannot race** (its ACP FirstTurn refuses by design; the fix is an
+  ephemeral ACP session per race — §9.36's machinery, throwaway session), and
+  the **write seat's `autoAllowedTools` misses `git -C` shapes** (prefix-match
+  trap; do NOT blind-fix with `Bash(git -C:*)`, the constant serves `--auto`
+  in real workspaces — measure whether the rule grammar can scope a verb
+  behind `-C` first).
 - **The finish line and `d` ship with the same PR** (§9.37's amendment): every
   racer's block carries "2nd of 4 · done · 25.0s" — host-observed rank welded
   to the phase word, measured elapsed — and `d` flips the focused seat between

@@ -6212,12 +6212,31 @@ arena worktrees, `.worktreeinclude` seeding (the first real arena run on a repo 
 will surface it), and a deletion guard stronger than git's own refusal to remove a dirty
 worktree. Two of the original deferrals landed the day after (amendment below).
 
-Verification note, honest: the git mechanics (worktree creation from one base, add -N, the
-three collection outcomes, the session-id guard, the renders, the yank) are all pinned by
-offline tests against a real temp repository. **No live vendor has raced yet** — the spawn path
-reuses each vendor's verified FirstTurn invocation, but FirstTurn in a worktree with
-PostureWrite is a combination no live run has exercised, and the first live race is the
-verification this section still owes.
+Verification note: the git mechanics (worktree creation from one base, add -N, the three
+collection outcomes, the session-id guard, the renders, the yank) are all pinned by offline
+tests against a real temp repository. ~~No live vendor has raced yet.~~ **The first live race
+ran 2026-08-09** — turn 4 of a real room on the Windows box, four seats dispatched, `/arena`
+against this repo at 422b1c3 — and it paid the debt this note carried while measuring exactly
+where the predicted risk lived:
+
+- **The core is verified live.** Worktrees created as named siblings, three seats raced fresh,
+  ranks rendered in host-observed order (agy 1st · 7s, codex 2nd · 15s, claude 3rd · 19s), and
+  the zero-render said "no changes against 422b1c3." on every finisher — honest zeros, since
+  the brief was a harness check that asked for no changes. The room's threads survived intact.
+- **The cursor seat cannot race, by its own design.** The ACP refounding (§9.36) gives
+  `Cursor.FirstTurn` a deliberate refusal — "driven as a live ACP process, not as one child per
+  turn" — which arena's uniform one-shot path duly surfaced on the column. The fix is a
+  follow-up with its own shape: an EPHEMERAL ACP session per race (spawn in the worktree, one
+  turn, kill), which is §9.36's machinery pointed at a throwaway session. On the deferred list
+  below until someone builds it; until then a race is honestly 3-of-4 on Windows.
+- **The write seat hit the allowlist-prefix trap.** claude's one probe — `git -C <worktree>
+  status --short --branch` — met `autoAllowedTools`' `Bash(git status:*)` rule and failed the
+  prefix match, so an ungated print-mode seat had an approval request and nobody to ask (act
+  rendered ✗, correctly). The fix is NOT a blind `Bash(git -C:*)` — that constant also serves
+  `--auto` in real workspaces, where pre-approving every `-C` form is a wider grant than the
+  verbs it lists — and the vendor file already warns its rule grammar has not been driven.
+  What this needs first is one measured probe of whether the rule syntax can scope a verb
+  behind `-C` at all; the finding is filed, the measurement is the next step.
 
 **Amendment, 2026-08-08: the finish line and the `d` key.** Two deferrals came off the list:
 
