@@ -32,6 +32,21 @@ func Render(st State, sty Styles, g Glyphs) string {
 	b.WriteString("\n")
 	b.WriteString(rule(st.Width, sty, g))
 	b.WriteString("\n")
+	// The needs-you strip is the first thing under the frame's own edge, above
+	// the collapsed-seat notice and above the band (§9.40).
+	//
+	// The ordering rule the other two follow is subject size — the room outranks
+	// the turn — and this one is ranked by URGENCY instead, on modeLine's own
+	// precedent: a gate is the only state in this room where something is STOPPED
+	// until a key is pressed, which is why GATE outranks every other mode word on
+	// the footer. The seats that are not on screen and the brief that was just
+	// sent are both facts a reader can come back to; a blocked vendor is not.
+	//
+	// fit, not padRight: the line is assembled from two styles (needsYouJoin).
+	if lay.NeedsYou > 0 {
+		b.WriteString(fit(framePadStr+needsYouLine(st, st.Width-2*framePad, sty, g), st.Width))
+		b.WriteString("\n")
+	}
 	if lay.Notice > 0 {
 		b.WriteString(fit(framePadStr+noticeLine(st, sty, g, st.Width-2*framePad), st.Width))
 		b.WriteString("\n")
@@ -120,6 +135,12 @@ func layoutFor(st State, g Glyphs) Layout {
 		Notice:   collapsedNotice(st, g) != "",
 		Primary:  primary,
 		Band:     band,
+		// Asked of the queue rather than of a drawn line, because the strip's
+		// height is one row or none by construction (needsYouRows) — and because
+		// asking it here in the glyph set and width the frame happens to have
+		// would make a room's ROW COUNT depend on --ascii, which no other chrome
+		// line does.
+		NeedsYou: needsYouRows(st) > 0,
 	})
 }
 
