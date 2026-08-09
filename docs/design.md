@@ -2461,11 +2461,11 @@ Sources rule unchanged: a segment ships only when this doc names its source.
 Read the version numbers below against §1: v1 cuts on the snapshot gates, so an item
 marked for v1 is not an item waiting on the gauges. They are done.
 
-ADR-005 adds a second axis: external adoption is now an explicit product goal alongside
-ADR-001's portfolio-evidence bar, and adoptability is a design input rather than a
-lagging indicator. That does not reorder the feature track below — it adds the adoption
-track that runs beside it, and one of its items lands *before* v1 is done, which is why
-this section is no longer titled "after v1".
+ADR-005 adds a second axis: external adoption is an explicit product goal, and
+adoptability is a design input rather than a lagging indicator. That does not reorder the
+feature track below — it adds the adoption track that runs beside it, and one of its
+items lands *before* v1 is done, which is why this section is no longer titled
+"after v1".
 
 ### Adoption track (ADR-005)
 
@@ -2490,24 +2490,21 @@ these items are ordered by that sequence, not by version number.
    The README positioning line — *"one local HUD for every coding agent you use"* —
    lands **with** this slice and deliberately not before it: a positioning claim that
    arrives ahead of a one-command install is a promise the reader has no way to act on.
-2. **The launch post is experiment #1, and the hypothesis it tests is cross-harness
-   visibility** — do multi-harness power users want one honest local HUD across the
-   agents they already run? That, and only that, is what the launched product contains.
-   Its bar is pre-registered here before launch so the outcome is falsifiable either
-   way: **10 run-evidenced external users within 30 days of the post.** Run-evidence
-   means the person demonstrably ran telltale — a version-bearing bug report, a
-   real-session screenshot, a PR grounded in running it, package-manager feedback, or an
-   unsolicited statement of use. Engagement without run-evidence (a comment, a question,
-   a hot take) does not count, and a star does not count; stars stay weather (ADR-001).
+2. **The launch post tests one hypothesis: cross-harness visibility** — do multi-harness
+   power users want one honest local HUD across the agents they already run? That, and
+   only that, is what the launched product contains. The signal that answers it is
+   evidence someone actually *ran* telltale — a version-bearing bug report, a real-session
+   screenshot, a PR grounded in running it, package-manager feedback, or an unsolicited
+   statement of use. Engagement without that (a comment, a question, a hot take) answers
+   a different question, and is read as such.
 3. **Needs-input / blocked / done state is the first post-validation feature** — the
    attention-routing job, and the reason the product is positioned the way it is. It is
    built where the vendor seams already support it: Claude Code hooks, Codex notify
    events, agy's `agent_state` (observed live transitioning `tool_use` → `idle`, §3.8),
    and Cursor Hooks (documented and versioned — §3.9, and the reason the Cursor adapter's
-   `status` field is deferred rather than mapped). Not before experiment #1 reads out,
-   and it then gets **its own experiment
-   (#2)**. The launch experiment explicitly does not claim this ground: its result is
-   evidence about cross-harness visibility only, and neither validates nor falsifies a
+   `status` field is deferred rather than mapped). It is judged on its own terms rather
+   than on the launch's: the launch explicitly does not claim this ground, so its result
+   is evidence about cross-harness visibility only, and neither validates nor falsifies a
    capability the launched product did not contain.
 4. **The agy disk-seam re-survey RAN the same day this track landed — verdict: OPEN**
    (§3.8 re-survey block; prompted by ccusage issue #1402). Both claimed surfaces
