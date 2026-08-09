@@ -56,6 +56,17 @@ type turnState struct {
 	arena      bool
 	arenaBase  string
 	arenaTrees map[model.VendorID]string
+	// arenaEphemeral holds the throwaway live-protocol sessions racing this
+	// turn, keyed by vendor (today: the ACP seat, §9.37's deferred follow-up).
+	//
+	// On the TURN and never in m.procs, and the placement is the isolation: the
+	// seat-process registry is the room's conversation — seatProcess would read
+	// a racer parked there as the seat's live process and hand the NEXT ordinary
+	// brief to a session that lives in a worktree and dies with the race. A
+	// racer registered here instead is killed by finishColumn when its column
+	// lands, and its context is the turn's rather than the room's, so every
+	// teardown path that cancels the turn kills it as the backstop.
+	arenaEphemeral map[model.VendorID]seatSession
 	// arenaFinished counts racers that have landed, in the order the ROOM saw
 	// them land — finishColumn call order, which is host-observed time, never a
 	// vendor's own claim about when it finished (the host-stamps rule). Event
@@ -380,17 +391,37 @@ func (m *Model) dispatch() tea.Cmd {
 				failures = append(failures, dispatchFailedMsg{c.Vendor, "arena: " + why})
 				continue
 			}
-			spec, err := v.FirstTurn(vendorPrompt, tree, c.Binary, vendors.PostureWrite)
-			if err != nil {
-				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
-				continue
+			if cv, ok := v.(vendors.Conversational); ok {
+				// The one seat FirstTurn cannot carry. The ACP refounding made
+				// this vendor live-only (§9.36) and the first live race duly
+				// surfaced its refusal on the column (§9.37's verification
+				// note), so its race is the sanctioned follow-up built as
+				// specified: a THROWAWAY ACP session in the racer's worktree —
+				// one process, one session, one prompt, killed when the column
+				// lands. §9.36's own machinery pointed at a throwaway session,
+				// not a second protocol.
+				sess, err := m.startEphemeralRacer(ctx, cv, c, tree, vendorPrompt)
+				if err != nil {
+					failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
+					continue
+				}
+				if ts.arenaEphemeral == nil {
+					ts.arenaEphemeral = map[model.VendorID]seatSession{}
+				}
+				ts.arenaEphemeral[c.Vendor] = sess
+			} else {
+				spec, err := v.FirstTurn(vendorPrompt, tree, c.Binary, vendors.PostureWrite)
+				if err != nil {
+					failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
+					continue
+				}
+				h, err := startProcess(ctx, spec, m.events, v.ParseEvent)
+				if err != nil {
+					failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
+					continue
+				}
+				ts.handles = append(ts.handles, h)
 			}
-			h, err := startProcess(ctx, spec, m.events, v.ParseEvent)
-			if err != nil {
-				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
-				continue
-			}
-			ts.handles = append(ts.handles, h)
 		} else if liveSeat(v) {
 			n, err := m.sendPersistentTurn(v, c, vendorPrompt)
 			if err != nil {
@@ -697,8 +728,22 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				c.Body = m.redactWhole(ev.Text)
 			}
 			// On a persistent seat this line is the ONLY end-of-turn signal:
-			// the process does not exit, so no KindDone is coming.
-			if ev.EndsTurn && m.isPersistent(ev.Vendor) {
+			// the process does not exit, so no KindDone is coming. An ephemeral
+			// arena racer speaks the same protocol, so the same is true of it —
+			// what differs is what finishColumn then does with the process.
+			if ev.EndsTurn && m.ephemeralRacer(ev.Vendor) != nil {
+				if strings.TrimSpace(c.Body) == "" {
+					// A clean end with nothing streamed. On this seat that is
+					// AMBIGUOUS by measurement, not by neglect: ACP's turn
+					// resolves with a stop reason and no reply, so a racer that
+					// worked silently and a chunk parser that broke render
+					// identically (§9.36's stated loss). The note names the
+					// fact rather than picking a story, and points at the one
+					// receipt a race still has — the diff.
+					c.Note = "the turn ended with nothing streamed — this seat sends no final reply, so the diff is the attempt's only receipt"
+				}
+				m.finishColumn(c, PhaseDone)
+			} else if ev.EndsTurn && m.isPersistent(ev.Vendor) {
 				m.finishColumn(c, PhaseDone)
 			}
 
@@ -712,6 +757,42 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			// process from procs (leaving it running and invisible, which is the
 			// exact state this product refuses), and discard the earned thread
 			// through the probation rule. Found in review before it shipped.
+			//
+			// A cursor race puts TWO processes behind one vendor id — the room's
+			// idle seat and the throwaway racer — and events carry only the
+			// vendor, so an exit here is attributed by the same liveness test
+			// the guard above already trusts: a process that exited cannot be
+			// Alive. While the racer is alive the exit can only be the room's
+			// own process dying in the background; once the racer is dead this
+			// exit is its, and it must not be eaten by the m.procs guard below —
+			// that guard reading a live ROOM process as "this seat is fine"
+			// would leave the race column streaming forever and the turn unable
+			// to end.
+			if es := m.ephemeralRacer(ev.Vendor); es != nil {
+				if es.Alive() {
+					// The room's idle seat died mid-race. Forgotten so the next
+					// ordinary brief respawns it; the racing column is not
+					// touched — its process is still running.
+					if p, ok := m.procs[ev.Vendor]; ok && (p.sess == nil || !p.sess.Alive()) {
+						m.dropProcess(ev.Vendor)
+					}
+					continue
+				}
+				// The racer died WITHOUT ending its turn — on this seat the
+				// turn's end is a protocol response (§9.36), so a bare exit,
+				// even a zero one, means no answer ever arrived. Failed with
+				// the reason named, never PhaseDone: an exit dressed as a
+				// completed attempt is the empty-success render this seat's
+				// missing result line makes possible, stated in §9.36 and
+				// refused here.
+				c.Body += m.flush(ev.Vendor)
+				c.Elapsed = time.Since(c.Started)
+				if !m.cancelling {
+					c.Note = "the racer's process ended before its turn did — no answer arrived; anything it wrote is in the diff"
+				}
+				m.finishColumn(c, PhaseFailed)
+				continue
+			}
 			if p, ok := m.procs[ev.Vendor]; ok && p.sess != nil && p.sess.Alive() {
 				continue
 			}
@@ -741,9 +822,22 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			// The same predecessor guard as KindDone, for the process-level
 			// half only: a vendor-REPORTED failure (EndsTurn) rides the current
 			// process's own stdout and is never stale, but a process exit can
-			// be an old process's.
+			// be an old process's — and during a cursor race, either of two
+			// processes' (see KindDone's attribution rule; same rule here).
 			if !ev.EndsTurn {
-				if p, ok := m.procs[ev.Vendor]; ok && p.sess != nil && p.sess.Alive() {
+				if es := m.ephemeralRacer(ev.Vendor); es != nil {
+					if es.Alive() {
+						// The room's idle seat failed in the background
+						// mid-race. Forgotten; the racing column is not its.
+						if p, ok := m.procs[ev.Vendor]; ok && (p.sess == nil || !p.sess.Alive()) {
+							m.dropProcess(ev.Vendor)
+						}
+						continue
+					}
+					// The racer itself crashed. Fall through: the tail below
+					// sets the note from the event and finishColumn — which is
+					// what reaps the dead racer — runs on the Err/ExitCode test.
+				} else if p, ok := m.procs[ev.Vendor]; ok && p.sess != nil && p.sess.Alive() {
 					continue
 				}
 			}
@@ -790,6 +884,18 @@ func (m *Model) applyEvents(batch []runner.Event) {
 					c.Elapsed = time.Since(c.Started)
 					m.finishColumn(c, PhaseFailed)
 				}
+				continue
+			}
+			if ev.EndsTurn && m.ephemeralRacer(ev.Vendor) != nil {
+				// The racer's own protocol reported the turn dead — a refused
+				// handshake, a session the vendor would not open, a failed
+				// prompt. NO process exit follows: an ACP server survives its
+				// own refusals (§9.36 measured it up and useless after a failed
+				// initialize), so the "KindDone still follows" assumption below
+				// would leave this column streaming forever. finishColumn is
+				// what kills the process.
+				c.Elapsed = time.Since(c.Started)
+				m.finishColumn(c, PhaseFailed)
 				continue
 			}
 			c.Elapsed = time.Since(c.Started)
@@ -842,7 +948,26 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 	// monorepo ever makes this visible, that measurement is the trigger to move
 	// it onto a Cmd.
 	if m.turn != nil && m.turn.arena {
-		if tree, ok := m.turn.arenaTrees[c.Vendor]; ok {
+		if es, ok := m.turn.arenaEphemeral[c.Vendor]; ok {
+			// The racer dies AT ITS OWN finish line, not the turn's. Kill, and
+			// never a polite wait: §9.33 measured this vendor's process
+			// lingering ~2.5s after answering, and a racer has nothing to say
+			// after its turn ends — the turn's end is the protocol response
+			// that just retired this column (§9.36). Killed BEFORE the diff is
+			// read below, so the receipt is a snapshot of a stopped attempt
+			// rather than a tree a live process is still writing into. The
+			// turn's context is the backstop for the paths that never reach
+			// here per column (ctrl+c, room teardown), and a seat cannot be
+			// cleared mid-race at all — askClearSeat refuses while a turn is in
+			// flight.
+			es.Kill()
+			delete(m.turn.arenaEphemeral, c.Vendor)
+		}
+		if tree, ok := m.turn.arenaTrees[c.Vendor]; ok && c.Arena == nil {
+			// c.Arena == nil makes collection once-only. A racer driven by a
+			// live protocol retires twice — its end-of-turn response, then the
+			// exit of the process that response got killed — and a second pass
+			// here would re-rank the race on an echo.
 			r := collectArena(tree, m.turn.arenaBase)
 			if ls := m.turn.arenaLive[c.Vendor]; ls != nil {
 				// This seat's live stat is over either way — the final owns
@@ -1317,6 +1442,21 @@ func (m *Model) isPersistent(v model.VendorID) bool {
 	return m.turn != nil && m.turn.persistent[v]
 }
 
+// ephemeralRacer returns the throwaway session racing this vendor in the
+// current turn, or nil on every other kind of turn.
+//
+// Read from the turn for isPersistent's reason, and one more of its own: this
+// is the fact applyEvents attributes a vendor's events by while TWO processes
+// wear one vendor id (the room's idle seat and the racer), and a lookup that
+// outlived the turn would go on attributing exits to a racer that has already
+// been reaped.
+func (m *Model) ephemeralRacer(v model.VendorID) seatSession {
+	if m.turn == nil {
+		return nil
+	}
+	return m.turn.arenaEphemeral[v]
+}
+
 // cancelTurn stops everything in flight. The columns keep whatever they already
 // received: that output was really produced, and the card says it is partial
 // rather than implying the turn completed.
@@ -1339,6 +1479,15 @@ func (m *Model) cancelTurn() {
 	}
 	for v := range m.turn.persistent {
 		m.interruptSeat(v)
+	}
+	// An ephemeral racer is KILLED, not interrupted, and the asymmetry against
+	// the loop above is the point: an interrupt exists to spare a conversation
+	// and its session-init cost, and a throwaway race session has neither —
+	// nothing resumes it, nothing is saved from it. A cancel that waited
+	// politely here would be waiting on the ~2.5s post-answer linger §9.33
+	// measured, for a process whose next act is the bin either way.
+	for _, es := range m.turn.arenaEphemeral {
+		es.Kill()
 	}
 	m.turn.cancel()
 }
@@ -1373,6 +1522,16 @@ func (m *Model) teardown() {
 	}
 	for _, h := range m.turn.handles {
 		h.Kill()
+	}
+	// The racers too — they are exactly the process the paragraph above warns
+	// about: not in procs (by design, see turnState.arenaEphemeral), so the
+	// loop over procs never sees them, and a quit mid-race would otherwise
+	// leave a vendor's ACP server running in a worktree with nothing on screen
+	// to say so. The turn context cancelled below kills the real ones again;
+	// the explicit kill is what makes the property hold synchronously and
+	// under test.
+	for _, es := range m.turn.arenaEphemeral {
+		es.Kill()
 	}
 	m.turn.cancel()
 	m.turn = nil
