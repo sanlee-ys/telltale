@@ -7030,6 +7030,22 @@ the mechanical version of this boundary — credentials a racer cannot reach —
 harder change that this amendment deliberately does not claim. The live measurement owed:
 the next race showing the codex seat stopping at its commit.
 
+**Open question, 2026-08-09: where should an adoption land?** Filed from the first live
+`/adopt` rather than decided, because the answer depends on a convention the room cannot see.
+`/adopt` merges into the room repo's current branch — for most workspaces, local `main` — and
+that is the smallest honest act the verb can perform. But an operator whose repos are run
+branch→PR (this project's own convention, and this operator's standing rule across every
+machine) then holds a merge commit on a local `main` that must never be pushed as-is; the
+first live adoption ended with four hand-run git commands turning the merge into a PR branch
+and resetting `main` back to origin. Options, none ruled on: (a) keep the current shape and
+document the hand-off (an adoption is a local act; publishing is the operator's, as it
+already is for every other commit); (b) `/adopt` onto a NEW branch cut from the room's HEAD
+(`adopt/t<N>-<vendor>`?), never touching the current branch — closer to branch→PR, but the
+room minting branch names in the operator's repo is a bigger footprint than one merge; (c) a
+flag or second verb for each. The founding posture — offer, never take — leans (b) no further
+than it leans (a): both are one revertible act on the operator's own y. Whoever picks this up
+starts from the measured friction: four commands, once per adoption, only on branch→PR repos.
+
 ### 9.38 paste lands whole, and never sends (2026-08-09)
 
 The ask, in the operator's words: *"how i can paste things into the area i can type in."* The
