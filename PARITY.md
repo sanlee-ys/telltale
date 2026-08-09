@@ -70,20 +70,43 @@ error near unexpected token `&`". It looks exactly like a broken vendor and is
 not; it cost an arm of the §9.36 capture. Drive cursor-agent from a PowerShell or
 cmd parent on Windows. Upstream wrapper bug, agent-ops ADR-012.
 
-**One test SKIPS on Windows, and it is the one whose claim is about Windows.**
+**The symlink refusal now runs on Windows — Developer Mode is the prerequisite.**
 `TestSeedSymlinksAreNamedNotFollowed` (`internal/council/arena_seed_test.go`)
 pins `.worktreeinclude` seeding's refusal to follow a symlink. Creating a
 symlink needs `SeCreateSymbolicLinkPrivilege`, which an ordinary Windows shell
-does not hold, so on this box the test skips with *"A required privilege is not
-held by the client"* — measured 2026-08-09. It runs for real on CI's
-`ubuntu-latest` race job; whether the `windows-latest` job skips it too is not
-visible, because that job runs `go test` without `-v`. The sting is that
+does not hold, so this box skipped it with *"A required privilege is not held by
+the client"* until **Developer Mode was enabled on 2026-08-09; it then PASSED,
+measured on this workstation.** The sting worth keeping is why it mattered:
 design.md §9.37's stated reason for refusing symlinks is *"Windows is primary
-and symlink semantics differ per platform"* — so the platform the claim is
-about is the platform that never checks it. To close it here: enable Windows
-Developer Mode (Settings → System → For developers), then
-`go test ./internal/council -run TestSeedSymlinksAreNamedNotFollowed -v` and
-confirm PASS rather than SKIP. An unrun test is not a pass.
+and symlink semantics differ per platform"* — so until that day, the platform
+the claim is about was the only platform never checking it.
+
+Two mechanics for whoever hits this on another box. **No new shell or logon is
+needed**: Go's `os.Symlink` retries with `SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE`,
+which reads Developer Mode at runtime rather than reading a token privilege
+granted at logon — an already-running terminal picks it up immediately. And
+**an elevated shell also passes** (Administrators hold the privilege) but does
+not close this gap, because the point is that the test runs in ordinary use.
+
+Still not visible: whether CI's `windows-latest` job skips it, because that job
+runs `go test` without `-v`. It runs for real on the `ubuntu-latest` race job.
+
+**One test still skips on Windows, and this one is legitimate.**
+`TestSavedRoomIsNotWorldReadable` (`internal/council/resume_test.go:446`) skips
+with *"posix file modes are not the access control on windows"* — measured
+2026-08-09 in a full `go test ./... -count=1 -v` pass, where it is the **only**
+skip in the entire suite. The mechanism is correctly skipped; POSIX modes really
+are not how Windows controls access. The residue is that the *property* — a
+saved `room.json` is not world-readable — is therefore only ever asserted on
+platforms that are not the primary target. Recorded as a measured gap, not as a
+defect: writing the ACL-based equivalent is a judgement about whether that
+property needs a Windows assertion at all, and nobody has made it.
+
+**Measuring skips at all needs `-count=1`.** `go test` caches passing packages
+and replays their output, so a `-v` run over cached results can report a
+different skip count than the same command uncached — observed here the same
+day, one run reporting a skip and the next reporting none with nothing changed
+in between. A skip census over a cached suite measures the cache.
 
 **Cursor install location, Windows.** `cursor-agent` lives at
 `%LOCALAPPDATA%\cursor-agent\cursor-agent.cmd` and is frequently absent from the
