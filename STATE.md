@@ -133,40 +133,23 @@ the argument; this file does not restate either.
   reaches the current room's race, so clearing older ones is
   `git worktree remove` + `git branch -D` by hand.
 
-- **QUEUED, unowned — the post-audit build list (2026-08-09).** The steal
-  sweep's survivors, reconciled against an independent read-only second-model
-  audit and then against the live repo. The audit's sharpest catch: subset
-  @-mention routing was on the steal list and has been shipped in
-  `mentions.go` since 2026-08-04 — so verify any steal against the repo
-  before building it. Each item is one concern → one branch → one PR; the
-  2026-09-30 demo is the deadline that ordered them.
+- **QUEUED, unowned — the post-audit build list (2026-08-09; shrunk same
+  day).** The steal sweep's survivors, reconciled against an independent
+  read-only second-model audit and then against the live repo. The audit's
+  sharpest catch: subset @-mention routing was on the steal list and had been
+  shipped in `mentions.go` since 2026-08-04 — so verify any steal against the
+  repo before building it. Items 1–4 (needs-you strip, gate before/after
+  preview, `telltale doctor`, version-pinned wire fixtures) landed 2026-08-09
+  and are gone from this list per its own keep-it-true rule; what landed is
+  git's record, not this file's. One pre-demo item remains; the 2026-09-30
+  demo is the deadline.
 
-  Pre-demo:
-
-  1. **A needs-you strip.** One line in council's chrome naming the seats
-     with a pending approval gate (`NEEDS YOU: claude codex`), driven only by
-     structured pending-gate state the room already holds, cleared only by
-     explicit focus/jump to that seat — never inferred from silence or output
-     shape. The anti-stall for driving four seats live on stage.
-  2. **Before/after preview inside the approval gate.** When the gated call
-     is a structured file edit whose payload carries old and new content,
-     render a red/green preview in the gate; when the payload doesn't carry
-     it, show nothing — never reconstruct or guess a diff (§4a.1: display
-     measured output only).
-  3. **`telltale doctor`.** A launch-time preflight (the one moment §9.17
-     permits probing): vendor binaries found, versions, capabilities — with
-     three honest states: checked-and-passed, checked-and-failed, and
-     not-checked. Auth and network report `not-checked` unless a probe
-     actually ran.
-  4. **Version-pinned wire fixtures.** Sanitized captures of each vendor's
-     real stream frames — including zero, absent, and error shapes —
-     labelled with the CLI version that produced them, committed as test
-     fixtures. The defense against a vendor changing its frames between
-     rehearsal and demo day. Fixtures are synthesized-shape only: real ids,
-     paths, and content never reach this public repo.
-  5. **A scripted fallback demo tape** (optional, taste work): a checked-in
+  1. **A scripted fallback demo tape** (optional, taste work): a checked-in
      recording script (e.g. VHS) that captures the demo path end-to-end, so
      a vendor or network failure on the day cannot erase the presentation.
+     Deliberately not built with the rest: there is no defined demo path yet
+     to record, and scripting one before it exists would invent the demo
+     rather than capture it.
 
   Post-demo shelf — decided, deliberately not queued: a measured-silence
   advisory ("no event for 5m", never "stalled"); rendering an explicit
@@ -213,6 +196,18 @@ Nothing open. The last one here was the 44 seconds, and it was measured
 2026-08-08; the finding and the unowned work left over from it are below.
 
 ## Known gaps, not yet owned
+
+- **The agy seat cannot tell a lost thread from a resumed one, and the stream
+  will not say.** Measured 2026-08-09 against agy 1.1.11 during the wire-fixture
+  capture (PR #174; the full record is the fixture README): handed an unknown
+  `--conversation` id, the CLI does not error — it silently opens a NEW
+  conversation, answers normally, returns a different `conversation_id`,
+  `status: "SUCCESS"`, exit 0. Every other seat either resumes or says the
+  history is gone; this one claims success either way, so the room's honest
+  "history is gone, starting fresh" line cannot fire for agy on stream evidence
+  alone. Comparing the returned `conversation_id` against the one requested is
+  the only tell the capture surfaced; nothing reads it today. Unowned — a fix
+  is a behavior change to the agy seat, not a measurement.
 
 - **ATTRIBUTED, 2026-08-08. Spawning was never the cost; `wait` is, and only on
   the three seats that are not persistent.** One traced `@all` turn, all four

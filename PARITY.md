@@ -102,6 +102,16 @@ That means a macOS run is expected to work and has not been shown to. Treat a
 missing or empty adapter on macOS as unverified rather than broken, and record
 what you find here.
 
+## `telltale doctor`
+
+Same shape as the adapters: every version probe behind the doctor report was
+measured on this Windows box only (2026-08-09) — five installs, five
+`--version` answers. Path resolution reuses council's own detection, portable
+by construction, but no macOS run is recorded, and cursor's POSIX entry point
+taking the bare `--version` is true by construction there, not by measurement.
+Treat a wrong-looking doctor row on the Mac as unverified rather than broken,
+and record what you find here.
+
 ## Terminal profile
 
 The same frame reads better on macOS than on Windows, and the reason is not a
