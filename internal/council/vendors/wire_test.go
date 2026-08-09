@@ -177,8 +177,12 @@ func TestClaudeWireResumeNotFoundIsPinnedAt_2_1_226(t *testing.T) {
 	if !end.EndsTurn {
 		t.Error("the failed turn never ends; the column would wait forever")
 	}
-	if end.Note == "" {
-		t.Error("the error carries no note at all")
+	// The frame's `result` key is absent; the vendor's account of the failure
+	// lives in its `errors` array, and the column shows that sentence rather
+	// than a generic "the turn failed". The id in the fixture is the sanitized
+	// one, so the assertion is on the sentence, not the id.
+	if !strings.Contains(end.Note, "No conversation found with session ID") {
+		t.Errorf("Note = %q, want the vendor's own sentence from the errors array", end.Note)
 	}
 	if end.CostUSD == nil {
 		t.Fatal("cost is ABSENT on a frame that reported zero; zero and absent are different states (§4a.1)")
