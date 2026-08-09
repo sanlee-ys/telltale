@@ -75,6 +75,19 @@ type turnState struct {
 	// lands, and its context is the turn's rather than the room's, so every
 	// teardown path that cancels the turn kills it as the backstop.
 	arenaEphemeral map[model.VendorID]seatSession
+	// arenaHandles keys this race's ONE-SHOT racer processes by vendor, for the
+	// give-up key (`x`, program.go — §9.37, amended 2026-08-09). handles above
+	// stays the flat list on purpose: its two consumers, cancelTurn and
+	// teardown, are all-or-nothing acts that never address a single process,
+	// and re-keying them would put a map where a list says exactly what those
+	// paths do. The give-up is the first act that kills ONE racer while the
+	// others run, and it needs to land on the right process — the second live
+	// race measured why: one stuck seat held a decided race hostage for ~20
+	// minutes because ctrl+c was the only exit and it cancels everything.
+	// Arena turns only; the non-arena paths keep no per-vendor record because
+	// no per-vendor act exists there (a persistent seat is already addressable
+	// through ts.persistent and m.procs).
+	arenaHandles map[model.VendorID]racerHandle
 	// arenaSeeds holds each racer's .worktreeinclude receipt from setup, so
 	// finishColumn can stamp it onto the ArenaResult it builds at landing —
 	// seeding happened before the seat spawned, but the column that states it
@@ -94,6 +107,15 @@ type turnState struct {
 	// end with no cleanup path to forget.
 	arenaLive map[model.VendorID]*arenaLiveState
 }
+
+// racerHandle is the one-method slice of runner.Handle the give-up key drives.
+//
+// An interface for exactly seatSession's reason: the property under test is
+// "the RIGHT racer's process was killed and the other racers' survived", and a
+// test that needed four real children just to watch one be killed would be
+// spawning processes to check a map lookup. runner.Handle is the only
+// production implementation, and only dispatch's arena branch ever stores one.
+type racerHandle interface{ Kill() }
 
 type eventBatchMsg struct{ events []runner.Event }
 
@@ -457,6 +479,15 @@ func (m *Model) dispatch() tea.Cmd {
 					continue
 				}
 				ts.handles = append(ts.handles, h)
+				// The same handle, keyed by vendor, so `x` can kill THIS racer
+				// and no other (turnState.arenaHandles). The flat append above
+				// stays: cancelTurn and teardown still sweep the list, and a
+				// give-up's second Kill on an already-killed handle is a no-op
+				// by Handle's own contract.
+				if ts.arenaHandles == nil {
+					ts.arenaHandles = map[model.VendorID]racerHandle{}
+				}
+				ts.arenaHandles[c.Vendor] = h
 			}
 		} else if liveSeat(v) {
 			n, err := m.sendPersistentTurn(v, c, vendorPrompt)

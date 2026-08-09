@@ -6582,6 +6582,53 @@ leftovers untouched throughout. **The live re-race is owed**: one `/arena` on th
 over the same leftover state that failed, confirming the seats race clean at the renumbered
 `t<N>` — the same debt shape every amendment here has carried, paid the same way.
 
+**Amendment, 2026-08-09: `x` gives up on one racing seat, and the race runs on.** The second
+live `/arena` (same day, Windows box) measured the gap: four seats raced, three landed
+(7m51s / 26m28s / 5m07s), and the fourth — the cursor throwaway ACP racer — streamed for
+**26m40s** with the live stat honestly reading "no changes yet against \<base\>" the whole
+time. The operator sat ~20 minutes after the race was effectively decided, because one stuck
+racer holds the WHOLE turn hostage: ctrl+c is the only exit and it cancels everything. The
+room displayed the truth and offered no per-seat act on it. The act built:
+
+- **`x` on a focused, still-racing arena seat, mid-turn** — the one per-seat key that runs
+  while a turn is in flight, because mid-flight is the only time it means anything.
+  y/n-gated exactly like `c` and `u` (a stray keystroke must cost a y before it costs a
+  process), and the question names the vendor and what y does. On y, the room kills THAT
+  racer only — the ephemeral ACP session when one is racing, else that vendor's one-shot
+  process through `turnState.arenaHandles`, the per-vendor record dispatch's arena branch now
+  keeps beside the flat `handles` list (the flat list stays: cancel and teardown are
+  all-or-nothing acts and never address a single process; the give-up is the first act that
+  does). The kill lands on the racer's side of the two-processes-one-vendor-id split — the
+  room's idle seat behind the same id survives, per applyEvents' existing attribution rule.
+- **A given-up seat lands like any other finisher, wearing the honest phase.** The stream
+  tail is flushed, the elapsed stamped, the note says "given up after \<elapsed\> — anything
+  it wrote is in the diff", and the column retires through `finishColumn` with the CANCELLED
+  phase — the same phase and render ctrl+c's cancel produces ("cancelled — the output above
+  is partial" is that path's wording; this one names the give-up instead). Everything the
+  finish line already does happens unchanged: the racer dies before the diff is read (the
+  receipt is a snapshot of a stopped attempt), a dirty tree commits its receipt onto the
+  arena branch, a clean tree stays a measured zero with no commit, the rank is stamped in
+  host-observed landing order — a DNF finished too, and the render welds the rank to the
+  phase word so "4th · cancelled" cannot read as a result — and the interim stat clears. The
+  seat leaves the turn's live set through the same drain every landing uses, so **the turn
+  ends when the remaining seats land** — which is the whole point.
+- **Three refusals, three sentences** (the undo key's rule): no turn in flight; an ordinary
+  turn — its seats share one fate by design, this key is arena-only and **ctrl+c remains the
+  whole-turn act**, said in the refusal; and a seat that already landed (its result is
+  settled — a y arriving after the seat lands under the question refuses the same way,
+  killing nothing and re-ranking nothing). The help panel's room-controls row is at its
+  exact 114-cell budget and does not name the key; it is taught by these refusals and by
+  this amendment, the way `/adopt` and `/arena drop` are taught by theirs.
+
+Verified offline only, the section's standing debt shape: real-temp-repo plus fake-session
+tests (giveup_test.go) pin the ephemeral kill and the cancelled landing with rank and
+committed receipt, the keyed one-shot kill with every other racer's handle surviving, the
+room process surviving its racer's give-up and the exit echo landing inert, the turn ending
+when the remaining seats land, all three refusals, the y/n/stray gate, and compose leaving
+`x` a letter. **A live give-up on the Windows box is owed** — one `/arena` where a stuck seat
+is given up mid-race and the turn ends the moment the others land, the same debt every
+amendment here has carried, paid the same way.
+
 ### 9.38 paste lands whole, and never sends (2026-08-09)
 
 The ask, in the operator's words: *"how i can paste things into the area i can type in."* The
