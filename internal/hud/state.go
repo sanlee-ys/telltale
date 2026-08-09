@@ -249,6 +249,20 @@ type State struct {
 	// Detail opens the per-session pane over the row area (§7.11).
 	Detail bool
 
+	// Usage opens the fleet usage view over the row area (§7.17): one block
+	// per vendor, saying what that vendor can honestly claim about its
+	// account.
+	//
+	// It is a THIRD body rather than a section of the detail pane, because
+	// what it reports is not a session fact. Quota is a property of the
+	// account (§7.1's sixth rule) and the relayed token total names a
+	// cursor-agent CLI conversation the HUD's rows do not come from (§7.16) —
+	// so neither has a row to hang off, and both would be a per-session claim
+	// if they did. Detail, Help and Usage are mutually exclusive: one body at
+	// a time, enforced in Update rather than in Render, so the state can never
+	// describe two panes at once.
+	Usage bool
+
 	// Burn is telltale's own sampling history of the account quota windows.
 	// It is HUD state, not schema (§4a): it describes this process's
 	// observation history, not the session.

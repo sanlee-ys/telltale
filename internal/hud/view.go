@@ -62,7 +62,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 	// The column-header row names the grid, so it appears only when the body
 	// IS the grid. Over a help overlay, a detail pane or an empty state it
 	// would label columns that are not on screen.
-	showColumns := full && !st.Help && !st.Detail && len(rows) > 0
+	showColumns := full && !st.Help && !st.Detail && !st.Usage && len(rows) > 0
 
 	chrome := len(header) + 1 // + footer
 	if full {
@@ -79,6 +79,13 @@ func Render(st State, sty Styles, g Glyphs) string {
 	var body []string
 	isRows := false
 	switch {
+	case st.Usage:
+		// Not dimmed by rowSty when the scan is stale: nothing on this surface
+		// comes from the scan. Quota is read from a vendor store or a relay
+		// file and the spend total from a hook's, and both already carry their
+		// own age (§7.15, §7.16) — borrowing the row area's staleness would
+		// de-emphasize readings whose freshness the scan does not describe.
+		body = usageLines(st, sty, g)
 	case st.Help:
 		body = helpLines(st, lay, hasCtx, hasCost, sty, g)
 	case st.Detail:
@@ -300,6 +307,20 @@ func headerIdentity(st State, sty Styles, g Glyphs) string {
 	return strings.Join(parts, sep)
 }
 
+// fleetOrder is the order every fleet-wide list renders in, and it is a fixed
+// order rather than a sorted or ranked one on purpose.
+//
+// The header's per-vendor counts and the usage view's per-vendor blocks (§7.17)
+// both walk it, so a vendor sits in the same place on both surfaces and in the
+// same place frame to frame. Ordering by size or by usage would make position
+// carry a meaning of its own, and then a vendor moving would look like news
+// when all that happened is that another one moved past it. Spatial constancy
+// IS the navigation here.
+var fleetOrder = []model.VendorID{
+	model.VendorClaude, model.VendorCodex, model.VendorGemini,
+	model.VendorAntigravity, model.VendorCursor,
+}
+
 func vendorCounts(st State, sty Styles) string {
 	counts := map[model.VendorID]int{}
 	for _, s := range st.Snap.Sessions {
@@ -307,10 +328,7 @@ func vendorCounts(st State, sty Styles) string {
 	}
 	short := st.Width < compactBreak
 	var out []string
-	for _, v := range []model.VendorID{
-		model.VendorClaude, model.VendorCodex, model.VendorGemini,
-		model.VendorAntigravity, model.VendorCursor,
-	} {
+	for _, v := range fleetOrder {
 		if counts[v] == 0 {
 			continue
 		}
@@ -600,6 +618,19 @@ func renderSpendVendor(t usagecache.Total, d spendDress, st State, sty Styles, g
 	// "spent", past tense and attached to the vendor: the block is a completed
 	// measurement of turns that already happened, not a running meter of a
 	// turn in flight.
+	return sty.Muted.Render(name+" spent") + "  " + spendFacts(t, d, st, sty, g)
+}
+
+// spendFacts is everything the spend block says EXCEPT the vendor's name: the
+// counts, then the window, then the reading's age once it has one.
+//
+// It is split out because the usage view (§7.17) renders the same measurement
+// under a per-vendor heading, where the name is already on screen a line above
+// and the verb has become the label column. Both callers must shed by the same
+// rules and print the same numbers — a second copy of this arithmetic is a
+// second place for the window to go missing, and the window going missing is
+// the one failure §7.16 spends a whole section forbidding.
+func spendFacts(t usagecache.Total, d spendDress, st State, sty Styles, g Glyphs) string {
 	cells := []string{
 		sty.Muted.Render("in") + " " + sty.Text.Render(theme.Tokens(t.InputTokens)),
 		sty.Muted.Render("out") + " " + sty.Text.Render(theme.Tokens(t.OutputTokens)),
@@ -610,8 +641,7 @@ func renderSpendVendor(t usagecache.Total, d spendDress, st State, sty Styles, g
 			sty.Muted.Render("cache write")+" "+sty.Text.Render(theme.Tokens(t.CacheWriteTokens)),
 		)
 	}
-	out := sty.Muted.Render(name+" spent") + "  " +
-		strings.Join(cells, " "+sty.Muted.Render(g.Mid)+" ")
+	out := strings.Join(cells, " "+sty.Muted.Render(g.Mid)+" ")
 
 	// The basis, in the §7.12 grammar the forecast and the relayed quota block
 	// both use: the scope of a claim travels with the number.
@@ -1101,6 +1131,10 @@ func helpLines(st State, lay Layout, hasCtx, hasCost bool, sty Styles, g Glyphs)
 		{"q", "quit  (also ctrl+c)"},
 		{arrowHint(g), "move the selection  (also j / k)"},
 		{"enter", "open the detail pane for the selected session"},
+		// Both halves of the claim, in the order the view states them, and
+		// inside the 45 columns the 60-column floor leaves this column —
+		// TestNoLineExceedsTheTerminalWidth is what enforces that budget.
+		{"u", "what each vendor has left, and what it spent"},
 		{"/", "find: narrow rows by name or path"},
 		{"esc", "close the pane, or cancel the find, or quit"},
 		// The cycle separator is "> " and not "-> " for one reason: a fourth
@@ -1195,6 +1229,12 @@ func footerLine(st State, visible, hiddenBelow int, sty Styles, g Glyphs) string
 	switch {
 	case st.Help:
 		keys = " " + sty.Muted.Render("? close")
+	case st.Usage:
+		// "esc close" rather than "u close", matching the detail pane. Both
+		// keys close it, and esc is the one the reader already has a reflex
+		// for; the toggle is taught by the footer hint that opened the view
+		// and by the help overlay's keys page.
+		keys = " " + sty.Muted.Render("esc close   "+arrowHint(g)+" scroll")
 	case st.Detail:
 		keys = " " + sty.Muted.Render("esc close   "+arrowHint(g)+" session")
 	default:
@@ -1202,12 +1242,17 @@ func footerLine(st State, visible, hiddenBelow int, sty Styles, g Glyphs) string
 		// cheapest hint to lose: the HUD already rescans every second, so `r`
 		// only ever shortens a wait, while `/` and `enter` are doors nobody
 		// finds by accident.
-		hints := []string{"q quit", "/ find", "enter detail", "v vendor", "s sort", "a all", "? keys"}
+		//
+		// "u usage" sits beside "enter detail" because it is the same kind of
+		// hint — a door into a body that replaces the grid — and it sheds on
+		// the same tier boundary for the same reason: below 80 columns the
+		// footer keeps only the keys nothing else can teach.
+		hints := []string{"q quit", "/ find", "enter detail", "u usage", "v vendor", "s sort", "a all", "? keys"}
 		switch tierFor(st.Width) {
 		case TierNarrow:
 			hints = []string{"q quit", "/ find", "? keys"}
 		case TierCompact:
-			hints = []string{"q quit", "/ find", "enter detail", "? keys"}
+			hints = []string{"q quit", "/ find", "enter detail", "u usage", "? keys"}
 		}
 		keys = " " + sty.Muted.Render(strings.Join(hints, "   "))
 	}

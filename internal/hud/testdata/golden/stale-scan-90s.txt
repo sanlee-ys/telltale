@@ -6,4 +6,4 @@
  ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys                                 ⚠ last scan 1m ago
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys                       ⚠ last scan 1m ago

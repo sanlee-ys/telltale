@@ -6,4 +6,4 @@
  ◐ CX │ 4f2a9c81-1d3e-4a77-9b02-000000000000                                                          —        — │   7m
    CC │ acme-api  C:\src\work                                        Sonnet 4.5                       —    $1.02 │    —
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys

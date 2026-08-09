@@ -214,7 +214,16 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// v1's esc quit unconditionally; with a pane and a query to back out
 		// of, an esc that closed the program instead of the pane would punish
 		// the reflex it trained.
+		//
+		// The usage view takes the first step. Order among the bodies is not
+		// arbitrary: they are mutually exclusive, so at most one of the first
+		// three cases can be true, and listing the newest first keeps the
+		// chain reading as "close whatever is open, then unwind the state
+		// underneath it".
 		switch {
+		case m.st.Usage:
+			m.st.Usage = false
+			m.st.Scroll = 0
 		case m.st.Detail:
 			m.st.Detail = false
 		case m.st.Help:
@@ -235,6 +244,8 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.st.Detail = !m.st.Detail
 		if m.st.Detail {
 			m.st.Help = false
+			m.st.Usage = false
+			m.st.Scroll = 0
 			if m.st.Cursor < 0 {
 				// enter with no selection opens the top row: the sort already
 				// put the most interesting session there.
@@ -245,6 +256,18 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.st.Finding = true
 		m.st.Detail = false
 		m.st.Help = false
+		m.st.Usage = false
+		m.st.Scroll = 0
+	case "u":
+		// One body at a time (§7.17). The usage view replaces the row area the
+		// same way the detail pane and the help overlay do, and two of them
+		// open at once is not a layout to resolve — it is a state that must
+		// not exist, which is why every door closes the others rather than
+		// Render picking a winner.
+		m.st.Usage = !m.st.Usage
+		m.st.Detail = false
+		m.st.Help = false
+		m.st.Scroll = 0
 	case "v":
 		m.st.Filter = m.st.Filter.Next()
 		m.resetSelection()
@@ -262,13 +285,14 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "?":
 		m.st.Help = !m.st.Help
 		m.st.Detail = false
+		m.st.Usage = false
 		m.st.Scroll = 0
 	case "up", "k":
-		// Over the help overlay the arrows scroll the overlay; everywhere else
-		// they move the selection. The rule is "the arrows move whatever the
-		// body is": help has no rows to select, and the row area has nothing
-		// to scroll independently of the cursor.
-		if m.st.Help {
+		// Over the help overlay and the usage view the arrows scroll the body;
+		// everywhere else they move the selection. The rule is "the arrows move
+		// whatever the body is": neither of those bodies has rows to select,
+		// and the row area has nothing to scroll independently of the cursor.
+		if m.st.Help || m.st.Usage {
 			if m.st.Scroll > 0 {
 				m.st.Scroll--
 			}
@@ -276,12 +300,12 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.moveCursor(-1)
 	case "down", "j":
-		if m.st.Help {
-			// Bounded against the overlay's own length rather than left to
-			// grow: Render clamps the viewport anyway, but an offset that
-			// keeps counting past the end takes as many keypresses to come
-			// back as it took to leave.
-			if m.st.Scroll < len(m.helpBody())-1 {
+		if m.st.Help || m.st.Usage {
+			// Bounded against the body's own length rather than left to grow:
+			// Render clamps the viewport anyway, but an offset that keeps
+			// counting past the end takes as many keypresses to come back as
+			// it took to leave.
+			if m.st.Scroll < len(m.scrollBody())-1 {
 				m.st.Scroll++
 			}
 			break
@@ -291,9 +315,14 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// helpBody renders the overlay off-screen purely to measure it. Cheap, and it
-// cannot disagree with what Render draws.
-func (m *Model) helpBody() []string {
+// scrollBody renders the currently open scrollable body off-screen purely to
+// measure it. Cheap, and it cannot disagree with what Render draws — which is
+// the whole reason the bound is taken this way rather than from a length
+// someone has to remember to update.
+func (m *Model) scrollBody() []string {
+	if m.st.Usage {
+		return usageLines(m.st, m.styles, m.glyphs)
+	}
 	rows := visibleSessions(m.st)
 	hasCtx, hasCost := columnsInUse(rows)
 	lay := resolveLayout(m.st.Width, hasCtx, hasCost)

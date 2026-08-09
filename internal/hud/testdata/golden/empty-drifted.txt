@@ -8,4 +8,4 @@
                            cursor   not detected   %APPDATA%\Cursor\User
                            gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys                                    ⚠ codex drifted
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys                          ⚠ codex drifted

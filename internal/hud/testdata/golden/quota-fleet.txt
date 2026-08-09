@@ -6,4 +6,4 @@
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys

@@ -326,6 +326,95 @@ func spendState(w, h int) State {
 	return st
 }
 
+// usageFleetState is the frame §7.17 exists for: every source state telltale
+// can be in, at once, so the view has to keep them apart in one screen.
+//
+//   - CODEX — quota from its own store, re-measured this scan.
+//   - CLAUDE — quota relayed by the statusline two hours ago, and saying so.
+//   - AGY — quota relayed a minute ago, fresh enough to say nothing about age.
+//   - CURSOR — no quota anywhere and never will be without a network call, but
+//     a token total from the hook relay. Spend with no quota beside it.
+//   - GEMINI — sessions on this machine and nothing to say about either: the
+//     absence line, with its reason.
+//
+// A sixth vendor is deliberately NOT here: one with no sessions, no quota and
+// no total does not appear at all, which is what TestUsageOmitsAVendorItHasNothingToSayAbout
+// pins.
+func usageFleetState(w, h int) State {
+	st := NewState()
+	st.Now = pinned
+	st.Width, st.Height = w, h
+	st.Snap = Snapshot{
+		At: pinned,
+		Sessions: []*model.Session{
+			sess(model.VendorCodex, "0f00dbaa-1234-4a77-9b02-000000000042",
+				`C:\src\code\notes-api`, "gpt-5.1-codex", 4*time.Minute,
+				withName("notes-api"),
+				withQuota(window("seven_day", "7d", 79, 22*time.Hour+48*time.Minute))),
+			sess(model.VendorGemini, "session-2026-08-02T09-58-0a1b2c3d",
+				`c:\src\code\learning-notes`, "gemini-3-pro", 3*time.Minute,
+				withName("glossary tooltips")),
+			cursorSession(70 * time.Second),
+		},
+		Vendors: []VendorView{
+			watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`,
+				(&claudecode.Adapter{}).Capabilities()),
+			watching(model.VendorCodex, `%USERPROFILE%\.codex`, fullCaps),
+			watching(model.VendorGemini, `%USERPROFILE%\.gemini\tmp`,
+				(&gemini.Adapter{}).Capabilities()),
+			watching(model.VendorCursor, `%APPDATA%\Cursor\User`,
+				(&cursoradapter.Adapter{}).Capabilities()),
+		},
+		Account: []quotacache.Account{
+			{Vendor: model.VendorClaude, WrittenAt: pinned.Add(-2 * time.Hour), Windows: []model.QuotaWindow{
+				window("five_hour", "5h", 42, 2*time.Hour+13*time.Minute),
+				window("seven_day", "7d", 6, 5*24*time.Hour),
+			}},
+			{Vendor: model.VendorAntigravity, WrittenAt: pinned.Add(-time.Minute), Windows: []model.QuotaWindow{
+				window("gemini-weekly", "gemini-weekly", 38, 3*time.Hour),
+			}},
+		},
+		Spend: []usagecache.Total{{
+			Vendor: model.VendorCursor,
+			Entry: usagecache.Entry{
+				Vendor:           string(model.VendorCursor),
+				Since:            pinned.Add(-12 * time.Minute),
+				WrittenAt:        pinned.Add(-90 * time.Second),
+				Turns:            14,
+				InputTokens:      48012,
+				OutputTokens:     1203,
+				CacheReadTokens:  1904221,
+				CacheWriteTokens: 62004,
+			},
+		}},
+	}
+	st.Usage = true
+	return st
+}
+
+// usageEmptyState is the same view on a machine that has told telltale nothing:
+// five vendors watched, no session, no relay entry, no total. The body says so
+// in a sentence rather than drawing five blocks of dashes — a table of nothing
+// is a table asserting it measured five things.
+func usageEmptyState(w, h int) State {
+	st := NewState()
+	st.Now = pinned
+	st.Width, st.Height = w, h
+	st.Snap = Snapshot{
+		At: pinned,
+		Vendors: []VendorView{
+			{Vendor: model.VendorAntigravity, Root: `%USERPROFILE%\.gemini\antigravity-cli`,
+				Status: StatusNotDetected},
+			watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`, fullCaps),
+			{Vendor: model.VendorCodex, Root: `%USERPROFILE%\.codex`, Status: StatusNotDetected},
+			{Vendor: model.VendorCursor, Root: `%APPDATA%\Cursor\User`, Status: StatusNotDetected},
+			{Vendor: model.VendorGemini, Root: `%USERPROFILE%\.gemini\tmp`, Status: StatusNotDetected},
+		},
+	}
+	st.Usage = true
+	return st
+}
+
 // v11State is the v1.1 fixture set, rendered with the REAL adapter capability
 // tables rather than the synthetic everything-vendor. Three Claude sessions
 // (one fanning out two sub-agents, one that measured zero, one running five)
@@ -389,8 +478,13 @@ func goldenCases() []goldenCase {
 			return st
 		}},
 
+		// 17 rows, not 16: the overlay gained the `u` key and at 16 the body
+		// clipped its own last line — "? close this help" — which is the one
+		// line a reader stuck in the overlay most needs. The overlay scrolls,
+		// so this was never a correctness bug; it was a frame the design doc
+		// pastes showing the product hiding its exit.
 		{name: "help", state: func() State {
-			st := healthyState(120, 16)
+			st := healthyState(120, 17)
 			st.Help = true
 			return st
 		}},
@@ -662,6 +756,28 @@ func goldenCases() []goldenCase {
 		{name: "spend-cursor", state: func() State {
 			return spendState(120, 10)
 		}},
+
+		// ------------------------------------------------- the usage view
+
+		// Every source state at once (§7.17): scan-fresh quota, relayed quota
+		// carrying its age, relayed quota fresh enough not to, spend with no
+		// quota beside it, and a vendor with neither saying which kind of
+		// nothing that is.
+		{name: "usage-fleet", state: func() State { return usageFleetState(120, 22) }},
+
+		// The same view at the 60-column floor. The gauges are gone — the grid's
+		// own shed order, because the bar re-states a number that is still on
+		// screen — and every fact survives, including the relayed reading's age
+		// and the spend total's window.
+		{name: "usage-floor", state: func() State { return usageFleetState(60, 22) }},
+
+		// ASCII. The distinction between a reading against a limit and a count
+		// with no limit is carried by words and by which vocabulary each line
+		// uses, so nothing about it depends on the Unicode set.
+		{name: "usage-ascii", ascii: true, state: func() State { return usageFleetState(120, 22) }},
+
+		// Nothing measured anywhere: a sentence, not a table of dashes.
+		{name: "usage-empty", state: func() State { return usageEmptyState(120, 10) }},
 
 		// Find mode: the footer becomes the query line and says how to leave.
 		{name: "find-active", state: func() State {
@@ -962,6 +1078,276 @@ func TestSpendSurvivesASCII(t *testing.T) {
 	}
 }
 
+// ------------------------------------------- the fleet usage view (§7.17)
+
+// usageBodyOf returns the view's body: everything between the two rules. The
+// header is deliberately excluded, because the header carries its OWN quota and
+// spend blocks and several assertions below would otherwise pass on the
+// header's evidence while the body did whatever it liked.
+func usageBodyOf(t *testing.T, st State, g Glyphs) []string {
+	t.Helper()
+	lines := strings.Split(Render(st, PlainStyles(), g), "\n")
+	// Matched against the rule the renderer itself draws, not against "a run of
+	// track glyphs": the view's own gauges are made of the same character, and
+	// a 20-cell empty track is a perfectly good imitation of a horizontal rule.
+	sep := rule(st.Width, PlainStyles(), g)
+	var body []string
+	rules := 0
+	for _, l := range lines {
+		if l == sep {
+			rules++
+			continue
+		}
+		if rules == 1 {
+			body = append(body, l)
+		}
+	}
+	if rules != 2 {
+		t.Fatalf("expected a body between two rules, found %d rules", rules)
+	}
+	return body
+}
+
+// The load-bearing assertion of this surface, and §7.1 principle 1 applied to
+// it: a vendor with no quota reading never renders a number. "0%" would say the
+// account has used none of its allowance, which is a measurement telltale did
+// not make and, for Gemini and Cursor, one that does not exist to be made.
+func TestUsageNeverRendersAQuotaLessVendorAsZero(t *testing.T) {
+	g := UnicodeGlyphs()
+	for _, line := range usageBodyOf(t, usageFleetState(120, 22), g) {
+		for _, v := range []string{" gemini", " cursor"} {
+			if strings.HasPrefix(line, v) && strings.Contains(line, "%") {
+				t.Errorf("a vendor with no quota source rendered a percentage:\n%s", line)
+			}
+		}
+	}
+	// And the general form: no line anywhere in the body pairs a bar with a
+	// zero it never read.
+	for _, line := range usageBodyOf(t, usageEmptyState(120, 10), g) {
+		if strings.Contains(line, "%") || strings.Contains(line, g.Fill) {
+			t.Errorf("a machine with no readings drew a gauge or a percentage:\n%s", line)
+		}
+	}
+}
+
+// TestSpendIsNeverRenderedAsQuota's claim, extended to the surface that puts
+// the two measurements four lines apart instead of on separate header rows.
+// Proximity is exactly what makes this the riskier render of the two.
+func TestUsageSpendBorrowsNoneOfQuotasVocabulary(t *testing.T) {
+	for _, ascii := range []bool{false, true} {
+		g := GlyphsFor(ascii)
+		var spent string
+		for _, line := range usageBodyOf(t, usageFleetState(120, 22), g) {
+			if strings.Contains(line, "spent") {
+				spent = line
+			}
+		}
+		if spent == "" {
+			t.Fatalf("ascii=%v: no spend line in the usage body", ascii)
+		}
+		if strings.Contains(spent, "%") {
+			t.Errorf("ascii=%v: the spend line rendered a percentage — of what?\n%s", ascii, spent)
+		}
+		for _, bar := range append([]string{g.Fill}, g.Eighths...) {
+			if strings.Contains(spent, bar) {
+				t.Errorf("ascii=%v: the spend line drew %q — a bar implies a ceiling\n%s", ascii, bar, spent)
+			}
+		}
+		if strings.Contains(spent, g.Reset) {
+			t.Errorf("ascii=%v: the spend line drew a reset countdown; a counter does not reset\n%s", ascii, spent)
+		}
+		if !strings.Contains(spent, "spent") {
+			t.Errorf("ascii=%v: the spend line lost its verb\n%s", ascii, spent)
+		}
+	}
+}
+
+// The sum is only honest while it says what it is a sum OF, at every width and
+// in every dress (§7.16). A bare token count is a number pretending to be a
+// state.
+func TestUsageTotalNeverPrintsWithoutItsWindow(t *testing.T) {
+	for _, w := range []int{200, 120, 100, 80, 72, 60} {
+		var spent string
+		for _, line := range usageBodyOf(t, usageFleetState(w, 22), UnicodeGlyphs()) {
+			if strings.Contains(line, "spent") {
+				spent = line
+			}
+		}
+		if spent == "" {
+			t.Errorf("width %d: the spend line vanished entirely", w)
+			continue
+		}
+		if !strings.Contains(spent, "over 10m") {
+			t.Errorf("width %d: the accumulation window shed:\n%s", w, spent)
+		}
+		if !strings.Contains(spent, "in 48k") || !strings.Contains(spent, "out 1.2k") {
+			t.Errorf("width %d: a token count shed:\n%s", w, spent)
+		}
+	}
+}
+
+// §4a.1 on this surface: the three ways a vendor can have no quota are three
+// different facts, and a reader deciding whether to go and DO something needs
+// them apart. "The statusline writes it" is an action; "its store holds
+// experiment values" is a closed door.
+func TestUsageKeepsTheKindsOfAbsenceApart(t *testing.T) {
+	body := strings.Join(usageBodyOf(t, usageFleetState(120, 22), UnicodeGlyphs()), "\n")
+	for _, want := range []string{
+		// structurally absent, with the measurement behind the verdict.
+		"its store holds experiment values, not usage",
+		// structurally absent, the other vendor, in its own words.
+		"no quota reaches disk anywhere telltale can read",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the usage body never says %q:\n%s", want, body)
+		}
+	}
+
+	// The third kind — the seam exists and has never fired — cannot appear in
+	// the same frame as the other two: Claude and agy are the only vendors
+	// whose quota travels by relay, and the fleet golden spends both of them on
+	// readings that DID arrive. So it is constructed here: a Claude session on
+	// the machine, and no relay entry for it.
+	//
+	// This line names the statusline, and that naming is the point. It is the
+	// one absence on this surface a user can act on, and an absence with an
+	// action behind it that does not say the action is just a shrug.
+	seam := usageFleetState(120, 22)
+	seam.Snap.Account = seam.Snap.Account[1:] // agy keeps its reading; claude loses one
+	seam.Snap.Sessions = append(seam.Snap.Sessions,
+		sess(model.VendorClaude, "00000000-aaaa-4bbb-8ccc-000000000009",
+			`C:\src\code\telltale`, "claude-opus-5", 12*time.Second, withName("telltale")))
+	got := strings.Join(usageBodyOf(t, seam, UnicodeGlyphs()), "\n")
+	if !strings.Contains(got, "no quota relayed yet · the telltale statusline writes it") {
+		t.Errorf("a vendor whose relay has never fired did not name the statusline:\n%s", got)
+	}
+	// And it must not be confusable with the structural case: a seam that has
+	// never fired is not a seam that does not exist.
+	for _, never := range []string{"anywhere", "reaches disk"} {
+		for _, line := range strings.Split(got, "\n") {
+			if strings.HasPrefix(line, " claude") && strings.Contains(line, never) {
+				t.Errorf("a never-fired relay was described as structurally absent:\n%s", line)
+			}
+		}
+	}
+	// A relayed reading that DID arrive says so, and says how old it is —
+	// §7.15's age rule, which is what keeps "aged out" from being mistaken for
+	// "fresh" in the one direction the reader could be misled.
+	if !strings.Contains(body, "relayed by the statusline · 2h ago") {
+		t.Errorf("a two-hour-old relayed reading rendered without its age:\n%s", body)
+	}
+	// And the scan-fresh block is not described as relayed. §7.15 makes the
+	// distinction load-bearing: only one of the two may ever carry a forecast.
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(line, " codex") && strings.Contains(line, "relayed") {
+			t.Errorf("a transcript-sourced block claimed to be relayed:\n%s", line)
+		}
+	}
+}
+
+// The view is not a checklist of every adapter that was compiled in. A vendor
+// with no sessions, no quota and no total is not on this machine in any sense
+// telltale measured, and a block of dashes for it would assert otherwise.
+func TestUsageOmitsAVendorItHasNothingToSayAbout(t *testing.T) {
+	st := usageFleetState(120, 22)
+	body := strings.Join(usageBodyOf(t, st, UnicodeGlyphs()), "\n")
+	// agy has a relayed reading and no sessions: it appears.
+	if !strings.Contains(body, " agy") {
+		t.Errorf("a vendor with a relayed reading and no sessions was dropped:\n%s", body)
+	}
+	// Now take both relayed readings away. Neither vendor has a session on this
+	// machine, so neither has anything telltale measured — and an absence line
+	// is for a vendor that is HERE and silent, not for one that is not here at
+	// all. Both must vanish outright.
+	st.Snap.Account = nil
+	body = strings.Join(usageBodyOf(t, st, UnicodeGlyphs()), "\n")
+	for _, gone := range []string{" agy", " claude"} {
+		if strings.Contains(body, gone) {
+			t.Errorf("a vendor with no sessions and no reading still got a block (%s):\n%s", gone, body)
+		}
+	}
+	// The vendors that ARE here are untouched by that.
+	for _, kept := range []string{" codex", " gemini", " cursor"} {
+		if !strings.Contains(body, kept) {
+			t.Errorf("a vendor with sessions lost its block (%s):\n%s", kept, body)
+		}
+	}
+}
+
+// Fixed fleet order, never sorted by usage. Position is the navigation, so a
+// vendor moving must mean a vendor was added or removed — not that another
+// vendor's percentage crossed it.
+func TestUsageOrderIsTheFleetOrderNotTheReadings(t *testing.T) {
+	st := usageFleetState(120, 22)
+	want := []string{" claude", " codex", " gemini", " agy", " cursor"}
+
+	check := func(label string) {
+		t.Helper()
+		var got []string
+		for _, line := range usageBodyOf(t, st, UnicodeGlyphs()) {
+			for _, v := range want {
+				if strings.HasPrefix(line, v+" ") || line == v {
+					got = append(got, v)
+				}
+			}
+		}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("%s: block order %v, want %v", label, got, want)
+		}
+	}
+	check("as measured")
+
+	// Invert every reading. The heaviest user is now the lightest and nothing
+	// may move.
+	for i := range st.Snap.Account {
+		for j := range st.Snap.Account[i].Windows {
+			p := 100 - float64(*st.Snap.Account[i].Windows[j].UsedPercent)
+			st.Snap.Account[i].Windows[j].UsedPercent = model.PercentPtr(p)
+		}
+	}
+	check("readings inverted")
+}
+
+// The gauge is the reason this surface exists rather than a wider header: one
+// window per line buys the bar real room. 20 cells at the wide tier against the
+// header's 8, shedding on the grid's own breakpoints rather than on new ones.
+func TestUsageGivesTheGaugeRealRoom(t *testing.T) {
+	g := UnicodeGlyphs()
+	for _, c := range []struct {
+		width, cells int
+	}{{120, usageGaugeWide}, {100, usageGaugeWide}, {99, usageGaugeCompact}, {80, usageGaugeCompact}, {79, 0}, {60, 0}} {
+		if got := usageGaugeFor(c.width); got != c.cells {
+			t.Errorf("width %d: gauge is %d cells, want %d", c.width, got, c.cells)
+		}
+	}
+	if usageGaugeWide <= quotaGauge {
+		t.Errorf("the usage view's bar (%d) is no wider than the header's cramped one (%d)",
+			usageGaugeWide, quotaGauge)
+	}
+	// The bar sheds and the number it encodes does not — the grid's rule
+	// (§7.2), and the reason shedding it is allowed at all.
+	narrow := strings.Join(usageBodyOf(t, usageFleetState(60, 22), g), "\n")
+	if strings.Contains(narrow, g.Fill) {
+		t.Errorf("the bar survived the narrow tier:\n%s", narrow)
+	}
+	for _, want := range []string{"42%", "79%", "↻ 2h13m", "2h ago"} {
+		if !strings.Contains(narrow, want) {
+			t.Errorf("the narrow tier shed the fact %q, not just the decoration:\n%s", want, narrow)
+		}
+	}
+}
+
+// §7.3: the drift notice renders under EVERY body, and a third body is a third
+// chance to lose it. A warning that comes and goes depending on which pane is
+// open is one a reader cannot trust to be there.
+func TestTheDriftNoticeRendersUnderTheUsageView(t *testing.T) {
+	st := driftState(120, 14, model.VendorCodex)
+	st.Usage = true
+	if got := Render(st, PlainStyles(), UnicodeGlyphs()); !strings.Contains(got, "codex drifted") {
+		t.Errorf("usage body: the drift notice is missing\n%s", got)
+	}
+}
+
 // The gauge's whole job is to not lie. This is the §7.4 table, verbatim.
 func TestGaugeScale(t *testing.T) {
 	g := UnicodeGlyphs()
@@ -1129,6 +1515,15 @@ func TestNoLineExceedsTheTerminalWidth(t *testing.T) {
 				if n := len([]rune(line)); n > w {
 					t.Errorf("width %d, help=%v: line %d is %d columns\n%s", w, help, i, n, line)
 				}
+			}
+		}
+		// The usage view is a third body with its own line budget — its
+		// headings carry sentences rather than cells, which is exactly the
+		// shape that overruns a narrow frame.
+		out := Render(usageFleetState(w, 22), PlainStyles(), UnicodeGlyphs())
+		for i, line := range strings.Split(out, "\n") {
+			if n := len([]rune(line)); n > w {
+				t.Errorf("width %d, usage: line %d is %d columns\n%s", w, i, n, line)
 			}
 		}
 	}
