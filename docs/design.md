@@ -6257,3 +6257,54 @@ where the predicted risk lived:
   measured nothing-to-show, and an unreadable diff carrying its reason. Plain text, no diff
   colouring yet: +/- prefixes are the first signal and survive `--ascii`; colour through the
   existing palette is a later, separate change under style.go's no-new-hues rule.
+
+**Amendment, 2026-08-09: the live stat — the race shows the diff growing.** Until now a
+racer's stat appeared only when its column finished; the audience of a 20-second race
+watched three spinners and then a scoreboard. The pattern is the manager lane's
+event-triggered diff refresh (codeg's), rebuilt under this room's honesty rules
+(`internal/council/arenalive.go`):
+
+- **Event-triggered, throttled, off the loop.** Stream activity on a racing column (text or a
+  tool call — a session id arriving is not evidence the tree moved) ARMS a re-read of that
+  seat's worktree — `git add -N . && git diff <base> --stat`, the same two claude-squad
+  mechanics the finish-time read carries, stat only (the full patch stays a finish-line
+  deliverable). An armed seat is read at most once per `arenaRefreshInterval` (2 s: the read
+  is a subprocess pair, the audience is human, and the first live podium ran 7 s/15 s/19 s —
+  faster buys frames nobody can distinguish), timed off the tick-stamped `State.Now` so the
+  throttle is testable and Render stays pure. The read runs as a Bubble Tea command
+  (goroutine → `arenaStatMsg`), never inline in Update, never in Render; one read in flight
+  per seat, a due refresh that finds one running SKIPS rather than queues. An idle seat never
+  arms, so an idle seat is never read; a seat whose worktree failed setup has no refresh slot
+  at all, by construction.
+- **The interim marker ruling.** A mid-race read is a measured value at a moment that is
+  already past, so the block's label is `arena · so far` — the "so far" is the whole marker,
+  the same honesty spend as an estimate's `~` — and it withholds the finish line's receipt
+  (branch, tree path, rank), which would dress an interim block in the final's clothes. Three
+  states stay three renders (§4a.1, mid-race edition): no read yet is the nil pointer and
+  renders NOTHING (absence, not a zero); a read that returned empty says "no changes yet
+  against <base>" (the "yet" is what separates a running seat's measured zero from the
+  final's settled one); a failed read carries git's first stderr line, never dressed as
+  no-changes. A failed read degrades only the live stat — the race runs on — and
+  `arenaRefreshMaxFails` (3) consecutive failures end the seat's live stat WITH THE STOP
+  NAMED on the column ("stopped re-reading … the finish-time diff still runs"), because a
+  gauge that quietly freezes goes on reading as live. A success resets the count: the
+  likeliest failure is the refresh contending with the vendor for the worktree's own index,
+  and one contended read is not evidence the tree is unreadable.
+- **The finish-time `collectArena` read stays the authoritative final and REPLACES the last
+  interim — cleared, never merged.** The refresh state lives on the turn, so teardown ends
+  all refreshing with no cleanup path to forget; a read that outlives its turn or its seat
+  arrives as a stale message and is dropped by comparison (turn number, final-already-landed),
+  not by hoping the timing worked out. The one collision the feature introduces is named in
+  the code: an interim `add -N` holds `index.lock` for milliseconds, so a final read that
+  fails while a refresh is in flight is retried once — reporting "diff unavailable" for a
+  lock this feature itself held would be the refresh degrading the read it exists to
+  complement.
+
+Verification note: the mechanics — arming, the throttle, single-flight, the three interim
+renders, replacement by the final, stop-on-turn-end and stop-on-repeated-failure, the
+`add -N` false-zero property of the interim read — are pinned by offline tests
+(`arenalive_test.go`), the git ones against a real temp repository. **No live race has
+watched the stat move yet**: what is owed is one `/arena` run against a real brief that
+changes files, confirming the "so far" block appears mid-race, grows, and swaps for the
+settled block at each finish — the same debt the original section carried, and it is stated
+here rather than implied paid.

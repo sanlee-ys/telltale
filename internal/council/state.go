@@ -441,6 +441,14 @@ type Column struct {
 	// legitimate way to read a race, so one seat's toggle must not drag the
 	// others'.
 	ArenaShowDiff bool
+	// ArenaInterim is the latest MID-RACE stat read for the current turn's
+	// attempt (arenalive.go), nil until a read has returned. Nil is absence
+	// and renders nothing — "no read yet" is not a zero (§4a.1). Each read
+	// replaces it wholesale, and finishColumn clears it the moment the
+	// authoritative ArenaResult lands: the final replaces the interim, never
+	// merges with it. Like Arena, every field is computed off the Update loop
+	// (the read runs as a Cmd), so Render stays pure over State.
+	ArenaInterim *ArenaInterim
 
 	// CostSession reports that the figure above is the PROCESS's running total
 	// rather than this turn's spend.
@@ -519,6 +527,7 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	// standing would describe a break the room has already healed.
 	c.Cleared = false
 	c.Arena = nil
+	c.ArenaInterim = nil
 	c.ArenaShowDiff = false
 	c.CostUSD = nil
 	c.CostSession = false

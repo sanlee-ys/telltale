@@ -516,7 +516,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// next dispatch.
 			return m, nil
 		}
+		// A racing seat's stream activity may have armed a live stat read
+		// (arenalive.go); launch what is due alongside the next wait. Batched
+		// rather than sequenced — the read is independent of the event
+		// channel, and waitEvents blocks.
+		if ref := m.dueArenaRefreshes(); ref != nil {
+			return m, tea.Batch(m.waitEvents(), ref)
+		}
 		return m, m.waitEvents()
+
+	case arenaStatMsg:
+		// One interim read landing (or being dropped as stale — the drop
+		// rules live with the handler). No follow-up command: the next read
+		// is launched by the tick or the next event batch, through the same
+		// due check everything else goes through.
+		m.applyArenaStat(msg)
+		return m, nil
 
 	case spinMsg:
 		// Now is stamped here, on the tick, so Render never reads a clock and
@@ -527,6 +542,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// happening, and it keeps §7.1's budget of one moving cell.
 		if m.st.Busy() {
 			m.st.Spinner++
+		}
+		// The tick is the throttle's second leg: arming happens on activity,
+		// but a seat armed mid-interval has to be read when the interval
+		// expires even if the vendor has gone quiet since — a burst of writes
+		// followed by silence is exactly the seat whose stat is most behind.
+		if ref := m.dueArenaRefreshes(); ref != nil {
+			return m, tea.Batch(spin(), ref)
 		}
 		return m, spin()
 	}
