@@ -54,6 +54,18 @@ the argument; this file does not restate either.
   (`ColorTrackLite` / `ColorTrackDark`), and council has no gauge. Wiring
   `lipgloss.LightDark` here would invent hues and break "Council adds no hues
   of its own" in `style.go`. The `_ = isDark` placeholder stays documented.
+- **The write seat's `git -C` allowlist gap** — **measured closed, 2026-08-09**,
+  by a four-arm probe on the reference box after two races tripped it. Claude
+  Code's `--allowedTools` matcher is prefix-only and no rule spelling scopes a
+  verb behind `-C` (the mid-wildcard `Bash(git -C * status:*)` does not match);
+  in a trusted workspace the operator's own settings cover `-C` shapes, which
+  is why it only ever bit in never-trusted arena worktrees. There is no
+  rule-shaped fix; `Bash(git -C:*)` stays rejected (it would pre-approve every
+  `-C` verb, destructive ones included), and the residue is friction the room
+  already handles — the blocked call surfaces as an approval on the column.
+  The full record lives on `autoAllowedTools` in
+  `internal/council/vendors/claude.go`; do not re-open without a new
+  measurement.
 - **Negative routing** (`@all` minus a seat) — **shipped 2026-08-04**, and this
   file went on listing it as an unowned gap for two days afterwards. `-@vendor`,
   the expansion of `-@all` into a list of exclusions, and the refusal to mix the
@@ -67,18 +79,6 @@ Nothing open. The last one here was the 44 seconds, and it was measured
 2026-08-08; the finding and the unowned work left over from it are below.
 
 ## Known gaps, not yet owned
-
-- **The write seat's `autoAllowedTools` misses `git -C` shapes** — the one
-  defect from the 2026-08-09 live race still standing (the other, the cursor
-  seat's refusal to race, is fixed in code and rides the live-session debt
-  above). Prefix-match trap: `git -C <path> status` fails `Bash(git status:*)`,
-  so an ungated print-mode seat had an approval request and nobody to ask. Do
-  NOT blind-fix with `Bash(git -C:*)` — the constant also serves `--auto` in
-  real workspaces. The next step is a measurement on the Windows box, not a
-  guess: whether Claude Code's rule grammar can scope a verb behind `-C` at
-  all (probe: allow `Bash(git -C * status:*)`, have a session run
-  `git -C . status`, see if it prompts). If it cannot, the fix likely becomes
-  the seat running bare git verbs with its cwd set instead of `-C` forms.
 
 - **ATTRIBUTED, 2026-08-08. Spawning was never the cost; `wait` is, and only on
   the three seats that are not persistent.** One traced `@all` turn, all four
