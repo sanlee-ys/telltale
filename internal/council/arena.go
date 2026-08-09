@@ -1,7 +1,11 @@
 package council
 
 import (
+	"errors"
+	"io"
+	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -94,6 +98,29 @@ type ArenaResult struct {
 	// clothes, so the only clock that ranks a race is the room's. Zero means
 	// unranked — a fixture a test built by hand, rendered as absent, not first.
 	Rank, Of int
+
+	// Seed is this seat's .worktreeinclude receipt, nil when the room repo has
+	// no .worktreeinclude at all. The render draws NOTHING for nil and
+	// "seeded 0 files" for a report that copied nothing — a repo that never
+	// asked and a pattern file whose patterns found nothing are different
+	// facts, and collapsing them is the zero-vs-absent bug (§4a.1).
+	Seed *SeedReport
+}
+
+// SeedReport is what .worktreeinclude seeding measurably did for one seat.
+// Files is the count actually COPIED into this seat's tree — never the
+// pattern file's ambitions — per the rule that a displayed value comes from
+// measured output. Notices carry every pattern-level fact worth saying out
+// loud: the named refusals (absolute, `..`, negation, malformed), symlinks
+// not followed, and each pattern that matched nothing. A no-match is a
+// notice rather than silence because a .worktreeinclude is an
+// allowlist-shaped file, and an allowlist must fail visibly on a stale
+// entry, not only on a violation — but it is a notice rather than a failure,
+// because a pattern for a file this clone happens to lack must not kill the
+// race.
+type SeedReport struct {
+	Files   int
+	Notices []string
 }
 
 // gitOut runs one git command with plain argv — never a shell (§9.3's rule
@@ -138,18 +165,24 @@ func arenaBranch(turn int, v model.VendorID) string {
 	return "arena/t" + itoa(turn) + "/" + string(v)
 }
 
-// arenaSetup records the base and adds one worktree per racing seat.
+// arenaSetup records the base, adds one worktree per racing seat, and seeds
+// each worktree from the room repo's .worktreeinclude when one exists.
 //
 // The base is read ONCE, before any worktree exists, so every attempt races
-// from the same commit. Per-seat failures skip that seat (reported on its
-// column) rather than aborting the race — a partial read degrades a field, not
-// the row, and the same rule holds one level up.
-func arenaSetup(workspace string, turn int, seats []model.VendorID) (base string, trees map[model.VendorID]string, seatErr map[model.VendorID]string, err error) {
+// from the same commit — and the seed plan is read once for the same reason:
+// every racer is offered the same bytes, so per seat only the copy itself can
+// differ. Per-seat failures (a worktree that could not be added, a seed copy
+// that failed) skip that seat (reported on its column) rather than aborting
+// the race — a partial read degrades a field, not the row, and the same rule
+// holds one level up.
+func arenaSetup(workspace string, turn int, seats []model.VendorID) (base string, trees map[model.VendorID]string, seeds map[model.VendorID]*SeedReport, seatErr map[model.VendorID]string, err error) {
 	base, err = gitOut(workspace, "rev-parse", "HEAD")
 	if err != nil {
-		return "", nil, nil, err
+		return "", nil, nil, nil, err
 	}
+	plan := loadSeedPlan(workspace, seedBudgetBytes)
 	trees = map[model.VendorID]string{}
+	seeds = map[model.VendorID]*SeedReport{}
 	seatErr = map[model.VendorID]string{}
 	for _, v := range seats {
 		tree := arenaTree(workspace, turn, v)
@@ -157,9 +190,24 @@ func arenaSetup(workspace string, turn int, seats []model.VendorID) (base string
 			seatErr[v] = werr.Error()
 			continue
 		}
+		if plan != nil {
+			n, cerr := plan.copyInto(workspace, tree)
+			if cerr != nil {
+				// A copy error degrades THIS seat only, with the failed path
+				// and the error's first line as the reason. The seat does not
+				// race: a tree the room KNOWS is half-seeded would fail the
+				// brief for the exact reason seeding exists to remove, and a
+				// false failure wearing a vendor's name is worse than a named
+				// skip. The worktree itself stays on disk — kept-until-deleted
+				// receipts include the broken ones.
+				seatErr[v] = "seeding failed: " + cerr.Error()
+				continue
+			}
+			seeds[v] = &SeedReport{Files: n, Notices: plan.notices}
+		}
 		trees[v] = tree
 	}
-	return base, trees, seatErr, nil
+	return base, trees, seeds, seatErr, nil
 }
 
 // collectArena reads what one attempt changed, against the recorded base.
@@ -301,4 +349,329 @@ func arenaIdentity(tree string) []string {
 func undoArena(tree, base string) error {
 	_, err := gitOut(tree, "reset", "--hard", base)
 	return err
+}
+
+// ---------------------------------------------------------------------------
+// .worktreeinclude: a race carries the files git ignores, when the repo
+// names them.
+//
+// `git worktree add` gives every racer a CLEAN checkout, which is the whole
+// point — and also the trap: the files a project needs to RUN that git
+// deliberately does not carry (.env, local config, untracked fixtures) are
+// absent from a fresh worktree, so the first real race on any repo that needs
+// them fails falsely, on every seat at once. §9.37 deferred exactly this and
+// predicted where it would surface ("the first real arena run on a repo
+// needing .env"); this is that deferral, landed.
+//
+// The mechanism is agent-deck's .worktreeinclude — HALF of it, on purpose.
+// agent-deck pairs seeding with repo-carried setup scripts that run after the
+// copy, and that half is deliberately NOT taken: copying bytes into a tree
+// the room already owns is containable, but EXECUTING content the repo
+// carries crosses a trust boundary this project has explicitly parked
+// (byte-level trust gating is on the parked list pending an audit — §9.37).
+// A repo that could run code on the machine by merely containing a file is a
+// different product with a different threat model. Copy only, never execute.
+//
+// Candidates are `git ls-files --others` — untracked files only, and that
+// restriction is itself an honesty rule: a tracked file already arrives with
+// the checkout, so seeding the room's possibly-DIRTY copy of it would plant
+// the room's own edits in every seat's diff — a lying diff, the exact class
+// §4a.1 exists to prevent. Known limit, stated rather than hidden: a seeded
+// file that is untracked but NOT git-ignored still surfaces in the seat's
+// diff through collection's `git add -N .`; name git-ignored files in
+// .worktreeinclude and that cannot happen, because add refuses ignored paths.
+//
+// Containment: patterns resolve from the repo root and can never reach past
+// it — matches come FROM the ls-files enumeration (structurally inside the
+// root), and absolute or `..`-carrying patterns are refused by name before
+// they match anything. Symlinks are never followed: Windows is the primary
+// target (ADR-002) and symlink semantics differ per platform, so a symlink
+// match copies nothing and says so.
+
+// seedFileName is read from the room repo's root only — not from parents,
+// not from the racer trees.
+const seedFileName = ".worktreeinclude"
+
+// seedBudgetBytes caps the total bytes seeded into each racer's tree, 64 MiB.
+//
+// The budget exists for the node_modules pattern: one over-broad line in
+// .worktreeinclude must fail loud and named, not hang the room copying a
+// dependency tree into four worktrees. 64 MiB is far past any honest .env /
+// config / fixture set while staying small enough that even the worst case —
+// four seats, all refused at the cap mid-copy — costs seconds, not minutes.
+// The plan refuses over-budget up front (nothing copied, reason named), and
+// the copy enforces it again on ACTUAL bytes, because a file can grow between
+// the plan's stat and the copy.
+const seedBudgetBytes int64 = 64 << 20
+
+// seedFile is one planned copy: a slash-separated repo-relative path, with
+// the size and mode the plan measured.
+type seedFile struct {
+	rel  string
+	size int64
+	mode os.FileMode
+}
+
+// seedPlan is the room repo's .worktreeinclude, resolved once per race:
+// which untracked files the patterns name, and every per-pattern fact the
+// column must state (refusals, no-matches, symlinks, the budget verdict).
+// nil plan = no .worktreeinclude, which renders as nothing at all.
+type seedPlan struct {
+	files   []seedFile
+	notices []string
+	budget  int64
+}
+
+// loadSeedPlan reads workspace/.worktreeinclude and resolves it against the
+// repo's untracked files. Returns nil when the file does not exist — absence
+// is a different fact from a file that matched nothing, and nil is how the
+// render keeps them apart. Every other problem (unreadable file, refused
+// pattern, no-match pattern, symlink, over-budget total) is a NOTICE on the
+// plan, never an error: the plan degrades and says so, the race runs.
+//
+// budget is a parameter rather than a read of seedBudgetBytes so the refusal
+// path is testable without a 64 MiB fixture; every non-test caller passes the
+// constant.
+func loadSeedPlan(workspace string, budget int64) *seedPlan {
+	raw, err := os.ReadFile(filepath.Join(workspace, seedFileName))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return &seedPlan{budget: budget, notices: []string{seedFileName + " unreadable: " + firstLine(err.Error())}}
+	}
+	plan := &seedPlan{budget: budget}
+	var patterns []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		p := strings.TrimSpace(line)
+		if p == "" || strings.HasPrefix(p, "#") {
+			continue
+		}
+		if why := refuseSeedPattern(p); why != "" {
+			plan.notices = append(plan.notices, `refused "`+p+`": `+why)
+			continue
+		}
+		patterns = append(patterns, p)
+	}
+	if len(patterns) == 0 {
+		return plan
+	}
+
+	// The candidate set: every untracked file, ignored ones included — which
+	// is exactly the set a fresh worktree lacks. git does the walking, so the
+	// enumeration cannot leave the repo root and never descends into .git.
+	others, err := gitOut(workspace, "ls-files", "--others", "-z")
+	if err != nil {
+		plan.notices = append(plan.notices, "seeding unavailable: "+err.Error())
+		return plan
+	}
+	var candidates []string
+	for _, c := range strings.Split(others, "\x00") {
+		if c != "" {
+			candidates = append(candidates, filepath.ToSlash(c))
+		}
+	}
+
+	seen := map[string]bool{}
+	var total int64
+	for _, p := range patterns {
+		matched := false
+		for _, rel := range candidates {
+			if !seedMatch(p, rel) {
+				continue
+			}
+			matched = true
+			if seen[rel] {
+				continue
+			}
+			seen[rel] = true
+			fi, lerr := os.Lstat(filepath.Join(workspace, filepath.FromSlash(rel)))
+			switch {
+			case lerr != nil:
+				plan.notices = append(plan.notices, "not copied: "+rel+": "+firstLine(lerr.Error()))
+			case fi.Mode()&os.ModeSymlink != 0:
+				plan.notices = append(plan.notices, "symlink not copied: "+rel)
+			case !fi.Mode().IsRegular():
+				plan.notices = append(plan.notices, "not a regular file, not copied: "+rel)
+			default:
+				plan.files = append(plan.files, seedFile{rel: rel, size: fi.Size(), mode: fi.Mode().Perm()})
+				total += fi.Size()
+			}
+		}
+		if !matched {
+			// A stale pattern is visible, not silent — but it is a fact, not
+			// a failure. This clone simply holds nothing the pattern names.
+			plan.notices = append(plan.notices, `no untracked file matches "`+p+`"`)
+		}
+	}
+	if total > budget {
+		// Refused wholesale rather than truncated at the cap: seeding SOME of
+		// what the file names would hand every seat a tree that half-works,
+		// and which half would depend on ls-files ordering. Nothing is
+		// copied, the reason carries the measured total, and the race runs —
+		// unseeded, and saying so.
+		plan.files = nil
+		plan.notices = append(plan.notices,
+			"seeding refused: matches total "+seedSize(total)+", past the "+seedSize(budget)+" budget")
+	}
+	return plan
+}
+
+// refuseSeedPattern names why a pattern may not run at all, or returns ""
+// for a runnable one. Refusals are per-pattern and by name so one bad line
+// cannot silently disable — or worse, silently widen — the rest of the file.
+func refuseSeedPattern(p string) string {
+	if strings.HasPrefix(p, "!") {
+		return "negation is not supported"
+	}
+	// Leading separator, drive letter, or anything the host calls absolute:
+	// all refused as one class. Gitignore spells root-anchoring with a
+	// leading slash, and this file deliberately does not — patterns resolve
+	// from the repo root already, and an absolute-looking pattern is more
+	// often an attempt (or an accident) aimed outside the repo than an
+	// anchor. The refusal says where patterns resolve from, so the fix is in
+	// the sentence.
+	if strings.HasPrefix(p, "/") || strings.HasPrefix(p, "\\") || filepath.IsAbs(p) || filepath.VolumeName(p) != "" {
+		return "absolute — patterns resolve from the repo root"
+	}
+	for _, seg := range strings.Split(strings.ReplaceAll(p, "\\", "/"), "/") {
+		if seg == ".." {
+			return "may not reach above the repo root"
+		}
+		if seg == "**" {
+			continue
+		}
+		if _, err := path.Match(seg, "probe"); err != nil {
+			return "malformed pattern"
+		}
+	}
+	return ""
+}
+
+// seedMatch reports whether one pattern names one untracked file, both
+// slash-separated and repo-root-relative. The grammar is a documented subset
+// of gitignore's: a pattern without a slash matches its name at any depth
+// (file or directory — matching a directory seeds everything under it); a
+// pattern with a slash anchors at the repo root, `*` stays within one path
+// segment (path.Match), `**` spans segments, and a trailing slash means the
+// directory and its contents. No negation — refuseSeedPattern already turned
+// `!` away by name, because half a negation grammar is worse than none.
+func seedMatch(pattern, rel string) bool {
+	segs := strings.Split(rel, "/")
+	if !strings.Contains(pattern, "/") {
+		for _, seg := range segs {
+			if ok, _ := path.Match(pattern, seg); ok {
+				return true
+			}
+		}
+		return false
+	}
+	pat := strings.Split(strings.Trim(pattern, "/"), "/")
+	// The file itself, or any ancestor directory: a pattern that names a
+	// directory seeds the whole subtree, matching gitignore's own reading.
+	for n := len(segs); n >= 1; n-- {
+		if seedSegsMatch(pat, segs[:n]) {
+			return true
+		}
+	}
+	return false
+}
+
+// seedSegsMatch matches pattern segments against path segments, `**`
+// consuming zero or more. Inputs are pattern-file lines and repo paths —
+// both short — so the recursion is bounded by hand-written input, not data.
+func seedSegsMatch(pat, name []string) bool {
+	if len(pat) == 0 {
+		return len(name) == 0
+	}
+	if pat[0] == "**" {
+		if seedSegsMatch(pat[1:], name) {
+			return true
+		}
+		return len(name) > 0 && seedSegsMatch(pat, name[1:])
+	}
+	if len(name) == 0 {
+		return false
+	}
+	if ok, err := path.Match(pat[0], name[0]); err != nil || !ok {
+		return false
+	}
+	return seedSegsMatch(pat[1:], name[1:])
+}
+
+// copyInto seeds one racer's tree, creating parent directories as the
+// relative paths demand, and returns how many files actually landed — the
+// number the column states. The first error stops THIS tree and is returned
+// with its path and first line; the caller degrades that one seat and the
+// other racers never hear about it.
+func (p *seedPlan) copyInto(workspace, tree string) (int, error) {
+	var total int64
+	copied := 0
+	for _, f := range p.files {
+		src := filepath.Join(workspace, filepath.FromSlash(f.rel))
+		dst := filepath.Join(tree, filepath.FromSlash(f.rel))
+		n, err := seedCopyFile(src, dst, f.mode, p.budget-total)
+		total += n
+		if err != nil {
+			return copied, errors.New(f.rel + ": " + firstLine(err.Error()))
+		}
+		copied++
+	}
+	return copied, nil
+}
+
+// seedCopyFile copies one regular file, refusing to write more than room
+// bytes — the budget re-enforced on ACTUAL bytes, because the plan's sizes
+// are a stat from moments ago and a log file grows. The re-Lstat closes the
+// same gap for symlinks: a path that became a link since the plan is refused
+// here rather than followed.
+func seedCopyFile(src, dst string, mode os.FileMode, room int64) (int64, error) {
+	fi, err := os.Lstat(src)
+	if err != nil {
+		return 0, err
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return 0, errors.New("became a symlink; not followed")
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return 0, err
+	}
+	defer in.Close()
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return 0, err
+	}
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
+		return 0, err
+	}
+	// LimitReader at room+1: reading one byte past the room is how "over
+	// budget" is detected without ever copying unboundedly.
+	n, cerr := io.Copy(out, io.LimitReader(in, room+1))
+	if err := out.Close(); cerr == nil {
+		cerr = err
+	}
+	if n > room {
+		return n, errors.New("grew past the seeding budget mid-copy")
+	}
+	return n, cerr
+}
+
+// seedSize prints a byte count for a refusal sentence: whole MiB rounded UP
+// past a mebibyte (a budget refusal must never understate what it measured),
+// raw bytes below one. itoa over fmt, matching the rest of the render path.
+func seedSize(n int64) string {
+	if n >= 1<<20 {
+		return itoa(int((n+(1<<20-1))>>20)) + " MiB"
+	}
+	return itoa(int(n)) + " B"
+}
+
+// firstLine trims a multi-line error to the sentence a column can carry —
+// the same shape gitOut already gives git's own failures.
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
 }

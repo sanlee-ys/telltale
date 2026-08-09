@@ -1568,6 +1568,25 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		out = append(out, "")
 		out = append(out, sty.Muted.Render(padRight(labelRule("arena "+c.Arena.Branch, "", w, g), w, g)))
 		out = append(out, styleAll(wrap(abbreviate(c.Arena.Tree, st.Home), w), sty.Muted)...)
+		// Seeding is stated only when it RAN. A nil Seed — the room repo has
+		// no .worktreeinclude — draws nothing, while "seeded 0 files" is a
+		// measured zero from a pattern file that copied nothing; those are
+		// different facts and this line keeps them apart (§4a.1, the same
+		// rule the stat block below follows). The count is files actually
+		// copied into THIS seat's tree, never the pattern file's ambitions,
+		// and each notice under it names the pattern or path that produced
+		// it — a stale .worktreeinclude entry must be visible on the column,
+		// because an allowlist-shaped file fails both ways (§9.37).
+		if s := c.Arena.Seed; s != nil {
+			line := "seeded " + itoa(s.Files) + " files"
+			if s.Files == 1 {
+				line = "seeded 1 file"
+			}
+			out = append(out, styleAll(wrap(line, w), sty.Muted)...)
+			for _, n := range s.Notices {
+				out = append(out, styleAll(wrap(n, w), sty.Muted)...)
+			}
+		}
 		// The finish line: host-observed rank, the phase word, the measured
 		// elapsed. The rank NEVER stands alone — "2nd · failed" is a different
 		// fact from "2nd · done", and printing the number without the word

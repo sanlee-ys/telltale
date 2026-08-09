@@ -61,7 +61,7 @@ func TestArenaSetupRacesFromOneBase(t *testing.T) {
 	ws := gitRepo(t)
 	seats := []model.VendorID{model.VendorCodex, model.VendorAntigravity}
 
-	base, trees, seatErr, err := arenaSetup(ws, 7, seats)
+	base, trees, _, seatErr, err := arenaSetup(ws, 7, seats)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestArenaSetupRefusesOutsideARepo(t *testing.T) {
 	if _, err := gitOut(".", "--version"); err != nil {
 		t.Skip("git not available")
 	}
-	_, _, _, err := arenaSetup(t.TempDir(), 1, []model.VendorID{model.VendorCodex})
+	_, _, _, _, err := arenaSetup(t.TempDir(), 1, []model.VendorID{model.VendorCodex})
 	if err == nil {
 		t.Fatal("a non-repo workspace was accepted — the race would have nowhere to diff against")
 	}
@@ -104,7 +104,7 @@ func TestArenaSetupRefusesOutsideARepo(t *testing.T) {
 // read "no changes" — a false zero, the exact class §4a.1 exists to prevent.
 func TestCollectArenaSeesNewFiles(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, err := arenaSetup(ws, 1, []model.VendorID{model.VendorCodex})
+	base, trees, _, _, err := arenaSetup(ws, 1, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestCollectArenaSeesNewFiles(t *testing.T) {
 // nothing; an unreadable one is a failure. The two must not meet in the middle.
 func TestCollectArenaZeroAndErrorAreDifferent(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
+	base, trees, _, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func TestArenaCommandRefusals(t *testing.T) {
 func TestArenaRanksAreHostObserved(t *testing.T) {
 	ws := gitRepo(t)
 	seats := []model.VendorID{model.VendorClaude, model.VendorCodex}
-	base, trees, _, err := arenaSetup(ws, 4, seats)
+	base, trees, _, _, err := arenaSetup(ws, 4, seats)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -403,7 +403,7 @@ func TestArenaCommitMsgIsATurnLabel(t *testing.T) {
 // what rev-parse reported, and the room's own repo has not moved an inch.
 func TestArenaCommitMakesTheAttemptDurable(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, err := arenaSetup(ws, 5, []model.VendorID{model.VendorCodex})
+	base, trees, _, _, err := arenaSetup(ws, 5, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -509,7 +509,7 @@ func TestArenaCommitFallsBackToALocalIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	base, trees, _, err := arenaSetup(ws, 1, []model.VendorID{model.VendorClaude})
+	base, trees, _, _, err := arenaSetup(ws, 1, []model.VendorID{model.VendorClaude})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -541,7 +541,7 @@ func TestArenaCommitFallsBackToALocalIdentity(t *testing.T) {
 func TestArenaCommitFailureDegradesTheSeatAlone(t *testing.T) {
 	ws := gitRepo(t)
 	seats := []model.VendorID{model.VendorClaude, model.VendorCodex}
-	base, trees, _, err := arenaSetup(ws, 3, seats)
+	base, trees, _, _, err := arenaSetup(ws, 3, seats)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -608,7 +608,7 @@ func TestArenaCommitFailureDegradesTheSeatAlone(t *testing.T) {
 // branch stays at base and the "no changes" sentence stays the whole story.
 func TestArenaZeroDiffCommitsNothing(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
+	base, trees, _, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -647,7 +647,7 @@ func TestArenaZeroDiffCommitsNothing(t *testing.T) {
 // commit on top.
 func TestArenaSelfCommittedAttemptKeepsItsOwnTip(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, err := arenaSetup(ws, 6, []model.VendorID{model.VendorCodex})
+	base, trees, _, _, err := arenaSetup(ws, 6, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -698,7 +698,7 @@ func TestArenaSelfCommittedAttemptKeepsItsOwnTip(t *testing.T) {
 // never moves.
 func TestUndoTakesTheWholeTurnBack(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, err := arenaSetup(ws, 7, []model.VendorID{model.VendorCodex})
+	base, trees, _, _, err := arenaSetup(ws, 7, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -821,7 +821,7 @@ func TestUndoRefusalsEachNameTheirReason(t *testing.T) {
 // not measure happening.
 func TestUndoResetFailureSurfacesGitsOwnSentence(t *testing.T) {
 	ws := gitRepo(t)
-	base, trees, _, err := arenaSetup(ws, 8, []model.VendorID{model.VendorCodex})
+	base, trees, _, _, err := arenaSetup(ws, 8, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}

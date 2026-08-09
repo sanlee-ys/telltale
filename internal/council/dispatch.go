@@ -67,6 +67,12 @@ type turnState struct {
 	// lands, and its context is the turn's rather than the room's, so every
 	// teardown path that cancels the turn kills it as the backstop.
 	arenaEphemeral map[model.VendorID]seatSession
+	// arenaSeeds holds each racer's .worktreeinclude receipt from setup, so
+	// finishColumn can stamp it onto the ArenaResult it builds at landing —
+	// seeding happened before the seat spawned, but the column that states it
+	// is only born when the seat lands. Empty when the room repo has no
+	// .worktreeinclude, and the render then draws no seed line at all.
+	arenaSeeds map[model.VendorID]*SeedReport
 	// arenaFinished counts racers that have landed, in the order the ROOM saw
 	// them land — finishColumn call order, which is host-observed time, never a
 	// vendor's own claim about when it finished (the host-stamps rule). Event
@@ -302,13 +308,13 @@ func (m *Model) dispatch() tea.Cmd {
 				racers = append(racers, c.Vendor)
 			}
 		}
-		base, trees, seatErrs, aerr := arenaSetup(m.st.Workspace, next, racers)
+		base, trees, seeds, seatErrs, aerr := arenaSetup(m.st.Workspace, next, racers)
 		if aerr != nil {
 			cancel()
 			m.st.Notice = "arena: " + aerr.Error()
 			return nil
 		}
-		ts.arena, ts.arenaBase, ts.arenaTrees, arenaSeatErr = true, base, trees, seatErrs
+		ts.arena, ts.arenaBase, ts.arenaTrees, ts.arenaSeeds, arenaSeatErr = true, base, trees, seeds, seatErrs
 		// One live-stat slot per seat that actually has a tree to read. Seats
 		// skipped above (worktree add failed) are absent here too, which is the
 		// never-refresh-a-failed-setup rule enforced by construction rather
@@ -1008,6 +1014,10 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 					r.Commit = sha
 				}
 			}
+			// The seed receipt was measured at setup; the column that states
+			// it exists now. nil when the room repo has no .worktreeinclude —
+			// the render draws nothing for nil, per zero-vs-absent.
+			r.Seed = m.turn.arenaSeeds[c.Vendor]
 			// Rank is the order the room OBSERVED seats land, stamped here on
 			// the host's clock. Every racer gets one — a DNF finished too, just
 			// not well, and the render pairs the rank with the phase word so
