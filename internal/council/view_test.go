@@ -806,6 +806,87 @@ func TestPhaseColors(t *testing.T) {
 	}
 }
 
+// TestArenaDiffColors is TestPhaseColors' shape pointed at the patch view:
+// one existing token per line class, asserted with the coloured set, while the
+// plain set renders the exact bytes the goldens already pin. The header cases
+// are the ones that earn the test — `+++` and `---` open with the change
+// markers' own prefixes, and a classifier that read them second would paint a
+// file header as an edit.
+func TestArenaDiffColors(t *testing.T) {
+	sty := NewStyles(true)
+	cases := []struct {
+		line  string
+		style lipgloss.Style
+		what  string
+	}{
+		{"+inserted line", sty.SevOK, "an added line"},
+		{"-deleted line", sty.SevCrit, "a removed line"},
+		{"@@ -1,4 +1,6 @@", sty.Muted, "a hunk header"},
+		{"diff --git a/x.go b/x.go", sty.Muted, "a file header"},
+		{"index 0123abc..456def0 100644", sty.Muted, "an index header"},
+		{"+++ b/x.go", sty.Muted, "a +++ file header"},
+		{"--- a/x.go", sty.Muted, "a --- file header"},
+		{" unchanged context", sty.Text, "a context line"},
+	}
+	for _, c := range cases {
+		got := sty.ForDiffLine(c.line).Render(c.line)
+		want := c.style.Render(c.line)
+		if got != want {
+			t.Errorf("%s renders %q, want %q", c.what, got, want)
+		}
+	}
+	// The header-before-marker rule, stated as its own assertion: a `+++`
+	// header wearing the addition's green is the patch claiming an edit it
+	// never made, and likewise `---` and the removal's red.
+	if sty.ForDiffLine("+++ b/x.go").Render("x") == sty.SevOK.Render("x") {
+		t.Error("a +++ file header is styled as an addition")
+	}
+	if sty.ForDiffLine("--- a/x.go").Render("x") == sty.SevCrit.Render("x") {
+		t.Error("a --- file header is styled as a removal")
+	}
+
+	// The render path actually spends the tokens: the patch view assembled
+	// with the coloured set carries each class's escape on the whole line.
+	st := room()
+	st.Columns[0].Phase = PhaseDone
+	st.Columns[0].Arena = &ArenaResult{
+		Stat: " x.go | 2 +-",
+		Diff: "diff --git a/x.go b/x.go\n+++ b/x.go\n@@ -1 +1 @@\n-old\n+new\n ctx\n",
+	}
+	st.Columns[0].ArenaShowDiff = true
+	lines, _ := columnLines(st, st.Columns[0], 38, sty, GlyphsFor(false))
+	joined := strings.Join(lines, "\n")
+	for _, want := range []struct{ styled, what string }{
+		{sty.SevOK.Render("+new"), "the added line"},
+		{sty.SevCrit.Render("-old"), "the removed line"},
+		{sty.Muted.Render("@@ -1 +1 @@"), "the hunk header"},
+		{sty.Muted.Render("+++ b/x.go"), "the +++ header"},
+	} {
+		if !strings.Contains(joined, want.styled) {
+			t.Errorf("%s does not carry its token's escape in the rendered column", want.what)
+		}
+	}
+	if strings.Contains(joined, sty.SevOK.Render("+++ b/x.go")) {
+		t.Error("the rendered column styles a +++ header as an addition")
+	}
+
+	// Colour stayed a second signal: PlainStyles renders every class as its
+	// own bytes — the same property the untouched goldens assert frame-wide —
+	// and that identity is also the whole of the --ascii and NO_COLOR story,
+	// because those paths neutralize the style set and never see an escape.
+	plain := PlainStyles()
+	for _, c := range cases {
+		if got := plain.ForDiffLine(c.line).Render(c.line); got != c.line {
+			t.Errorf("PlainStyles alters %s: %q", c.what, got)
+		}
+	}
+	pl, _ := columnLines(st, st.Columns[0], 38, plain, GlyphsFor(false))
+	pj := strings.Join(pl, "\n")
+	if strings.Contains(pj, "\x1b[") {
+		t.Error("PlainStyles patch view emits an ANSI escape; goldens would see colour")
+	}
+}
+
 // TestRenderIsPure guards the contract the goldens depend on: two renders of
 // the same State are byte-identical, so nothing in the render path reads a
 // clock, the filesystem or the environment.

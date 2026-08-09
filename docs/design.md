@@ -6275,9 +6275,16 @@ where the predicted risk lived:
   frame renders at most 400 patch lines (`arenaDiffScreenLines`) — a render cost bound, not a
   data bound — and the cutoff names how many lines it dropped and both routes to the rest
   (`y`, and the worktree itself). Three refusals with three sentences: no race this turn, a
-  measured nothing-to-show, and an unreadable diff carrying its reason. Plain text, no diff
+  measured nothing-to-show, and an unreadable diff carrying its reason. ~~Plain text, no diff
   colouring yet: +/- prefixes are the first signal and survive `--ascii`; colour through the
-  existing palette is a later, separate change under style.go's no-new-hues rule.
+  existing palette is a later, separate change under style.go's no-new-hues rule.~~ **Coloured
+  2026-08-09, through the existing palette and nothing else** (`Styles.ForDiffLine`): added
+  lines wear `SevOK`, removed lines `SevCrit`, headers (`diff --git`, `index `, `---`/`+++`,
+  `@@`) the muted chrome style — no new hue, per style.go's rule. Classification reads the raw
+  prefix with headers matched first, so `+++` never wears the addition's green. The `+`/`-`
+  prefixes stay the first signal: `PlainStyles` renders the same bytes as before, which is why
+  no golden moved, and `--ascii`/`NO_COLOR` see exactly the frame they always did. The stat
+  blocks (interim and final) stay unstyled — a stat is a summary, not a patch line.
 
 **Amendment, 2026-08-09: the live stat — the race shows the diff growing.** Until now a
 racer's stat appeared only when its column finished; the audience of a 20-second race

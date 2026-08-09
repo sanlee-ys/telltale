@@ -1,6 +1,8 @@
 package council
 
 import (
+	"strings"
+
 	"charm.land/lipgloss/v2"
 
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -291,6 +293,48 @@ func (s Styles) retint(st lipgloss.Style, v model.VendorID) lipgloss.Style {
 		return st
 	}
 	return st.Foreground(lipgloss.Color(seatHue(v)))
+}
+
+// ForDiffLine returns the style one raw patch line renders in — the "later,
+// separate change" §9.37's `d` amendment left on the table, landed entirely
+// inside the palette the room already has. Added lines wear SevOK, removed
+// lines SevCrit, headers the Muted chrome style; nothing here is a new hue,
+// and nothing here is a first signal. The `+`/`-` prefixes carry the whole
+// distinction on their own — they are what survives --ascii and NO_COLOR, and
+// under PlainStyles every branch of this switch is the identity style, which
+// is why no layout golden can see this function exist.
+//
+// Classification reads the RAW line, and the headers are matched FIRST, in
+// this order, because three of them are prefix-shadowed by the change
+// markers: `+++ b/file` opens with the addition's own `+`, `--- a/file` with
+// the removal's `-`, and a classifier that checked `+` before `+++` would
+// paint a file header as an inserted line — a header wearing green is the
+// patch claiming a change it never made. `index ` keeps its trailing space on
+// purpose: a body line of prose can begin with the word "index", and only
+// git's own `index 1234..5678 100644` form carries the space-delimited shape.
+//
+// SevOK/SevCrit here are severity tokens spent on non-severity facts, and
+// that reuse is deliberate rather than sloppy: green-for-added and
+// red-for-removed is the one colour convention every diff reader already
+// owns, it is the same green/red every terminal diff pager maps to these same
+// ANSI indices, and minting a second green would be exactly the sixth-colour
+// drift the package comment forbids. The context lines stay Text — a line the
+// patch did not touch is the baseline the coloured lines read against.
+func (s Styles) ForDiffLine(line string) lipgloss.Style {
+	switch {
+	case strings.HasPrefix(line, "+++"),
+		strings.HasPrefix(line, "---"),
+		strings.HasPrefix(line, "diff --git"),
+		strings.HasPrefix(line, "index "),
+		strings.HasPrefix(line, "@@"):
+		return s.Muted
+	case strings.HasPrefix(line, "+"):
+		return s.SevOK
+	case strings.HasPrefix(line, "-"):
+		return s.SevCrit
+	default:
+		return s.Text
+	}
 }
 
 // ForAvailability returns the style an unavailable column's card renders in.
