@@ -7556,3 +7556,82 @@ an honest count is the trade; the whole edit is in the file the moment it is app
 **No preview on a denial or after the fact.** The trace still says `✗ denied by you` and nothing
 more. What the seat *would* have written is not what happened, and a room that showed it
 afterwards would be displaying a file state that never existed.
+
+### 9.42 `telltale doctor`: the one moment probing is allowed, and the three answers it may give (2026-08-09)
+
+Council's detection has never run a vendor. `detect.go` says why in its own doc — "council
+never runs a vendor to find out whether it works: a probe turn costs real quota, and 'is it
+authenticated?' is a question the first real dispatch answers for free" (ADR-008 §6) — and that
+rule is correct and stays. What it is a rule *about* is a **turn**: the room may not spend the
+user's money to answer a question it does not have to ask, and it may not spend it silently,
+mid-conversation, on a schedule nobody asked for.
+
+So the boundary is drawn at **cost and side effect**, not at "running a vendor is forbidden".
+`telltale doctor` runs `<binary> --version` — a flag that parses argv, prints a string and
+exits, with no model, no session and no billing anywhere in it. It starts no turn, reads no
+credential store, makes no network call, and writes nothing at all: it adds no fourth exception
+to the three writes `CLAUDE.md` lists, because it has none. §9.17 is the frame that makes this
+the right place for it — *a fact that is true at launch and stays true belongs at launch*, and
+what binary is on this disk and what it calls itself is exactly that shape. The inverse of the
+same rule is why there is no `/doctor`: nothing this reports changes while the room is open.
+
+**Three states, and the whole design is keeping them three.**
+
+| | what it means | what it may carry |
+|---|---|---|
+| `ok` | the check ran and passed | the measured text — the path that was stat'd, the line the vendor printed |
+| `FAILED` | the check ran and did not pass | the reason |
+| `not checked` | the check did not run | **why** it did not, and never a value |
+
+**Auth and network are `not checked` on every seat, always.** A binary that exists and answers
+`--version` establishes nothing whatever about a login or about reachability, and a report that
+let those two ride along on the good news would be believed on the one day it was wrong — the
+§4a.1 collapse wearing a preflight's clothes. The reason is printed rather than shrugged: the
+only thing that establishes a login is a real turn, and a turn costs quota. A seat that is
+installed and signed out reports its own auth failure on its column the first time you dispatch
+to it, which is where that fact was always going to come from.
+
+**`NotChecked` is the zero value**, for §9.17's `GateOff` reason exactly: a safety property
+whose default is the reassuring answer is the wrong way round however carefully the constructor
+sets it. Every `Check` a test types by hand, and every field a future change forgets to fill in,
+reads as an honest blank instead of a silent pass. `TestNotCheckedIsTheZeroStatus` pins it.
+
+**The measurement that would have been a plausible lie.** One seat's resolved binary is not the
+program it names. Detection steps over `cursor-agent.cmd` to the bundled `node.exe` its launcher
+would have run (§9.33), so the obvious `--version` answers **`v24.5.0`** — node's version,
+printed under a row labelled `cursor`, real and about the wrong program. Handed the bundle first,
+`node.exe index.js --version`, the same install answers **`2026.08.04-aaa8809`**. Both measured
+here, one after the other. The version argv is therefore per-seat data taken through
+`vendors.CursorNodeBundle`, not a `--version` constant and not a second `filepath.Join` — that
+function's own doc names two copies of one join as the agreement that silently stops holding.
+The other four take the bare flag, verified by running them: claude `2.1.226 (Claude Code)`,
+codex `codex-cli 0.147.0`, agy `1.1.11`, grok `grok 1.0.0 (3cd0d0cbce) [stable]`.
+
+**Found and undrivable is a third thing, and it stays one.** `detect.go` already refuses to
+collapse "not installed" with "installed somewhere council will not drive from", because the fix
+differs. The preflight carries that through as two checks rather than one verdict: `binary`
+passes and `drivable` fails, with the shim note attached. The version probe still runs on such a
+seat — what is installed is worth knowing where the room cannot use it, and a fixed `--version`
+carries none of the prompt text that made it undrivable.
+
+**A fifth mode, not a council flag, and no colour in it.** What it prints goes somewhere else:
+council's output is a full-screen room, so a preflight rendered inside one is unreadable at
+exactly the moment it is wanted — before the room opens, piped into a file, pasted into an issue.
+Every distinction it makes is carried by a **word** (`ok`, `FAILED`, `not checked`), so
+`--ascii` and `NO_COLOR` have nothing to switch off and neither is a flag here; a flag that does
+nothing is a promise that something was configurable. `Render` is pure over its `Report` for
+council's reason, with the probe durations measured in `Run` and arriving as data. Each seat gets
+its own `--timeout` (15s default) rather than the run sharing one: a wedged vendor must cost its
+own deadline and a failed check, never the report. And the command exits **0** whatever it finds
+— a failed check is this mode working, and exiting non-zero would make "I have four of five
+seats" indistinguishable from "doctor itself broke".
+
+**Capabilities are printed and are explicitly not checks.** How a seat streams and whether it can
+be asked to ask first were measured once, against live runs (§9.7, §9.33, §9.36, §9.39, and
+`canGate`), and written down; nothing re-measures them on this machine now. They render on their
+own labelled line — *"council declares, and did not check here"* — outside the status column,
+because putting them in it would give them a fourth state and imply a check that never happened.
+The words are read off `granularityFor` and `canGate` rather than restated, so the preflight
+cannot drift from the room's own badges. Worth the line at all because "installed" and "will
+stream to you" are different promises, and the seat a user is most likely to think is broken is
+the one that is working and silent until the end of the turn (§9.14).
