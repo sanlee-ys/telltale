@@ -449,6 +449,11 @@ func (m *Model) dispatch() tea.Cmd {
 				failures = append(failures, dispatchFailedMsg{c.Vendor, "arena: " + why})
 				continue
 			}
+			// The one turn shape where the room adds words to a brief. Every
+			// racer gets the SAME constant line ahead of the same brief, so
+			// the comparison the race exists for is untouched — see
+			// arenaConduct for the ruling and the incident that forced it.
+			vendorPrompt = arenaConduct + "\n\n" + vendorPrompt
 			if cv, ok := v.(vendors.Conversational); ok {
 				// The one seat FirstTurn cannot carry. The ACP refounding made
 				// this vendor live-only (§9.36) and the first live race duly

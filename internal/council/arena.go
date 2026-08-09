@@ -42,6 +42,33 @@ import (
 // marked on the result and stated in the yank notice, never silent.
 const arenaDiffBudget = 1 << 20
 
+// arenaConduct is the standing preamble every racer's brief carries, and it is
+// the ONE place the room adds words to what the operator typed.
+//
+// The incident that forced it (2026-08-09, live races t5 and t8, Windows box):
+// a write-posture racer's confinement is the worktree, but the machine's git
+// and gh credentials are ambient — so a racer can reach GitHub, and one did.
+// The codex seat took a gofmt brief, pushed its arena branch, opened PR #157,
+// waited out CI, and MERGED IT INTO MAIN, then announced the same plan again
+// on the next race. §9.37's founding ruling — the room offers the diffs and
+// the human adopts, never an auto-adoption — binds this codebase; it cannot
+// bind a vendor that decides to run `gh pr merge` on its own. The operator
+// ruled the same day: the brief says so instead.
+//
+// The bend to the brief-verbatim promise is real and is bounded three ways:
+// races only (an ordinary turn's prompt is untouched), a CONSTANT — the same
+// published line for every racer on every race, so the cross-seat comparison
+// the race exists for is undisturbed — and recorded in §9.37 rather than
+// discoverable only by reading a wire capture. It is an instruction to the
+// model, not a control: a vendor can still ignore it, which is why it says
+// what the operator will DO (adopt the winner) rather than pretending to be a
+// sandbox. The mechanical version of this boundary — credentials a racer
+// cannot reach — is a different, harder change and is deliberately not
+// claimed here.
+const arenaConduct = "This tree is a race attempt in its own git worktree. " +
+	"Do not push, open pull requests, or merge — the operator compares the " +
+	"attempts and adopts the winner. Do the work, verify it locally, and stop."
+
 // ArenaResult is one seat's race outcome: where its attempt lives and what it
 // changed. Held on the Column so Render stays pure over State — every field is
 // computed once, at collection, never during a frame.
