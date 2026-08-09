@@ -1629,7 +1629,18 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 				shown = lines[:arenaDiffScreenLines]
 			}
 			for _, line := range shown {
-				out = append(out, fit(strings.TrimRight(line, " "), w))
+				// Classify RAW, style, then fit — in that order and no other.
+				// ForDiffLine reads the line's own prefix (headers before
+				// change markers, so `+++` never wears the addition's green),
+				// the style wraps the whole line, and fit does the width work
+				// LAST because these lines now genuinely carry ANSI: the trap
+				// this call was chosen against (§9.5's padRight cutting
+				// through an escape) is no longer hypothetical here. The
+				// colour is the second signal — PlainStyles renders these
+				// exact bytes, which is what keeps the goldens the proof that
+				// the prefixes still carry it alone.
+				raw := strings.TrimRight(line, " ")
+				out = append(out, fit(sty.ForDiffLine(raw).Render(raw), w))
 			}
 			if n := len(lines) - len(shown); n > 0 {
 				out = append(out, wrap("(… "+itoa(n)+" more lines — y copies the whole diff, d returns to the stat)", w)...)
