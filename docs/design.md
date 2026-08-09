@@ -6819,6 +6819,27 @@ when the remaining seats land, all three refusals, the y/n/stray gate, and compo
 is given up mid-race and the turn ends the moment the others land, the same debt every
 amendment here has carried, paid the same way.
 
+**Amendment, 2026-08-09: the brief carries the conduct line — the one place the room adds
+words.** A write-posture racer's confinement is its worktree, but the machine's git and gh
+credentials are ambient, so a racer can reach GitHub — and one did: the codex seat took the
+t5 gofmt brief, pushed its arena branch, opened a PR, waited out CI, and merged it into main,
+then announced the same plan on the very next race. This section's founding ruling — the
+room offers the diffs and the human adopts, never an auto-adoption — binds this codebase and
+cannot bind a vendor that runs `gh pr merge` on its own initiative. The operator ruled the
+same day: every `/arena` dispatch now prepends `arenaConduct` (arena.go) to the brief —
+*"This tree is a race attempt in its own git worktree. Do not push, open pull requests, or
+merge — the operator compares the attempts and adopts the winner. Do the work, verify it
+locally, and stop."*
+
+The bend to the brief-verbatim promise is bounded three ways, each pinned by test: races
+only (an ordinary turn's prompt is byte-verbatim), a constant — the same published line for
+every racer on every race, prepended so a long brief cannot bury it, leaving the cross-seat
+comparison undisturbed — and recorded here rather than discoverable only in a wire capture.
+Stated honestly for what it is: an instruction, not a control. A vendor can ignore it, and
+the mechanical version of this boundary — credentials a racer cannot reach — is a different,
+harder change that this amendment deliberately does not claim. The live measurement owed:
+the next race showing the codex seat stopping at its commit.
+
 ### 9.38 paste lands whole, and never sends (2026-08-09)
 
 The ask, in the operator's words: *"how i can paste things into the area i can type in."* The

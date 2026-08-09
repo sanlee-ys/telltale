@@ -302,3 +302,59 @@ func TestCancelAndTeardownKillTheRacer(t *testing.T) {
 		}
 	})
 }
+
+// TestARaceBriefCarriesTheConductLineAndAnOrdinaryBriefDoesNot pins the one
+// place the room adds words to a brief (arenaConduct, §9.37 amended
+// 2026-08-09): every one-shot racer's prompt opens with the same constant
+// line ahead of the operator's own words — prepended, not appended, so a long
+// brief cannot bury it — and an ordinary turn's prompt carries none of it.
+// The cursor racer's prompt rides its protocol rather than its spec (§9.36:
+// `acp` is the whole argv), so the one-shot three are the witnesses here.
+func TestARaceBriefCarriesTheConductLineAndAnOrdinaryBriefDoesNot(t *testing.T) {
+	_, log, _ := arenaCursorRace(t)
+
+	oneShots := 0
+	for _, spec := range log.specs {
+		if spec.Vendor == model.VendorCursor {
+			continue
+		}
+		oneShots++
+		p := specPrompt(spec)
+		at, brief := strings.Index(p, arenaConduct), strings.Index(p, "add a marker file")
+		if at < 0 {
+			t.Errorf("%s raced without the conduct line:\n%s", spec.Vendor, p)
+			continue
+		}
+		if brief < 0 {
+			t.Errorf("%s lost the operator's own brief:\n%s", spec.Vendor, p)
+			continue
+		}
+		if at > brief {
+			t.Errorf("%s carries the conduct line AFTER the brief — a long brief would bury it", spec.Vendor)
+		}
+	}
+	if oneShots != 3 {
+		t.Fatalf("%d one-shot racers, want 3", oneShots)
+	}
+}
+
+// TestAnOrdinaryBriefStaysVerbatim is the boundary of the bend: the conduct
+// line is a race fact, and a turn that is not a race sends exactly what the
+// operator typed.
+func TestAnOrdinaryBriefStaysVerbatim(t *testing.T) {
+	log := countSpawns(t)
+	m := flowRoom(t, true)
+	m.st.Draft = "@all add a marker file"
+	m.dispatch()
+	if m.turn == nil {
+		t.Fatal("the turn did not dispatch")
+	}
+	if log.n() == 0 {
+		t.Fatal("nothing spawned")
+	}
+	for _, spec := range log.specs {
+		if strings.Contains(specPrompt(spec), arenaConduct) {
+			t.Errorf("%s's ordinary brief carries the race conduct line", spec.Vendor)
+		}
+	}
+}
