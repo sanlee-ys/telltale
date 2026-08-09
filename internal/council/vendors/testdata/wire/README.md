@@ -104,12 +104,14 @@ produced is recorded here as absent, not invented.
 - **Nothing here is from macOS.** Every capture is Windows 11. Whether a Mac's
   frames match is unmeasured; `PARITY.md` is where that would be recorded.
 
-## One thing these fixtures surfaced and did not fix
+## One thing these fixtures surfaced
 
 Claude Code's resume-not-found frame carries the vendor's own sentence in an
-`errors` array — `["No conversation found with session ID: …"]` — and
-`claude.go`'s `streamLine` does not model that key. The turn is still reported as
-failed, correctly, but with the generic note "the vendor reported the turn
-failed" rather than the vendor's own words. Recorded here rather than changed,
-because reading a new field is a behaviour change and this directory is a
-measurement.
+`errors` array — `["No conversation found with session ID: …"]` — which
+`claude.go`'s `streamLine` did not model when the capture landed. The turn was
+still reported as failed, correctly, but with the generic note "the vendor
+reported the turn failed" rather than the vendor's own words. The capture PR
+recorded that here rather than fixing it, because reading a new field is a
+behaviour change and this directory is a measurement; a follow-up change then
+modelled the field, so the column now shows the vendor's sentence, and the
+wire test asserts it.

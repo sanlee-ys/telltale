@@ -536,6 +536,22 @@ func firstLine(s string) string {
 	return s
 }
 
+// joinNonEmpty renders a result frame's `errors` array as one note line.
+//
+// Every non-blank sentence is kept, joined with "; ": the array is the
+// vendor's account of the failure, and dropping all but the first entry would
+// be an editorial cut of measured output. Only a single-entry array has been
+// observed, so on real frames so far the join is a no-op.
+func joinNonEmpty(errs []string) string {
+	var kept []string
+	for _, e := range errs {
+		if e = strings.TrimSpace(e); e != "" {
+			kept = append(kept, e)
+		}
+	}
+	return strings.Join(kept, "; ")
+}
+
 // toolArg picks the one field of a tool's input worth showing in a trace.
 //
 // Ordered by how much it identifies the action: the command a shell ran tells
@@ -663,6 +679,14 @@ type streamLine struct {
 	Result       string   `json:"result"`
 	IsError      bool     `json:"is_error"`
 	TotalCostUSD *float64 `json:"total_cost_usd"`
+	// Errors carries the vendor's own sentences about why the turn failed.
+	// MEASURED on 2.1.226: a failed --resume produces a result frame whose
+	// `result` key is absent and whose `errors` array holds the one sentence
+	// worth showing — "No conversation found with session ID: …". Pinned by
+	// testdata/wire/claude-2.1.226-resume-not-found.jsonl; before this field
+	// existed that frame rendered as the generic "the vendor reported the
+	// turn failed", which was true and told the operator nothing.
+	Errors []string `json:"errors"`
 }
 
 func (Claude) ParseEvent(line []byte) (runner.Event, bool) {
@@ -759,10 +783,19 @@ func (Claude) ParseEvent(line []byte) (runner.Event, bool) {
 			// The process may still exit 0 while the turn itself failed. The
 			// column has to show the failure either way, so it is reported here
 			// rather than inferred from the exit code.
+			//
+			// The note prefers the vendor's own words over the generic sentence,
+			// from whichever field carries them. `result` stays first: it was the
+			// measured carrier on the frames this branch was built against, and
+			// no captured frame holds both — the one measured `errors` frame
+			// (resume-not-found, 2.1.226) has no `result` key at all, so the
+			// precedence between the two is a choice, not a measurement.
 			ev.Kind = runner.KindError
 			ev.Note = "the vendor reported the turn failed"
 			if sl.Result != "" {
 				ev.Note = sl.Result
+			} else if msg := joinNonEmpty(sl.Errors); msg != "" {
+				ev.Note = msg
 			}
 		}
 		return ev, true

@@ -169,6 +169,25 @@ func TestVendorReportedErrorIsAnError(t *testing.T) {
 	}
 }
 
+// TestErrorsArrayReachesTheNote: a failed turn whose `result` is empty but
+// whose `errors` array carries the vendor's sentence shows that sentence, not
+// the generic note. The measured case is the 2.1.226 resume-not-found frame
+// (replayed in full by the wire test); these synthesized lines pin the parsing
+// choices around it — blank entries are dropped, several entries all survive,
+// and an errors array that is present but all-blank falls back to the generic
+// note rather than an empty one.
+func TestErrorsArrayReachesTheNote(t *testing.T) {
+	ev, _ := Claude{}.ParseEvent([]byte(`{"type":"result","is_error":true,"errors":["", "one thing broke", "then another"]}`))
+	if ev.Note != "one thing broke; then another" {
+		t.Errorf("Note = %q, want every non-blank error kept, in order", ev.Note)
+	}
+
+	ev, _ = Claude{}.ParseEvent([]byte(`{"type":"result","is_error":true,"errors":["  ", ""]}`))
+	if ev.Note != "the vendor reported the turn failed" {
+		t.Errorf("Note = %q, want the generic note when the array holds no words", ev.Note)
+	}
+}
+
 // TestUnknownEventsAreIgnoredNotFatal: the stream-json schema carries far more
 // than a comparison room needs, and a parser that failed on an unrecognised
 // event would turn every upstream addition into a broken column.
