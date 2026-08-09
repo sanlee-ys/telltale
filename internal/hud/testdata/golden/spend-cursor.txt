@@ -1,0 +1,10 @@
+ telltale  │  2 sessions  │  codex 1  cursor 1                                         codex 7d █████▌──   79% ↻ 22h48m
+                               cursor spent  in 48k · out 1.2k · cache read 1.9M · cache write 62k  · 14 turns over 10m
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                               MODEL          CONTEXT                AGE
+ ● CU │ Multi-vendor orchestration  C:\src\code                               composer-2.5   ████▏───────    37% │   1m
+ ◐ CX │ notes-api  C:\src\code                                                gpt-5.1-codex                    — │   4m
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys

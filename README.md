@@ -196,12 +196,17 @@ binary on PATH is only the editor launcher and council never drives it.)
 **The gauges never write to anything that isn't theirs.** `telltale statusline` and
 `telltale hud` read vendor files, make no network calls, read no credentials, and no
 keybinding can mutate vendor state or send anything to a running agent. What telltale
-writes to disk is two files of its own under `~/.telltale/`, both keys and numbers,
+writes to disk is three files of its own under `~/.telltale/`, all keys and numbers,
 never content: council's room file (`council/room.json` — the vendor session ids
-reattaching needs and the room's workspace, no transcript, output or brief content)
-and the statusline's quota relay (`quota/<vendor>.json` — the rate-limit windows it
+reattaching needs and the room's workspace, no transcript, output or brief content),
+the statusline's quota relay (`quota/<vendor>.json` — the rate-limit windows it
 just rendered, so the HUD can show account quota per vendor instead of only for
-vendors whose stores carry it; [docs/design.md §7.15](docs/design.md)). `telltale
+vendors whose stores carry it; [docs/design.md §7.15](docs/design.md)), and the
+cursor token relay (`usage/<vendor>.json` — a running total of the token counts
+Cursor's `afterAgentResponse` hook reports per turn, so the HUD can say what this
+machine spent; [docs/design.md §7.16](docs/design.md)). That last one is spend, not
+quota: there is no denominator anywhere in it, so it never renders as a percentage
+or a bar, and Cursor's account quota stays visibly absent. `telltale
 council` remains the one mode that acts on the world, and it is labelled as one
 everywhere it can be: it spawns vendor CLIs, it is entered only by typing the
 subcommand, it is not reachable from the HUD, and it shares no keybinding with it.
@@ -209,7 +214,11 @@ subcommand, it is not reachable from the HUD, and it shares no keybinding with i
 keeps its access tokens, refresh tokens and OAuth secrets in the *same SQLite file* as
 its session state — so it is enforced there as a read allowlist with a test that plants
 credential-shaped strings in the fixtures and asserts none of them reaches anything the
-HUD can display ([docs/design.md §3.9](docs/design.md)).
+HUD can display ([docs/design.md §3.9](docs/design.md)). The Cursor *hook* is the same
+discipline against a different hazard: its payload carries the model's reply text and
+the user's email address beside the four numbers, so the parser's struct is the
+allowlist and markers planted in a real payload shape must reach neither the parse nor
+the file.
 
 ## The dispatch room
 

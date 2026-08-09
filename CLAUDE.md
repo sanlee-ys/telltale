@@ -116,22 +116,37 @@ This is the thing the whole codebase optimizes for, more than idiomatic Go. Read
 
 **The gauges never write to anything that isn't theirs.** `telltale statusline`
 and `telltale hud` read vendor files, make no network calls, read no credentials,
-and no keybinding mutates vendor state. Two deliberate, bounded exceptions exist,
-both under `~/.telltale/` and both numbers-and-keys only, never content:
-`telltale council` (spawns vendor CLIs; writes `council/room.json` — session ids
-and workspace, never transcript or brief content) and the **statusline's quota
-relay** (`quota/<vendor>.json` — the rate-limit windows it just rendered, written
-after the line is on stdout so the HUD can attribute account quota per vendor;
-design.md §7.15, amended 2026-08-07). Each carries a test pinning the serialized
-form to keys and numbers. If you're adding a feature to `internal/hud` or
-`internal/statusline` that would write anywhere else, shell out, or touch a
-credential store, that is almost certainly the wrong package for it.
+and no keybinding mutates vendor state. **Three** deliberate, bounded exceptions
+exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
 
-The Cursor adapter (`internal/adapter/cursor`) is the sharpest version of this
-boundary: its on-disk store holds OAuth/refresh tokens in the *same SQLite file*
-as session state, so "reads no credentials" is enforced there with a read
-allowlist plus a test that plants credential-shaped strings in fixtures and
-asserts none of them reaches anything the HUD can display.
+- `telltale council` — spawns vendor CLIs; writes `council/room.json` (session
+  ids and workspace, never transcript or brief content).
+- the **statusline's quota relay** — `quota/<vendor>.json`, the rate-limit
+  windows it just rendered, written after the line is on stdout so the HUD can
+  attribute account quota per vendor (design.md §7.15, amended 2026-08-07).
+- the **cursor token relay** — `usage/<vendor>.json`, a running total of the
+  token counts Cursor's `afterAgentResponse` hook reports per turn, so the HUD
+  can say what this machine spent (design.md §7.16, added 2026-08-08). Written
+  by `telltale hook cursor`, which is its own mode rather than a flag on a
+  gauge: a hook's stdout is parsed by the vendor as a hook result, so that path
+  prints nothing at all and exits 0 on every branch.
+
+Each carries a test pinning the serialized form to keys and numbers. If you're
+adding a feature to `internal/hud` or `internal/statusline` that would write
+anywhere else, shell out, or touch a credential store, that is almost certainly
+the wrong package for it.
+
+Two sharper versions of the same boundary, worth reading before you touch either
+seam. The Cursor **adapter** (`internal/adapter/cursor`) reads an on-disk store
+that holds OAuth/refresh tokens in the *same SQLite file* as session state, so
+"reads no credentials" is enforced with a read allowlist plus a test that plants
+credential-shaped strings in fixtures and asserts none reaches anything the HUD
+can display. The Cursor **hook** (`internal/cursorhook`) is handed a payload that
+carries the model's full reply text and the user's email address alongside the
+four numbers telltale wants — so the allowlist there is the struct itself:
+`encoding/json` drops every field with no destination, and a test plants markers
+in a real payload shape and asserts none survives, at the parser and again on the
+serialized cache file.
 
 ## Where state lives — and why nothing is copied between these
 
