@@ -62,6 +62,12 @@ type turnState struct {
 	// batching bounds the resolution: two seats landing in one drained batch
 	// rank in batch order, which is the honest limit of what the room measured.
 	arenaFinished int
+	// arenaLive is the per-seat live-stat bookkeeping (arenalive.go), built
+	// from arenaTrees so a seat whose worktree failed setup has no entry and
+	// can never be read. ON THE TURN, deliberately: when the turn tears down
+	// the whole map goes with it, which is what stops all refreshing at turn
+	// end with no cleanup path to forget.
+	arenaLive map[model.VendorID]*arenaLiveState
 }
 
 type eventBatchMsg struct{ events []runner.Event }
@@ -292,6 +298,14 @@ func (m *Model) dispatch() tea.Cmd {
 			return nil
 		}
 		ts.arena, ts.arenaBase, ts.arenaTrees, arenaSeatErr = true, base, trees, seatErrs
+		// One live-stat slot per seat that actually has a tree to read. Seats
+		// skipped above (worktree add failed) are absent here too, which is the
+		// never-refresh-a-failed-setup rule enforced by construction rather
+		// than by a check somewhere a refactor could lose it.
+		ts.arenaLive = map[model.VendorID]*arenaLiveState{}
+		for v := range trees {
+			ts.arenaLive[v] = &arenaLiveState{}
+		}
 	}
 
 	for i := range m.st.Columns {
@@ -618,6 +632,12 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				// direction only: the column now IS showing incremental output.
 				c.Phase = PhaseStreaming
 			}
+			// Stream activity is what arms a racing seat's live stat read
+			// (arenalive.go): the vendor is demonstrably doing something, so
+			// its tree is worth a look. Text and tool calls arm; the meta
+			// events below do not — a session id arriving is not evidence the
+			// tree moved, and an idle seat re-reads nothing.
+			m.armArenaRefresh(ev.Vendor)
 
 		case runner.KindActivity:
 			// One event can carry a parallel batch of calls, or a batch of
@@ -626,6 +646,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			for _, a := range ev.Acts {
 				c.recordAct(a, m.redactWhole)
 			}
+			m.armArenaRefresh(ev.Vendor)
 
 		case runner.KindSession:
 			// An arena attempt's id is throwaway BY DESIGN (arena.go): letting it
@@ -823,6 +844,24 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 	if m.turn != nil && m.turn.arena {
 		if tree, ok := m.turn.arenaTrees[c.Vendor]; ok {
 			r := collectArena(tree, m.turn.arenaBase)
+			if ls := m.turn.arenaLive[c.Vendor]; ls != nil {
+				// This seat's live stat is over either way — the final owns
+				// the block from here, and a read launched after this line
+				// would only ever arrive to be dropped.
+				ls.stopped = true
+				if r.Err != "" && ls.inFlight {
+					// The one collision the live refresh introduces: an
+					// interim read still running holds the worktree's
+					// index.lock for the milliseconds its `add -N` takes, and
+					// git fails rather than waits. A final that failed WHILE a
+					// refresh was in flight is retried once, because reporting
+					// "diff unavailable" for a lock this feature itself was
+					// holding would be the refresh degrading the authoritative
+					// read it exists to complement. One retry, not a loop: a
+					// second failure is a real one and is reported as such.
+					r = collectArena(tree, m.turn.arenaBase)
+				}
+			}
 			r.Branch = arenaBranch(c.TurnN, c.Vendor)
 			// Rank is the order the room OBSERVED seats land, stamped here on
 			// the host's clock. Every racer gets one — a DNF finished too, just
@@ -831,6 +870,11 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 			m.turn.arenaFinished++
 			r.Rank, r.Of = m.turn.arenaFinished, len(m.turn.arenaTrees)
 			c.Arena = &r
+			// The finish-time read REPLACES the last interim stat, never
+			// merges with it (§9.37): the interim was a moment already past,
+			// and leaving any of it beside the settled result would be two
+			// answers on one column with nothing to say which is final.
+			c.ArenaInterim = nil
 		}
 	}
 

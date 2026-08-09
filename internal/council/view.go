@@ -1613,6 +1613,47 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 				out = append(out, wrap("(the yankable diff is truncated at 1 MB — the worktree holds the whole of it)", w)...)
 			}
 		}
+	} else if c.ArenaInterim != nil {
+		// The MID-RACE stat (§9.37's live refresh). An else-branch of the
+		// final on purpose: the two must never share a frame, because an
+		// interim line beside a settled result is two answers with nothing to
+		// say which one stands — finishColumn clears the interim when the
+		// final lands, and this branch is the render-side half of that rule.
+		//
+		// The rule says "so far", and that is the whole honesty marker: this
+		// is a measured read of the tree at a moment already past, not the
+		// settled result, and the label is the word that keeps a mid-race
+		// stat from masquerading as a finish line (§4a.1 — the same reason an
+		// estimate wears its ~). No branch, no worktree path, no rank: those
+		// are the finish line's receipt, and printing them early would dress
+		// an interim block in the final's clothes.
+		//
+		// Three states, three renders, matching the final block's own rule: a
+		// stat (shown), a measured nothing-YET (said against the named base —
+		// "yet" because the seat is still running, unlike the final's settled
+		// "no changes"), and a failed read (the error, never dressed as
+		// zero). The fourth state — no read has returned — is the nil pointer
+		// and renders nothing at all: absence, not a zero.
+		out = append(out, "")
+		out = append(out, sty.Muted.Render(padRight(labelRule("arena · so far", "", w, g), w, g)))
+		switch {
+		case c.ArenaInterim.Err != "":
+			out = append(out, wrap("live stat unavailable: "+c.ArenaInterim.Err, w)...)
+			if c.ArenaInterim.Stopped {
+				// The give-up is said, not silent: a stat that quietly froze
+				// would go on reading as live. The race itself is untouched
+				// and the sentence says where the real answer still arrives.
+				out = append(out, wrap("stopped re-reading after "+itoa(arenaRefreshMaxFails)+
+					" failed reads — the finish-time diff still runs.", w)...)
+			}
+		case strings.TrimSpace(c.ArenaInterim.Stat) == "":
+			out = append(out, wrap("no changes yet against "+shortSHA(c.ArenaInterim.Base)+".", w)...)
+		default:
+			for _, line := range strings.Split(c.ArenaInterim.Stat, "\n") {
+				// fit, not padRight — the ANSI trap, same as the final stat.
+				out = append(out, fit(strings.TrimRight(line, " "), w))
+			}
+		}
 	}
 	return out, anchors
 }
