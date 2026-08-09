@@ -49,11 +49,23 @@ jobs:
           # This runner has none of the five vendor CLIs, which makes it the
           # exact machine the honest states matter on: every check that CAN pass
           # has nothing to pass against, so anything reading `ok` here is a claim
-          # nothing measured. Run FIRST among the smokes so the "writes nothing"
-          # assertion below is about doctor and not about a relay that ran
-          # earlier (design.md §9.42).
+          # nothing measured (design.md §9.42).
+          #
+          # The "writes nothing" half is a BEFORE/AFTER of ~/.telltale rather
+          # than a Test-Path. `go test ./...` ran two steps ago and the cache
+          # packages' own tests use the real home directory, so the directory
+          # already exists here — and an assertion that cannot tell doctor's
+          # writes from an earlier step's is not an assertion about doctor.
+          function Snapshot {
+            $dir = "$env:USERPROFILE\.telltale"
+            if (-not (Test-Path $dir)) { return '<absent>' }
+            (Get-ChildItem $dir -Recurse -File | Sort-Object FullName |
+              ForEach-Object { "$($_.FullName)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join "`n"
+          }
+          $before = Snapshot
           $out = ./telltale.exe doctor --timeout 20s | Out-String
           if ($LASTEXITCODE -ne 0) { throw "doctor exited $LASTEXITCODE; a failed CHECK is this mode working, not a failed command" }
+          if ((Snapshot) -ne $before) { throw "doctor changed something under ~/.telltale; the preflight writes nothing at all" }
           if ($out -match 'auth\s+ok' -or $out -match 'network\s+ok') { throw "honesty violation: doctor passed a check it never ran: $out" }
           if ($out -notmatch 'auth\s+not checked') { throw "auth did not report not-checked: $out" }
           if ($out -notmatch 'network\s+not checked') { throw "network did not report not-checked: $out" }
@@ -63,7 +75,6 @@ jobs:
           if ($out -notmatch 'binary\s+FAILED') { throw "a machine with no vendor CLIs reported no failed binary check: $out" }
           if ($out -notmatch 'version\s+not checked') { throw "version was not skipped for a binary that is not there: $out" }
           if ($out -match '\x1b') { throw "doctor emitted ANSI escapes; it is read in pipes and pastes: $out" }
-          if (Test-Path "$env:USERPROFILE\.telltale") { throw "doctor wrote under ~/.telltale; the preflight writes nothing at all" }
 
       - name: Smoke (fixture through the real binary)
         shell: pwsh
