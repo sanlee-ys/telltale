@@ -90,15 +90,22 @@ func addressableVendors() []model.VendorID {
 // SeatNames is the addressable roster as the words a user types, in seating
 // order. Every surface that TELLS someone who can be seated reads it from here.
 //
-// It exists because that list used to be typed out by hand in four such places
-// — the `--vendor` flag help and the usage block in cmd/telltale, /seat's typo
-// notice, and /arena drop's — and when grok became the fifth seat (§9.39) all
-// four went on naming the four seats the room had before it. ParseSeats had
-// accepted `grok` the whole time, so the help was describing a smaller room
-// than the one that existed: a user reading `--help` was told a supported
-// vendor did not exist. That is the honest-gauge rule (§4a.1) applied to a
-// control surface rather than a value — what the room SAYS it accepts has to be
-// derived from what it accepts, not restated alongside it.
+// It exists because that list used to be typed out by hand in eight such
+// places — the `--vendor` flag help and the usage block in cmd/telltale,
+// ParseSeats' own error, and the refusals of /seat, /unseat, /adopt, /arena
+// drop and a flow chain's seat — and when grok became the fifth seat (§9.39)
+// seven of the eight went on naming the four seats the room had before it.
+// Every one of those refusals validates against mentionAliases, which had
+// accepted `grok` the whole time, so each was describing a smaller room than
+// the one it was itself enforcing: a user reading `--help`, or reading why
+// their /adopt was refused, was told a supported vendor did not exist. That is
+// the honest-gauge rule (§4a.1) applied to a control surface rather than a
+// value — what the room SAYS it accepts has to be derived from what it
+// accepts, not restated alongside it and left to rot.
+//
+// The list drifted in seven places at once because it was cheap to retype and
+// nothing failed when it went stale. Deriving it is what makes the next seat a
+// one-line change instead of a scavenger hunt.
 //
 // Aliases are deliberately excluded. `antigravity` is an accepted spelling of
 // `agy`, not a sixth seat, and listing it would make a five-seat room read as

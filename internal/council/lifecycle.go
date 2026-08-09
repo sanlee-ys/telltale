@@ -102,7 +102,8 @@ func (m *Model) adoptCommand(arg string) bool {
 	v, ok := mentionAliases()[strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "@")))]
 	if !ok {
 		// The draft is kept: a typo is cheap to fix and nothing has run.
-		m.st.Notice = "no racer called " + arg + " — /adopt takes claude, codex, agy or cursor"
+		m.st.Notice = "no racer called " + arg +
+			" — /adopt takes " + strings.Join(SeatNames(), ", ")
 		return true
 	}
 	tree, raced := race.trees[v]

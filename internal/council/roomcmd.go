@@ -659,7 +659,7 @@ func (m *Model) unseatCommand(arg string) bool {
 	drop, unknown := parseSeatList(arg)
 	if len(unknown) > 0 {
 		m.st.Notice = "no seat called " + strings.Join(unknown, " or ") +
-			" — /unseat takes claude, codex, agy or cursor"
+			" — /unseat takes " + strings.Join(SeatNames(), ", ")
 		return true
 	}
 	if len(drop) == 0 {
