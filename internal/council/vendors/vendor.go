@@ -74,6 +74,38 @@ type Conversational interface {
 	Open(workspace, binary, sessionID string, p Posture) (runner.Spec, runner.Protocol, error)
 }
 
+// SilentResumeFork names a seat whose vendor, handed a conversation id it no
+// longer holds, does NOT refuse it: it opens a NEW conversation, answers the
+// brief normally, and reports success.
+//
+// It exists because that behaviour breaks the assumption every other resume path
+// in this package is built on — that a vendor either continues the thread or
+// says it cannot. A vendor in this set says neither, so a room reading only
+// status and exit code would report a resumed conversation on a turn that has no
+// history behind it. The one tell such a stream carries is that the id it reports
+// back is not the id it was asked for, and comparing those two is the whole of
+// what implementing this interface buys.
+//
+// Implementing it is a claim about a LIVE RUN, never about what a CLI's help
+// text implies (ADR-001, design.md §4a.1), which is why the method returns the
+// build the fork was measured against rather than being a bare marker: a seat
+// cannot make the claim without naming its evidence, and a vendor bump that
+// fixes the behaviour leaves a version string that no longer matches the
+// fixtures beside it.
+//
+// Deliberately NOT implemented by default. An id mismatch on a vendor whose
+// resume semantics have not been measured is not evidence of anything — it could
+// as easily be a vendor that re-keys a resumed thread while keeping its history
+// — and firing a "your history is gone" card on that would be exactly the
+// inference §4a.1 forbids.
+type SilentResumeFork interface {
+	Vendor
+
+	// SilentResumeForkMeasuredAt names the vendor build, and the date, the fork
+	// was observed on.
+	SilentResumeForkMeasuredAt() string
+}
+
 // Persistent is a vendor that can be driven as ONE process taking many turns,
 // rather than a fresh child per turn.
 //

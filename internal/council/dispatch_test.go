@@ -23,6 +23,7 @@ func traceModel() *Model {
 		resumeIDs:  map[model.VendorID]string{},
 		unproven:   map[model.VendorID]bool{},
 		threadLost: map[model.VendorID]bool{},
+		forkWatch:  map[model.VendorID]string{},
 		redactors:  map[model.VendorID]*Redactor{},
 	}
 }

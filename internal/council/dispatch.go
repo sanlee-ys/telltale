@@ -389,6 +389,11 @@ func (m *Model) dispatch() tea.Cmd {
 		// turn's genuine failure note.
 		delete(m.threadLost, c.Vendor)
 		delete(m.failure, c.Vendor)
+		// Same lifetime, same reason: the id this seat was asked to resume is a
+		// fact about ONE dispatch, and a stale entry would let a later turn's
+		// perfectly ordinary new conversation be compared against an id nobody
+		// asked for on it.
+		delete(m.forkWatch, c.Vendor)
 		if !route.addresses(c.Vendor) {
 			// Not in this turn. Its previous reply stays on screen, because
 			// that is still the last thing this vendor said — but the note
@@ -503,7 +508,7 @@ func (m *Model) dispatch() tea.Cmd {
 			ts.persistent[c.Vendor] = true
 			note = n
 		} else {
-			spec, err := m.specFor(v, c, vendorPrompt)
+			spec, resumed, err := m.specFor(v, c, vendorPrompt)
 			if err != nil {
 				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 				continue
@@ -514,6 +519,18 @@ func (m *Model) dispatch() tea.Cmd {
 				continue
 			}
 			ts.handles = append(ts.handles, h)
+			// The id half of §9.43's comparison, recorded at the one moment it is
+			// known and ONLY for a seat whose vendor has been measured to fork a
+			// lost thread in silence. Gating here rather than at the comparison is
+			// deliberate: it keeps applyEvents free of vendor knowledge, and it
+			// makes the honesty rule structural — a seat that never enters this
+			// map can never raise the card, so a vendor whose resume semantics
+			// nobody has measured cannot be accused of losing a thread.
+			if resumed != "" {
+				if _, forks := v.(vendors.SilentResumeFork); forks {
+					m.forkWatch[c.Vendor] = resumed
+				}
+			}
 		}
 
 		ts.live[c.Vendor] = true
@@ -679,19 +696,27 @@ func itoa(i int) string { return strconv.Itoa(i) }
 // A vendor with a session id resumes it; one without starts fresh. A resume
 // that the vendor refuses is not silently downgraded — ErrNoResume falls back
 // to a first turn, and the column says the thread was lost.
-func (m *Model) specFor(v vendors.Vendor, c *Column, prompt string) (runner.Spec, error) {
+//
+// The second return is the id this invocation actually asked the vendor to
+// resume, empty on a first turn. It is returned rather than recorded here
+// because it is the ONE fact a caller cannot re-derive from the Spec — the id is
+// buried in a vendor-specific argv position — and because a method that quietly
+// wrote model state would fire on the several tests that call this directly to
+// inspect an invocation. What the caller does with it is §9.43's comparison.
+func (m *Model) specFor(v vendors.Vendor, c *Column, prompt string) (runner.Spec, string, error) {
 	p := m.posture()
 	if id := m.sessions[c.Vendor]; id != "" {
 		// Resume: the brief is already in this vendor's own history.
 		spec, err := v.NextTurn(prompt, m.st.Workspace, c.Binary, id, p)
 		if err == nil {
-			return spec, nil
+			return spec, id, nil
 		}
 	}
 	// First turn for THIS vendor, so it gets the operating context. Per vendor
 	// rather than per room: a seat added to a later turn is still a stranger,
 	// and would otherwise be the only one guessing.
-	return v.FirstTurn(m.brief.Apply(prompt), m.st.Workspace, c.Binary, p)
+	spec, err := v.FirstTurn(m.brief.Apply(prompt), m.st.Workspace, c.Binary, p)
+	return spec, "", err
 }
 
 // waitEvents blocks on one event, then drains what is already queued into a
@@ -757,7 +782,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			// lives in a worktree and dies with the race — the user would quit,
 			// reattach, and find every conversation swapped for a discarded one.
 			if ev.SessionID != "" && !(m.turn != nil && m.turn.arena) {
-				m.sessions[ev.Vendor] = ev.SessionID
+				m.adoptSession(c, ev.SessionID)
 			}
 
 		case runner.KindGate:
@@ -765,7 +790,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 
 		case runner.KindMeta:
 			if ev.SessionID != "" && !(m.turn != nil && m.turn.arena) {
-				m.sessions[ev.Vendor] = ev.SessionID
+				m.adoptSession(c, ev.SessionID)
 			}
 			if ev.CostUSD != nil {
 				c.CostUSD = ev.CostUSD
@@ -1271,6 +1296,73 @@ func joinNotice(a, b string) string {
 	default:
 		return a + " · " + b
 	}
+}
+
+// adoptSession takes the session id a vendor just reported, and — on the one
+// seat where that id can contradict the room — says so first.
+//
+// The ordinary case is a single assignment: whatever id the vendor named is the
+// thread the next turn resumes.
+//
+// The case this function exists for is §9.43. MEASURED 2026-08-09 against agy
+// 1.1.11 during the wire-fixture capture: handed a `--conversation` id it does
+// not hold, that CLI does not refuse it — it opens a NEW conversation, answers
+// the brief normally, and reports `status: "SUCCESS"` with exit 0 and a
+// DIFFERENT `conversation_id`. Every other seat either resumes or says the
+// history is gone; this one claims success either way, so a room reading status
+// and exit code alone would render a continued conversation for a turn with no
+// history behind it. The returned id not matching the requested one is the only
+// tell the capture surfaced, and this is where it is read.
+//
+// Three decisions are worth stating, because each had an alternative:
+//
+//   - **The reply stands.** The turn succeeded and the answer is real; what is
+//     false is only the claim that it was informed by everything before it. So
+//     the body renders untouched and the card corrects the labelling. Failing
+//     the column instead would throw away work the user paid for to punish the
+//     vendor for a bookkeeping mismatch.
+//   - **The NEW id is adopted**, not discarded. The reply already happened
+//     inside it, so keeping the requested id would leave the room pointing at a
+//     conversation with one fewer turn in it than the transcript shows — and
+//     would rebuild the same forking invocation on every later turn.
+//   - **The card is the calm one already in use** (settleRestoredThread's), not
+//     a second card saying the same thing in different words. The fact is
+//     identical — this seat is starting fresh — and only the body differs,
+//     because the mechanics differ: there the turn FAILED and the id was let go,
+//     here the turn succeeded in a thread the user never asked for.
+//
+// The comparison only ever runs for a seat dispatch put in forkWatch, which is
+// gated on vendors.SilentResumeFork. An id mismatch on a vendor whose resume
+// semantics have not been measured stays unremarked (§4a.1: a card is a measured
+// fact, never an inference).
+func (m *Model) adoptSession(c *Column, id string) {
+	if asked, watching := m.forkWatch[c.Vendor]; watching && asked != id {
+		// Spent on sight. The comparison is about the dispatch, and both the
+		// init and the result frame carry an id — leaving the entry in place
+		// would raise the same card twice on one turn.
+		delete(m.forkWatch, c.Vendor)
+		c.Note = "thread not restored — starting fresh"
+		c.NoteDetail = "this seat asked to resume its saved thread and the vendor answered in a new conversation instead, " +
+			"reporting success. the reply below is real; the history behind it is not. " +
+			"the new thread is kept, so your next brief continues from this turn."
+		c.NoteCalm = true
+		// The seat is no longer on the thread the room reattached it to, so the
+		// marker that says it is has to go — the same correction
+		// settleRestoredThread makes when a restored id is let go.
+		c.Restored = false
+		// Guards this sentence against the rest of the turn's events, exactly as
+		// the refused-reattach card is guarded: a later note about the same seat
+		// must not replace the one line that says what happened to the history.
+		m.threadLost[c.Vendor] = true
+		// Probation is over, and settled by EVIDENCE rather than by a turn's
+		// outcome. The restored id is gone — the vendor answered somewhere else —
+		// so there is nothing left for settleRestoredThread to decide, and
+		// leaving the seat marked unproven would let a later failure on the NEW
+		// thread be blamed on a reattach that has already been reported.
+		delete(m.unproven, c.Vendor)
+		delete(m.resumeIDs, c.Vendor)
+	}
+	m.sessions[c.Vendor] = id
 }
 
 // settleRestoredThread decides the fate of a session id that came back from a

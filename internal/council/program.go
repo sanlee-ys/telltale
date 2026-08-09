@@ -148,6 +148,23 @@ type Model struct {
 	// that tells the user what happens to their next brief. Cleared per turn at
 	// dispatch, because it is a fact about one turn and not about the seat.
 	threadLost map[model.VendorID]bool
+	// forkWatch names, per seat, the conversation id THIS turn's dispatch asked
+	// the vendor to resume — and it is populated only for a seat whose vendor has
+	// been MEASURED to answer a resume it cannot honour by silently opening a new
+	// conversation (vendors.SilentResumeFork; today that is agy alone).
+	//
+	// It is the requested half of §9.43's comparison. The returned half arrives
+	// on the vendor's own session event, and adoptSession is where the two meet.
+	// Keeping the vendor gate HERE rather than at the comparison is what makes
+	// the honesty rule structural: a seat that never enters this map cannot
+	// raise a lost-thread card, so no vendor is accused of losing a thread on
+	// evidence nobody captured.
+	//
+	// Cleared per turn at dispatch, beside threadLost, and again the moment the
+	// card fires: it is a fact about one dispatch, and a stale entry would let an
+	// ordinary new conversation on a later turn be compared against an id nobody
+	// asked for on it.
+	forkWatch map[model.VendorID]string
 	// failure is what this turn's failure said about the seat's CONVERSATION, as
 	// classified where the evidence was — the runner's stderr classifier and the
 	// adapters' own result parsers — rather than re-derived here from a rendered
@@ -282,6 +299,7 @@ func newWithBrief(opts Options, b Brief, hs HookSet, re Reattachment) *Model {
 		resumeIDs:  map[model.VendorID]string{},
 		unproven:   map[model.VendorID]bool{},
 		threadLost: map[model.VendorID]bool{},
+		forkWatch:  map[model.VendorID]string{},
 		failure:    map[model.VendorID]runner.FailureClass{},
 		redactors:  map[model.VendorID]*Redactor{},
 		procs:      map[model.VendorID]*seatProc{},

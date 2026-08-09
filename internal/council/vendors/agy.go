@@ -172,6 +172,33 @@ func (a Antigravity) NextTurn(prompt, workspace, binary, sessionID string, p Pos
 	}, nil
 }
 
+// SilentResumeForkMeasuredAt makes this the one seat that admits its resume can
+// fail without saying so (vendors.SilentResumeFork).
+//
+// MEASURED 2026-08-09, agy 1.1.11, Windows 11 reference box, during the
+// wire-fixture capture (testdata/wire/README.md records it under "what could NOT
+// be captured, and why"). `agy --conversation <a uuid it has never seen>` was run
+// through this adapter's own argv. It did not error. It opened a NEW
+// conversation, answered the prompt normally, and came back with
+// `status: "SUCCESS"`, exit 0, and a `conversation_id` that was NOT the one
+// requested.
+//
+// That is why testdata/wire holds no agy resume-failure fixture: the other
+// batch seats produce one (Claude's `errors` array, codex's and grok's stderr),
+// and this vendor produces nothing to capture. The absence is the finding.
+//
+// So the id comparison is the ONLY tell, and it is a comparison the adapter
+// cannot make: ParseEvent sees one line at a time and never learns which id the
+// turn asked for. The room owns both halves and does the comparison there —
+// council's dispatch records the id it dispatched with, and adopts the returned
+// one while saying the history did not come with it (design.md §9.43).
+//
+// The version in this string is load-bearing rather than decorative. If a later
+// build starts refusing an unknown `--conversation` id the way every other seat
+// does, this method is what has to be re-measured and removed, and a stale
+// version here is the sign that nobody did.
+func (Antigravity) SilentResumeForkMeasuredAt() string { return "agy 1.1.11, 2026-08-09" }
+
 // agyStep is one `step_update` payload.
 //
 // ToolName and ToolInfo were on the wire from the first capture and were not

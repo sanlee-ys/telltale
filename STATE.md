@@ -190,18 +190,6 @@ Nothing open. The last one here was the 44 seconds, and it was measured
 
 ## Known gaps, not yet owned
 
-- **The agy seat cannot tell a lost thread from a resumed one, and the stream
-  will not say.** Measured 2026-08-09 against agy 1.1.11 during the wire-fixture
-  capture (PR #174; the full record is the fixture README): handed an unknown
-  `--conversation` id, the CLI does not error — it silently opens a NEW
-  conversation, answers normally, returns a different `conversation_id`,
-  `status: "SUCCESS"`, exit 0. Every other seat either resumes or says the
-  history is gone; this one claims success either way, so the room's honest
-  "history is gone, starting fresh" line cannot fire for agy on stream evidence
-  alone. Comparing the returned `conversation_id` against the one requested is
-  the only tell the capture surfaced; nothing reads it today. Unowned — a fix
-  is a behavior change to the agy seat, not a measurement.
-
 - **ATTRIBUTED, 2026-08-08. Spawning was never the cost; `wait` is, and only on
   the three seats that are not persistent.** One traced `@all` turn, all four
   seats, out of a live room's ring:
