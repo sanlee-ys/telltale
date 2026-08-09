@@ -6223,10 +6223,11 @@ is a git command the user runs against a kept branch, never an action taken for 
 race is not routable in v1 (`@codex`-only arenas): the value is the comparison, and a one-seat
 race is an ordinary turn in a worktree, which `/cd` already provides.
 
-Deliberately deferred, each its own change judged against this section: commit-per-turn inside
-arena worktrees, `.worktreeinclude` seeding (the first real arena run on a repo needing `.env`
-will surface it), and a deletion guard stronger than git's own refusal to remove a dirty
-worktree. Two of the original deferrals landed the day after (amendment below).
+Deliberately deferred, each its own change judged against this section: ~~commit-per-turn inside
+arena worktrees~~ (landed 2026-08-09, with its undo — second amendment below), `.worktreeinclude`
+seeding (the first real arena run on a repo needing `.env` will surface it), and a deletion guard
+stronger than git's own refusal to remove a dirty worktree. Two of the original deferrals landed
+the day after (amendment below).
 
 Verification note: the git mechanics (worktree creation from one base, add -N, the three
 collection outcomes, the session-id guard, the renders, the yank) are all pinned by offline
@@ -6371,3 +6372,54 @@ untouched room thread, the kill on finish / protocol failure / cancel / teardown
 degraded exits, and the exit-echo not re-ranking the race. cursor-agent was not installed
 where this was built, so **this amendment owes a live race on the Windows box** — the same
 debt the core paid above, carried the same way until it is.
+**Amendment, 2026-08-09: every attempt survives as a commit, and `u` takes one back.** The
+commit-per-turn deferral came off the list, and it brought the rollback it makes possible
+(mechanics stolen with attribution: Crystal's commit-per-turn checkpoint, cc-haha's turn-level
+undo). Two halves that stack:
+
+- **Commit-per-turn.** The moment a racer lands and `collectArena` has read its diff, the
+  worktree's whole state is staged and committed onto `arena/t<N>/<vendor>` — subject
+  `arena t<N>: <first line of the brief>` (64-byte cap) — so every attempt is durable on its
+  branch: diffable, adoptable, rollbackable, and the worktree itself becomes deletable without
+  losing anything. Staging everything is correct *there and only there*: the tree contains
+  nothing but the racer's own output, so the reason blanket staging is wrong in a real
+  workspace does not exist in that one. The sha the column renders is exactly what
+  `git rev-parse HEAD` returned, shortened for display only. On a machine with no git identity
+  anywhere (CI runners, fresh boxes) the commit carries a fallback identity via per-command
+  `-c` flags — never a config write, which on a worktree would land in the shared repo config,
+  i.e. in the room's repo. A commit that cannot land (a stale ref lock, a signer that cannot
+  run) degrades **that seat's receipt only**, as `not committed: <git's first stderr line>` —
+  the diff was still read, the race and the other racers are untouched. A racer that committed
+  for itself mid-turn already parked its attempt; its own tip is reported rather than papered
+  over with an empty commit — and the diff still answers against the recorded base, so the
+  mid-turn commit cannot hide the work.
+- **The empty-commit ruling.** A zero-diff attempt commits **nothing**, and that is a ruling,
+  not an omission: an empty commit would be a receipt claiming work that did not happen —
+  §4a.1's false zero, mirrored into the write path. The seat renders no commit line and no
+  failure either (nothing was owed); "no changes against \<base\>." stays the whole story, and
+  the branch tip staying at base is the machine-readable form of the same fact.
+- **Undo-the-whole-turn.** `u` on a focused arena seat, y/n-gated exactly like `c` (a stray
+  keystroke must cost a `y` before it costs an attempt), runs `git reset --hard <base>` inside
+  the racer worktree **only**. Branch and tree agree by construction rather than by a second
+  command: the worktree has its arena branch checked out, so `--hard` moves that ref itself.
+  The safety argument is an explicit path guard, not trust in recorded state: the reset runs
+  only on a path equal to the arena-tree name recomputed from the room's *current* workspace,
+  turn and vendor — a name that structurally cannot be the workspace itself — and anything
+  else refuses before git runs. Refusals are four sentences for four facts: no race this turn;
+  the attempt changed nothing (nothing to take back); already undone (pressing again is not
+  more undone); and the reset itself failed, carrying git's own first stderr line. After an
+  undo the stat stays on the column — the measured record of what the attempt changed — under
+  an "undone" line saying the tree and branch no longer hold it.
+- `u` landed on the help panel's room-controls row at its exact 114-cell budget by trading the
+  word "worktrees" for it: the arena block prints the worktree path on every race, so that
+  clause restated something the screen already teaches, while an undo key documented nowhere
+  is a control nobody finds.
+
+Verification note, on the same terms as the section's own: the git mechanics — the commit
+landing on the branch with the racer's files, the per-seat degrade, the zero-diff skip, the
+self-committed tip, the undo round-trip (files restored, created files gone, branch back at
+base), the path guard, and every refusal sentence — are pinned by offline tests against real
+temp repositories. **No live race has exercised either half yet.** The debt is one live
+`/arena` run that adopts an attempt from its arena branch after deleting the worktree, and one
+that `u`-undoes an attempt — same shape as the 2026-08-09 live run above, which is what paid
+this section's first verification note.

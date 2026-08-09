@@ -6,7 +6,7 @@
     ctrl+j/esc   ctrl+j puts a newline in the brief (it grows to six rows); esc leaves compose, keeping the draft       
     @codex       name a lane: @claude @codex @agy @cursor; @all convenes everyone                                       
                  -@codex excludes one. Unaddressed goes to claude. Leading only: "ask @claude" is prose                 
-    /cd <dir>    move the room; /read /write (y); /seat /unseat; /arena races worktrees; c clears (y); /trace <file>    
+    /cd <dir>    move the room; /read /write (y); /seat /unseat; /arena races; c clears, u undoes (y); /trace <file>    
     y / Y        copy this seat's reply, or the whole turn (in turn view, both) — while a gate waits, y/n answer it     
     tab / 1-4    focus between columns — in compose too; 1-4 goes straight to a seat, by position                       
     ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too                                      

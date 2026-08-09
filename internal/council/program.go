@@ -197,6 +197,15 @@ type Model struct {
 	// is the only handle on that thread, and no vendor here offers a way back to
 	// one it has been told to forget.
 	clearPending model.VendorID
+	// undoPending names the seat awaiting y/n before its race attempt is reset
+	// to base (§9.37, amended 2026-08-09), empty when nothing is pending.
+	//
+	// Confirmed for clearPending's reason, and the stake is the same shape: an
+	// undo throws away a worktree's whole state, and while the arena BRANCH
+	// commit usually survives in the reflog, the room must not lean on a
+	// recovery path it never renders — a stray `u` in view mode has to cost a
+	// y before it costs an attempt.
+	undoPending model.VendorID
 	// writePending is true while /write awaits y/n before the room's posture is
 	// loosened, and is the only one of the three room controls that asks.
 	//
@@ -569,6 +578,9 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.clearPending != "" {
 		return m.clearGateKey(msg)
 	}
+	if m.undoPending != "" {
+		return m.undoGateKey(msg)
+	}
 	if m.writePending {
 		return m.writeGateKey(msg)
 	}
@@ -753,6 +765,98 @@ func (m *Model) clearSeat(v model.VendorID) {
 	// them, which is the failure this whole control was built to remove.
 	m.saveRoom()
 	m.st.Notice = label + "'s thread cleared — its next brief opens a new session"
+}
+
+// askUndoSeat arms the confirmation for undoing the focused seat's race
+// attempt (§9.37, amended 2026-08-09) — askClearSeat's shape, because the two
+// keys make the same kind of claim: something this seat holds is about to be
+// irrevocably dropped, and a card whose y does nothing teaches that the key is
+// unreliable rather than that there is nothing to drop.
+//
+// The refusals are each their own sentence because they are different facts
+// with different remedies: no race this turn (there is nothing `u` addresses),
+// a measured zero (the attempt changed nothing, so there is nothing an undo
+// would remove), and already undone (it worked the first time — pressing again
+// is not a way to make it more undone). Collapsing any two would be the
+// degraded-vs-zero bug applied to a keystroke.
+func (m *Model) askUndoSeat() {
+	if m.turn != nil {
+		m.st.Notice = "a turn is in flight — u undoes a race attempt between turns"
+		return
+	}
+	c := m.focused()
+	if c == nil {
+		m.st.Notice = "no seat is focused"
+		return
+	}
+	if c.Arena == nil {
+		m.st.Notice = "no race on " + c.Label + "'s current turn — u takes a race attempt back"
+		return
+	}
+	r := c.Arena
+	if r.Undone {
+		m.st.Notice = c.Label + "'s attempt is already undone — its worktree is back at " + shortSHA(r.Base)
+		return
+	}
+	if r.Err == "" && strings.TrimSpace(r.Stat) == "" {
+		m.st.Notice = c.Label + "'s attempt changed nothing — there is nothing to undo"
+		return
+	}
+	m.undoPending = c.Vendor
+	m.st.Notice = "undo " + c.Label + "'s attempt? y resets its worktree and branch to " + shortSHA(r.Base) + " · n keeps it"
+}
+
+// undoGateKey answers the confirmation armed by `u`. Anything that is not y
+// or n cancels rather than falling through to viewKey — clearGateKey's rule,
+// for clearGateKey's reason: this gate interrupts nothing, so the safe reading
+// of a key nobody meant to press is to put the reset back out of reach.
+func (m *Model) undoGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	v := m.undoPending
+	m.undoPending = ""
+	switch msg.String() {
+	case "y":
+		m.undoSeat(v)
+	case "n":
+		m.st.Notice = "kept — nothing was undone"
+	default:
+		m.st.Notice = "undo cancelled — y confirms, n declines"
+	}
+	return m, nil
+}
+
+// undoSeat resets one racer's worktree — and, through it, its arena branch —
+// back to the recorded base (§9.37, amended 2026-08-09).
+//
+// The path guard is the whole safety argument, so it is explicit rather than
+// trusted: the reset runs ONLY on a path that equals arenaTree(workspace,
+// turn, vendor) recomputed from the room's own current state — the one name
+// this room would have created for this seat this turn, and a name that can
+// never equal the workspace itself (the -arena-t<N>-<vendor> suffix sees to
+// that). A recorded Tree that does not match — a forged fixture, a room that
+// /cd'd away since the race, state damaged in any way — refuses without
+// running git at all, because `reset --hard` pointed at the wrong directory
+// is the exact irreversible act the confirm gate exists to price.
+//
+// A failed reset surfaces git's own first stderr line (the gitOut convention)
+// and leaves Undone unset: the room must not claim a rollback it did not
+// measure happening.
+func (m *Model) undoSeat(v model.VendorID) {
+	c := m.column(v)
+	if c == nil || c.Arena == nil {
+		m.st.Notice = "no race attempt to undo"
+		return
+	}
+	r := c.Arena
+	if r.Tree != arenaTree(m.st.Workspace, c.TurnN, v) {
+		m.st.Notice = "undo refused: " + r.Tree + " is not an arena tree this room made this turn — nothing was reset"
+		return
+	}
+	if err := undoArena(r.Tree, r.Base); err != nil {
+		m.st.Notice = "undo failed: " + err.Error()
+		return
+	}
+	r.Undone = true
+	m.st.Notice = c.Label + "'s attempt undone — " + r.Branch + " and its worktree are back at " + shortSHA(r.Base)
 }
 
 // flowWriteGateKey authorizes or cancels a /flow write hop before any seat is spawned.
@@ -1197,6 +1301,14 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// no race this turn, and an attempt whose diff is a measured nothing or
 		// an error, are different facts and get different sentences.
 		m.toggleArenaDiff()
+	case "u":
+		// Undo the focused seat's whole race attempt — worktree and arena
+		// branch back to the recorded base (§9.37, amended 2026-08-09). A key
+		// beside `d` because they address the same block, y/n-confirmed like
+		// `c` because both throw away something a keystroke cannot bring
+		// back. View mode only: in compose `u` is the letter u, the contract
+		// q, f and c already keep.
+		m.askUndoSeat()
 	case "c":
 		// Clear the focused seat's thread — the first control built to §9.17's
 		// rule, and a key rather than a room command for a reason recorded

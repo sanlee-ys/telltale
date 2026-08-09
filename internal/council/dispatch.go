@@ -988,6 +988,26 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 				}
 			}
 			r.Branch = arenaBranch(c.TurnN, c.Vendor)
+			// Commit-per-turn (§9.37, amended 2026-08-09): once the diff is
+			// read, the attempt is parked on its arena branch, so every race
+			// survives the worktree it happened in — diffable, adoptable,
+			// rollbackable, even after the tree is deleted. Two deliberate
+			// skips: a zero-diff attempt gets NO empty commit (a receipt for
+			// work that did not happen is §4a.1's false zero, mirrored), and
+			// a seat whose collection already failed gets one sentence, not
+			// two — its tree is unreadable, so a commit error would restate
+			// the same degradation in different words. A commit failure lands
+			// on THIS seat as a named reason and nowhere else: the race, the
+			// other racers and the room's repo are not this seat's blast
+			// radius.
+			if r.Err == "" && strings.TrimSpace(r.Stat) != "" {
+				sha, cerr := commitArena(tree, m.turn.arenaBase, arenaCommitMsg(c.TurnN, c.Prompt))
+				if cerr != nil {
+					r.CommitErr = "not committed: " + cerr.Error()
+				} else {
+					r.Commit = sha
+				}
+			}
 			// Rank is the order the room OBSERVED seats land, stamped here on
 			// the host's clock. Every racer gets one — a DNF finished too, just
 			// not well, and the render pairs the rank with the phase word so
