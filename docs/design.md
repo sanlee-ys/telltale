@@ -1524,7 +1524,7 @@ shows what the real v1 capability mix produces.
  ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
 
 Row 3 is the honest-gauge case in its normal habitat: a session whose adapter can source
@@ -1543,7 +1543,7 @@ columns. Nothing about it looks like zero.
  ◐ CX │ notes-api  C:\src\code            gpt-5.1-codex                — │   4m
  ○ CC │ learning-notes  C:\src\code       Haiku 4.5      ██████▌─  92.6% │  22m
  ──────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   ? keys
+ q quit   / find   enter detail   u usage   ? keys
 ```
 
 **C — narrow (72 cols).** Gauge gone; the number it encoded stays. Vendor names shorten.
@@ -1573,7 +1573,7 @@ sorted by activity, so they do not appear in the order they are described.
  ◐ CX │ 4f2a9c81-1d3e-4a77-9b02-000000000000                                                          —        — │   7m
    CC │ acme-api  C:\src\work                                        Sonnet 4.5                       —    $1.02 │    —
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
 
 Row 1 is at exactly 0% and draws a full track. Row 2 is the label-overflow case,
@@ -1595,7 +1595,7 @@ staleness.
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
 
 `0%` is a full track of `────────────`; absent is whitespace. If these two rows ever
@@ -1616,7 +1616,7 @@ overflowing at any width.
  ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys            ⚠ last scan 47s ago   Access is denied.
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys  ⚠ last scan 47s ago   Access is denied.
 ```
 
 **F — filter and sort active (120 cols).** The header count reads `3 of 4` so it cannot
@@ -1632,7 +1632,7 @@ footer, because a monitor that silently hides rows is a liar.
  ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys                       filter claude   sort context
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys             filter claude   sort context
 ```
 
 **G — empty (120 cols).** Distinguishes "watching, found nothing" from "vendor not
@@ -1650,7 +1650,7 @@ error dialog.
                              cursor   not detected   %APPDATA%\Cursor\User
                              gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
 
 The vendor status word is one of exactly four: `watching` (directory exists and is
@@ -1672,7 +1672,7 @@ the Codex line reads `not detected`, since `~/.codex` is absent (§3.2). The thi
                        cursor   not detected   %APPDATA%\Cursor\User
                        gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
 
 `drifted` is the word the other three cannot say. Those three are all answers from
@@ -1708,7 +1708,7 @@ that revealed it. The ordinary case is render M. The fourth word:
                            cursor   not detected   %APPDATA%\Cursor\User
                            gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys                                    ⚠ codex drifted
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys                          ⚠ codex drifted
 ```
 
 **H — help overlay (120 cols).** Replaces the row area rather than floating over it; a
@@ -1721,6 +1721,7 @@ floating panel on a monitor obscures the thing being monitored.
         q      quit  (also ctrl+c)
         ↑/↓    move the selection  (also j / k)
         enter  open the detail pane for the selected session
+        u      what each vendor has left, and what it spent
         /      find: narrow rows by name or path
         esc    close the pane, or cancel the find, or quit
         v      vendor: all > claude > codex >
@@ -1754,7 +1755,7 @@ it rather than computing one (§3.9).
  ● AG │ 4c8b21a7  C:\src\code                                                 Gemini 3.6 F…                    — │   2m
  ◐ GE │ glossary tooltips ⑂~2  c:\src\code                                    gemini-3-pro                     — │   3m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
 
 This render is the one to look at when judging §6 Q7. The ragged CONTEXT column is the
@@ -1771,7 +1772,7 @@ cost of option (2); it is honest, and whether it is *legible* is a dogfood quest
  ○ CC │ learning-notes  C:\src\code                                                                Haiku 4.5     │  22m
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
 
 **L — ASCII glyph mode (120 cols).** `--ascii`, `TELLTALE_ASCII=1`, or a non-terminal
@@ -1788,7 +1789,7 @@ the precision.
  o CX | notes-api  C:\src\code                                       gpt-5.1-codex                  n/a      n/a |   4m
  . CC | learning-notes  C:\src\code                                  Haiku 4.5      ##########--  92.6%   $11.07 |  22m
  ----------------------------------------------------------------------------------------------------------------------
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
 
 **M — shape drift (120 cols).** A store that reads fine and no longer matches. Every row
@@ -1813,7 +1814,7 @@ a reader could not trust to be there.
  ◐ CX │ 00000000-bbbb-4ccc-8ddd-000000000001                                                          —        — │   4m
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys                                    ⚠ codex drifted
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys                          ⚠ codex drifted
 ```
 
 ### 7.4 The gauge
@@ -2147,8 +2148,14 @@ screen. Nothing in §7 may reach for it.
   Cascadia Mono; other fonts may render the step more harshly.
 - Fill resolution is one eighth of a cell (1.04% at 12 cells). The number beside the bar
   carries the precision; the bar carries the glance.
-- The account quota block is sourced from one session (§7.1). A second quota-bearing
-  vendor needs a per-vendor block.
+- ~~The account quota block is sourced from one session (§7.1). A second quota-bearing
+  vendor needs a per-vendor block.~~ **Closed in two steps.** §7.15 (2026-08-07) gave the
+  *header* a block per vendor, from the statusline relay alongside the transcript reading.
+  §7.17 (2026-08-09) gave the per-vendor block its own surface: `u` opens a body with one
+  block per vendor, the gauge at 20 cells instead of the header's 8, and — the part the
+  header has no room for at all — a stated reason wherever a vendor has nothing to say.
+  What remains is not this limitation but §7.17's own: an aged-out relay reading and one
+  that never arrived render alike.
 - The 1 s poll has not been measured on a cold cache over an 837-session tree (§6 Q3).
 - The burn forecast's sampling history lives in the process and dies with it. Restarting
   the HUD restarts the basis at zero, and for the first five minutes of every run there
@@ -2255,7 +2262,7 @@ column on every row forever to serve a mark that is off most of the time.
  ◐ CX │ 4f2a9c81-1d3e-4a77-9b02-000000000000                                                                     │   7m
  ○ CC │ learning-notes ⑂~5  C:\src\code                                                            Haiku 4.5     │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
 
 That frame is also §7.13's: row 2 measured **zero** sub-agents and therefore draws no
@@ -2284,7 +2291,7 @@ quota is a property of the account):
  ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
 
 Both windows in that frame have the same 7 samples over the same 18 minutes. The 5h window
@@ -2376,7 +2383,7 @@ and once applied, with the mode left:
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys                                         find "api"
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys                               find "api"
 ```
 
 Four rules, all of them the same rule — **a monitor that hides rows must say so**:
@@ -2453,7 +2460,7 @@ an ellipsis says so — the footer's dropping-is-never-silent rule. The generate
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
 
 At 120 columns three vendors and four windows already shed to tags-without-gauges;
@@ -2574,7 +2581,7 @@ answer. The generated render (`spend-cursor` golden):
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
 
 Codex's quota is on the quota line; Cursor's is nowhere, and Cursor's spend is on a line
@@ -2641,6 +2648,189 @@ wanted per-turn cost is, at this version, the one surface that provably cannot s
 - The counter says nothing about *which* conversation or model spent the tokens, by the
   design ruling above. If a future seam makes a CLI conversation joinable to a HUD row,
   that is a new claim and needs its own section.
+
+### 7.17 `u`: the fleet usage view — two claims, and never one
+
+Added 2026-08-09. §7.15 gave the header a block per vendor and §7.16 gave it a spend line,
+and between them they filled the one or two lines the header has. §7.10's last open
+limitation said the quiet part: *"the account quota block is sourced from one session. A
+second quota-bearing vendor needs a per-vendor block."* It has one now — but not in the
+header, because the header is answering a different question.
+
+**Glance and read are different jobs.** The header answers *am I about to run out?* in the
+time it takes to look up from an editor, and its whole design is a shed cascade that spends
+decoration to keep facts on one line (§7.15). It cannot also answer *what can telltale
+actually say about each of my five vendors, and where it says nothing, why?* — that answer
+is a paragraph per vendor, and a paragraph per vendor is a body, not a header. So `u` opens
+a third body over the row area, on the detail pane's precedent (§7.11): it replaces the
+grid rather than floating over it, because a panel covering the thing being monitored is a
+monitor you have to move to read. **The header is unchanged.** Both surfaces render the
+same readings from the same assembly, and the duplication is the point — one is for
+glancing at, one is for reading.
+
+#### The organizing insight, and it came from the measurement
+
+"Usage" is **two different claims**, and the view may never blur them.
+
+| | **Quota** | **Spend** |
+|---|---|---|
+| what it is | a reading against a limit the vendor published | a count of tokens with no denominator anywhere |
+| sources today | Codex (its own store, scan-fresh); Claude and agy (statusline relay) | Cursor (`~/.telltale/usage/`, the hook relay) |
+| may render | gauge, percentage, reset countdown, severity hue | a verb, the counts, and the accumulation window |
+| may never render | — | a gauge, a percentage, a countdown, a bar, or the sum without its window |
+
+The right-hand column is not a style preference. There is no ceiling anywhere in a token
+count — Cursor publishes no account limit without a network call (§3.9, re-measured
+§7.16) — so a bar or a percentage would **invent** one, which is the same class of error as
+filling a `CapNone` field with a plausible guess. `TestSpendIsNeverRenderedAsQuota` already
+pins this for the header; `TestUsageSpendBorrowsNoneOfQuotasVocabulary` extends it to the
+surface that puts the two measurements four lines apart instead of on separate header rows,
+because **proximity is what makes this the riskier render of the two**.
+
+#### The layout
+
+One block per vendor, in **fixed fleet order** — claude, codex, gemini, agy, cursor — never
+sorted by usage. Position is the navigation: a vendor moving must mean a vendor was added
+or removed, not that another vendor's percentage crossed it. `fleetOrder` is now one
+variable, walked by both the header's per-vendor counts and this view, so a vendor sits in
+the same place on both surfaces.
+
+Each block is a heading that states the **quota seam** — where the reading came from, or
+why there is none — and then one line per fact under it, hanging off the detail pane's
+label column so the two bodies read as one product. The generated render (`usage-fleet`
+golden):
+
+```
+ telltale  │  3 sessions  │  codex 1  gemini 1  cursor 1
+                      ag gemini-weekly 38% ↻ 3h00m  │  cc 5h 42% ↻ 2h13m  7d 6% ↻ 5d00h · 2h ago  │  cx 7d 79% ↻ 22h48m
+                               cursor spent  in 48k · out 1.2k · cache read 1.9M · cache write 62k  · 14 turns over 10m
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ fleet usage  quota is a reading against a limit; spend is a count with none
+
+ claude  quota relayed by the statusline · 2h ago
+        5h             ████████────────────    42%  ↻ 2h13m
+        7d             █▏──────────────────     6%  ↻ 5d00h
+
+ codex  quota read from its own store, this scan
+        7d             ███████████████─────    79%  ↻ 22h48m
+
+ gemini  no quota reaches disk anywhere telltale can read
+
+ agy  quota relayed by the statusline
+        gemini-weekly  ███████▎────────────    38%  ↻ 3h00m
+
+ cursor  no quota anywhere · its store holds experiment values, not usage
+        spent          in 48k · out 1.2k · cache read 1.9M · cache write 62k  · 14 turns over 10m
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ esc close   ↑/↓ scroll
+```
+
+Five things in that frame are doing work:
+
+- **The gauge is 20 cells, not the header's 8.** That is the concrete reason this view
+  exists rather than a wider header: one window per line buys the bar room to be *read*
+  rather than merely glanced at. Fill resolution goes from 1.6% to 0.66%. It sheds to 12
+  cells at the compact tier and disappears below 80 columns, on §7.2's own breakpoints
+  rather than on new ones — and it is allowed to shed only because the number beside it
+  stays.
+- **The heading names the source, and §7.15 makes that load-bearing.** A transcript-sourced
+  block is re-measured every scan; a relayed one is exactly as old as the last statusline
+  render, and only the first may ever carry a burn forecast. A reader deciding how much to
+  trust a percentage needs to know which they are looking at. The relayed reading's **age
+  survives every dress level** — the phrase around it gives way instead — because shedding
+  the age would re-present a stale number as fresh.
+- **`cursor` has a spend line and no quota lines, and the heading says why.** Without that
+  sentence the reader is left to guess whether Cursor's quota was missing, zero, or simply
+  not drawn. The heading always speaks about quota and never about spend, deliberately: the
+  spend line explains itself in its own vocabulary (a verb and a window), while an absent
+  reading explains nothing at all unless something says it out loud.
+- **`gemini` is one line, and it is a line rather than a row of dashes.**
+- **The header above it still carries both blocks, unchanged.**
+
+#### Three kinds of nothing, and the one that had to collapse
+
+§4a.1's rule is that the kinds of absence stay distinct. On this surface there are three,
+and they are the whole reason the absence line carries a reason rather than an em dash:
+
+| | Vendors | What it renders | Why that wording |
+|---|---|---|---|
+| **structurally absent** | gemini, cursor | `no quota reaches disk anywhere telltale can read` / `no quota anywhere · its store holds experiment values, not usage` | There is no seam to fire. Cursor's verdict was re-measured 2026-08-08 and came back harder: the only account figures on its disk are Statsig experiment values stamped `is_user_in_experiment:false`, never consumption (§7.16). Naming an action here would send someone to enable a thing that does not exist. |
+| **seam exists, never seen** | claude, agy | `no quota relayed yet · the telltale statusline writes it` | This is the one absence a user can act on, so it **names the statusline**. The reading turns up as soon as the gauge runs in that vendor. An absence with an action behind it that does not say the action is just a shrug. |
+| **aged out** | any relayed vendor | *renders as never-seen* | `quotacache`'s reader drops a window whose reset has passed and any entry over 24h old before the HUD ever sees it (§7.15's self-expiry). Telling the two apart would mean **holding numbers §7.15 calls not stale but FALSE** so this view could display them. Losing one distinction is the cheaper of those two trades — and it is recorded as a limitation below rather than left to be discovered. |
+
+Codex is in none of the three: its quota comes from its own store, so an absence there is a
+statement about what this scan read (`no quota in the sessions read this scan`) rather than
+about a relay that never fired. Borrowing either of the other two sentences for it would
+name the wrong seam.
+
+**A vendor with no sessions, no quota and no total does not appear at all.** The view is a
+report on what is running, not a checklist of every adapter that was compiled in — and an
+absence line is for a vendor that is *here* and silent, not for one that is not here. When
+nothing anywhere has anything to say, the body is a sentence rather than five blocks of
+dashes, because a table of nothing is a table asserting it measured five things
+(`usage-empty` golden):
+
+```
+ telltale  │  0 sessions
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ fleet usage  quota is a reading against a limit; spend is a count with none
+
+        no vendor on this machine has reported a quota reading or a token count
+
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ esc close   ↑/↓ scroll
+```
+
+#### Everything else is inherited, not invented
+
+- **`u` opens and closes it; `esc` closes it.** The esc chain gains a step and now reads
+  usage → detail → help → clear the query → quit. One body at a time: opening any of the
+  three closes the others, enforced in `Update` rather than in `Render`, because a pane
+  that appears only because it won an ordering is a pane nobody can predict. Find mode
+  closes it too — but only in that direction, since once the mode has the keyboard `u` is
+  a letter (§7.8).
+- **`u usage` joins the footer hints** beside `enter detail`, and sheds on the same tier
+  boundary for the same reason: below 80 columns the footer keeps only the keys nothing
+  else can teach. It is on the help overlay's keys page at every width.
+- **The drift notice renders under this body too** (§7.3), like every other. A warning that
+  comes and goes depending on which pane is open is one a reader cannot trust to be there.
+- **Overflow scrolls** with the help overlay's vocabulary — `↑`/`↓` move the body, bounded
+  against its own rendered length — not the grid's `+N more`, which counts sessions.
+- **The 60-column floor and the height tiers are unchanged**, and nothing here animates
+  (§7.1 rule 4). At the floor the bars are gone and every fact survives, including the
+  relayed reading's age and the spend total's window.
+- **The view is not narrowed by `v` or by the find query.** Those narrow the *session*
+  list, and nothing on this surface is a session fact — filtering an account reading by a
+  session filter would be the per-row quota §7.1 forbids, arriving by the back door.
+
+#### Declined
+
+- **Trend sparklines.** The caches hold one reading per vendor, so a trend line would be
+  drawn from data that does not exist. The burn forecast (§7.12) is the honest version of
+  this and it is confined to the one scan-fresh block that can support it.
+- **Sorting by usage.** Position is the navigation; see the fleet-order note above.
+- **Per-row quota.** An account fact is not a session fact — §7.1's sixth rule, and the
+  reason this view exists at all.
+- **A fabricated fleet total.** Different units (percentages of unrelated windows, and raw
+  token counts), different accounts, different vendors. Any single number across them would
+  be arithmetic telltale invented, which is the ADR-001 violation this whole product is
+  built to refuse.
+
+#### Known limitations
+
+- **An aged-out relay reading is indistinguishable from one that never arrived**, by the
+  trade in the table above. Both render as "no quota relayed yet".
+- **The header and this view say some of the same things twice.** That is deliberate — the
+  header is for glancing and this is for reading — but it does mean a reading appears in
+  two places on screen while the view is open, and a future change to one has to be made in
+  both. `quotaVendors` being shared by both surfaces is what keeps them from disagreeing
+  about *which* source speaks for a vendor; nothing yet keeps them from diverging in tone.
+- **The absence sentences are per-vendor literals**, so a sixth vendor arrives with the
+  fallback wording (`no quota telltale can read`) until someone measures its seam and gives
+  it a sentence. That is the honest default — it claims nothing about a seam nobody has
+  looked at — but it is a step down from the four that name theirs.
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 

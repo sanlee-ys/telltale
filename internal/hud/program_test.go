@@ -227,8 +227,17 @@ func TestEnterOpensAndClosesTheDetailPane(t *testing.T) {
 // from the bottom.
 func TestEscUnwindsOneLayerAtATime(t *testing.T) {
 	m := loaded(t)
-	m = send(t, m, key("enter"))
+	m = send(t, m, key("u"))
 	m, cmd := updateWith(t, m, key("esc"))
+	if cmd != nil {
+		t.Fatal("esc quit with the usage view open")
+	}
+	if m.st.Usage {
+		t.Fatal("esc did not close the usage view")
+	}
+
+	m = send(t, m, key("enter"))
+	m, cmd = updateWith(t, m, key("esc"))
 	if cmd != nil {
 		t.Fatal("esc quit with the detail pane open")
 	}
@@ -254,6 +263,76 @@ func TestEscUnwindsOneLayerAtATime(t *testing.T) {
 	_, cmd = updateWith(t, m, key("esc"))
 	if cmd == nil {
 		t.Fatal("esc from the bottom layer did not quit")
+	}
+}
+
+// u opens and closes the fleet usage view, and it is a body rather than an
+// overlay — so it may never be on screen beside another one.
+func TestUsageViewIsOneBodyAtATime(t *testing.T) {
+	m := loaded(t)
+	m = send(t, m, key("u"))
+	if !m.st.Usage {
+		t.Fatal("u did not open the usage view")
+	}
+	m = send(t, m, key("u"))
+	if m.st.Usage {
+		t.Fatal("u did not close the usage view")
+	}
+
+	// Every other door closes it, and it closes every other door. Rendering
+	// would otherwise have to pick a winner, and a pane that appears only
+	// because it won an ordering is a pane nobody can predict.
+	for _, open := range []struct {
+		key  string
+		want func(*Model) bool
+	}{
+		{"?", func(m *Model) bool { return m.st.Help }},
+		{"enter", func(m *Model) bool { return m.st.Detail }},
+		// Find is a MODE rather than a body, and it closes the view for the
+		// same reason the bodies do — but only in this direction. Once find
+		// mode has the keyboard, "u" is a letter, which is the whole point of
+		// the mode announcing itself in the footer.
+		{"/", func(m *Model) bool { return m.st.Finding }},
+	} {
+		m = send(t, loaded(t), key("u"))
+		m = send(t, m, key(open.key))
+		if m.st.Usage {
+			t.Errorf("%q left the usage view open beside it", open.key)
+		}
+		if !open.want(m) {
+			t.Errorf("%q did not open its own body from the usage view", open.key)
+		}
+
+		// And the other direction, for the two that are bodies.
+		if open.key == "/" {
+			continue
+		}
+		m = send(t, loaded(t), key(open.key))
+		m = send(t, m, key("u"))
+		if !m.st.Usage {
+			t.Errorf("u did not open from the %q body", open.key)
+		}
+		if m.st.Help || m.st.Detail {
+			t.Errorf("u left the %q body open beside it", open.key)
+		}
+	}
+}
+
+// The arrows move whatever the body is. Over the usage view that is the view,
+// not the row selection underneath it — and the offset is bounded against the
+// body's own length so it takes no more keypresses to come back than it took to
+// leave.
+func TestUsageViewScrollIsBoundedAndLeavesTheSelectionAlone(t *testing.T) {
+	m := send(t, newTestModel(), tea.WindowSizeMsg{Width: 120, Height: 8})
+	m = send(t, m, key("u"))
+	for i := 0; i < 50; i++ {
+		m = send(t, m, key("down"))
+	}
+	if max := len(m.scrollBody()) - 1; m.st.Scroll > max {
+		t.Errorf("usage scroll ran to %d, bound is %d", m.st.Scroll, max)
+	}
+	if m.st.Cursor != -1 {
+		t.Error("arrows over the usage view moved the row selection")
 	}
 }
 
@@ -413,7 +492,7 @@ func TestHelpOverlayScrollIsBounded(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		m = send(t, m, key("down"))
 	}
-	if max := len(m.helpBody()) - 1; m.st.Scroll > max {
+	if max := len(m.scrollBody()) - 1; m.st.Scroll > max {
 		t.Errorf("help scroll ran to %d, bound is %d", m.st.Scroll, max)
 	}
 	if m.st.Cursor != -1 {

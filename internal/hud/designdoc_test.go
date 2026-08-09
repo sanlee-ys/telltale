@@ -26,6 +26,8 @@ var embedded = []string{
 	"quota-fleet",
 	// the token relay — §7.16's generated render.
 	"spend-cursor",
+	// the fleet usage view — §7.17's generated renders.
+	"usage-fleet", "usage-empty",
 }
 
 // notEmbedded lists goldens deliberately kept out of the design doc, with the
@@ -37,6 +39,8 @@ var notEmbedded = map[string]string{
 	"stale-scan-90s": "identical layout to stale-scan-47s; only the notice styling differs",
 	"quota-absent":   "described in §7.7; its layout is covered by wide-healthy",
 	"readme":         "drawn into README.md's hero picture; see TestReadmeHeroImagesAreTheHudThatRenders",
+	"usage-floor":    "same fixture as usage-fleet at 60 columns; §7.17 describes the shed in prose",
+	"usage-ascii":    "same fixture as usage-fleet in the reduced glyph set; §7.17 states the claim survives it",
 }
 
 // The design doc is a contract, and a contract that drifts from the code is

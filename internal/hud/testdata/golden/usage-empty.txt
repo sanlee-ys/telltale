@@ -1,11 +1,10 @@
  telltale  │  0 sessions
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-                                                   no active sessions
+ fleet usage  quota is a reading against a limit; spend is a count with none
 
-                       agy      not detected   %USERPROFILE%\.gemini\antigravity-cli
-                       claude   unreadable     %USERPROFILE%\.claude\projects  Access is denied.
-                       codex    not detected   %USERPROFILE%\.codex
-                       cursor   not detected   %APPDATA%\Cursor\User
-                       gemini   not detected   %USERPROFILE%\.gemini\tmp
+        no vendor on this machine has reported a quota reading or a token count
+
+
+
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ esc close   ↑/↓ scroll
