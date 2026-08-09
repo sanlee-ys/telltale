@@ -11,18 +11,18 @@ import (
 )
 
 type StatuslineInput struct {
-	Cwd            string  `json:"cwd"`
-	SessionID      string  `json:"session_id"`
-	SessionName    string  `json:"session_name,omitempty"`
-	TranscriptPath string  `json:"transcript_path"`
-	Version        string  `json:"version"`
-	Model          Model   `json:"model"`
-	Workspace      *Workspace `json:"workspace,omitempty"`
-	Cost           *Cost   `json:"cost,omitempty"`
+	Cwd            string         `json:"cwd"`
+	SessionID      string         `json:"session_id"`
+	SessionName    string         `json:"session_name,omitempty"`
+	TranscriptPath string         `json:"transcript_path"`
+	Version        string         `json:"version"`
+	Model          Model          `json:"model"`
+	Workspace      *Workspace     `json:"workspace,omitempty"`
+	Cost           *Cost          `json:"cost,omitempty"`
 	ContextWindow  *ContextWindow `json:"context_window,omitempty"`
-	RateLimits     *RateLimits `json:"rate_limits,omitempty"`
-	Worktree       *Worktree `json:"worktree,omitempty"`
-	Agent          *Agent  `json:"agent,omitempty"`
+	RateLimits     *RateLimits    `json:"rate_limits,omitempty"`
+	Worktree       *Worktree      `json:"worktree,omitempty"`
+	Agent          *Agent         `json:"agent,omitempty"`
 }
 
 type Model struct {

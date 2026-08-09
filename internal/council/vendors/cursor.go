@@ -22,10 +22,10 @@ import (
 // that is deliberate — a fallback is a second protocol to keep honest, and the
 // numbers below are why nobody would want to fall back to it.
 //
-//	              print mode (§9.33)     ACP (§9.36)
-//	  a follow-up turn   ~13s            1.1–1.8s
-//	  fixed cost         ~8.1s PER TURN  ~2–4s once, at handshake
-//	  resume             a whole respawn  session/load, ~0.9s, same process
+//	            print mode (§9.33)     ACP (§9.36)
+//	a follow-up turn   ~13s            1.1–1.8s
+//	fixed cost         ~8.1s PER TURN  ~2–4s once, at handshake
+//	resume             a whole respawn  session/load, ~0.9s, same process
 //
 // What the switch COST is stated beside what it bought, because the losses are
 // real and two of them are permanent:

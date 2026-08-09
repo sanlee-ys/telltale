@@ -13,9 +13,9 @@ func TestStateMDStaleNoticeWording(t *testing.T) {
 	t.Cleanup(func() { measureStateMDBehind = orig })
 
 	cases := []struct {
-		n       int
-		ok      bool
-		want    string
+		n         int
+		ok        bool
+		want      string
 		wantEmpty bool
 	}{
 		{n: 12, ok: true, want: "STATE.md is 12 commits behind HEAD"},
