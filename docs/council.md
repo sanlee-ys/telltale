@@ -479,13 +479,16 @@ named with their reasons. Only the exact two-word form is the verb; anything lon
 not a vendor's, so they work in a `--read` room too — and both answer with usage when
 typed bare.
 
-The record behind all of this — the rulings, what the first live race on 2026-08-09
-verified, and what is still owed — is [design.md §9.37](design.md). Read it before
-trusting the edges: the core race, its ranks and its honest zeros are **live-verified**;
-the live `arena · so far` stat, the throwaway-session racer for the cursor seat, the
-seeding, and the adopt/undo round-trips are pinned by offline tests against real git
-repositories but have not yet been exercised by a live race, and the guide says so rather
-than rounding them up to settled.
+The record behind all of this — the rulings, which live race verified what, and what is
+still owed — is [design.md §9.37](design.md). Read it before trusting the edges, because
+they are not all at the same standard. **Live-verified** as of race t9 (2026-08-09): the
+core race and its ranks, the honest zeros, every attempt surviving as a commit,
+`/adopt` and `/arena drop` end to end, `x` on a stuck racer, and the conduct line's one
+observed compliance. **Live in part**: the `arena · so far` stat has been watched reading a
+measured nothing mid-race but never watched *grow*; the cursor seat's throwaway racer has
+been spawned, streamed and killed live but never watched finish on its own. **Not yet
+exercised by any live race**: `u`, and `.worktreeinclude` seeding — both pinned by offline
+tests against real git repositories, and named here rather than rounded up to settled.
 
 ## Flags
 
