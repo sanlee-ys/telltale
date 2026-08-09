@@ -134,17 +134,19 @@ func (m *Model) adoptCommand(arg string) bool {
 	// THE CLEAN-TREE GATE IS THE ONE HARD PRECONDITION. A merge writes into
 	// the room's working tree, and if that tree holds uncommitted work the
 	// merge can entangle or (on abort) discard it. Adopt must never eat the
-	// user's own edits, so a dirty room refuses by name — with the count, so
-	// the user knows whether it is the one file they remember or something a
-	// stray process left behind.
-	roomDirty, err := worktreePorcelain(race.workspace)
+	// user's own edits, so a dirty room refuses by name — but only over what
+	// the merge can actually harm: tracked changes always, untracked paths
+	// only when the adoption writes them (adoptBlockers, and the t9 incident
+	// recorded on it — the first live adopt was refused over an untracked
+	// settings directory the merge would never have touched).
+	roomDirty, err := adoptBlockers(race.workspace, arenaBranch(race.raceN, v))
 	if err != nil {
 		m.st.Notice = "adopt: " + err.Error()
 		return true
 	}
 	if n := len(roomDirty); n > 0 {
 		m.st.Notice = "the room tree holds " + itoa(n) + " uncommitted " + plural(n, "path") +
-			" — /adopt merges into it, so commit or stash them first"
+			" the merge could harm (" + roomDirty[0] + ") — commit or stash them first"
 		return true
 	}
 
@@ -217,13 +219,13 @@ func (m *Model) adoptSeat(v model.VendorID) string {
 		}
 	}
 
-	roomDirty, err := worktreePorcelain(race.workspace)
+	roomDirty, err := adoptBlockers(race.workspace, branch)
 	if err != nil {
 		return "adopt: " + err.Error()
 	}
 	if n := len(roomDirty); n > 0 {
 		return "the room tree holds " + itoa(n) + " uncommitted " + plural(n, "path") +
-			" — nothing was merged; commit or stash them first"
+			" the merge could harm (" + roomDirty[0] + ") — nothing was merged; commit or stash them first"
 	}
 
 	if _, err := gitOut(race.workspace, "merge", "--no-ff", "--no-edit", branch); err != nil {
@@ -423,6 +425,65 @@ func worktreePorcelain(dir string) ([]string, error) {
 		return nil, nil
 	}
 	return strings.Split(out, "\n"), nil
+}
+
+// adoptBlockers names what in the room tree actually stands in a merge's way,
+// or returns nothing for a room the adoption cannot harm.
+//
+// The first live adopt (2026-08-09, race t9) was refused over `?? .claude/` —
+// an untracked settings directory the merge would never have touched — because
+// the gate counted every porcelain line as danger. That was the gate being
+// blunt, not safe: the hazard the clean-tree rule exists for is a merge
+// ENTANGLING uncommitted work, and a merge can only entangle paths it writes.
+// So the rule is split along what git itself distinguishes:
+//
+//   - A TRACKED change blocks unconditionally. The merge machinery reads and
+//     rewrites tracked state, an abort resets it, and reasoning about which
+//     tracked change is safe would be a guess where the stake is the
+//     operator's own edits.
+//   - An UNTRACKED path blocks only if the adoption would write it — the
+//     branch's own file list (`git diff --name-only HEAD...branch`, the
+//     merge-base half git merge actually applies), compared path-for-path,
+//     with an untracked DIRECTORY (porcelain prints those with a trailing
+//     slash) blocking on any branch file under it. git refuses exactly this
+//     overlap itself ("untracked working tree files would be overwritten");
+//     the gate saying it first, by name, before y is armed, is the whole
+//     improvement.
+func adoptBlockers(workspace, branch string) ([]string, error) {
+	lines, err := worktreePorcelain(workspace)
+	if err != nil {
+		return nil, err
+	}
+	if len(lines) == 0 {
+		return nil, nil
+	}
+	var blockers, untracked []string
+	for _, l := range lines {
+		if strings.HasPrefix(l, "??") {
+			untracked = append(untracked, strings.TrimSpace(strings.TrimPrefix(l, "??")))
+			continue
+		}
+		blockers = append(blockers, strings.TrimSpace(l))
+	}
+	if len(untracked) > 0 {
+		out, err := gitOut(workspace, "--no-pager", "diff", "--name-only", "HEAD..."+branch)
+		if err != nil {
+			return nil, err
+		}
+		incoming := strings.Split(out, "\n")
+		for _, u := range untracked {
+			for _, f := range incoming {
+				if f == "" {
+					continue
+				}
+				if f == u || (strings.HasSuffix(u, "/") && strings.HasPrefix(f, u)) {
+					blockers = append(blockers, "?? "+u+" (the adoption writes "+f+")")
+					break
+				}
+			}
+		}
+	}
+	return blockers, nil
 }
 
 // unadoptedCount is how many commits the racer's branch holds that the room's

@@ -13,3 +13,8 @@ telltale*.exe
 # fact about the product. The numbers worth keeping go in STATE.md with the
 # conditions they were taken under.
 *trace*.txt
+
+# Claude Code's per-repo settings (approvals, local config). Machine-local
+# state, never content this repo ships — and the first live /adopt was
+# blocked by exactly this directory sitting untracked in the room tree.
+.claude/

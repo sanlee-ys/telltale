@@ -112,11 +112,15 @@ func TestAdoptMergesTheRacerIntoTheRoom(t *testing.T) {
 }
 
 // TestAdoptRefusesADirtyRoomTree: adopt must never eat the user's uncommitted
-// work, so a dirty room refuses by name, before any gate arms.
+// work, so a room with a TRACKED change refuses by name, before any gate arms.
+// Tracked, deliberately — this test used to plant an untracked file, and under
+// adoptBlockers' refined rule an untracked bystander is exactly what no longer
+// blocks (its own test below); a modified tracked file is the unconditional
+// case.
 func TestAdoptRefusesADirtyRoomTree(t *testing.T) {
 	m, ws := racedModel(t, model.VendorCodex)
 	scribble(t, m, model.VendorCodex, "answer.go", "package answer\n")
-	if err := os.WriteFile(filepath.Join(ws, "wip.txt"), []byte("half-typed\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ws, "a.txt"), []byte("half-typed edit\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -129,6 +133,63 @@ func TestAdoptRefusesADirtyRoomTree(t *testing.T) {
 	}
 	if got, _ := gitOut(ws, "rev-list", "--count", "HEAD"); got != "1" {
 		t.Errorf("something was committed or merged behind the refusal: %s commits", got)
+	}
+}
+
+// TestAdoptIgnoresUntrackedBystanders is the t9 incident as a fixture: the
+// first live adopt was refused over `?? .claude/` — an untracked settings
+// directory the merge would never have written. An untracked path the
+// adoption does not touch is a bystander, not a hazard, and the gate arms
+// and the merge lands with it sitting right there, untouched.
+func TestAdoptIgnoresUntrackedBystanders(t *testing.T) {
+	m, ws := racedModel(t, model.VendorCodex)
+	scribble(t, m, model.VendorCodex, "answer.go", "package answer\n")
+	if err := os.MkdirAll(filepath.Join(ws, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws, ".claude", "settings.local.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	adopt(t, m, "codex", "y")
+
+	if !strings.Contains(m.st.Notice, "adopted codex") {
+		t.Fatalf("a bystander directory blocked the adopt: %q", m.st.Notice)
+	}
+	if body, err := os.ReadFile(filepath.Join(ws, ".claude", "settings.local.json")); err != nil || string(body) != "{}\n" {
+		t.Errorf("the bystander did not survive the merge untouched: %q (%v)", body, err)
+	}
+}
+
+// TestAdoptRefusesAnUntrackedCollisionByName: the one untracked shape that IS
+// a hazard — a path the adoption itself writes — refuses before the gate
+// arms, naming both the squatter and the incoming file, because letting the
+// merge discover it would end in git's own overwrite refusal after y.
+func TestAdoptRefusesAnUntrackedCollisionByName(t *testing.T) {
+	m, ws := racedModel(t, model.VendorCodex)
+	scribble(t, m, model.VendorCodex, "answer.go", "package answer\n")
+	// The racer's attempt must be ON its branch for the collision to be
+	// computable at arm time — commit it the way finishColumn would have.
+	tree := m.lastRace.trees[model.VendorCodex]
+	if _, err := gitOut(tree, "add", "-A"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gitOut(tree, "commit", "-m", "attempt", "--no-gpg-sign"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws, "answer.go"), []byte("package squatter\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	adopt(t, m, "codex", "")
+	if m.adoptPending != "" {
+		t.Fatal("the gate armed over an untracked file the merge writes")
+	}
+	if !strings.Contains(m.st.Notice, "answer.go") {
+		t.Errorf("the refusal does not name the colliding path: %q", m.st.Notice)
+	}
+	if body, _ := os.ReadFile(filepath.Join(ws, "answer.go")); string(body) != "package squatter\n" {
+		t.Errorf("the squatting file was disturbed behind a refusal: %q", body)
 	}
 }
 
