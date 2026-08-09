@@ -9,6 +9,7 @@ import (
 
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/quotacache"
+	"github.com/sanlee-ys/telltale/internal/usagecache"
 )
 
 // pollInterval is the tick cadence. 1 s is affordable because the poll is
@@ -114,6 +115,13 @@ func (m *Model) scanCmd() tea.Cmd {
 		// absent vendor.
 		if dir, err := quotacache.Dir(); err == nil {
 			snap.Account = quotacache.ReadAll(dir, snap.At)
+		}
+		// The hook-relayed token totals ride the same cadence and are read the
+		// same way, for the same reason (design.md §7.16). Two caches rather
+		// than one field because they are two measurements: quota has a
+		// ceiling the vendor published, and this has none at all.
+		if dir, err := usagecache.Dir(); err == nil {
+			snap.Spend = usagecache.ReadAll(dir, snap.At)
 		}
 		return scanResultMsg{snap: snap}
 	}

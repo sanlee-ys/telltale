@@ -24,6 +24,8 @@ var embedded = []string{
 	"shape-drift", "empty-drifted",
 	// the quota relay — §7.15's generated render.
 	"quota-fleet",
+	// the token relay — §7.16's generated render.
+	"spend-cursor",
 }
 
 // notEmbedded lists goldens deliberately kept out of the design doc, with the

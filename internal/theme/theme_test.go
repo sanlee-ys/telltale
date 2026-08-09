@@ -38,6 +38,42 @@ func TestPercentFitsFiveColumns(t *testing.T) {
 	}
 }
 
+func TestTokensFloorsAndNeverOverstates(t *testing.T) {
+	cases := []struct {
+		in   int64
+		want string
+	}{
+		{0, "0"},
+		{1, "1"},
+		{999, "999"},
+		{1000, "1k"},
+		{1203, "1.2k"},
+		{48012, "48k"},
+		{48099, "48k"},
+		// The flooring rule, stated as a case: 47,999 is not 48k. A gauge that
+		// rounds a spend figure up has invented tokens nobody was billed for.
+		{47999, "47.9k"},
+		{999999, "999.9k"},
+		{1_000_000, "1M"},
+		{1_904_221, "1.9M"},
+		{1_999_999, "1.9M"},
+		{999_999_999, "999.9M"},
+		{1_000_000_000, "1B"},
+		{2_450_000_000, "2.4B"},
+		// Negative is not a small count, it is a broken one. Callers reject it
+		// upstream; this is the belt-and-braces floor.
+		{-5, "0"},
+	}
+	for _, c := range cases {
+		if got := Tokens(c.in); got != c.want {
+			t.Errorf("Tokens(%d) = %q, want %q", c.in, got, c.want)
+		}
+		if n := len([]rune(Tokens(c.in))); n > 6 {
+			t.Errorf("Tokens(%d) = %q exceeds the 6-column budget", c.in, Tokens(c.in))
+		}
+	}
+}
+
 func TestCost(t *testing.T) {
 	cases := []struct {
 		in   float64

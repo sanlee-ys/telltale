@@ -6,6 +6,7 @@ import (
 
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/quotacache"
+	"github.com/sanlee-ys/telltale/internal/usagecache"
 )
 
 // Filter is the vendor filter. It cycles rather than opening a menu: with a
@@ -192,6 +193,21 @@ type Snapshot struct {
 	// property of the account, and pinning them to a fabricated session row
 	// would assert per-session quota, the claim §7.1 exists to forbid.
 	Account []quotacache.Account
+	// Spend is the hook-relayed token total, one entry per vendor whose
+	// running total survived the cache's expiry rules (design.md §7.16).
+	//
+	// It is a separate field from Account for the reason §7.16 exists to
+	// state: these are two different measurements, and sharing a field is how
+	// they would come to be read as one. Account is a percentage OF something
+	// — a window whose ceiling the vendor published. Spend has no denominator
+	// anywhere, because Cursor exposes no account limit without a network
+	// call (§3.9), so it can be counted and never gauged.
+	//
+	// Like Account it is not folded into Sessions: the hook fires for
+	// cursor-agent CLI conversations, which are not the IDE Composer sessions
+	// the Cursor rows come from, so pinning a total to any row would be a
+	// per-session claim the seam cannot support.
+	Spend []usagecache.Total
 	// At is when the scan completed. The zero value means no scan has ever
 	// completed, which is a different thing from a scan that completed and
 	// found nothing.

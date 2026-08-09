@@ -49,3 +49,29 @@ jobs:
           if ($cc -match 'transcript|myproject') { throw "quota relay carried content, not numbers: $cc" }
           $ag = Get-Content "$env:USERPROFILE\.telltale\quota\agy.json" -Raw
           if ($ag -notmatch 'gemini-weekly') { throw "agy quota relay missing its bucket: $ag" }
+      - name: Smoke (cursor token relay through the real binary)
+        shell: pwsh
+        run: |
+          # A REAL afterAgentResponse payload shape, carrying the two things that
+          # must never survive it: the model's reply text and the user's email
+          # address (design.md §7.16). Driven through the BINARY rather than the
+          # package, because the boundary claim is about what ships.
+          $payload = '{"conversation_id":"c-1","generation_id":"g-1","model":"composer-2.5","text":"SECRET-REPLY","input_tokens":48012,"output_tokens":1203,"cache_read_tokens":1904221,"cache_write_tokens":62004,"transcript_path":"C:\\SECRET-PATH\\x.jsonl","user_email":"SECRET@example.com"}'
+          $out = $payload | ./telltale.exe hook cursor
+          # A hook's stdout is parsed by the vendor as a hook result, so this
+          # path prints nothing at all.
+          if ($out) { throw "the hook wrote to stdout: $out" }
+          $cx = Get-Content "$env:USERPROFILE\.telltale\usage\cursor.json" -Raw
+          if ($cx -notmatch '"input_tokens":48012') { throw "token relay missing its counts: $cx" }
+          if ($cx -notmatch '"turns":1') { throw "token relay missing its window: $cx" }
+          if ($cx -match 'SECRET|composer|conversation|generation') { throw "token relay carried content, not numbers: $cx" }
+          # Twice is a total, not a replacement, and the window says so.
+          $payload | ./telltale.exe hook cursor
+          $cx = Get-Content "$env:USERPROFILE\.telltale\usage\cursor.json" -Raw
+          if ($cx -notmatch '"input_tokens":96024' -or $cx -notmatch '"turns":2') {
+            throw "the second turn did not accumulate: $cx"
+          }
+          # A payload with no counts is a non-event, never a zeroed total.
+          '{"conversation_id":"c-2","text":"no usage here"}' | ./telltale.exe hook cursor
+          $cx = Get-Content "$env:USERPROFILE\.telltale\usage\cursor.json" -Raw
+          if ($cx -notmatch '"turns":2') { throw "an empty payload disturbed the total: $cx" }

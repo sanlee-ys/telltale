@@ -121,6 +121,46 @@ func Cost(usd float64) string {
 	return fmt.Sprintf("$%.2f", usd)
 }
 
+// Tokens renders a token count compactly: "940", "48.0k", "1.9M", "2.4B".
+//
+// It floors at every step and never rounds up, the same rule Percent follows
+// and for the same reason: this number is what a machine SPENT, and a display
+// that rounds 47,950 up to "48.0k" has invented fifty tokens nobody was
+// billed for. Flooring can only ever understate, which is the direction an
+// honest gauge is allowed to be wrong in.
+//
+// "B" rather than "G" above a billion because the value is a count, not a
+// byte size — the SI prefix would be borrowing a vocabulary that means
+// something else here. Four columns is the common case ("1.9M"), six the
+// widest ("999.9k").
+func Tokens(n int64) string {
+	if n < 0 {
+		n = 0
+	}
+	switch {
+	case n < 1_000:
+		return fmt.Sprintf("%d", n)
+	case n < 1_000_000:
+		// Integer division IS the floor: n/100 is hundreds, and dividing that
+		// by ten in float can only render a tenth already reached.
+		return trimTenth(float64(n/100)/10, "k")
+	case n < 1_000_000_000:
+		return trimTenth(float64(n/100_000)/10, "M")
+	default:
+		return trimTenth(float64(n/100_000_000)/10, "B")
+	}
+}
+
+// trimTenth drops a trailing ".0" so a whole magnitude reads as "2M" rather
+// than "2.0M" — the same shape Percent uses for whole percentages, and one
+// fewer column in a header line that is already fighting for them.
+func trimTenth(v float64, suffix string) string {
+	if v == math.Trunc(v) {
+		return fmt.Sprintf("%d%s", int64(v), suffix)
+	}
+	return fmt.Sprintf("%.1f%s", v, suffix)
+}
+
 // Age renders how long ago something happened, in at most four columns:
 // "12s", "47m", "2h", "3d". Sub-hour precision is where a session monitor's
 // value is; finer precision above that would just be a second thing ticking.

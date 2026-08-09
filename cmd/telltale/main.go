@@ -7,12 +7,16 @@
 //	                      product marker — ADR-004)
 //	telltale hud          cross-vendor watch-mode TUI
 //	telltale council      dispatch room: one brief to several vendor CLIs at once
+//	telltale hook <v>     vendor hook relay: a per-turn payload on stdin, token
+//	                      counts to ~/.telltale/usage/, nothing on stdout
 //
 // The two GAUGES — statusline and hud — share the normalized session model and
 // internal/theme's numbers, and nothing else. Neither calls the network or
-// sends anything to a running agent; their one write is the statusline's quota
-// relay (internal/quotacache, design.md §7.15) — numbers-only, under
-// ~/.telltale/, after the render. council is the deliberate exception
+// sends anything to a running agent; their writes are the statusline's quota
+// relay (internal/quotacache, design.md §7.15) and the hook relay's token
+// counts (internal/usagecache, §7.16) — numbers-only, under ~/.telltale/,
+// never ahead of the thing the vendor is waiting on. council is the
+// deliberate exception
 // (ADR-008): it spawns vendor CLIs, states each one's read-only posture on
 // screen, and shares no keybinding with the HUD. It reuses internal/theme and
 // nothing else from the gauges, so that seam is unchanged.
@@ -41,10 +45,12 @@ import (
 	"github.com/sanlee-ys/telltale/internal/antigravity"
 	"github.com/sanlee-ys/telltale/internal/claude"
 	"github.com/sanlee-ys/telltale/internal/council"
+	"github.com/sanlee-ys/telltale/internal/cursorhook"
 	"github.com/sanlee-ys/telltale/internal/hud"
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/quotacache"
 	"github.com/sanlee-ys/telltale/internal/statusline"
+	"github.com/sanlee-ys/telltale/internal/usagecache"
 )
 
 var version = "dev" // set via -ldflags at release time
@@ -67,6 +73,8 @@ func main() {
 			fmt.Fprintln(os.Stderr, "telltale council:", err)
 			os.Exit(1)
 		}
+	case "hook":
+		runHook(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println("telltale", version)
 	default:
@@ -137,6 +145,62 @@ func relayQuota(vendor string, windows []quotacache.Window) {
 		return
 	}
 	_ = quotacache.Write(dir, vendor, windows, time.Now())
+}
+
+// runHook is the vendor-hook relay: a payload on stdin, a number on disk, and
+// nothing on stdout.
+//
+// It is a third mode rather than a flag on statusline because it is a
+// different seam with a different owner. `telltale statusline` is invoked by a
+// host that wants a LINE back and will print whatever it gets; a hook is
+// invoked by a vendor mid-turn and its stdout is parsed by that vendor as a
+// hook result. So this path prints nothing at all on success — the one place
+// in the binary where silence is the contract.
+//
+// Exit code is 0 on every path, including a broken payload. A hook that exits
+// non-zero is a hook that can colour a vendor's turn with an error the user
+// did not cause, and telltale's cache is never worth that; the reason goes to
+// stderr for `--debug`-style inspection and the turn continues.
+func runHook(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "telltale hook: want a vendor (cursor)")
+		return
+	}
+	switch args[0] {
+	case "cursor":
+		runCursorHook()
+	default:
+		fmt.Fprintln(os.Stderr, "telltale hook: unknown vendor "+args[0]+" (want cursor)")
+	}
+}
+
+// runCursorHook reads one afterAgentResponse payload and folds its token
+// counts into ~/.telltale/usage/cursor.json (design.md §7.16).
+//
+// The payload it is handed carries the model's reply text and the user's email
+// address alongside the numbers; internal/cursorhook is what makes that
+// impossible to keep, and it is called before anything here touches disk.
+func runCursorHook() {
+	turn, err := cursorhook.Parse(os.Stdin)
+	if err != nil {
+		// ErrEmpty is not a failure: the hook fired and the vendor had no
+		// usage to report. Both cases write nothing and both exit clean; only
+		// the message differs, and only on stderr.
+		fmt.Fprintln(os.Stderr, "telltale hook cursor:", err)
+		return
+	}
+	delta, ok := usagecache.FromCursorTurn(turn)
+	if !ok {
+		fmt.Fprintln(os.Stderr, "telltale hook cursor: incomplete token counts; turn not counted")
+		return
+	}
+	dir, err := usagecache.Dir()
+	if err != nil {
+		return
+	}
+	if err := usagecache.Add(dir, string(model.VendorCursor), delta, time.Now()); err != nil {
+		fmt.Fprintln(os.Stderr, "telltale hook cursor:", err)
+	}
 }
 
 func runHUD(args []string) error {
@@ -262,6 +326,9 @@ usage:
   telltale statusline    (wire into Claude Code settings.json statusLine command)
   telltale hud           cross-vendor session HUD
   telltale council       dispatch room: one brief, several agents, side by side
+  telltale hook cursor   (wire into ~/.cursor/hooks.json as an afterAgentResponse
+                         command hook) read one turn's token counts on stdin,
+                         add them to this machine's running total, print nothing
   telltale version
 
 telltale hud flags:
@@ -366,9 +433,14 @@ telltale council flags:
 statusline and hud read vendor files, never call the network, and never send
 anything to a running agent. telltale's own state lives under ~/.telltale/ and
 is keys and numbers only: the statusline relays the quota it just rendered
-(quota/<vendor>.json) so the hud can attribute account quota per vendor, and
-council keeps one room file (council/room.json) holding the session ids
-reattaching needs — no transcript, output or brief content in either. council
+(quota/<vendor>.json) so the hud can attribute account quota per vendor, the
+cursor hook adds each turn's token counts to a running total
+(usage/<vendor>.json) so the hud can say what this machine spent, and council
+keeps one room file (council/room.json) holding the session ids reattaching
+needs — no transcript, output, prompt or brief content in any of them. council
 is the deliberate exception to reading only: it spawns vendor CLIs, and each
-column states its own posture on screen.`)
+column states its own posture on screen.
+
+Tokens spent are NOT quota. Cursor exposes no account limit without a network
+call, so the hud shows what was consumed and never a percentage of anything.`)
 }

@@ -65,6 +65,19 @@ is the third, and it does not sit on the pipeline above:
   answered by the seated vendor CLIs side by side, each column claiming only what was
   measured about that vendor. It spawns vendor CLIs instead of reading their session
   files, which is why it is off the data layer above and specified separately in §9.
+- **`telltale hook <vendor>`** (§7.16): the vendor-hook relay — a per-turn payload on
+  stdin, token counts to `~/.telltale/usage/`, and **nothing on stdout**, because a
+  hook's stdout is parsed by the vendor as a hook result. Not a gauge and not a room; it
+  renders nothing and is never run by a human.
+
+**The gauges never write, with three bounded exceptions — all under `~/.telltale/`, all
+numbers and keys only, never content.** `telltale council` keeps `council/room.json` (the
+session ids reattaching needs); the statusline relays `quota/<vendor>.json` after its line
+is on stdout (§7.15); and `telltale hook` accumulates `usage/<vendor>.json` (§7.16). Each
+is atomic (temp+rename), best-effort, self-expiring on read, and pinned by a test that
+walks the serialized form field by field. No transcript, prompt, reply, path or address
+reaches any of the three. Anything else that wants to write from `internal/hud` or
+`internal/statusline` is in the wrong package.
 
 The two gauge paths share exactly two packages: `internal/model` (the schema) and
 `internal/theme` (thresholds and value formatters). `internal/theme` is stdlib-only and
@@ -2451,6 +2464,183 @@ What the relay does **not** change: the statusline's own display (it renders fro
 stdin as before, the write happens after), the HUD's read-only posture toward *vendor*
 files, and the absence rule — a vendor whose statusline never fires simply never
 appears, and one that stops firing ages out.
+
+### 7.16 The token relay — what Cursor cost, from a seam with no network call
+
+Added 2026-08-08. §3.9 declared Cursor's `cost` and `quota` **ABSENT**, and re-verifying
+it that day made the verdict harder rather than softer: `usageData` was `{}` in 19 of 19
+blobs, `tokenCount` was zero in 1,622 of 1,622 message rows, 78 `turn_ended` records and
+51 transcripts carried status and no numbers, and the only account figures anywhere on
+disk were Statsig experiment values stamped `is_user_in_experiment:false`. Nothing about
+consumption reaches the store as a byproduct of a turn.
+
+So the number was fetched rather than found: **Cursor Hooks**, the vendor's own
+documented and versioned contract (cursor.com/docs/hooks), whose `afterAgentResponse`
+step hands a command hook the turn's token counts on stdin.
+
+**Why the hook and not print mode — the derived-`inputTokens` trap.** `cursor-agent -p
+--output-format json` prints a `usage` block, and reaching for it would have been the
+obvious move. It is the wrong one: its `inputTokens` is **not** the raw count. The CLI
+publishes `max(raw − cacheRead − cacheWrite, 0)`, measured printing **24,076 where the
+un-derived input was 48,012**. Rendering that under the label "input tokens" would be
+telltale repeating a vendor's arithmetic as if it were a reading — the ADR-001 violation
+this project exists to refuse, and a *quieter* one than usual, because the number looks
+perfectly plausible. The hook payload carries the vendor's own `tokenUsage` fields
+untouched, which is the entire reason it wins.
+
+Source-read at **cursor-agent 2026.08.04-aaa8809** (`8674.index.js`,
+`./src/after-agent-hooks.ts`), where the payload is assembled as
+`{conversation_id, generation_id, model, text, input_tokens: tokenUsage?.inputTokens,
+output_tokens: …, cache_read_tokens: …, cache_write_tokens: …}` and then enriched by the
+executor (`190.index.js`) with `hook_event_name`, `cursor_version`, `workspace_roots`,
+`session_id`, `transcript_path` and **`user_email`** before it reaches stdin. Both
+Windows transports (`argv_heredoc`, the default, and `windows_temp_file`) deliver that
+JSON on the command's **stdin**, under PowerShell.
+
+**The payload is the reason the allowlist is a struct.** This is the first telltale seam
+where the numbers arrive in the same object as the model's full reply *and* the user's
+email address. `internal/cursorhook` decodes into a four-field struct of integer
+pointers; `encoding/json` discards everything with no destination, so no content field
+can reach the cache unless someone adds a field on purpose — the technique
+`internal/adapter/cursor` already uses against a store that keeps OAuth tokens beside
+session state (decisions/007), pointed at a payload that keeps PII beside numbers. A test
+plants markers in every content-bearing field of a real payload shape and asserts none of
+them survives, at the parser AND again on the serialized cache file.
+
+**Three fields were left out on purpose, and they are not content.** `model` and
+`generation_id` are per-turn facts and the entry is a TOTAL — naming one turn's model
+beside a sum invites reading the sum as that model's. `conversation_id` names a
+cursor-agent **CLI** conversation, and the HUD's Cursor rows come from the **IDE's**
+Composer store (§3.9); the CLI keeps a separate one. Storing it would dangle a join that
+does not exist, which is also why this reading is not rendered on a session row.
+
+#### The accumulation ruling: a total, and never without its window
+
+A hook fires once per agent response, so the file is either the last turn's numbers or a
+running total. It is a **running total**, and the price of that choice is that the window
+is not optional:
+
+- a single turn's counts answer a question nobody asks — the turn you just watched
+  finish — and go stale the instant the next one starts. A *counter* is the thing a token
+  figure wants to be.
+- but a sum over an unbounded window is a different and much weaker claim than a reading.
+  So the entry carries `since` and `turns`, both travel to the screen, and the renderer
+  may never print the sum without them. "48k" is a number pretending to be a state;
+  "in 48k · out 1.2k · 14 turns over 12m" is a measurement with its scope attached, the
+  same §7.12 basis rule the burn forecast and the relayed quota block already follow.
+- the window's boundaries are mechanical rather than chosen. Accumulation continues onto
+  any entry a *reader* would still accept, and opens a fresh window otherwise — first
+  turn ever, first turn after a day of silence, first turn after a corrupted or
+  clock-skewed file. `internal/usagecache.readEntry` is shared by `Add` and `ReadAll`
+  precisely so those two can never disagree; without that, a sum could silently span a
+  week-long gap and still call itself a total.
+- **a partial turn is refused, not part-counted.** A payload missing any of the four
+  counts is not accumulated at all. Summing the three that arrived and treating the
+  fourth as zero would leave the total wrong by an amount nothing on screen could name,
+  while it kept looking like a total; refusing makes the counter go quiet, and a visible
+  absence is the failure mode §7.7 prefers every time. Every count in the file is
+  therefore a sum of complete readings, and `turns` says exactly how many.
+
+Everything else is §7.15's mechanism copied deliberately, function for function: one file
+per vendor under `~/.telltale/usage/`, atomic temp+rename in the same directory,
+best-effort, self-expiring at 24h and on future-skew, and the reading's age travelling
+with it past five minutes. `internal/usagecache` is a **sibling package** rather than a
+second store inside `internal/quotacache` because the two share their mechanism exactly
+and their schema not at all — quota is windows with percentages, resets and a
+"reset has passed, so this window no longer exists" rule that means nothing to a counter
+— and folding them together would put one keys-not-content test in charge of two
+unrelated formats.
+
+#### What it renders, and what stays absent
+
+**Tokens spent are not quota, and the render may never blur that.** There is no
+denominator anywhere in this reading, so no percentage, no gauge, no countdown, no bar —
+any of them would invent a ceiling out of nothing, the same class of error as filling a
+`CapNone` field with a plausible guess. The spend block therefore gets **its own header
+line, never shared with quota at any width**, and carries a verb: `cursor spent`. The
+verb is a word, not a glyph or a colour, so `--ascii` and `NO_COLOR` lose none of the
+claim. `TestSpendIsNeverRenderedAsQuota` asserts the line carries no `%`, no gauge glyph
+and no reset mark, and — the other half of the same claim — that Cursor is given no quota
+block, because Cursor still has no account quota and saying so by absence is the honest
+answer. The generated render (`spend-cursor` golden):
+
+```
+ telltale  │  2 sessions  │  codex 1  cursor 1                                         codex 7d █████▌──   79% ↻ 22h48m
+                               cursor spent  in 48k · out 1.2k · cache read 1.9M · cache write 62k  · 14 turns over 10m
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                               MODEL          CONTEXT                AGE
+ ● CU │ Multi-vendor orchestration  C:\src\code                               composer-2.5   ████▏───────    37% │   1m
+ ◐ CX │ notes-api  C:\src\code                                                gpt-5.1-codex                    — │   4m
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   v vendor   s sort   a all   ? keys
+```
+
+Codex's quota is on the quota line; Cursor's is nowhere, and Cursor's spend is on a line
+of its own. The shed cascade follows §7.15's grammar — cache pair first, then the turn
+count, then full names down to the two-letter tags — and vendor, verb, `in`, `out` and
+the window survive every level, with the ellipsis saying so whenever anything went.
+`theme.Tokens` floors at every step for the same reason `theme.Percent` does: this is
+what a machine *spent*, and rounding 47,950 up to "48.0k" invents fifty tokens nobody was
+billed for.
+
+#### The boundary amendment
+
+This is the **third** bounded write on a gauge path, and §1 and `CLAUDE.md` name it
+alongside council's `room.json` and the statusline's quota relay. It meets the same bar:
+under `~/.telltale/`, numbers and keys only, atomic, best-effort, and pinned by a test
+that walks the serialized form field by field. It is also the first one written by
+neither gauge — `telltale hook cursor` is its own mode, because a hook's stdout is parsed
+by the vendor as a hook result, so this is the one path in the binary where printing
+nothing is the contract and every exit is clean.
+
+#### Live verification, 2026-08-08 — and the half of it that did not hold
+
+Measured, on Windows 11 at cursor-agent 2026.08.04-aaa8809:
+
+- the relay path end to end, driven by the real binary from a real turn's real counts
+  (`input 23,941 / output 33 / cache 0 / 0`, from a print-mode `result` whose zero cache
+  figures make its derived `inputTokens` equal to the raw one). Two turns relayed;
+  `~/.telltale/usage/cursor.json` read back
+  `{"vendor":"cursor","turns":2,"input_tokens":47882,"output_tokens":66,…}` — accumulated,
+  with no `text`, no `user_email`, no `conversation_id` and no `model` anywhere in it —
+  and the HUD rendered `cursor spent  in 47.8k · out 66 · cache read 0 · cache write 0 ·
+  2 turns over 6s` from that file.
+- **the vendor never invoked the hook, on any surface reachable from a script.** Marker
+  hooks were installed at `~/.cursor/hooks.json` on both `beforeSubmitPrompt` and
+  `afterAgentResponse` and neither fired for: `-p --output-format json`, a non-TTY run
+  without `-p`, or an **ACP** turn driven over JSON-RPC. The ACP result is corroborated by
+  source rather than resting on one capture — the ACP chunk (`8096.index.js`) contains
+  **zero** references to `hookExecutor` — and the only call site of the
+  `afterAgentResponse` helper sits in the React/ink agent-app module, beside the protobuf
+  agent-server dispatcher the IDE talks to. The config itself was not the problem: `type`
+  defaults to `"command"` in the bundle's own validator, and an invalid config produced no
+  `[hooks]` warning on those paths either, which is consistent with the subsystem not
+  being initialized there at all.
+
+So the seam is real and its payload is verified by source read at a pinned version, and
+the **invocation is verified for no surface yet**. What is unverified, itemized: that a
+true-TTY interactive `cursor-agent` session fires the hook; that the Cursor IDE's agent
+server does; and therefore that any figure ever appears without being fed in by hand. The
+hook is left wired at `~/.cursor/hooks.json` so the first session that does fire it
+captures a total. Worth stating plainly because it bears on the roadmap: **council's
+Cursor seat runs on ACP (§9.36), and ACP does not carry hooks** — so the seat that most
+wanted per-turn cost is, at this version, the one surface that provably cannot supply it.
+
+#### Known limitations
+
+- **Accumulation is a read-modify-write and takes no lock.** Two hook processes finishing
+  in the same instant can lose one turn. Accepted rather than locked: the loss is bounded
+  and self-consistent (the `turns` count drops with the counts it names, so the total
+  never disagrees with its own window), and the alternative is a lock file on a path a
+  vendor's turn is waiting on — a gauge that can hang a turn is strictly worse than one
+  that undercounts.
+- **`~/.cursor/hooks.json` is un-versioned machine state.** It names an absolute path to
+  the binary, so it does not travel; versioning it belongs in the dotfiles repo, not here.
+- The counter says nothing about *which* conversation or model spent the tokens, by the
+  design ruling above. If a future seam makes a CLI conversation joinable to a HUD row,
+  that is a new claim and needs its own section.
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 

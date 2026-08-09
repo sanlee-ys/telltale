@@ -19,6 +19,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/quotacache"
+	"github.com/sanlee-ys/telltale/internal/usagecache"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden renders")
@@ -275,6 +276,52 @@ func fleetQuotaState(w, h int) State {
 				window("gemini-weekly", "gemini-weekly", 38, 3*time.Hour),
 			}},
 		},
+	}
+	return st
+}
+
+// spendState is the frame §7.16 exists for: one vendor whose account quota is
+// readable (Codex, from its own store) and one whose is not and never will be
+// without a network call (Cursor) but whose per-turn token counts now arrive
+// through the hook relay.
+//
+// The two facts have to be legible side by side. The quota line speaks for
+// Codex and says nothing about Cursor — Cursor's quota stays visibly ABSENT,
+// which is the honest state — while the spend line says what Cursor's turns
+// actually cost this machine. Neither may be mistaken for the other, which is
+// what TestSpendIsNeverRenderedAsQuota asserts on this exact render.
+func spendState(w, h int) State {
+	st := NewState()
+	st.Now = pinned
+	st.Width, st.Height = w, h
+	st.Snap = Snapshot{
+		At: pinned,
+		Sessions: []*model.Session{
+			sess(model.VendorCodex, "0f00dbaa-1234-4a77-9b02-000000000042",
+				`C:\src\code\notes-api`, "gpt-5.1-codex", 4*time.Minute,
+				withName("notes-api"),
+				withQuota(window("seven_day", "7d", 79, 22*time.Hour+48*time.Minute))),
+			sess(model.VendorCursor, "3c7f0a11-5566-4d88-9e00-000000000007",
+				`C:\src\code\telltale`, "composer-2.5", 90*time.Second,
+				withName("Multi-vendor orchestration"), withCtx(37)),
+		},
+		Vendors: []VendorView{
+			watching(model.VendorCodex, `%USERPROFILE%\.codex`, fullCaps),
+			watching(model.VendorCursor, `%APPDATA%\Cursor\User`, cursoradapter.New().Capabilities()),
+		},
+		Spend: []usagecache.Total{{
+			Vendor: model.VendorCursor,
+			Entry: usagecache.Entry{
+				Vendor:           string(model.VendorCursor),
+				Since:            pinned.Add(-12 * time.Minute),
+				WrittenAt:        pinned.Add(-90 * time.Second),
+				Turns:            14,
+				InputTokens:      48012,
+				OutputTokens:     1203,
+				CacheReadTokens:  1904221,
+				CacheWriteTokens: 62004,
+			},
+		}},
 	}
 	return st
 }
@@ -608,6 +655,14 @@ func goldenCases() []goldenCase {
 			return fleetQuotaState(120, 9)
 		}},
 
+		// The token relay (§7.16). Codex's quota is on the quota line; Cursor
+		// has none there and is not faked into it, and its spend gets a line
+		// of its own with a verb on it. No percentage, no bar, no ceiling —
+		// there is no denominator anywhere in this reading.
+		{name: "spend-cursor", state: func() State {
+			return spendState(120, 10)
+		}},
+
 		// Find mode: the footer becomes the query line and says how to leave.
 		{name: "find-active", state: func() State {
 			st := healthyState(120, 9)
@@ -755,6 +810,157 @@ func compareGolden(t *testing.T, name, got string) {
 }
 
 // --------------------------------------------------------- unit assertions
+
+// ------------------------------------------------ the token relay (§7.16)
+
+// spendLineOf returns the header line carrying the spend block, or "" — found
+// by the verb, which is the thing the design says must always be on it.
+func spendLineOf(render string) string {
+	for _, line := range strings.Split(render, "\n") {
+		if strings.Contains(line, "spent") {
+			return line
+		}
+	}
+	return ""
+}
+
+// The one regression this feature can cause. Tokens spent have NO denominator
+// — Cursor publishes no account limit without a network call (§3.9) — so the
+// spend line may never borrow the quota line's vocabulary. A percentage or a
+// bar here would invent a ceiling out of nothing, which is the same class of
+// error as filling a CapNone field with a plausible guess.
+func TestSpendIsNeverRenderedAsQuota(t *testing.T) {
+	g := UnicodeGlyphs()
+	got := Render(spendState(120, 10), PlainStyles(), g)
+	line := spendLineOf(got)
+	if line == "" {
+		t.Fatal("no spend line in the render")
+	}
+	if strings.Contains(line, "%") {
+		t.Errorf("the spend line rendered a percentage — of what?\n%s", line)
+	}
+	for _, bar := range append([]string{g.Fill, g.Track}, g.Eighths...) {
+		if strings.Contains(line, bar) {
+			t.Errorf("the spend line drew a gauge glyph %q — a bar implies a ceiling\n%s", bar, line)
+		}
+	}
+	if strings.Contains(line, g.Reset) {
+		t.Errorf("the spend line drew a reset countdown; a counter does not reset\n%s", line)
+	}
+	// And the other half of the same claim: Cursor's quota stays ABSENT. The
+	// quota block is asserted directly rather than by scanning the frame,
+	// because the identity line legitimately says "cursor 1" — that is a
+	// session count, and the distinction between it and a quota reading is
+	// exactly what this test would otherwise blur.
+	st := spendState(120, 10)
+	quota := quotaBlock(st, PlainStyles(), g, st.Width)
+	if strings.Contains(strings.ToLower(quota), "cursor") || strings.Contains(quota, "cu ") {
+		t.Errorf("cursor was given a quota block it has no source for:\n%s", quota)
+	}
+	if !strings.Contains(quota, "codex") {
+		t.Errorf("the vendor that DOES have quota lost its block:\n%s", quota)
+	}
+}
+
+// The window is what makes a sum honest, so it never sheds — at any width, in
+// any dress. "48k" alone is a number pretending to be a state.
+func TestSpendAlwaysCarriesItsWindow(t *testing.T) {
+	for _, w := range []int{200, 150, 120, 100, 90, 80, 70, 60} {
+		got := Render(spendState(w, 12), PlainStyles(), UnicodeGlyphs())
+		line := spendLineOf(got)
+		if line == "" {
+			t.Errorf("width %d: the spend line vanished entirely", w)
+			continue
+		}
+		if !strings.Contains(line, "over 10m") {
+			t.Errorf("width %d: the accumulation window shed:\n%s", w, line)
+		}
+		// in/out are fact and shed with it.
+		if !strings.Contains(line, "in 48k") || !strings.Contains(line, "out 1.2k") {
+			t.Errorf("width %d: a token count shed:\n%s", w, line)
+		}
+	}
+}
+
+// Dropping is never silent (the footer's rule). When the line cannot fit the
+// cache pair, it says so with the ellipsis rather than quietly showing two
+// numbers where there were four.
+func TestSpendSaysWhenItDroppedTheCachePair(t *testing.T) {
+	g := UnicodeGlyphs()
+	wide := spendLineOf(Render(spendState(120, 10), PlainStyles(), g))
+	if !strings.Contains(wide, "cache read") || strings.Contains(wide, g.Ellipsis) {
+		t.Errorf("at 120 the full dress should fit undecorated:\n%s", wide)
+	}
+	narrow := spendLineOf(Render(spendState(70, 12), PlainStyles(), g))
+	if strings.Contains(narrow, "cache") {
+		t.Errorf("at 70 the cache pair should have shed:\n%s", narrow)
+	}
+	if !strings.Contains(narrow, g.Ellipsis) {
+		t.Errorf("the cache pair shed without saying so:\n%s", narrow)
+	}
+}
+
+// Past the age threshold the reading carries its own age — the §7.12 basis
+// rule the relayed quota block follows, applied to a total. Without it a
+// morning's spend reads as this minute's.
+func TestAStaleSpendTotalCarriesItsAge(t *testing.T) {
+	st := spendState(120, 10)
+	st.Snap.Spend[0].WrittenAt = pinned.Add(-2 * time.Hour)
+	line := spendLineOf(Render(st, PlainStyles(), UnicodeGlyphs()))
+	if !strings.Contains(line, "2h ago") {
+		t.Errorf("a two-hour-old total rendered without its age:\n%s", line)
+	}
+
+	fresh := spendLineOf(Render(spendState(120, 10), PlainStyles(), UnicodeGlyphs()))
+	if strings.Contains(fresh, "ago") {
+		t.Errorf("a 90-second-old total wore an age it did not need:\n%s", fresh)
+	}
+}
+
+// Absence is not zero (§4a.1), here as everywhere. A machine that has never
+// fired the hook has no spend line at all — not a line of zeros, which would
+// assert that nothing was spent rather than that nothing was measured.
+func TestNoRelayedTotalRendersNoLine(t *testing.T) {
+	st := spendState(120, 10)
+	st.Snap.Spend = nil
+	got := Render(st, PlainStyles(), UnicodeGlyphs())
+	if line := spendLineOf(got); line != "" {
+		t.Errorf("a vendor with no relayed total rendered a line:\n%s", line)
+	}
+	if strings.Contains(got, " 0 ") && strings.Contains(got, "spent") {
+		t.Errorf("absence rendered as a zeroed total:\n%s", got)
+	}
+}
+
+// The spend line never shares a row with quota, at any width. They carry
+// different kinds of number and a reader scanning one line of vendor blocks
+// would take the second for more of the first.
+func TestSpendNeverSharesALineWithQuota(t *testing.T) {
+	for _, w := range []int{200, 160, 120, 100, 80, 60} {
+		got := Render(spendState(w, 12), PlainStyles(), UnicodeGlyphs())
+		for _, line := range strings.Split(got, "\n") {
+			if strings.Contains(line, "spent") && strings.Contains(line, "%") {
+				t.Errorf("width %d: quota and spend shared a line:\n%s", w, line)
+			}
+		}
+	}
+}
+
+// The ASCII set has to carry the same distinction. The verb is a word, not a
+// glyph, precisely so --ascii and NO_COLOR lose nothing of the claim.
+func TestSpendSurvivesASCII(t *testing.T) {
+	got := Render(spendState(120, 10), PlainStyles(), GlyphsFor(true))
+	line := spendLineOf(got)
+	if line == "" {
+		t.Fatal("the spend line vanished in ASCII")
+	}
+	if !strings.Contains(line, "cursor spent") || !strings.Contains(line, "over 10m") {
+		t.Errorf("ASCII lost part of the claim:\n%s", line)
+	}
+	if strings.Contains(line, "%") || strings.Contains(line, "#") {
+		t.Errorf("ASCII rendered a gauge or a percentage:\n%s", line)
+	}
+}
 
 // The gauge's whole job is to not lie. This is the §7.4 table, verbatim.
 func TestGaugeScale(t *testing.T) {
