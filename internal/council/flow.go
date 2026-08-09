@@ -160,7 +160,8 @@ func ParseFlowChain(input string) (*FlowChain, error) {
 		name := strings.ToLower(strings.TrimPrefix(seatStr, "@"))
 		vendorID, ok := aliases[name]
 		if !ok || allAliases[name] {
-			return nil, fmt.Errorf("unknown vendor seat @%s in flow chain (valid seats: @claude, @codex, @agy, @cursor)", name)
+			return nil, fmt.Errorf("unknown vendor seat @%s in flow chain (valid seats: @%s)",
+				name, strings.Join(SeatNames(), ", @"))
 		}
 
 		verb := strings.ToLower(parts[1])

@@ -35,6 +35,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	agyadapter "github.com/sanlee-ys/telltale/internal/adapter/antigravity"
@@ -245,7 +246,7 @@ func runHUD(args []string) error {
 func runCouncil(args []string) error {
 	fs := flag.NewFlagSet("telltale council", flag.ContinueOnError)
 	dir := fs.String("cd", "", "move the room's workspace for this launch (default: where the saved room was, or cwd) — /cd inside the room does the same")
-	seats := fs.String("vendor", "", "who is in the room: a comma list (claude,codex,agy,cursor) or all (default: who the saved room seated, or every vendor that can be driven) — a typed list overrides the saved roster and is what the room saves from then on")
+	seats := fs.String("vendor", "", "who is in the room: a comma list ("+strings.Join(council.SeatNames(), ",")+") or all (default: who the saved room seated, or every vendor that can be driven) — a typed list overrides the saved roster and is what the room saves from then on")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
 	// The room writes by default, and --read is the opt-out. Posture used to be
@@ -319,8 +320,17 @@ func parseFilter(s string) (hud.Filter, error) {
 	}
 }
 
-func usage() {
-	fmt.Fprintln(os.Stderr, `telltale — an honest gauge for your coding agents
+// usageText is the long help.
+//
+// It is a package-level const rather than a literal inside usage() so
+// TestUsageNamesEverySeat can read it. The council seat roster appears here as
+// hand-wrapped prose at a fixed column, which is the one place in this repo the
+// roster cannot simply be interpolated from council.SeatNames() without the
+// interpolation fighting the wrapping — so the words stay written out and a
+// test pins them against SeatNames instead. This block is exactly where that
+// drift happened: grok became the fifth seat (§9.39) and the help went on
+// naming four, telling a reader a supported vendor did not exist.
+const usageText = `telltale — an honest gauge for your coding agents
 
 usage:
   telltale statusline    (wire into Claude Code settings.json statusLine command)
@@ -349,11 +359,11 @@ telltale council flags:
                               saved room exists it is named once before the
                               first dispatch replaces it
   --vendor <list>             who is in the room: a comma list of claude, codex,
-                              agy and cursor, or "all" (default: who the saved
-                              room seated, or every seat that can be driven).
-                              A typed list overrides the saved roster and is
-                              the room the next save records. A seat that is
-                              not installed — or is installed and cannot be
+                              agy, cursor and grok, or "all" (default: who the
+                              saved room seated, or every seat that can be
+                              driven). A typed list overrides the saved roster
+                              and is the room the next save records. A seat that
+                              is not installed — or is installed and cannot be
                               driven — folds out of the grid, so the seats
                               that answer get the width, and one line under
                               the header names what was folded and why. "all"
@@ -442,5 +452,8 @@ is the deliberate exception to reading only: it spawns vendor CLIs, and each
 column states its own posture on screen.
 
 Tokens spent are NOT quota. Cursor exposes no account limit without a network
-call, so the hud shows what was consumed and never a percentage of anything.`)
+call, so the hud shows what was consumed and never a percentage of anything.`
+
+func usage() {
+	fmt.Fprintln(os.Stderr, usageText)
 }

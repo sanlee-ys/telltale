@@ -41,7 +41,7 @@ func ParseSeats(s string) (Seats, error) {
 		v, ok := aliases[name]
 		if !ok {
 			return Seats{}, errors.New("unknown --vendor " + name +
-				" (want all, claude, codex, agy, cursor or grok)")
+				" (want all, " + strings.Join(SeatNames(), ", ") + ")")
 		}
 		if !out.names(v) {
 			out.Only = append(out.Only, v)

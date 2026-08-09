@@ -598,7 +598,7 @@ func (m *Model) seatCommand(arg string) bool {
 		// smaller room than asked for would be discovered as a missing answer
 		// several turns later.
 		m.st.Notice = "no seat called " + strings.Join(unknown, " or ") +
-			" — /seat takes claude, codex, agy, cursor, or all"
+			" — /seat takes " + strings.Join(SeatNames(), ", ") + ", or all"
 		return true
 	}
 	if len(want) == 0 {
@@ -659,7 +659,7 @@ func (m *Model) unseatCommand(arg string) bool {
 	drop, unknown := parseSeatList(arg)
 	if len(unknown) > 0 {
 		m.st.Notice = "no seat called " + strings.Join(unknown, " or ") +
-			" — /unseat takes claude, codex, agy or cursor"
+			" — /unseat takes " + strings.Join(SeatNames(), ", ")
 		return true
 	}
 	if len(drop) == 0 {
