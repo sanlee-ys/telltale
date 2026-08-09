@@ -221,6 +221,9 @@ type Layout struct {
 	// Notice is 1 when a row under the header names the seats that were
 	// collapsed out of the grid, 0 otherwise.
 	Notice int
+	// NeedsYou is 1 when a row under the header names the seats a pending
+	// approval gate is stopped on (§9.40), 0 otherwise.
+	NeedsYou int
 	// Band is how many rows the live turn's brief spends as a full-width band
 	// above the columns (§9.30). Zero means no band — and it is the SAME zero the
 	// columns read to decide whether to echo the brief themselves, so the two can
@@ -243,6 +246,10 @@ type layoutInput struct {
 	Composer int
 	// Notice reports that the collapsed-seat line is on screen.
 	Notice bool
+	// NeedsYou reports that the needs-you strip has at least one seat to name
+	// (§9.40). One row or none — the strip sheds rather than wraps, so unlike
+	// Band there is no height to pass in here.
+	NeedsYou bool
 	// Band is how many rows the live-turn band WANTS, before the tier and the
 	// height floor get a say. Zero when the turn addresses fewer than two
 	// on-screen seats, or when the body is not the grid at all — there is no
@@ -309,6 +316,25 @@ func resolveLayoutIn(in layoutInput) Layout {
 	}
 	if in.Notice {
 		rows++
+	}
+	// The needs-you strip costs a row and, unlike the band below it, it does NOT
+	// yield (§9.40).
+	//
+	// The band's whole value is removing a duplication, so a terminal too short to
+	// afford it falls back to the frame as it was and loses nothing that was not
+	// already on screen. This line is the opposite trade: what it removes is a
+	// SEARCH, and it is the only place in the room that says which seat is stopped
+	// — gateLabel prints the call and the card lives in the column the reader has
+	// to find. A row spent on that is the last row this budget should reclaim, and
+	// it is spent in every tier for the same reason: at the tabs tier the blocked
+	// seat may be the one column NOT on screen, which is precisely where a reader
+	// has no other way to learn it exists.
+	//
+	// Before the band, so the band yields to it rather than the other way round —
+	// same ordering argument the notice already wins on, one urgency step up.
+	if in.NeedsYou {
+		rows++
+		l.NeedsYou = 1
 	}
 
 	// The band is room chrome and it is spent HERE — after the tier, out of the

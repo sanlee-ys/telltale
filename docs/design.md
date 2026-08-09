@@ -7333,3 +7333,108 @@ Worth stating for the next adapter, because it generalises past this vendor: **a
 should be shaped like a brief, not like a greeting.** Three of this file's captures used
 friendly one-liners, and the one hazard they could never have surfaced is the one that took
 the seat down on its first real turn.
+
+### 9.40 the room said something was stopped and never said which seat (2026-08-09)
+
+The gate (§9.8) blocks a vendor until a key is pressed, and the room already announced that in
+two places. Neither of them names the seat.
+
+- The **card** sits in the blocked column and does not have to name it: its position *is* the
+  seat, which is exactly why `gateCard` passes an empty subject there.
+- The **mode line** cannot. `gateLabel` prints the oldest request's own text —
+  `GATE Write: internal/council/gate.go (+2 queued)` — which says what is blocked and never who.
+
+So in a five-seat room the footer says something is stopped, and the reader finds out which
+column by going through them one at a time while it stays stopped. On a projector, driving four
+seats live, that is the stall. **The needs-you strip is one line of room chrome that answers the
+question the other two cannot:** `⚠ NEEDS YOU   2 Codex   3 Antigravity`.
+
+**It is driven by the gate queue and by nothing else, and that is the whole safety property.**
+`State.Gates` is a structured record of vendors that asked for permission and have not been
+answered. Every name on this line comes from one of those entries. A seat that has gone quiet,
+a seat streaming nothing, a seat whose prose happens to end in a question mark — none of them
+reach it, because none of them is a *measurement* that anyone is blocked (§4a.1). "Needs you"
+is a claim about a vendor waiting on a keystroke, and the queue is the only thing in this room
+that knows. `TestTheStripSaysNothingWithoutAPendingGate` builds all three of those look-alikes
+at once and asserts no strip is drawn.
+
+**A seat leaves when the reader goes to it — and that is the only thing besides answering that
+takes it off.** Derived from `State.Focus` rather than stored as an acknowledged set, on
+`Gating()`'s own argument: a stored set is a second place for the same fact to live, and the two
+drift the first time a seat's gate is answered and a *new* one arrives while the old
+acknowledgement is still in the map. At that point the anti-stall silently omits a seat that is
+waiting, which is the one failure it exists to prevent. Derived, the worst case is the strip
+re-listing a seat the reader visited and left — and that is true: it is still stopped and nobody
+is looking at it any more. `TestGoingToASeatIsWhatClearsIt` pins the three clearings that are
+refused (the seat going quiet, the seat producing output, time passing) alongside the one that
+is allowed.
+
+**The default focus is a hole in that rule, and it is deliberately left open.** `NewState` seats
+the keys on column 0 without anyone pressing anything, so a gate on whichever seat happens to be
+focused never appears here at all. That is the correct outcome rather than a gap: the reader is
+looking at the column whose card is already spelling the question out in full, and a room-level
+line naming the seat under their own cursor is the duplication §9.30 spent a section removing.
+
+#### Where it sits, and what it does not yield to
+
+Directly under the frame's heavy rule — **above** the collapsed-seat notice and above the band.
+The other two are ordered by subject size (the room outranks the turn); this one is ordered by
+**urgency**, on `modeLine`'s own precedent: a gate is the only state in this room where
+something is STOPPED until a key is pressed, which is why `GATE` outranks every other mode word
+on the footer. Seats that are not on screen and a brief that was just sent are facts a reader
+can come back to. A blocked vendor is not.
+
+It costs a row and, unlike the band, **it does not yield to a short terminal.** The band's whole
+value is removing a duplication, so retiring it falls back to the frame as it was and loses
+nothing that was not already on screen. This line is the only place the room says *which* seat
+is stopped, so a row spent on it is the last row the height budget should reclaim. It is spent
+in **every tier** for the same reason — at the tabs tier the blocked seat may be the one column
+not on screen, which is precisely where a reader has no other way to learn it exists.
+
+#### The ladder, and one ordering that had to be reasoned about again
+
+Longest-first, widest-that-fits-wins — `stripHeader`'s idiom, so this package has one shedding
+shape rather than three. Three rungs:
+
+1. every seat, by name;
+2. every seat, by the two-letter tag §9.25 made permanent;
+3. as many tagged seats as fit, and a count of the rest (`+2 more`).
+
+**Identity yields before a SEAT does**, which is §9.18's order and the rung boundary worth
+writing down. A four-seat strip at sixty columns can hold `2 Codex   3 Antigravity   +2 more` or
+it can hold `2 CX   3 AG   4 CU   5 GR`, and the second is better by the only measure this line
+has: the reader is asking who is stopped, four abbreviations they already learned from the
+column headers answer it completely, and two names plus a count answer half of it. So the tag
+rung is tried at *full roster* before any seat is dropped.
+
+Nothing is ever clipped at any rung — an entry survives whole or leaves and is counted, because
+`Ant` is not a shortened `Antigravity`, it is a seat this room does not have (§9.18). The count
+is never traded away either, on `overflowMarker`'s rule: "there is more" without a number is the
+marker §9.10 shipped and got reported as a room that could not scroll. Below the width where
+even one tagged seat fits, `⚠ NEEDS YOU` survives alone — still true, still the signal, and
+honest about being unable to say who. That floor is unreachable in a real frame (MinWidth leaves
+the strip 56 cells and the lead costs eleven) and is written out anyway, because the last time a
+floor was assumed rather than enforced it was wrong by four.
+
+#### Two smaller rulings
+
+**The seat number is printed only where the key is live.** Digits focus a seat through
+`viewKey`, and `gateKey` falls through to it, so while the room is gating the number works in
+both modes — except on a turn page, where `focusSeat` refuses outright because there are no
+columns to move between (§9.22). A number printed there would be the room naming a key that does
+nothing, which is §7.8's surprise. The names stay, because *who is stopped* is still true on a
+page.
+
+**A seat folded out of the grid is still named.** Its vendor is blocked whether or not the room
+drew it a column, and a blocked vendor with no card, no column and no line anywhere is the
+disappearance §4a.1 forbids. It carries no number, because no key in this room reaches it, and
+it is therefore the one entry that focus cannot clear — which is honest: nothing the reader can
+press from here will unblock it.
+
+**No new hue, and no new site for the old one.** The line is `Alert` — SevWarn at weight, the
+gate card's own title style — with the seat numbers `Muted`, which is the chrome/anchor split
+the column header and the tab bar already use for those same two things. §9.28's list of three
+places a seat hue is spent stays closed; it was ratified as closed, and a fourth site is a
+decision for whoever wants to reopen it rather than a side effect of this line. Under `--ascii`
+and `NO_COLOR` the strip reads exactly the same, which is the property every distinction this UI
+makes has to have: `NEEDS YOU` is the signal, and the mark and the weight only make it findable.
