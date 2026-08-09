@@ -1580,6 +1580,20 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 			}
 			out = append(out, styleAll(wrap(finish, w), sty.bold(sty.Text))...)
 		}
+		// The commit receipt, and its two honest alternatives (§9.37, amended
+		// 2026-08-09). "committed <sha>" is the measured tip — shortSHA of what
+		// rev-parse returned, never a derived value. A commit that was owed and
+		// failed says so with git's own sentence; a zero-diff attempt says
+		// NOTHING here, because the "no changes" sentence below is the whole
+		// story and a "not committed" beside it would dress a ruled-out empty
+		// commit up as a failure. Three states, three renders — the same rule
+		// as the diff outcomes.
+		if c.Arena.Commit != "" {
+			out = append(out, wrap("committed "+shortSHA(c.Arena.Commit)+".", w)...)
+		}
+		if c.Arena.CommitErr != "" {
+			out = append(out, wrap(c.Arena.CommitErr, w)...)
+		}
 		switch {
 		case c.Arena.Err != "":
 			out = append(out, wrap(c.Arena.Err, w)...)
@@ -1612,6 +1626,16 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 			if c.Arena.DiffTruncated {
 				out = append(out, wrap("(the yankable diff is truncated at 1 MB — the worktree holds the whole of it)", w)...)
 			}
+		}
+		if c.Arena.Undone {
+			// LAST, below the stat, because that is when it happened: the
+			// attempt was made, measured, and THEN taken back. The stat above
+			// deliberately stays — it is the record of what the attempt
+			// changed, and erasing it to report the undo would be the room
+			// destroying the thing it exists to show (the cleared marker's
+			// argument, one block over) — while this line says the tree and
+			// branch no longer hold it.
+			out = append(out, wrap("undone — worktree and branch are back at "+shortSHA(c.Arena.Base)+".", w)...)
 		}
 	} else if c.ArenaInterim != nil {
 		// The MID-RACE stat (§9.37's live refresh). An else-branch of the
@@ -3442,7 +3466,13 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// A row of its own was never affordable: the budget is hard (17 rows,
 		// above) and a control documented below the fold is a control nobody finds
 		// (§9.20), which is exactly how the room came to be missing this one.
-		"  /cd <dir>    move the room; /read /write (y); /seat /unseat; /arena races worktrees; c clears (y); /trace <file>",
+		// `u` landed at this row's exact 114-cell budget by trading the word
+		// "worktrees" for it: the arena block itself prints the worktree path on
+		// every race, so the word was the one clause here restating something the
+		// feature already teaches on screen, while an undo key documented nowhere
+		// is a control nobody finds. `c clears, u undoes (y)` groups the two
+		// y-confirmed seat keys under one marker rather than spending "(y)" twice.
+		"  /cd <dir>    move the room; /read /write (y); /seat /unseat; /arena races; c clears, u undoes (y); /trace <file>",
 		// One row for three keys, and the merge is the honest shape rather than
 		// a saving. The panel's budget is hard (17 rows, above) and yank had to
 		// land inside it — a copy key documented below the fold is a copy key

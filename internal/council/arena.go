@@ -64,6 +64,30 @@ type ArenaResult struct {
 	// collapse is the degraded-vs-zero bug §4a.1 exists to prevent.
 	Err string
 
+	// Commit is the sha that makes this attempt durable on Branch — exactly
+	// what `git rev-parse HEAD` returned after the turn's commit landed, never
+	// a value council derived (§9.37, amended 2026-08-09; the mechanic is
+	// Crystal's commit-per-turn). Empty on a zero-diff attempt BY RULING: an
+	// empty commit would be a receipt claiming work that did not happen — the
+	// false nonzero, §4a.1's bug pointed the other way — so nothing is
+	// committed and the "no changes" sentence stays the whole story.
+	Commit string
+	// CommitErr names why a commit that WAS owed could not be made (no
+	// identity anywhere and the fallback failed, a signer that cannot run, a
+	// tree that vanished mid-turn). It degrades this seat's receipt to
+	// worktree-only — the attempt is still on disk, just not parked on the
+	// branch — and it never aborts the race or touches the other racers: a
+	// partial read degrades a field, not the row, and the same rule holds for
+	// a partial write.
+	CommitErr string
+	// Undone records that the user took this attempt back (`u`): worktree and
+	// branch were reset to Base. The Stat/Diff above it deliberately survive —
+	// they are the measured record of what the attempt changed and the room
+	// does not destroy its reading surface — but the block says the tree no
+	// longer holds it, and a second undo is refused as already done rather
+	// than re-run as a no-op that pretends to act.
+	Undone bool
+
 	// Rank is the order the ROOM saw this attempt land (1-based), Of how many
 	// raced. Host-observed finish order, per the host-stamps rule: a vendor's
 	// own claim about when it finished is an inferred value wearing measured
@@ -171,4 +195,110 @@ func collectArena(tree, base string) ArenaResult {
 	}
 	r.Diff = diff
 	return r
+}
+
+// arenaCommitMsg names one attempt's commit from the turn that produced it:
+// "arena t<N>: <first line of the brief>". First line only and capped at 64
+// bytes (cut on a rune boundary), because the subject line is a label for
+// `git log --oneline` over a kept branch, not a second copy of the brief —
+// the brief itself is in the transcript and in the commit the user adopts.
+func arenaCommitMsg(turn int, brief string) string {
+	line := brief
+	if i := strings.IndexByte(line, '\n'); i >= 0 {
+		line = line[:i]
+	}
+	line = strings.TrimSpace(line)
+	const subjectCap = 64
+	if len(line) > subjectCap {
+		cut := subjectCap
+		for cut > 0 && !utf8Start(line[cut]) {
+			cut--
+		}
+		line = strings.TrimRight(line[:cut], " ") + "…"
+	}
+	if line == "" {
+		return "arena t" + itoa(turn)
+	}
+	return "arena t" + itoa(turn) + ": " + line
+}
+
+// commitArena parks one attempt's tree state on its arena branch, and returns
+// the resulting tip as `git rev-parse HEAD` reported it — the one sha the
+// column may render, because it is read back rather than inferred (§4a.1).
+//
+// Staging everything (`add -A`) is correct HERE and only here: the worktree
+// contains nothing but the racer's own output, so there is no bystander state
+// to sweep up — the reason blanket staging is wrong in a real workspace does
+// not exist in this one. Argv through gitOut, never a shell (§9.3).
+//
+// A racer that committed for ITSELF mid-turn leaves a clean tree ahead of
+// base; its own tip is the durable receipt and is reported as such rather
+// than papered over with an empty commit. And the commit honors the repo's
+// own config — including a configured signer — on purpose: a -c override that
+// silently skipped signing would park an unsigned commit on a machine whose
+// owner asked for signed ones. A signer (or anything else) that cannot run
+// fails this seat's commit with git's own first stderr line, which the
+// column then carries as a named degradation.
+func commitArena(tree, base, msg string) (string, error) {
+	if _, err := gitOut(tree, "add", "-A"); err != nil {
+		return "", err
+	}
+	dirty, err := gitOut(tree, "status", "--porcelain")
+	if err != nil {
+		return "", err
+	}
+	if dirty == "" {
+		head, err := gitOut(tree, "rev-parse", "HEAD")
+		if err != nil {
+			return "", err
+		}
+		if head != base {
+			// The attempt's own mid-turn commit already parked it.
+			return head, nil
+		}
+		// Clean at base: nothing owed. The caller skips the zero-diff case
+		// before calling; this is the belt to that suspender.
+		return "", nil
+	}
+	args := arenaIdentity(tree)
+	args = append(args, "commit", "-m", msg)
+	if _, err := gitOut(tree, args...); err != nil {
+		return "", err
+	}
+	return gitOut(tree, "rev-parse", "HEAD")
+}
+
+// arenaIdentity supplies a committer identity ONLY where the machine has
+// none — CI runners and fresh boxes, where `git commit` otherwise refuses
+// and every race would degrade on arrival. Per-command `-c` flags rather
+// than `git config`, because a worktree shares its repo's config file: a
+// config write "inside the racer worktree" would actually land in the
+// room's repo, which is the one thing arena is forbidden to touch. Each
+// half is checked separately so a machine with a real name and no email
+// (or the reverse) keeps the half it has.
+func arenaIdentity(tree string) []string {
+	var args []string
+	if _, err := gitOut(tree, "config", "user.name"); err != nil {
+		args = append(args, "-c", "user.name=telltale arena")
+	}
+	if _, err := gitOut(tree, "config", "user.email"); err != nil {
+		args = append(args, "-c", "user.email=arena@telltale.invalid")
+	}
+	return args
+}
+
+// undoArena takes one attempt back: `git reset --hard <base>` inside the
+// racer worktree ONLY (§9.37, amended 2026-08-09; the shape is cc-haha's
+// turn-level undo). Branch and tree agree by construction rather than by a
+// second command: the worktree has arena/t<N>/<vendor> checked out, so
+// --hard moves that ref itself — there is no window where the branch says
+// one thing and the tree another. Everything the attempt produced is
+// tracked or staged by the time this can run (collectArena's add -N, then
+// commitArena's add -A), so the reset removes created files too instead of
+// stranding them as untracked survivors. The caller owns the guard that
+// tree really is an arena worktree this room made this turn; this function
+// deliberately does nothing to make it safe to point elsewhere.
+func undoArena(tree, base string) error {
+	_, err := gitOut(tree, "reset", "--hard", base)
+	return err
 }

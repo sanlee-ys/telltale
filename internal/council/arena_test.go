@@ -37,6 +37,15 @@ func gitRepo(t *testing.T) string {
 	mustGit("init", "-b", "main")
 	mustGit("config", "user.email", "arena@test.invalid")
 	mustGit("config", "user.name", "arena test")
+	// Byte-faithful checkouts, whatever the host's git thinks about line
+	// endings. Git for Windows (and the windows-latest runner) defaults
+	// core.autocrlf to true, which smudges LF to CRLF on every checkout —
+	// including the one `reset --hard` performs — so a test that writes
+	// "one\n", resets, and reads the file back would be measuring the HOST's
+	// translation policy rather than whether the reset restored the content.
+	// That is exactly how TestUndoTakesTheWholeTurnBack failed on CI while
+	// passing on Linux: the undo worked, the comparison didn't.
+	mustGit("config", "core.autocrlf", "false")
 	if err := os.WriteFile(filepath.Join(ws, "a.txt"), []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -364,5 +373,581 @@ func TestArenaDiffRenderIsCapped(t *testing.T) {
 	if strings.Count(joined, "+line") > arenaDiffScreenLines {
 		t.Errorf("the column holds %d patch lines, past the %d cap",
 			strings.Count(joined, "+line"), arenaDiffScreenLines)
+	}
+}
+
+// --- commit-per-turn and undo (§9.37, amended 2026-08-09) ---
+
+// TestArenaCommitMsgIsATurnLabel: first line only, capped at 64 bytes on a
+// rune boundary, because the subject is a `git log --oneline` label for a kept
+// branch, not a second copy of the brief.
+func TestArenaCommitMsgIsATurnLabel(t *testing.T) {
+	if got := arenaCommitMsg(4, "fix it\nand more detail"); got != "arena t4: fix it" {
+		t.Errorf("multiline brief: %q", got)
+	}
+	if got := arenaCommitMsg(9, "   "); got != "arena t9" {
+		t.Errorf("empty brief: %q", got)
+	}
+	long := arenaCommitMsg(1, strings.Repeat("x", 80))
+	if !strings.HasSuffix(long, "…") {
+		t.Errorf("an over-cap brief was not truncated: %q", long)
+	}
+	if strings.Contains(long, "\n") || len(long) > len("arena t1: ")+64+len("…") {
+		t.Errorf("subject too long or multiline: %q", long)
+	}
+}
+
+// TestArenaCommitMakesTheAttemptDurable is half one of the amendment: once a
+// racer lands and its diff is read, the whole tree state is a commit on
+// arena/t<N>/<vendor> — created files included — the recorded sha is exactly
+// what rev-parse reported, and the room's own repo has not moved an inch.
+func TestArenaCommitMakesTheAttemptDurable(t *testing.T) {
+	ws := gitRepo(t)
+	base, trees, _, err := arenaSetup(ws, 5, []model.VendorID{model.VendorCodex})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := trees[model.VendorCodex]
+	// One modified file and one created file: the created one is the half a
+	// stage that trusted the diff's stat would miss.
+	if err := os.WriteFile(filepath.Join(tree, "a.txt"), []byte("two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tree, "new.go"), []byte("package new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := clearModel()
+	c := &m.st.Columns[1] // codex
+	c.Phase = PhaseStreaming
+	c.TurnN = 5
+	c.Prompt = "fix the flaky poller retry loop so CI stops going red on Tuesdays"
+	m.turn = &turnState{
+		live:       map[model.VendorID]bool{model.VendorCodex: true},
+		persistent: map[model.VendorID]bool{},
+		arena:      true, arenaBase: base, arenaTrees: trees,
+		cancel: func() {},
+	}
+	m.finishColumn(c, PhaseDone)
+
+	r := c.Arena
+	if r == nil {
+		t.Fatal("no arena result")
+	}
+	if r.CommitErr != "" {
+		t.Fatalf("the commit degraded: %s", r.CommitErr)
+	}
+	head, _ := gitOut(tree, "rev-parse", "HEAD")
+	if r.Commit == "" || r.Commit != head {
+		t.Errorf("Commit = %q, want the measured tip %q", r.Commit, head)
+	}
+	if r.Commit == base {
+		t.Error("the tip did not move — nothing was committed")
+	}
+	// The branch ref agrees, read from the shared repo rather than the tree —
+	// this is what makes the worktree deletable without losing the attempt.
+	if got, _ := gitOut(ws, "rev-parse", "arena/t5/codex"); got != r.Commit {
+		t.Errorf("arena/t5/codex = %q, want %q", got, r.Commit)
+	}
+	// The commit carries the racer's files and the turn-derived subject.
+	shown, _ := gitOut(tree, "show", "--name-only", "--format=%s", "HEAD")
+	for _, want := range []string{"arena t5: fix the flaky poller retry loop", "a.txt", "new.go"} {
+		if !strings.Contains(shown, want) {
+			t.Errorf("the commit is missing %q:\n%s", want, shown)
+		}
+	}
+	if dirty, _ := gitOut(tree, "status", "--porcelain"); dirty != "" {
+		t.Errorf("the worktree is dirty after its own commit:\n%s", dirty)
+	}
+	// The room's repo: same HEAD, same branch, clean tree. The commit ran in
+	// the racer's tree ONLY.
+	if got, _ := gitOut(ws, "rev-parse", "HEAD"); got != base {
+		t.Errorf("the room repo's HEAD moved: %q", got)
+	}
+	if got, _ := gitOut(ws, "branch", "--show-current"); got != "main" {
+		t.Errorf("the room repo's branch moved: %q", got)
+	}
+	if dirty, _ := gitOut(ws, "status", "--porcelain"); dirty != "" {
+		t.Errorf("the room repo picked up state:\n%s", dirty)
+	}
+	// And the column renders the receipt short — display truncates, the
+	// record does not.
+	if got := render(m.st); !strings.Contains(got, "committed "+shortSHA(r.Commit)+".") {
+		t.Error("the commit receipt is not on the column")
+	}
+}
+
+// TestArenaCommitFallsBackToALocalIdentity is the CI-runner shape: a machine
+// with NO git identity anywhere still parks the attempt, via per-command -c
+// flags — never a config write, which on a worktree would land in the shared
+// repo config, i.e. in the room's repo.
+func TestArenaCommitFallsBackToALocalIdentity(t *testing.T) {
+	if _, err := gitOut(".", "--version"); err != nil {
+		t.Skip("git not available")
+	}
+	// Point every config layer at an empty file so the machine's own identity
+	// cannot leak into the fixture: the property is "no identity, still commits".
+	empty := filepath.Join(t.TempDir(), "empty-gitconfig")
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", empty)
+	t.Setenv("GIT_CONFIG_SYSTEM", empty)
+
+	root := t.TempDir()
+	ws := filepath.Join(root, "repo")
+	if err := os.Mkdir(ws, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gitOut(ws, "init", "-b", "main"); err != nil {
+		t.Fatal(err)
+	}
+	// The fixture's own commit supplies identity inline, so the REPO stays
+	// identity-less the way a fresh runner's does.
+	if _, err := gitOut(ws, "-c", "user.name=fixture", "-c", "user.email=fixture@test.invalid",
+		"commit", "--allow-empty", "-m", "initial", "--no-gpg-sign"); err != nil {
+		t.Fatal(err)
+	}
+
+	base, trees, _, err := arenaSetup(ws, 1, []model.VendorID{model.VendorClaude})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := trees[model.VendorClaude]
+	if err := os.WriteFile(filepath.Join(tree, "answer.txt"), []byte("done\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sha, err := commitArena(tree, base, "arena t1: x")
+	if err != nil {
+		t.Fatalf("an identity-less machine could not commit: %v", err)
+	}
+	if sha == "" || sha == base {
+		t.Fatalf("no commit landed: %q", sha)
+	}
+	if got, _ := gitOut(tree, "log", "-1", "--format=%ce"); got != "arena@telltale.invalid" {
+		t.Errorf("committer email = %q, want the fallback identity", got)
+	}
+}
+
+// TestArenaCommitFailureDegradesTheSeatAlone: a commit that cannot land is a
+// named reason on THAT seat's receipt. Its diff is still read, its phase is
+// still its own, the other racer commits fine, and the room repo is
+// untouched. The injected failure is a stale lock on the seat's own branch
+// ref — git's classic crashed-process residue, and a seam that fails ONLY
+// the ref update: add, status and diff all still work, which is what lets
+// the test hold the diff-was-still-read property at the same time. (Assumes
+// git's default files ref backend, like the loose-ref reads in gitRepo.)
+func TestArenaCommitFailureDegradesTheSeatAlone(t *testing.T) {
+	ws := gitRepo(t)
+	seats := []model.VendorID{model.VendorClaude, model.VendorCodex}
+	base, trees, _, err := arenaSetup(ws, 3, seats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad, good := trees[model.VendorClaude], trees[model.VendorCodex]
+	lock := filepath.Join(ws, ".git", "refs", "heads", "arena", "t3", "claude.lock")
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tr := range []string{bad, good} {
+		if err := os.WriteFile(filepath.Join(tr, "work.txt"), []byte("changed\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	m := clearModel()
+	for _, i := range []int{0, 1} {
+		m.st.Columns[i].Phase = PhaseStreaming
+		m.st.Columns[i].TurnN = 3
+		m.st.Columns[i].Prompt = "try it"
+	}
+	m.turn = &turnState{
+		live:       map[model.VendorID]bool{model.VendorClaude: true, model.VendorCodex: true},
+		persistent: map[model.VendorID]bool{},
+		arena:      true, arenaBase: base, arenaTrees: trees,
+		cancel: func() {},
+	}
+	m.finishColumn(&m.st.Columns[0], PhaseDone)
+	m.finishColumn(&m.st.Columns[1], PhaseDone)
+
+	cl, cx := m.st.Columns[0].Arena, m.st.Columns[1].Arena
+	if cl == nil || cx == nil {
+		t.Fatal("a racer landed without an arena result")
+	}
+	if cl.Commit != "" {
+		t.Errorf("a commit that failed to sign reported a sha: %q", cl.Commit)
+	}
+	if !strings.HasPrefix(cl.CommitErr, "not committed: ") {
+		t.Errorf("the failure is not a named receipt degradation: %q", cl.CommitErr)
+	}
+	if m.st.Columns[0].Phase != PhaseDone {
+		t.Errorf("a commit failure re-labelled the seat's own turn: %v", m.st.Columns[0].Phase)
+	}
+	if cl.Err != "" || !strings.Contains(cl.Stat, "work.txt") {
+		t.Errorf("the failed-commit seat lost its diff: err=%q stat=%q", cl.Err, cl.Stat)
+	}
+	if got, _ := gitOut(ws, "rev-parse", "arena/t3/claude"); got != base {
+		t.Errorf("the failed seat's branch moved anyway: %q", got)
+	}
+	// The neighbour is not this seat's blast radius.
+	if cx.CommitErr != "" || cx.Commit == "" {
+		t.Errorf("the other racer was dragged down: commit=%q err=%q", cx.Commit, cx.CommitErr)
+	}
+	if got, _ := gitOut(ws, "rev-parse", "HEAD"); got != base {
+		t.Errorf("the room repo's HEAD moved: %q", got)
+	}
+	if got := render(m.st); !strings.Contains(got, "not committed:") {
+		t.Error("the degradation is not on the column")
+	}
+}
+
+// TestArenaZeroDiffCommitsNothing pins the empty-commit ruling: a measured
+// zero gets NO commit — an empty commit would be a receipt claiming work that
+// did not happen — and no failure either, because nothing was owed. The
+// branch stays at base and the "no changes" sentence stays the whole story.
+func TestArenaZeroDiffCommitsNothing(t *testing.T) {
+	ws := gitRepo(t)
+	base, trees, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m := clearModel()
+	c := &m.st.Columns[1]
+	c.Phase = PhaseStreaming
+	c.TurnN = 2
+	m.turn = &turnState{
+		live:       map[model.VendorID]bool{model.VendorCodex: true},
+		persistent: map[model.VendorID]bool{},
+		arena:      true, arenaBase: base, arenaTrees: trees,
+		cancel: func() {},
+	}
+	m.finishColumn(c, PhaseDone)
+
+	r := c.Arena
+	if r.Commit != "" || r.CommitErr != "" {
+		t.Errorf("a measured zero produced a commit receipt: commit=%q err=%q", r.Commit, r.CommitErr)
+	}
+	if got, _ := gitOut(ws, "rev-parse", "arena/t2/codex"); got != base {
+		t.Errorf("the branch moved on a zero-diff attempt: %q", got)
+	}
+	got := render(m.st)
+	if !strings.Contains(got, "no changes against") {
+		t.Error("the zero sentence is gone")
+	}
+	if strings.Contains(got, "committed ") || strings.Contains(got, "not committed") {
+		t.Error("a zero-diff column carries a commit line")
+	}
+}
+
+// TestArenaSelfCommittedAttemptKeepsItsOwnTip: a racer that committed for
+// itself mid-turn leaves a clean tree ahead of base. Its own tip IS the
+// durable receipt — reported as measured, never papered over with an empty
+// commit on top.
+func TestArenaSelfCommittedAttemptKeepsItsOwnTip(t *testing.T) {
+	ws := gitRepo(t)
+	base, trees, _, err := arenaSetup(ws, 6, []model.VendorID{model.VendorCodex})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := trees[model.VendorCodex]
+	if err := os.WriteFile(filepath.Join(tree, "own.txt"), []byte("mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gitOut(tree, "add", "own.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gitOut(tree, "commit", "-m", "racer's own commit", "--no-gpg-sign"); err != nil {
+		t.Fatal(err)
+	}
+	own, _ := gitOut(tree, "rev-parse", "HEAD")
+
+	m := clearModel()
+	c := &m.st.Columns[1]
+	c.Phase = PhaseStreaming
+	c.TurnN = 6
+	m.turn = &turnState{
+		live:       map[model.VendorID]bool{model.VendorCodex: true},
+		persistent: map[model.VendorID]bool{},
+		arena:      true, arenaBase: base, arenaTrees: trees,
+		cancel: func() {},
+	}
+	m.finishColumn(c, PhaseDone)
+
+	r := c.Arena
+	if r.Commit != own {
+		t.Errorf("Commit = %q, want the racer's own tip %q", r.Commit, own)
+	}
+	if r.CommitErr != "" {
+		t.Errorf("a self-committed attempt was called a failure: %q", r.CommitErr)
+	}
+	if got, _ := gitOut(tree, "rev-parse", "HEAD"); got != own {
+		t.Errorf("an empty commit was stacked on the racer's own: %q", got)
+	}
+	// The diff still answers against BASE, so the mid-turn commit cannot hide
+	// the work (the claude-squad anchor rule, exercised end to end).
+	if !strings.Contains(r.Stat, "own.txt") {
+		t.Errorf("the self-committed work vanished from the stat:\n%s", r.Stat)
+	}
+}
+
+// TestUndoTakesTheWholeTurnBack is half two: u, y-confirmed, resets the
+// racer's worktree AND its arena branch to the recorded base — one command,
+// agreeing by construction — and the column says so while the room repo
+// never moves.
+func TestUndoTakesTheWholeTurnBack(t *testing.T) {
+	ws := gitRepo(t)
+	base, trees, _, err := arenaSetup(ws, 7, []model.VendorID{model.VendorCodex})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := trees[model.VendorCodex]
+	if err := os.WriteFile(filepath.Join(tree, "a.txt"), []byte("two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tree, "created.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := clearModel()
+	m.st.Workspace = ws
+	m.st.Focus = 1
+	c := &m.st.Columns[1]
+	c.Phase = PhaseStreaming
+	c.TurnN = 7
+	c.Prompt = "race it"
+	m.turn = &turnState{
+		live:       map[model.VendorID]bool{model.VendorCodex: true},
+		persistent: map[model.VendorID]bool{},
+		arena:      true, arenaBase: base, arenaTrees: trees,
+		cancel: func() {},
+	}
+	m.finishColumn(c, PhaseDone)
+	if c.Arena.Commit == "" {
+		t.Fatalf("fixture: the attempt was not committed: %+v", c.Arena)
+	}
+
+	m.askUndoSeat()
+	if m.undoPending != model.VendorCodex {
+		t.Fatalf("u did not arm the focused seat: %q (notice %q)", m.undoPending, m.st.Notice)
+	}
+	m.undoGateKey(key("y"))
+
+	if !c.Arena.Undone {
+		t.Fatal("the result does not record the undo")
+	}
+	if got, _ := gitOut(tree, "rev-parse", "HEAD"); got != base {
+		t.Errorf("the worktree is not back at base: %q", got)
+	}
+	if b, err := os.ReadFile(filepath.Join(tree, "a.txt")); err != nil || string(b) != "one\n" {
+		t.Errorf("a modified file was not restored: %q %v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(tree, "created.txt")); !os.IsNotExist(err) {
+		t.Error("a created file survived the undo")
+	}
+	if dirty, _ := gitOut(tree, "status", "--porcelain"); dirty != "" {
+		t.Errorf("the worktree is dirty after the undo:\n%s", dirty)
+	}
+	// Branch and tree agree: the ref moved back with the reset.
+	if got, _ := gitOut(ws, "rev-parse", "arena/t7/codex"); got != base {
+		t.Errorf("the branch still holds the undone commit: %q", got)
+	}
+	// The room repo: never touched by either half.
+	if got, _ := gitOut(ws, "rev-parse", "HEAD"); got != base {
+		t.Errorf("the room repo's HEAD moved: %q", got)
+	}
+	if dirty, _ := gitOut(ws, "status", "--porcelain"); dirty != "" {
+		t.Errorf("the room repo picked up state:\n%s", dirty)
+	}
+	if !strings.Contains(m.st.Notice, "undone") {
+		t.Errorf("the notice does not report the undo: %q", m.st.Notice)
+	}
+	// Asserted on the column's own lines at a width the sentence fits in one
+	// piece, because at grid width it wraps — the property is that the COLUMN
+	// says it, not that the notice does.
+	lines, _ := columnLines(m.st, m.st.Columns[1], 80, PlainStyles(), GlyphsFor(false))
+	if got := strings.Join(lines, "\n"); !strings.Contains(got, "undone — worktree and branch are back at "+shortSHA(base)+".") {
+		t.Errorf("the column does not say the attempt was taken back:\n%s", got)
+	}
+
+	// A second press is refused as already done — not re-run as a no-op that
+	// pretends to act.
+	m.askUndoSeat()
+	if m.undoPending != "" {
+		t.Error("a second undo armed on an already-undone attempt")
+	}
+	if !strings.Contains(m.st.Notice, "already undone") {
+		t.Errorf("the second press is not its own sentence: %q", m.st.Notice)
+	}
+}
+
+// TestUndoRefusalsEachNameTheirReason: no race, changed nothing, already
+// undone, and mid-turn are four different facts and four different sentences.
+func TestUndoRefusalsEachNameTheirReason(t *testing.T) {
+	m := clearModel()
+	m.st.Focus = 0
+	c := &m.st.Columns[0]
+
+	m.turn = &turnState{}
+	m.askUndoSeat()
+	if m.undoPending != "" || !strings.Contains(m.st.Notice, "in flight") {
+		t.Errorf("mid-turn refusal: pending=%q notice=%q", m.undoPending, m.st.Notice)
+	}
+	m.turn = nil
+
+	m.askUndoSeat()
+	if m.undoPending != "" || !strings.Contains(m.st.Notice, "no race") {
+		t.Errorf("no-race refusal: %q", m.st.Notice)
+	}
+
+	c.Arena = &ArenaResult{Tree: "/x/repo-arena-t1-claude", Base: "abcdef1234"}
+	m.askUndoSeat()
+	if m.undoPending != "" || !strings.Contains(m.st.Notice, "changed nothing") {
+		t.Errorf("zero-diff refusal: %q", m.st.Notice)
+	}
+
+	c.Arena = &ArenaResult{Tree: "/x/repo-arena-t1-claude", Base: "abcdef1234",
+		Stat: " a.txt | 1 +", Undone: true}
+	m.askUndoSeat()
+	if m.undoPending != "" || !strings.Contains(m.st.Notice, "already undone") {
+		t.Errorf("already-undone refusal: %q", m.st.Notice)
+	}
+}
+
+// TestUndoResetFailureSurfacesGitsOwnSentence: refusal three — the reset
+// itself failed, and the notice carries git's first stderr line rather than a
+// generic shrug. Undone stays unset: the room may not claim a rollback it did
+// not measure happening.
+func TestUndoResetFailureSurfacesGitsOwnSentence(t *testing.T) {
+	ws := gitRepo(t)
+	base, trees, _, err := arenaSetup(ws, 8, []model.VendorID{model.VendorCodex})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := trees[model.VendorCodex]
+	if err := os.WriteFile(filepath.Join(tree, "gone.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := clearModel()
+	m.st.Workspace = ws
+	m.st.Focus = 1
+	c := &m.st.Columns[1]
+	c.Phase = PhaseStreaming
+	c.TurnN = 8
+	m.turn = &turnState{
+		live:       map[model.VendorID]bool{model.VendorCodex: true},
+		persistent: map[model.VendorID]bool{},
+		arena:      true, arenaBase: base, arenaTrees: trees,
+		cancel: func() {},
+	}
+	m.finishColumn(c, PhaseDone)
+
+	// The tree vanishes between the race and the undo — a user deleted it by
+	// hand, which kept-until-deleted invites.
+	if err := os.RemoveAll(tree); err != nil {
+		t.Fatal(err)
+	}
+	m.askUndoSeat()
+	if m.undoPending == "" {
+		t.Fatalf("undo did not arm: %q", m.st.Notice)
+	}
+	m.undoGateKey(key("y"))
+
+	if !strings.HasPrefix(m.st.Notice, "undo failed: ") || len(m.st.Notice) <= len("undo failed: ") {
+		t.Errorf("the failure does not carry git's own sentence: %q", m.st.Notice)
+	}
+	if c.Arena.Undone {
+		t.Error("a failed reset was recorded as an undo")
+	}
+}
+
+// TestUndoNeverTouchesTheRoomRepo is the path guard: the reset runs only on
+// the exact tree name this room would have created for this seat this turn.
+// A recorded tree that points anywhere else — here, forged to the workspace
+// itself — is refused before git runs at all.
+func TestUndoNeverTouchesTheRoomRepo(t *testing.T) {
+	ws := gitRepo(t)
+	base, _ := gitOut(ws, "rev-parse", "HEAD")
+	// Uncommitted work in the room repo: exactly what a --hard reset aimed
+	// wrong would destroy.
+	if err := os.WriteFile(filepath.Join(ws, "a.txt"), []byte("precious uncommitted edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := clearModel()
+	m.st.Workspace = ws
+	m.st.Focus = 0
+	c := &m.st.Columns[0]
+	c.TurnN = 2
+	c.Arena = &ArenaResult{Tree: ws, Base: base, Branch: "arena/t2/claude", Stat: " a.txt | 1 +"}
+
+	m.askUndoSeat()
+	if m.undoPending == "" {
+		t.Fatalf("fixture did not arm: %q", m.st.Notice)
+	}
+	m.undoGateKey(key("y"))
+
+	if !strings.Contains(m.st.Notice, "not an arena tree") {
+		t.Errorf("the guard did not name its refusal: %q", m.st.Notice)
+	}
+	if c.Arena.Undone {
+		t.Error("a refused undo was recorded as done")
+	}
+	if b, err := os.ReadFile(filepath.Join(ws, "a.txt")); err != nil || string(b) != "precious uncommitted edit\n" {
+		t.Fatalf("THE ROOM REPO WAS RESET: %q %v", b, err)
+	}
+}
+
+// TestUndoGateKeepsAndCancels: n is a decision, a stray key is not, and the
+// two get different sentences — clearGateKey's contract on the new gate.
+func TestUndoGateKeepsAndCancels(t *testing.T) {
+	for _, tc := range []struct {
+		name, press, notice string
+	}{
+		{"n keeps", "n", "kept"},
+		{"a stray key cancels", "j", "cancelled"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := clearModel()
+			m.st.Focus = 0
+			c := &m.st.Columns[0]
+			c.TurnN = 1
+			c.Arena = &ArenaResult{
+				Tree: arenaTree(m.st.Workspace, 1, model.VendorClaude),
+				Base: "abcdef1234", Stat: " a.txt | 1 +",
+			}
+			m.askUndoSeat()
+			if m.undoPending != model.VendorClaude {
+				t.Fatalf("u did not arm: %q", m.st.Notice)
+			}
+			m.undoGateKey(key(tc.press))
+			if m.undoPending != "" {
+				t.Error("the gate is still pending after an answer")
+			}
+			if c.Arena.Undone {
+				t.Error("a declined undo ran anyway")
+			}
+			if !strings.Contains(m.st.Notice, tc.notice) {
+				t.Errorf("notice %q does not contain %q", m.st.Notice, tc.notice)
+			}
+		})
+	}
+}
+
+// TestUndoIsViewModeOnly keeps the contract q, f and c already keep: in
+// compose, u is the letter u.
+func TestUndoIsViewModeOnly(t *testing.T) {
+	m := clearModel()
+	m.st.Mode = ModeComposing
+
+	m.key(key("u"))
+
+	if m.undoPending != "" {
+		t.Errorf("u armed an undo while composing: %s", m.undoPending)
+	}
+	if !strings.Contains(m.st.Draft, "u") {
+		t.Errorf("u was swallowed instead of typed: draft = %q", m.st.Draft)
 	}
 }
