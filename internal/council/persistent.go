@@ -391,6 +391,74 @@ func (m *Model) spawnSeat(v vendors.Vendor, c *Column, resumeID string, want ven
 	return sess, streamWire{pv}, resumed, nil
 }
 
+// startEphemeralRacer opens a THROWAWAY live-protocol session for one arena
+// attempt: the vendor's ACP server launched rooted in the racer's worktree,
+// exactly one session and one prompt run through it, and the process killed the
+// moment its column lands (finishColumn) — §9.37's deferred cursor-race
+// follow-up, built as §9.36's machinery pointed at a throwaway session. It is
+// spawnSeat's sibling, not a fork of it: same Open, same protocol driver, same
+// counted startRPCSession spawn — no second ACP implementation exists to drift.
+//
+// Three refusals are built into the call shape, each one a §9.37 constraint:
+//
+//   - sessionID is the empty string, ALWAYS. A race session is never persisted
+//     and never resumed — resuming would anchor the attempt on the room's own
+//     conversation, which is the opposite of a race, and the throwaway id the
+//     protocol reports back is already refused by applyEvents' arena guard
+//     before it can reach m.sessions or room.json.
+//   - the session is registered on the TURN (turnState.arenaEphemeral), never
+//     in m.procs. The seat-process registry is the room's conversation; a racer
+//     parked there would BE the seat's process to every later dispatch.
+//   - ctx is the TURN's context, not roomCtx — the exact inversion of the rule
+//     spawnSeat states. A room process must survive its turn's teardown; a
+//     racer must NOT survive the race, so every path that tears the turn down
+//     (last column landing, ctrl+c, room quit) kills it as the backstop behind
+//     finishColumn's own per-column kill.
+//
+// Posture is PostureWrite like every racer's (§9.37: a one-shot has no channel
+// to be asked on, so the gate structurally cannot exist here) and the
+// containment is the worktree — a phrase that means LESS on this seat than on
+// its neighbours, which is worth stating rather than implying: §9.36 measured
+// workspace trust NOT applying over ACP (the same directory print mode refused
+// to run in was written to over ACP with no prompt), and an arena worktree is a
+// freshly created, never-trusted directory. So nothing but the session's cwd
+// scopes what this attempt touches. That is the caveat the seat's posture
+// detail already carries (detect.go's Cursor branch); a worktree gives it more
+// force, not less, and nothing here claims a confinement nothing measured.
+func (m *Model) startEphemeralRacer(ctx context.Context, cv vendors.Conversational, c *Column, tree, prompt string) (seatSession, error) {
+	spec, proto, err := cv.Open(tree, c.Binary, "", vendors.PostureWrite)
+	if err != nil {
+		return nil, err
+	}
+	if proto == nil {
+		return nil, errNotALiveSeat
+	}
+	sess, err := startRPCSession(ctx, spec, m.events, proto)
+	if err != nil {
+		return nil, err
+	}
+	// The turn is handed over exactly as handTurnToSeat hands one to a room
+	// process: the protocol may TAKE it and hold it until its handshake answers
+	// (zero lines is legal — Session.SendTurn's contract), and the clock starts
+	// now because the person who typed /arena is waiting from now. No brief is
+	// applied, matching the FirstTurn arm beside this one in dispatch: every
+	// racer gets the same bare vendorPrompt or the race is not a comparison.
+	lines, err := proto.Turn(prompt)
+	if err != nil {
+		// Unreachable on a protocol this function just built — Turn refuses
+		// only after a failed handshake, and no line has moved yet — but a
+		// refusal that ever does arrive must not leave the process it belongs
+		// to running with no column to account for it.
+		sess.Kill()
+		return nil, err
+	}
+	if err := sess.SendTurn(lines); err != nil {
+		sess.Kill()
+		return nil, err
+	}
+	return sess, nil
+}
+
 // errNotALiveSeat is unreachable through dispatch, which asks liveSeat before it
 // gets here. It exists so that a future seat added to the registry without a
 // protocol fails loudly at its first brief rather than silently taking a path

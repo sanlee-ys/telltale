@@ -6243,8 +6243,9 @@ where the predicted risk lived:
   `Cursor.FirstTurn` a deliberate refusal — "driven as a live ACP process, not as one child per
   turn" — which arena's uniform one-shot path duly surfaced on the column. The fix is a
   follow-up with its own shape: an EPHEMERAL ACP session per race (spawn in the worktree, one
-  turn, kill), which is §9.36's machinery pointed at a throwaway session. On the deferred list
-  below until someone builds it; until then a race is honestly 3-of-4 on Windows.
+  turn, kill), which is §9.36's machinery pointed at a throwaway session. ~~On the deferred list
+  below until someone builds it; until then a race is honestly 3-of-4 on Windows.~~ **Built
+  2026-08-09, in exactly that shape — second amendment below.**
 - **The write seat hit the allowlist-prefix trap.** claude's one probe — `git -C <worktree>
   status --short --branch` — met `autoAllowedTools`' `Bash(git status:*)` rule and failed the
   prefix match, so an ungated print-mode seat had an approval request and nobody to ask (act
@@ -6324,3 +6325,49 @@ watched the stat move yet**: what is owed is one `/arena` run against a real bri
 changes files, confirming the "so far" block appears mid-race, grows, and swaps for the
 settled block at each finish — the same debt the original section carried, and it is stated
 here rather than implied paid.
+**Amendment, 2026-08-09: the cursor seat races too, on a throwaway session.** The deferred
+follow-up the verification note filed is built, in the shape it predicted. For an arena turn —
+and only there — dispatch recognises the Conversational seat and, instead of the `FirstTurn`
+one-shot it deliberately refuses, launches a throwaway `cursor-agent acp` server rooted in that
+racer's worktree, runs exactly one `session/new` and one `session/prompt` through §9.36's own
+protocol driver, and kills the process when the column lands. It is `startEphemeralRacer`
+(persistent.go), a sibling of `spawnSeat` reusing `Cursor.Open`, `acpProtocol` and the counted
+`startRPCSession` spawn — no second ACP implementation exists to drift, and where the client
+was welded to the room seat's lifecycle the seam extracted was placement, not protocol.
+
+- **The room's conversation is untouchable by construction, not by discipline.** The race
+  session opens with an empty resume id (never persisted, never resumed), registers on the
+  TURN (`turnState.arenaEphemeral`) rather than in the seat-process registry — so a live
+  persistent cursor seat and its racer coexist without either being mistaken for the other —
+  and the throwaway session id it reports is refused by the existing arena guard before it
+  can reach the saved threads or room.json.
+- **Kill, never wait.** §9.33 measured this vendor's process lingering ~2.5 s after answering,
+  so the racer is killed at its own finish line — before the diff is read, making the receipt
+  a snapshot of a stopped attempt — and on a protocol-reported failure (an ACP server survives
+  its own refusals, so no exit event would ever have come), on ctrl+c, and at room teardown.
+  Its context is the turn's rather than the room's, which is the backstop on every one of
+  those paths; a seat cannot be cleared mid-race at all, because `askClearSeat` refuses while
+  a turn is in flight.
+- **Two processes now wear one vendor id during a race**, so the eleventh amendment's
+  stale-exit guard grew an attribution rule on the same liveness test it already trusts: an
+  exit that arrives while the racer is alive can only be the room's idle seat dying in the
+  background (forgotten, race untouched); one that arrives after the racer is dead is the
+  racer's own, and must not be eaten by the guard reading a live room process as "this seat
+  is fine" — that would hang the race column forever.
+- **The exits keep their epistemics.** A racer that dies without its end-of-turn response
+  FAILED — on this seat the turn's end is a response, so a bare exit means no answer arrived,
+  and rendering it done would be the empty-success this seat's missing result line makes
+  possible. A turn that ends cleanly having streamed nothing lands done with a note naming
+  the ambiguity, because a silently-working racer and a broken chunk parser are identical on
+  this wire (§9.36's stated loss). Token usage stays what ACP makes it: absent, never zero.
+  And the containment phrase every racer carries — write posture, contained by the worktree —
+  is stated at its weakest here: §9.36 measured workspace trust not applying over ACP, and an
+  arena worktree is a freshly created, never-trusted directory, so nothing but the session's
+  cwd scopes the attempt. The posture detail already says so; the worktree gives it more
+  force, not less.
+
+Verified offline only: fixture-driven tests (arena_cursor_test.go) pin the spawn choice, the
+untouched room thread, the kill on finish / protocol failure / cancel / teardown, both
+degraded exits, and the exit-echo not re-ranking the race. cursor-agent was not installed
+where this was built, so **this amendment owes a live race on the Windows box** — the same
+debt the core paid above, carried the same way until it is.
