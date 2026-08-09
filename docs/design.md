@@ -6228,6 +6228,11 @@ arena worktrees~~ (landed 2026-08-09, with its undo — second amendment below),
 seeding (the first real arena run on a repo needing `.env` will surface it), and a deletion guard
 stronger than git's own refusal to remove a dirty worktree. Two of the original deferrals landed
 the day after (amendment below).
+Deliberately deferred, each its own change judged against this section: commit-per-turn inside
+arena worktrees, ~~`.worktreeinclude` seeding (the first real arena run on a repo needing `.env`
+will surface it)~~ (landed 2026-08-09 — second amendment below), and a deletion guard stronger
+than git's own refusal to remove a dirty worktree. Two of the original deferrals landed the day
+after (amendment below).
 
 Verification note: the git mechanics (worktree creation from one base, add -N, the three
 collection outcomes, the session-id guard, the renders, the yank) are all pinned by offline
@@ -6423,3 +6428,52 @@ temp repositories. **No live race has exercised either half yet.** The debt is o
 `/arena` run that adopts an attempt from its arena branch after deleting the worktree, and one
 that `u`-undoes an attempt — same shape as the 2026-08-09 live run above, which is what paid
 this section's first verification note.
+
+**Amendment, 2026-08-09: `.worktreeinclude` — a race carries the files git ignores, when the
+repo names them.** The seeding deferral came off the list, on the schedule the original note
+predicted (a real race on a repo needing `.env` fails falsely on every seat at once, so the fix
+is worth landing before that repo shows up). What was built, and the rulings inside it:
+
+- **The file and the copy.** A `.worktreeinclude` at the room repo's root — gitignore-style
+  patterns, one per line, `#` comments and blank lines ignored — and during `arenaSetup`, after
+  each racer's worktree is added, every matching file is copied from the room repo into that
+  tree, relative paths preserved, parent directories created. The grammar is a documented
+  subset of gitignore's (bare names match at any depth, anchored patterns from the root, `*`
+  within a segment, `**` across segments, a directory pattern takes its subtree; no negation).
+- **Copy only, never execute — the half of agent-deck deliberately not taken.** agent-deck (the
+  pattern source) pairs seeding with repo-carried setup scripts that run after the copy. That
+  half crosses a trust boundary this project has explicitly parked: byte-level trust gating is
+  on the parked list pending an audit, and a repo that can run code on the machine by merely
+  containing a file is a different product with a different threat model. Copying bytes into a
+  tree the room already owns is containable; execution is not.
+- **Candidates are untracked files only** (`git ls-files --others`, ignored files included —
+  exactly the set a fresh worktree lacks). A tracked file already arrives with the checkout,
+  and seeding the room's possibly-dirty copy of one would plant the room's own edits in every
+  seat's diff — a lying diff, §4a.1's class. Known limit, stated: a seeded file that is
+  untracked but *not* git-ignored still surfaces through collection's `git add -N .`; name
+  git-ignored files and it cannot.
+- **Containment.** Patterns resolve from the repo root and matches come from git's own
+  enumeration, so they structurally cannot leave it; absolute and `..`-carrying patterns are
+  refused by name anyway, per pattern, so one bad line disables only itself. Symlinks are never
+  followed — Windows is primary and symlink semantics differ per platform — a symlink match
+  copies nothing and says so.
+- **The budget: 64 MiB per seat** (`seedBudgetBytes`). Exists for the node_modules pattern — an
+  over-broad line must fail loud and named, not hang the room copying a dependency tree into
+  four worktrees. Over-budget is refused wholesale (copying *some* of the file's list would
+  hand every seat a tree that half-works), with the measured total in the sentence, and the
+  budget is enforced again on actual bytes during the copy, because files grow between stat and
+  copy.
+- **Honesty in the column.** "seeded 3 files" is the count actually copied into that seat's
+  tree; no `.worktreeinclude` means no line at all (zero and absent stay two facts). A pattern
+  that matches nothing is a named notice, not silence — an allowlist-shaped file fails both
+  ways — and not a failure either. A copy error degrades that one seat with the path and the
+  error's first line, through the same per-seat lane a failed worktree add uses; the race runs
+  on, and the half-seeded worktree stays on disk (kept-until-deleted receipts include the
+  broken ones).
+
+Verification note, same shape as this section's original one: the mechanics — the copy into
+each racer tree, nested parents, every named refusal, the budget, the per-seat degrade channel,
+zero-vs-absent on the seed line — are pinned by offline tests against real temp repositories.
+**No live race on a repo that actually needs a `.env` has run yet; that run is the debt this
+amendment carries**, and it is the same debt the original note carried for the core, paid the
+same way.
