@@ -10,6 +10,25 @@ on:
   workflow_call:
 
 jobs:
+  # The race detector, on the one platform in this gate where it costs nothing
+  # extra to have: -race needs cgo, which the Windows job's toolchain setup
+  # does not carry and the reference workstation never had — which is exactly
+  # how the turn clock's locking (runner/clock.go) stayed "argued, not
+  # race-verified" in STATE.md from the day it was written. This job is not a
+  # platform claim (windows-latest above remains the verified target, ADR-002);
+  # it is the detector finally running at all, on every push, against the same
+  # suite. A data race is a property of the Go code, not of the OS that
+  # happened to catch it.
+  race:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Test under the race detector
+        run: go test -race ./...
+
   test:
     # Windows is the primary target (ADR-002): the eval runs where the users are.
     runs-on: windows-latest
