@@ -35,7 +35,7 @@ func TestSeedCarriesIgnoredFilesIntoEveryRacerTree(t *testing.T) {
 	seedWrite(t, ws, seedFileName, "# what a race needs to run\n\n.env\n")
 	seats := []model.VendorID{model.VendorClaude, model.VendorCodex}
 
-	_, trees, seeds, seatErr, err := arenaSetup(ws, 1, seats)
+	_, _, trees, seeds, seatErr, err := arenaSetup(ws, 1, seats)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestSeedCreatesNestedParents(t *testing.T) {
 	seedWrite(t, ws, "config/local/dev.yaml", "port: 1\n")
 	seedWrite(t, ws, seedFileName, "config/\n")
 
-	_, trees, seeds, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
+	_, _, trees, seeds, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestSeedNamesThePatternThatMatchedNothing(t *testing.T) {
 	seedWrite(t, ws, ".env", "K=V\n")
 	seedWrite(t, ws, seedFileName, ".env\n*.secret\n")
 
-	_, trees, seeds, seatErr, err := arenaSetup(ws, 3, []model.VendorID{model.VendorCodex})
+	_, _, trees, seeds, seatErr, err := arenaSetup(ws, 3, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestSeedRefusesEscapesByName(t *testing.T) {
 	ws := gitRepo(t)
 	seedWrite(t, ws, seedFileName, "../outside\n/etc/passwd\n!.env\n")
 
-	_, trees, seeds, seatErr, err := arenaSetup(ws, 4, []model.VendorID{model.VendorCodex})
+	_, _, trees, seeds, seatErr, err := arenaSetup(ws, 4, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestSeedCopyErrorDegradesTheSeatNotTheRace(t *testing.T) {
 	seedWrite(t, ws, "cfg", "now a file\n")
 	seedWrite(t, ws, seedFileName, "cfg\n")
 
-	base, trees, _, seatErr, err := arenaSetup(ws, 5, []model.VendorID{model.VendorClaude, model.VendorCodex})
+	_, base, trees, _, seatErr, err := arenaSetup(ws, 5, []model.VendorID{model.VendorClaude, model.VendorCodex})
 	if err != nil {
 		t.Fatalf("a per-seat copy error escaped to the race channel: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestSeedSymlinksAreNamedNotFollowed(t *testing.T) {
 	}
 	seedWrite(t, ws, seedFileName, "link.env\n")
 
-	_, trees, seeds, _, err := arenaSetup(ws, 6, []model.VendorID{model.VendorCodex})
+	_, _, trees, seeds, _, err := arenaSetup(ws, 6, []model.VendorID{model.VendorCodex})
 	if err != nil {
 		t.Fatal(err)
 	}

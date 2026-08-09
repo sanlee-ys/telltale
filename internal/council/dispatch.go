@@ -56,6 +56,14 @@ type turnState struct {
 	arena      bool
 	arenaBase  string
 	arenaTrees map[model.VendorID]string
+	// arenaRaceN is the number this race's names were minted with — read from
+	// the repo's own arena refs at setup (arenaRaceNumber), NOT the turn
+	// counter, because branches and worktrees outlive the room while the turn
+	// counter resets with it. finishColumn derives the branch, the commit
+	// subject and the result's RaceN from this field; deriving any of them
+	// from Column.TurnN instead re-creates the collision the scan exists to
+	// prevent — the two numbers agree only until a leftover pushes them apart.
+	arenaRaceN int
 	// arenaEphemeral holds the throwaway live-protocol sessions racing this
 	// turn, keyed by vendor (today: the ACP seat, §9.37's deferred follow-up).
 	//
@@ -318,13 +326,13 @@ func (m *Model) dispatch() tea.Cmd {
 				racers = append(racers, c.Vendor)
 			}
 		}
-		base, trees, seeds, seatErrs, aerr := arenaSetup(m.st.Workspace, next, racers)
+		raceN, base, trees, seeds, seatErrs, aerr := arenaSetup(m.st.Workspace, next, racers)
 		if aerr != nil {
 			cancel()
 			m.st.Notice = "arena: " + aerr.Error()
 			return nil
 		}
-		ts.arena, ts.arenaBase, ts.arenaTrees, ts.arenaSeeds, arenaSeatErr = true, base, trees, seeds, seatErrs
+		ts.arena, ts.arenaRaceN, ts.arenaBase, ts.arenaTrees, ts.arenaSeeds, arenaSeatErr = true, raceN, base, trees, seeds, seatErrs
 		// One live-stat slot per seat that actually has a tree to read. Seats
 		// skipped above (worktree add failed) are absent here too, which is the
 		// never-refresh-a-failed-setup rule enforced by construction rather
@@ -344,7 +352,7 @@ func (m *Model) dispatch() tea.Cmd {
 		for v, tr := range trees {
 			raceTrees[v] = tr
 		}
-		m.lastRace = &arenaRace{workspace: m.st.Workspace, turn: next, base: base, trees: raceTrees}
+		m.lastRace = &arenaRace{workspace: m.st.Workspace, raceN: raceN, base: base, trees: raceTrees}
 	}
 
 	for i := range m.st.Columns {
@@ -1015,7 +1023,12 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 					r = collectArena(tree, m.turn.arenaBase)
 				}
 			}
-			r.Branch = arenaBranch(c.TurnN, c.Vendor)
+			// Named with the RACE's recorded number, never c.TurnN: the race
+			// numbers itself past older rooms' leftovers (arenaRaceNumber),
+			// so the turn and the race can legitimately disagree — and the
+			// branch the receipt claims must be the branch setup created.
+			r.Branch = arenaBranch(m.turn.arenaRaceN, c.Vendor)
+			r.RaceN = m.turn.arenaRaceN
 			// Commit-per-turn (§9.37, amended 2026-08-09): once the diff is
 			// read, the attempt is parked on its arena branch, so every race
 			// survives the worktree it happened in — diffable, adoptable,
@@ -1029,7 +1042,7 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 			// other racers and the room's repo are not this seat's blast
 			// radius.
 			if r.Err == "" && strings.TrimSpace(r.Stat) != "" {
-				sha, cerr := commitArena(tree, m.turn.arenaBase, arenaCommitMsg(c.TurnN, c.Prompt))
+				sha, cerr := commitArena(tree, m.turn.arenaBase, arenaCommitMsg(m.turn.arenaRaceN, c.Prompt))
 				if cerr != nil {
 					r.CommitErr = "not committed: " + cerr.Error()
 				} else {

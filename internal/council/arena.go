@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -99,6 +100,15 @@ type ArenaResult struct {
 	// unranked — a fixture a test built by hand, rendered as absent, not first.
 	Rank, Of int
 
+	// RaceN is the race number every name on this result was minted with —
+	// the t<N> in Branch, Tree and the commit subject. Recorded from the
+	// turn's own numbering (turnState.arenaRaceN) because it is NOT always
+	// the column's TurnN: the race numbers itself past leftovers from older
+	// rooms (arenaRaceNumber), so anything that re-derives a name from this
+	// result — undoSeat's path guard is the consumer — must re-derive with
+	// THIS number, or a race that outran its turn becomes unguardable.
+	RaceN int
+
 	// Seed is this seat's .worktreeinclude receipt, nil when the room repo has
 	// no .worktreeinclude at all. The render draws NOTHING for nil and
 	// "seeded 0 files" for a report that copied nothing — a repo that never
@@ -125,18 +135,15 @@ type SeedReport struct {
 
 // gitOut runs one git command with plain argv — never a shell (§9.3's rule
 // applies to every process council starts, not only vendors) — and returns
-// trimmed stdout. Errors carry git's own first stderr line, which is the
-// sentence the notice shows.
+// trimmed stdout. Errors carry the stderr line git itself marked as the
+// problem (gitErrLine), which is the sentence the notice shows.
 func gitOut(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	var out, errb strings.Builder
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
 	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(errb.String())
-		if i := strings.IndexByte(msg, '\n'); i > 0 {
-			msg = msg[:i]
-		}
+		msg := gitErrLine(errb.String())
 		if msg == "" {
 			msg = err.Error()
 		}
@@ -145,28 +152,114 @@ func gitOut(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(out.String()), nil
 }
 
+// gitErrLine picks the one stderr line a failed git command's error carries:
+// the first line git itself marks as the problem — its own `fatal:` / `error:`
+// prefixes — falling back to the first non-empty line only when no marked line
+// exists (some refusals, like `worktree remove` on a dirty tree, print bare
+// prose).
+//
+// The preference exists because "first line" was measured lying (2026-08-09,
+// live /arena race, Windows box). When the arena branch already existed,
+// `git worktree add ... -b arena/t3/claude` wrote TWO stderr lines and exited
+// nonzero:
+//
+//	Preparing worktree (new branch 'arena/t3/claude')
+//	fatal: a branch named 'arena/t3/claude' already exists
+//
+// The old rule surfaced the first, so all four columns reported
+// "arena: Preparing worktree (new branch ...)" as the reason they failed —
+// progress chatter wearing the error's clothes, with the actual fatal line
+// swallowed. git's prefixes are the measured marker of which line is the
+// error; anything printed before them is narration (§4a.1: the displayed
+// value must be the measured failure, not the nearest string to it).
+func gitErrLine(stderr string) string {
+	first := ""
+	for _, line := range strings.Split(stderr, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "fatal:") || strings.HasPrefix(line, "error:") {
+			return line
+		}
+		if first == "" {
+			first = line
+		}
+	}
+	return first
+}
+
 type gitError string
 
 func (e gitError) Error() string { return string(e) }
 
 // arenaTree names one attempt's worktree: a SIBLING of the workspace,
-// `<repo>-arena-t<turn>-<vendor>`, matching the README's own worktree
-// convention (`git worktree add ../telltale-council`). Sibling rather than a
-// directory under ~/.telltale because kept-until-deleted means the user must
-// SEE what is kept — a receipt hidden in a state directory is a receipt nobody
-// reads — and because /cd already resolves siblings by name, so
-// `/cd telltale-arena-t7-codex` works with zero new code.
-func arenaTree(workspace string, turn int, v model.VendorID) string {
-	name := filepath.Base(workspace) + "-arena-t" + itoa(turn) + "-" + string(v)
+// `<repo>-arena-t<N>-<vendor>` where N is the RACE number (arenaRaceNumber —
+// the turn number until leftovers from an older room push it past), matching
+// the README's own worktree convention (`git worktree add ../telltale-council`).
+// Sibling rather than a directory under ~/.telltale because kept-until-deleted
+// means the user must SEE what is kept — a receipt hidden in a state directory
+// is a receipt nobody reads — and because /cd already resolves siblings by
+// name, so `/cd telltale-arena-t7-codex` works with zero new code.
+func arenaTree(workspace string, raceN int, v model.VendorID) string {
+	name := filepath.Base(workspace) + "-arena-t" + itoa(raceN) + "-" + string(v)
 	return filepath.Join(filepath.Dir(workspace), name)
 }
 
-func arenaBranch(turn int, v model.VendorID) string {
-	return "arena/t" + itoa(turn) + "/" + string(v)
+func arenaBranch(raceN int, v model.VendorID) string {
+	return "arena/t" + itoa(raceN) + "/" + string(v)
 }
 
-// arenaSetup records the base, adds one worktree per racing seat, and seeds
-// each worktree from the room repo's .worktreeinclude when one exists.
+// arenaRaceNumber reads the number the next race must clear: one past the
+// highest N among the workspace's existing arena/t<N>/... branches, floored
+// at the room's own turn number (a repo with no arena refs races as t<turn>,
+// the original naming, unchanged).
+//
+// READ from the refs, never guessed from the turn counter, because the two
+// lifetimes disagree (§9.37, amended 2026-08-09): arena branches and
+// worktrees are KEPT until the user deletes them, while the room's turn
+// counter — and the in-memory race receipt /arena drop needs — reset with
+// every launch. On the first live race to cross a relaunch, a fresh room's
+// turn 3 collided with an older room's t3 leftovers: every seat failed at
+// worktree add, and /arena drop could not reach the old trees because their
+// receipt (Model.lastRace) had died with the old room — the only remedy was
+// hand-run git. The refs are the one record that shares the leftovers'
+// lifetime, so the refs are what numbers the race. for-each-ref over the
+// arena/ namespace, argv through gitOut like every other git call here.
+//
+// A scan that cannot run degrades to the turn-number floor WITH THE RACE
+// RUNNING — a broken for-each-ref must not brick /arena. The worst outcome
+// of the floor is the collision itself, which the caller now reports with
+// git's own fatal line (gitErrLine) instead of progress chatter: degraded
+// numbering costs a named per-seat failure, never a silent one.
+func arenaRaceNumber(workspace string, turn int) int {
+	n := turn
+	out, err := gitOut(workspace, "for-each-ref", "--format=%(refname:short)", "refs/heads/arena/")
+	if err != nil {
+		return n
+	}
+	for _, ref := range strings.Split(out, "\n") {
+		rest, ok := strings.CutPrefix(ref, "arena/t")
+		if !ok {
+			continue
+		}
+		num, _, ok := strings.Cut(rest, "/")
+		if !ok {
+			continue
+		}
+		if k, aerr := strconv.Atoi(num); aerr == nil && k >= n {
+			n = k + 1
+		}
+	}
+	return n
+}
+
+// arenaSetup records the base, numbers the race against the refs the repo
+// already holds, adds one worktree per racing seat, and seeds each worktree
+// from the room repo's .worktreeinclude when one exists. raceN is the number
+// every name this race mints carries — branch, tree, commit subject — and
+// the caller must record it (turnState, the race receipt) so adopt, drop and
+// undo re-derive the same names.
 //
 // The base is read ONCE, before any worktree exists, so every attempt races
 // from the same commit — and the seed plan is read once for the same reason:
@@ -175,19 +268,30 @@ func arenaBranch(turn int, v model.VendorID) string {
 // that failed) skip that seat (reported on its column) rather than aborting
 // the race — a partial read degrades a field, not the row, and the same rule
 // holds one level up.
-func arenaSetup(workspace string, turn int, seats []model.VendorID) (base string, trees map[model.VendorID]string, seeds map[model.VendorID]*SeedReport, seatErr map[model.VendorID]string, err error) {
+func arenaSetup(workspace string, turn int, seats []model.VendorID) (raceN int, base string, trees map[model.VendorID]string, seeds map[model.VendorID]*SeedReport, seatErr map[model.VendorID]string, err error) {
 	base, err = gitOut(workspace, "rev-parse", "HEAD")
 	if err != nil {
-		return "", nil, nil, nil, err
+		return 0, "", nil, nil, nil, err
 	}
+	raceN = arenaRaceNumber(workspace, turn)
 	plan := loadSeedPlan(workspace, seedBudgetBytes)
 	trees = map[model.VendorID]string{}
 	seeds = map[model.VendorID]*SeedReport{}
 	seatErr = map[model.VendorID]string{}
 	for _, v := range seats {
-		tree := arenaTree(workspace, turn, v)
-		if _, werr := gitOut(workspace, "worktree", "add", "-b", arenaBranch(turn, v), tree, base); werr != nil {
-			seatErr[v] = werr.Error()
+		tree := arenaTree(workspace, raceN, v)
+		if _, werr := gitOut(workspace, "worktree", "add", "-b", arenaBranch(raceN, v), tree, base); werr != nil {
+			why := werr.Error()
+			if strings.Contains(why, "already exists") {
+				// Something still claimed this name despite the ref scan — a
+				// sibling directory an old room left with no branch to be
+				// scanned, or a ref minted between scan and add. That is an
+				// older room's leftover, the receipt that could reach it is
+				// gone (arenaRaceNumber's doc), so the remedy is named here:
+				// hand-run git is the one tool that still reaches it.
+				why += " — an older race's leftover; git worktree remove / git branch -D clears it"
+			}
+			seatErr[v] = why
 			continue
 		}
 		if plan != nil {
@@ -207,7 +311,7 @@ func arenaSetup(workspace string, turn int, seats []model.VendorID) (base string
 		}
 		trees[v] = tree
 	}
-	return base, trees, seeds, seatErr, nil
+	return raceN, base, trees, seeds, seatErr, nil
 }
 
 // collectArena reads what one attempt changed, against the recorded base.
@@ -245,12 +349,14 @@ func collectArena(tree, base string) ArenaResult {
 	return r
 }
 
-// arenaCommitMsg names one attempt's commit from the turn that produced it:
-// "arena t<N>: <first line of the brief>". First line only and capped at 64
-// bytes (cut on a rune boundary), because the subject line is a label for
-// `git log --oneline` over a kept branch, not a second copy of the brief —
-// the brief itself is in the transcript and in the commit the user adopts.
-func arenaCommitMsg(turn int, brief string) string {
+// arenaCommitMsg names one attempt's commit from the race that produced it:
+// "arena t<N>: <first line of the brief>", N the recorded race number — the
+// same N the branch carries, so the subject and the ref it lands on can never
+// disagree. First line only and capped at 64 bytes (cut on a rune boundary),
+// because the subject line is a label for `git log --oneline` over a kept
+// branch, not a second copy of the brief — the brief itself is in the
+// transcript and in the commit the user adopts.
+func arenaCommitMsg(raceN int, brief string) string {
 	line := brief
 	if i := strings.IndexByte(line, '\n'); i >= 0 {
 		line = line[:i]
@@ -265,9 +371,9 @@ func arenaCommitMsg(turn int, brief string) string {
 		line = strings.TrimRight(line[:cut], " ") + "…"
 	}
 	if line == "" {
-		return "arena t" + itoa(turn)
+		return "arena t" + itoa(raceN)
 	}
-	return "arena t" + itoa(turn) + ": " + line
+	return "arena t" + itoa(raceN) + ": " + line
 }
 
 // commitArena parks one attempt's tree state on its arena branch, and returns

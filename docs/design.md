@@ -6539,6 +6539,49 @@ mechanics — merge, commit-then-merge, conflict abort, both guards, the force, 
 (`lifecycle_test.go`), but no live adopt has run on the Windows box. The first one pays this
 note the way turn 4 paid the last one.
 
+**Amendment, 2026-08-09: the race numbers itself off the refs, and a failed race says why.**
+A live `/arena` at turn 3 (Windows box, real room) failed on all four seats, and each column's
+whole explanation was `arena: Preparing worktree (new branch 'arena/t3/<vendor>')`. Two
+measured defects, one incident — the second is what made the first expensive:
+
+- **The collision.** Kept-until-deleted cuts both ways: arena branches and worktrees outlive
+  the room, but the turn counter — and the in-memory race receipt `/arena drop` needs
+  (`Model.lastRace`) — reset with every launch. So a fresh room's turn 3 minted the exact
+  names an older room's turn 3 had already parked, `git worktree add -b` refused every seat,
+  and drop could not reach the old trees because their receipt had died with the old room. The
+  only remedy was hand-run git. The fix reads instead of guessing: at setup the race number is
+  `arenaRaceNumber` — one past the highest N among the repo's existing `arena/t<N>/...`
+  branches (`git for-each-ref` over `refs/heads/arena/`, argv via gitOut), floored at the turn
+  number, so a repo with no leftovers keeps racing as `t<turn>`. The refs are the one record
+  that shares the leftovers' lifetime, which is what qualifies them to number the race; a scan
+  that cannot run degrades to the turn-number floor with the race running, because a broken
+  for-each-ref must not brick `/arena`. The number is recorded once
+  (`turnState.arenaRaceN`, `arenaRace.raceN`, `ArenaResult.RaceN`) and EVERYTHING that mints
+  or re-derives a name reads it — the branch on the receipt, the `arena t<N>:` commit subject,
+  `/adopt` and `/arena drop`'s re-derivations, undo's path guard — because the turn and the
+  race now legitimately disagree, and one call site still reading `Column.TurnN` would aim a
+  verb at names the race never created. The arena block's render is untouched: it already
+  shows the branch name, which carries the (now honest) `t<N>`.
+- **The lie about the collision.** gitOut surfaced the FIRST stderr line of a failed command,
+  and `worktree add` prints progress chatter ("Preparing worktree ...") before its
+  `fatal: a branch named '...' already exists` — so the column showed the narration and
+  swallowed the diagnosis. gitOut now prefers the first line git itself marks as the problem
+  (`fatal:` / `error:`), falling back to the first non-empty line only when no marked line
+  exists (some refusals print bare prose). git's own prefixes are the measured marker of
+  which line is the error; the old rule displayed the nearest string to the failure instead of
+  the failure. If a residual collision still happens despite the scan — a sibling directory an
+  old room left with no branch to be scanned, a ref minted between scan and add — the seat's
+  error now carries the fatal line plus the named remedy (`git worktree remove` /
+  `git branch -D`), since those leftovers are exactly the state no receipt can reach.
+
+Both fixes are pinned by offline tests against real temp repositories: the two-line-stderr
+collision fixture (the live transcript, replayed), renumbering past stale `t3` branches with
+every seat racing clean, the turn-number floor on a failed scan, the residual-collision
+sentence, and adopt/drop/undo driven end to end against a race whose number outran its turn —
+leftovers untouched throughout. **The live re-race is owed**: one `/arena` on the Windows box
+over the same leftover state that failed, confirming the seats race clean at the renumbered
+`t<N>` — the same debt shape every amendment here has carried, paid the same way.
+
 ### 9.38 paste lands whole, and never sends (2026-08-09)
 
 The ask, in the operator's words: *"how i can paste things into the area i can type in."* The
