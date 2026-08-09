@@ -87,6 +87,31 @@ func addressableVendors() []model.VendorID {
 	}
 }
 
+// SeatNames is the addressable roster as the words a user types, in seating
+// order. Every surface that TELLS someone who can be seated reads it from here.
+//
+// It exists because that list used to be typed out by hand in four such places
+// — the `--vendor` flag help and the usage block in cmd/telltale, /seat's typo
+// notice, and /arena drop's — and when grok became the fifth seat (§9.39) all
+// four went on naming the four seats the room had before it. ParseSeats had
+// accepted `grok` the whole time, so the help was describing a smaller room
+// than the one that existed: a user reading `--help` was told a supported
+// vendor did not exist. That is the honest-gauge rule (§4a.1) applied to a
+// control surface rather than a value — what the room SAYS it accepts has to be
+// derived from what it accepts, not restated alongside it.
+//
+// Aliases are deliberately excluded. `antigravity` is an accepted spelling of
+// `agy`, not a sixth seat, and listing it would make a five-seat room read as
+// six. This returns seats; mentionAliases stays the authority on spellings.
+func SeatNames() []string {
+	vendors := addressableVendors()
+	out := make([]string, 0, len(vendors))
+	for _, v := range vendors {
+		out = append(out, string(v))
+	}
+	return out
+}
+
 // allAliases address the whole room explicitly. They are how you convene the
 // committee now that silence goes to Claude alone (see defaultRoute).
 var allAliases = map[string]bool{"all": true, "everyone": true, "council": true}

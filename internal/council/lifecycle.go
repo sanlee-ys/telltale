@@ -317,7 +317,8 @@ func (m *Model) arenaDrop(word string, force bool) {
 	} else {
 		v, ok := mentionAliases()[strings.ToLower(strings.TrimPrefix(word, "@"))]
 		if !ok {
-			m.st.Notice = "no racer called " + word + " — /arena drop takes claude, codex, agy, cursor, or all"
+			m.st.Notice = "no racer called " + word +
+				" — /arena drop takes " + strings.Join(SeatNames(), ", ") + ", or all"
 			return
 		}
 		if _, raced := race.trees[v]; !raced {
