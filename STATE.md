@@ -27,26 +27,19 @@ the argument; this file does not restate either.
 
 ## In flight
 
-- **/arena is BUILT and on this branch** (ships with its PR; blind rebuttal
-  merged as #132): one brief raced across every seat, each attempt a fresh
-  session in its own kept sibling worktree, compared in-column by `git diff
-  --stat` against one recorded base, full diff on `y`. Binding copy —
-  the four rulings, the two claude-squad diff mechanics, and the deferred
-  follow-ups list: [docs/design.md §9.37](docs/design.md). **The first live
-  race ran 2026-08-09 and the core held** — three seats raced, ranks and
-  honest zeros rendered, room threads intact. It measured two seat defects,
-  both recorded in §9.37's verification note and both unowned: the **cursor
-  seat cannot race** (its ACP FirstTurn refuses by design; the fix is an
-  ephemeral ACP session per race — §9.36's machinery, throwaway session), and
-  the **write seat's `autoAllowedTools` misses `git -C` shapes** (prefix-match
-  trap; do NOT blind-fix with `Bash(git -C:*)`, the constant serves `--auto`
-  in real workspaces — measure whether the rule grammar can scope a verb
-  behind `-C` first).
-- **The finish line and `d` ship with the same PR** (§9.37's amendment): every
-  racer's block carries "2nd of 4 · done · 25.0s" — host-observed rank welded
-  to the phase word, measured elapsed — and `d` flips the focused seat between
-  stat and full patch (400-line render cap, cut stated). Two §9.37 deferrals
-  retired; commit-per-turn, `.worktreeinclude` and the deletion guard remain.
+- **The arena family is landed and owes one live session.** The whole §9.37
+  deferred list is now built — the live stat, the cursor racer, commit-per-turn
+  with `u` undo, `.worktreeinclude` seeding, `/adopt` and `/arena drop` — plus
+  §9.38's composer paste (what landed: `gh pr list --state merged`; the rulings:
+  the dated 2026-08-09 amendments in [docs/design.md §9.37/§9.38](docs/design.md)).
+  Every one of those amendments states a live-verification debt rather than
+  implying it paid, and **one real session on the Windows box covers nearly all
+  of them at once**: a `/arena` run with a brief that changes files (4-of-4 now —
+  cursor races on a throwaway ACP session), watching the "so far" stat grow,
+  the `committed <sha>` receipts land, then `/adopt` the winner, `u`-undo a
+  loser, `/arena drop` the rest, and paste a three-line snippet (expect one
+  insertion, zero sends). Nothing here has run against a live vendor —
+  offline suites only, same debt shape the core carried before turn 4 paid it.
 
 ## Closed without code (do not re-open)
 
@@ -74,6 +67,18 @@ Nothing open. The last one here was the 44 seconds, and it was measured
 2026-08-08; the finding and the unowned work left over from it are below.
 
 ## Known gaps, not yet owned
+
+- **The write seat's `autoAllowedTools` misses `git -C` shapes** — the one
+  defect from the 2026-08-09 live race still standing (the other, the cursor
+  seat's refusal to race, is fixed in code and rides the live-session debt
+  above). Prefix-match trap: `git -C <path> status` fails `Bash(git status:*)`,
+  so an ungated print-mode seat had an approval request and nobody to ask. Do
+  NOT blind-fix with `Bash(git -C:*)` — the constant also serves `--auto` in
+  real workspaces. The next step is a measurement on the Windows box, not a
+  guess: whether Claude Code's rule grammar can scope a verb behind `-C` at
+  all (probe: allow `Bash(git -C * status:*)`, have a session run
+  `git -C . status`, see if it prompts). If it cannot, the fix likely becomes
+  the seat running bare git verbs with its cwd set instead of `-C` forms.
 
 - **ATTRIBUTED, 2026-08-08. Spawning was never the cost; `wait` is, and only on
   the three seats that are not persistent.** One traced `@all` turn, all four
