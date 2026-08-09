@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -1038,6 +1039,11 @@ func (m *Model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.setDraft(string(d[:len(d)-1]))
 		}
 		m.st.Notice = ""
+	case "ctrl+u":
+		// Backspace at paste scale: the whole draft in one keystroke. The
+		// ruling — why this chord, why no y/n, what the empty draft does —
+		// lives on clearDraft (§9.38).
+		m.clearDraft()
 	default:
 		// A key that carries NO text is not text, so it keeps the meaning it has
 		// in view mode. The test is msg.Text rather than a hand-kept list of
@@ -1263,6 +1269,65 @@ func (m *Model) pageScrollBy(d int) {
 func (m *Model) setDraft(s string) {
 	m.st.Draft = s
 	m.st.Route, _ = ParseRoute(s)
+}
+
+// clearDraft empties the composer in one keystroke, and says how much it took.
+//
+// It exists because paste changed the arithmetic (§9.38). A draft used to cost
+// at most a typed sentence, so backspace's rune-at-a-time delete was
+// proportionate to any mistake the composer could hold; one wrong paste is now
+// up to 8,192 runes in one gesture, and 8,192 backspaces is not an editor. The
+// key is ctrl+u — readline's kill-line, the idiom every shell user's hands
+// already know for exactly this act — and it matters that it is a CHORD:
+// sanitizePaste drops every control character, so no paste can carry this key
+// into the room, and no stray letter can fire it. The one gesture that can
+// empty a draft is a deliberate hand on ctrl, which is the same argument
+// paste.go makes for why a pasted \x03 must not cancel.
+//
+// No y/n gate, deliberately — unlike `c` and `u`, whose confirms price a drop
+// nothing can reverse (a session id is the only handle on a thread). A cleared
+// draft's ways back are ordinary: the clipboard still holds a paste, the
+// keyboard re-types a sentence. What the room owes instead of a gate is the
+// HONEST STATEMENT of the loss, because "cheap to regret" stops being true at
+// an 8k paste: the notice carries the rune count of the string just dropped —
+// a measured value off the draft itself, in pasteRefusal's own unit and
+// spelling ("chars", ungrouped itoa), so the refusal that would not let 20481
+// chars in and the notice that let 1204 out are one vocabulary (§4a.1: the
+// number is read, never derived from anything but the string it counts).
+//
+// The empty draft is silent, and that is backspace's precedent applied rather
+// than a hole in §9.12's attribution rule. Backspace on an empty draft deletes
+// nothing and clears the notice; ctrl+u is the same act at a different size
+// and gets the same treatment. The rule demands a sentence from a key whose
+// effect was refused or is invisible — but leaning on ctrl+u over an empty
+// composer produces exactly the state the key promises, already on screen, and
+// an every-press "nothing to clear" would put noise in the cell where dispatch
+// answers land.
+//
+// Nothing but the draft moves. setDraft("") re-derives Route, and that is the
+// draft falling, not a second casualty: the routing cell is a statement about
+// the draft, and a footer still promising "→ codex" over an empty composer
+// would be the mode line lying about what enter does next. Mode stays compose
+// (the operator is mid-edit, not leaving), flow state, quote arming, focus and
+// the columns are untouched — and a pending y/n can never reach here at all,
+// because key() routes every gate ahead of composeKey. Each gate answers a
+// stray ctrl+u by its own standing rule (cancel, or restate the question);
+// draftclear_test.go asserts that ordering rather than trusting it.
+//
+// In VIEW mode ctrl+u matches nothing and falls through viewKey silently —
+// there is no draft on screen to clear, and esc's contract when it parked the
+// draft was "keeping the draft"; a chord that revoked that promise from the
+// mode the promise was made to would make esc unsafe in hindsight. The key is
+// taught on the help panel's compose-keys row (ctrl+j/u/esc — view.go), not on
+// the compose mode line, whose hint row is at its width budget already.
+func (m *Model) clearDraft() {
+	if m.st.Draft == "" {
+		m.st.Notice = ""
+		return
+	}
+	n := utf8.RuneCountInString(m.st.Draft)
+	m.setDraft("")
+	m.st.Notice = "draft cleared — " + itoa(n) + " " + plural(n, "char")
 }
 
 func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

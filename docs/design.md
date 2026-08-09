@@ -6607,3 +6607,29 @@ into the room. Expected: one insertion, three rows in the composer, zero dispatc
 sends it as one brief. If the paste instead lands as separate turns, the terminal did not
 bracket it — record the terminal build in PARITY.md, because that is a measured vendor fact,
 not a council bug.
+
+**Amendment, 2026-08-09 — the ergonomic other half: ctrl+u clears the draft.** Paste changed
+the arithmetic on regret. A draft used to cost at most a typed sentence, so backspace's
+rune-at-a-time delete was proportionate to any mistake the composer could hold; one wrong
+paste is now up to 8,192 runes in a single gesture, and 8,192 backspaces is not an editor.
+`ctrl+u` — readline's own kill-line — empties the composer in one keystroke, in compose mode
+only. A chord on purpose: `sanitizePaste` drops every control character, so no paste can
+carry the key into the room, and no stray letter can fire it — the one gesture that can empty
+a draft is a deliberate hand on ctrl, the same argument that keeps a pasted `\x03` from
+cancelling. No y/n gate, unlike `c` and `u`, whose confirms price drops nothing can reverse:
+a cleared draft's ways back are ordinary (the clipboard still holds a paste; a sentence
+re-types), so the loss is *stated* instead of priced — the notice carries the measured rune
+count of the string just dropped ("draft cleared — 1204 chars"), in the paste refusal's own
+unit and spelling, never an estimate (§4a.1). An empty draft clears silently — backspace's
+own empty-draft behaviour applied at size: after the press the state the key promises is
+already on screen, and an every-press "nothing to clear" would put noise where dispatch
+answers land. The key sits below every pending gate in `key()`'s routing, so a stray ctrl+u
+under a y/n gets that gate's standing stray-key answer (cancel, or the question restated) and
+never reaches the draft; in view mode it does nothing at all, because esc parked the draft
+there under the promise "keeping the draft", and a chord that revoked it from the other mode
+would make esc unsafe in hindsight. Nothing but the draft moves — the routing indicator falls
+with it only because it describes it. Taught on the help panel's compose-keys row
+(`ctrl+j/u/esc`, landed inside that row's 114-cell budget; the words "compose" and "the
+draft" paid), deliberately not on the compose mode line, which is at its own width budget.
+Tests: `draftclear_test.go` drives `Update` with the real chord through every gate and both
+modes.

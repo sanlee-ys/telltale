@@ -3454,10 +3454,19 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// `esc` merged in from its own row, and the row it frees is what pays for
 		// the overflow marker helpRows now spends (§4a.1: this panel used to clip
 		// in silence). The merge is a category rather than a saving, which is the
-		// bar helpKeys' budget comment sets: these are the two compose keys that
-		// are NOT enter — one extends the draft, one leaves it alone — and a
-		// reader hunting for either is in compose looking for the way out of it.
-		"  ctrl+j/esc   ctrl+j puts a newline in the brief (it grows to six rows); esc leaves compose, keeping the draft",
+		// bar helpKeys' budget comment sets: these are the compose keys that are
+		// NOT enter — one extends the draft, one empties it, one leaves it alone —
+		// and a reader hunting for any of them is in compose looking for the way
+		// out of something. `ctrl+u` landed inside this row's 114-cell budget
+		// (§9.38: paste made rune-by-rune backspace the only way out of a wrong
+		// 8k draft, and a clear key documented nowhere is a control nobody finds)
+		// by trading the words "compose" and "the draft" for it — both restate
+		// what the row's own context already says: this is the compose-keys row,
+		// and "it" has been the brief since the first clause. The compose mode
+		// line does NOT name ctrl+u: its hint row is at budget, and the cell
+		// would be spent on the key you need least often exactly when the footer
+		// has the least room.
+		"  ctrl+j/u/esc ctrl+j puts a newline in the brief (it grows to six rows); ctrl+u clears it; esc leaves, keeping it",
 		// Down from three rows to two. What went is "the others are review, IDE
 		// and tiebreak lanes" — which explains why the fleet is shaped this way
 		// rather than what a key does, and it is in docs/design.md §9.11 and
