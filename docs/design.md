@@ -6477,3 +6477,59 @@ zero-vs-absent on the seed line — are pinned by offline tests against real tem
 **No live race on a repo that actually needs a `.env` has run yet; that run is the debt this
 amendment carries**, and it is the same debt the original note carried for the core, paid the
 same way.
+
+**Amendment, 2026-08-09: the end of a worktree's life — `/adopt` and `/arena drop`.** The
+deferred deletion guard came off the list, and adoption moved from a printed suggestion to a
+typed room command; both are §9.17 verbs, reachable mid-session with no flag and no relaunch
+(`lifecycle.go`). The shapes borrow from the two products that had already worked this seam —
+claude-squad's adopt, Pane's deletion guard — with one deliberate fork each:
+
+- **`/adopt <seat>` merges; it does not check out.** claude-squad's adopt is a checkout of the
+  attempt's branch over the user's — which moves HEAD, rewrites the tree wholesale, and leaves
+  the user's own branch behind. That is more state than the act requires, and §9.37's whole
+  posture is offer-never-take, so council does the least-magic git operation that lands the
+  work: `git merge --no-ff arena/t<N>/<seat>` in the room's repo, on the branch the user is
+  already standing on. `--no-ff` keeps the adoption a visible event in history — the merge
+  commit is the receipt saying where the work came from. Because arena seats leave their work
+  uncommitted (commit-per-turn is still deferred), a dirty attempt is first committed in its
+  OWN worktree, on its OWN arena branch, under the user's own git config — and the y/n card
+  says so, naming the exact command(s) y will run, the flow write gate's contract. Hard
+  precondition, refused by name with the path count: the room tree must be CLEAN
+  (`git status --porcelain` empty) — a merge writes into that tree, and adopt must never eat
+  the user's uncommitted work. A racer that changed nothing refuses (an empty merge commit
+  would claim work that does not exist); a merge that conflicts is `git merge --abort`ed —
+  tree restored, attempt intact on its branch — and the notice hands the merge to a human. A
+  merge that failed before starting reports the tree as untouched instead: the two endings
+  are different facts (§4a.1). Posture is not consulted: read/write governs the seats, and an
+  adopt runs on the user's own y, the same footing as /cd.
+- **`/arena drop <seat>` (or `all`) deletes tree + branch, guarded; the force is a spelling,
+  not a keystroke.** Two guards, each refusing with exactly what would be lost and the way
+  forward: a worktree holding uncommitted changes (counted), and an arena branch holding
+  commits the room's HEAD cannot reach (counted, with `/adopt <seat>` offered beside the
+  force). The force form is a trailing bang — `/arena drop codex!` — re-run by the user,
+  chosen over a second y/n on purpose: y is one keystroke answered against a notice half-read,
+  while the bang travels in the command, records that destruction was asked for, and cannot be
+  produced by a stray key. (`/adopt` keeps y/n because its act is additive and revertible;
+  drop orphans work.) Mechanics are `git worktree remove` (git's own `--force` only when the
+  user spelled it) then `branch -D`, argv via gitOut — and the path check is mechanical: a
+  tree is only ever removed if it re-derives, from the recorded race's own workspace/turn/seat
+  through the same `arenaTree` that minted it, to exactly the recorded path. A receipt entry
+  that fails that check is refused even under force. `drop all` degrades per seat rather than
+  refusing wholesale: clean trees go, survivors are named with their reasons.
+- **The target is the RACE'S receipt, not the column.** `Column.Arena` is a per-turn fact the
+  next dispatch clears; the worktrees are kept until deleted. So dispatch records the race —
+  workspace, turn, base, each racer's tree — on the model (`arenaRace`), in memory only:
+  room.json stays keys-and-numbers, and a room reopened after a quit finishes the lifecycle by
+  hand with the same git commands, against worktrees that are visible siblings precisely so no
+  session state is needed to find them. Grammar note: only the exact two-word form
+  `/arena drop <seat>[!]` is the verb; anything longer after `/arena` is a brief and races as
+  prose, the roomcmd vocabulary rule applied inside the one command that takes free text.
+
+The help panel's room-commands row is at its width budget and does not name the two verbs;
+they are taught by the slash refusal (which lists `/adopt` in the live table), by bare
+`/adopt` and bare `/arena drop` answering with usage, and by every guard refusal naming its
+remedy. Verification owed, same debt shape the race itself carried until 2026-08-09: the git
+mechanics — merge, commit-then-merge, conflict abort, both guards, the force, the path check,
+`drop all`'s partial degrade — are pinned by offline tests against real temp repositories
+(`lifecycle_test.go`), but no live adopt has run on the Windows box. The first one pays this
+note the way turn 4 paid the last one.
