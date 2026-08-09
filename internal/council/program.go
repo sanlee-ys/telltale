@@ -940,6 +940,29 @@ func (m *Model) pageOpen() bool { return m.st.Page.Open }
 // navigating somewhere. That is also why it is a toggle on one key — the two
 // views are one transcript, and a pair of keys would make them two places.
 //
+// toggleArenaDiff flips the focused seat's arena block between the stat and
+// the full patch. Refused with the reason named when there is nothing to flip
+// to — askClearSeat's rule: a key that silently does nothing teaches that the
+// key is unreliable, and "no race", "changed nothing" and "unreadable" are
+// three different reasons deserving three different sentences.
+func (m *Model) toggleArenaDiff() {
+	c := m.focused()
+	if c == nil {
+		m.st.Notice = "no seat is focused"
+		return
+	}
+	switch {
+	case c.Arena == nil:
+		m.st.Notice = "no race on " + c.Label + "'s current turn — d shows an arena diff"
+	case c.Arena.Err != "":
+		m.st.Notice = "no diff to show — " + c.Arena.Err
+	case c.Arena.Diff == "":
+		m.st.Notice = c.Label + "'s attempt changed nothing — there is no diff to show"
+	default:
+		c.ArenaShowDiff = !c.ArenaShowDiff
+	}
+}
+
 // A room with no turn is told so rather than handed an empty page. askClearSeat's
 // shape and askClearSeat's reason: a control that opens onto nothing teaches
 // that the key is unreliable, not that the room is empty.
@@ -1144,6 +1167,14 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// one transcript read two ways (§9.22). View mode only: in compose `t` is
 		// the letter t, which is the same contract `q`, `f` and `c` already keep.
 		m.toggleTurnView()
+	case "d":
+		// The focused seat's arena block flips stat ↔ full patch. A key rather
+		// than a second yank, because reading and taking are different acts, and
+		// per COLUMN because comparing A's stat against B's whole diff is a
+		// legitimate way to read a race. Refusals name the reason: a seat with
+		// no race this turn, and an attempt whose diff is a measured nothing or
+		// an error, are different facts and get different sentences.
+		m.toggleArenaDiff()
 	case "c":
 		// Clear the focused seat's thread — the first control built to §9.17's
 		// rule, and a key rather than a room command for a reason recorded

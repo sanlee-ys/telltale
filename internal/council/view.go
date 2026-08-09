@@ -1568,9 +1568,39 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		out = append(out, "")
 		out = append(out, sty.Muted.Render(padRight(labelRule("arena "+c.Arena.Branch, "", w, g), w, g)))
 		out = append(out, styleAll(wrap(abbreviate(c.Arena.Tree, st.Home), w), sty.Muted)...)
+		// The finish line: host-observed rank, the phase word, the measured
+		// elapsed. The rank NEVER stands alone — "2nd · failed" is a different
+		// fact from "2nd · done", and printing the number without the word
+		// would let a fast crash read as a podium. Rank zero (a fixture, or a
+		// pre-rank frame) renders nothing rather than "1st of 0".
+		if c.Arena.Rank > 0 {
+			finish := ordinal(c.Arena.Rank) + " of " + itoa(c.Arena.Of) + " · " + phaseWord(c.Phase)
+			if c.Elapsed > 0 {
+				finish += " · " + dur(c.Elapsed)
+			}
+			out = append(out, styleAll(wrap(finish, w), sty.bold(sty.Text))...)
+		}
 		switch {
 		case c.Arena.Err != "":
 			out = append(out, wrap(c.Arena.Err, w)...)
+		case c.ArenaShowDiff && c.Arena.Diff != "":
+			// The full patch, capped for the frame: Render runs per keystroke
+			// and a megabyte diff is tens of thousands of styled lines. The cap
+			// names what it dropped and where the whole thing is — two exits,
+			// both stated (y, and the worktree itself).
+			// TrimRight before splitting: a patch ends in a newline, and the
+			// empty string after it is not a line the cutoff should count.
+			lines := strings.Split(strings.TrimRight(c.Arena.Diff, "\n"), "\n")
+			shown := lines
+			if len(lines) > arenaDiffScreenLines {
+				shown = lines[:arenaDiffScreenLines]
+			}
+			for _, line := range shown {
+				out = append(out, fit(strings.TrimRight(line, " "), w))
+			}
+			if n := len(lines) - len(shown); n > 0 {
+				out = append(out, wrap("(… "+itoa(n)+" more lines — y copies the whole diff, d returns to the stat)", w)...)
+			}
 		case strings.TrimSpace(c.Arena.Stat) == "":
 			out = append(out, wrap("no changes against "+shortSHA(c.Arena.Base)+".", w)...)
 		default:
@@ -1594,6 +1624,46 @@ func shortSHA(sha string) string {
 		return sha[:7]
 	}
 	return sha
+}
+
+// arenaDiffScreenLines caps how much of a patch one frame renders. The whole
+// diff stays yankable; this bounds only the per-keystroke render cost, and the
+// cutoff line says what was dropped and both ways to the rest.
+const arenaDiffScreenLines = 400
+
+// ordinal spells a rank. Four seats today, but the teens rule is three lines
+// and a "21st" bug would outlive the assumption that broke it.
+func ordinal(n int) string {
+	s := itoa(n)
+	if n%100 >= 11 && n%100 <= 13 {
+		return s + "th"
+	}
+	switch n % 10 {
+	case 1:
+		return s + "st"
+	case 2:
+		return s + "nd"
+	case 3:
+		return s + "rd"
+	default:
+		return s + "th"
+	}
+}
+
+// phaseWord is the finish-line vocabulary: the phase as one word, because a
+// rank must never print without the word that says what KIND of finish it
+// ranks — "2nd · failed" and "2nd · done" are different facts.
+func phaseWord(p Phase) string {
+	switch p {
+	case PhaseDone:
+		return "done"
+	case PhaseFailed:
+		return "failed"
+	case PhaseCancelled:
+		return "cancelled"
+	default:
+		return "running"
+	}
 }
 
 // inFlightBody is what a seat's reading area says for the turn it is on: the

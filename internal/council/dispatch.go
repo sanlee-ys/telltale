@@ -56,6 +56,12 @@ type turnState struct {
 	arena      bool
 	arenaBase  string
 	arenaTrees map[model.VendorID]string
+	// arenaFinished counts racers that have landed, in the order the ROOM saw
+	// them land — finishColumn call order, which is host-observed time, never a
+	// vendor's own claim about when it finished (the host-stamps rule). Event
+	// batching bounds the resolution: two seats landing in one drained batch
+	// rank in batch order, which is the honest limit of what the room measured.
+	arenaFinished int
 }
 
 type eventBatchMsg struct{ events []runner.Event }
@@ -818,6 +824,12 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 		if tree, ok := m.turn.arenaTrees[c.Vendor]; ok {
 			r := collectArena(tree, m.turn.arenaBase)
 			r.Branch = arenaBranch(c.TurnN, c.Vendor)
+			// Rank is the order the room OBSERVED seats land, stamped here on
+			// the host's clock. Every racer gets one — a DNF finished too, just
+			// not well, and the render pairs the rank with the phase word so
+			// "2nd" on a failed attempt cannot read as a result.
+			m.turn.arenaFinished++
+			r.Rank, r.Of = m.turn.arenaFinished, len(m.turn.arenaTrees)
 			c.Arena = &r
 		}
 	}
