@@ -817,7 +817,36 @@ type PendingGate struct {
 	// Text is the call as it will be shown, formatted exactly like a trace
 	// entry: "Write: ~/ws/ping.txt".
 	Text string
+
+	// Old and New are the before and after of a structured file edit, measured
+	// off the vendor's own permission payload and already redacted (§9.41).
+	//
+	// This is the ONE projection of runner.Gate.Input that crosses onto State,
+	// and it is two named strings rather than the blob for exactly the reason
+	// the blob is kept off this side: a whole argument map on the renderer's
+	// side of the boundary is a Write's entire file content one careless line
+	// away from the screen. Two fields with one purpose cannot be reached for
+	// by accident.
+	//
+	// A PAIR or nothing. The adapter fills both or neither, so the renderer's
+	// test is simply whether they DIFFER — an edit whose payload carried only
+	// the new half, or no halves at all (every non-Edit call, and every call on
+	// the Cursor seat), leaves both empty, reads as identical, and draws no
+	// preview. Nothing here is ever read from disk or reconstructed: §4a.1's
+	// rule is that a field nothing sourced is absent, and a guessed diff on the
+	// one card in this room that guards a write would be the worst place in the
+	// product to invent something.
+	Old, New string
 }
+
+// HasPreview reports whether this request carried enough to draw a before/after.
+//
+// The whole test is that the two halves DIFFER, which folds three separate
+// "nothing to show" cases into one honest answer: no payload halves at all
+// (both empty), and an edit that would change nothing (both equal). It is a
+// method rather than a field so there is no second copy of the rule to drift —
+// the card, the layout budget and the tests all ask this one question.
+func (p PendingGate) HasPreview() bool { return p.Old != p.New }
 
 // Reattach is what a resumed room says about where it came from.
 //

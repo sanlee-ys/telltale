@@ -532,11 +532,35 @@ func (m *Model) queueGate(c *Column, g *runner.Gate) {
 	if m.gateInputs == nil {
 		m.gateInputs = map[string]map[string]any{}
 	}
+	// The two halves of an edit, when the vendor sent both — redacted the same
+	// way and for a sharper version of the same reason (§9.41). A tool call's
+	// argument line is a likely place for a token; the BODY of a file being
+	// edited is where one actually lives, and this card puts that body in chrome
+	// that does not scroll away. Redaction is applied to each half separately
+	// because they are rendered separately; whole-string, like every other
+	// complete vendor string, since an edit payload arrives in one piece.
+	//
+	// TrimRight of newlines only, deliberately not TrimSpace: leading whitespace
+	// is a line's INDENT, and a preview that silently unindented the code it is
+	// asking about would be showing an edit the vendor did not request.
+	//
+	// Two halves that come out of here EQUAL draw no preview, which covers the
+	// two ways that can happen and treats them alike on purpose: an edit whose
+	// only difference was a redacted secret, and one whose only difference was
+	// trailing newlines. Neither has anything a red/green block could show that
+	// would not be a line claiming to differ from an identical line.
+	old, next := "", ""
+	if g.OldContent != g.NewContent {
+		old = strings.TrimRight(m.redactWhole(g.OldContent), "\n")
+		next = strings.TrimRight(m.redactWhole(g.NewContent), "\n")
+	}
 	m.st.Gates = append(m.st.Gates, PendingGate{
 		Vendor:    c.Vendor,
 		RequestID: g.RequestID,
 		ToolUseID: g.ToolUseID,
 		Text:      text,
+		Old:       old,
+		New:       next,
 	})
 	m.gateInputs[g.RequestID] = g.Input
 }

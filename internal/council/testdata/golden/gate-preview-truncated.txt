@@ -1,0 +1,24 @@
+  council ⚠ WRITE  │  ~/code/telltale                                               turn 1  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▌ ▸ 1 CC Claude Code  ───  ⠋ streaming  │    2 CX Codex  ──────────  ⠋ waiting  │    3 AG Antigravity  ────  ⠋ waiting  
+▌   gated  tokens                       │    WRITES  final only                 │    WRITES  final only                 
+▌ ⚠ waiting on you: Edit:               │                                       │                                       
+▌   internal/council/gate.go            │                                       │                                       
+▌   - old 1                             │                                       │                                       
+▌   - old 2                             │                                       │                                       
+▌   - old 3                             │                                       │                                       
+▌   2 more removed lines not shown      │                                       │                                       
+▌   + new 1                             │                                       │                                       
+▌   + new 2                             │                                       │                                       
+▌   + new 3                             │                                       │                                       
+▌   1 more added line not shown         │                                       │                                       
+▌   y approve   n deny   a stop asking  │                                       │                                       
+                                                                                                                        
+                                                                                                                        
+▌ ⚙ Read: internal/council/view.go ✓    │                                       │                                       
+▌ ⚙ Edit: internal/council/gate.go      │                                       │                                       
+▌                                       │                                       │                                       
+▌ I need to add the card renderer.      │  working — the reply arrives whole.   │  working — the reply arrives whole.   
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ›                                                                                                                     
+  GATE            Edit: internal/council/gate.go  │  y approve  │  n deny  │  a stop asking  │  ctrl+c cancel the turn  
