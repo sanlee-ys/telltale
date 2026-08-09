@@ -436,6 +436,11 @@ type Column struct {
 	// outlives the marker on purpose (kept until the user deletes it), the
 	// on-screen block does not.
 	Arena *ArenaResult
+	// ArenaShowDiff flips the arena block from the stat to the full patch (`d`).
+	// Per column: comparing seat A's stat against seat B's whole diff is a
+	// legitimate way to read a race, so one seat's toggle must not drag the
+	// others'.
+	ArenaShowDiff bool
 
 	// CostSession reports that the figure above is the PROCESS's running total
 	// rather than this turn's spend.
@@ -514,6 +519,7 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	// standing would describe a break the room has already healed.
 	c.Cleared = false
 	c.Arena = nil
+	c.ArenaShowDiff = false
 	c.CostUSD = nil
 	c.CostSession = false
 	c.Started = time.Time{}

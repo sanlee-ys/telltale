@@ -6208,9 +6208,9 @@ race is not routable in v1 (`@codex`-only arenas): the value is the comparison, 
 race is an ordinary turn in a worktree, which `/cd` already provides.
 
 Deliberately deferred, each its own change judged against this section: commit-per-turn inside
-arena worktrees, the tab-toggle from stat to a full colored diff, a results line with measured
-finish order, `.worktreeinclude` seeding (the first real arena run on a repo needing `.env` will
-surface it), and a deletion guard stronger than git's own refusal to remove a dirty worktree.
+arena worktrees, `.worktreeinclude` seeding (the first real arena run on a repo needing `.env`
+will surface it), and a deletion guard stronger than git's own refusal to remove a dirty
+worktree. Two of the original deferrals landed the day after (amendment below).
 
 Verification note, honest: the git mechanics (worktree creation from one base, add -N, the
 three collection outcomes, the session-id guard, the renders, the yank) are all pinned by
@@ -6218,3 +6218,23 @@ offline tests against a real temp repository. **No live vendor has raced yet** �
 reuses each vendor's verified FirstTurn invocation, but FirstTurn in a worktree with
 PostureWrite is a combination no live run has exercised, and the first live race is the
 verification this section still owes.
+
+**Amendment, 2026-08-08: the finish line and the `d` key.** Two deferrals came off the list:
+
+- **Every racer's arena block now carries a finish line** — *"2nd of 4 · done · 25.0s"* — and
+  each part keeps its own epistemics. The rank is the order the ROOM saw seats land
+  (finishColumn call order, host-stamped; event batching bounds the resolution, which is the
+  honest limit of what was measured — a vendor's own claim about when it finished is an
+  inferred value wearing measured clothes and is not consulted). The phase word is welded to
+  the rank on purpose: "2nd · failed" and "2nd · done" are different facts, and a bare number
+  would let a fast crash read as a podium. A DNF ranks — it landed, just not well. The elapsed
+  is the column's own measured clock. parallel-code's results screen is the pattern source,
+  minus its star rating, which is a judgment no gauge here is allowed to render.
+- **`d` flips the focused seat's arena block from stat to the full patch** and back. Per
+  column, because reading A's stat against B's whole diff is a legitimate way to compare. The
+  frame renders at most 400 patch lines (`arenaDiffScreenLines`) — a render cost bound, not a
+  data bound — and the cutoff names how many lines it dropped and both routes to the rest
+  (`y`, and the worktree itself). Three refusals with three sentences: no race this turn, a
+  measured nothing-to-show, and an unreadable diff carrying its reason. Plain text, no diff
+  colouring yet: +/- prefixes are the first signal and survive `--ascii`; colour through the
+  existing palette is a later, separate change under style.go's no-new-hues rule.

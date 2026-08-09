@@ -243,3 +243,126 @@ func TestArenaCommandRefusals(t *testing.T) {
 		t.Error("'/arenas' was stolen from the conversation")
 	}
 }
+
+// TestArenaRanksAreHostObserved: rank is the order finishColumn fired, every
+// racer gets one — a DNF ranks too — and the render pairs rank with the phase
+// word so a fast crash cannot read as a podium.
+func TestArenaRanksAreHostObserved(t *testing.T) {
+	ws := gitRepo(t)
+	seats := []model.VendorID{model.VendorClaude, model.VendorCodex}
+	base, trees, _, err := arenaSetup(ws, 4, seats)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m := clearModel()
+	m.st.Columns[0].Phase = PhaseStreaming
+	m.st.Columns[0].TurnN = 4
+	m.st.Columns[1].Phase = PhaseStreaming
+	m.st.Columns[1].TurnN = 4
+	m.turn = &turnState{
+		live:       map[model.VendorID]bool{model.VendorClaude: true, model.VendorCodex: true},
+		persistent: map[model.VendorID]bool{},
+		arena:      true,
+		arenaBase:  base,
+		arenaTrees: trees,
+		cancel:     func() {},
+	}
+
+	// Codex lands first, failed; Claude second, done. The order of these calls
+	// IS the measurement.
+	m.finishColumn(&m.st.Columns[1], PhaseFailed)
+	m.finishColumn(&m.st.Columns[0], PhaseDone)
+
+	cx, cc := m.st.Columns[1].Arena, m.st.Columns[0].Arena
+	if cx == nil || cc == nil {
+		t.Fatal("a racer landed without an arena result")
+	}
+	if cx.Rank != 1 || cc.Rank != 2 || cx.Of != 2 || cc.Of != 2 {
+		t.Errorf("ranks = codex %d/%d, claude %d/%d — want 1/2 and 2/2 in landing order",
+			cx.Rank, cx.Of, cc.Rank, cc.Of)
+	}
+
+	// The failed seat's finish line must carry the word, not just the number.
+	st := m.st
+	got := render(st)
+	if !strings.Contains(got, "1st of 2 · failed") {
+		t.Errorf("the DNF's rank prints without its phase word:\n%s", got)
+	}
+	if !strings.Contains(got, "2nd of 2 · done") {
+		t.Errorf("the finisher's rank line is missing or unworded")
+	}
+}
+
+// TestArenaDiffToggleShowsThePatchAndNamesItsRefusals: d flips stat to patch on
+// the focused seat only, and each nothing-to-show case names its reason.
+func TestArenaDiffToggleShowsThePatchAndNamesItsRefusals(t *testing.T) {
+	m := clearModel()
+	c := &m.st.Columns[0]
+	m.st.Focus = 0
+
+	m.toggleArenaDiff()
+	if !strings.Contains(m.st.Notice, "no race") {
+		t.Errorf("no-race refusal: %q", m.st.Notice)
+	}
+
+	c.Arena = &ArenaResult{Err: "diff unavailable: boom"}
+	m.toggleArenaDiff()
+	if !strings.Contains(m.st.Notice, "boom") {
+		t.Errorf("error refusal does not carry the reason: %q", m.st.Notice)
+	}
+
+	c.Arena = &ArenaResult{}
+	m.toggleArenaDiff()
+	if !strings.Contains(m.st.Notice, "changed nothing") {
+		t.Errorf("zero refusal: %q", m.st.Notice)
+	}
+
+	c.Arena = &ArenaResult{Stat: " a.txt | 1 +", Diff: "diff --git a/a.txt b/a.txt\n+two"}
+	m.toggleArenaDiff()
+	if !c.ArenaShowDiff {
+		t.Fatal("d did not flip to the patch")
+	}
+	got := render(m.st)
+	if !strings.Contains(got, "+two") {
+		t.Error("the patch is not on screen after d")
+	}
+	if strings.Contains(got, "a.txt | 1 +") {
+		t.Error("the stat is still on screen beside the patch — the toggle shows one or the other")
+	}
+	// Per column: the second seat keeps its own stat view.
+	if m.st.Columns[1].ArenaShowDiff {
+		t.Error("one seat's toggle dragged its neighbour")
+	}
+	m.toggleArenaDiff()
+	if c.ArenaShowDiff {
+		t.Fatal("d did not flip back")
+	}
+}
+
+// TestArenaDiffRenderIsCapped: the transcript carries at most
+// arenaDiffScreenLines of patch, and the cutoff names what was dropped and both
+// routes to the rest. Asserted on columnLines rather than the frame, because
+// the cutoff sits at the BOTTOM of a 450-line transcript and a 24-row viewport
+// shows a screenful of it — the property is about what the column holds, not
+// which slice of it happens to be scrolled into view.
+func TestArenaDiffRenderIsCapped(t *testing.T) {
+	st := room()
+	var b strings.Builder
+	for i := 0; i < arenaDiffScreenLines+50; i++ {
+		b.WriteString("+line\n")
+	}
+	st.Columns[0].Arena = &ArenaResult{Diff: b.String(), Stat: "x"}
+	st.Columns[0].ArenaShowDiff = true
+	st.Columns[0].Phase = PhaseDone
+
+	lines, _ := columnLines(st, st.Columns[0], 38, PlainStyles(), GlyphsFor(false))
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "50 more lines") {
+		t.Error("an over-cap patch renders without saying how much was cut")
+	}
+	if strings.Count(joined, "+line") > arenaDiffScreenLines {
+		t.Errorf("the column holds %d patch lines, past the %d cap",
+			strings.Count(joined, "+line"), arenaDiffScreenLines)
+	}
+}

@@ -63,6 +63,13 @@ type ArenaResult struct {
 	// could not be read is reported, never rendered as "no changes" — that
 	// collapse is the degraded-vs-zero bug §4a.1 exists to prevent.
 	Err string
+
+	// Rank is the order the ROOM saw this attempt land (1-based), Of how many
+	// raced. Host-observed finish order, per the host-stamps rule: a vendor's
+	// own claim about when it finished is an inferred value wearing measured
+	// clothes, so the only clock that ranks a race is the room's. Zero means
+	// unranked — a fixture a test built by hand, rendered as absent, not first.
+	Rank, Of int
 }
 
 // gitOut runs one git command with plain argv — never a shell (§9.3's rule

@@ -35,6 +35,11 @@ binding copies and the argument; this file does not restate either.
   mechanics are test-pinned offline; FirstTurn-in-a-worktree is a combination
   no live run has exercised. First live race before the 9-30 demo is the
   check that has not happened.
+- **The finish line and `d` ship with the same PR** (§9.37's amendment): every
+  racer's block carries "2nd of 4 · done · 25.0s" — host-observed rank welded
+  to the phase word, measured elapsed — and `d` flips the focused seat between
+  stat and full patch (400-line render cap, cut stated). Two §9.37 deferrals
+  retired; commit-per-turn, `.worktreeinclude` and the deletion guard remain.
 
 ## Closed without code (do not re-open)
 
