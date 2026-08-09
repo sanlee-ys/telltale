@@ -14,8 +14,8 @@ jobs:
     # Windows is the primary target (ADR-002): the eval runs where the users are.
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Vet
