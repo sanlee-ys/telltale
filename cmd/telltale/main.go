@@ -1,6 +1,6 @@
 // telltale — an honest gauge for your coding agents.
 //
-// One binary, three modes (decisions/002, decisions/008):
+// One binary, five modes (decisions/002, decisions/008):
 //
 //	telltale statusline   read a vendor statusline JSON payload on stdin, print one
 //	                      line (Claude Code, or Antigravity CLI via its documented
@@ -9,6 +9,8 @@
 //	telltale council      dispatch room: one brief to several vendor CLIs at once
 //	telltale hook <v>     vendor hook relay: a per-turn payload on stdin, token
 //	                      counts to ~/.telltale/usage/, nothing on stdout
+//	telltale doctor       launch-time preflight: which vendor binaries are here,
+//	                      what version each reports, and what was never checked
 //
 // The two GAUGES — statusline and hud — share the normalized session model and
 // internal/theme's numbers, and nothing else. Neither calls the network or
@@ -25,6 +27,11 @@
 // initializes it — only package init runs, and the statusline latency budget is
 // re-benchmarked whenever deps change (the binary is spawned fresh on every
 // prompt, so init cost is statusline cost).
+//
+// doctor is the only mode that RUNS a vendor without having been asked for a
+// turn, and it is bounded to `<binary> --version`: no model, no session, no
+// quota, no credential, no network, and nothing written anywhere (design.md
+// §9.42, internal/doctor's package doc).
 package main
 
 import (
@@ -47,6 +54,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/claude"
 	"github.com/sanlee-ys/telltale/internal/council"
 	"github.com/sanlee-ys/telltale/internal/cursorhook"
+	"github.com/sanlee-ys/telltale/internal/doctor"
 	"github.com/sanlee-ys/telltale/internal/hud"
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/quotacache"
@@ -76,6 +84,11 @@ func main() {
 		}
 	case "hook":
 		runHook(os.Args[2:])
+	case "doctor":
+		if err := runDoctor(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "telltale doctor:", err)
+			os.Exit(1)
+		}
 	case "version", "--version", "-v":
 		fmt.Println("telltale", version)
 	default:
@@ -202,6 +215,43 @@ func runCursorHook() {
 	if err := usagecache.Add(dir, string(model.VendorCursor), delta, time.Now()); err != nil {
 		fmt.Fprintln(os.Stderr, "telltale hook cursor:", err)
 	}
+}
+
+// runDoctor is the launch-time preflight (design.md §9.42).
+//
+// A fifth mode rather than a council flag, and the reason is the same one that
+// made `hook` its own mode: what it prints goes somewhere else. Council's
+// output is a full-screen room, so a preflight rendered inside it would be
+// unreadable at exactly the moment it is wanted — before the room opens, and
+// often piped into a file or pasted into an issue. This path never enters the
+// alternate screen and never touches the TUI.
+//
+// It is the one place in this binary that runs a vendor. What that buys and
+// what it costs is argued in internal/doctor's package doc: `--version` parses
+// argv, prints a string and exits, so nothing here starts a turn, spends quota,
+// reads a credential, writes under ~/.telltale, or calls the network.
+func runDoctor(args []string) error {
+	fs := flag.NewFlagSet("telltale doctor", flag.ContinueOnError)
+	width := fs.Int("width", 0, "wrap column for the report (default 80)")
+	// Every probe gets its own deadline rather than one budget for the run: a
+	// wedged seat must cost its own timeout and not the report. The default is
+	// generous because the slow case is measured — a cold vendor CLI takes
+	// seconds to start on this fleet (design.md §9.33) and a bundled node loads
+	// for ~1.2s before it parses a flag — and because the cost of being wrong
+	// is asymmetric: too short renders a FAILED that is really this flag's
+	// fault, which is the one kind of dishonest cell this mode exists to avoid.
+	timeout := fs.Duration("timeout", 15*time.Second, "how long each vendor gets to answer --version")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	rep := doctor.Run(council.DoctorSeats(), doctor.ExecProbe(*timeout))
+	fmt.Print(doctor.Render(rep, doctor.Options{Width: *width}))
+	// Exit 0 whatever the report says. A failed CHECK is this command working —
+	// it looked, and it is telling you. Exiting non-zero on a missing vendor
+	// would make "I have four of the five seats installed" indistinguishable
+	// from "doctor itself broke", and would put a red cross in any CI that ever
+	// ran it for information.
+	return nil
 }
 
 func runHUD(args []string) error {
@@ -339,12 +389,28 @@ usage:
   telltale hook cursor   (wire into ~/.cursor/hooks.json as an afterAgentResponse
                          command hook) read one turn's token counts on stdin,
                          add them to this machine's running total, print nothing
+  telltale doctor        launch-time preflight: which vendor binaries are on
+                         this machine, where each was found, what version it
+                         reports — and, said out loud rather than left blank,
+                         what was never checked. Auth and network are always
+                         "not checked": nothing here probes a login or calls
+                         the network, and a preflight that implied otherwise
+                         would be trusted on the one day it was wrong
   telltale version
 
 telltale hud flags:
   --vendor all|claude|codex|gemini|agy|cursor   start with a vendor filter applied
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
+
+telltale doctor flags:
+  --timeout <dur>             how long each vendor gets to answer --version
+                              (default 15s). One deadline per seat, not one for
+                              the run: a wedged vendor costs its own timeout and
+                              reports a failed check, never the whole report
+  --width <n>                 wrap column for the report (default 80)
+It prints words and no colour, so it reads the same in a terminal, in a pipe and
+in a pasted issue; --ascii and NO_COLOR have nothing to switch off.
 
 telltale council is ONE persistent room. Run it with no arguments: it reopens
 the saved room, reattaches every vendor's own session, and continues the
