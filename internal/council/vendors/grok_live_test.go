@@ -35,13 +35,24 @@ func TestLiveGrok(t *testing.T) {
 		t.Skipf("grok not on PATH: %v", err)
 	}
 
-	// A prompt with an exact expected answer, so the assertion is about the
-	// pipe rather than about the model's prose. The temp dir is the workspace:
-	// this turn has no reason to see the repo, and the seat writes by default.
+	// A prompt with an exact expected answer, so the assertion is about the pipe
+	// rather than about the model's prose. The temp dir is the workspace: this
+	// turn has no reason to see the repo, and the seat writes by default.
 	ws := t.TempDir()
 
-	spec, err := Grok{}.FirstTurn(
-		"Reply with exactly: LIVEOK. Do not use any tool.", ws, bin, PostureRead)
+	// FENCED, and that is the whole point of this line. The first version of
+	// this test sent "Reply with exactly: LIVEOK", which begins with a letter,
+	// and it passed against an argv that could not send a real council turn at
+	// all: a briefed room prepends Brief.Apply's `---` fence, clap refused the
+	// hyphen-leading token as a flag value, and the seat exited 2 before any
+	// event. A live test whose prompt is shaped unlike the product's is a green
+	// check over a case that never ships.
+	const fenced = "--- operating context ---\n" +
+		"You are one seat in a room of five. Answer only what is asked.\n" +
+		"--- end operating context. The request follows. ---\n\n" +
+		"Reply with exactly: LIVEOK. Do not use any tool."
+
+	spec, err := Grok{}.FirstTurn(fenced, ws, bin, PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,8 +77,15 @@ func TestLiveGrok(t *testing.T) {
 	// have to compose, and the thread has to be the vendor's rather than a
 	// re-send of ours. Asking about the first turn's content is what tells those
 	// two apart — a fresh conversation cannot answer it.
+	// Fenced too. Brief.Apply is first-turn only, so a real resume prompt would
+	// NOT carry the fence — which is exactly why this one does: the resume path
+	// must be proven safe for the hyphen-leading shape rather than merely never
+	// handed it, so that a future change to when the brief is applied cannot
+	// resurrect the exit-2 failure on a path nothing exercises.
 	next, err := Grok{}.NextTurn(
-		"What exact word did you just reply with? Answer with only that word.",
+		"--- operating context ---\nStill the same room.\n"+
+			"--- end operating context. The request follows. ---\n\n"+
+			"What exact word did you just reply with? Answer with only that word.",
 		ws, bin, first.session, PostureRead)
 	if err != nil {
 		t.Fatal(err)

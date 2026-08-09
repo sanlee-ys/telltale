@@ -86,27 +86,47 @@ func grokBaseArgs(_ Posture) []string {
 	}
 }
 
-// grokPromptArgs puts the prompt on argv, last.
+// grokPromptArgs puts the prompt on argv as ONE token, ATTACHED to its flag.
 //
 // argv rather than stdin, and unlike the Codex seat that is not a preference —
-// it is the only channel offered. There is no `-` sentinel; `-p/--single` takes
-// the prompt as its VALUE, and the alternatives (`--prompt-file`, which needs a
-// temp file this package has no business writing, and `--prompt-json`, which is
-// argv too) buy nothing over it. It is safe here for the reason it is safe on
-// the Antigravity seat: `grok` resolves to a native grok.exe rather than a
-// .cmd shim, so runner's shell-shim refusal does not trip and no cmd.exe ever
-// sees the brief. The residual is the ~32K Windows command-line limit, which a
-// long multi-turn brief can reach; --prompt-file is the escape hatch if it ever
-// does, and it is deliberately not built before it is needed.
+// it is the only channel offered. There is no `-` sentinel. It is safe here for
+// the reason it is safe on the Antigravity seat: `grok` resolves to a native
+// grok.exe rather than a .cmd shim, so runner's shell-shim refusal does not
+// trip and no cmd.exe ever sees the brief. The residual is the ~32K Windows
+// command-line limit, which a long multi-turn brief can reach; --prompt-file is
+// the escape hatch if it ever does, and it is deliberately not built before it
+// is needed.
 //
-// -p goes LAST, so the prompt is the value immediately after it and no flag
-// added later can land between the two. The Antigravity adapter learned that
-// the expensive way — there, a flag after -p is silently swallowed INTO the
-// prompt. grok's parser is a well-behaved clap and does not have that failure
-// mode (`--resume <id> -p <prompt>` was measured resuming correctly), so this
-// is discipline copied from a sibling rather than a trap measured here.
+// **`--single=<prompt>`, not `-p <prompt>`, and this cost a live room to find.**
+// The separated form was what shipped, and it was verified against a probe
+// prompt that began with a letter. Council's real first turn does not: a briefed
+// room prepends `Brief.Apply`'s fence, so the prompt begins with `---`. clap does
+// not take a hyphen-leading token as a flag's value unless the flag opts into
+// `allow_hyphen_values`, and this one does not — so the brief was read as an
+// unknown FLAG, the seat died at exit 2 before a single event, and the column
+// reported failed in 0s on every briefed turn. Measured, with the parser's own
+// words:
+//
+//	error: unexpected argument '--- operating context ---
+//	  You are in a room...' found
+//	  tip: to pass '...' as a value, use '-- ...'
+//
+// The attached form fixes it because there is no second token to misread:
+// everything after the first `=` in `--single=…` is the value, hyphens and
+// newlines included. Verified against the exact failing shape — a leading `---`
+// and an embedded newline — on the first turn AND composed with `--resume`,
+// where the resumed turn recalled a codeword only the first turn carried.
+//
+// The long spelling is deliberate: `-p=…` is not the same thing to clap, whose
+// attached form for a SHORT flag is `-pVALUE`. `--single=` is the unambiguous
+// one, and it is worth the six extra characters to never have to remember that.
+//
+// This is why the seat's live test now sends a brief-shaped prompt rather than a
+// benign one (grok_live_test.go): a green test over a prompt whose first
+// character is a letter proved the argv worked for a case the product never
+// sends.
 func grokPromptArgs(p Posture, prompt string) []string {
-	return append(grokBaseArgs(p), "-p", prompt)
+	return append(grokBaseArgs(p), "--single="+prompt)
 }
 
 func (g Grok) FirstTurn(prompt, workspace, binary string, p Posture) (runner.Spec, error) {
@@ -128,10 +148,16 @@ func (g Grok) FirstTurn(prompt, workspace, binary string, p Posture) (runner.Spe
 // input_tokens 497 against cache_read_input_tokens 19456 — the conversation was
 // on the vendor's side, not re-sent from ours.
 //
-// --resume takes the id as its own value and precedes -p. A missing id is
-// ErrNoResume rather than a fresh turn invented here: the room says out loud
+// --resume takes the id as its own value and precedes the prompt. A missing id
+// is ErrNoResume rather than a fresh turn invented here: the room says out loud
 // when a thread was lost, and an adapter that silently started a new
 // conversation would take that sentence away from it.
+//
+// The session id is separated rather than attached, and that asymmetry with the
+// prompt is deliberate rather than an oversight: a session id is a UUID and can
+// never begin with a hyphen, so the hazard grokPromptArgs exists to route around
+// does not reach this flag. Both spellings were measured working here; the plain
+// one is kept because it is the one the vendor documents.
 func (g Grok) NextTurn(prompt, workspace, binary, sessionID string, p Posture) (runner.Spec, error) {
 	if sessionID == "" {
 		return runner.Spec{}, ErrNoResume
@@ -139,8 +165,9 @@ func (g Grok) NextTurn(prompt, workspace, binary, sessionID string, p Posture) (
 	return runner.Spec{
 		Vendor: g.ID(),
 		Binary: binary,
-		Args:   append(append(grokBaseArgs(p), "--resume", sessionID), "-p", prompt),
-		Dir:    workspace,
+		Args: append(append(grokBaseArgs(p), "--resume", sessionID),
+			"--single="+prompt),
+		Dir: workspace,
 	}, nil
 }
 

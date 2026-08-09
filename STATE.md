@@ -27,11 +27,18 @@ the argument; this file does not restate either.
 
 ## In flight
 
-- **The Grok seat is landed and owes nothing on this machine; it owes a Mac.**
+- **The Grok seat is landed, was broken on its first live turn, and is fixed.**
   The fifth seat (§9.39) is built, registered, and verified end to end against
   the real binary — `go test ./internal/council/vendors -tags=live -run
   TestLiveGrok` exercises the actual argv and asserts a real resume, and it
-  passes here. Two things are deliberately NOT done and should not be mistaken
+  passes here. **It passed before the fix too, and that is the part worth
+  remembering**: the seat shipped with `-p` separated from its value, which
+  clap refuses for a brief beginning with `---`, so every briefed turn died at
+  exit 2 with an empty column while the live test stayed green over a prompt
+  that began with a letter (§9.39's dated amendment). The prompt is now
+  attached (`--single=…`) and every argv test uses a fenced, brief-shaped
+  prompt. The rule that generalises: **probe a vendor with a prompt shaped
+  like a brief, not like a greeting.** Two things are deliberately NOT done and should not be mistaken
   for oversights. **There is no `internal/adapter/grok`**, so the HUD cannot see
   grok sessions at all; council drives this vendor, the gauges do not observe
   it, and closing that is a separate piece of work with its own on-disk-format

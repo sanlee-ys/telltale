@@ -289,19 +289,47 @@ func TestGrokAsksForNothingInEitherPosture(t *testing.T) {
 	}
 }
 
-// TestGrokPutsThePromptLastOnArgv.
+// briefShapedPrompt is what council actually sends on a briefed first turn:
+// Brief.Apply's fence, so the very first character is a hyphen.
 //
-// -p takes the prompt as its VALUE, so the prompt must be the argument
-// immediately after it — the discipline agy.go learned the expensive way, where
-// a flag added after -p is silently swallowed INTO the prompt. Asserted on both
-// entry points, because the resume path is where a new flag would most likely be
-// appended by someone reading only half this file.
-func TestGrokPutsThePromptLastOnArgv(t *testing.T) {
+// Every argv assertion below uses THIS rather than a friendly string, because a
+// prompt beginning with a letter is the exact case that let the separated `-p`
+// form pass its tests and then die in a live room.
+const briefShapedPrompt = "--- operating context ---\nYou are in a room.\n" +
+	"--- end operating context. The request follows. ---\n\nhello all."
+
+// TestGrokAttachesThePromptToItsFlag is the regression test for the seat's one
+// production failure, and it is written as a property rather than as a string
+// match so that any future re-separation fails here.
+//
+// The bug: `-p` followed by the prompt as a separate token. clap will not take a
+// hyphen-leading token as a flag's value without `allow_hyphen_values`, and
+// council's briefed prompt begins with `---`, so grok read the whole brief as an
+// unknown flag and exited 2 before emitting a single event — a column that
+// reported `failed 0s` on every briefed turn.
+//
+// The fix is the attached form, where there is no second token to misread.
+func TestGrokAttachesThePromptToItsFlag(t *testing.T) {
 	check := func(t *testing.T, spec runner.Spec) {
 		t.Helper()
-		n := len(spec.Args)
-		if n < 2 || spec.Args[n-2] != "-p" || spec.Args[n-1] != "the brief" {
-			t.Errorf("argv does not end in -p <prompt>: %v", spec.Args)
+		want := "--single=" + briefShapedPrompt
+		last := spec.Args[len(spec.Args)-1]
+		if last != want {
+			t.Errorf("argv does not end in the attached prompt.\n got: %q\nwant: %q", last, want)
+		}
+		// The property that actually matters: NO argv element is a bare prompt
+		// flag with the prompt sitting beside it. This is what fails if someone
+		// "tidies" the attached form back into two tokens.
+		for i, a := range spec.Args {
+			if a == "-p" || a == "--single" {
+				t.Errorf("argv[%d] is a bare %q; the prompt must be attached with = "+
+					"or a brief beginning with --- is read as a flag: %v", i, a, spec.Args)
+			}
+			// And no element may be the naked prompt, which is the same bug
+			// wearing a different flag name.
+			if a == briefShapedPrompt {
+				t.Errorf("argv[%d] is the prompt as its own token: %v", i, spec.Args)
+			}
 		}
 		if spec.StdinPrompt != "" {
 			t.Errorf("prompt on stdin (%q); grok offers no stdin channel for it",
@@ -311,13 +339,18 @@ func TestGrokPutsThePromptLastOnArgv(t *testing.T) {
 			t.Errorf("spec vendor = %q", spec.Vendor)
 		}
 	}
-	first, err := Grok{}.FirstTurn("the brief", "/ws", "grok", PostureRead)
+
+	first, err := Grok{}.FirstTurn(briefShapedPrompt, "/ws", "grok", PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
 	check(t, first)
 
-	next, err := Grok{}.NextTurn("the brief", "/ws", "grok", "sess-1", PostureRead)
+	// The resume path is where a briefed prompt is LESS likely to appear and the
+	// bug therefore more likely to survive a partial fix — Brief.Apply is
+	// first-turn only. It is asserted with the same fenced prompt anyway,
+	// because the adapter must not have two answers to one question.
+	next, err := Grok{}.NextTurn(briefShapedPrompt, "/ws", "grok", "sess-1", PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,6 +367,12 @@ func TestGrokResumesOnItsOwnThread(t *testing.T) {
 	joined := strings.Join(spec.Args, " ")
 	if !strings.Contains(joined, "--resume 019fe742") {
 		t.Errorf("resume args = %v", spec.Args)
+	}
+	// --resume keeps the separated form on purpose: a session id is a UUID and
+	// cannot begin with a hyphen, so it is not exposed to the hazard the prompt
+	// is. Pinned so the asymmetry reads as a decision rather than a leftover.
+	if !strings.Contains(joined, "--resume 019fe742 --single=") {
+		t.Errorf("the id and the prompt are not in the expected order/forms: %v", spec.Args)
 	}
 	if !strings.Contains(joined, "--output-format streaming-json") {
 		t.Errorf("resume dropped the output format: %v", spec.Args)
