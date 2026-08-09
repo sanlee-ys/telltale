@@ -75,9 +75,13 @@ type roomVerb struct {
 // which feature shipped first.
 func roomVerbs() []roomVerb {
 	return []roomVerb{
+		{verb: "/adopt", run: (*Model).adoptCommand},
 		// /arena and /flow carry no run: both are DISPATCHES, parsed in
 		// dispatch.go against this same draft, and are recognised here only so
-		// the refusal does not reject the room's own words.
+		// the refusal does not reject the room's own words. (/arena drop is the
+		// one non-dispatch spelling, and dispatch.go hands it straight to
+		// lifecycle.go — the word still routes through the dispatch parse so
+		// the room keeps exactly one reading of "/arena".)
 		{verb: "/arena"},
 		{verb: "/cd", run: (*Model).cdCommand},
 		{verb: "/flow"},
@@ -140,9 +144,12 @@ func (m *Model) refuseUnknownCommand() bool {
 	// bought back when /arena joined the vocabulary, because this line has a
 	// HARD budget: TestTheRefusalFitsTheRoomItIsShownIn fails any wording the
 	// room's own width clips. The remedy clause outranks elegance; a refusal
-	// that truncates its vocabulary teaches a partial alphabet.
+	// that truncates its vocabulary teaches a partial alphabet. "sends it"
+	// lost its object when /adopt joined — the third purchase on this line,
+	// and the last cheap one: the next verb has to find its characters
+	// somewhere else.
 	m.st.Notice = "no room command " + firstWord(m.st.Draft, m.glyphs.Ellipsis) +
-		", a leading space sends it · " + strings.Join(roomWords(), " ")
+		", a leading space sends · " + strings.Join(roomWords(), " ")
 	return true
 }
 

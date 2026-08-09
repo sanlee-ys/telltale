@@ -1,0 +1,433 @@
+package council
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/sanlee-ys/telltale/internal/model"
+)
+
+// Worktree end-of-life: the two verbs that finish what /arena starts (§9.37's
+// deferred list). A race leaves one kept worktree and one arena branch per
+// racer, and §9.37's ruling is that council never deletes or adopts them on its
+// own — "adoption is a git command the user runs against a kept branch". These
+// verbs keep that ruling and move the typing into the room (§9.17: a control
+// you need mid-session cannot live outside it):
+//
+//   - /adopt <seat> merges the racer's arena branch into the room's repo,
+//     behind a y/n gate whose question names the exact git command.
+//   - /arena drop <seat> (or all) deletes a racer's worktree and branch,
+//     refusing while either still holds work the room has not taken.
+//
+// THE ADOPT IS A MERGE, NOT A CHECKOUT, and that fork is deliberate.
+// claude-squad's adopt checks the attempt's branch out over the user's — which
+// moves HEAD, rewrites the working tree wholesale, and leaves the user's own
+// branch behind. A room may not mutate more state than the act requires
+// (§9.37's whole posture: offer, never take), so council does the smallest git
+// operation that lands the work: `git merge --no-ff arena/t<N>/<seat>` in the
+// room's repo, on the branch the user is already on. --no-ff so the adoption
+// is a visible event in history — a fast-forward would dissolve the race into
+// the room's own line, and the merge commit is the receipt that says where the
+// work came from. The user's branch, HEAD, and uncommitted files (none — see
+// the clean-tree gate) are exactly where they were, plus one merge.
+//
+// Neither verb consults the room's read/write posture. Posture governs what
+// the SEATS may do (§9.16); both of these run only on the user's own y or
+// typed force word, which is the user acting, not a vendor — the same footing
+// as /cd moving the room or the user running git in another terminal.
+
+// arenaRace is the receipt of the most recent /arena race: where every
+// racer's kept worktree and branch live, and the workspace they were created
+// beside. Recorded at dispatch, when the worktrees are created, so the two
+// end-of-life verbs still have their target after later ordinary turns clear
+// Column.Arena (startTurn resets per-turn facts; the worktrees outlive them by
+// design).
+//
+// In-memory only, deliberately: room.json stays keys-and-numbers (ADR-008),
+// and a room reopened after a quit can still finish the lifecycle by hand with
+// the same git commands these verbs print — the worktrees are visible siblings
+// precisely so no session state is needed to find them.
+type arenaRace struct {
+	// workspace is the room repo the race was cut from — captured rather than
+	// read from m.st.Workspace at use time, because /cd may have moved the room
+	// since and every branch and tree here belongs to the repo that raced.
+	workspace string
+	turn      int
+	base      string
+	// trees maps each racer to its worktree, exactly as arenaSetup created
+	// them. Entries leave this map only via a successful drop, so "raced but
+	// already dropped" and "never raced" answer differently.
+	trees map[model.VendorID]string
+}
+
+// adoptCommand is /adopt <seat>: arm the y/n gate that merges a racer's arena
+// branch into the room's repo.
+//
+// Everything that can be refused is refused HERE, before the gate arms, so the
+// question the user answers with y is one that can actually be honored —
+// a card whose y then fails on a precondition teaches that the key is
+// unreliable (askClearSeat's rule). Each refusal is its own sentence with its
+// own remedy, per §9.17's tell that a refusal must name an in-room way
+// forward.
+func (m *Model) adoptCommand(arg string) bool {
+	if m.turn != nil {
+		// The race's own trees are being written mid-turn, and a merge under a
+		// running turn would race the racers. /cd's refusal, for /cd's reason.
+		m.st.Notice = "a turn is in flight — /adopt merges between turns"
+		return true
+	}
+	race := m.lastRace
+	if arg == "" {
+		// Bare /adopt answers the question it half-asks, the way bare /cd,
+		// /trace, /seat and /unseat do.
+		if race == nil {
+			m.st.Notice = "no race has run — /arena <brief> races the seats, then /adopt <seat> takes the winner"
+		} else {
+			m.st.Notice = "the last race is turn " + itoa(race.turn) +
+				" — /adopt <seat> merges that seat's arena branch into the room"
+		}
+		m.setDraft("")
+		return true
+	}
+	if race == nil {
+		m.st.Notice = "no race has run — /arena <brief> races the seats first"
+		return true
+	}
+	v, ok := mentionAliases()[strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "@")))]
+	if !ok {
+		// The draft is kept: a typo is cheap to fix and nothing has run.
+		m.st.Notice = "no racer called " + arg + " — /adopt takes claude, codex, agy or cursor"
+		return true
+	}
+	tree, raced := race.trees[v]
+	if !raced {
+		// Covers a seat that never raced AND one whose tree was already
+		// dropped — either way there is no kept worktree to adopt from.
+		m.st.Notice = string(v) + " has no kept worktree from turn " + itoa(race.turn) + " — nothing to adopt"
+		return true
+	}
+
+	dirty, err := worktreePorcelain(tree)
+	if err != nil {
+		m.st.Notice = "adopt: " + err.Error()
+		return true
+	}
+	ahead, err := unadoptedCount(race, v)
+	if err != nil {
+		m.st.Notice = "adopt: " + err.Error()
+		return true
+	}
+	if len(dirty) == 0 && ahead == 0 {
+		// A measured zero, not a guess: the worktree is clean and the branch
+		// sits at commits the room already has. Adopting it would create an
+		// empty merge commit claiming work that does not exist.
+		m.st.Notice = string(v) + " changed nothing in the race — there is nothing to adopt"
+		return true
+	}
+
+	// THE CLEAN-TREE GATE IS THE ONE HARD PRECONDITION. A merge writes into
+	// the room's working tree, and if that tree holds uncommitted work the
+	// merge can entangle or (on abort) discard it. Adopt must never eat the
+	// user's own edits, so a dirty room refuses by name — with the count, so
+	// the user knows whether it is the one file they remember or something a
+	// stray process left behind.
+	roomDirty, err := worktreePorcelain(race.workspace)
+	if err != nil {
+		m.st.Notice = "adopt: " + err.Error()
+		return true
+	}
+	if n := len(roomDirty); n > 0 {
+		m.st.Notice = "the room tree holds " + itoa(n) + " uncommitted " + plural(n, "path") +
+			" — /adopt merges into it, so commit or stash them first"
+		return true
+	}
+
+	// Armed. The question names the exact command y will run — the same
+	// contract the flow write gate keeps ("y authorizes @codex → docs/out.md")
+	// — because the answer to "may I?" is only informed if the "what" is on
+	// screen. When the racer's work is still uncommitted (arena seats do not
+	// commit; commit-per-turn is on §9.37's deferred list), the commit that
+	// precedes the merge is named too: it writes to the racer's own branch,
+	// but a y that quietly ran two commands after promising one would be the
+	// card lying about its own scope.
+	branch := arenaBranch(race.turn, v)
+	m.adoptPending = v
+	q := "adopt " + string(v) + "? y runs git merge --no-ff " + branch
+	if len(dirty) > 0 {
+		q = "adopt " + string(v) + "? y commits its worktree to " + branch +
+			", then runs git merge --no-ff " + branch
+	}
+	m.st.Notice = q + " · n cancels"
+	m.setDraft("")
+	return true
+}
+
+// adoptSeat performs the adopt the gate approved, and returns the sentence the
+// notice shows. Reached only from adoptGateKey's y.
+//
+// Steps, each a plain git command through gitOut's argv (never a shell):
+//
+//  1. If the racer's worktree holds uncommitted work, commit it — in the
+//     WORKTREE, on the racer's own arena branch. The attempt has to be a
+//     commit before a merge can carry it, arena seats leave their work
+//     uncommitted (commit-per-turn is deferred, §9.37), and the arena branch
+//     is the one ref that exists to hold exactly this. Signing and author
+//     identity come from the user's own git config, unmodified: an adopt
+//     commit enters the room's history, and council inventing an identity or
+//     skipping the user's signing rule there would be the room writing
+//     history that misstates its provenance.
+//  2. Re-check the room tree is clean. Between arming and y no turn can run
+//     (the pending gate swallows every key), but nothing stops an external
+//     process from writing to the workspace — the check is one git status.
+//  3. `git merge --no-ff --no-edit <branch>` in the room repo. On failure:
+//     if a merge is actually in progress (MERGE_HEAD exists — a conflict
+//     stopped it midway), `git merge --abort` puts the tree back and the
+//     notice says a human merge is needed; if no merge started (git refused
+//     outright), the tree was never touched and the notice says that instead.
+//     The two endings are different facts and are not collapsed (§4a.1).
+func (m *Model) adoptSeat(v model.VendorID) string {
+	race := m.lastRace
+	if race == nil {
+		// Unreachable from the gate, which only arms over a live race — kept so
+		// this function cannot nil-deref if a future caller finds it.
+		return "no race has run — nothing to adopt"
+	}
+	tree, ok := race.trees[v]
+	if !ok {
+		return string(v) + " has no kept worktree from turn " + itoa(race.turn)
+	}
+	branch := arenaBranch(race.turn, v)
+
+	dirty, err := worktreePorcelain(tree)
+	if err != nil {
+		return "adopt: " + err.Error()
+	}
+	if len(dirty) > 0 {
+		if _, err := gitOut(tree, "add", "-A"); err != nil {
+			return "adopt: " + err.Error()
+		}
+		if _, err := gitOut(tree, "commit", "-m", string(v)+"'s arena attempt, turn "+itoa(race.turn)); err != nil {
+			return "adopt: the attempt could not be committed to " + branch + " — " + err.Error()
+		}
+	}
+
+	roomDirty, err := worktreePorcelain(race.workspace)
+	if err != nil {
+		return "adopt: " + err.Error()
+	}
+	if n := len(roomDirty); n > 0 {
+		return "the room tree holds " + itoa(n) + " uncommitted " + plural(n, "path") +
+			" — nothing was merged; commit or stash them first"
+	}
+
+	if _, err := gitOut(race.workspace, "merge", "--no-ff", "--no-edit", branch); err != nil {
+		if _, mh := gitOut(race.workspace, "rev-parse", "--verify", "MERGE_HEAD"); mh == nil {
+			// A conflict stopped the merge midway. Aborting is the restore, not
+			// a retreat: the alternative leaves the user's repo mid-merge with
+			// conflict markers they never asked for, discovered later as a
+			// broken build. The work is still whole on the arena branch.
+			_, _ = gitOut(race.workspace, "merge", "--abort")
+			return "the merge failed: " + err.Error() +
+				" — aborted, the room tree is restored; adopting " + branch + " needs a human merge"
+		}
+		return "the merge failed: " + err.Error() + " — the room tree is untouched"
+	}
+	return "adopted " + string(v) + " — " + branch + " is merged; /arena drop " + string(v) + " removes its worktree"
+}
+
+// parseArenaDrop recognises the drop verb inside a /arena draft: "drop",
+// "drop <seat>", "drop <seat>!", "drop all", "drop all!" — and NOTHING longer.
+//
+// The length cap is the vocabulary rule (roomcmd.go): only a draft that IS the
+// command is intercepted. "/arena drop the cache layer and rebuild" is a brief
+// someone will genuinely race, and a looser prefix match would steal it — so a
+// third word hands the whole draft back to the race path as prose. The cost is
+// the two-word brief "drop codex", which now needs rewording to race; that
+// brief asks four agents to delete a teammate's worktree, and a room that
+// raced it instead of asking would be the cheaper mistake to regret.
+func parseArenaDrop(brief string) (seat string, force, ok bool) {
+	f := strings.Fields(brief)
+	if len(f) == 0 || f[0] != "drop" || len(f) > 2 {
+		return "", false, false
+	}
+	if len(f) == 1 {
+		return "", false, true
+	}
+	seat = f[1]
+	if strings.HasSuffix(seat, "!") {
+		force, seat = true, strings.TrimSuffix(seat, "!")
+	}
+	return seat, force, true
+}
+
+// arenaDrop is /arena drop <seat> (or all): delete a racer's worktree and its
+// arena branch, guarded so nothing the room has not taken can be lost silently.
+//
+// THE FORCE IS A SPELLING, NOT A KEYSTROKE. A guarded drop refuses with a
+// sentence that says exactly what would be lost and names the force form
+// (`/arena drop <seat>!`); forcing means re-running the command with the bang.
+// A y/n confirm was considered and rejected for this verb: y is one keystroke
+// answered against a notice the user may not have finished reading, while the
+// bang travels IN the command — the user types the destruction they are
+// asking for, the draft records that they asked, and a stray key can never
+// produce it. It is also a vocabulary git users already own (-D, -f, :q!).
+// /adopt keeps the y/n shape because its act is additive (a merge, revertible
+// with git's own tools); drop deletes work with no ref left pointing at it.
+func (m *Model) arenaDrop(word string, force bool) {
+	if m.turn != nil {
+		// An arena turn in flight is WRITING to these trees; an ordinary turn
+		// still holds the room's dispatch state. Between turns, like every
+		// other mutation typed at the room.
+		m.st.Notice = "a turn is in flight — /arena drop removes worktrees between turns"
+		return
+	}
+	race := m.lastRace
+	if race == nil {
+		m.st.Notice = "no race has run — there is no arena worktree to drop"
+		return
+	}
+	if word == "" {
+		// Bare "drop" half-asks; answer it, the house shape.
+		m.st.Notice = "/arena drop <seat> deletes that racer's worktree and branch — all takes every one, a trailing ! discards unadopted work"
+		m.setDraft("")
+		return
+	}
+
+	var targets []model.VendorID
+	if strings.EqualFold(word, "all") {
+		// Grid order, so the report reads in the order the room draws seats.
+		for _, c := range m.st.Columns {
+			if _, ok := race.trees[c.Vendor]; ok {
+				targets = append(targets, c.Vendor)
+			}
+		}
+		if len(targets) == 0 {
+			m.st.Notice = "every worktree from turn " + itoa(race.turn) + " is already dropped"
+			m.setDraft("")
+			return
+		}
+	} else {
+		v, ok := mentionAliases()[strings.ToLower(strings.TrimPrefix(word, "@"))]
+		if !ok {
+			m.st.Notice = "no racer called " + word + " — /arena drop takes claude, codex, agy, cursor, or all"
+			return
+		}
+		if _, raced := race.trees[v]; !raced {
+			m.st.Notice = string(v) + " has no kept worktree from turn " + itoa(race.turn)
+			return
+		}
+		targets = []model.VendorID{v}
+	}
+
+	// Per seat, refusals do not abort the batch: "drop all" over one dirty
+	// tree drops the clean ones and names the survivor — a partial act that
+	// reports itself beats an all-or-nothing that punishes three clean trees
+	// for one dirty one (§4a.1's degrade-the-field rule, one level up).
+	var dropped, kept []string
+	for _, v := range targets {
+		if why := m.dropRacer(v, force); why == "" {
+			dropped = append(dropped, string(v))
+		} else {
+			kept = append(kept, why)
+		}
+	}
+	var parts []string
+	if len(dropped) == 1 && len(targets) == 1 {
+		parts = append(parts, "dropped "+dropped[0]+" — its worktree and arena branch are deleted")
+	} else if len(dropped) > 0 {
+		parts = append(parts, "dropped "+strings.Join(dropped, ", ")+" — worktrees and arena branches deleted")
+	}
+	parts = append(parts, kept...)
+	m.st.Notice = strings.Join(parts, " · ")
+	if len(kept) == 0 {
+		m.setDraft("")
+	}
+	// A refusal keeps the draft: the force form is one keystroke of editing
+	// away, and retyping the whole command to add a bang would be the room
+	// charging for its own caution.
+}
+
+// dropRacer removes one racer's worktree and branch, or returns the sentence
+// explaining why it did not. Empty string means dropped.
+//
+// THE PATH CHECK IS THE MECHANICAL GUARD, not the map membership. Every tree
+// this function will ever remove must re-derive, from the recorded race's own
+// (workspace, turn, seat), to exactly the path arenaSetup would have created —
+// arenaTree is the single spelling of that name, shared with setup. A tree
+// that fails the check is refused even under force, because no state this
+// room's arena created can have that name: whatever put it in the map, it is
+// not ours to delete. Stolen from Pane's deletion guard, where the rule is the
+// same: a destructive verb only ever aims at paths the tool itself minted.
+func (m *Model) dropRacer(v model.VendorID, force bool) string {
+	race := m.lastRace
+	tree := race.trees[v]
+	branch := arenaBranch(race.turn, v)
+	if want := arenaTree(race.workspace, race.turn, v); tree != want {
+		return string(v) + ": " + tree + " is not this race's worktree — refusing to remove it"
+	}
+
+	spell := "/arena drop " + string(v) + "!"
+	if !force {
+		// Two guards, two sentences, each naming what would be lost AND how to
+		// proceed — a refusal without its remedy is §9.17's defect.
+		dirty, err := worktreePorcelain(tree)
+		if err != nil {
+			return string(v) + ": " + err.Error()
+		}
+		if n := len(dirty); n > 0 {
+			return string(v) + ": its worktree holds " + itoa(n) + " uncommitted " + plural(n, "path") +
+				" — " + spell + " discards them"
+		}
+		n, err := unadoptedCount(race, v)
+		if err != nil {
+			return string(v) + ": " + err.Error()
+		}
+		if n > 0 {
+			return string(v) + ": " + branch + " holds " + itoa(n) + " " + plural(n, "commit") +
+				" the room has not merged — /adopt " + string(v) + " takes them, " + spell + " discards them"
+		}
+	}
+
+	args := []string{"worktree", "remove"}
+	if force {
+		// git itself refuses to remove a dirty worktree; the force the user
+		// spelled is handed to git as git's own flag rather than reimplemented
+		// as an rm — the deletion stays a git operation end to end.
+		args = append(args, "--force")
+	}
+	if _, err := gitOut(race.workspace, append(args, tree)...); err != nil {
+		return string(v) + ": " + err.Error()
+	}
+	if _, err := gitOut(race.workspace, "branch", "-D", branch); err != nil {
+		// Half-done is reported as half-done: the tree is gone, the ref is not.
+		return string(v) + ": worktree removed, but " + branch + " remains — " + err.Error()
+	}
+	delete(race.trees, v)
+	return ""
+}
+
+// worktreePorcelain is one `git status --porcelain`, split into its lines: the
+// count is what refusals name, and empty means a measured clean.
+func worktreePorcelain(dir string) ([]string, error) {
+	out, err := gitOut(dir, "status", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	if out == "" {
+		return nil, nil
+	}
+	return strings.Split(out, "\n"), nil
+}
+
+// unadoptedCount is how many commits the racer's branch holds that the room's
+// HEAD cannot reach — the work a drop would orphan and an adopt would take.
+// Measured with rev-list against the room repo's own HEAD rather than the
+// recorded base, because "unadopted" is a fact about where the ROOM is now: a
+// branch already merged counts zero even though it is ahead of the base.
+func unadoptedCount(race *arenaRace, v model.VendorID) (int, error) {
+	out, err := gitOut(race.workspace, "rev-list", "--count", "HEAD.."+arenaBranch(race.turn, v))
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(out)
+}

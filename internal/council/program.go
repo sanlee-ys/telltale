@@ -206,6 +206,21 @@ type Model struct {
 	// recovery path it never renders — a stray `u` in view mode has to cost a
 	// y before it costs an attempt.
 	undoPending model.VendorID
+	// adoptPending names the racer awaiting y/n before its arena branch is
+	// merged into the room's repo (/adopt, lifecycle.go), empty when nothing is.
+	//
+	// Confirmed for /write's reason, not `c`'s: nothing is destroyed by an
+	// adopt — the merge is revertible with git's own tools — but it MUTATES THE
+	// USER'S REPO, which no other act in this room does without a y. The
+	// question on the card names the exact git command, because "may I?" is
+	// only answerable when the "what" is on screen.
+	adoptPending model.VendorID
+	// lastRace is the most recent /arena race's receipt: workspace, turn, base,
+	// and each racer's kept worktree (lifecycle.go). Nil until a race runs.
+	// Held on Model rather than State because Render never reads it — the
+	// on-screen arena block is Column.Arena, a per-turn fact; this outlives the
+	// turn the way the worktrees themselves do (§9.37: kept until deleted).
+	lastRace *arenaRace
 	// writePending is true while /write awaits y/n before the room's posture is
 	// loosened, and is the only one of the three room controls that asks.
 	//
@@ -581,6 +596,9 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.undoPending != "" {
 		return m.undoGateKey(msg)
 	}
+	if m.adoptPending != "" {
+		return m.adoptGateKey(msg)
+	}
 	if m.writePending {
 		return m.writeGateKey(msg)
 	}
@@ -611,6 +629,27 @@ func (m *Model) clearGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.st.Notice = "kept — nothing was cleared"
 	default:
 		m.st.Notice = "clear cancelled — y confirms, n declines"
+	}
+	return m, nil
+}
+
+// adoptGateKey answers the confirmation armed by /adopt.
+//
+// Anything that is not y or n cancels, matching clearGateKey and writeGateKey
+// rather than the flow gate, for the same reason those two give: this
+// interrupts nothing, the question is one sentence on screen, and the safe
+// reading of a key nobody meant to press is to merge nothing. The command y
+// runs was named on the card when adoptCommand armed it (lifecycle.go).
+func (m *Model) adoptGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	v := m.adoptPending
+	m.adoptPending = ""
+	switch msg.String() {
+	case "y":
+		m.st.Notice = m.adoptSeat(v)
+	case "n":
+		m.st.Notice = "kept — nothing was merged"
+	default:
+		m.st.Notice = "adopt cancelled — y confirms, n declines"
 	}
 	return m, nil
 }

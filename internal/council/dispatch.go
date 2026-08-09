@@ -220,6 +220,16 @@ func (m *Model) dispatch() tea.Cmd {
 	} else {
 		m.endFlowChain()
 		if brief, ok := parseCommand(m.st.Draft, "/arena"); ok {
+			// The drop verb is caught before anything a race needs, because it
+			// is not a race: nothing spawns, nothing is billed, and no posture
+			// applies — deleting a kept worktree is the USER acting on the
+			// user's own receipt (lifecycle.go), so a read-only room may do it
+			// exactly as it may /cd. Only the exact two-word form is taken
+			// (parseArenaDrop); anything longer is a brief and races as prose.
+			if seat, force, isDrop := parseArenaDrop(brief); isDrop {
+				m.arenaDrop(seat, force)
+				return nil
+			}
 			// A race is a dispatch, not room state, so it lives here beside
 			// /flow rather than in roomCommand — and like a flow write hop, it
 			// cannot run in a room that may not write: every racing seat gets
@@ -323,6 +333,18 @@ func (m *Model) dispatch() tea.Cmd {
 		for v := range trees {
 			ts.arenaLive[v] = &arenaLiveState{}
 		}
+		// The race's receipt, for the end-of-life verbs (/adopt, /arena drop —
+		// lifecycle.go). Recorded here, at creation, because Column.Arena is a
+		// per-turn fact the next dispatch clears while the worktrees are kept
+		// until the user deletes them (§9.37) — the verbs need a target that
+		// lives as long as the trees do. A copy of the map, not the map: drop
+		// deletes entries from the receipt, and ts.arenaTrees still describes
+		// this turn's dispatch.
+		raceTrees := make(map[model.VendorID]string, len(trees))
+		for v, tr := range trees {
+			raceTrees[v] = tr
+		}
+		m.lastRace = &arenaRace{workspace: m.st.Workspace, turn: next, base: base, trees: raceTrees}
 	}
 
 	for i := range m.st.Columns {
