@@ -6533,3 +6533,72 @@ mechanics — merge, commit-then-merge, conflict abort, both guards, the force, 
 `drop all`'s partial degrade — are pinned by offline tests against real temp repositories
 (`lifecycle_test.go`), but no live adopt has run on the Windows box. The first one pays this
 note the way turn 4 paid the last one.
+
+### 9.38 paste lands whole, and never sends (2026-08-09)
+
+The ask, in the operator's words: *"how i can paste things into the area i can type in."* The
+answer required measuring what a paste even was in this room, because the two obvious guesses —
+it works, or it fires a send per pasted line — were both wrong.
+
+**What was measured about today's behaviour.** All of it read off the pinned module source, not
+vendor docs. bubbletea v2.0.8 enables bracketed paste unless a view opts out
+(`cursed_renderer.go` writes `SetModeBracketedPaste`; council's `View()` never sets
+`DisableBracketedPasteMode`), and ultraviolet's terminal reader buffers everything between the
+paste markers into ONE `PasteEvent` — a newline inside the paste lands as `\n` in its content,
+never as an Enter keypress, and the win32-input-mode encoding Windows Terminal uses is decoded
+into the same buffer (`terminal_reader.go`, ultraviolet pinned at v0.0.0-20260703014108). So in
+a bracketed-paste terminal a paste could never have fired a send. What it did instead was
+NOTHING: council's `Update` had no `PasteMsg` case, the message fell through the type switch,
+and the clipboard's offer was silently discarded. The composer never learned a paste happened.
+
+The fires-sends failure is real on exactly one path: a terminal with NO bracketed paste replays
+a paste as keystrokes, each pasted newline arrives as an Enter keypress, and compose mode's
+enter dispatches — a five-line paste is up to five turns, each to live vendor CLIs. Council
+cannot distinguish that replay from typing without a timing heuristic, which would be inferred
+behaviour, and this product does not ship inferred behaviour (§4a.1). So that path is left as
+it is and named here instead: the text chunks are flattened safely by `sanitizeKeepingSpace`,
+the enters are enters, and the fix on such a terminal is the terminal. Windows Terminal — the
+reference environment — brackets its pastes.
+
+**What was built** (`paste.go`): the room's half of the contract the runtime already offers.
+
+- **One `PasteMsg` case in `Update`.** The content goes into the draft and nowhere else — a
+  paste never dispatches, never answers a gate, never quits. Enter, a keystroke from a person,
+  remains the only way a brief leaves the room. Pasted control characters cannot act: a pasted
+  `\x03` is not ctrl+c, a pasted `q` is the letter q; controls without width are dropped.
+- **The multiline ruling: newlines are PRESERVED, raw.** The composer has been a block since
+  ctrl+j existed (`State.Draft` may hold newlines; `wrap()` honours them; the compose area
+  grows to `maxComposerRows` and elides with "N more above"), so there is no single-line
+  prompt to protect and no need for a `⏎` display glyph — a pasted paragraph renders as the
+  rows it is, in both glyph sets, and dispatch hands the vendors the draft with its real
+  newlines. The string on screen is the string sent (§7.14). CRLF collapses to `\n` (the
+  Windows clipboard's line ending; splitting it would gift every line a trailing space). The
+  one lossy rewrite is stated rather than hidden: a tab becomes one space, because a cell grid
+  cannot budget a tab and a guessed tab stop would be fidelity theatre.
+- **A cap with a named refusal.** `maxPasteRunes` (8,192, over draft-plus-paste) refuses
+  atomically — nothing lands, not a truncated prefix — and the notice carries both numbers and
+  the remedy: *"paste refused: 20481 chars against the composer's 8192 — put long text in a
+  file and name the path in the brief."* The number is anchored to the narrowest pipe a brief
+  must fit through (the Antigravity seat's prompt rides argv; Windows caps a command line at
+  32,767 UTF-16 units; 8,192 runes is at most half that even all-surrogate-pair) and to the
+  point where a footer composer that deletes rune-by-rune stops being an editor.
+- **A paste from view mode inserts and opens compose.** A paste is not a keystroke — view
+  mode's letters are commands because they are keys; pasted text can only be material, and the
+  only place material goes is the draft. The mode line states the switch on the next frame.
+  The exception is a pending y/n (tool gate, `c`, `/write`, a flow write hop): the paste is
+  refused by name and the question stays exactly where it was — nothing about a pending
+  request happens implicitly.
+
+No golden changed and none was added: a pasted draft produces the same `State` shape ctrl+j
+already produces, and a golden that did not change is the claim that the room's appearance did
+not either. The tests (`paste_test.go`) drive `Update` with the real message shape and assert
+the observables the flow security tests trust — spawn count, draft, pending flags — end to end
+through enter, which must deliver the pasted newlines to the seat intact.
+
+**The live verification owed.** No test in this container can observe Windows Terminal
+bracketing a paste — that is the terminal's half of the contract. The check, one minute at the
+real machine: open `telltale council` in Windows Terminal, copy a three-line snippet, paste
+into the room. Expected: one insertion, three rows in the composer, zero dispatches; then enter
+sends it as one brief. If the paste instead lands as separate turns, the terminal did not
+bracket it — record the terminal build in PARITY.md, because that is a measured vendor fact,
+not a council bug.

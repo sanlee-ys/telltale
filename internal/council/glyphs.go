@@ -257,8 +257,14 @@ func sanitize(s string) string {
 }
 
 // sanitizeKeepingSpace is sanitize for text the user is TYPING, minus the
-// newline case: a draft prompt is one logical line on the footer regardless of
-// what a paste contained.
+// newline case: a newline arriving inside a KeyPressMsg's Text is line-ending
+// noise from the decoder, not paragraphing, so it flattens to a space.
+//
+// A bracketed paste never comes through here — it arrives whole as a
+// tea.PasteMsg and goes through sanitizePaste (paste.go), which KEEPS its
+// newlines, because there they are the operator's structure. This filter is
+// the typed path, and — in a terminal with no bracketed paste, where a paste
+// replays as keystrokes — the honest floor for that replay's text chunks.
 //
 // It does not trim. Trimming would make the string on screen disagree with the
 // string about to be dispatched, which is the same silent divergence the HUD's
