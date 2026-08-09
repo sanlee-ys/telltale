@@ -5,7 +5,8 @@ answer one brief side by side, each column claiming only what was measured about
 vendor — standing on a statusline and a cross-vendor HUD where every number is traceable
 to measured tool output, nothing narrated, nothing guessed.
 
-> A telltale is the ribbon on a sail that shows true airflow. It doesn't interpret;
+> A telltale is the ribbon on a sail that shows true airflow. Sailors watch whether
+> it streams smoothly or flutters to judge the sail's trim. It doesn't interpret;
 > it just tells you what's actually happening.
 
 <p align="center">
