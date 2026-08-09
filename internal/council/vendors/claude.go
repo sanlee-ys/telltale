@@ -309,13 +309,33 @@ func (c Claude) baseArgs(p Posture) []string {
 // prompts. The read posture needed removal and got the wrong flag. This posture
 // needs pre-approval, which is the thing the flag actually is.
 //
-// STRENGTH: the mechanism is measured (the deny-list note above established what
-// this flag does by reading a live session's own tools array). This RULE SYNTAX
-// is not. `Bash(git commit:*)` is the vendor's documented permission-rule shape
-// and it has not been driven here, so if it is wrong the failure is the seat
-// still asking and still landing nothing — the behaviour of the day before this
-// existed. That is why the change is spelled as an addition rather than as a
-// replacement of the permission mode: a wrong guess costs nothing that worked.
+// STRENGTH: the mechanism is measured, and as of 2026-08-09 the RULE SYNTAX is
+// too — first by two live races tripping over it, then by a four-arm probe on
+// the reference box (claude CLI, seat-shaped invocation: -p,
+// --permission-mode acceptEdits, --allowedTools). What the probe pinned:
+//
+//   - The rules work as prefixes: `git status` under `Bash(git status:*)`
+//     ran. The grant this constant makes is real.
+//   - THE MATCHER IS PREFIX-ONLY AND CANNOT SEE THROUGH -C. In the
+//     seat-shaped invocation, `git -C . status` was BLOCKED under
+//     `Bash(git status:*)` and equally blocked under the mid-wildcard
+//     `Bash(git -C * status:*)` — a wildcard between tokens does not match in
+//     the flag path. There is no rule spelling that scopes a verb behind -C,
+//     so there is no rule-shaped fix, and `Bash(git -C:*)` stays rejected for
+//     the reason it was always rejected: it would pre-approve every -C verb,
+//     the destructive ones included.
+//   - CONTEXT IS WHY IT ONLY EVER BIT IN RACES. In a TRUSTED workspace the
+//     operator's own settings allowlists apply on top of this flag and can
+//     cover -C shapes — the same command that blocked in a worktree ran in
+//     the main repo under an identical flag. An arena worktree is a freshly
+//     created, never-trusted directory, so there this constant is the whole
+//     grant.
+//
+// The residue is friction, not deadlock: a seat that reaches for `git -C` in
+// this posture raises an approval the room now surfaces on the column (the
+// `a` approval flow), where the operator answers it — measured working across
+// two races. A seat's cwd is already the directory its -C would name, so the
+// prompt is usually the model spelling a path it did not need.
 //
 // SCOPED TO THE VERBS THAT LAND WORK, not to git. `reset`, `clean` and
 // `branch -D` are absent on purpose: this is the posture where nobody is
