@@ -21,11 +21,13 @@ to measured tool output, nothing narrated, nothing guessed.
 
 **Status: pre-v1, under active development.** All three modes are built.
 
-**v1 is held until council settles**, and the gauges being done is not an argument against
-that. Cutting v1 as gauges only — statusline and HUD, with declared vendor version pins —
-was the standing alternative and it is rejected: a release names the product, and the
-product is the room. So the statusline and the HUD are finished and unreleased on purpose,
-and the version number waits on the surface that is still moving week to week.
+**v1 is a snapshot, not a freeze.** It cuts when three checkable gates hold — nothing on
+the surface is half-finished or unused by its own author, the README is verified true
+against the code, and no breaking change to the grammar or keymap is planned — not when
+development goes quiet, because it doesn't: this room is driven daily. Cutting v1 as
+gauges only — statusline and HUD, with declared vendor version pins — was the standing
+alternative and it is rejected: a release names the product, and the product is the room.
+The gates and the argument are in [docs/design.md §1](docs/design.md).
 
 Every adapter here was verified against something real rather than against vendor docs — a
 live on-disk corpus, a live payload capture, or the vendor's own persistence code read at a
@@ -40,7 +42,7 @@ measured against a live run of that CLI rather than read off its `--help`
 
 ## Install
 
-**First release pending.** v1 is held until council settles (above), so nothing is
+**First release pending.** v1 cuts when the snapshot gates hold (above), so nothing is
 tagged yet and the two package-manager lines below do not resolve today. They are
 written down rather than promised later because the packaging is built and exercised:
 `.goreleaser.yaml` and `.github/workflows/release.yml` cut all four binaries, the

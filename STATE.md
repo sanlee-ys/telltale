@@ -17,11 +17,13 @@ Pre-v1. The active push is making `telltale council` usable as a daily driver:
 one terminal, four seats, readable and steerable without opening four vendor
 apps.
 
-**The direction is recorded rather than remembered** (2026-08-06): council is
-the product, the gauges are the infrastructure under it, and **v1 is held until
-council settles**. Cutting v1 as gauges only was the standing alternative and it
-is rejected. `README.md` and [docs/design.md §1](docs/design.md) hold the
-binding copies and the argument; this file does not restate either.
+**The direction is recorded rather than remembered** (2026-08-06; v1 gate
+re-cut 2026-08-08): council is the product, the gauges are the infrastructure
+under it, and **v1 is a snapshot that cuts when three checkable gates hold —
+not when development goes quiet**. Cutting v1 as gauges only was the standing
+alternative and it is rejected. `README.md` and
+[docs/design.md §1](docs/design.md) hold the binding copies, the gates, and
+the argument; this file does not restate either.
 
 ## In flight
 
