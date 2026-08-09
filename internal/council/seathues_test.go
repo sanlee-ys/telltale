@@ -16,12 +16,12 @@ import (
 // this pass regolds nothing.
 
 // seatVendors is every VendorID that can reach a seat hue, seatable or not — the
-// four the room seats plus Gemini, which is in the normalized model and takes
+// five the room seats plus Gemini, which is in the normalized model and takes
 // the documented fallback. Kept beside the tests so the fallback has a witness
 // as well as a doc comment.
 var seatVendors = []model.VendorID{
 	model.VendorClaude, model.VendorCodex, model.VendorGemini,
-	model.VendorAntigravity, model.VendorCursor,
+	model.VendorAntigravity, model.VendorCursor, model.VendorGrok,
 }
 
 // TestEverySeatWearsItsOwnHue. A vendor the room can seat holds a hue nobody
@@ -88,10 +88,12 @@ func TestNoSeatHueIsASeverity(t *testing.T) {
 // updating it is what puts the hue question in front of whoever is doing it.
 func TestSeatHuesAreExhaustive(t *testing.T) {
 	seats := addressableVendors()
-	if len(seats) != 4 {
-		t.Fatalf("the room seats %d vendors; §9.28 decided a hue for 4. A fifth seat needs "+
-			"a hue decision (and 4 vs 12 is already one hue at two intensities — see "+
-			"seatHue's note on the weakness) before this number moves.", len(seats))
+	if len(seats) != 5 {
+		t.Fatalf("the room seats %d vendors; §9.28 plus the Grok amendment decided a hue "+
+			"for 5. A sixth seat needs a hue decision, and it is now the HARD one: the "+
+			"legal set (4,5,6,12,13,14) has exactly 13 left, after which a new seat "+
+			"cannot have its own hue without taking a severity or abandoning 4-bit "+
+			"indices — see seatHue's note. Decide it before this number moves.", len(seats))
 	}
 	seen := map[string]model.VendorID{}
 	for _, v := range seats {

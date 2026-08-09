@@ -7140,3 +7140,128 @@ with it only because it describes it. Taught on the help panel's compose-keys ro
 draft" paid), deliberately not on the compose mode line, which is at its own width budget.
 Tests: `draftclear_test.go` drives `Update` with the real chord through every gate and both
 modes.
+
+### 9.39 a fifth seat, and the first that reports money (2026-08-09)
+
+The ask, in the operator's words: *"grok 30 dollar subscription paid for. create a seat for
+grok in council."* The seat is built and the invocation is verified end to end; what follows is
+what had to be measured to earn each claim on the column, including two flags that were refuted
+and one hazard the seat ships with because nothing in the CLI can close it.
+
+**The vendor.** grok 1.0.0 (3cd0d0cbce), signed in against grok.com — the subscription, not an
+API key — with `grok models` reporting one model, `grok-4.5`. It is a spawn-per-turn batch
+program like Codex and Antigravity, not a live process like the Cursor seat: `-p/--single`
+takes a prompt, answers, and exits. So it implements `Vendor` and neither `Persistent` nor
+`Conversational`, and its column takes the same spawn-per-turn shape those two already have.
+
+**The invocation, and what it deliberately does not carry.** `--output-format streaming-json`
+and nothing else, with the prompt as the value of a trailing `-p`. argv rather than stdin, and
+unlike Codex that is not a preference — there is no `-` sentinel and no stdin channel for a
+prompt at all. It is safe for the reason the Antigravity seat's argv transport is safe: the
+installer drops a native `grok.exe`, not a `.cmd`, so `classify()` never reaches the shim
+refusal and no `cmd.exe` ever sees a brief.
+
+Two flags whose names promise containment were probed, and NEITHER is passed:
+
+- **`--permission-mode plan` was refuted, with the write landing.** Asked to create a file under
+  it, the seat called its `write` tool, reported the call `completed`, said so in prose, and the
+  file was on disk afterwards. The control run without the flag wrote its file too, via
+  `search_replace`. The only difference observed between the arms was which write tool the model
+  picked. This is the Antigravity ledger a second time (ADR-008, seventeenth amendment) and it
+  lands the same way.
+- **`--sandbox` is worse than refuted — it is unobservable.** `grok --sandbox bogus-profile-xyz
+  -p "hi"` does not error, does not warn, and answers normally with exit 0. A flag that silently
+  accepts a profile name that cannot exist gives council no way to tell a real profile from a
+  typo, so asking for one would put a word in the badge backed by a value the CLI may never have
+  read. Feeding a vendor a deliberately INVALID value, rather than a plausible one, is what
+  turned "unverified" into "unobservable" here, and it is the cheapest probe in this document.
+
+So the badge is `unsandboxed`, and its detail says both of those things in the vendor's own
+terms. Also deliberately absent: `--always-approve` and `--permission-mode dontAsk /
+bypassPermissions`. The default headless mode already writes without asking — measured, above —
+so an approve-everything flag would buy nothing in exchange for the badge cost ADR-008's fifth
+and seventh amendments attach to that whole class.
+
+**The first seat that reports money, and why that is the honesty rule working rather than
+bending.** grok's `end` event carries a `total_cost_usd` it computed itself (`0.0407676` on the
+first captured turn, with a `modelUsage` breakdown beside it). Codex and Antigravity report
+token counts and no dollar figure, which is why both adapters leave `CostUSD` nil forever — a
+cost derived from tokens and a remembered price is exactly the invented number section 4a.1
+forbids. The constraint was never "council does not show cost"; it was "council does not INVENT
+cost". This figure is read, so it passes through untouched, and
+`TestGrokEndCarriesThreadAndTheVendorsOwnCost` asserts the exact captured value so that any
+future rounding or unit conversion fails there.
+
+The pointer matters and is not defensive: a captured turn ends with no `usage` and no cost keys
+at all (see the slash hazard below), so "reported nothing" and "reported zero" are both real
+states of this field on this vendor. `TestGrokAbsentCostStaysAbsent` pins it.
+
+**Streaming, and the one judgement call.** The deltas are genuinely token-level — `"I'll"`,
+`" read"`, `"notes"`, `".txt"`. That is finer than the ~80-character chunks section 9.7 flagged
+as overstating "tokens" on the Claude seat, and finer than the ~95-character ACP chunks section
+9.36 measured on the Cursor seat, so this column carries `GranTokens` on the strongest evidence
+in the room.
+
+The judgement call is `thought`, which is dropped. It is the model reasoning rather than
+answering — 46 lines against 14 of `text` on the first capture, opening "The user wants me to
+read notes.txt" — and routing it to the column would put private deliberation where the answer
+goes, in a room built to compare answers. It is the line `codex.go` already draws when it
+excludes `reasoning` items. The cost is stated rather than hidden: a turn that thinks for a long
+time before speaking shows an empty column while it thinks.
+
+**A hazard that ships, because no invocation closes it.** A brief whose first non-space
+character is `/` is eaten by grok's own slash-command parser and never reaches the model. The
+turn is not an error — `available_commands`, then an `end` with no usage, no cost and no text,
+exit 0. On screen: a column that finishes instantly with nothing in it.
+
+Three channels were tried and all three were eaten: `-p "/context"`, `--verbatim -p "/context"`
+(whose help text reads "Send the prompt exactly as given"), and `--prompt-json` with the text as
+a content block. The third had a CONTROL — the same `--prompt-json` invocation with a non-slash
+prompt answered normally — which is what makes this a property of the parser rather than a guess
+about a flag that might not work.
+
+The room mostly protects this seat already, and by accident rather than by design: section 9.31
+refuses to dispatch any draft whose first character is a slash, so nothing spawns and nothing is
+billed. What does NOT hold is that refusal's documented escape hatch. A user who genuinely means
+a leading slash types one leading SPACE, and the space survives the composer, the parse and the
+dispatch untouched — and then grok trims it and eats the slash anyway (measured). So the escape
+hatch reaches four seats and not the fifth.
+
+Nothing is rewritten to compensate, and that is the decision rather than an omission. Editing a
+brief on the way to ONE vendor would make five columns answer different questions while the room
+claims they answered one, and the room's whole premise is that the seats got the same brief. A
+blank column is the lesser failure, and it is documented in the file whose column shows the
+symptom.
+
+**The hue argument section 9.28 said would be owed.** That section closed by saying a fifth
+vendor would have to argue for its colour, and here is the argument. Grok is `14`, bright cyan —
+the twin of Codex's `6`, so section 9.28's honest weakness is now TWO twinned pairs rather than
+one. That is forced, not chosen: after 4/5/6/12 the legal set holds only 13 and 14, both twins
+of a seat already seated. The only real decision was which seat to pair with, and it went to
+Codex because silence routes to Claude alone — the Claude column is on screen in nearly every
+room, so keeping magenta unshared protects the seat a reader sees most. `CX` versus `GR` carries
+the distinction when a scheme renders 6 and 14 close, which is what the two-letter tags are for.
+
+Worth stating plainly for whoever adds a sixth: **the legal set is now full.** 13 is the last
+free index, and after it a new seat cannot have a hue of its own without taking a severity
+(making a seat read as failed) or abandoning 4-bit indices (council asserting a colour over the
+user's own scheme). `TestSeatHuesAreExhaustive` fails with that sentence in it. The tag is what
+scales; the hue was always going to run out.
+
+**What is verified, and what is not.** The parser is pinned against captured lines, and the
+INVOCATION is verified separately by `grok_live_test.go` (`-tags=live`) — because unit tests
+over captures would still pass if the argv this adapter builds were rejected outright by the
+CLI, which is the ADR-008 failure mode in its purest form. That test ran: the first turn
+returned the exact expected text, a session id and a positive cost; the resume turn came back on
+the SAME session id and recalled its own first answer, which is what distinguishes a real resume
+from a re-send. Not verified: anything on macOS — this is a Windows measurement, and the Mac's
+grok is untouched (`PARITY.md`). Not built: an `internal/adapter/grok`, so no HUD row carries
+this vendor. Council can drive this seat; the gauges cannot yet see it.
+
+**The fleet gap this opens, named rather than closed here.** agent-ops ADR-012 rules that guard
+wiring, not lane shape, is the control on every vendor — and grok is a fifth vendor with no
+guards wired. Its `~/.grok/config.toml` carries `[compat.claude] hooks = false`, so the fleet's
+Claude-format hooks do not run in front of it, and it has its own hook system (`grok hooks-add`
+/ `hooks-trust`) that nothing has been installed into. Per ADR-012 that is an open obligation
+and not a reason to route work away from the seat; closing it is agent-ops work rather than
+telltale's, and it is filed rather than done here.

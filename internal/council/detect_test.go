@@ -622,11 +622,57 @@ func TestNoVendorClaimsUnverifiedEnforcement(t *testing.T) {
 	if got := sandboxFor(model.VendorClaude, true).Level; got != SandboxTools {
 		t.Errorf("claude claims %v, want SandboxTools", got)
 	}
-	for _, v := range []model.VendorID{model.VendorClaude, model.VendorCodex, model.VendorAntigravity} {
+	// Grok is the Antigravity case with a second, weaker-looking half that is
+	// actually the sharper one. --permission-mode plan was REFUTED (asked to
+	// write a file under it, it wrote the file), which is what forces
+	// SandboxNone. --sandbox was not refuted but shown UNOBSERVABLE: it
+	// silently accepts a profile name that cannot exist, so council has no way
+	// to distinguish a real request from a typo and asks for neither (§9.39).
+	for _, win := range []bool{true, false} {
+		if got := sandboxFor(model.VendorGrok, win).Level; got != SandboxNone {
+			t.Errorf("grok claims %v, want SandboxNone — plan mode was measured writing the file", got)
+		}
+	}
+	if got := sandboxFor(model.VendorGrok, true).Badge(); strings.HasPrefix(got, "ro:") {
+		t.Errorf("grok badge is %q; a vendor measured writing must not wear an ro: prefix", got)
+	}
+	// The same this-tool's-own-behaviour rule the agy detail is held to: the
+	// badge may not say council passes a flag it does not pass. Asserted as the
+	// absence of the two flag names in any affirmative form by checking the
+	// invocation instead — vendors.TestGrokAsksForNothingInEitherPosture owns
+	// that half — and here by requiring the detail to name why nothing is asked.
+	if d := sandboxFor(model.VendorGrok, true).Detail; !strings.Contains(d, "--sandbox") {
+		t.Errorf("the grok detail does not explain the unobservable sandbox flag: %q", d)
+	}
+	for _, v := range []model.VendorID{model.VendorClaude, model.VendorCodex,
+		model.VendorAntigravity, model.VendorGrok} {
 		for _, win := range []bool{true, false} {
 			if sandboxFor(v, win).Detail == "" {
 				t.Errorf("%s (windows=%v) has a badge with no explanation behind it", v, win)
 			}
+		}
+	}
+}
+
+// TestEverySeatableVendorHasACandidate. The registry says a seat CAN be driven;
+// candidates() says council knows where to find its binary. A vendor in one and
+// not the other is a seat that either renders as a permanently-absent column or
+// resolves a path nothing can drive — both silent, and neither caught by any
+// other test in this file.
+func TestEverySeatableVendorHasACandidate(t *testing.T) {
+	found := map[model.VendorID]bool{}
+	for _, c := range candidates() {
+		found[c.vendor] = true
+		if c.envVar == "" {
+			t.Errorf("%s has no override env var; an unusual install would be unreachable", c.vendor)
+		}
+		if len(c.names) == 0 {
+			t.Errorf("%s has no command name to look for", c.vendor)
+		}
+	}
+	for _, v := range addressableVendors() {
+		if !found[v] {
+			t.Errorf("%s can be addressed and seated but candidates() cannot find its binary", v)
 		}
 	}
 }
@@ -646,5 +692,12 @@ func TestGranularityMatchesWhatWasMeasured(t *testing.T) {
 		if got := granularityFor(v); got != GranFinalOnly {
 			t.Errorf("%s = %v, want GranFinalOnly — measured to produce nothing until the turn ends", v, got)
 		}
+	}
+	// Grok's deltas are the finest in the room — "I'll", " read", "notes",
+	// ".txt" — so it carries GranTokens on better evidence than either seat
+	// already wearing the word (§9.39). Asserted here rather than left to the
+	// default so that a future re-measure has to argue with a test.
+	if got := granularityFor(model.VendorGrok); got != GranTokens {
+		t.Errorf("grok = %v, want GranTokens — token-level deltas were observed live", got)
 	}
 }

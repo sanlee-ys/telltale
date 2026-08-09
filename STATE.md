@@ -14,7 +14,7 @@ off work. `unknown` is a legal value; an honest blank beats a plausible guess.
 ## Current objective
 
 Pre-v1. The active push is making `telltale council` usable as a daily driver:
-one terminal, four seats, readable and steerable without opening four vendor
+one terminal, five seats, readable and steerable without opening five vendor
 apps.
 
 **The direction is recorded rather than remembered** (2026-08-06; v1 gate
@@ -26,6 +26,24 @@ alternative and it is rejected. `README.md` and
 the argument; this file does not restate either.
 
 ## In flight
+
+- **The Grok seat is landed and owes nothing on this machine; it owes a Mac.**
+  The fifth seat (§9.39) is built, registered, and verified end to end against
+  the real binary — `go test ./internal/council/vendors -tags=live -run
+  TestLiveGrok` exercises the actual argv and asserts a real resume, and it
+  passes here. Two things are deliberately NOT done and should not be mistaken
+  for oversights. **There is no `internal/adapter/grok`**, so the HUD cannot see
+  grok sessions at all; council drives this vendor, the gauges do not observe
+  it, and closing that is a separate piece of work with its own on-disk-format
+  survey. **The seat has no fleet guards wired** — grok's own config carries
+  `[compat.claude] hooks = false` and its native hook system
+  (`grok hooks-add`/`hooks-trust`) has nothing installed into it — which under
+  agent-ops ADR-012 is an open obligation on the fleet rather than a reason to
+  avoid the seat. That work belongs in agent-ops, not here.
+
+  It also arrived AFTER race t9 below, which is why that entry still says four
+  seats: t9 raced the room as it was that morning, and a record of what ran is
+  not a place to write down what would run today. The next race is 5-of-5.
 
 - **The arena family's live debt is mostly paid** (2026-08-09, race t9 on the
   reference box, after three earlier races each exposed and funded a fix —
@@ -169,9 +187,10 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   the hidden `cursor-agent acp` server ([design.md §9.36](docs/design.md)):
   one live process, a handshake paid once, and a warm turn measured at
   **1.12 s through the merged seat** against the ~13 s above. What remains on
-  this bullet is `codex` and `agy`, which are batch programs with no seam anyone
-  has found — their `wait` is a CLI cold-start floor nothing in this repo can
-  move.
+  this bullet is `codex` and `agy` — and now `grok`, which is a batch program of
+  the same shape (§9.39) and has not been timed on this axis. All three have no
+  seam anyone has found; their `wait` is a CLI cold-start floor nothing in this
+  repo can move.
 
   **A fan-out turn costs the SLOWEST seat, not the sum**: 38.4 s here, set by
   codex's 34.7 s of `stream` — which is the model working and not something to

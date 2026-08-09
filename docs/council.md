@@ -1,8 +1,9 @@
 # telltale council — the dispatch room
 
-`telltale council` is one brief, typed once and answered by the 4-vendor fleet side by
-side — **Claude Code**, **Codex**, **Antigravity**, and **Cursor**, each in its own column,
-in your terminal. It exists because the alternative is four terminals and a clipboard.
+`telltale council` is one brief, typed once and answered by five vendors side by side —
+**Claude Code**, **Codex**, **Antigravity**, **Cursor** and **Grok**, each in its own
+column, in your terminal. It exists because the alternative is five terminals and a
+clipboard.
 
 This file is the room's own guide: what each mark on the frame means, how a turn is routed,
 how to read four answers at once, how to get one back out — and how to race one brief
@@ -40,7 +41,7 @@ shape the turn separators use further down the transcript. The state leads with 
 mark is always a second signal; the word carries the distinction on its own, so `--ascii`
 and a monochrome terminal lose nothing (`design.md` §9.11). Each seat's name also carries
 its own hue — the one place council spends a colour it did not inherit, ratified as an
-exception because "which of four agents is speaking" is a distinction the statusline and
+exception because "which of five agents is speaking" is a distinction the statusline and
 the HUD have no seats to make (§9.28); the tags carry it first, so a terminal scheme that
 renders two of them alike loses nothing that was load-bearing.
 
@@ -90,8 +91,10 @@ Two of those need the same answer to the obvious follow-up — *must they stay t
 not a setting anyone chose to leave on: on Windows both of Codex's sandboxed modes were
 measured failing *every* process spawn, reads included, so `-s read-only` was not a
 restriction but a seat that could not read its own repo. Antigravity was asked to write a
-file under both of its own read-only flags and wrote it. Those are measurements, and the
-badge reports them. The control that actually holds is the directory council was pointed
+file under both of its own read-only flags and wrote it. Grok wrote its file under
+`--permission-mode plan` too — and its `--sandbox` flag silently ACCEPTS a profile name
+that does not exist, so there was nothing there council could even observe, let alone
+claim. Those are measurements, and the badge reports them. The control that actually holds is the directory council was pointed
 at — so if a room should not be able to touch something, point it somewhere else:
 
 ```
@@ -110,8 +113,8 @@ command it ran — interleaved with what it says.
 ## Routing: who a turn actually reaches
 
 The room is an operating committee, but routing defaults to the **control plane**, not a
-broadcast. An unaddressed brief goes to **Claude alone**; `@codex`, `@agy` and `@cursor`
-(and `@claude`) name seats for one turn; **`@all`** (also `@everyone` / `@council`)
+broadcast. An unaddressed brief goes to **Claude alone**; `@codex`, `@agy`, `@cursor` and
+`@grok` (and `@claude`) name seats for one turn; **`@all`** (also `@everyone` / `@council`)
 convenes every seated vendor. Mentions used to narrow from an everyone-default; that
 inverted after measured council burn billed scarce seats on every casual turn. Only
 leading mentions route, so "ask @claude about it" stays prose.

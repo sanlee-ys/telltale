@@ -163,7 +163,38 @@ func candidates() []candidate {
 			unusableHint: "point TELLTALE_COUNCIL_CURSOR_BIN at the bundled node.exe " +
 				"beside this install's index.js — the .cmd runs nothing else",
 		},
+		{
+			vendor:     model.VendorGrok,
+			label:      "Grok",
+			names:      []string{"grok"},
+			knownPaths: grokKnownPaths(),
+			envVar:     "TELLTALE_COUNCIL_GROK_BIN",
+			// Verified argv-only by running it, not by reading the flag list:
+			// `-p/--single` takes the prompt as its VALUE and there is no `-`
+			// stdin sentinel. Safe anyway, because the installer drops a native
+			// grok.exe rather than a shim — so classify() never reaches the
+			// refusal, and no cmd.exe ever sees a brief.
+			stdinPrompt: false,
+		},
 	}
+}
+
+// grokKnownPaths is where grok's own installer puts the CLI.
+//
+// The Windows entry is measured — it is where the binary sits on this machine
+// and where `grok update` keeps it — rather than guessed. The POSIX entry is
+// the same layout under the same dotdir and is NOT verified here, which is safe
+// for the reason cursorKnownPaths states: a knownPath either exists or is
+// skipped, so a wrong one cannot produce a wrong claim.
+func grokKnownPaths() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	if runtime.GOOS == "windows" {
+		return []string{filepath.Join(home, ".grok", "bin", "grok.exe")}
+	}
+	return []string{filepath.Join(home, ".grok", "bin", "grok")}
 }
 
 // cursorKnownPaths is where the cursor-agent installer puts the CLI.
@@ -725,6 +756,31 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 				"not apply here — the same directory that print mode refused to run in " +
 				"was written to over ACP without a prompt",
 		}
+	case model.VendorGrok:
+		return SandboxClaim{
+			Level: SandboxNone,
+			// Refuted, not unverified, and refuted twice over — which is why
+			// this reads like the Antigravity branch rather than like the
+			// Cursor one. Asked to create a file under --permission-mode plan,
+			// it called its `write` tool, reported the call "completed", said
+			// so, and the file was on disk afterwards. The control run without
+			// the flag also wrote its file. The only difference between the two
+			// arms was which write tool the model picked.
+			//
+			// The --sandbox clause is a DIFFERENT kind of evidence and is worth
+			// its own sentence: that flag was never refuted, it was shown to be
+			// unobservable. Handed a profile name that cannot exist it neither
+			// errored nor warned, so council has no way to tell a real profile
+			// from a typo, and asks for nothing rather than putting a word in
+			// this badge that the CLI may never have read.
+			Detail: "treat this column as able to change your files, and that is " +
+				"MEASURED rather than assumed: asked to write a file under " +
+				"--permission-mode plan, it wrote the file, exactly as the run " +
+				"without it did. Council passes neither that nor --sandbox — " +
+				"--sandbox silently ACCEPTS a profile name that does not exist, so " +
+				"nothing council asked of it could be observed. The workspace above " +
+				"is the containment, not a flag",
+		}
 	default:
 		return SandboxClaim{}
 	}
@@ -775,9 +831,18 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 // The delta trap this capture used to carry is GONE with the protocol: ACP
 // repeats nothing, and there is no `model_call_id` in its traffic. See
 // vendors/cursoracp.go.
+// A fifth seat now carries GranTokens on the STRONGEST evidence in the room,
+// which is worth recording precisely because §9.7's flagged overstatement
+// above is the reason to be careful with the word. Grok's captured deltas are
+// "I'll", " read", " `", "notes", ".txt" — actual tokens, not the ~80-character
+// chunks the Claude seat calls tokens nor the ~95-character ACP chunks the
+// Cursor seat does. Its `thought` stream is dropped (see vendors/grok.go), so
+// a turn that reasons for a long time before speaking still shows an empty
+// column while it reasons; what this word promises is that once the answer
+// starts, it arrives as it is written.
 func granularityFor(v model.VendorID) Granularity {
 	switch v {
-	case model.VendorClaude, model.VendorCursor:
+	case model.VendorClaude, model.VendorCursor, model.VendorGrok:
 		return GranTokens
 	case model.VendorCodex, model.VendorAntigravity:
 		return GranFinalOnly

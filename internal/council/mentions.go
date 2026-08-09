@@ -62,6 +62,9 @@ func mentionAliases() map[string]model.VendorID {
 		// falls through as an unrecognised token, stays in the brief as prose,
 		// and the turn silently goes to the default lane instead.
 		"cursor": model.VendorCursor,
+		// One spelling, because the binary and the product are the same word.
+		// There is no second name to accept the way `antigravity` shadows `agy`.
+		"grok": model.VendorGrok,
 	}
 }
 
@@ -80,6 +83,7 @@ func addressableVendors() []model.VendorID {
 		model.VendorCodex,
 		model.VendorAntigravity,
 		model.VendorCursor,
+		model.VendorGrok,
 	}
 }
 

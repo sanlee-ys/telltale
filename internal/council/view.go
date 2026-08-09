@@ -1241,6 +1241,8 @@ func vendorTag(v model.VendorID) string {
 		return "AG"
 	case model.VendorCursor:
 		return "CU"
+	case model.VendorGrok:
+		return "GR"
 	default:
 		// A vendor this map has not met yet still gets two cells rather than
 		// none, on the HUD's own fallback: a seat added to one surface should not

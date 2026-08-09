@@ -250,6 +250,25 @@ func (s Styles) ForSandbox(l SandboxLevel) lipgloss.Style {
 // the real distinction on every surface a seat name appears on, and the hue is
 // the second signal it is supposed to be. If a fifth vendor arrives wanting
 // blue, the tag is what still works and the hue is what has to be argued for.
+//
+// **The fifth vendor arrived, and here is the argument it owed.** Grok is 14,
+// bright cyan — the twin of Codex's 6, so the weakness above is now TWO pairs
+// rather than one. That is forced rather than chosen: after 4/5/6/12 the legal
+// set holds only 13 and 14, and both are twins of a seat already at the table.
+// There was no unpaired hue to spend, so the only real decision was WHICH seat
+// to pair with, and it went to Codex for a reason about how the room is
+// actually used. Silence routes to Claude alone (mentions.go, defaultRoute), so
+// the Claude column is the one on screen in nearly every room; keeping magenta
+// unshared protects the seat a reader sees most from the one confusion this
+// palette can still make. Codex's cyan is spent instead, and `CX` versus `GR`
+// is what carries the distinction when a scheme renders 6 and 14 close.
+//
+// What this exhausts is worth stating plainly for whoever adds the sixth: the
+// legal set is now FULL. 13 is the last free index, and after it a new seat
+// cannot have a hue of its own without either taking a severity — which would
+// make a seat read as failed — or abandoning 4-bit indices, which would mean
+// council asserting a colour over the user's own scheme. The tag is what
+// scales; the hue was always going to run out.
 func seatHue(v model.VendorID) string {
 	switch v {
 	case model.VendorClaude:
@@ -260,6 +279,8 @@ func seatHue(v model.VendorID) string {
 		return "4" // blue
 	case model.VendorCursor:
 		return "12" // bright blue
+	case model.VendorGrok:
+		return "14" // bright cyan
 	default:
 		// Gemini and anything added since. A seat with no hue of its own renders
 		// in the identity hue every seat name used to have, which is a seat that

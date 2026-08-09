@@ -158,8 +158,8 @@ mechanism.
 ## What it is
 
 - **A dispatch room** — `telltale council`, one brief typed once and answered by Claude
-  Code, Codex, Cursor and Antigravity side by side. The one mode that spawns vendor CLIs
-  instead of reading their files; it gets its own section below.
+  Code, Codex, Cursor, Antigravity and Grok side by side. The one mode that spawns vendor
+  CLIs instead of reading their files; it gets its own section below.
 - **In-prompt statusline for Claude Code** — model, context %, session cost, and quota
   pacing (`rate_limits` windows), rendered from the JSON Claude Code hands your
   statusline command on stdin. No network calls, no credential reads.
@@ -222,23 +222,24 @@ the file.
 
 ## The dispatch room
 
-`telltale council` is one brief, typed once and answered by the 4-vendor fleet side by
-side — **Claude Code**, **Codex**, **Antigravity**, and **Cursor**, each in its own column,
-in your terminal. It exists because the alternative is four terminals and a clipboard.
+`telltale council` is one brief, typed once and answered by five vendors side by side —
+**Claude Code**, **Codex**, **Antigravity**, **Cursor** and **Grok**, each in its own
+column, in your terminal. It exists because the alternative is five terminals and a
+clipboard.
 
 ```
 telltale.exe council
 ```
 
 Every column carries its own sandbox posture and its own streaming granularity, because the
-four vendors differ on both and one blanket claim would be false for at least one of them —
+five vendors differ on both and one blanket claim would be false for at least one of them —
 and each of those claims was measured against a live run of that CLI rather than read off
 its `--help`. A plain `telltale council` can write, and says so in the header for the whole
 session; `--read` opens a room that only talks. But no badge is what keeps this room out of
 your files — the directory it was pointed at is, and `--cd` is how you move it.
 
-An unaddressed brief goes to Claude alone; `@codex`, `@agy`, `@cursor` and `@all` route a
-turn, `-@claude` addresses everyone but that seat, and the composer prices the route before
+An unaddressed brief goes to Claude alone; `@codex`, `@agy`, `@cursor`, `@grok` and `@all`
+route a turn, `-@claude` addresses everyone but that seat, and the composer prices the route before
 you press enter. Each seat keeps its own conversation and rides that vendor's own native
 resume rather than a re-sent transcript, so no session ever holds another's history.
 

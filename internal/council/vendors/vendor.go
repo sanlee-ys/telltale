@@ -160,5 +160,6 @@ func Registry() map[model.VendorID]Vendor {
 		// ErrCursorIsLiveOnly, because the seat is Conversational and there is no
 		// spawn-per-turn invocation of it any more.
 		model.VendorCursor: Cursor{},
+		model.VendorGrok:   Grok{},
 	}
 }
