@@ -1,3 +1,17 @@
+# Go source checks out LF on every machine, whatever core.autocrlf says.
+#
+# Measured 2026-08-09, two live /arena races on the Windows box (the reference
+# environment): with autocrlf=true every .go file materializes CRLF, and gofmt
+# then lists ~160 files as drifted forever — CRLF masks real drift, `gofmt -w`
+# is a no-op on the first pass, and a brief whose verify step is "gofmt -l
+# comes back empty" is unachievable on that machine. One seat honestly failed
+# on exactly that (exit status 1, twice, ~5m apart); another spent its run
+# reasoning around it. The fixtures below were already protected; the source
+# was the gap. The index has always been LF, so this changes checkout only —
+# existing clones refresh with: git rm --cached -r . && git reset --hard
+# (commit or stash first).
+*.go text eol=lf
+
 # JSONL fixtures are byte-exact by design and must survive checkout untouched.
 #
 # Two things would otherwise silently break them, and both would turn a passing
