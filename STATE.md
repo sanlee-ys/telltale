@@ -27,19 +27,60 @@ the argument; this file does not restate either.
 
 ## In flight
 
-- **The arena family is landed and owes one live session.** The whole §9.37
-  deferred list is now built — the live stat, the cursor racer, commit-per-turn
-  with `u` undo, `.worktreeinclude` seeding, `/adopt` and `/arena drop` — plus
-  §9.38's composer paste (what landed: `gh pr list --state merged`; the rulings:
-  the dated 2026-08-09 amendments in [docs/design.md §9.37/§9.38](docs/design.md)).
-  Every one of those amendments states a live-verification debt rather than
-  implying it paid, and **one real session on the Windows box covers nearly all
-  of them at once**: a `/arena` run with a brief that changes files (4-of-4 now —
-  cursor races on a throwaway ACP session), watching the "so far" stat grow,
-  the `committed <sha>` receipts land, then `/adopt` the winner, `u`-undo a
-  loser, `/arena drop` the rest, and paste a three-line snippet (expect one
-  insertion, zero sends). Nothing here has run against a live vendor —
-  offline suites only, same debt shape the core carried before turn 4 paid it.
+- **The arena family's live debt is mostly paid** (2026-08-09, race t9 on the
+  reference box, after three earlier races each exposed and funded a fix —
+  swallowed worktree errors, turn-number collisions, the agy print-timeout,
+  a racer pushing mid-race, a stalled seat holding the turn). t9 was the clean
+  run: all four seats raced, agy finished live for the first time, codex ended
+  with "nothing pushed" under the conduct preamble, a stalled cursor was cut
+  loose live with `x`, the colored patch toggle read cleanly, and the winner
+  went through `/adopt` → `/arena drop` → a merged PR. Still unverified
+  against a live room: `u` undo on a real racer commit, `.worktreeinclude`
+  seeding, and §9.38's composer paste (expect one insertion, zero sends) —
+  small enough to fold into any future race rather than owing a session of
+  their own.
+
+- **QUEUED, unowned — the post-audit build list (2026-08-09).** The steal
+  sweep's survivors, reconciled against an independent read-only second-model
+  audit and then against the live repo. The audit's sharpest catch: subset
+  @-mention routing was on the steal list and has been shipped in
+  `mentions.go` since 2026-08-04 — so verify any steal against the repo
+  before building it. Each item is one concern → one branch → one PR; the
+  2026-09-30 demo is the deadline that ordered them.
+
+  Pre-demo:
+
+  1. **A needs-you strip.** One line in council's chrome naming the seats
+     with a pending approval gate (`NEEDS YOU: claude codex`), driven only by
+     structured pending-gate state the room already holds, cleared only by
+     explicit focus/jump to that seat — never inferred from silence or output
+     shape. The anti-stall for driving four seats live on stage.
+  2. **Before/after preview inside the approval gate.** When the gated call
+     is a structured file edit whose payload carries old and new content,
+     render a red/green preview in the gate; when the payload doesn't carry
+     it, show nothing — never reconstruct or guess a diff (§4a.1: display
+     measured output only).
+  3. **`telltale doctor`.** A launch-time preflight (the one moment §9.17
+     permits probing): vendor binaries found, versions, capabilities — with
+     three honest states: checked-and-passed, checked-and-failed, and
+     not-checked. Auth and network report `not-checked` unless a probe
+     actually ran.
+  4. **Version-pinned wire fixtures.** Sanitized captures of each vendor's
+     real stream frames — including zero, absent, and error shapes —
+     labelled with the CLI version that produced them, committed as test
+     fixtures. The defense against a vendor changing its frames between
+     rehearsal and demo day. Fixtures are synthesized-shape only: real ids,
+     paths, and content never reach this public repo.
+  5. **A scripted fallback demo tape** (optional, taste work): a checked-in
+     recording script (e.g. VHS) that captures the demo path end-to-end, so
+     a vendor or network failure on the day cannot erase the presentation.
+
+  Post-demo shelf — decided, deliberately not queued: a measured-silence
+  advisory ("no event for 5m", never "stalled"); rendering an explicit
+  zero-output turn distinct from absent; one visible, editable queued room
+  draft (never auto-send); an import verb for adopting work from outside the
+  room (a new verb with its own measurements, not an overload of `/adopt`);
+  per-racer port allocation, when an arena brief first needs live servers.
 
 ## Closed without code (do not re-open)
 
