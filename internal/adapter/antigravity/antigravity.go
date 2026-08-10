@@ -515,6 +515,13 @@ func (a *Adapter) applyDatabase(s *model.Session, db *sqlite.File, w *drift.Watc
 // has not called a model yet — the field is nil and nothing is degraded. A
 // gen_metadata table that exists and cannot be walked is a broken read and
 // says so.
+//
+// The token counts leave here TWICE and on purpose: as the display strings the
+// detail pane shows per row, and as model.Session.Tokens, the integers the
+// fleet usage view sums per vendor (design.md §7.17). A generation that failed
+// its self-check is in neither — it is dropped from the sum and the drop is
+// named in Diagnostics, which is the only place a reader can find out that a
+// row's total is over fewer generations than the conversation actually ran.
 func (a *Adapter) applyGenerations(s *model.Session, db *sqlite.File, w *drift.Watch) {
 	rows, ok, err := db.Table(tableGenMetadata)
 	if err != nil {
@@ -597,6 +604,14 @@ func (a *Adapter) applyGenerations(s *model.Session, db *sqlite.File, w *drift.W
 		setExtra(s, "uncached in", formatTokens(in))
 		setExtra(s, "output", formatTokens(out))
 		setExtra(s, "generations", itoa(int64(counted)))
+		// The same two numbers unformatted, because the fleet usage view sums
+		// them across this vendor's sessions and a sum of "1.2M" strings is a
+		// sum of roundings (design.md §7.16 amendment, §7.17). Set from the
+		// SAME variables the extras are, in the same branch, so the row and the
+		// fleet total can never disagree about what was counted — and set only
+		// where `counted > 0`, so a conversation that contributed nothing is
+		// absent from the sum rather than a zero inside it.
+		s.Tokens = &model.TokenCounts{Input: in, Output: out}
 	}
 }
 

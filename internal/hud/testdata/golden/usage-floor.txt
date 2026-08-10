@@ -1,6 +1,5 @@
- telltale  │  3 sessions  │  cx 1  ge 1  cu 1
+ telltale  │  7 sessions  │  cx 1  ge 1  ag 3  cu 1  gr 1
        ag gemini-weekly 38%  │  cc 5h 42%  7d 6% · 2h ago …
-         cu spent  in 48k · out 1.2k  · 14 turns over 10m …
  ──────────────────────────────────────────────────────────
  fleet usage  quota has a limit; spend has none
 
@@ -15,8 +14,11 @@
 
  agy  quota relayed by the statusline
         gemini-weekly     38%  ↻ 3h00m
+        spent          uncached in 1.2M · out 13.1k
+                       summed across 2 sessions on disk
 
  cursor  no quota anywhere
-        spent          in 48k · out 1.2k  · over 10m …
+
+ grok  no quota anywhere
  ──────────────────────────────────────────────────────────
  esc close   ↑/↓ scroll

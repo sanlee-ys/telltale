@@ -13,7 +13,6 @@ import (
 
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/theme"
-	"github.com/sanlee-ys/telltale/internal/usagecache"
 )
 
 // Freshness boundaries for the scan itself (design.md §7.7). Retained values
@@ -55,8 +54,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 
 	headerDim := sty.Dim(st.scanAge() > criticalAfter && !st.Snap.At.IsZero())
 	quota := quotaBlock(st, headerDim, g, st.Width)
-	spend := spendBlock(st, headerDim, g, st.Width)
-	header := headerLines(st, lay, quota, spend, sty, g)
+	header := headerLines(st, lay, quota, sty, g)
 
 	full := st.Height >= fullChromeHeight
 	// The column-header row names the grid, so it appears only when the body
@@ -243,34 +241,27 @@ func columnsInUse(rows []*model.Session) (ctx, cost bool) {
 
 // ------------------------------------------------------------------- header
 
-// headerLines assembles the header: identity, then the account-quota block,
-// then the spend block.
+// headerLines assembles the header: identity, then the account-quota block.
 //
-// Spend NEVER shares a line with quota, at any width, and that is a claim rule
-// rather than a layout one (§7.16). The two carry different kinds of number —
-// a percentage of a published ceiling, and a count with no ceiling anywhere —
-// and a reader scanning one line of vendor blocks would take the second for
-// more of the first. Its own line, with its own verb on it, is what keeps
-// "cursor has no quota" and "cursor spent this much" as two readable facts
-// instead of one confusing one.
-func headerLines(st State, lay Layout, quota, spend string, sty Styles, g Glyphs) []string {
+// It carried a THIRD line until 2026-08-09 — Cursor's relayed token total, on
+// a row of its own so a count with no ceiling could never be read as a
+// percentage of one (§7.16). The owner retired that display: the number was
+// honest and it bought no decision, so it was spending a header line the
+// header does not have. The relay underneath it is untouched and still
+// accumulating (§7.16's amendment); what came back is the line.
+func headerLines(st State, lay Layout, quota string, sty Styles, g Glyphs) []string {
 	left := headerIdentity(st, sty, g)
 
-	var out []string
 	switch {
 	case quota == "":
-		out = []string{left}
+		return []string{left}
 	case lay.Tier == TierWide && lipgloss.Width(left)+3+lipgloss.Width(quota) <= st.Width-1:
-		out = []string{joinEnds(left, quota, st.Width)}
+		return []string{joinEnds(left, quota, st.Width)}
 	default:
 		// Below the wide tier the quota block wraps to its own line rather
 		// than competing with identity for the same row.
-		out = []string{left, joinEnds("", quota, st.Width)}
+		return []string{left, joinEnds("", quota, st.Width)}
 	}
-	if spend != "" {
-		out = append(out, joinEnds("", spend, st.Width))
-	}
-	return out
 }
 
 func headerIdentity(st State, sty Styles, g Glyphs) string {
@@ -520,142 +511,6 @@ func renderQuotaVendor(b quotaVendorBlock, d quotaDress, st State, sty Styles, g
 		// number. "6% · 2h ago" is a measurement with its time attached;
 		// "6%" alone would be the relay presenting last night as now.
 		out += " " + sty.Muted.Render(g.Mid+" "+theme.Age(b.age)+" ago")
-	}
-	return out
-}
-
-// ------------------------------------------------------------------- spend
-
-// spendDress is one level of the spend line's shed cascade, in the same
-// grammar as quotaDress.
-type spendDress struct {
-	fullNames bool
-	cache     bool
-	turns     bool
-}
-
-// spendDressLevels is the shed order, most dressed first.
-//
-// What sheds and what does not is decided by one question: could a reader draw
-// a wrong conclusion from the shorter line? The vendor, the verb, the in/out
-// counts and the window's "since" survive every level, because the sum is only
-// honest while it says what it is a sum of — a bare "48.0k" with no window is
-// the number pretending to be a state, which is exactly what §7.16 forbids.
-// The cache pair sheds first (it is an order of magnitude larger than the
-// other two and dominates the line while answering the smallest question), the
-// turn count second. Both go with a visible ellipsis: dropping is never
-// silent, the footer's rule.
-var spendDressLevels = []spendDress{
-	{fullNames: true, cache: true, turns: true},
-	{cache: true, turns: true},
-	{turns: true},
-	{},
-}
-
-// spendBlock renders what this machine has SPENT, one labelled block per
-// vendor with a live running total (design.md §7.16).
-//
-// Three properties are load-bearing, and all three are about what the line is
-// allowed to claim:
-//
-//   - it is never a gauge, never a percentage, never a bar. There is no
-//     denominator anywhere in this reading — Cursor publishes no account limit
-//     without a network call — so any of those would invent a ceiling. The
-//     rendering vocabulary here is deliberately the one the quota line does
-//     NOT use.
-//   - the verb is on the line. "cursor spent" reads as consumption in a header
-//     whose other line reads as remaining capacity, and it survives --ascii and
-//     NO_COLOR, because a distinction carried only by which line it landed on
-//     is not carried at all.
-//   - the window travels with the sum, always: "14 turns over 12m" says what
-//     was added up, and past the age threshold "· 2h ago" says when the adding
-//     stopped. Shedding either would re-present a stale total as a live one.
-func spendBlock(st State, sty Styles, g Glyphs, width int) string {
-	totals := st.Snap.Spend
-	if len(totals) == 0 {
-		return ""
-	}
-	var line string
-	for _, d := range spendDressLevels {
-		line = renderSpendLine(totals, d, st, sty, g)
-		if lipgloss.Width(line) <= width {
-			return line
-		}
-	}
-	// Even the barest level overflows: drop whole trailing vendor blocks. The
-	// ellipsis renderSpendLine already appends at this dress level carries the
-	// notice — half a vendor's total is a worse claim than a marked absence.
-	for len(totals) > 1 {
-		totals = totals[:len(totals)-1]
-		line = renderSpendLine(totals, spendDress{}, st, sty, g)
-		if lipgloss.Width(line) <= width {
-			return line
-		}
-	}
-	return line
-}
-
-func renderSpendLine(totals []usagecache.Total, d spendDress, st State, sty Styles, g Glyphs) string {
-	parts := make([]string, 0, len(totals))
-	for i := range totals {
-		parts = append(parts, renderSpendVendor(totals[i], d, st, sty, g))
-	}
-	line := strings.Join(parts, "  "+sty.Muted.Render(g.Sep)+"  ")
-	if !d.cache || !d.turns {
-		// Something was dropped to make this fit. The grid's own rule: a
-		// reader must never have to wonder whether the missing thing was
-		// missing or merely elided.
-		line += " " + sty.Muted.Render(g.Ellipsis)
-	}
-	return line
-}
-
-func renderSpendVendor(t usagecache.Total, d spendDress, st State, sty Styles, g Glyphs) string {
-	name := string(t.Vendor)
-	if !d.fullNames {
-		name = strings.ToLower(vendorTag(t.Vendor))
-	}
-	// "spent", past tense and attached to the vendor: the block is a completed
-	// measurement of turns that already happened, not a running meter of a
-	// turn in flight.
-	return sty.Muted.Render(name+" spent") + "  " + spendFacts(t, d, st, sty, g)
-}
-
-// spendFacts is everything the spend block says EXCEPT the vendor's name: the
-// counts, then the window, then the reading's age once it has one.
-//
-// It is split out because the usage view (§7.17) renders the same measurement
-// under a per-vendor heading, where the name is already on screen a line above
-// and the verb has become the label column. Both callers must shed by the same
-// rules and print the same numbers — a second copy of this arithmetic is a
-// second place for the window to go missing, and the window going missing is
-// the one failure §7.16 spends a whole section forbidding.
-func spendFacts(t usagecache.Total, d spendDress, st State, sty Styles, g Glyphs) string {
-	cells := []string{
-		sty.Muted.Render("in") + " " + sty.Text.Render(theme.Tokens(t.InputTokens)),
-		sty.Muted.Render("out") + " " + sty.Text.Render(theme.Tokens(t.OutputTokens)),
-	}
-	if d.cache {
-		cells = append(cells,
-			sty.Muted.Render("cache read")+" "+sty.Text.Render(theme.Tokens(t.CacheReadTokens)),
-			sty.Muted.Render("cache write")+" "+sty.Text.Render(theme.Tokens(t.CacheWriteTokens)),
-		)
-	}
-	out := strings.Join(cells, " "+sty.Muted.Render(g.Mid)+" ")
-
-	// The basis, in the §7.12 grammar the forecast and the relayed quota block
-	// both use: the scope of a claim travels with the number.
-	basis := "over " + theme.Age(t.Span())
-	if d.turns {
-		basis = fmt.Sprintf("%d turns over %s", t.Turns, theme.Age(t.Span()))
-	}
-	out += "  " + sty.Muted.Render(g.Mid+" "+basis)
-
-	if age := st.Now.Sub(t.WrittenAt); age >= quotaAgeShown {
-		// Same threshold as the relayed quota block, and the same reason: past
-		// it, a total without its measurement time presents last night's spend
-		// as this minute's.
-		out += " " + sty.Muted.Render(g.Mid+" "+theme.Age(age)+" ago")
 	}
 	return out
 }

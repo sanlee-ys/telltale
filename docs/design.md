@@ -2719,39 +2719,87 @@ and their schema not at all — quota is windows with percentages, resets and a
 — and folding them together would put one keys-not-content test in charge of two
 unrelated formats.
 
-#### What it renders, and what stays absent
+#### What it rendered, and what stayed absent
+
+*This subsection describes the display as built on 2026-08-08. It was retired on
+2026-08-09 — see the amendment below — and is kept in the past tense because the rules it
+worked out still bind the one spend line that remains (§7.17).*
 
 **Tokens spent are not quota, and the render may never blur that.** There is no
 denominator anywhere in this reading, so no percentage, no gauge, no countdown, no bar —
 any of them would invent a ceiling out of nothing, the same class of error as filling a
-`CapNone` field with a plausible guess. The spend block therefore gets **its own header
-line, never shared with quota at any width**, and carries a verb: `cursor spent`. The
+`CapNone` field with a plausible guess. The spend block therefore got **its own header
+line, never shared with quota at any width**, and carried a verb: `cursor spent`. The
 verb is a word, not a glyph or a colour, so `--ascii` and `NO_COLOR` lose none of the
-claim. `TestSpendIsNeverRenderedAsQuota` asserts the line carries no `%`, no gauge glyph
-and no reset mark, and — the other half of the same claim — that Cursor is given no quota
-block, because Cursor still has no account quota and saying so by absence is the honest
-answer. The generated render (`spend-cursor` golden):
+claim. It rendered as:
 
 ```
  telltale  │  2 sessions  │  codex 1  cursor 1                                         codex 7d █████▌──   79% ↻ 22h48m
                                cursor spent  in 48k · out 1.2k · cache read 1.9M · cache write 62k  · 14 turns over 10m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
         SESSION                                                               MODEL          CONTEXT                AGE
+```
+
+Codex's quota was on the quota line; Cursor's was nowhere, and Cursor's spend was on a
+line of its own. The shed cascade followed §7.15's grammar — cache pair first, then the
+turn count, then full names down to the two-letter tags — and vendor, verb, `in`, `out`
+and the window survived every level, with the ellipsis saying so whenever anything went.
+`theme.Tokens` floors at every step for the same reason `theme.Percent` does: this is
+what a machine *spent*, and rounding 47,950 up to "48.0k" invents fifty tokens nobody was
+billed for.
+
+#### The display is retired; the relay is not (owner's ruling, 2026-08-09)
+
+**Ruled by the owner: the Cursor spend line comes off every surface. The seam, the hook,
+the cache and the HUD's read of it all stay.** The reason was not that the number was
+wrong — it was measured end to end and it was right. It was that *it bought no decision*.
+A running token count for a vendor with no ceiling anywhere answers a question nobody was
+asking, and it was answering it from a header line the header does not have to spare:
+§7.15's whole design is a shed cascade fighting for one or two rows, and this was
+permanently occupying a third.
+
+That is a product judgement, not an honesty one, and it is worth naming which because the
+two have different consequences. Nothing here was retracted. §7.16's measurements, its
+vocabulary rules and its accumulation ruling all still stand and all still bind — the
+fleet usage view's remaining spend line is held to them (§7.17), and the amendment below
+is the first place they were applied to a sum of a different shape.
+
+What changed, exactly:
+
+- **removed:** the header's spend line, and the usage view's Cursor spend row. Nothing
+  renders a `usagecache.Total` anywhere.
+- **kept, deliberately untouched:** `telltale hook cursor`, `internal/cursorhook`,
+  `internal/usagecache` and every test either owns; `~/.cursor/hooks.json` on this
+  machine; and the HUD's own read — `Snapshot.Spend` is still filled by every scan and is
+  read by nothing. `internal/hud/state.go` says so on the field, because a reader who
+  finds an unused field will otherwise correctly conclude it is dead and delete it.
+  Reinstating the display is a call site, not a re-plumb, and the accumulating file means
+  the day it comes back it has history in it rather than starting from this minute.
+- **pinned:** `TestTheCursorSpendDisplayIsRetiredEverywhere` renders the same fixture that
+  produced the old block — relayed total still in the snapshot — at five widths, in both
+  glyph sets, with the usage view open and closed, and fails on the verb or on either of
+  the counts appearing anywhere in the frame.
+  `TestTheRetiredDisplayStillHasItsRelayUnderneath` is the other half, and it is the one
+  that catches "retired" being implemented as "deleted".
+  `TestCursorIsStillGivenNoQuotaBlock` survives from the old pair: losing its spend line
+  is exactly the moment a renderer would be tempted to find Cursor a home on the quota
+  one.
+
+The same fixture now renders (`cursor-without-spend` golden) — a two-line header where
+there were three, Cursor's row still on the grid, and its quota still visibly nowhere:
+
+```
+ telltale  │  2 sessions  │  codex 1  cursor 1                                         codex 7d █████▌──   79% ↻ 22h48m
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                               MODEL          CONTEXT                AGE
  ● CU │ Multi-vendor orchestration  C:\src\code                               composer-2.5   ████▏───────    37% │   1m
  ◐ CX │ notes-api  C:\src\code                                                gpt-5.1-codex                    — │   4m
+
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
 ```
-
-Codex's quota is on the quota line; Cursor's is nowhere, and Cursor's spend is on a line
-of its own. The shed cascade follows §7.15's grammar — cache pair first, then the turn
-count, then full names down to the two-letter tags — and vendor, verb, `in`, `out` and
-the window survive every level, with the ellipsis saying so whenever anything went.
-`theme.Tokens` floors at every step for the same reason `theme.Percent` does: this is
-what a machine *spent*, and rounding 47,950 up to "48.0k" invents fifty tokens nobody was
-billed for.
 
 #### The boundary amendment
 
@@ -2836,35 +2884,36 @@ glancing at, one is for reading.
 | | **Quota** | **Spend** |
 |---|---|---|
 | what it is | a reading against a limit the vendor published | a count of tokens with no denominator anywhere |
-| sources today | Codex (its own store, scan-fresh); Claude and agy (statusline relay) | Cursor (`~/.telltale/usage/`, the hook relay) |
+| sources today | Codex (its own store, scan-fresh); Claude and agy (statusline relay) | agy (summed from the conversations this scan read, §3.8) |
 | may render | gauge, percentage, reset countdown, severity hue | a verb, the counts, and the accumulation window |
 | may never render | — | a gauge, a percentage, a countdown, a bar, or the sum without its window |
 
 The right-hand column is not a style preference. There is no ceiling anywhere in a token
-count — Cursor publishes no account limit without a network call (§3.9, re-measured
-§7.16) — so a bar or a percentage would **invent** one, which is the same class of error as
-filling a `CapNone` field with a plausible guess. `TestSpendIsNeverRenderedAsQuota` already
-pins this for the header; `TestUsageSpendBorrowsNoneOfQuotasVocabulary` extends it to the
-surface that puts the two measurements four lines apart instead of on separate header rows,
-because **proximity is what makes this the riskier render of the two**.
+count — no vendor here publishes an account limit a passive reader can see (§3.8, §3.9,
+§3.9a) — so a bar or a percentage would **invent** one, which is the same class of error
+as filling a `CapNone` field with a plausible guess.
+`TestUsageSpendBorrowsNoneOfQuotasVocabulary` pins it, and since the header's spend line
+was retired (§7.16's amendment) that test is the *whole* of the guarantee rather than the
+second half of a pair. It matters most here anyway: this surface puts the two measurements
+four lines apart under one vendor name instead of on separate header rows, and
+**proximity is what makes this the riskier render of the two**.
 
 #### The layout
 
-One block per vendor, in **fixed fleet order** — claude, codex, gemini, agy, cursor — never
-sorted by usage. Position is the navigation: a vendor moving must mean a vendor was added
-or removed, not that another vendor's percentage crossed it. `fleetOrder` is now one
+One block per vendor, in **fixed fleet order** — claude, codex, gemini, agy, cursor, grok
+— never sorted by usage. Position is the navigation: a vendor moving must mean a vendor
+was added or removed, not that another vendor's percentage crossed it. `fleetOrder` is one
 variable, walked by both the header's per-vendor counts and this view, so a vendor sits in
 the same place on both surfaces.
 
 Each block is a heading that states the **quota seam** — where the reading came from, or
 why there is none — and then one line per fact under it, hanging off the detail pane's
 label column so the two bodies read as one product. The generated render (`usage-fleet`
-golden):
+golden, and the shape it took after the 2026-08-09 amendment below):
 
 ```
- telltale  │  3 sessions  │  codex 1  gemini 1  cursor 1
+ telltale  │  7 sessions  │  codex 1  gemini 1  agy 3  cursor 1  grok 1
                       ag gemini-weekly 38% ↻ 3h00m  │  cc 5h 42% ↻ 2h13m  7d 6% ↻ 5d00h · 2h ago  │  cx 7d 79% ↻ 22h48m
-                               cursor spent  in 48k · out 1.2k · cache read 1.9M · cache write 62k  · 14 turns over 10m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  fleet usage  quota is a reading against a limit; spend is a count with none
 
@@ -2879,9 +2928,12 @@ golden):
 
  agy  quota relayed by the statusline
         gemini-weekly  ███████▎────────────    38%  ↻ 3h00m
+        spent          uncached in 1.2M · out 13.1k  · summed across 2 sessions on disk, this scan
 
  cursor  no quota anywhere · its store holds experiment values, not usage
-        spent          in 48k · out 1.2k · cache read 1.9M · cache write 62k  · 14 turns over 10m
+
+ grok  no quota anywhere · no window, no ordinal, no reset time on its disk
+
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  esc close   ↑/↓ scroll
 ```
@@ -2900,13 +2952,15 @@ Five things in that frame are doing work:
   trust a percentage needs to know which they are looking at. The relayed reading's **age
   survives every dress level** — the phrase around it gives way instead — because shedding
   the age would re-present a stale number as fresh.
-- **`cursor` has a spend line and no quota lines, and the heading says why.** Without that
-  sentence the reader is left to guess whether Cursor's quota was missing, zero, or simply
-  not drawn. The heading always speaks about quota and never about spend, deliberately: the
-  spend line explains itself in its own vocabulary (a verb and a window), while an absent
-  reading explains nothing at all unless something says it out loud.
+- **`agy` carries both kinds of claim, and they arrive from two different seams.** Its
+  percentage is relayed by the statusline; its token counts are summed out of the
+  conversations this scan read. The heading always speaks about quota and never about
+  spend, deliberately: the spend line explains itself in its own vocabulary (a verb and a
+  window), while an absent or relayed reading explains nothing at all unless something says
+  it out loud.
 - **`gemini` is one line, and it is a line rather than a row of dashes.**
-- **The header above it still carries both blocks, unchanged.**
+- **`cursor` and `grok` have a sentence each and no numbers, and the sentences differ**
+  because the measurements behind them do.
 
 #### Three kinds of nothing, and the one that had to collapse
 
@@ -2915,7 +2969,7 @@ and they are the whole reason the absence line carries a reason rather than an e
 
 | | Vendors | What it renders | Why that wording |
 |---|---|---|---|
-| **structurally absent** | gemini, cursor | `no quota reaches disk anywhere telltale can read` / `no quota anywhere · its store holds experiment values, not usage` | There is no seam to fire. Cursor's verdict was re-measured 2026-08-08 and came back harder: the only account figures on its disk are Statsig experiment values stamped `is_user_in_experiment:false`, never consumption (§7.16). Naming an action here would send someone to enable a thing that does not exist. |
+| **structurally absent** | gemini, cursor, grok | `no quota reaches disk anywhere telltale can read` / `no quota anywhere · its store holds experiment values, not usage` / `no quota anywhere · no window, no ordinal, no reset time on its disk` | There is no seam to fire. Cursor's verdict was re-measured 2026-08-08 and came back harder: the only account figures on its disk are Statsig experiment values stamped `is_user_in_experiment:false`, never consumption (§7.16). grok's was measured the same way on 2026-08-09: a rate/limit/quota sweep of the whole store matched tool-configuration keys and nothing else (§3.9a). Naming an action here would send someone to enable a thing that does not exist. **Each vendor gets its own sentence rather than sharing one** — the verdicts are the same shape and different measurements, and lending grok Cursor's wording would claim something about grok's disk that nobody looked for there. |
 | **seam exists, never seen** | claude, agy | `no quota relayed yet · the telltale statusline writes it` | This is the one absence a user can act on, so it **names the statusline**. The reading turns up as soon as the gauge runs in that vendor. An absence with an action behind it that does not say the action is just a shrug. |
 | **aged out** | any relayed vendor | *renders as never-seen* | `quotacache`'s reader drops a window whose reset has passed and any entry over 24h old before the HUD ever sees it (§7.15's self-expiry). Telling the two apart would mean **holding numbers §7.15 calls not stale but FALSE** so this view could display them. Losing one distinction is the cheaper of those two trades — and it is recorded as a limitation below rather than left to be discovered. |
 
@@ -2978,6 +3032,84 @@ dashes, because a table of nothing is a table asserting it measured five things
   token counts), different accounts, different vendors. Any single number across them would
   be arithmetic telltale invented, which is the ADR-001 violation this whole product is
   built to refuse.
+- **A spend line for grok**, added 2026-08-09 and the closest call in this section. grok
+  is the only vendor here that writes real money to disk, so it is the one block where a
+  reader might expect a figure — and it gets none. The only cost on its disk is
+  `usage.costUsdTicks` on each `turn_completed` record: per-turn, not cumulative,
+  in an append-only file that reached 818 KB in one session (§3.9a). A tail-window sum is
+  a **lower bound**, and a lower bound rendered next to the word "spent" is a derived
+  number wearing a read one's clothes. The last turn's cost is already a labelled Extra in
+  the detail pane, where its label says which turn it belongs to. Nothing on grok's block
+  says any of this: the heading speaks about quota and never about spend, and buying one
+  vendor an exception would cost every other block its meaning.
+
+#### Amendment, 2026-08-09: the owner's ruling on which vendors this speaks for
+
+Ruled by the owner: **Cursor's spend display goes; agy and grok come on.** The retirement
+half is §7.16's amendment. This is the half that adds.
+
+**agy's spend line, and why its window reads differently.** The source is the agy
+adapter's measured per-conversation token counts — `gen_metadata`'s `#1.#4.#2` (uncached
+input) and `#1.#4.#3` (output), guarded by the `thinking + answer == output` identity §3.8
+requires and the adapter asserts. Those were already on screen per row as display-only
+extras; what is new is `model.Session.Tokens`, the same two numbers as integers, summed
+per vendor by the view. The integers exist because a sum of pre-rounded display strings is
+a sum of roundings; the adapter sets both in the same branch from the same variables, so a
+row and the fleet total cannot disagree about what was counted.
+
+**This is a scan, not a meter, and the wording has to carry that.** Cursor's total was a
+file that only ever went up. agy's is a sum over the conversations that are on disk at
+this moment, so *deleting a conversation makes it smaller*. §7.16's rule — the sum never
+prints without its window — therefore binds against a different window:
+
+- the wording is `summed across 2 sessions on disk, this scan`, and it never says "since
+  <date>". A "since" is a meter's claim and this is not a meter.
+- the shed cascade drops words and never facts: `summed across N sessions on disk, this
+  scan` → `summed across N sessions on disk` → `across N sessions on disk` → `N sessions
+  on disk`. The **count** survives every level because it *is* the window, and **"on
+  disk"** survives every level because it is the difference between this sum and a
+  monotonic one. "summed" and "this scan" are what give way, in that order.
+- the count is of the sessions that **contributed a measured reading**, not of the vendor's
+  sessions. The fleet fixture's agy has three conversations and the line says two: the
+  third has not called a model yet, carries no counts, and is in neither the sum nor its
+  window. Folding it in as a zero would put a session in the denominator that contributed
+  nothing to the numerator — §4a.1's rule applied to a window instead of to a cell.
+- a generation that **failed its self-check** is dropped by the adapter and named in that
+  row's Diagnostics, which is where a reader finds out a total is over fewer generations
+  than the conversation ran. That is inherited behaviour, not new, and it is the one place
+  this surface is quieter than the row it summed: the count says how many sessions, not how
+  many generations inside them were refused. Recorded as a limitation below.
+- the label is **`uncached in`**, not `in`. §3.8 marks the cache-read component's field
+  number lower-confidence and the adapter refuses to fold it into a rounder total;
+  labelling the number `in` would quietly promote a partial figure to a whole one, and the
+  fleet line is the one place a reader could not catch that.
+
+**And it wraps rather than sheds, which nothing else on this surface does.** Every other
+line here sheds decoration — a gauge that re-states a number still on screen, a phrase
+around an age. This line is facts only: two counts, a label that has to say "uncached",
+and a window that may not go. At 60 columns those do not fit on one row and there is
+nothing left to spend. The header solved that class of problem by dropping whole vendor
+blocks, because a header has a hard one-or-two-line budget; **this is a body and it
+scrolls**, so it can pay a second row, and a second row costs a reader nothing next to a
+sum that has stopped saying what it summed. The window hangs under the counts in the same
+indent and re-runs its own cascade there — a row to itself buys back dress the shared row
+could not afford, so the *narrow* render says more about the window than a cramped
+single-line one would have. It carries no leading glyph: the mid dot separates facts on a
+line everywhere else in this product, and giving it a second job as a continuation mark is
+the failure §9.26 is a whole section about. `usage-floor` (60 columns):
+
+```
+ agy  quota relayed by the statusline
+        gemini-weekly     38%  ↻ 3h00m
+        spent          uncached in 1.2M · out 13.1k
+                       summed across 2 sessions on disk
+```
+
+**grok's block** is the absence table's third structural row, above. It qualifies for a
+block on sessions alone, and it would have rendered the un-surveyed fallback
+(`no quota telltale can read`) — honest, and a step down from a sentence that names what
+was measured. It now says `no quota anywhere · no window, no ordinal, no reset time on its
+disk`, from §3.9a's sweep. It has no spend line, for the reason in Declined above.
 
 #### Known limitations
 
@@ -2988,10 +3120,22 @@ dashes, because a table of nothing is a table asserting it measured five things
   two places on screen while the view is open, and a future change to one has to be made in
   both. `quotaVendors` being shared by both surfaces is what keeps them from disagreeing
   about *which* source speaks for a vendor; nothing yet keeps them from diverging in tone.
-- **The absence sentences are per-vendor literals**, so a sixth vendor arrives with the
+- **The absence sentences are per-vendor literals**, so a seventh vendor arrives with the
   fallback wording (`no quota telltale can read`) until someone measures its seam and gives
   it a sentence. That is the honest default — it claims nothing about a seam nobody has
-  looked at — but it is a step down from the four that name theirs.
+  looked at — but it is a step down from the five that name theirs.
+- **The spend line's count is of sessions, not of generations.** A conversation whose read
+  dropped some generations for failing the `thinking + answer == output` self-check still
+  counts as one contributing session, and its partial sum is in the total. The drop is
+  named in that row's Diagnostics and nowhere on this surface, so a reader looking only at
+  the fleet line cannot tell a whole conversation from a partly-refused one. The
+  alternative — excluding the whole conversation — would discard generations that passed
+  their own check and undercount by an amount nothing on screen could name, which is the
+  worse of the two silences.
+- **The spend line's window shrinks silently when a conversation is deleted.** "on disk"
+  is the only thing saying so. There is no honest alternative from a passive read: the
+  scan cannot know what was on disk yesterday without keeping its own history, and a cache
+  of previous scans would be telltale asserting a past it did not measure at the time.
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 

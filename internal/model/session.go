@@ -356,6 +356,33 @@ type Extra struct {
 	Value string
 }
 
+// TokenCounts is a session's measured token consumption — a count with no
+// denominator anywhere in it.
+//
+// It is deliberately NOT a Field, and that is the whole design of it. A Field
+// is a thing the HUD lays a column out for and gauges; these numbers may never
+// be gauged, because there is no ceiling to divide them by (design.md §7.16's
+// vocabulary rules). What they exist for is the fleet usage view's spend line
+// (§7.17), which sums them per vendor and states the window it summed over —
+// so the counts have to survive as INTEGERS rather than as the pre-formatted
+// display strings an adapter would otherwise put in an Extra.
+//
+// Nil means the adapter measured nothing for this session, which is the usual
+// pair of absences and never a zero: a conversation that has not called a
+// model yet carries nil, and so does one whose counts failed their read. A
+// contributor of zero would put a session in the sum's denominator ("summed
+// across N sessions") that contributed nothing to its numerator.
+type TokenCounts struct {
+	// Input is input tokens as the vendor reported them, with no arithmetic of
+	// telltale's applied. An adapter whose vendor reports only the UNCACHED
+	// input — agy's `#1.#4.#2`, §3.8 — puts that here and says so in the label
+	// its own Extra carries; folding an uncertain cache-read figure in to make
+	// a rounder total is the derived-number error decisions/001 forbids.
+	Input int64
+	// Output is output tokens, same rule.
+	Output int64
+}
+
 // Session is one agent session, normalized. Adapters construct it; renderers
 // only read it.
 //
@@ -448,6 +475,11 @@ type Session struct {
 
 	// Extras are vendor-specific display-only pairs. See Extra.
 	Extras []Extra
+
+	// Tokens is what this session measurably consumed, when the vendor writes
+	// token counts down at all. See TokenCounts: it is not a Field, it is never
+	// gauged, and nil is absence rather than zero.
+	Tokens *TokenCounts
 }
 
 // Key is the cross-vendor unique identity of a session, used to match rows
@@ -640,6 +672,12 @@ func (s *Session) Validate(caps Capabilities) error {
 	}
 	if s.Subagents != nil && *s.Subagents < 0 {
 		errs = append(errs, fmt.Errorf("model: subagents %d is negative", *s.Subagents))
+	}
+	if s.Tokens != nil && (s.Tokens.Input < 0 || s.Tokens.Output < 0) {
+		// A negative count is a misread, not a small one, and it would subtract
+		// from a fleet sum that has no way to notice.
+		errs = append(errs, fmt.Errorf("model: token counts are negative (in %d, out %d)",
+			s.Tokens.Input, s.Tokens.Output))
 	}
 
 	seen := make(map[string]bool, len(s.Quota))

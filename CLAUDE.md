@@ -125,11 +125,14 @@ exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
   windows it just rendered, written after the line is on stdout so the HUD can
   attribute account quota per vendor (design.md §7.15, amended 2026-08-07).
 - the **cursor token relay** — `usage/<vendor>.json`, a running total of the
-  token counts Cursor's `afterAgentResponse` hook reports per turn, so the HUD
-  can say what this machine spent (design.md §7.16, added 2026-08-08). Written
-  by `telltale hook cursor`, which is its own mode rather than a flag on a
-  gauge: a hook's stdout is parsed by the vendor as a hook result, so that path
-  prints nothing at all and exits 0 on every branch.
+  token counts Cursor's `afterAgentResponse` hook reports per turn (design.md
+  §7.16, added 2026-08-08). Written by `telltale hook cursor`, which is its own
+  mode rather than a flag on a gauge: a hook's stdout is parsed by the vendor as
+  a hook result, so that path prints nothing at all and exits 0 on every branch.
+  **Its DISPLAY was retired by the owner on 2026-08-09** (§7.16's amendment) —
+  the write, the cache and the HUD's read of it are all untouched, and nothing
+  renders the total today. Don't "clean up" the reader on the grounds that it is
+  unused; being wired is the point of it.
 
 Each carries a test pinning the serialized form to keys and numbers. If you're
 adding a feature to `internal/hud` or `internal/statusline` that would write

@@ -212,6 +212,14 @@ type Snapshot struct {
 	// cursor-agent CLI conversations, which are not the IDE Composer sessions
 	// the Cursor rows come from, so pinning a total to any row would be a
 	// per-session claim the seam cannot support.
+	//
+	// NOTHING RENDERS THIS as of 2026-08-09, and the field is kept filled on
+	// purpose. The owner retired the display — the total was honest and it
+	// bought no decision — while the relay under it stays wired: `telltale hook
+	// cursor` keeps writing, this scan keeps reading, and the day the display is
+	// wanted back it is a call site rather than a re-plumb (§7.16's amendment).
+	// A reader looking for where this is consumed will find nowhere, and that is
+	// the answer rather than a bug.
 	Spend []usagecache.Total
 	// At is when the scan completed. The zero value means no scan has ever
 	// completed, which is a different thing from a scan that completed and
