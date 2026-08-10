@@ -14,44 +14,15 @@ telltale*.exe
 # conditions they were taken under.
 *trace*.txt
 
-# PowerShell's module analysis cache, when it lands HERE instead of under
-# %LOCALAPPDATA%, as an untracked Microsoft/… tree on Windows — not just at
-# the repo root but under whatever package directory `go test` happened to
-# run from (e.g. internal/council/Microsoft/…), which a pattern containing a
-# slash would miss: such a pattern anchors to the .gitignore's own directory
-# unless it starts with `**/`.
-#
-# This block was added believing nothing in this repository spawns PowerShell
-# and that the writer was therefore out of reach. That is not what happens.
-# MEASURED 2026-08-09, by polling Win32_Process during `go test ./internal/
-# council` and resolving the parent chain while every process in it was still
-# alive:
-#
-#	powershell.exe -File …\github-mcp-wrapper.ps1
-#	  <- council.test.exe
-#	  <- go test -count=1 ./internal/council
-#
-#	cmd.exe /c codex exec --json -s danger-full-access --skip-git-repo-check -
-#	  <- council.test.exe
-#	  <- go test -count=1 ./internal/council
-#
-# So the suite starts more than git and the Go test helper: it starts a real
-# vendor CLI. That vendor then runs the operator's own hooks, which spawn
-# PowerShell, and those inherit the test binary's working directory — which is
-# the package directory — and write their cache into it. The crumbs are residue
-# from a real vendor turn, not litter from an unrelated tool.
-#
-# Redirecting PSModuleAnalysisCachePath would hide that rather than fix it, so
-# it is deliberately NOT done here. The fix is to stop the suite reaching a real
-# vendor: startProcess, startSession and startRPCSession are behind package vars
-# so tests can stub them (countSpawns does), and the leak says some path still
-# gets past. Pinning down WHICH test is open work — output buffering made the
-# test name unreliable, while the ancestry above is not in doubt.
-#
-# Until that lands this stays a backstop and not a fix: it keeps the crumbs out
-# of `git status` (and out of an /adopt, the way .claude/ above once broke one)
-# rather than stopping them being written.
-**/Microsoft/Windows/PowerShell/
+# The `**/Microsoft/Windows/PowerShell/` backstop that stood here is GONE, and
+# its removal is the receipt for the fix rather than a tidy-up. Those crumbs
+# were written by the operator's Codex hooks, spawned by a real `codex exec`
+# turn the council suite was starting on their own account, and
+# internal/council/main_test.go now refuses that spawn outright. The block said
+# in its own words that it was a backstop until the spawn was pinned down; it
+# has been. An ignore kept for a writer that can no longer write is a claim
+# nobody can check, and deleting it is how the fix is verified — `git status`
+# stays clean across a full suite run with nothing hiding it.
 
 # Claude Code's per-repo settings (approvals, local config). Machine-local
 # state, never content this repo ships — and the first live /adopt was
