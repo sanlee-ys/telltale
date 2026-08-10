@@ -27,7 +27,7 @@ var embedded = []string{
 	// the token relay — §7.16's generated render.
 	"spend-cursor",
 	// the fleet usage view — §7.17's generated renders.
-	"usage-fleet", "usage-empty",
+	"usage-fleet", "usage-empty", "usage-models", "usage-stale-relay",
 }
 
 // notEmbedded lists goldens deliberately kept out of the design doc, with the
@@ -41,6 +41,8 @@ var notEmbedded = map[string]string{
 	"readme":         "drawn into README.md's hero picture; see TestReadmeHeroImagesAreTheHudThatRenders",
 	"usage-floor":    "same fixture as usage-fleet at 60 columns; §7.17 describes the shed in prose",
 	"usage-ascii":    "same fixture as usage-fleet in the reduced glyph set; §7.17 states the claim survives it",
+	"usage-stale-ascii": "same fixture as usage-stale-relay in the reduced glyph set; " +
+		"§7.17 quotes the escalated heading inline as a one-line literal",
 }
 
 // The design doc is a contract, and a contract that drifts from the code is
