@@ -131,13 +131,43 @@ what you find here.
 
 ## `telltale doctor`
 
-Same shape as the adapters: every version probe behind the doctor report was
-measured on this Windows box only (2026-08-09) — five installs, five
-`--version` answers. Path resolution reuses council's own detection, portable
-by construction, but no macOS run is recorded, and cursor's POSIX entry point
-taking the bare `--version` is true by construction there, not by measurement.
-Treat a wrong-looking doctor row on the Mac as unverified rather than broken,
-and record what you find here.
+The Windows box ran it first (2026-08-09) — five installs, five `--version`
+answers. **The Mac has now run it too** (2026-08-10, Intel x86_64, macOS 26.5.2,
+a binary built from `main` at `9b67e04`), so path resolution and the version
+probes are measured on both platforms rather than portable-by-construction on
+one:
+
+| seat | binary | version |
+|---|---|---|
+| `claude` | `~/.local/bin/claude` | `2.1.222 (Claude Code)` |
+| `codex` | `/usr/local/bin/codex` | `codex-cli 0.146.0` |
+| `agy` | `~/.local/bin/agy` | `1.1.10` |
+| `cursor` | `~/.local/bin/cursor-agent` | `2026.08.04-aaa8809` |
+| `grok` | **`binary FAILED`** | not checked — no binary to run |
+
+All four installed seats report `drivable ok` as **native executables**, which is
+the row that matters beyond the version string: it is the measurement behind
+"the prompt goes in argv and no shell sees it", so the brief's argv transport
+holds on macOS and does not depend on a shell quoting it. Cursor's POSIX entry
+point taking the bare `--version` was true by construction here; it is now true
+by measurement.
+
+**A cold run is several seconds slower than a warm one, and the report says so
+per seat.** First run after boot: `claude` 3.89s, `cursor` 2.74s, the other two
+under 0.6s. Immediately re-run, every probe came back under 1s. The probe is
+launching a real vendor binary, so the first one pays that vendor's start-up —
+don't read a multi-second `--version` row as a hung seat, and don't quote a warm
+number as the cost of the check.
+
+`grok` is **not installed on this box**, which is a capability gap and not a
+doctor defect — the row is the report working. It refutes nothing the Grok seat
+claims: the four grok questions this file lists as unverified off Windows need an
+install before they can be answered, and they stay unverified. That install is
+queued as a dated Mac entry in `dotfiles/PARITY.md`; fold anything further into
+that entry rather than opening a second one.
+
+Treat a wrong-looking doctor row on the Mac as unverified rather than broken, and
+record what you find here.
 
 ## Terminal profile
 
