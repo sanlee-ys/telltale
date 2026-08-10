@@ -1,5 +1,4 @@
  telltale  │  7 sessions  │  cx 1  ge 1  ag 3  cu 1  gr 1
-       ag gemini-weekly 38%  │  cc 5h 42%  7d 6% · 2h ago …
  ──────────────────────────────────────────────────────────
  fleet usage  quota has a limit; spend has none  ━━━━━━━━━━
 
@@ -24,5 +23,6 @@
         models         composer-2.5
 
  grok  no quota anywhere
+        models         grok-4.5
  ──────────────────────────────────────────────────────────
  esc close   ↑/↓ scroll

@@ -307,8 +307,17 @@ func scanSpendByVendor(st State) map[model.VendorID]scanSpend {
 	return out
 }
 
-// usageLines renders the body.
-func usageLines(st State, sty Styles, g Glyphs) []string {
+// usageLines renders the body, into a known number of rows.
+//
+// `room` is the body region's height, and it is a parameter rather than
+// something this function could do without: the page's vertical rhythm is
+// decided against it (usageAir). Every other body in the HUD renders at its
+// natural length and lets Render pad the remainder, which is right for a grid
+// — a list of rows ends where the rows end. It is wrong for a PAGE, and §7.17's
+// field report (2026-08-09) is what the difference looks like: on a tall
+// terminal the content stopped around 40% and the rest was blank, so a surface
+// deliberately built to be READ trailed off into nothing like a truncated file.
+func usageLines(st State, room int, sty Styles, g Glyphs) []string {
 	cells := usageGaugeFor(st.Width)
 	out := []string{usageHeading(st, sty, g)}
 
@@ -321,11 +330,69 @@ func usageLines(st State, sty Styles, g Glyphs) []string {
 		return append(out, "", strings.Repeat(" ", usageIndent)+
 			sty.Muted.Render("no vendor on this machine has reported a quota reading or a token count"))
 	}
+
+	body := make([][]string, 0, len(blocks))
+	natural := len(out)
 	for _, b := range blocks {
-		out = append(out, "")
-		out = append(out, usageBlockLines(st, b, cells, sty, g)...)
+		lines := usageBlockLines(st, b, cells, sty, g)
+		body = append(body, lines)
+		natural += 1 + len(lines)
+	}
+
+	gap := usageAir(natural, room, len(blocks))
+	for i, lines := range body {
+		// The first block's single blank is the heading's own threshold and it
+		// never grows: widening it would push the whole page down the screen,
+		// which is vertical centring arriving by the back door. The §7.x anchor
+		// rulings hold — the page starts where the page starts.
+		n := gap
+		if i == 0 {
+			n = 1
+		}
+		for j := 0; j < n; j++ {
+			out = append(out, "")
+		}
+		out = append(out, lines...)
 	}
 	return out
+}
+
+// usageAir decides how many blank rows separate two vendor blocks: one, or two
+// when the page has the rows to spare.
+//
+// **This reverses half of §7.17's air-and-alignment ruling, and the reversal is
+// narrow.** §9.26's argument — a second weight is worth only what it is scarce
+// — stands, and it is why the vendor headings still get no rule. The line it
+// also produced, that "a one-row gap is the threshold and two rows is nothing
+// the design asked for", was decided under a LINE BUDGET, on the assumption
+// that a row spent on air is a row taken from a fact. On a tall terminal that
+// assumption is simply false: the rows are there, unspent, and the choice is
+// not air-versus-fact but air-versus-void.
+//
+// So the second row is never a design fiat and never a constant. It appears
+// only when the page would otherwise leave MORE blank rows at the bottom than
+// the widened gaps consume, which makes it a redistribution of air the page
+// already has rather than an invention of any. On a short terminal the page is
+// tight, exactly as before, and nothing about §7.17's shed behaviour moves.
+//
+// **It stops at two, and the cap is the whole argument for it being honest.**
+// Distributing ALL the surplus — justifying the blocks down to the closing rule
+// — was the obvious alternative and it is rejected on two counts. It makes gap
+// height a function of terminal height and block count, so the distance between
+// two vendors would encode nothing while looking like it encoded something; and
+// it puts every gap on a variable, so one grok session appearing reshuffles the
+// vertical position of every block below it, against §7.1 rule 4's one-cell
+// churn budget. Air that says "these are separate things" has to be a constant
+// to say it. Two rows say it twice as clearly as one and still say the same
+// thing on every frame.
+func usageAir(natural, room, blocks int) int {
+	if blocks < 2 {
+		return 1
+	}
+	if natural+blocks-1 > room {
+		return 1
+	}
+	return 2
 }
 
 // usageHeadingNotes states the view's organizing distinction, in three dress

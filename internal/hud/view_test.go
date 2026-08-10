@@ -505,6 +505,15 @@ func usageStaleRelayState(w, h int) State {
 	return st
 }
 
+// usageTallState is the void, reconstructed: the fleet fixture in a terminal
+// tall enough that the page used to stop around 40% and fade into nothing.
+//
+// It pins BOTH halves of the §7.17 fix and it has to, because either alone
+// still reads as unfinished — the gaps between vendor blocks widen to two rows
+// (usageAir), and the closing rule is drawn where the content stops rather than
+// at the frame's bottom edge, so the leftover rows are visibly outside the page.
+func usageTallState(w, h int) State { return usageFleetState(w, h) }
+
 // usageModelsState is the models census's own scenario, and it holds every case
 // the row has to get right in one frame:
 //
@@ -965,6 +974,13 @@ func goldenCases() []goldenCase {
 		// The same escalation in the reduced set. The claim is carried by the
 		// glyph and the sentence, so `!` replaces `⚠` and nothing else moves.
 		{name: "usage-stale-ascii", ascii: true, state: func() State { return usageStaleRelayState(120, 27) }},
+
+		// The void (§7.17, amended 2026-08-09). The same fleet fixture in a
+		// terminal with rows to spare: the blocks breathe into two-row gaps
+		// instead of crowding the top, and the closing rule sits under the last
+		// block rather than at the frame's bottom, so what is left over reads as
+		// unused terminal instead of an unfinished page.
+		{name: "usage-tall", state: func() State { return usageTallState(120, 52) }},
 
 		// Find mode: the footer becomes the query line and says how to leave.
 		{name: "find-active", state: func() State {

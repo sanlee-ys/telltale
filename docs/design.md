@@ -2879,9 +2879,13 @@ actually say about each of my five vendors, and where it says nothing, why?* —
 is a paragraph per vendor, and a paragraph per vendor is a body, not a header. So `u` opens
 a third body over the row area, on the detail pane's precedent (§7.11): it replaces the
 grid rather than floating over it, because a panel covering the thing being monitored is a
-monitor you have to move to read. **The header is unchanged.** Both surfaces render the
-same readings from the same assembly, and the duplication is the point — one is for
-glancing at, one is for reading.
+monitor you have to move to read.
+
+**The header was left unchanged, and that was wrong for this one body** — see *the header
+stops repeating the page* below, which reverses it. Over the GRID the two surfaces render
+the same readings from the same assembly and the duplication is the point, one for glancing
+at and one for reading. Over this body there is nothing left to glance at: the reader is
+already looking at the read surface.
 
 #### The organizing insight, and it came from the measurement
 
@@ -2919,7 +2923,6 @@ golden, and the shape it took after the 2026-08-09 amendment below):
 
 ```
  telltale  │  7 sessions  │  codex 1  gemini 1  agy 3  cursor 1  grok 1
-                      ag gemini-weekly 38% ↻ 3h00m  │  cc 5h 42% ↻ 2h13m  7d 6% ↻ 5d00h · 2h ago  │  cx 7d 79% ↻ 22h48m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  fleet usage  quota is a reading against a limit; spend is a count with none  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -2945,6 +2948,7 @@ golden, and the shape it took after the 2026-08-09 amendment below):
  grok  no quota anywhere · no window, no ordinal, no reset time on its disk
         models         grok-4.5
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
  esc close   ↑/↓ scroll
 ```
 
@@ -2971,6 +2975,9 @@ Five things in that frame are doing work:
 - **`gemini` is one line, and it is a line rather than a row of dashes.**
 - **`cursor` and `grok` have a sentence each and no numbers, and the sentences differ**
   because the measurements behind them do.
+- **The header above it is identity only.** It carried the quota strip when this view
+  shipped; the amendment below took it off, because every figure on it is restated
+  underneath with room.
 
 #### Three kinds of nothing, and the one that had to collapse
 
@@ -3001,10 +3008,10 @@ dashes, because a table of nothing is a table asserting it measured five things
  fleet usage  quota is a reading against a limit; spend is a count with none  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         no vendor on this machine has reported a quota reading or a token count
-
-
-
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
  esc close   ↑/↓ scroll
 ```
 
@@ -3022,7 +3029,7 @@ The third one had already cost something real, which is why it is the longest it
 `models` row naming the model display names this scan saw under that vendor.
 
 ```
- telltale  │  6 sessions  │  claude 4  codex 1  gemini 1                               codex 7d █████▌──   79% ↻ 22h48m
+ telltale  │  6 sessions  │  claude 4  codex 1  gemini 1
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  fleet usage  quota is a reading against a limit; spend is a count with none  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -3121,6 +3128,10 @@ is nothing the design asked for. And a light rule under each vendor heading, for
 scarcity reason above; air is the boundary strength this body can afford, and it already
 has it.
 
+> **The first of those was reversed on 2026-08-09** — narrowly, and only where the rows are
+> otherwise going to waste. See *the page stops trailing off*. The rule under each vendor
+> heading stands declined.
+
 #### An old reading has to look old (the 19-hour incident)
 
 **What happened, 2026-08-09.** A Claude relay entry written nineteen hours earlier
@@ -3137,7 +3148,6 @@ chrome on that line.
 
 ```
  telltale  │  7 sessions  │  codex 1  gemini 1  agy 3  cursor 1  grok 1
-                            ag gemini-weekly 38% ↻ 3h00m  │  cc 7d 15% ↻ 4d07h · ⚠ stale 19h ago  │  cx 7d 79% ↻ 22h48m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  fleet usage  quota is a reading against a limit; spend is a count with none  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -3162,6 +3172,7 @@ chrome on that line.
  grok  no quota anywhere · no window, no ordinal, no reset time on its disk
         models         grok-4.5
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
  esc close   ↑/↓ scroll
 ```
 
@@ -3365,8 +3376,138 @@ Added by the reading pass:
   spend line's argument, one field over.
 - **A second escalation step for the relay's age**, and a per-block threshold parsed out of
   a window label. Both above.
-- **A second blank row between blocks, and a light rule under each vendor heading.** The
-  air-and-alignment note above.
+- **A light rule under each vendor heading.** The air-and-alignment note above. (A second
+  blank row between blocks was on this list too, and came off it — see below.)
+
+#### Amended 2026-08-09: the header stops repeating the page
+
+**The defect, from driving the real thing.** With the usage body open the header still drew
+the full quota strip — two cramped rows of
+`ag 3p-5h 0% ↻2h10m 3p-weekly 0% … cc 5h 40% ↻2h17m 7d 62% … cx 7d 37% … cursor spent in
+47.8k out 66 …`. Every fact on them is stated properly in the blocks four rows below, with
+a label column, a 20-cell gauge and the provenance sentence the strip has no room for. It
+was the same measurement twice, once cramped and once legible, with the cramped copy on
+top, and it was the ugliest thing on the screen.
+
+**Over the `u` body the header collapses to identity and session counts** —
+`telltale │ 144 of 1380 sessions │ claude 961 codex 299 …` — and the quota strip does not
+render. The grid keeps today's header exactly. Two rows come back to the body.
+
+This **reverses #163**, which ruled the header untouched when this view landed. #163 was
+right for the grid and wrong for this page, and the principle worth keeping is the one that
+distinguishes them:
+
+> A **glance** surface may not repeat the **read** surface it sits above.
+
+The glance line earns its rows by being the only statement of a fact. Over the grid it is:
+account quota appears nowhere else, so the strip buys a fact that is otherwise off screen.
+Over the page built to state those same facts at length, it buys nothing and costs two of
+the rows that page is short of. Identity survives the collapse for exactly that test — the
+session census is not restated anywhere below, because the usage blocks speak about
+accounts and never about sessions.
+
+One consequence worth naming: at the 60-column floor the recovered row is enough for
+`grok`'s census row to fit, which it did not before. The fix pays for itself in content on
+the narrowest terminal telltale renders on.
+
+#### Amended 2026-08-09: the page stops trailing off
+
+**The defect, same session.** On a tall terminal the content stopped around 40% of the way
+down and the rest was blank. Nothing was wrong with any line; the page simply had no bottom.
+A surface built to be *read* trailed off like a truncated file.
+
+Council solved this exact problem twice (§9.23's contiguous rails, §9.11's boundary-strength
+grammar) and neither answer ports: the HUD has no rails, and importing them would give this
+one body a vocabulary no other surface in the product speaks. The fix is in the HUD's own
+language, and it is two moves that only work together.
+
+**1. The closing rule hugs the content.** The frame's bottom rule was already being drawn —
+sixty rows below the last vendor block, where it reads as the terminal's edge rather than as
+the page's. Moved to where the content stops, the same rule makes the body a bounded region
+with a visible bottom edge, and the leftover rows fall *outside* it: unused terminal, not
+unfinished page. This is §9.11's boundary-strength grammar with the weight the frame already
+owns, moved — no new glyph, no new hue, no second rule. The grid is untouched, because its
+body is a list and a list that ends early has ended; a hard edge under a row area still open
+for more rows would claim something false.
+
+**2. The blocks breathe into two-row gaps.** This is the reversal of the air-and-alignment
+ruling above, and it is narrow. That ruling was made under a **line budget**, on the
+assumption that a row spent on air is a row taken from a fact. On a tall terminal the
+assumption is false — the rows are there, unspent — and the real choice is air versus void.
+So the second row is never a constant and never a fiat: it appears only when the widened
+gaps consume fewer rows than the page would otherwise leave blank at the bottom, which makes
+it a **redistribution of air the page already has**. Short terminal, tight page, exactly as
+before. The gap before the *first* block never grows, so the page still starts where the
+page starts — the §7.x anchor rulings hold and this is not vertical centring.
+
+**It stops at two, and the cap is the argument.** Distributing all the surplus — justifying
+the blocks down to the closing rule — was the obvious alternative and is declined twice
+over. It makes gap height a function of terminal height and block count, so the distance
+between two vendors would encode nothing while looking like it encoded something. And it
+puts every gap on a variable, so one grok session appearing reshuffles the vertical position
+of every block below it, against §7.1 rule 4's one-cell churn budget. Air that says "these
+are separate things" has to be a constant to say it.
+
+Also declined: **inventing content to fill the space** (a fleet total is §7.17's own
+rejected list; anything else would be a number nobody measured), and **centring the block
+vertically**.
+
+The `usage-tall` golden pins both halves at 52 rows:
+
+```
+ telltale  │  7 sessions  │  codex 1  gemini 1  agy 3  cursor 1  grok 1
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ fleet usage  quota is a reading against a limit; spend is a count with none  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ claude  quota relayed by the statusline · 2h ago
+        5h             ████████────────────    42%  ↻ 2h13m
+        7d             █▏──────────────────     6%  ↻ 5d00h
+
+
+ codex  quota read from its own store, this scan
+        models         gpt-5.1-codex
+        7d             ███████████████─────    79%  ↻ 22h48m
+
+
+ gemini  no quota reaches disk anywhere telltale can read
+        models         gemini-3-pro
+
+
+ agy  quota relayed by the statusline
+        models         Gemini 3.6 Flash (High)
+        gemini-weekly  ███████▎────────────    38%  ↻ 3h00m
+        spent          uncached in 1.2M · out 13.1k  · summed across 2 sessions on disk, this scan
+
+
+ cursor  no quota anywhere · its store holds experiment values, not usage
+        models         composer-2.5
+
+
+ grok  no quota anywhere · no window, no ordinal, no reset time on its disk
+        models         grok-4.5
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ esc close   ↑/↓ scroll
+```
 
 #### Per-vendor hues: ratified, and exactly as far as council's went
 
@@ -3432,11 +3573,19 @@ Declined inside the ratification, and the list is closed:
 
 - **An aged-out relay reading is indistinguishable from one that never arrived**, by the
   trade in the table above. Both render as "no quota relayed yet".
-- **The header and this view say some of the same things twice.** That is deliberate — the
-  header is for glancing and this is for reading — but it does mean a reading appears in
-  two places on screen while the view is open, and a future change to one has to be made in
-  both. `quotaVendors` being shared by both surfaces is what keeps them from disagreeing
-  about *which* source speaks for a vendor; nothing yet keeps them from diverging in tone.
+- **The header and this view still say some of the same things twice — just never at the
+  same moment.** The 2026-08-09 amendment above removed the on-screen overlap by collapsing
+  the header while this body is open, so no reading appears in two places in one frame any
+  more. What survives is the *maintenance* half of the limitation: two renderers still speak
+  for the same measurement, and a future change to one has to be made in both.
+  `quotaVendors` being shared by both surfaces is what keeps them from disagreeing about
+  *which* source speaks for a vendor; nothing yet keeps them from diverging in tone.
+- **The void fix is decided per frame, so a resize can change the gaps.** `usageAir` widens
+  the blocks apart only when the taller layout still fits, which means dragging a terminal
+  across the threshold moves every gap by a row at once. It is a resize, not a tick — §7.1
+  rule 4 budgets *frame-to-frame* churn on a still screen and this cannot fire on one — but
+  it is a visible jump at the boundary rather than a smooth one, and smoothing it would mean
+  the variable-height gaps the amendment declines.
 - **The absence sentences are per-vendor literals**, so a seventh vendor arrives with the
   fallback wording (`no quota telltale can read`) until someone measures its seam and gives
   it a sentence. That is the honest default — it claims nothing about a seam nobody has
