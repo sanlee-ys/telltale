@@ -1,0 +1,18 @@
+ telltale  │  7 sessions  │  codex 1  gemini 1  agy 3  cursor 1  grok 1
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ this week  each vendor's longest window, and every window it names weekly  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ claude 7d             █▏──────────────────     6%  ↻ 5d00h  · 2h ago
+ codex  7d             ███████████████─────    79%  ↻ 22h48m
+ gemini   no quota reaches disk anywhere telltale can read
+ agy    3p-weekly      ────────────────────     0%  ↻ 6d23h
+        gemini-weekly  ███████▎────────────    38%  ↻ 6d23h
+ cursor   no quota anywhere · its store holds experiment values, not usage
+ grok     no quota anywhere · no window, no ordinal, no reset time on its disk
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+ esc close   ↑/↓ scroll

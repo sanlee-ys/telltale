@@ -54,9 +54,10 @@ func Render(st State, sty Styles, g Glyphs) string {
 
 	headerDim := sty.Dim(st.scanAge() > criticalAfter && !st.Snap.At.IsZero())
 	// The glance strip does not render over the surface that reads the same
-	// data properly (§7.17, amended 2026-08-09). See headerLines.
+	// data properly (§7.17, amended 2026-08-09; §7.19 rides the same rule).
+	// See headerLines.
 	quota := ""
-	if !st.Usage {
+	if !st.Usage && !st.Week {
 		quota = quotaBlock(st, headerDim, g, st.Width)
 	}
 	header := headerLines(st, lay, quota, sty, g)
@@ -65,7 +66,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 	// The column-header row names the grid, so it appears only when the body
 	// IS the grid. Over a help overlay, a detail pane or an empty state it
 	// would label columns that are not on screen.
-	showColumns := full && !st.Help && !st.Detail && !st.Usage && len(rows) > 0
+	showColumns := full && !st.Help && !st.Detail && !st.Usage && !st.Week && len(rows) > 0
 
 	chrome := len(header) + 1 // + footer
 	if full {
@@ -89,6 +90,10 @@ func Render(st State, sty Styles, g Glyphs) string {
 		// own age (§7.15, §7.16) — borrowing the row area's staleness would
 		// de-emphasize readings whose freshness the scan does not describe.
 		body = usageLines(st, bodyHeight, sty, g)
+	case st.Week:
+		// Undimmed for the usage view's reason: these readings carry their
+		// own age (§7.15), not the scan's.
+		body = weekLines(st, sty, g)
 	case st.Help:
 		body = helpLines(st, lay, hasCtx, hasCost, sty, g)
 	case st.Detail:
@@ -139,7 +144,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 	if slack < 0 {
 		slack = 0
 	}
-	pageClosesItself := full && st.Usage
+	pageClosesItself := full && (st.Usage || st.Week)
 
 	out := make([]string, 0, st.Height)
 	out = append(out, header...)
@@ -1126,6 +1131,7 @@ func helpLines(st State, lay Layout, hasCtx, hasCost bool, sty Styles, g Glyphs)
 		// inside the 45 columns the 60-column floor leaves this column —
 		// TestNoLineExceedsTheTerminalWidth is what enforces that budget.
 		{"u", "what each vendor has left, and what it spent"},
+		{"w", "this week: the fleet's slow windows only"},
 		{"/", "find: narrow rows by name or path"},
 		{"esc", "close the pane, or cancel the find, or quit"},
 		// The cycle separator is "> " and not "-> " for one reason: a fourth
@@ -1220,7 +1226,7 @@ func footerLine(st State, visible, hiddenBelow int, sty Styles, g Glyphs) string
 	switch {
 	case st.Help:
 		keys = " " + sty.Muted.Render("? close")
-	case st.Usage:
+	case st.Usage, st.Week:
 		// "esc close" rather than "u close", matching the detail pane. Both
 		// keys close it, and esc is the one the reader already has a reflex
 		// for; the toggle is taught by the footer hint that opened the view
@@ -1237,8 +1243,10 @@ func footerLine(st State, visible, hiddenBelow int, sty Styles, g Glyphs) string
 		// "u usage" sits beside "enter detail" because it is the same kind of
 		// hint — a door into a body that replaces the grid — and it sheds on
 		// the same tier boundary for the same reason: below 80 columns the
-		// footer keeps only the keys nothing else can teach.
-		hints := []string{"q quit", "/ find", "enter detail", "u usage", "v vendor", "s sort", "a all", "? keys"}
+		// footer keeps only the keys nothing else can teach. "w week" rides
+		// beside its sibling door at the wide tier only; the compact footer
+		// already teaches `u`, and the help overlay teaches the rest.
+		hints := []string{"q quit", "/ find", "enter detail", "u usage", "w week", "v vendor", "s sort", "a all", "? keys"}
 		switch tierFor(st.Width) {
 		case TierNarrow:
 			hints = []string{"q quit", "/ find", "? keys"}

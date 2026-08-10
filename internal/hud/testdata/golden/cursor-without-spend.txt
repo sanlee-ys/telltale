@@ -7,4 +7,4 @@
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys

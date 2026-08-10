@@ -215,12 +215,15 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// of, an esc that closed the program instead of the pane would punish
 		// the reflex it trained.
 		//
-		// The usage view takes the first step. Order among the bodies is not
+		// The week page takes the first step. Order among the bodies is not
 		// arbitrary: they are mutually exclusive, so at most one of the first
-		// three cases can be true, and listing the newest first keeps the
+		// four cases can be true, and listing the newest first keeps the
 		// chain reading as "close whatever is open, then unwind the state
 		// underneath it".
 		switch {
+		case m.st.Week:
+			m.st.Week = false
+			m.st.Scroll = 0
 		case m.st.Usage:
 			m.st.Usage = false
 			m.st.Scroll = 0
@@ -245,6 +248,7 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.st.Detail {
 			m.st.Help = false
 			m.st.Usage = false
+			m.st.Week = false
 			m.st.Scroll = 0
 			if m.st.Cursor < 0 {
 				// enter with no selection opens the top row: the sort already
@@ -257,6 +261,7 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.st.Detail = false
 		m.st.Help = false
 		m.st.Usage = false
+		m.st.Week = false
 		m.st.Scroll = 0
 	case "u":
 		// One body at a time (§7.17). The usage view replaces the row area the
@@ -267,6 +272,15 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.st.Usage = !m.st.Usage
 		m.st.Detail = false
 		m.st.Help = false
+		m.st.Week = false
+		m.st.Scroll = 0
+	case "w":
+		// The week page (§7.19) is a sibling door to `u`, not a mode inside
+		// it: one key, one body, and the same one-body-at-a-time rule.
+		m.st.Week = !m.st.Week
+		m.st.Detail = false
+		m.st.Help = false
+		m.st.Usage = false
 		m.st.Scroll = 0
 	case "v":
 		m.st.Filter = m.st.Filter.Next()
@@ -286,13 +300,15 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.st.Help = !m.st.Help
 		m.st.Detail = false
 		m.st.Usage = false
+		m.st.Week = false
 		m.st.Scroll = 0
 	case "up", "k":
-		// Over the help overlay and the usage view the arrows scroll the body;
-		// everywhere else they move the selection. The rule is "the arrows move
-		// whatever the body is": neither of those bodies has rows to select,
-		// and the row area has nothing to scroll independently of the cursor.
-		if m.st.Help || m.st.Usage {
+		// Over the help overlay, the usage view and the week page the arrows
+		// scroll the body; everywhere else they move the selection. The rule
+		// is "the arrows move whatever the body is": none of those bodies has
+		// rows to select, and the row area has nothing to scroll independently
+		// of the cursor.
+		if m.st.Help || m.st.Usage || m.st.Week {
 			if m.st.Scroll > 0 {
 				m.st.Scroll--
 			}
@@ -300,7 +316,7 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.moveCursor(-1)
 	case "down", "j":
-		if m.st.Help || m.st.Usage {
+		if m.st.Help || m.st.Usage || m.st.Week {
 			// Bounded against the body's own length rather than left to grow:
 			// Render clamps the viewport anyway, but an offset that keeps
 			// counting past the end takes as many keypresses to come back as
@@ -329,6 +345,9 @@ func (m *Model) scrollBody() []string {
 		// Measuring the aired page here would hand `j` a bound that describes a
 		// layout the reader is not looking at.
 		return usageLines(m.st, 0, m.styles, m.glyphs)
+	}
+	if m.st.Week {
+		return weekLines(m.st, m.styles, m.glyphs)
 	}
 	rows := visibleSessions(m.st)
 	hasCtx, hasCost := columnsInUse(rows)

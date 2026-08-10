@@ -28,6 +28,8 @@ var embedded = []string{
 	"cursor-without-spend",
 	// the fleet usage view — §7.17's generated renders.
 	"usage-fleet", "usage-empty", "usage-models", "usage-stale-relay", "usage-tall",
+	// the week page — §7.19's generated render.
+	"week",
 	// the grok seam — §3.9a, pasted beside the survey rather than in §7.3
 	// because the claim it proves is about that VENDOR, not about the grid: a
 	// store that holds real money renders with the COST column dropped.
@@ -47,6 +49,8 @@ var notEmbedded = map[string]string{
 	"usage-ascii":    "same fixture as usage-fleet in the reduced glyph set; §7.17 states the claim survives it",
 	"usage-stale-ascii": "same fixture as usage-stale-relay in the reduced glyph set; " +
 		"§7.17 quotes the escalated heading inline as a one-line literal",
+	"week-stale": "usage-stale-relay's fixture through the §7.19 lens; " +
+		"§7.19 quotes the escalated row inline as a one-line literal",
 }
 
 // The design doc is a contract, and a contract that drifts from the code is

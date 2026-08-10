@@ -1044,7 +1044,7 @@ the workspace and its CONTEXT is an em dash rather than a zero:
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 **Adapter built, same day (`internal/adapter/grok`).** Name, model, workspace, context %
@@ -1775,7 +1775,7 @@ shows what the real v1 capability mix produces.
  ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 Row 3 is the honest-gauge case in its normal habitat: a session whose adapter can source
@@ -1824,7 +1824,7 @@ sorted by activity, so they do not appear in the order they are described.
  ◐ CX │ 4f2a9c81-1d3e-4a77-9b02-000000000000                                                          —        — │   7m
    CC │ acme-api  C:\src\work                                        Sonnet 4.5                       —    $1.02 │    —
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 Row 1 is at exactly 0% and draws a full track. Row 2 is the label-overflow case,
@@ -1846,7 +1846,7 @@ staleness.
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 `0%` is a full track of `────────────`; absent is whitespace. If these two rows ever
@@ -1867,7 +1867,7 @@ overflowing at any width.
  ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys  ⚠ last scan 47s ago   Access is denied.
+                                                                                ⚠ last scan 47s ago   Access is denied.
 ```
 
 **F — filter and sort active (120 cols).** The header count reads `3 of 4` so it cannot
@@ -1883,7 +1883,7 @@ footer, because a monitor that silently hides rows is a liar.
  ● CC │ acme-api  C:\src\work                                        Sonnet 4.5     ████▌───────    41%    $0.18 │  48s
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys             filter claude   sort context
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys    filter claude   sort context
 ```
 
 **G — empty (120 cols).** Distinguishes "watching, found nothing" from "vendor not
@@ -1901,7 +1901,7 @@ error dialog.
                              cursor   not detected   %APPDATA%\Cursor\User
                              gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 The vendor status word is one of exactly four: `watching` (directory exists and is
@@ -1923,7 +1923,7 @@ the Codex line reads `not detected`, since `~/.codex` is absent (§3.2). The thi
                        cursor   not detected   %APPDATA%\Cursor\User
                        gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 `drifted` is the word the other three cannot say. Those three are all answers from
@@ -1959,7 +1959,7 @@ that revealed it. The ordinary case is render M. The fourth word:
                            cursor   not detected   %APPDATA%\Cursor\User
                            gemini   not detected   %USERPROFILE%\.gemini\tmp
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys                          ⚠ codex drifted
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys                 ⚠ codex drifted
 ```
 
 **H — help overlay (120 cols).** Replaces the row area rather than floating over it; a
@@ -1973,6 +1973,7 @@ floating panel on a monitor obscures the thing being monitored.
         ↑/↓    move the selection  (also j / k)
         enter  open the detail pane for the selected session
         u      what each vendor has left, and what it spent
+        w      this week: the fleet's slow windows only
         /      find: narrow rows by name or path
         esc    close the pane, or cancel the find, or quit
         v      vendor: all > claude > codex >
@@ -2006,7 +2007,7 @@ it rather than computing one (§3.9).
  ● AG │ 4c8b21a7  C:\src\code                                                 Gemini 3.6 F…                    — │   2m
  ◐ GE │ glossary tooltips ⑂~2  c:\src\code                                    gemini-3-pro                     — │   3m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 This render is the one to look at when judging §6 Q7. The ragged CONTEXT column is the
@@ -2023,7 +2024,7 @@ cost of option (2); it is honest, and whether it is *legible* is a dogfood quest
  ○ CC │ learning-notes  C:\src\code                                                                Haiku 4.5     │  22m
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 **L — ASCII glyph mode (120 cols).** `--ascii`, `TELLTALE_ASCII=1`, or a non-terminal
@@ -2040,7 +2041,7 @@ the precision.
  o CX | notes-api  C:\src\code                                       gpt-5.1-codex                  n/a      n/a |   4m
  . CC | learning-notes  C:\src\code                                  Haiku 4.5      ##########--  92.6%   $11.07 |  22m
  ----------------------------------------------------------------------------------------------------------------------
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 **M — shape drift (120 cols).** A store that reads fine and no longer matches. Every row
@@ -2065,7 +2066,7 @@ a reader could not trust to be there.
  ◐ CX │ 00000000-bbbb-4ccc-8ddd-000000000001                                                          —        — │   4m
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys                          ⚠ codex drifted
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys                 ⚠ codex drifted
 ```
 
 ### 7.4 The gauge
@@ -2517,7 +2518,7 @@ column on every row forever to serve a mark that is off most of the time.
  ◐ CX │ 4f2a9c81-1d3e-4a77-9b02-000000000000                                                                     │   7m
  ○ CC │ learning-notes ⑂~5  C:\src\code                                                            Haiku 4.5     │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 That frame is also §7.13's: row 2 measured **zero** sub-agents and therefore draws no
@@ -2546,7 +2547,7 @@ quota is a property of the account):
  ◐ CX │ notes-api  C:\src\code                                       gpt-5.1-codex                    —        — │   4m
  ○ CC │ learning-notes  C:\src\code                                  Haiku 4.5      ██████████▏─  92.6%   $11.07 │  22m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 Both windows in that frame have the same 7 samples over the same 18 minutes. The 5h window
@@ -2638,7 +2639,7 @@ and once applied, with the mode left:
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys                               find "api"
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys                      find "api"
 ```
 
 Four rules, all of them the same rule — **a monitor that hides rows must say so**:
@@ -2717,7 +2718,7 @@ an ellipsis says so — the footer's dropping-is-never-silent rule. The generate
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 At 120 columns three vendors and four windows already shed to tags-without-gauges;
@@ -2894,7 +2895,7 @@ there were three, Cursor's row still on the grid, and its quota still visibly no
 
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
 ```
 
 #### The boundary amendment
@@ -3816,6 +3817,91 @@ files) and drops to 50 sessions under `-short`.
 Codex's 138 ms is the next-largest item and is now co-dominant with everything else put
 together. It is left alone: the scan is an order of magnitude inside its budget, and the
 same cache would need its own correctness argument against its own read path.
+
+### 7.19 `w`: the week page — the slow windows, one line per vendor (2026-08-09)
+
+The owner's question, verbatim: "one view of the weekly usage for these models — it would
+help with scoping work." §7.17 already holds every reading that view needs and spends a
+block per vendor to say it, with the census, the spend lines and the five-hour windows in
+between. A scoping glance wants none of those; it wants the slow pools, one line each. So
+`w` opens a LENS over §7.17's data — the same `quotaVendors`/`usageBlocks` assembly, so the
+two surfaces cannot disagree about an account — rendered as a tight table.
+
+**Which windows, and why the rule is honest.** The page shows every window the vendor
+itself names weekly, plus the vendor's longest. Neither leg infers a duration, which is the
+constraint that shaped this section (§4a.1; quotaAgeWarn's ruling that a length parsed out
+of "5h" or "seven_day" is a guess wearing a fact's clothes):
+
+- the `-weekly` suffix is vendor vocabulary read verbatim — agy names its buckets
+  ("3p-weekly", "gemini-weekly" observed, §3.8) and quotacache carries the names as ids
+  unchanged. Reading the vendor's own suffix is reading, not translating.
+- the LAST window rides `model.QuotaWindow`'s ordering contract — "display order, shortest
+  first" — so it is the vendor's longest pool by structure rather than by arithmetic.
+  Claude's slice ends on `seven_day`, Codex's on `secondary`. No id is parsed for a length,
+  and each row renders the vendor's own label beside the reading, so the page never states
+  a duration the vendor did not.
+
+One edge is deliberate: a vendor whose only surviving window is short — Claude relayed
+after quotacache dropped an expired `seven_day` — shows that window under its own label.
+It is the longest reading telltale holds, and the label says how long it is.
+
+**What is kept off.** SPEND does not appear, and not because it is unimportant: a spend
+total's accumulation window is "sessions on disk, this scan" (§7.16) — not a week, not any
+calendar span — and rendering it under a page titled "this week" would claim a window the
+number does not have. The u page renders spend correctly, one key away. A vendor with no
+reading keeps §7.17's absence sentence rather than an em dash, because a dash would say
+"no reading now" about vendors that are structurally unreadable (§4a.1's three kinds of
+nothing). Sorting by remaining headroom was considered and rejected: readings, absences
+and two-window vendors do not order on one axis, and a page that reshuffles when a
+percentage moves spends §7.1 rule 4's churn budget to encode nothing the percentages do
+not already say.
+
+**The relayed age rides every row.** This page has no vendor headings to carry §7.15's
+age, so it rides each row as a suffix, and past quotaAgeWarn it escalates in the header's
+own grammar — the word (`stale`), the glyph, then the hue as the second signal. The REASON
+sentence does not travel here; §7.17 carries the argument, this page carries the alarm:
+
+```
+ claude 7d             ██▉─────────────────    15%  ↻ 4d07h  · ⚠ stale 19h ago
+```
+
+**The frame, generated by the build** (`internal/hud/testdata/golden/week.txt`; the
+week-stale variant is the golden quoted above). Both agy weekly pools under one vendor
+name, the second on a continuation row; the four five-hour buckets in the fixture render
+nowhere; 3p-weekly's measured 0% draws a full empty track while the three absence vendors
+draw sentences — zero and absent, still different states on the page built for a glance:
+
+```
+ telltale  │  7 sessions  │  codex 1  gemini 1  agy 3  cursor 1  grok 1
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ this week  each vendor's longest window, and every window it names weekly  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ claude 7d             █▏──────────────────     6%  ↻ 5d00h  · 2h ago
+ codex  7d             ███████████████─────    79%  ↻ 22h48m
+ gemini   no quota reaches disk anywhere telltale can read
+ agy    3p-weekly      ────────────────────     0%  ↻ 6d23h
+        gemini-weekly  ███████▎────────────    38%  ↻ 6d23h
+ cursor   no quota anywhere · its store holds experiment values, not usage
+ grok     no quota anywhere · no window, no ordinal, no reset time on its disk
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+ esc close   ↑/↓ scroll
+```
+
+**Known limitations, named:**
+
+- **"This week" is the page's name, not each row's claim.** Codex's `secondary` window is
+  selected for being the longest, not for being seven days; if the vendor ever reports a
+  different length there, the label beside the reading says so and the page needs no code
+  change. The title states the question the page answers, the labels state the facts.
+- **A new agy bucket that is weekly but not named `-weekly` would miss the suffix leg.**
+  It would still appear if it is the slice's last window; otherwise it waits for the
+  registry to learn the vendor's new word, which is the same posture every verbatim-
+  vocabulary surface here takes (§7.15's convert rule).
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 
