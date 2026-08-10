@@ -278,8 +278,21 @@ func TestCdTildeWithNoHomeIsRefused(t *testing.T) {
 // TestRunRejectsAMissingCdDirectory is the LoadBrief discipline on --cd: a
 // typed path that is not a directory is a plain error before the alternate
 // screen, not four seats failing their first turn.
+//
+// The saved room is PLANTED, and pointed at a workspace that does not exist.
+// Two reasons, and the second is why this test exists in the shape it does.
+// The first is coverage: --cd has to win over a restored workspace, and a room
+// whose own directory is also gone is the case where a bug could answer with
+// the saved-directory sentence instead of the typed-path refusal. The second is
+// hermeticity — the earlier version read whatever the developer's real
+// ~/.telltale/council held, so its verdict moved with the machine (see
+// tempHome). Planting the state makes the stale-workspace case the one that is
+// always exercised, rather than the one that shows up on a bad day.
 func TestRunRejectsAMissingCdDirectory(t *testing.T) {
-	tempHome(t)
+	home := tempHome(t)
+	if err := SaveRoom(savedRoom(filepath.Join(home, "renamed-away"))); err != nil {
+		t.Fatal(err)
+	}
 	err := Run(Options{Dir: filepath.Join(t.TempDir(), "gone")})
 	if err == nil || !strings.Contains(err.Error(), "not a directory") {
 		t.Fatalf("err = %v, want the --cd refusal", err)
