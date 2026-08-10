@@ -14,17 +14,29 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
-// tempHome redirects the saved-room directory into the test's own tree.
+// tempHome cuts the test off from every piece of council state the DEVELOPER's
+// machine happens to be carrying, and points it at the test's own tree.
 //
-// Both variables, because os.UserHomeDir reads USERPROFILE on Windows and HOME
-// everywhere else — and a test that got this wrong would not fail, it would
-// quietly write into the developer's real ~/.telltale/council and leave a room
-// behind that a later --resume would find.
+// Both home variables, because os.UserHomeDir reads USERPROFILE on Windows and
+// HOME everywhere else — and a test that got this wrong would not fail, it
+// would quietly write into the developer's real ~/.telltale/council and leave a
+// room behind that a later --resume would find.
+//
+// briefEnv is blanked for the mirror-image reason, and it is not hypothetical:
+// TELLTALE_COUNCIL_BRIEF is exactly the variable a real user of this room sets
+// once and forgets, so it is set on the maintainer's box and unset in CI.
+// TestRunRejectsAMissingCdDirectory went red on a clean checkout of a green
+// main the day that brief's repo was renamed out from under it — LoadBrief runs
+// first in Run and failed on the stale path, so the test reported the wrong
+// refusal while CI, which has no such variable, stayed green. A verdict that
+// depends on un-versioned machine state is the same class of defect as a Render
+// that reads the clock (CLAUDE.md): it does not fail where it is wrong.
 func tempHome(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("USERPROFILE", dir)
+	t.Setenv(briefEnv, "")
 	return dir
 }
 
