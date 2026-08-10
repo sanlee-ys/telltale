@@ -136,7 +136,14 @@ func TestAChangedTranscriptIsReparsed(t *testing.T) {
 	if err := os.WriteFile(path, []byte(rewrite[:same]), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chtimes(path, time.Now(), time.Now()); err != nil {
+	// The stamp is advanced off the file's own mtime, not taken from the clock.
+	// Chtimes(time.Now()) can land on the exact mtime the second read cached —
+	// two writes inside one Windows clock tick (15.6 ms on a quiet CI VM) share
+	// a stamp — and then the cache correctly serves the old parse and the test
+	// fails without a defect. The rewrite's mtime is never older than the cached
+	// one, so ten milliseconds past it is always a stamp the cache has not seen.
+	bump := statOf(t, path).ModTime().Add(10 * time.Millisecond)
+	if err := os.Chtimes(path, bump, bump); err != nil {
 		t.Fatal(err)
 	}
 	third, _ := mustRead(t, a).Model.Name()
