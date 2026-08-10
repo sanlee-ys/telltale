@@ -50,6 +50,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/adapter/codex"
 	"github.com/sanlee-ys/telltale/internal/adapter/cursor"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
+	grokadapter "github.com/sanlee-ys/telltale/internal/adapter/grok"
 	"github.com/sanlee-ys/telltale/internal/antigravity"
 	"github.com/sanlee-ys/telltale/internal/claude"
 	"github.com/sanlee-ys/telltale/internal/council"
@@ -256,7 +257,7 @@ func runDoctor(args []string) error {
 
 func runHUD(args []string) error {
 	fs := flag.NewFlagSet("telltale hud", flag.ContinueOnError)
-	vendor := fs.String("vendor", "all", "vendor filter at startup: all, claude, codex, gemini, agy, cursor")
+	vendor := fs.String("vendor", "all", "vendor filter at startup: all, claude, codex, gemini, agy, cursor, grok")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
 	if err := fs.Parse(args); err != nil {
@@ -280,7 +281,7 @@ func runHUD(args []string) error {
 		// is nothing to configure and nothing to fail.
 		Adapters: []model.Adapter{
 			claudecode.New(), codex.New(), gemini.New(),
-			agyadapter.New(), cursor.New(),
+			agyadapter.New(), cursor.New(), grokadapter.New(),
 		},
 		Filter:  filter,
 		ASCII:   useASCII,
@@ -365,8 +366,12 @@ func parseFilter(s string) (hud.Filter, error) {
 		// footer and the header count print. Both are accepted for the same
 		// reason both agy spellings are.
 		return hud.FilterCursor, nil
+	case "grok":
+		// One spelling, because grok's binary name and its product name are the
+		// same word (model.VendorGrok). There is no second thing to accept.
+		return hud.FilterGrok, nil
 	default:
-		return hud.FilterAll, errors.New("unknown --vendor " + s + " (want all, claude, codex, gemini, agy or cursor)")
+		return hud.FilterAll, errors.New("unknown --vendor " + s + " (want all, claude, codex, gemini, agy, cursor or grok)")
 	}
 }
 
@@ -399,7 +404,8 @@ usage:
   telltale version
 
 telltale hud flags:
-  --vendor all|claude|codex|gemini|agy|cursor   start with a vendor filter applied
+  --vendor all|claude|codex|gemini|agy|cursor|grok
+                              start with a vendor filter applied
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
 

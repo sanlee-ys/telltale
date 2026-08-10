@@ -28,6 +28,10 @@ var embedded = []string{
 	"spend-cursor",
 	// the fleet usage view — §7.17's generated renders.
 	"usage-fleet", "usage-empty",
+	// the grok seam — §3.9a, pasted beside the survey rather than in §7.3
+	// because the claim it proves is about that VENDOR, not about the grid: a
+	// store that holds real money renders with the COST column dropped.
+	"grok-row",
 }
 
 // notEmbedded lists goldens deliberately kept out of the design doc, with the

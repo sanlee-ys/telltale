@@ -1,0 +1,27 @@
+{
+  "info": {
+    "id": "00000000-1111-7222-8333-000000000001",
+    "cwd": "C:\\src\\code\\example-app"
+  },
+  "session_summary": "Example App Session",
+  "created_at": "2026-08-09T19:03:08.969851700Z",
+  "updated_at": "2026-08-09T19:14:28.231464800Z",
+  "num_messages": 68,
+  "num_chat_messages": 42,
+  "current_model_id": "grok-4.5",
+  "next_trace_turn": 3,
+  "chat_format_version": 1,
+  "git_root_dir": "C:/src/code/example-app/",
+  "git_remotes": [
+    "https://example.invalid/example/example-app.git"
+  ],
+  "head_commit": "0000000000000000000000000000000000000000",
+  "head_branch": "main",
+  "request_id": "00000000-0000-4000-8000-000000000aaa",
+  "grok_home": "C:\\src\\home\\.grok",
+  "last_active_at": "2026-08-09T19:14:28.231464800Z",
+  "generated_title": "Example App Session",
+  "agent_name": "grok-build-plan",
+  "sandbox_profile": "off",
+  "reasoning_effort": "high"
+}

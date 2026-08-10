@@ -1,0 +1,9 @@
+ telltale  │  2 sessions  │  grok 2
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                               MODEL          CONTEXT                AGE
+ ● GR │ Adapter Field Map Review  C:\src\code                                 grok-4.5       ▊───────────     7% │  20s
+ ◐ GR │ example-app  C:\src\code                                              grok-4.5                         — │   6m
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
