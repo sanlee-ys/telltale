@@ -17,8 +17,8 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                                                                                                                        
 ▌ no turn dispatched yet.               │  no turn dispatched yet.              │  no turn dispatched yet.              
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  › should council resume sessions or re-send the transcript?_                                                          
-  COMPOSE                          → claude  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  › should council resume sessions or re-send the transcript?_                                                    │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────  COMPOSE  ─╯  
+                                   → claude  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut  

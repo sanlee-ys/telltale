@@ -1,7 +1,6 @@
   council READ  │  ~/code/telltale                                             no turn yet  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   council  ──────────────────────────────────────────────────────────────────────  what the badge on each column means  
-                                                                                                                        
     Each column states its own posture; there is no room-wide claim.                                                    
                                                                                                                         
     ro:tools     the write tools are ABSENT from that session — checked                                                 
@@ -39,6 +38,7 @@
     unsandboxed  Antigravity                                                                                            
   ↓ 7 more below                                                                                                        
     ?            close                                                                                                  
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ›                                                                                                                     
-  VIEW                                                                                ? close  │  i compose  │  q quit  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+                                                                                      ? close  │  i compose  │  q quit  

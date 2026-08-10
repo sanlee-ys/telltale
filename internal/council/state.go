@@ -140,7 +140,7 @@ type SandboxClaim struct {
 // HelpPage is which page of the help panel is open.
 //
 // Two pages rather than one long panel, because the panel's height budget is
-// hard (17 rows, helpKeys) and the two things it has to say are different
+// hard (16 rows, helpKeys) and the two things it has to say are different
 // kinds of thing: what the keys do, and what the words on each column MEAN.
 // Cramming the second into the first is what left the posture explanation as
 // four muted lines below the fold, which is where it was when a user asked

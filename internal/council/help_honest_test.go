@@ -17,7 +17,7 @@ func helpFrameRows(t *testing.T, st State) []string {
 	var rows []string
 	start := -1
 	for i, l := range strings.Split(render(st), "\n") {
-		if !fullWidthRule(l, st.Width, g) {
+		if !frameEdge(l, st.Width, g) {
 			continue
 		}
 		if start < 0 {

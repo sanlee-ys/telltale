@@ -131,7 +131,7 @@ func TestTheRailRidesTheSameBandTheThinOneDoes(t *testing.T) {
 	st.Width, st.Height = 120, 60
 
 	thick, thin, bare := 0, 0, 0
-	for _, ln := range frameBody(t, render(st), g.RuleHeavy) {
+	for _, ln := range frameBody(t, render(st), g) {
 		switch {
 		case strings.Contains(ln, g.FocusRail):
 			thick++

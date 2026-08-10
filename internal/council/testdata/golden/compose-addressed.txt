@@ -17,8 +17,8 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                                                                                                                        
 ▌ no turn dispatched yet.               │  no turn dispatched yet.              │  no turn dispatched yet.              
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  › @codex @agy is the resume flag right?_                                                                              
-  COMPOSE            → codex, agy (2 seats)  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  › @codex @agy is the resume flag right?_                                                                        │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────  COMPOSE  ─╯  
+                     → codex, agy (2 seats)  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut  

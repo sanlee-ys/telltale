@@ -13,12 +13,12 @@
 ▌   + new 3                             │                                       │                                       
 ▌   1 more added line not shown         │                                       │                                       
 ▌   y approve   n deny   a stop asking  │                                       │                                       
-                                                                                                                        
-                                                                                                                        
+▌                                       │                                       │                                       
 ▌ ⚙ Read: internal/council/view.go ✓    │                                       │                                       
 ▌ ⚙ Edit: internal/council/gate.go      │                                       │                                       
 ▌                                       │                                       │                                       
 ▌ I need to add the card renderer.      │  working — the reply arrives whole.   │  working — the reply arrives whole.   
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ›                                                                                                                     
-  GATE            Edit: internal/council/gate.go  │  y approve  │  n deny  │  a stop asking  │  ctrl+c cancel the turn  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  GATE  ─╯  
+                  Edit: internal/council/gate.go  │  y approve  │  n deny  │  a stop asking  │  ctrl+c cancel the turn  

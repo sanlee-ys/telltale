@@ -6082,6 +6082,12 @@ head; the value of the second one is entirely in its scarcity, which is why the 
 and `TestOnlyTheFrameAndTheTurnPageDrawTheHeavyRule` asserts it as a *count* on the rendered
 frame rather than as a property of the three call sites.
 
+> **Amended 2026-08-09 (§9.44).** Two of those three lines are now one. The composer is a
+> bordered box, so the lower full-bleed rule is gone and the frame's closed shape is the header
+> rule plus the box — closure carried by corners rather than by ink. The scarcity argument here
+> is unchanged and one line cheaper; what the heavy weight says is now *the chrome stops here and
+> the seats begin*. The test still asserts a count, and the count is 1.
+
 **Why the turn page's rule is the third.** It is the only line inside the frame that bounds a
 whole document rather than a part of one. §9.23 gave it the *weight* of a root — the label at
 full intensity while its seat rules recede — on the finding that the page's outline whispered
@@ -8351,3 +8357,76 @@ entirely successful still delivers the mismatched id to the room.
 behaviour rests on the 2026-08-09 capture, and the code rests on that capture's fixture. A
 re-measurement against a later build is what would retire `SilentResumeForkMeasuredAt`, and
 until somebody runs one, this seat's claim names 1.1.11 and no other build.
+
+### 9.44 the composer was a gap under a rule, and the room's state floated below it (2026-08-09)
+
+**Inspiration is named because it should be: Grok's CLI.** Its input is a rounded, clearly
+bordered box, and the bottom border carries a right-anchored legend — `Grok 4.5 (high) ·
+always-approve` — laid *on* the line rather than under it, with the remaining key hint
+(`Shift+Tab:mode`) on a muted line below. The thing that reads well there is not the corners. It
+is that the box says **where you act**, and its own frame says **what you are acting under**,
+which leaves the line below free to be nothing but keys.
+
+Council had neither. §9.26 closed the frame with two full-bleed heavy rules, and the composer sat
+in the gap between the lower one and the mode line — a prompt glyph on an unbounded row, with no
+mark anywhere saying that this strip of the screen is the one place typing does anything. Every
+other region in the room is a reading area. The one region that is an *input* was the only region
+with no shape of its own.
+
+**So the composer is a box, and it is the only bordered element on screen.** Rounded corners
+(`╭ ─ ╮ │ ╰ ╯`, and `+ - |` in the reduced set), a side and a cell of air on each row, and the
+bottom border carrying the legend. Bordering exactly one thing is the whole design: a second box
+anywhere would make this one a decoration instead of a signal, the same scarcity argument §9.26
+made for a second rule weight and §9.28 made for the seat hue.
+
+**The lower heavy rule is gone, and that is a correction to §9.26 rather than a cost of this
+change.** §9.26's claim was that the two full-bleed rules were the only *closed shape* on screen
+and that a closed shape earns the second weight. They were never closed — two horizontal lines
+with nothing joining their ends is a pair of lines, and the weight was doing the work a shape
+should have done. The box actually closes, by corners and sides, so it draws **light**: closure
+moved from ink to geometry, which is a carrier that survives `NO_COLOR` outright. What the heavy
+rule now says is narrower and true — *the chrome stops here and the seats begin* — and there is
+exactly one line in a grid where that holds.
+
+**The legend is split by lifetime, not by topic.** On the border go the facts that stay true until
+a key changes them: the mode word (`VIEW` / `COMPOSE` / `GATE` / the page label) and, when the
+guard is off, `a not asking`. Under the box go the keys, which change with the mode, the draft and
+the turn. Nothing appears in both places — `statusLine`'s left-hand slot is now empty and is
+deliberately not backfilled, because a slot that survives its content is how a footer becomes the
+wall §9.11 spent a whole pass taking apart.
+
+The cadence cell keeps its **key** on the way up, not just its words. `a not asking` was added
+(§9.24-era footer work) to close the §9.17 defect where a permanently ungated room documented the
+way back nowhere on screen; moving the words without the key would have reopened it one release
+later. It is on the border, whole, and unsheddable.
+
+**What it costs, stated plainly.** One row of body — `promptChrome` goes from 2 to 3, since the
+box replaces the rule with a top border and adds a bottom one — and six cells of composer width,
+which is `boxChrome`: a side glyph plus `gutter` cells of air, on each side. The air is `gutter`
+rather than one cell because **the room spells its separator one way** — two cells each side of
+every `│` it draws, which `TestTheRoomSpellsItsSeparatorOneWay` already holds for the header, the
+key line and the column rails. A box welding its prose to its own sides would be a second grammar
+for the room's only vertical mark, on the element the eye is meant to read as the frame.
+
+**The help panel paid the row, the way it always pays.** Its budget was 17 lines to the pinned `?`
+and is now 16, which pushed `ctrl+c / q` off page one and the WORKSPACE sentence — the
+load-bearing line — off page two at the reference machine's 24-row room. Neither was allowed to
+fall: both pages spend the blank row directly under their title instead, on §9.11's own ranking
+that **a rule outranks a blank**. The title *is* a labelled rule, so the blank beneath it was the
+one row on each page restating a boundary the row above already drew.
+
+`MinWidth` (60) and `MinHeight` (10) are unchanged and still
+resolve: at the floor the room is 2 header rows, 3 of footer chrome, a one-row composer and four
+rows of reading area. When the frame is too narrow to lay the legend on the border with air each
+side and a rule cell outboard of it, the border **closes bare** rather than truncating — a legend
+cut in half is a claim cut in half.
+
+**One golden moved further than the box did, and it is a gain rather than a surprise.** Emptying
+`statusLine`'s left slot gives the key line back four cells and its gap, and at the tabbed tier
+that is enough for `1-N seat` to stop shedding — `empty-tabs.txt` now names a key that always
+worked and had been dropped for width since §9.29. Nothing was un-shed by hand; the ladder in
+`hint.shed` is unchanged and simply has more room to not use.
+
+**No new hues.** The border and the sides are `Rule()`, i.e. muted chrome; the legend keeps the
+exact styles the mode word already had on the mode line, gate included. This change spends
+*shape*, which the palette does not pay for.

@@ -12,13 +12,13 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                                                                                                                        
 ▌ no turn dispatched yet.               │  no turn dispatched yet.              │  no turn dispatched yet.              
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ↑ 16 more above                                                                                                       
-    line                                                                                                                
-    line                                                                                                                
-    line                                                                                                                
-    line                                                                                                                
-    the last line_                                                                                                      
-  COMPOSE                          → claude  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ↑ 16 more above                                                                                                 │  
+  │    line                                                                                                          │  
+  │    line                                                                                                          │  
+  │    line                                                                                                          │  
+  │    line                                                                                                          │  
+  │    the last line_                                                                                                │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────  COMPOSE  ─╯  
+                                   → claude  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut  

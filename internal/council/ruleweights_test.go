@@ -60,6 +60,12 @@ func TestTheHeavyRuleHasAnUnclaimedASCIIPartner(t *testing.T) {
 // is the OUTLINE" and it can only say that while the interior lines are all the
 // other weight. So the useful assertion is not that the frame is heavy — it is
 // that nothing else is, at every tier and on both projections.
+//
+// **One full-bleed rule, not two, since §9.44.** The lower one is gone: the
+// composer is a bordered box now and closes the frame by shape rather than by
+// ink. The scarcity argument is unchanged and one line cheaper — what the weight
+// says is "the chrome stops here and the seats begin", and there is exactly one
+// place in a grid where that is true.
 func TestOnlyTheFrameAndTheTurnPageDrawTheHeavyRule(t *testing.T) {
 	g := UnicodeGlyphs()
 
@@ -76,21 +82,22 @@ func TestOnlyTheFrameAndTheTurnPageDrawTheHeavyRule(t *testing.T) {
 		return full, other
 	}
 
-	// The grid: two full-bleed rules and nothing else. Seat headers, turn
-	// separators, skip lines and cards are all interior.
+	// The grid: one full-bleed rule and nothing else. Seat headers, turn
+	// separators, skip lines and cards are all interior, and the composer's box
+	// draws light.
 	full, other := heavyLines(render(talking()))
-	if full != 2 {
-		t.Errorf("the grid draws %d full-bleed heavy rules, want exactly 2", full)
+	if full != 1 {
+		t.Errorf("the grid draws %d full-bleed heavy rules, want exactly 1", full)
 	}
 	if other != 0 {
 		t.Errorf("%d interior grid lines carry the heavy rule; the frame is no longer the only outline", other)
 	}
 
-	// The turn page: the same two, plus the turn's own rule — which is not
+	// The turn page: the same one, plus the turn's own rule — which is not
 	// full-bleed (it sits inside the frame pad and carries a label and meta).
 	full, other = heavyLines(render(paged()))
-	if full != 2 {
-		t.Errorf("the turn page draws %d full-bleed heavy rules, want exactly 2", full)
+	if full != 1 {
+		t.Errorf("the turn page draws %d full-bleed heavy rules, want exactly 1", full)
 	}
 	if other != 1 {
 		t.Errorf("the turn page carries the heavy rule on %d interior lines, want exactly 1 "+
@@ -101,8 +108,8 @@ func TestOnlyTheFrameAndTheTurnPageDrawTheHeavyRule(t *testing.T) {
 	help := room()
 	help.Help = HelpKeys
 	full, other = heavyLines(render(help))
-	if full != 2 || other != 0 {
-		t.Errorf("the help panel frame is %d heavy rules and %d heavy interior lines, want 2 and 0",
+	if full != 1 || other != 0 {
+		t.Errorf("the help panel frame is %d heavy rules and %d heavy interior lines, want 1 and 0",
 			full, other)
 	}
 }
@@ -208,10 +215,57 @@ func TestTheHeavyRuleSurvivesASCII(t *testing.T) {
 			full++
 		}
 	}
-	if full != 2 {
-		t.Errorf("ascii mode draws %d full-bleed heavy rules, want 2:\n%s", full, frame)
+	if full != 1 {
+		t.Errorf("ascii mode draws %d full-bleed heavy rules, want 1:\n%s", full, frame)
 	}
 	if !strings.Contains(frame, a.Rule) {
 		t.Error("ascii mode lost the light rule; both weights have to be on screen")
+	}
+}
+
+// TestTheComposerIsAClosedBox is §9.44's whole claim, in both glyph modes.
+//
+// The claim is not "there are some box characters on screen" — it is that the
+// composer has four corners and that every row between them has a side on each
+// end. A box missing one side is worse than the bare rule it replaced: it reads
+// as a rendering failure rather than as a frame, which is exactly what --ascii
+// would have produced if the corners had been left to a Unicode-only fallback.
+func TestTheComposerIsAClosedBox(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		ascii bool
+	}{{"unicode", false}, {"ascii", true}} {
+		g := GlyphsFor(tc.ascii)
+		st := talking()
+		st.ASCII = tc.ascii
+		lines := strings.Split(Render(st, PlainStyles(), g), "\n")
+
+		top, bottom := -1, -1
+		for i, ln := range lines {
+			trimmed := strings.TrimSpace(ln)
+			if strings.HasPrefix(trimmed, g.BoxTL) && strings.HasSuffix(trimmed, g.BoxTR) && top < 0 {
+				top = i
+			}
+			if strings.HasPrefix(trimmed, g.BoxBL) && strings.HasSuffix(trimmed, g.BoxBR) {
+				bottom = i
+			}
+		}
+		if top < 0 || bottom <= top {
+			t.Fatalf("%s: the composer box is not closed (top=%d bottom=%d):\n%s",
+				tc.name, top, bottom, strings.Join(lines, "\n"))
+		}
+		for i := top + 1; i < bottom; i++ {
+			trimmed := strings.TrimSpace(lines[i])
+			if !strings.HasPrefix(trimmed, g.Sep) || !strings.HasSuffix(trimmed, g.Sep) {
+				t.Errorf("%s: composer row %d has no side: %q", tc.name, i-top, lines[i])
+			}
+		}
+		// The legend is ON the bottom border, and it is not repeated under it.
+		if !strings.Contains(lines[bottom], "VIEW") {
+			t.Errorf("%s: the box's bottom border carries no mode word: %q", tc.name, lines[bottom])
+		}
+		if strings.Contains(lines[len(lines)-1], "VIEW") {
+			t.Errorf("%s: the mode word is on the border AND under it: %q", tc.name, lines[len(lines)-1])
+		}
 	}
 }
