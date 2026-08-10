@@ -1,11 +1,11 @@
 <!-- Generated from the render, not drawn by hand. Do not edit:
      re-emit it with `go test ./internal/council ./internal/hud -update`.
      See internal/svgframe for why this picture cannot drift. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="1122" height="300" viewBox="0 0 1122 300" role="img" aria-labelledby="t">
-  <title id="t">The telltale council room: three vendor seats side by side, the focused seat marked by a rail and a caret, each seat's sandbox posture named in words beneath it.</title>
-  <rect x="0" y="0" width="1122" height="300" rx="10" fill="#0c0c0c" stroke="#3a3a3a"/>
-  <path d="M0 36 V10 a10 10 0 0 1 10 -10 H1112 a10 10 0 0 1 10 10 V36 Z" fill="#1b1b1b"/>
-  <line x1="0" y1="36" x2="1122" y2="36" stroke="#3a3a3a"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1482" height="300" viewBox="0 0 1482 300" role="img" aria-labelledby="t">
+  <title id="t">The telltale council room: five vendor seats side by side, the focused seat marked by a rail and a caret, each seat's sandbox posture named in words beneath it.</title>
+  <rect x="0" y="0" width="1482" height="300" rx="10" fill="#0c0c0c" stroke="#3a3a3a"/>
+  <path d="M0 36 V10 a10 10 0 0 1 10 -10 H1472 a10 10 0 0 1 10 10 V36 Z" fill="#1b1b1b"/>
+  <line x1="0" y1="36" x2="1482" y2="36" stroke="#3a3a3a"/>
   <text x="21" y="23.4" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="14" fill="#cccccc" fill-opacity="0.55" xml:space="preserve">telltale council</text>
   <text y="64.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
@@ -16,12 +16,12 @@
     <tspan x="165" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
     <tspan x="174" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
     <tspan x="192" textLength="135" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">~/code/telltale</tspan>
-    <tspan x="327" textLength="450" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                                  </tspan>
-    <tspan x="777" textLength="306" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">turn 1  │  3/3 seated  │  no brief</tspan>
-    <tspan x="1083" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="327" textLength="810" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                                                                          </tspan>
+    <tspan x="1137" textLength="306" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">turn 1  │  5/5 seated  │  no brief</tspan>
+    <tspan x="1443" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
   </text>
   <text y="82.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
-    <tspan x="21" textLength="1080" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</tspan>
+    <tspan x="21" textLength="1440" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</tspan>
   </text>
   <text y="100.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">▌</tspan>
@@ -29,31 +29,47 @@
     <tspan x="39" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd" font-weight="bold">▸ </tspan>
     <tspan x="57" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">1 CC </tspan>
     <tspan x="102" textLength="99" lengthAdjust="spacingAndGlyphs" fill="#3a96dd" font-weight="bold">Claude Code</tspan>
-    <tspan x="201" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="219" textLength="72" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">────────</tspan>
-    <tspan x="291" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="309" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#13a10e">✓ done</tspan>
-    <tspan x="363" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="381" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="390" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="408" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">  </tspan>
-    <tspan x="426" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">2 CX </tspan>
-    <tspan x="471" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">Codex</tspan>
-    <tspan x="516" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="534" textLength="117" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">─────────────</tspan>
-    <tspan x="651" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="669" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">○ idle</tspan>
-    <tspan x="723" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="741" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="750" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="768" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">  </tspan>
-    <tspan x="786" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">3 AG </tspan>
-    <tspan x="831" textLength="99" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">Antigravity</tspan>
-    <tspan x="930" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="948" textLength="63" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">───────</tspan>
-    <tspan x="1011" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="1029" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">○ idle</tspan>
+    <tspan x="201" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="210" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#13a10e">✓ done</tspan>
+    <tspan x="264" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc">     </tspan>
+    <tspan x="309" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="318" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="336" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">  </tspan>
+    <tspan x="354" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">2 CX </tspan>
+    <tspan x="399" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">Codex</tspan>
+    <tspan x="444" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="462" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">─────</tspan>
+    <tspan x="507" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="525" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">○ idle</tspan>
+    <tspan x="579" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="597" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="606" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="624" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">  </tspan>
+    <tspan x="642" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">3 AG </tspan>
+    <tspan x="687" textLength="99" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">Antigravity</tspan>
+    <tspan x="786" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> </tspan>
+    <tspan x="795" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">○ idle</tspan>
+    <tspan x="849" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">    </tspan>
+    <tspan x="885" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="894" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="912" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">  </tspan>
+    <tspan x="930" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">4 CU </tspan>
+    <tspan x="975" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">Cursor</tspan>
+    <tspan x="1029" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="1047" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">────</tspan>
     <tspan x="1083" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="1101" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">○ idle</tspan>
+    <tspan x="1155" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="1173" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1182" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="1200" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">  </tspan>
+    <tspan x="1218" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">5 GR </tspan>
+    <tspan x="1263" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#3a96dd">Grok</tspan>
+    <tspan x="1299" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="1317" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">──────</tspan>
+    <tspan x="1371" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="1389" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">○ idle</tspan>
+    <tspan x="1443" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
   </text>
   <text y="118.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">▌</tspan>
@@ -61,108 +77,144 @@
     <tspan x="57" textLength="72" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">ro:tools</tspan>
     <tspan x="129" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
     <tspan x="147" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">tokens</tspan>
-    <tspan x="201" textLength="180" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                    </tspan>
-    <tspan x="381" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="390" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">    </tspan>
-    <tspan x="426" textLength="108" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">ro:requested</tspan>
-    <tspan x="534" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="552" textLength="90" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">final only</tspan>
-    <tspan x="642" textLength="99" lengthAdjust="spacingAndGlyphs" fill="#cccccc">           </tspan>
-    <tspan x="741" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="750" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">    </tspan>
-    <tspan x="786" textLength="99" lengthAdjust="spacingAndGlyphs" fill="#c19c00" font-weight="bold">unsandboxed</tspan>
-    <tspan x="885" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="903" textLength="90" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">final only</tspan>
-    <tspan x="993" textLength="108" lengthAdjust="spacingAndGlyphs" fill="#cccccc">            </tspan>
+    <tspan x="201" textLength="108" lengthAdjust="spacingAndGlyphs" fill="#cccccc">            </tspan>
+    <tspan x="309" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="318" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">    </tspan>
+    <tspan x="354" textLength="108" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">ro:requested</tspan>
+    <tspan x="462" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="480" textLength="90" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">final only</tspan>
+    <tspan x="570" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc">   </tspan>
+    <tspan x="597" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="606" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">    </tspan>
+    <tspan x="642" textLength="99" lengthAdjust="spacingAndGlyphs" fill="#c19c00" font-weight="bold">unsandboxed</tspan>
+    <tspan x="741" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="759" textLength="90" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">final only</tspan>
+    <tspan x="849" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">    </tspan>
+    <tspan x="885" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="894" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">    </tspan>
+    <tspan x="930" textLength="108" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">ro:requested</tspan>
+    <tspan x="1038" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="1056" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">tokens</tspan>
+    <tspan x="1110" textLength="63" lengthAdjust="spacingAndGlyphs" fill="#cccccc">       </tspan>
+    <tspan x="1173" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1182" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">    </tspan>
+    <tspan x="1218" textLength="99" lengthAdjust="spacingAndGlyphs" fill="#c19c00" font-weight="bold">unsandboxed</tspan>
+    <tspan x="1317" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="1335" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">tokens</tspan>
+    <tspan x="1389" textLength="72" lengthAdjust="spacingAndGlyphs" fill="#cccccc">        </tspan>
   </text>
   <text y="136.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">▌</tspan>
-    <tspan x="30" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> ⚙ Glob                                </tspan>
-    <tspan x="381" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="390" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                       </tspan>
-    <tspan x="741" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="750" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                       </tspan>
+    <tspan x="30" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> ⚙ Glob                        </tspan>
+    <tspan x="309" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="318" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="597" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="606" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="885" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="894" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="1173" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1182" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
   </text>
   <text y="154.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">▌</tspan>
-    <tspan x="30" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> ⚙ Read                                </tspan>
-    <tspan x="381" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="390" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                       </tspan>
-    <tspan x="741" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="750" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                       </tspan>
+    <tspan x="30" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> ⚙ Read                        </tspan>
+    <tspan x="309" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="318" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="597" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="606" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="885" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="894" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="1173" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1182" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
   </text>
   <text y="172.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">▌</tspan>
-    <tspan x="30" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> ⚙ Bash: go test ./...                 </tspan>
-    <tspan x="381" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="390" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                       </tspan>
-    <tspan x="741" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="750" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                       </tspan>
+    <tspan x="30" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> ⚙ Bash: go test ./...         </tspan>
+    <tspan x="309" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="318" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="597" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="606" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="885" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="894" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="1173" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1182" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
   </text>
   <text y="190.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">▌</tspan>
-    <tspan x="30" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                       </tspan>
-    <tspan x="381" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="390" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                       </tspan>
-    <tspan x="741" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="750" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                       </tspan>
+    <tspan x="30" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="309" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="318" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="597" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="606" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="885" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="894" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
+    <tspan x="1173" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1182" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                               </tspan>
   </text>
   <text y="208.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">▌</tspan>
-    <tspan x="30" textLength="351" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> Tests pass.                           </tspan>
-    <tspan x="381" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="390" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="408" textLength="207" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">no turn dispatched yet.</tspan>
-    <tspan x="615" textLength="126" lengthAdjust="spacingAndGlyphs" fill="#cccccc">              </tspan>
-    <tspan x="741" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
-    <tspan x="750" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="768" textLength="207" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">no turn dispatched yet.</tspan>
-    <tspan x="975" textLength="126" lengthAdjust="spacingAndGlyphs" fill="#cccccc">              </tspan>
+    <tspan x="30" textLength="279" lengthAdjust="spacingAndGlyphs" fill="#cccccc"> Tests pass.                   </tspan>
+    <tspan x="309" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="318" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="336" textLength="207" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">no turn dispatched yet.</tspan>
+    <tspan x="543" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc">      </tspan>
+    <tspan x="597" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="606" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="624" textLength="207" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">no turn dispatched yet.</tspan>
+    <tspan x="831" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc">      </tspan>
+    <tspan x="885" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="894" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="912" textLength="207" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">no turn dispatched yet.</tspan>
+    <tspan x="1119" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc">      </tspan>
+    <tspan x="1173" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│</tspan>
+    <tspan x="1182" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="1200" textLength="207" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">no turn dispatched yet.</tspan>
+    <tspan x="1407" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc">      </tspan>
   </text>
   <text y="226.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="39" textLength="1044" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮</tspan>
-    <tspan x="1083" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="39" textLength="1404" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮</tspan>
+    <tspan x="1443" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
   </text>
   <text y="244.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
     <tspan x="39" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│  </tspan>
     <tspan x="66" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">› </tspan>
-    <tspan x="84" textLength="972" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                                                                                            </tspan>
-    <tspan x="1056" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │</tspan>
-    <tspan x="1083" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="84" textLength="1332" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                                                                                                                                    </tspan>
+    <tspan x="1416" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │</tspan>
+    <tspan x="1443" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
   </text>
   <text y="262.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="39" textLength="972" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  </tspan>
-    <tspan x="1011" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#3a96dd" font-weight="bold">VIEW</tspan>
-    <tspan x="1047" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  ─╯</tspan>
-    <tspan x="1083" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="39" textLength="1332" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────  </tspan>
+    <tspan x="1371" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#3a96dd" font-weight="bold">VIEW</tspan>
+    <tspan x="1407" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  ─╯</tspan>
+    <tspan x="1443" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
   </text>
   <text y="280.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
-    <tspan x="21" textLength="207" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                    ↑↓ </tspan>
-    <tspan x="228" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">scroll</tspan>
-    <tspan x="282" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
-    <tspan x="327" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">[ ] </tspan>
-    <tspan x="363" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">turn</tspan>
-    <tspan x="399" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
-    <tspan x="444" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">f </tspan>
-    <tspan x="462" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">expand</tspan>
-    <tspan x="516" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
-    <tspan x="561" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">tab </tspan>
-    <tspan x="597" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">focus</tspan>
+    <tspan x="21" textLength="567" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                                            ↑↓ </tspan>
+    <tspan x="588" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">scroll</tspan>
     <tspan x="642" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
-    <tspan x="687" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">1-3 </tspan>
-    <tspan x="723" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">seat</tspan>
+    <tspan x="687" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">[ ] </tspan>
+    <tspan x="723" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">turn</tspan>
     <tspan x="759" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
-    <tspan x="804" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">i </tspan>
-    <tspan x="822" textLength="63" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">compose</tspan>
-    <tspan x="885" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
-    <tspan x="930" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">? </tspan>
-    <tspan x="948" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">help</tspan>
-    <tspan x="984" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
-    <tspan x="1029" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">q </tspan>
-    <tspan x="1047" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">quit</tspan>
-    <tspan x="1083" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="804" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">f </tspan>
+    <tspan x="822" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">expand</tspan>
+    <tspan x="876" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
+    <tspan x="921" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">tab </tspan>
+    <tspan x="957" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">focus</tspan>
+    <tspan x="1002" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
+    <tspan x="1047" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">1-5 </tspan>
+    <tspan x="1083" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">seat</tspan>
+    <tspan x="1119" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
+    <tspan x="1164" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">i </tspan>
+    <tspan x="1182" textLength="63" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">compose</tspan>
+    <tspan x="1245" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
+    <tspan x="1290" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">? </tspan>
+    <tspan x="1308" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">help</tspan>
+    <tspan x="1344" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
+    <tspan x="1389" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">q </tspan>
+    <tspan x="1407" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">quit</tspan>
+    <tspan x="1443" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
   </text>
 </svg>

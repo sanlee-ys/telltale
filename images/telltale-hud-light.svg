@@ -1,16 +1,16 @@
 <!-- Generated from the render, not drawn by hand. Do not edit:
      re-emit it with `go test ./internal/council ./internal/hud -update`.
      See internal/svgframe for why this picture cannot drift. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="1113" height="300" viewBox="0 0 1113 300" role="img" aria-labelledby="t">
-  <title id="t">The telltale HUD: seven agent sessions from five vendors, each row naming its vendor, workspace, model, context window and age, with the cells no vendor can source left empty rather than filled in.</title>
-  <rect x="0" y="0" width="1113" height="300" rx="10" fill="#ffffff" stroke="#c9ccc6"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1113" height="318" viewBox="0 0 1113 318" role="img" aria-labelledby="t">
+  <title id="t">The telltale HUD: eight agent sessions from six vendors, each row naming its vendor, workspace, model, context window and age, with the cells no vendor can source left empty rather than filled in.</title>
+  <rect x="0" y="0" width="1113" height="318" rx="10" fill="#ffffff" stroke="#c9ccc6"/>
   <path d="M0 36 V10 a10 10 0 0 1 10 -10 H1103 a10 10 0 0 1 10 10 V36 Z" fill="#f1f2ef"/>
   <line x1="0" y1="36" x2="1113" y2="36" stroke="#c9ccc6"/>
   <text x="21" y="23.4" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="14" fill="#000000" fill-opacity="0.55" xml:space="preserve">telltale hud</text>
   <text y="64.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="99" lengthAdjust="spacingAndGlyphs" fill="#000000"> telltale  </tspan>
     <tspan x="120" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">│</tspan>
-    <tspan x="129" textLength="126" lengthAdjust="spacingAndGlyphs" fill="#000000">  7 sessions  </tspan>
+    <tspan x="129" textLength="126" lengthAdjust="spacingAndGlyphs" fill="#000000">  8 sessions  </tspan>
     <tspan x="255" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">│</tspan>
     <tspan x="264" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#000000">  </tspan>
     <tspan x="282" textLength="72" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">claude 2</tspan>
@@ -22,7 +22,9 @@
     <tspan x="543" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">agy 1</tspan>
     <tspan x="588" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#000000">  </tspan>
     <tspan x="606" textLength="72" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">cursor 1</tspan>
-    <tspan x="678" textLength="135" lengthAdjust="spacingAndGlyphs" fill="#000000">               </tspan>
+    <tspan x="678" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#000000">  </tspan>
+    <tspan x="696" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">grok 1</tspan>
+    <tspan x="750" textLength="63" lengthAdjust="spacingAndGlyphs" fill="#000000">       </tspan>
     <tspan x="813" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">codex</tspan>
     <tspan x="858" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
     <tspan x="867" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">5h</tspan>
@@ -63,6 +65,22 @@
   </text>
   <text y="136.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#000000"> ● </tspan>
+    <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#06989a">GR</tspan>
+    <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
+    <tspan x="75" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">│</tspan>
+    <tspan x="84" textLength="639" lengthAdjust="spacingAndGlyphs" fill="#000000"> Adapter Field Map Review  C:\src\code                                 </tspan>
+    <tspan x="723" textLength="117" lengthAdjust="spacingAndGlyphs" fill="#06989a">grok-4.5     </tspan>
+    <tspan x="840" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#000000">  </tspan>
+    <tspan x="858" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#4e9a06">▊</tspan>
+    <tspan x="867" textLength="99" lengthAdjust="spacingAndGlyphs" fill="#d3d7cf">───────────</tspan>
+    <tspan x="966" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
+    <tspan x="975" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#4e9a06">    7%</tspan>
+    <tspan x="1029" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
+    <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">│</tspan>
+    <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#000000">  45s</tspan>
+  </text>
+  <text y="154.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#000000"> ● </tspan>
     <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#06989a">CU</tspan>
     <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
     <tspan x="75" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">│</tspan>
@@ -77,7 +95,7 @@
     <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">│</tspan>
     <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#000000">   1m</tspan>
   </text>
-  <text y="154.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+  <text y="172.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#000000"> ● </tspan>
     <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#06989a">CX</tspan>
     <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
@@ -93,7 +111,7 @@
     <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">│</tspan>
     <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#000000">   1m</tspan>
   </text>
-  <text y="172.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+  <text y="190.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#000000"> ● </tspan>
     <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#06989a">AG</tspan>
     <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
@@ -106,7 +124,7 @@
     <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">│</tspan>
     <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#000000">   2m</tspan>
   </text>
-  <text y="190.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+  <text y="208.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#000000"> ◐ </tspan>
     <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#06989a">GE</tspan>
     <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
@@ -119,7 +137,7 @@
     <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">│</tspan>
     <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#000000">   3m</tspan>
   </text>
-  <text y="208.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+  <text y="226.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#000000"> ◐ </tspan>
     <tspan x="48" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#06989a">CC</tspan>
     <tspan x="66" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
@@ -132,7 +150,7 @@
     <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">│</tspan>
     <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#000000">   4m</tspan>
   </text>
-  <text y="226.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+  <text y="244.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
     <tspan x="30" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">○</tspan>
     <tspan x="39" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
@@ -150,13 +168,13 @@
     <tspan x="1038" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">│</tspan>
     <tspan x="1047" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#000000">  22m</tspan>
   </text>
-  <text y="244.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
-  </text>
   <text y="262.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+  </text>
+  <text y="280.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
     <tspan x="30" textLength="1062" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</tspan>
   </text>
-  <text y="280.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+  <text y="298.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="9" lengthAdjust="spacingAndGlyphs" fill="#000000"> </tspan>
     <tspan x="30" textLength="693" lengthAdjust="spacingAndGlyphs" fill="#000000" fill-opacity="0.55">q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys</tspan>
   </text>

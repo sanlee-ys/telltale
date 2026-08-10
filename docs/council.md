@@ -6,7 +6,7 @@ column, in your terminal. It exists because the alternative is five terminals an
 clipboard.
 
 This file is the room's own guide: what each mark on the frame means, how a turn is routed,
-how to read four answers at once, how to get one back out — and how to race one brief
+how to read five answers at once, how to get one back out — and how to race one brief
 across every seat and keep the attempt you like. [README.md](../README.md) is
 the front door and states the project's claims; [design.md §9](design.md) is the record
 behind this one — what was measured on each vendor, what each seam cost, and what is still
@@ -24,10 +24,12 @@ telltale.exe council
   </picture>
 </p>
 
-That picture is emitted from the council test suite's `activity` golden
-(`internal/council/testdata/golden/activity.txt`) with its empty rows dropped, and nothing
+That picture is emitted from the council test suite's `hero` golden
+(`internal/council/testdata/golden/hero.txt`) with its empty rows dropped, and nothing
 else changed — including the `READ` in its header, because the fixture opens a `--read`
-room. A plain `telltale council` says `⚠ WRITE` there instead.
+room. A plain `telltale council` says `⚠ WRITE` there instead. The five columns are the
+five addressable seats (Claude Code, Codex, Antigravity, Cursor, Grok); the three-column
+`activity` golden stays a unit fixture and is not the public picture.
 
 ## The seat header
 
@@ -147,7 +149,7 @@ where history goes.
 
 **A committee brief is drawn once, not once per seat.** From two seats up, the live turn's
 brief sits full width under the room chrome and the addressed columns stop echoing it —
-one question above four answers instead of the same paragraph across the top of every
+one question above five answers instead of the same paragraph across the top of every
 reading area. It spends at most four rows, and when the brief is longer the fourth row
 says how many rows are missing and where the whole of it is, because a reader must never
 have to wonder whether they are looking at their own question or a truncated copy of it.
@@ -160,12 +162,12 @@ re-sending the transcript, which keeps that guarantee structural: each session h
 its own history. `ctrl+r` arms a rebuttal turn — off by default — in which each vendor
 sees the others' last answers, fenced and labelled as untrusted material.
 
-## Reading four answers at once
+## Reading five answers at once
 
 **Reading is a first-class mode.** `↑`/`↓` scroll the focused column, `pgup`/`pgdn` move by
 a screenful, `g` and `G` reach the first turn or the newest, `tab` moves between columns,
 `1`–`N` go straight to the Nth seat on screen, and `f` expands one column to the full width
-— which is what you want when an answer is long rather than when four of them are being
+— which is what you want when an answer is long rather than when five of them are being
 compared. `[` and `]` walk the focused column **a turn at a time**, landing the turn's
 separator on the top row where the brief and the answer to it read together. The scrollback
 had only ever moved in lines, so `↑ 509 more above` was measured, correct, and counted in a
@@ -373,8 +375,8 @@ keeps `room.json` the only file it writes on its own initiative.
 ## The race: /arena
 
 **`/arena <brief>` races one brief across every seated vendor, each attempt in its own git
-worktree, compared by diff instead of by prose.** Four writers in one shared tree are not
-four answers; the worktree is what makes four *write* attempts comparable at all. Every
+worktree, compared by diff instead of by prose.** Five writers in one shared tree are not
+five answers; the worktree is what makes five *write* attempts comparable at all. Every
 attempt is a **fresh session** — the room's own conversations are untouched, and a race's
 throwaway session ids can never replace the threads the room reattaches to. Even the seat
 driven as a live process races on a throwaway session of its own, killed at its own finish
@@ -504,7 +506,7 @@ exactly those and dispatches to nobody else. That is a different control from an
 `@mention`, which routes a single turn.
 
 `--brief <file>` (or `TELLTALE_COUNCIL_BRIEF`) hands one file of shared operating context
-to every vendor on its first turn. Without it, the room's default state is four vendors
+to every vendor on its first turn. Without it, the room's default state is five vendors
 guessing separately at a convention you already wrote down. The flag takes a **path**,
 never content: telltale is public and a briefing is not, so no default location inside a
 repo is searched, and the file is never logged, never rendered and never stored by

@@ -1368,13 +1368,10 @@ func TestFlowHopIsNamedWhileAChainDrivesTheRoom(t *testing.T) {
 
 // activityRoom is the room the `activity` golden pins: one seat that has
 // finished a turn with a trace behind it, two that have not been asked
-// anything.
+// anything. It deliberately sits on room()'s three-column fixture so the
+// activity golden does not cascade every time the public hero adds a seat.
 //
-// Named rather than inlined because three things now render it and every one of
-// them has to be the SAME room — the golden, README.md's council frame (which
-// is that golden with its blank rows dropped, TestReadmeCouncilFrameMatchesItsGolden),
-// and the hero pictures in images/ (image_test.go). A second copy of this state
-// is how the pictures drifted from the product the first time.
+// The public pictures use heroRoom() instead — same activity story, five seats.
 func activityRoom() State {
 	st := room()
 	st.Turn = 1
@@ -1383,6 +1380,66 @@ func activityRoom() State {
 		{Text: "Glob"}, {Text: "Read"}, {Text: "Bash: go test ./..."},
 	}
 	st.Columns[0].Body = "Tests pass."
+	return st
+}
+
+// heroRoom is the five-seat room the public council pictures pin.
+//
+// room() stays three columns on purpose: hundreds of goldens and layout
+// assertions are built on that fixture, and expanding it would re-pin the
+// whole suite for a change that only the public hero needs. This fixture is
+// the dedicated source for images/telltale-council-{dark,light}.svg — one State,
+// one Render, blank scrollback dropped in heroFrame, dual dark/light SVGs.
+//
+// Width is 160 so five primary columns stay above minColumn (24): at 120 the
+// layout drops five seats to tabs, which is not the product picture. Seating
+// order matches addressableVendors. Exactly one focus mark (Claude, Focus 0).
+// Sandbox and granularity claims mirror the measured per-vendor postures the
+// live room draws — no invented cost, no invented context.
+func heroRoom() State {
+	st := NewState()
+	st.Width, st.Height = 160, 24
+	st.Workspace = "/home/dev/code/telltale"
+	st.Home = "/home/dev"
+	st.Mode = ModeViewing
+	st.Turn = 1
+	st.Focus = 0
+	st.Columns = []Column{
+		{
+			Vendor: model.VendorClaude, Label: "Claude Code",
+			Avail:   AvailInstalled,
+			Sandbox: SandboxClaim{Level: SandboxTools, Detail: "tool allowlist"},
+			Gran:    GranTokens, Phase: PhaseDone,
+			Acts: []Act{
+				{Text: "Glob"}, {Text: "Read"}, {Text: "Bash: go test ./..."},
+			},
+			Body: "Tests pass.",
+		},
+		{
+			Vendor: model.VendorCodex, Label: "Codex",
+			Avail:   AvailInstalled,
+			Sandbox: SandboxClaim{Level: SandboxRequested, Detail: "degrades to a spawn failure on windows"},
+			Gran:    GranFinalOnly, Phase: PhaseIdle,
+		},
+		{
+			Vendor: model.VendorAntigravity, Label: "Antigravity",
+			Avail:   AvailInstalled,
+			Sandbox: SandboxClaim{Level: SandboxNone, Detail: "measured not to restrict writes"},
+			Gran:    GranFinalOnly, Phase: PhaseIdle,
+		},
+		{
+			Vendor: model.VendorCursor, Label: "Cursor",
+			Avail:   AvailInstalled,
+			Sandbox: SandboxClaim{Level: SandboxRequested, Detail: "ACP plan mode, one trial held"},
+			Gran:    GranTokens, Phase: PhaseIdle,
+		},
+		{
+			Vendor: model.VendorGrok, Label: "Grok",
+			Avail:   AvailInstalled,
+			Sandbox: SandboxClaim{Level: SandboxNone, Detail: "measured not to restrict writes"},
+			Gran:    GranTokens, Phase: PhaseIdle,
+		},
+	}
 	return st
 }
 
