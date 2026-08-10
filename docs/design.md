@@ -877,7 +877,7 @@ a first-class state here and not a failure.
 | workspace | **MEASURED** | `summary.json` → `info.cwd`, absolute and native (`C:\Users\sanle\code\telltale`), on 30 of 30. The parent directory name carries the same path percent-encoded and is the **fallback** — see the round-trip note below. |
 | context % | **MEASURED** | `signals.json` → `contextWindowUsage`, an integer percentage the vendor computes, beside the raw `contextTokensUsed` / `contextWindowTokens` (500000 on every session). It TRUNCATES: 39656/500000 = 7.93 is written `7`, 22675/500000 = 4.535 is written `4`. The adapter reports the vendor's integer and does not recompute — grok is the second vendor after Cursor with no assumed denominator, and the more precise float would be a number the vendor never said. |
 | cost | **PER-TURN ONLY, so the field stays `CapNone`** | `updates.jsonl` → each `turn_completed` record's `usage.costUsdTicks`. The unit is measured twice over (below). It is **not cumulative**: one session's three turns read 455412000, 820464000, 747416000 ticks, the third smaller than the second. `"[a-z_]*cost[a-z_]*"` over every `.json`/`.jsonl` in the store matched `costUsdTicks` and **nothing else** — no session total exists anywhere. Summing needs every turn record and `updates.jsonl` reached **818 KB** in one session, past any bounded tail; a tail-window sum is a lower bound, and a lower bound in a column headed COST is a derived number wearing a read one's clothes. The **last turn's** cost is carried as a labeled Extra instead. |
-| quota | **ABSENT** | `"[a-z_]*(rate\|limit\|quota)[a-z_]*"` over the whole store returned only tool-configuration keys (`output_byte_limit`, `head_limit`). No window, no ordinal, no reset time reaches disk. |
+| quota | **ABSENT** | `"[a-z_]*(rate\|limit\|quota)[a-z_]*"` over the whole store returned only tool-configuration keys (`output_byte_limit`, `head_limit`). No window, no ordinal, no reset time reaches disk. That is a statement about the *disk*; the network half of the same question is measured and closed separately below. |
 | last_activity | **MEASURED** | `summary.json` → `last_active_at` (29 of 30) then `updated_at` (30 of 30) then `created_at`, folded with the file's mtime per §6 Q8. `summary.json` is rewritten every turn, which is also why it — not the session DIRECTORY, whose mtime moves only when an entry is added — is the freshness hint `Discover` returns. |
 | liveness | **ABSENT, and this one was probed rather than reasoned about** | See below. |
 | sub-agent count | **ABSENT** | grok ships a `spawn_subagent` tool (it is in the tool list every headless run prints), and `"subagent[A-Za-z_]*"` matched nothing on disk outside the system prompt's own description of it. No nest, no count, no parent link. Same ruling as Codex (§3.3): declaring the field and emitting zero would assert something the format cannot check. |
@@ -935,6 +935,90 @@ record of its cwd outranks a key we reconstructed.
   it reaches any displayable field, the way §3.9's credential allowlist is enforced.
 - **The `.lock` sidecars** beside `summary.json`, `chat_history.jsonl`, `updates.jsonl` and
   `rewind_points.jsonl` are never opened and never created. The gauges read.
+
+**The quota question has a network half, and it is closed three times over — probed
+2026-08-09**, the same local day as the survey above (the HTTP `Date` headers quoted below
+read 2026-08-10 UTC; this box runs UTC−4). The table's `quota` row says nothing reaches
+*disk*, which invites the obvious follow-up: the CLI talks to a server, so ask the server. `~/.grok/README.md` ("Using
+auth.json for API Access") even documents the call. This block exists so the next person to
+ask stops here instead of re-deriving it. Three findings, then three rules.
+
+*The documented recipe does not run on this build.* Its `jq` path
+`."https://accounts.x.ai/sign-in".key` matches nothing in this box's `auth.json`, whose one
+entry is keyed `https://auth.x.ai::<uuid>` (`auth_mode: "oidc"`, a six-hour `expires_at`);
+sent as written it returns **401**, `www-authenticate: … reason=no auth context`. And
+`POST /v1/chat/completions` gates on a header the recipe never mentions — omit it and the
+proxy answers **426 Upgrade Required**, body `"Your Grok CLI version (none) is outdated"`.
+The header is `x-grok-client-version`, read out of `grok.exe`'s string table beside
+`x-grok-client-identifier`, `x-grok-client-mode`, `x-grok-session-id` and the documented
+`x-grok-model-override`. The README is product prose here too, exactly as this section's
+header warns.
+
+*The free half of the question is answered, and the answer is no.* `GET /v1/models` — the
+same request whose result the CLI already caches to `models_cache.json`, so it bills
+nothing — returns **200** carrying `etag`, `strict-transport-security`, `cf-cache-status`,
+`CF-RAY`, `alt-svc` and `Server: cloudflare`, and **not one `x-ratelimit-*` header of any
+kind**. The one proxy response this vendor already persists has no quota in it.
+
+*The billed half is `not checked`, which per §9.42 carries a reason and never a value.*
+Whether `POST /v1/chat/completions` returns those headers was **not measured**: it is the
+only probe here that spends a turn, and it stopped at this machine's own tool-permission
+boundary rather than being run. Two attempts to get it from the vendor's own logging failed
+for a reason worth recording, because it looks like evidence and is not: `~/.grok/logs/
+unified.jsonl` is **not an HTTP log** — every record's `src` is `shell` or `grok-pager` — so
+its silence about rate-limit headers was never evidence about the wire, and a live
+`grok -p` run driven with `--debug-file` produced no file at all.
+
+*The disk sweep was re-run with a case gap closed.* The original survey's
+`"[a-z_]*(rate|limit|quota)[a-z_]*"` is **lowercase-only** and would have missed a camelCase
+`rateLimit` — which matters precisely here, because this is the vendor that writes
+`contextWindowUsage` and `contextTokensUsed`, so camelCase is its house style and the
+original regex had a live blind spot. Re-swept as
+`"[A-Za-z_-]*([Rr]ate[Ll]imit|[Qq]uota|[Rr]emaining)[A-Za-z_-]*"` over the whole sessions
+store, including a session directory created by a fresh live turn: the sole hit is
+`agents_remaining` (17 occurrences), a **sub-agent budget**, not an account one. The
+`quota: ABSENT` verdict survives the stronger sweep.
+
+*And the vendor's own monitoring surface settles it.* `docs/user-guide/24-monitoring-usage.md`
+documents an external OpenTelemetry stream — the one place grok is *designed* to report what
+an account is doing — and its attribute keys are **a closed enum**, with an export-time
+validator that drops any record carrying a key outside it. What it carries is
+`grok_code.token.usage` (`input` / `output` / `reasoning` / `cache_read`, by model) and a
+`grok_code.api_request` event with the same four counts. What it carries **nowhere** is a
+window, a reset, a remaining percentage or a limit of any kind; `subscription tier` sits on
+its explicit never-exported list, and the doc states outright that there is no cost metric
+("join `grok_code.token.usage` with your own price sheet"). So the absence is not an
+oversight in a session file. The vendor built a schema for exactly this question, put
+**spend** in it, and put **no quota in it at all** — which is §7.15 versus §7.16 in the
+vendor's own hand: a count with none, never a reading against a limit.
+
+That stream is also the honest answer to "then what *could* be measured". If a grok **spend**
+row is ever wanted it is the seam — exported to a local collector whose output telltale would
+read as a *file*, leaving §4a.5's no-network-calls contract intact, since the push is grok's
+and not ours. It is the cursor relay's shape (§7.16), and it is emphatically not a quota
+window. Cost: a double opt-in, an endpoint, and a collector to run; the `console` exporter is
+no shortcut because the doc says it is suppressed in the `agent` and `headless` entrypoints.
+Recorded as the seam, not spent.
+
+A measurement of the completions headers would not move the verdict, because three separate
+rules already close this and none of them turns on whether the number exists:
+
+1. it needs `auth.json`, and this adapter resolves no path outside the sessions tree (above);
+2. it needs a network call, and §4a.5's adapter contract is explicit that implementations
+   "must not write to vendor state, and must not make network calls or read credentials";
+3. §9.42 draws the probing line at **cost and side effect** — `doctor` may run `--version`
+   precisely because it starts no turn and bills nothing. A quota probe against the
+   completions endpoint would spend from the very pool it is trying to read.
+
+And the quantity would be the wrong one regardless. `x-ratelimit-remaining-requests`,
+`-remaining-tokens` and `x-ratelimit-reset-requests` are documented for **`api.x.ai`**, the
+metered developer API. This CLI rides `cli-chat-proxy.grok.com` on an OIDC session token
+against a **SuperGrok subscription**, whose binding limit is a shared weekly pool surfaced
+only in grok.com's own Settings → Usage. An RPS/TPM header is not the window the usage pane
+means by quota: §4a.3's window carries a *length* and a `ResetsAt`, and a per-second request
+cap has neither. Relabelling one as the other would be a duration claim with no source —
+the exact move §4a.3 already forbids — and would land a real number on screen answering a
+question nobody asked.
 
 **Two smaller findings worth writing down.** One session's `summary.json` carries
 `"sandbox_profile": "bogus-profile-xyz"` — the invalid profile §9.39 fed the CLI to prove
