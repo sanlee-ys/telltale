@@ -1,10 +1,14 @@
- telltale  │  0 sessions
+ telltale  │  6 sessions  │  claude 4  codex 1  gemini 1                               codex 7d █████▌──   79% ↻ 22h48m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  fleet usage  quota is a reading against a limit; spend is a count with none  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        no vendor on this machine has reported a quota reading or a token count
+ claude  no quota relayed yet · the telltale statusline writes it
+        models         Haiku 4.5, Opus 5, Sonnet 4.5
 
+ codex  quota read from its own store, this scan
+        models         gpt-5.1-codex
+        7d             ███████████████─────    79%  ↻ 22h48m
 
-
+ gemini  no quota reaches disk anywhere telltale can read
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  esc close   ↑/↓ scroll

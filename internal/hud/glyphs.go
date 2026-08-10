@@ -31,6 +31,25 @@ type Glyphs struct {
 	Reset    string // quota countdown prefix
 	Warn     string // footer notice prefix
 
+	// RuleHeavy is the second rule weight, and it exists for the same reason
+	// council's does (§9.26): one weight asked to be both "where the frame ends"
+	// and "where a section starts" is a hierarchy a reader has to reconstruct
+	// from indentation. `Track` stays the interior weight — it draws the frame's
+	// own full-bleed rules and every gauge track — and RuleHeavy is spent on
+	// exactly one line in the whole HUD, the fleet usage view's title (§7.17).
+	//
+	// It is a CHARACTER before it is a style, so `--ascii` gets `=` rather than
+	// falling back to `-`: the hierarchy has to survive on the terminals least
+	// able to infer it, and `NO_COLOR` never touched it because weight of this
+	// kind is a glyph rather than an attribute. `=` is the one unclaimed mark
+	// left in the reduced set and the only unclaimed one that reads as a
+	// DOUBLED `-` rather than as a different symbol — the one property a second
+	// rule weight needs. TestTheHeavyRuleHasAnUnclaimedASCIIPartner enumerates
+	// the claimed set so the next glyph cannot be added without meeting it. The
+	// same pair council chose, deliberately: §7.1 principle 5 is that these are
+	// one product, and a second heavy-rule character would be a second alphabet.
+	RuleHeavy string
+
 	// Cursor marks the selected row. It lives in the row's leading pad column,
 	// which was already blank, so selection costs the grid nothing.
 	Cursor string
@@ -68,16 +87,17 @@ func UnicodeGlyphs() Glyphs {
 			"▏", "▎", "▍", "▌",
 			"▋", "▊", "▉",
 		},
-		Track:    "─", // ─
-		Sep:      "│", // │
-		Absent:   "—", // —
-		Ellipsis: "…", // …
-		Reset:    "↻", // ↻
-		Warn:     "⚠", // ⚠
-		Cursor:   "▸", // ▸
-		Fork:     "⑂", // ⑂
-		Mid:      "·", // ·
-		Caret:    "_",
+		Track:     "─", // ─
+		RuleHeavy: "━", // ━
+		Sep:       "│", // │
+		Absent:    "—", // —
+		Ellipsis:  "…", // …
+		Reset:     "↻", // ↻
+		Warn:      "⚠", // ⚠
+		Cursor:    "▸", // ▸
+		Fork:      "⑂", // ⑂
+		Mid:       "·", // ·
+		Caret:     "_",
 		Spinner: []string{
 			"⠋", "⠙", "⠹", "⠸", "⠼",
 			"⠴", "⠦", "⠧", "⠇", "⠏",
@@ -93,17 +113,18 @@ func UnicodeGlyphs() Glyphs {
 // precision anyway — the bar carries the glance.
 func ASCIIGlyphs() Glyphs {
 	return Glyphs{
-		DotLive:  "*",
-		DotIdle:  "o",
-		DotStale: ".",
-		Fill:     "#",
-		Eighths:  nil,
-		Track:    "-",
-		Sep:      "|",
-		Absent:   "n/a",
-		Ellipsis: ">",
-		Reset:    "~",
-		Warn:     "!",
+		DotLive:   "*",
+		DotIdle:   "o",
+		DotStale:  ".",
+		Fill:      "#",
+		Eighths:   nil,
+		Track:     "-",
+		RuleHeavy: "=",
+		Sep:       "|",
+		Absent:    "n/a",
+		Ellipsis:  ">",
+		Reset:     "~",
+		Warn:      "!",
 		// The cursor cannot be ">" here: ">" is already the ASCII ellipsis, and
 		// a mark that also means "truncated" is not a mark. "*" is taken by
 		// DotLive, so the selection uses the one bracket shape nothing else in
