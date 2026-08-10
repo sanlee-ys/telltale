@@ -14,12 +14,15 @@ telltale*.exe
 # conditions they were taken under.
 *trace*.txt
 
-# The `Microsoft/Windows/PowerShell/` backstop that stood here is GONE, and its
-# removal is the receipt for the fix rather than a tidy-up: those crumbs were
-# written by the operator's Codex hooks, spawned by a real `codex exec` turn the
-# council suite was starting, and internal/council/main_test.go now refuses that
-# spawn. An ignore kept for a writer that can no longer write would be a claim
-# nobody could check.
+# The `**/Microsoft/Windows/PowerShell/` backstop that stood here is GONE, and
+# its removal is the receipt for the fix rather than a tidy-up. Those crumbs
+# were written by the operator's Codex hooks, spawned by a real `codex exec`
+# turn the council suite was starting on their own account, and
+# internal/council/main_test.go now refuses that spawn outright. The block said
+# in its own words that it was a backstop until the spawn was pinned down; it
+# has been. An ignore kept for a writer that can no longer write is a claim
+# nobody can check, and deleting it is how the fix is verified — `git status`
+# stays clean across a full suite run with nothing hiding it.
 
 # Claude Code's per-repo settings (approvals, local config). Machine-local
 # state, never content this repo ships — and the first live /adopt was
