@@ -2595,7 +2595,9 @@ amendment to "the gauges never write" (§1, CLAUDE.md):
   from the future beyond clock-jitter tolerance.
 - **age travels with the reading** — past 5 minutes a relayed block carries
   `· 2h ago` at every dress level, the §7.12 basis rule applied to time: shedding
-  the age would re-present a stale number as fresh.
+  the age would re-present a stale number as fresh. Past `quotaAgeWarn` it stops
+  being muted chrome and escalates to `· ⚠ stale 19h ago`; §7.17 as amended
+  argues the threshold and owns both surfaces' wording.
 
 **One block per vendor, transcript outranks relay.** A vendor sourced from its own
 store (Codex) is re-measured every scan; its relay entry, if one ever exists, is as old
@@ -3083,7 +3085,7 @@ chrome on that line.
 
 ```
  telltale  │  4 sessions  │  codex 1  gemini 1  cursor 1  grok 1
-   ag gemini-weekly ██▋─────   38% ↻ 3h00m  │  cc 7d █───────   15% ↻ 4d07h · 19h ago  │  cx 7d █████▌──   79% ↻ 22h48m
+                            ag gemini-weekly 38% ↻ 3h00m  │  cc 7d 15% ↻ 4d07h · ⚠ stale 19h ago  │  cx 7d 79% ↻ 22h48m
                                cursor spent  in 48k · out 1.2k · cache read 1.9M · cache write 62k  · 14 turns over 10m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  fleet usage  quota is a reading against a limit; spend is a count with none  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3157,6 +3159,39 @@ account and this is a statement about the measurement.
 **There is exactly one step.** §9.26's lesson is that a second level is worth what it is
 scarce, and the only boundary above this one that is not invented is `quotacache`'s 24h
 drop — which is a disappearance rather than a louder warning.
+
+#### Amended 2026-08-09: the header escalates too
+
+The pass above deliberately left the header alone, and recorded that as unfinished work
+rather than as a boundary. It was the wrong half to fix first: the reading that was acted
+on was read off the **glance** line, so the product ended up loud on the surface a reader
+opens on purpose and quiet on the surface they merely look at. The header now escalates on
+the same threshold, in the same order, off the same constants — `quotaAgeWarn` and the
+reason string are read from §7.17's declarations rather than restated, because two copies
+of `5 * time.Hour` is how the two surfaces would come to disagree about one reading.
+
+Past the threshold the header's age suffix becomes `· ⚠ stale 19h ago`, in `SevWarn`, with
+`· older than the fleet's shortest quota window` beside it at the most dressed level. The
+reduced set renders `- ! stale 19h ago`. The reading itself is untouched — 15% keeps its
+own severity hue, for §7.17's reason: that is a statement about the account and this is a
+statement about the measurement.
+
+**The header keeps a WORD where the view's barest level does not**, and that is the one
+place the two surfaces deliberately differ. §7.17's shed bottoms out at `⚠ 19h ago`,
+because by then the reader has opened a body on purpose and the sentence above it is still
+on screen. The header has no sentence anywhere and is read at a glance, so the level that
+survives every shed has to state the verdict without the reader knowing what `⚠` is
+supposed to cost them. `stale` is that word: it names a state rather than restating the
+duration (`19h old` would be the number a second time), and it is the word this codebase
+already spends on a reading that has outlived its currency — `DotStale`, and the footer's
+own `⚠ last scan 1m ago`.
+
+**What sheds is the argument and only the argument.** `ageReason` joins the dress ladder as
+a sixth level above the existing five and is the first thing dropped, ahead of forecasts:
+it is by a wide margin the longest clause on the line, and it is the only part of the
+escalation whose absence costs a reader something they cannot otherwise see. Everything
+below it — glyph, word, age — survives to the barest level, so a narrow terminal loses why
+the reading is distrusted, never that it is. Same grammar as the view, one surface over.
 
 #### Everything else is inherited, not invented
 
@@ -3280,14 +3315,19 @@ Declined inside the ratification, and the list is closed:
   took the fallback sentence because nobody has measured what its store says about an
   account. Its census row is populated, because that comes from the sessions rather than
   from a seam.
-- **The HEADER does not escalate an over-age reading; only this view does.** In the
-  `usage-stale-relay` frame above, the same nineteen-hour Claude reading renders
-  `cc 7d █─── 15% ↻ 4d07h · 19h ago` on the glance surface, muted, exactly as before. That
-  is deliberate for this pass — the header is unchanged, and its shed cascade has no room
-  for the clause that carries the claim in words — but it means the surface a reader
-  glances at is the one that still presents an old number quietly, and the surface they
-  open on purpose is the one that shouts. The header's own version of this is unfinished
-  work, not a settled boundary.
+- **One over-age block costs the whole header line its gauges.** The escalation is decided
+  per block, but the dress cascade is decided per LINE — one level has to fit every block
+  on it — so the eight columns `⚠ stale` adds to a single vendor can push the line down a
+  level that every vendor pays for. That is exactly what the `usage-stale-relay` frame
+  above shows: at 120 columns with three vendors the header was already flush against its
+  budget, so escalating Claude's reading dropped the bars from agy's and Codex's fresh
+  blocks too. The trade is deliberate and it is the cascade's existing grammar rather than
+  a new rule — the percentage beside each bar carries the reading, and a quietly stale
+  number is a worse failure than a missing bar — but it does mean the frame that
+  demonstrates the fix is also the frame that pays the most for it. A per-block dress
+  would fix it and is declined: blocks of different heights and vocabularies on one line
+  is a grid a reader has to reconstruct, and §7.2's whole argument is that they should
+  not have to.
 - **The models census counts sessions, not turns.** A model that ran once six hours ago and
   a model that has been running all morning are the same entry in the row. There is no
   per-model activity anywhere the HUD reads, so weighting the list would be an invention —
