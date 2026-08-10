@@ -1476,6 +1476,14 @@ func TestAnUnclassifiedFailureAfterATransientOneStillDropsTheThread(t *testing.T
 // dead thread on turn 5 — the wedge, arriving one turn late.
 func TestAStaleClassificationCannotSpareTheNextTurnsThread(t *testing.T) {
 	tempHome(t)
+	// The dispatch below is a REAL one, and the Codex seat added underneath is
+	// AvailInstalled with `codex` as its binary — so on any machine that has
+	// Codex, this test used to start a live `codex exec -s danger-full-access`
+	// turn on the operator's own account, and CI (which has no vendors) could
+	// never see it. The seat is here only so the dispatch has somebody to
+	// address once Claude is excluded; nothing about this test's claim needs a
+	// process to exist.
+	countSpawns(t)
 	m := turnModel(false)
 	m.turn = nil
 	m.st.Columns[0].Phase = PhaseIdle

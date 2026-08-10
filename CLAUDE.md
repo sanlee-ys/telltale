@@ -58,6 +58,35 @@ Traps, in order of how often they bite:
   `zero-vs-absent.txt`, …). The name says what property it pins down — add a new
   golden rather than overloading an existing one with an unrelated case.
 
+## A council test never spawns a vendor
+
+`go test ./internal/council` must not start a vendor CLI, and this is enforced
+mechanically rather than by convention. `internal/council/main_test.go`'s
+`TestMain` wraps the package's three spawn vars (`startProcess`, `startSession`,
+`startRPCSession`) so that reaching one with a binary this machine can actually
+resolve **panics**, naming the call site and the full argv.
+
+The rule exists because the opposite default was measured costing real money. A
+plain suite run on a Windows box with Codex installed was starting
+`codex exec --json -s danger-full-access` — a live agent turn with full write
+access, on the operator's own account — from a test that only wanted a second
+seat for a dispatch to address. **CI could never catch it**: CI has no vendors
+installed, so every seat resolves `AvailNotInstalled` and nothing dispatches.
+A green pipeline over a local-only defect is exactly what a guard is for.
+
+Two consequences when you write a council test:
+
+- **Dispatching for real means stubbing.** Call `countSpawns(t)`
+  (`flow_security_test.go`) — it stubs all three vars and restores them in
+  `t.Cleanup`. Anything that builds an `AvailInstalled` column with a real
+  binary name and then reaches `dispatch()` needs it.
+- **A deliberately unspawnable binary is still allowed through.** Several tests
+  hand over a `telltale-no-such-binary` path to exercise the process-died
+  branch; a path `exec.LookPath` cannot resolve launches nothing, so the guard
+  lets it reach the real call and fail there. The gate is what would actually
+  run, not a declared intent — an opt-in marker would just become the thing a
+  future test copies without meaning it.
+
 ## Commit / PR voice
 
 Lowercase, declarative, describing the **behavior change from the user's side** —
