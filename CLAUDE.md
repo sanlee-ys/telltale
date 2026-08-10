@@ -24,6 +24,15 @@ if ($out -match '5h|7d') { throw "honest-gauge violation: quota rendered without
 If you touch a statusline segment, expect a similar assertion to exist or to be worth
 adding — this repo tests the rendered string, not just that the code ran.
 
+**Run git as plain `git`, never `git -C <path>` — if you are a council seat.** The
+seat's allowlist is prefix-matched, so `Bash(git commit:*)` cannot match a command
+beginning `git -C`, and no rule spelling fixes it (`STATE.md` carries the measurement
+and why `Bash(git -C:*)` stays rejected). Your cwd is already the workspace, so `-C`
+buys nothing and costs every git call an approval. This **inverts** the usual advice:
+outside a seat, `git -C` is preferred precisely to avoid `cd &&` chains. Same trap on
+`gh` — `gh pr` and `gh run` are allowlisted, `gh api` is not, so reach for the
+porcelain rather than the API.
+
 ## Golden tests: the actual workflow and its traps
 
 `internal/council` and `internal/hud` render to fixed-width strings and diff them

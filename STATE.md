@@ -178,6 +178,18 @@ the argument; this file does not restate either.
   The full record lives on `autoAllowedTools` in
   `internal/council/vendors/claude.go`; do not re-open without a new
   measurement.
+
+  **Amended 2026-08-10: "friction the room already handles" holds only while
+  someone is answering cards.** Press `a`, or walk away, and a `-C` call stops
+  being a card and becomes the operator running git in a second terminal —
+  which is the one thing a command surface exists to remove. Measured the same
+  day, in a live room: `git -C <abs> status --short` was refused while a plain
+  `git status --short` from the same working directory ran untouched. The seat's
+  cwd is already the workspace, so **`-C` buys nothing here and costs the
+  allowlist**. The conflict worth naming is that the global command-shapes
+  convention mandates `git -C` precisely to avoid `cd &&` chains: right in a
+  terminal, inverted inside a seat. `CLAUDE.md` carries the instruction; this
+  entry carries why.
 - **Negative routing** (`@all` minus a seat) — **shipped 2026-08-04**, and this
   file went on listing it as an unowned gap for two days afterwards. `-@vendor`,
   the expansion of `-@all` into a list of exclusions, and the refusal to mix the
