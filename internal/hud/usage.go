@@ -323,7 +323,13 @@ func usageHeading(st State, sty Styles, g Glyphs) string {
 // states a PROVENANCE ("relayed by the statusline") rather than a number; the
 // windows are not its continuation, they are the next fact down.
 func usageBlockLines(st State, b usageBlock, cells int, sty Styles, g Glyphs) []string {
-	head := " " + sty.Identity.Render(string(b.vendor))
+	// The vendor NAME is the one place on this surface that spends a per-vendor
+	// hue (§7.17, ratified 2026-08-09; the HUD half of council's §9.28). Six
+	// blocks stack in one column here, so position answers nothing about which
+	// vendor a paragraph belongs to — the condition council named for when a hue
+	// earns its place. The dress beside it is NOT retinted: it is chrome, and
+	// past quotaAgeWarn it is a warning that has to keep SevWarn.
+	head := " " + sty.VendorIdentity(b.vendor).Render(string(b.vendor))
 
 	if b.quota != nil {
 		head = usageFit(head, usageSourceDress(*b.quota, g), st.Width, usageSourceStyle(*b.quota, sty), g)

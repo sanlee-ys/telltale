@@ -3201,12 +3201,66 @@ Added by the reading pass:
   a window label. Both above.
 - **A second blank row between blocks, and a light rule under each vendor heading.** The
   air-and-alignment note above.
-- **Per-vendor hues on this surface.** Council ratified exactly one hue exception (§9.28)
-  and it is for the SEAT — a concept the HUD does not have. Whether it extends to the fleet
-  usage view's vendor names is a question put to San on 2026-08-09 and **still open**; it
-  is not declined, it is unanswered, and nothing was built on a guess. If it is taken up it
-  arrives the way council's did: names only, 4-bit indices, the severity and chrome
-  families off limits, `PlainStyles`-identity by construction, and zero golden churn.
+
+#### Per-vendor hues: ratified, and exactly as far as council's went
+
+Answered 2026-08-09 (San), and it is a **yes**. The question §7.17 left open — whether
+council's seat-hue exception (§9.28) extends to this surface's vendor names — turned on
+whether the HUD has the concept the exception was granted for. It does, on this body and
+nowhere else: **six vendor blocks stack in one column**, each a heading with a paragraph
+under it, so position answers nothing about which vendor a reader is looking at. That is
+the exact condition §9.28 named. The grid does not qualify and does not get it — a row's
+vendor is already answered by a two-letter tag in a fixed column.
+
+It arrives on the terms the open question itself set, and every one of them is council's
+rather than a new argument:
+
+- **Names only.** The vendor NAME in each usage-block heading, and nothing else. Not the
+  seam sentence beside it (chrome, and past `quotaAgeWarn` a warning that must keep
+  `SevWarn`), not the gauges, percentages or countdowns (severity owns those), not the
+  spend line, not the models census (theme's identity hue, the same token the grid's
+  `MODEL` column spends), not the grid rows, and not the header's quota block — the glance
+  surface names its vendors by tag in a fixed order, so the question the hue answers is not
+  the one it is asking. `TestTheVendorHueIsSpentOnlyOnTheVendorName` walks the rendered
+  frame and fails if a hue reaches the header, a fact row or the footer.
+- **The assignments are council's, matched by literal value** — claude `5`, codex `6`, agy
+  `4`, cursor `12`, grok `14`, gemini falling back to the identity hue. A reader who learned
+  in the room that magenta is Claude must not meet a second colour for Claude one keypress
+  away. `TestVendorHuesMatchCouncilsSeats` writes council's numbers out and fails when one
+  copy moves without the other — the shape `TestStripTagsMatchTheHUDSpelling` already uses
+  for the two-letter tags, and for the same reason: the seam between the two surfaces is the
+  normalized session model and `internal/theme`'s numbers, and reaching across it for a
+  rendering detail is the coupling that seam exists to prevent.
+- **The map does NOT go into `internal/theme`**, and the stdlib rule is not why. These are
+  plain strings and would compile there. The reason is theme's own contract — one hue, one
+  meaning, across every surface that imports it — and `internal/statusline` has no vendor
+  blocks. Two packages holding the same map is the honest cost of keeping that contract
+  intact, and the parity test is what makes the cost bounded.
+- **4-bit indices, severity and chrome off limits.** `1`/`2`/`3` and their bright twins
+  `9`/`10`/`11` are the ramp this very surface draws its percentages in — a vendor heading
+  wearing red would read as an account in trouble — and `0`/`7`/`8`/`15` are the gauge track
+  and the terminal's own fore/background. `TestNoVendorHueIsASeverityOrChrome` fences it.
+- **`PlainStyles`-identity by construction, and zero golden churn.** One `retint` helper
+  returns the base style untouched when `Plain` is set, so no golden on this surface can see
+  the feature exist; **any golden diff on this change is a bug**, and none was produced.
+  `NO_COLOR` needs nothing new — `colorprofile` downsamples inside Bubble Tea exactly as
+  §7.5 describes.
+
+The **honest weakness is council's too**: `4`/`12` and `6`/`14` are two pairs of one hue at
+two intensities, and some schemes render each pair close. Council carries the distinction on
+the two-letter tags; here the thing being tinted is the vendor's full name, spelled out at
+the head of its own block, so this surface has more carrying it than the room does.
+
+Declined inside the ratification, and the list is closed:
+
+- **The hue on the grid rows and the header.** Position and the two-letter tag already
+  answer "which vendor" on both, so it would be the circus row §9.28 refused for council's
+  column headers, spent on a question the layout had already settled.
+- **A hue on the vendor tag as well as the name**, wherever the two appear together — double
+  the ink for a distinction the name already carries. Council's own declined list.
+- **Gemini given a hue of its own.** The legal set has one index left (`13`), and spending
+  it to complete a set is a palette entry with no argument behind it. Gemini takes the
+  identity-hue fallback and looks exactly as it always did.
 
 #### Known limitations
 
