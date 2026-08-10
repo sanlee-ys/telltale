@@ -3710,6 +3710,104 @@ Declined inside the ratification, and the list is closed:
   but a reader who takes the order for importance will be wrong, which is part of why it is
   alphabetical rather than ranked.
 
+### 7.18 The scan keeps up: what a poll actually costs, measured (2026-08-09)
+
+The footer's `⚠ last scan Ns ago` (`view.go` `staleAfter = 3s`) was on permanently on the
+owner's machine. That notice was **correct** — the scan really was taking longer than three
+seconds against a 1 s `pollInterval` — which is the worst version of the problem: a true
+signal that fires constantly stops being read, and the one field the HUD has for saying
+"do not trust what you are looking at" becomes wallpaper. Raising `staleAfter` was
+considered and rejected outright; it hides the measurement instead of fixing what it
+measures.
+
+**Measure first.** Profiled against the live corpus on 2026-08-09 (Windows 11, i7-7700K,
+1,404 sessions across six vendors — 967 claude, 346 codex, 65 agy, 53 grok, 7 cursor,
+1 gemini). Nothing from that corpus is in this repository; only the timings are.
+
+| vendor | refs | discover | read (all refs, gate 8) | per-read p50 / p95 |
+|---|---|---|---|---|
+| claude | 967 | 29 ms | **2.612 s** | 12.8 ms / 63.7 ms |
+| codex | 346 | 27 ms | 138 ms | 1.0 ms / 13.2 ms |
+| agy | 65 | 1 ms | 42 ms | 2.5 ms / 14.4 ms |
+| grok | 53 | 5 ms | 11 ms | 1.0 ms / 3.3 ms |
+| gemini | 1 | 0 ms | 3 ms | 3.2 ms |
+| cursor | 7 | 0 ms | 2 ms | 1.0 ms |
+
+Whole `Scan`, warm: **1.84 s / 1.91 s / 3.37 s** over three consecutive runs.
+
+Four of the five things worth suspecting were already fine, and saying so is the point of
+recording this:
+
+- **The vendors are already concurrent.** `Scan` fans out one goroutine per adapter and
+  `readAll` fans out per ref behind a semaphore of 8. Serialization was not the finding.
+- **The reads are already bounded.** Head 64 KB + tail 128 KB held at this corpus size —
+  164 MB read against 693 MB on disk. Cursor's SQLite store was already snapshot-cached on
+  a two-stat check, and grok's `updates.jsonl` never showed up in the profile at all.
+- **The scan is already off the UI goroutine** (`scanCmd`), so a slow scan lagged the
+  display; it never froze input.
+- **The 8-hour idle filter is genuinely expensive** — 1,235 of 1,404 sessions were read and
+  then hidden — but see the rejected optimization below.
+
+The finding was **JSON parsing, and specifically re-parsing work that had not changed**.
+Broken down over claude's 967 files: open 73 ms, stat 14 ms, head read 185 ms, tail read
+364 ms, subagent stat pass 321 ms, and **`json.Unmarshal` 2.65 s** — 46,727 records, every
+second, of which on a typical tick approximately none had been written since the last one.
+A pure `os.Stat` pass over the same 967 files costs 50 ms.
+
+**The fix** is a per-transcript parse cache in `internal/adapter/claudecode`, keyed on the
+file's `(size, mtime)` — the same shape `internal/adapter/cursor` already uses for its
+store snapshot. The honesty constraints decided its boundaries, not convenience:
+
+- **`last_activity` is not cached.** The §6 Q8 ruling makes it `max(mtime, newest record
+  timestamp)` and *both* inputs move, so only the record-timestamp half — a pure function
+  of the bytes the parse read — is stored. The mtime half is re-stat'ed and the max
+  re-folded on every read. This is the field the display's whole staleness story hangs
+  off; freezing it would have been the exact self-defeating fix.
+- **The sub-agent count is not cached.** It is a function of `now` as much as of the disk
+  (§7.13's recency horizon): a fan-out expires with no file changing. It runs on every
+  read, cache hit or not. It was always a stat pass and stays one.
+- **Diagnostics and degradation replay verbatim.** A hit reports the same torn records and
+  the same drift verdict a fresh read would. `drift.Watch.Fold` only reads its watch, which
+  is what makes replaying a stored one sound.
+- **Absence stays absence.** The stat happens *before* the cache lookup, so a deleted
+  transcript is `ErrSessionGone` and never a replay; and a field the parse did not source
+  is stored as empty and rebuilt as nil.
+- Entries are pruned in `Discover` against the live set, so a HUD left running for a day
+  does not accumulate one per session that ever existed.
+
+The residual risk is every mtime cache's: a rewrite landing on byte-identical size *and*
+identical mtime is invisible. NTFS timestamps are 100 ns, the vendor appends rather than
+rewrites, and the cursor adapter already accepts this trade.
+
+**Rejected: skipping the read for sessions the idle filter will hide.** It is the biggest
+apparent win on the table — 1,235 of 1,404 rows — and it is a lie. Q8 exists precisely
+because NTFS defers mtime while a writer holds the file (observed lags of ~100 s hot,
+~20 min closing), so a stat-only recency prefilter would hide the hot sessions the HUD
+exists to watch. The scan also cannot know the filter: `a` toggles `ShowAll` and the rows
+must already be there. The cache buys the same speed with none of that.
+
+**Result**, `BenchmarkScan` in `internal/hud` over a synthesized 1,400-session corpus
+(generated in the test, never committed; five runs each, same machine):
+
+| | before | after |
+|---|---|---|
+| warm scan (steady state) | 798 ms median (533–931) | **82 ms median (64–174)** |
+| cold scan (first, after launch) | 896 ms median (708–1156) | 994 ms median (655–1200) — unchanged within noise |
+
+On the live corpus the warm whole-`Scan` went from 1.84–3.37 s to **181–204 ms**. The cold
+scan is untouched by design: the first frame must genuinely read everything, and that is
+what the spinner is for.
+
+The benchmark's corpus is Claude-shaped only, which is a deliberate narrowing recorded here
+so nobody reads it as a whole-fleet figure: claude was 967 of 1,404 sessions and 2.6 s of
+the 2.9 s of read time, and it is the only adapter carrying this cache. The other five
+together were under a fifth of the budget. It runs at full scale in CI (~30 MB of temp
+files) and drops to 50 sessions under `-short`.
+
+Codex's 138 ms is the next-largest item and is now co-dominant with everything else put
+together. It is left alone: the scan is an order of magnitude inside its budget, and the
+same cache would need its own correctness argument against its own read path.
+
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 
 Rigor stays the floor; features and front-end craft are the priority axis from here.

@@ -51,6 +51,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/adapter/drift"
@@ -125,10 +126,110 @@ const subagentDir = "subagents"
 // inference, and the HUD marks it.
 var subagentHorizon = model.DefaultLivenessThresholds.Idle
 
-// Adapter reads Claude Code transcripts. It holds no mutable state and is safe
-// for concurrent use.
+// Adapter reads Claude Code transcripts. It is safe for concurrent use; the one
+// piece of mutable state is the parse cache below, and it is behind a mutex.
 type Adapter struct {
 	root string
+
+	// mu guards parses. Reads run concurrently (internal/hud.readAll fans out
+	// across a semaphore) and every one of them consults this map, so the
+	// synchronization is real rather than decorative — the repo runs a `race`
+	// job in CI.
+	mu sync.Mutex
+	// parses is the head+tail parse of each transcript, keyed by locator and
+	// stamped with the file identity it was parsed from. See parsed.
+	parses map[string]*parsed
+}
+
+// parsed is everything ONE head+tail parse of a transcript determined, kept so
+// that a tick on which the file did not move does not parse it again.
+//
+// Why this exists, measured on the owner's corpus 2026-08-09 (967 Claude
+// transcripts, 693 MB on disk, Windows 11): a full scan read 164 MB and
+// unmarshalled 46,727 JSON records EVERY SECOND, and json.Unmarshal alone was
+// 2.65 s of the 3.6 s of serial work — against a 1 s poll. The footer's
+// "last scan Ns ago" staleness notice was therefore on permanently, which is
+// how a true signal becomes wallpaper. I/O was not the problem: open 73 ms,
+// stat 14 ms, head 185 ms, tail 364 ms over the same 967 files. Parsing was.
+//
+// # Why this cannot lie
+//
+// The cache is keyed on (size, mtime) of the transcript, and NOTHING derived
+// from anything else lives in here. Specifically:
+//
+//   - LastActivity is NOT cached. §6 Q8 makes it max(mtime, newest record
+//     timestamp), and BOTH inputs can move — so only the record-timestamp half
+//     (newestTS), which is a pure function of the bytes this parse read, is
+//     stored. The mtime half is re-stat'ed and the max re-folded on every read.
+//   - The subagent count is NOT cached. It is a function of `now` (a
+//     transcript written 40 minutes ago crosses subagentHorizon with no file
+//     changing at all), so countSubagents runs on every read, cache hit or not.
+//     It was always a stat pass and stays one: 321 ms serial over 967 sessions.
+//   - Diagnostics are stored and replayed verbatim, so a cache hit reports
+//     exactly the torn records and drift a fresh read would have reported. A
+//     hit that quietly dropped a diagnostic would be worse than the slow scan.
+//   - Absence is stored as absence: an empty string here means the parse found
+//     no value, and the rebuilt session leaves the field nil. Nothing in here
+//     can resurrect a value whose record is gone, because a file whose records
+//     changed has a different mtime and is re-parsed.
+//
+// The residual risk is the one every mtime cache carries: a rewrite that lands
+// on byte-identical size AND identical mtime is invisible. NTFS timestamps are
+// 100 ns, the vendor appends rather than rewrites, and internal/adapter/cursor
+// already accepts this same trade for the same reason (see its snapshot type).
+type parsed struct {
+	size int64
+	mod  time.Time
+
+	// The four things applyRecord and aiTitle can set, as plain values.
+	workspace string
+	name      string
+	modelID   string
+	extras    []model.Extra
+
+	// newestTS is the newest in-window record timestamp, zero if none parsed.
+	newestTS time.Time
+	// bad and good are the unparseable and well-formed record counts; good is
+	// what drift.Fold weighs, and zero is its load-bearing case.
+	bad, good int
+	// watch is the drift verdict for this parse. Fold only READS a Watch, so
+	// replaying one across ticks is safe, and its verdict is a function of the
+	// records — exactly what the key covers.
+	watch *drift.Watch
+}
+
+// cachedParse returns the stored parse when the file identity still matches.
+func (a *Adapter) cachedParse(locator string, info fs.FileInfo) (*parsed, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	p, ok := a.parses[locator]
+	if !ok || p.size != info.Size() || !p.mod.Equal(info.ModTime()) {
+		return nil, false
+	}
+	return p, true
+}
+
+func (a *Adapter) storeParse(locator string, p *parsed) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.parses == nil {
+		a.parses = make(map[string]*parsed)
+	}
+	a.parses[locator] = p
+}
+
+// pruneParses drops cache entries for transcripts the latest Discover did not
+// see, so a long-running HUD does not accumulate an entry per session that ever
+// existed. Discover is the only honest place to do this: it is the one caller
+// that knows the whole live set.
+func (a *Adapter) pruneParses(live map[string]struct{}) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for k := range a.parses {
+		if _, ok := live[k]; !ok {
+			delete(a.parses, k)
+		}
+	}
 }
 
 // New returns an adapter rooted at the user's Claude projects directory.
@@ -246,9 +347,12 @@ func (a *Adapter) Discover(ctx context.Context) ([]model.SessionRef, error) {
 	}
 
 	refs := make([]model.SessionRef, 0, len(byID))
+	live := make(map[string]struct{}, len(byID))
 	for _, r := range byID {
 		refs = append(refs, r)
+		live[r.Locator] = struct{}{}
 	}
+	a.pruneParses(live)
 	return refs, nil
 }
 
@@ -370,7 +474,103 @@ func (u *usage) contextIn() int64 {
 // marked degraded and explained in Diagnostics, and the row still renders with
 // an em dash in that cell.
 func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Session, error) {
-	f, err := os.Open(ref.Locator)
+	// Stat before open. On the common tick the parse is cached and the file is
+	// never opened at all, and a stat is the cheapest way to answer both
+	// questions this path asks: does the transcript still exist (a vanished one
+	// is ErrSessionGone, exactly as before), and did it move.
+	info, err := os.Stat(ref.Locator)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, model.ErrSessionGone
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	p, hit := a.cachedParse(ref.Locator, info)
+	if !hit {
+		p, err = a.parse(ref.Locator, info)
+		if err != nil {
+			return nil, err
+		}
+		a.storeParse(ref.Locator, p)
+	}
+
+	now := time.Now()
+	s := &model.Session{Vendor: Vendor, ID: ref.ID, ObservedAt: now}
+
+	// The parse's four values, restored the same way a fresh parse would set
+	// them. An empty string is a parse that found nothing, so the field stays
+	// nil — absence survives the cache.
+	if p.workspace != "" {
+		s.WorkspaceDir = model.Ptr(p.workspace)
+	}
+	if p.name != "" {
+		s.Name = model.Ptr(p.name)
+	}
+	if p.modelID != "" {
+		s.Model = &model.Model{ID: p.modelID}
+	}
+	if len(p.extras) > 0 {
+		// Copied, not aliased: Extras is a slice on a struct the cache keeps
+		// across ticks, and handing the same backing array to every reader is
+		// how one row's append silently rewrites another's.
+		s.Extras = append([]model.Extra(nil), p.extras...)
+	}
+
+	// last_activity is the fresher of two vendor-written signals: the file's
+	// mtime and the newest record timestamp (§6 Q8 ruling, 2026-08-01). NTFS
+	// defers the mtime update while the writer holds the file — observed lags
+	// of ~100 s on a hot session and ~20 min on a closing one — so mtime alone
+	// UNDER-reports activity on exactly the rows the HUD exists to watch. A
+	// signal meaningfully ahead of the observation clock is a broken read and
+	// is excluded. Only if BOTH signals are unreadable does the field degrade.
+	//
+	// The mtime half is re-stat'ed on EVERY read and the max re-folded here,
+	// cache hit or not — this is the field the cache is least allowed to freeze,
+	// because it is the one the whole staleness display hangs off.
+	mtimeOK := false
+	var mtime time.Time
+	if mod := info.ModTime(); !mod.After(now.Add(futureSkew)) {
+		mtimeOK, mtime = true, mod
+	}
+
+	// Q8 fold: the fresher valid signal wins; both invalid degrades.
+	switch {
+	case mtimeOK && p.newestTS.After(mtime):
+		s.LastActivity = model.TimePtr(p.newestTS)
+	case mtimeOK:
+		s.LastActivity = model.TimePtr(mtime)
+	case !p.newestTS.IsZero():
+		s.LastActivity = model.TimePtr(p.newestTS)
+	default:
+		s.Degraded = s.Degraded.With(model.FieldLastActivity)
+		s.Diagnostics = append(s.Diagnostics, "no readable activity timestamp (mtime ahead of the clock, no record timestamps)")
+	}
+
+	if p.bad > 0 {
+		// Structure only, never transcript content: this repo is public.
+		s.Diagnostics = append(s.Diagnostics, plural(p.bad, "unparseable record skipped", "unparseable records skipped"))
+	}
+
+	// Not cached, and deliberately: the count is a function of `now` as much as
+	// of the disk (subagentHorizon), so a session's fan-out chip must expire on
+	// the clock even though no file moved. It was always a stat pass.
+	a.countSubagents(s, ref.Locator, now)
+
+	// Last, because the verdict reads what the session managed to source. Fold
+	// only reads the Watch, which is what makes replaying a cached one sound.
+	p.watch.Fold(s, p.good)
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// parse reads the head and tail windows and unmarshals them. This is the
+// expensive half of Read and the only half the cache stores; see parsed.
+func (a *Adapter) parse(locator string, info fs.FileInfo) (*parsed, error) {
+	f, err := os.Open(locator)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, model.ErrSessionGone
 	}
@@ -379,27 +579,11 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	}
 	defer f.Close()
 
-	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-
 	now := time.Now()
-	s := &model.Session{Vendor: Vendor, ID: ref.ID, ObservedAt: now}
-
-	// last_activity is the fresher of two vendor-written signals: the file's
-	// mtime and the newest record timestamp (§6 Q8 ruling, 2026-08-01). NTFS
-	// defers the mtime update while the writer holds the file — observed lags
-	// of ~100 s on a hot session and ~20 min on a closing one — so mtime alone
-	// UNDER-reports activity on exactly the rows the HUD exists to watch. The
-	// record timestamps live in the tail window we already read, so the max is
-	// folded in after apply(); a signal meaningfully ahead of the observation
-	// clock is a broken read and is excluded, same as before. Only if BOTH
-	// signals are unreadable does the field degrade.
-	mtimeOK := false
-	var mtime time.Time
-	if mod := info.ModTime(); !mod.After(now.Add(futureSkew)) {
-		mtimeOK, mtime = true, mod
+	p := &parsed{
+		size:  info.Size(),
+		mod:   info.ModTime(),
+		watch: drift.NewWatch(verifiedAgainst, canarySessionID),
 	}
 
 	// The head window must end where the tail window begins, or records in
@@ -413,7 +597,6 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	}
 	var head [][]byte
 	if headWindow > 0 {
-		var err error
 		head, err = jsonl.Head(f, headWindow)
 		if err != nil {
 			return nil, err
@@ -424,27 +607,35 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		return nil, err
 	}
 
-	var bad, good int
-	var newestTS time.Time
-	w := drift.NewWatch(verifiedAgainst, canarySessionID)
+	// The parse folds into a scratch Session rather than into parsed's plain
+	// fields directly, purely so applyRecord and setExtra stay the ONE place
+	// that decides precedence (last record wins, customTitle outranks ai-title,
+	// a synthetic model never overwrites a real one). Two copies of that logic
+	// is how a cache and a fresh read start disagreeing.
+	scratch := &model.Session{Vendor: Vendor}
 	apply := func(recs [][]byte) {
 		for _, raw := range recs {
 			var r record
 			if err := json.Unmarshal(raw, &r); err != nil {
 				// One bad record degrades the fields it feeds, not the row.
-				bad++
+				p.bad++
 				continue
 			}
-			good++
+			p.good++
 			// The canary is checked before the sidechain skip: a sidechain
 			// record is not a row, but it is still evidence about the shape.
 			if r.SessionID != "" {
-				w.Saw(canarySessionID)
+				p.watch.Saw(canarySessionID)
 			}
-			w.Observed(r.Version)
+			p.watch.Observed(r.Version)
+			// The skew bound is taken against the PARSE clock, which is within
+			// a tick of the read clock that used to take it. A record stamped
+			// ahead of the clock is excluded and stays excluded until the file
+			// moves again — the conservative direction, and it costs at most
+			// futureSkew of freshness on a row whose mtime says the same thing.
 			if ts, err := time.Parse(time.RFC3339Nano, r.Timestamp); err == nil &&
-				ts.After(newestTS) && !ts.After(now.Add(futureSkew)) {
-				newestTS = ts
+				ts.After(p.newestTS) && !ts.After(now.Add(futureSkew)) {
+				p.newestTS = ts
 			}
 			if r.IsSidechain {
 				// Free insurance: 0 of 837 top-level transcripts carried one
@@ -452,12 +643,12 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 				// vendor change that moves them inline must not inflate rows.
 				continue
 			}
-			a.applyRecord(s, &r)
+			a.applyRecord(scratch, &r)
 			// A custom title outranks a generated one, so an ai-title never
 			// overwrites a customTitle already seen.
-			if r.Type == "ai-title" && s.Name == nil {
+			if r.Type == "ai-title" && scratch.Name == nil {
 				if t, ok := aiTitle(raw); ok {
-					s.Name = model.Ptr(t)
+					scratch.Name = model.Ptr(t)
 				}
 			}
 		}
@@ -465,33 +656,17 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	apply(head)
 	apply(tail)
 
-	// Q8 fold: the fresher valid signal wins; both invalid degrades.
-	switch {
-	case mtimeOK && newestTS.After(mtime):
-		s.LastActivity = model.TimePtr(newestTS)
-	case mtimeOK:
-		s.LastActivity = model.TimePtr(mtime)
-	case !newestTS.IsZero():
-		s.LastActivity = model.TimePtr(newestTS)
-	default:
-		s.Degraded = s.Degraded.With(model.FieldLastActivity)
-		s.Diagnostics = append(s.Diagnostics, "no readable activity timestamp (mtime ahead of the clock, no record timestamps)")
+	if scratch.WorkspaceDir != nil {
+		p.workspace = *scratch.WorkspaceDir
 	}
-
-	if bad > 0 {
-		// Structure only, never transcript content: this repo is public.
-		s.Diagnostics = append(s.Diagnostics, plural(bad, "unparseable record skipped", "unparseable records skipped"))
+	if scratch.Name != nil {
+		p.name = *scratch.Name
 	}
-
-	a.countSubagents(s, ref.Locator, now)
-
-	// Last, because the verdict reads what the session managed to source.
-	w.Fold(s, good)
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
+	if scratch.Model != nil {
+		p.modelID = scratch.Model.ID
 	}
-	return s, nil
+	p.extras = scratch.Extras
+	return p, nil
 }
 
 // countSubagents counts the session's recently written sub-agent transcripts.
