@@ -15,7 +15,11 @@ telltale*.exe
 *trace*.txt
 
 # PowerShell's module analysis cache, when it lands HERE instead of under
-# %LOCALAPPDATA%, as an untracked internal/council/Microsoft/… tree on Windows.
+# %LOCALAPPDATA%, as an untracked Microsoft/… tree on Windows — not just at
+# the repo root but under whatever package directory `go test` happened to
+# run from (e.g. internal/council/Microsoft/…), which a pattern containing a
+# slash would miss: such a pattern anchors to the .gitignore's own directory
+# unless it starts with `**/`.
 #
 # This block was added believing nothing in this repository spawns PowerShell
 # and that the writer was therefore out of reach. That is not what happens.
@@ -47,7 +51,7 @@ telltale*.exe
 # Until that lands this stays a backstop and not a fix: it keeps the crumbs out
 # of `git status` (and out of an /adopt, the way .claude/ above once broke one)
 # rather than stopping them being written.
-Microsoft/Windows/PowerShell/
+**/Microsoft/Windows/PowerShell/
 
 # Claude Code's per-repo settings (approvals, local config). Machine-local
 # state, never content this repo ships — and the first live /adopt was
