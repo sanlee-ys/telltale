@@ -2595,7 +2595,9 @@ amendment to "the gauges never write" (§1, CLAUDE.md):
   from the future beyond clock-jitter tolerance.
 - **age travels with the reading** — past 5 minutes a relayed block carries
   `· 2h ago` at every dress level, the §7.12 basis rule applied to time: shedding
-  the age would re-present a stale number as fresh.
+  the age would re-present a stale number as fresh. Past `quotaAgeWarn` it stops
+  being muted chrome and escalates to `· ⚠ stale 19h ago`; §7.17 as amended
+  argues the threshold and owns both surfaces' wording.
 
 **One block per vendor, transcript outranks relay.** A vendor sourced from its own
 store (Codex) is re-measured every scan; its relay entry, if one ever exists, is as old
