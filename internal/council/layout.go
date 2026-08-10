@@ -129,10 +129,23 @@ const (
 	// needed to say so.
 	stripWidth = stripColumn
 
-	// promptChrome is the fixed part of the footer: the rule above the
-	// composer, and the mode line below it. The composer itself is variable —
-	// see Layout.Prompt.
-	promptChrome = 2
+	// promptChrome is the fixed part of the footer: the composer box's two
+	// borders, and the key line below it. The composer itself is variable — see
+	// Layout.Prompt, which counts the rows INSIDE the box.
+	//
+	// Three, and the third row is what §9.44 cost. It was two — one heavy rule
+	// above the compose area, one mode line under it — and the box replaces the
+	// rule with a top border and adds a bottom border to close the shape. Net one
+	// row, taken from the body, and it is spent where every other row in this
+	// budget is defended: the notice, the needs-you strip and the band all take a
+	// body row to say something the body cannot. This one says where the room ends
+	// and where you type.
+	//
+	// The room's own floor is unchanged by it. At MinHeight the budget is 2 header
+	// rows + 3 here + a one-row composer, which still leaves the columns four rows
+	// of reading area — TestFrameHeightFitsTheTerminal and TestFrameNeverTears
+	// sweep the matrix that proves it.
+	promptChrome = 3
 	// headerRows is the title line plus its rule.
 	headerRows = 2
 

@@ -7,33 +7,37 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
-// frameBody is the rows between the header rule and the footer rule — the part
-// columnsBody draws.
+// frameBody is the rows between the header's rule and the composer's box — the
+// part columnsBody draws.
 //
-// Found by the two full-width rules rather than by arithmetic over Layout,
-// because the point of these assertions is what a reader SEES: a test that
-// re-derived the body's row range from the same numbers the renderer used would
-// agree with a renderer that had gone wrong. A body row is never all rule glyphs
-// (it carries at least the frame pad and a gutter), so the two lines that are
-// bracket the body exactly.
+// Found by what is PAINTED rather than by arithmetic over Layout, because the
+// point of these assertions is what a reader sees: a test that re-derived the
+// body's row range from the same numbers the renderer used would agree with a
+// renderer that had gone wrong.
 //
-// The rule handed in is the HEAVY one since §9.26: the frame's two edges are the
-// only lines in the room drawn at that weight, which makes this search stricter
-// than it was rather than merely different — a column header's leader can no
-// longer be mistaken for a frame edge at any width.
-func frameBody(t *testing.T, frame string, rule string) []string {
+// The upper bound is the HEAVY rule (§9.26), which makes the search stricter
+// than a light-rule match — a column header's leader can never be mistaken for
+// the frame's edge. The lower bound used to be a second heavy rule and is now
+// the composer box's top-left corner (§9.44): the box replaced that rule, and
+// nothing else in the room opens a line with that glyph.
+func frameBody(t *testing.T, frame string, g Glyphs) []string {
 	t.Helper()
 	lines := strings.Split(frame, "\n")
-	var rules []int
+	top, box := -1, -1
 	for i, ln := range lines {
-		if ln != "" && strings.Trim(ln, rule) == "" {
-			rules = append(rules, i)
+		if top < 0 && ln != "" && strings.Trim(ln, g.RuleHeavy) == "" {
+			top = i
+			continue
+		}
+		if box < 0 && strings.HasPrefix(strings.TrimSpace(ln), g.BoxTL) {
+			box = i
 		}
 	}
-	if len(rules) < 2 {
-		t.Fatalf("frame has %d full-width rules, want at least 2:\n%s", len(rules), frame)
+	if top < 0 || box <= top {
+		t.Fatalf("frame has no reading area between the header rule (%d) and the "+
+			"composer box (%d):\n%s", top, box, frame)
 	}
-	return lines[rules[0]+1 : rules[len(rules)-1]]
+	return lines[top+1 : box]
 }
 
 // TestTheRailNeverDashes is the frame the room draws around its columns: it does
@@ -77,7 +81,7 @@ func TestTheRailNeverDashes(t *testing.T) {
 		{"skips", func() State { return skipRoom(false) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			body := frameBody(t, render(tc.st()), g.RuleHeavy)
+			body := frameBody(t, render(tc.st()), g)
 			railed := make([]bool, len(body))
 			any := false
 			for i, ln := range body {
@@ -109,7 +113,7 @@ func TestRailsDoNotSpearAVoid(t *testing.T) {
 	g := UnicodeGlyphs()
 	st := room()
 	st.Width, st.Height = 120, 60
-	body := frameBody(t, render(st), g.RuleHeavy)
+	body := frameBody(t, render(st), g)
 
 	bare := 0
 	for _, ln := range body {

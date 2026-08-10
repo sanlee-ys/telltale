@@ -10,11 +10,11 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                                                                                                                        
 ▌ turn 4  ───────────────────────────────────────  │                      │                      │                      
 ▌ › where does the resume path break?              │  last: turn 3 ✓      │  last: turn 3 ⚠      │                      
 ▌                                                  │  ○ not addressed in  │  ○ not addressed in  │  no turn dispatched  
 ▌ Reading resume.go now.                           │    turn 4            │    turn 4            │  yet.                
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ›                                                                                                                     
-  VIEW                     ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-4 seat  │  ctrl+c cancel  │  ? help  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+                           ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-4 seat  │  ctrl+c cancel  │  ? help  

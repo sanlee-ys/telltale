@@ -337,7 +337,7 @@ func TestBottomAnchorPutsBodyNearComposer(t *testing.T) {
 	g := GlyphsFor(false)
 	bodyStart, bodyEnd := -1, -1
 	for i, r := range rows {
-		if !fullWidthRule(r, st.Width, g) {
+		if !frameEdge(r, st.Width, g) {
 			continue
 		}
 		if bodyStart < 0 {
@@ -393,7 +393,7 @@ func TestRailsStopThroughEmptyBody(t *testing.T) {
 	// entirely the rule glyph at frame width is a room rule.
 	bodyStart, bodyEnd := -1, -1
 	for i, r := range rows {
-		if !fullWidthRule(r, st.Width, g) {
+		if !frameEdge(r, st.Width, g) {
 			continue
 		}
 		if bodyStart < 0 {
@@ -434,6 +434,17 @@ func TestRailsStopThroughEmptyBody(t *testing.T) {
 // leader used to be the same character, so "is this line the frame" was a
 // question about width and this helper had to say so out loud; now it is a
 // question about which glyph, and the width check is belt and braces.
+// frameEdge reports a line that BOUNDS the room's reading area.
+//
+// It used to be one predicate — a full-bleed heavy rule — because the frame was
+// two of them. §9.44 replaced the lower one with the composer's box, so the
+// reading area now runs from the header's rule to that box's top border, and a
+// test hunting for "the body between the rules" hunts for one of each.
+func frameEdge(line string, width int, g Glyphs) bool {
+	return fullWidthRule(line, width, g) ||
+		strings.HasPrefix(strings.TrimSpace(line), g.BoxTL)
+}
+
 func fullWidthRule(line string, width int, g Glyphs) bool {
 	rs := []rune(line)
 	if len(rs) != width {

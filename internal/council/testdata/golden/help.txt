@@ -1,7 +1,6 @@
   council READ  │  ~/code/telltale                                             no turn yet  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   council  ──────────────────────────────────────────────────────────────────  one brief, several agents, side by side  
-                                                                                                                        
     i / enter    compose a brief; enter dispatches — to claude, or whoever is @mentioned (@all = everyone)              
     ctrl+j/u/esc ctrl+j puts a newline in the brief (it grows to six rows); ctrl+u clears it; esc leaves, keeping it    
     @codex       name a lane: @claude @codex @agy @cursor; @all convenes everyone                                       
@@ -19,6 +18,7 @@
     a seat that cannot be driven folds out of the grid, named in one line above.                                        
   ↓ 5 more below                                                                                                        
     ?            next page: what the badge on each column means                                                         
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ›                                                                                                                     
-  VIEW                                                                            ? next page  │  i compose  │  q quit  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+                                                                                  ? next page  │  i compose  │  q quit  

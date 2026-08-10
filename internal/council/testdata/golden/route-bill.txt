@@ -17,8 +17,8 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                                                                                                                        
 ▌                                       │  working — the reply arrives whole.   │  no turn dispatched yet.              
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  › @all where does this leave the gate?_                                                                               
-  COMPOSE              → everyone (3 seats)  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  › @all where does this leave the gate?_                                                                         │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────  COMPOSE  ─╯  
+                       → everyone (3 seats)  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut  

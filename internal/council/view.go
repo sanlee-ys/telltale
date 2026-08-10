@@ -83,12 +83,17 @@ func Render(st State, sty Styles, g Glyphs) string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(rule(st.Width, sty, g))
+	// The composer is a BOX, and it is the only bordered element on screen
+	// (§9.44). Everything above it is a reading area; this is where you act, and
+	// the border is the room saying so in shape rather than in words.
+	b.WriteString(fit(composerTop(lay, sty, g), st.Width))
 	b.WriteString("\n")
 	for _, l := range composerLines(st, lay, sty, g) {
 		b.WriteString(fit(l, st.Width))
 		b.WriteString("\n")
 	}
+	b.WriteString(fit(composerBottom(st, lay, sty, g), st.Width))
+	b.WriteString("\n")
 	b.WriteString(fit(modeLine(st, lay, sty, g), st.Width))
 	return b.String()
 }
@@ -177,9 +182,21 @@ func floorMessage(st State, sty Styles) string {
 	return sty.Muted.Render(want + got)
 }
 
-// rule is the frame's own edge: the full-bleed line under the header and the
-// one above the composer. Together they are the only closed shape on screen, so
-// they draw at the HEAVY weight and everything inside them stays light (§9.26).
+// rule is the frame's own edge: the full-bleed line under the header. It draws
+// at the HEAVY weight and everything inside it stays light (§9.26).
+//
+// **It used to be two lines, and §9.44 took the lower one away.** §9.26's
+// argument was that the two full-bleed rules were the only CLOSED SHAPE on
+// screen, and that a closed shape is what earns a second weight. That is no
+// longer what closes the frame: the composer is a bordered box now, so the
+// frame's shape is this rule at the top and a box with four corners at the
+// bottom — and the box closes by SHAPE rather than by ink, which is why it draws
+// light and why the weight here is still scarce enough to mean something.
+//
+// What the weight says now is narrower and truer than "outline": this is the
+// line where the room's chrome stops and the seats begin. There is exactly one
+// of it, plus a turn page's own separator, which is the same scarcity §9.26
+// bought and one line cheaper.
 //
 // It is still `Rule()`, i.e. muted, and that is deliberate. Weight says which
 // line is the outline; intensity would say the outline matters more than the
@@ -2823,16 +2840,129 @@ func tabBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	return b.String()
 }
 
-// promptWidth is the usable text width inside the compose area.
+// boxChrome is what the composer's border costs a row of text: a side glyph and
+// its air, on each side (§9.44).
+//
+// The air is `gutter`, not a literal, because **the room spells its separator
+// one way** — two cells each side of every `│` it draws, which
+// TestTheRoomSpellsItsSeparatorOneWay holds for the header, the mode line and
+// the column rails. A box that welded its prose to its sides with one cell would
+// be a second grammar for the room's only vertical mark, on the one element the
+// eye is meant to read as the frame.
+//
+// It is named rather than spelled out for framePad's reason: the builders that
+// PAINT the sides and the arithmetic that SUBTRACTS them have to agree exactly,
+// or the row runs past the terminal edge.
+const boxChrome = 2 * (1 + gutter)
+
+// boxSideL and boxSideR are the painted sides, air included.
+func boxSideL(g Glyphs) string { return g.Sep + strings.Repeat(" ", gutter) }
+func boxSideR(g Glyphs) string { return strings.Repeat(" ", gutter) + g.Sep }
+
+// boxWidth is how wide the composer's box is drawn, borders included.
+func boxWidth(width int) int {
+	w := width - 2*framePad
+	if w < boxChrome {
+		w = boxChrome
+	}
+	return w
+}
+
+// promptWidth is the usable text width inside the compose area — inside the
+// box's sides, inside its air, and after the prompt glyph.
 func promptWidth(width int, g Glyphs) int {
 	// The prompt glyph plus its space. One cell in both glyph sets, but measured
 	// rather than assumed, because a set that changed it would silently shift
 	// every wrap in the composer.
-	w := width - 2*framePad - lipgloss.Width(g.Prompt+" ")
+	w := boxWidth(width) - boxChrome - lipgloss.Width(g.Prompt+" ")
 	if w < 1 {
 		w = 1
 	}
 	return w
+}
+
+// composerTop is the box's opening border.
+func composerTop(lay Layout, sty Styles, g Glyphs) string {
+	w := boxWidth(lay.Width)
+	return framePadStr + sty.Rule().Render(
+		g.BoxTL+strings.Repeat(g.Rule, maxInt(0, w-2))+g.BoxTR) + framePadStr
+}
+
+// composerBottom closes the box, and carries the room's standing state ON the
+// border — a fieldset legend, right-anchored (§9.44).
+//
+// The facts here are the ones that are true of the ROOM until a key changes
+// them: which mode the keys are in, and whether the gate is still asking. They
+// used to open the mode line under the composer, wedged against a wall of key
+// hints, where a word like COMPOSE competed for attention with six bindings that
+// change every frame. On the border they sit against nothing, and they are
+// attached to the thing they describe rather than floating under it.
+//
+// They are NOT repeated below: statusLine's left-hand slot is empty now, and the
+// line under the box is key hints and nothing else. A fact in two places is a
+// fact a reader has to reconcile.
+func composerBottom(st State, lay Layout, sty Styles, g Glyphs) string {
+	w := boxWidth(lay.Width)
+	styled, plain := composerLabel(st, sty, g)
+
+	// The legend gets `gutter` cells of air each side and one rule cell outboard
+	// of it — the same air every labelled rule in this room puts around its own
+	// label, so a legend on a border reads the way `turn 3 ───` already does.
+	// When the frame cannot afford that, the border closes BARE rather than
+	// truncating: a legend cut in half is a claim cut in half, and the mode is
+	// still named by the keys the moment anything is pressed.
+	air := strings.Repeat(" ", gutter)
+	left := w - 2 - (lipgloss.Width(plain) + 2*gutter) - 1
+	if plain == "" || left < 1 {
+		return framePadStr + sty.Rule().Render(
+			g.BoxBL+strings.Repeat(g.Rule, maxInt(0, w-2))+g.BoxBR) + framePadStr
+	}
+	return framePadStr +
+		sty.Rule().Render(g.BoxBL+strings.Repeat(g.Rule, left)+air) +
+		styled +
+		sty.Rule().Render(air+g.Rule+g.BoxBR) + framePadStr
+}
+
+// composerLabel is the legend on the box's bottom border: the mode word, and the
+// gate cadence when the room has stopped asking.
+//
+// Returns the styled copy and a plain one, for the same reason hints does — the
+// border's rule runs are sized from the plain width, and measuring a string that
+// carries escapes would count the escape bytes as cells.
+//
+// The cadence keeps its KEY (`a`), not just its word. Moving `not asking` up here
+// without it would leave the room permanently ungated with the only way back
+// undocumented on screen, which is the §9.17 defect §9.24's footer cell was added
+// to close — the cell moved, the promise did not.
+func composerLabel(st State, sty Styles, g Glyphs) (styled, plain string) {
+	word, style := "VIEW", sty.Strong
+	switch {
+	case st.Gating():
+		// Same rank it has on the mode line: a gate is the only state in this room
+		// where something is STOPPED until a key is pressed, so it outranks both
+		// other mode words wherever they are drawn.
+		word, style = "GATE", sty.Alert
+	case st.Mode == ModeComposing:
+		word = "COMPOSE"
+		// Empty compose is the post-turn resting state, demoted for the reason it
+		// always was: nothing has been typed, so the word is orientation rather
+		// than news.
+		if strings.TrimSpace(st.Draft) == "" {
+			style = sty.Muted
+		}
+	case st.Page.Open:
+		word = pageLabel(st)
+	}
+	styled, plain = style.Render(word), word
+
+	if !st.Asking() && st.Write {
+		// The room's one separator grammar: two cells of air each side
+		// (TestTheRoomSpellsItsSeparatorOneWay).
+		sep := strings.Repeat(" ", gutter) + g.Sep + strings.Repeat(" ", gutter)
+		styled += sty.Muted.Render(sep) + sty.Text.Render("a") + " " + sty.Muted.Render("not asking")
+		plain += sep + "a not asking"
+	}
+	return styled, plain
 }
 
 // composerRows is how many rows the draft wants, before the height floor.
@@ -2868,6 +2998,11 @@ func composerRows(st State, g Glyphs) int {
 func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 	prefix := g.Prompt + " "
 	w := promptWidth(lay.Width, g)
+	// The box's sides, drawn on every row between the two borders. Muted with the
+	// borders themselves: the box is chrome, and only what is typed inside it is
+	// content (§9.44).
+	lgut := framePadStr + sty.Rule().Render(boxSideL(g))
+	rgut := sty.Rule().Render(boxSideR(g)) + framePadStr
 
 	text := st.Draft
 	if st.Mode == ModeComposing {
@@ -2879,8 +3014,8 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 		// so repeating "goes to everyone" here was footer noise on an empty draft
 		// — the exact chrome the Windows screenshot spent body on.
 		return padRows([]string{
-			framePadStr + sty.Muted.Render(prefix) +
-				sty.Muted.Render(padRight("type a brief"+g.Caret, w, g)) + framePadStr,
+			lgut + sty.Muted.Render(prefix) +
+				sty.Muted.Render(padRight("type a brief"+g.Caret, w, g)) + rgut,
 		}, lay, w, sty, g)
 	}
 
@@ -2899,7 +3034,7 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 			text = elideLeft(text, w, g.Ellipsis)
 		}
 		return padRows([]string{
-			framePadStr + sty.Muted.Render(prefix) + sty.Text.Render(padRight(text, w, g)) + framePadStr,
+			lgut + sty.Muted.Render(prefix) + sty.Text.Render(padRight(text, w, g)) + rgut,
 		}, lay, w, sty, g)
 	}
 
@@ -2919,8 +3054,8 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 	if elided > 0 {
 		// The same words the column overflow marker uses, deliberately: one
 		// vocabulary for "there is content you cannot see", wherever it appears.
-		out = append(out, framePadStr+sty.Muted.Render(padRight(
-			g.Up+" "+strconv.Itoa(elided)+" more above", w+2, g))+framePadStr)
+		out = append(out, lgut+sty.Muted.Render(padRight(
+			g.Up+" "+strconv.Itoa(elided)+" more above", w+lipgloss.Width(prefix), g))+rgut)
 	}
 	for i, r := range rows {
 		// Continuation rows are indented to the prefix, so a wrapped brief reads
@@ -2929,7 +3064,7 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 		if i == 0 && elided == 0 {
 			p = prefix
 		}
-		out = append(out, framePadStr+sty.Muted.Render(p)+sty.Text.Render(padRight(r, w, g))+framePadStr)
+		out = append(out, lgut+sty.Muted.Render(p)+sty.Text.Render(padRight(r, w, g))+rgut)
 	}
 	return padRows(out, lay, w, sty, g)
 }
@@ -2938,7 +3073,9 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 // frame is the number of lines the terminal has whatever the draft is doing.
 func padRows(rows []string, lay Layout, w int, sty Styles, g Glyphs) []string {
 	for len(rows) < lay.Prompt {
-		rows = append(rows, framePadStr+sty.Muted.Render("  ")+sty.Text.Render(padRight("", w, g))+framePadStr)
+		rows = append(rows, framePadStr+sty.Rule().Render(boxSideL(g))+
+			sty.Muted.Render("  ")+sty.Text.Render(padRight("", w, g))+
+			sty.Rule().Render(boxSideR(g))+framePadStr)
 	}
 	return rows[:lay.Prompt]
 }
@@ -3186,22 +3323,16 @@ func modeHints(st State, g Glyphs) []hint {
 		{key: g.Up + g.Down, label: "scroll"},
 		{key: "[ ]", label: "turn", shed: true},
 	}
-	// A room that has stopped asking says so, on every frame, next to the key
-	// that reverses it.
+	// A room that has stopped asking still says so on every frame, and still says
+	// it next to the key that reverses it — on the composer box's bottom border
+	// now rather than here (§9.44, composerLabel).
 	//
-	// This is a hint about STATE rather than about the mode, which no other cell
-	// on this line is — and that is the justification rather than an exception to
-	// it. `a` on the card is announced twice while a card is up and then the card
-	// is gone; without this the room would be permanently ungated with the only
-	// way back undocumented anywhere on screen, which is the §9.17 defect rebuilt
-	// one key later. It is not marked sheddable for the same reason `t grid` is
-	// not: shedding it would drop the way out of a state, not a convenience.
-	//
-	// Only when the gate is OFF. The asking room is the default and needs no cell
-	// to say a card will arrive — the card says that itself.
-	if !st.Asking() && st.Write {
-		hs = append(hs, hint{key: "a", label: "not asking"})
-	}
+	// It was the one cell on this line that was a hint about STATE rather than
+	// about the mode, which is exactly why it moved: the border is where this room
+	// keeps its standing state. The promise it makes is unchanged and unsheddable
+	// — `a` and the words `not asking` are still on screen together — so the §9.17
+	// defect it was added to close stays closed. What is gone is the cell, and the
+	// footer is one item shorter in the room where the guard is off.
 	if several {
 		// `f` is the SECOND rung of the shed ladder, after `[ ]`, and the two
 		// cells framePad now spends on the room's margins are what made a second
@@ -3243,8 +3374,19 @@ func modeHints(st State, g Glyphs) []hint {
 		hint{key: "?", label: "help"}, hint{key: "q", label: "quit"})
 }
 
+// modeLine is now the KEYS and nothing else — the mode word and the gate cadence
+// moved onto the composer box's bottom border (§9.44, composerLabel).
+//
+// The split is by lifetime rather than by topic. What is on the border is true
+// of the room until something is pressed; what is on this line changes with the
+// mode, the draft and the turn. Grok's CLI makes the same cut and it is the
+// reason its input box reads as calm: the box says what you are in, the line
+// under it says what you can press.
 func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
-	var left string
+	// Empty, deliberately: statusLine's left-hand slot held the mode word, and the
+	// word is on the border now. It is not backfilled with something else — a slot
+	// that exists because it used to is how a footer becomes a wall again.
+	const left = ""
 	switch {
 	case st.Gating():
 		// Outranks both other modes, because it is the only state in this room
@@ -3256,7 +3398,10 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 		// so it renders at full intensity while the keys that answer it recede
 		// to their labels' weight. Everything on this line used to be equally
 		// faint, including the path a vendor is about to write to.
-		return statusLine(sty.Alert.Render("GATE"),
+		//
+		// The word GATE itself is on the border above (composerLabel); what stays
+		// here is the call being decided and the keys that answer it.
+		return statusLine(left,
 			[]hint{
 				{key: gateLabel(st)},
 				{key: "y", label: "approve"},
@@ -3272,37 +3417,26 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 			lay, sty, g)
 	}
 
-	left = "VIEW"
-	leftStyle := sty.Strong
-	switch {
-	case st.Mode == ModeComposing:
-		left = "COMPOSE"
-		// Empty compose is the post-turn resting state. Full weight on COMPOSE
-		// competed with the routing cell for the same attention the screenshot
-		// said the footer was stealing from the body — demote until there is a
-		// draft. Gate and notices still outrank this path above.
-		if strings.TrimSpace(st.Draft) == "" {
-			leftStyle = sty.Muted
-		}
-	case st.Page.Open:
-		// The mode word says which PROJECTION is live, and carries the turn the
-		// body is deliberately not allowed to move to (§9.22, pageLabel).
-		left = pageLabel(st)
-	}
 	if st.Notice != "" {
 		// A notice replaces the keys rather than joining them, and keeps the
 		// warning mark at severity while its words stay plain — the same split
-		// every other note in this room makes. The mode label keeps leftStyle
-		// (muted on empty compose) so COMPOSE does not compete with the notice
-		// for the same attention.
-		return statusLine(leftStyle.Render(left),
+		// every other note in this room makes. It no longer has to compete with a
+		// mode word for the reader's attention: the mode word is on the border and
+		// the notice has this line to itself.
+		return statusLine(left,
 			[]hint{{key: g.Warn, label: st.Notice, alarm: true}}, lay, sty, g)
 	}
-	return statusLine(leftStyle.Render(left), modeHints(st, g), lay, sty, g)
+	return statusLine(left, modeHints(st, g), lay, sty, g)
 }
 
-// statusLine lays the mode name against its right-anchored hints, and is the one
-// place the two-copy truncation rule lives.
+// statusLine lays a left-hand label against its right-anchored hints, and is the
+// one place the two-copy truncation rule lives.
+//
+// Since §9.44 every caller passes an EMPTY label — the mode word moved onto the
+// composer box's border — so in practice this is the key line, right-anchored.
+// The slot is kept rather than deleted because it is what the shed and gap
+// arithmetic is written against, and because the width it frees is real: with
+// four cells and a gap back, the tabbed tier stopped shedding `1-N seat`.
 //
 // It sheds before it truncates, and the order is: everything, then the
 // sheddable cells newest-first, then the ellipsis. §9.20 added a key to a line
@@ -3575,8 +3709,9 @@ func helpTitle(about string, lay Layout, sty Styles, g Glyphs) string {
 
 // helpKeys is page one: what every key does.
 func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
-	// The budget is HARD, and it is 17 rows rather than the 19 this panel used
-	// to spend. Body at a 24-row terminal is 19 with nothing else on screen, but
+	// The budget is HARD, and it is 16 rows — 17 until §9.44 gave the composer a
+	// bordered box and the frame a row to its footer. Body at a 24-row terminal is
+	// 18 with nothing else on screen, but
 	// the collapsed-seat notice costs a row and the narrow tier's tab bar costs
 	// another — and a machine with a seat that will not run is the ordinary
 	// machine, not the edge case. At 19 entries the `?` line, the only
@@ -3585,7 +3720,13 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 	// present; two were, to buy the two rows back.
 	return []string{
 		helpTitle("one brief, several agents, side by side", lay, sty, g),
-		"",
+		// No blank under the title, and it is §9.11's own ranking spending the row
+		// this panel needed when §9.44 took one: **a rule outranks a blank.** The
+		// title IS a labelled rule, so the boundary it draws is already the
+		// stronger of the two, and a blank immediately under it is the one row on
+		// this page that says something the row above it already said. Page two
+		// spends the same row on the same argument.
+		//
 		// Merged with the `enter` line it used to sit above. The two described one
 		// key in two rows, which is the cheapest row in the panel to buy back.
 		"  i / enter    compose a brief; enter dispatches — to claude, or whoever is @mentioned (@all = everyone)",
@@ -3611,7 +3752,7 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// ADR-010 where that argument belongs.
 		//
 		// The exclusion form was folded into the SAME two rows rather than given
-		// a third: this panel's budget is hard (17 rows, above), and a feature
+		// a third: this panel's budget is hard (16 rows, above), and a feature
 		// that pushed the `?` line off a 24-row terminal would have bought
 		// discoverability for one thing by taking away the way out of the panel.
 		// The commas between the aliases went to pay for it — they were never
@@ -3640,7 +3781,7 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// take one argument in one vocabulary and differ only in direction, so a
 		// reader who finds either has found both. "times" paid for it — the row is
 		// a list of controls, and `/trace <file>` is unambiguous without the verb.
-		// A row of its own was never affordable: the budget is hard (17 rows,
+		// A row of its own was never affordable: the budget is hard (16 rows,
 		// above) and a control documented below the fold is a control nobody finds
 		// (§9.20), which is exactly how the room came to be missing this one.
 		// `u` landed at this row's exact 114-cell budget by trading the word
@@ -3651,7 +3792,7 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// y-confirmed seat keys under one marker rather than spending "(y)" twice.
 		"  /cd <dir>    move the room; /read /write (y); /seat /unseat; /arena races; c clears, u undoes (y); /trace <file>",
 		// One row for three keys, and the merge is the honest shape rather than
-		// a saving. The panel's budget is hard (17 rows, above) and yank had to
+		// a saving. The panel's budget is hard (16 rows, above) and yank had to
 		// land inside it — a copy key documented below the fold is a copy key
 		// nobody finds — but the real reason these belong together is that they
 		// COLLIDE. `y` means two things depending on whether a vendor is
@@ -3673,7 +3814,7 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		"  ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too",
 		"  pgup/pgdn    scroll by a screenful, in compose too (space = pgdn in view mode);",
 		// The turn keys land on the row that already holds the other jumps rather
-		// than on one of their own, because the budget is hard (17 rows, above)
+		// than on one of their own, because the budget is hard (16 rows, above)
 		// and this is the row a reader is already on when they are looking for a
 		// way to move by something bigger than a line. "jump to the" went to pay
 		// for it: the line above says `scroll`, so what g / G do is unambiguous
@@ -3681,7 +3822,7 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// finds (§9.20).
 		"               g / G first turn or newest; [ ] step one turn at a time",
 		// `t` lands on the row that already holds `f` rather than on one of its
-		// own, because the budget is hard (17 rows, above) and these two are the
+		// own, because the budget is hard (16 rows, above) and these two are the
 		// same question asked twice: how much of the room is the reading area.
 		// `f` gives one seat the width; `t` gives one turn the room. A reader
 		// looking for either is looking for the other, and the merge is what §9.15
@@ -3831,7 +3972,10 @@ func helpGranGloss() map[Granularity]string {
 func helpPostures(st State, lay Layout, sty Styles, g Glyphs) []string {
 	lines := []string{
 		helpTitle("what the badge on each column means", lay, sty, g),
-		"",
+		// No blank under the title — helpKeys' row, spent here for the same reason
+		// (§9.11: a rule outranks a blank). It is what keeps the WORKSPACE
+		// sentence, the load-bearing line on this page, above the fold now that
+		// §9.44 costs the panel a row.
 		"  Each column states its own posture; there is no room-wide claim.",
 		"",
 	}

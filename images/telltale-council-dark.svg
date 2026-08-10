@@ -1,9 +1,9 @@
 <!-- Generated from the render, not drawn by hand. Do not edit:
      re-emit it with `go test ./internal/council ./internal/hud -update`.
      See internal/svgframe for why this picture cannot drift. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="1122" height="282" viewBox="0 0 1122 282" role="img" aria-labelledby="t">
+<svg xmlns="http://www.w3.org/2000/svg" width="1122" height="300" viewBox="0 0 1122 300" role="img" aria-labelledby="t">
   <title id="t">The telltale council room: three vendor seats side by side, the focused seat marked by a rail and a caret, each seat's sandbox posture named in words beneath it.</title>
-  <rect x="0" y="0" width="1122" height="282" rx="10" fill="#0c0c0c" stroke="#3a3a3a"/>
+  <rect x="0" y="0" width="1122" height="300" rx="10" fill="#0c0c0c" stroke="#3a3a3a"/>
   <path d="M0 36 V10 a10 10 0 0 1 10 -10 H1112 a10 10 0 0 1 10 10 V36 Z" fill="#1b1b1b"/>
   <line x1="0" y1="36" x2="1122" y2="36" stroke="#3a3a3a"/>
   <text x="21" y="23.4" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="14" fill="#cccccc" fill-opacity="0.55" xml:space="preserve">telltale council</text>
@@ -120,17 +120,27 @@
     <tspan x="975" textLength="126" lengthAdjust="spacingAndGlyphs" fill="#cccccc">              </tspan>
   </text>
   <text y="226.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
-    <tspan x="21" textLength="1080" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</tspan>
+    <tspan x="21" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+    <tspan x="39" textLength="1044" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮</tspan>
+    <tspan x="1083" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
   </text>
   <text y="244.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="39" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">› </tspan>
-    <tspan x="57" textLength="1044" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                                                                                                    </tspan>
+    <tspan x="39" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">│  </tspan>
+    <tspan x="66" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">› </tspan>
+    <tspan x="84" textLength="972" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                                                                                                            </tspan>
+    <tspan x="1056" textLength="27" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │</tspan>
+    <tspan x="1083" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
   </text>
   <text y="262.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
     <tspan x="21" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
-    <tspan x="39" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#3a96dd" font-weight="bold">VIEW</tspan>
-    <tspan x="75" textLength="153" lengthAdjust="spacingAndGlyphs" fill="#cccccc">              ↑↓ </tspan>
+    <tspan x="39" textLength="972" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  </tspan>
+    <tspan x="1011" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#3a96dd" font-weight="bold">VIEW</tspan>
+    <tspan x="1047" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  ─╯</tspan>
+    <tspan x="1083" textLength="18" lengthAdjust="spacingAndGlyphs" fill="#cccccc">  </tspan>
+  </text>
+  <text y="280.5" font-family="'JetBrains Mono','Fira Code','Cascadia Mono',Consolas,'DejaVu Sans Mono',monospace" font-size="15" xml:space="preserve">
+    <tspan x="21" textLength="207" lengthAdjust="spacingAndGlyphs" fill="#cccccc">                    ↑↓ </tspan>
     <tspan x="228" textLength="54" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">scroll</tspan>
     <tspan x="282" textLength="45" lengthAdjust="spacingAndGlyphs" fill="#cccccc" fill-opacity="0.55">  │  </tspan>
     <tspan x="327" textLength="36" lengthAdjust="spacingAndGlyphs" fill="#cccccc">[ ] </tspan>

@@ -24,8 +24,13 @@ type Glyphs struct {
 	Act      string // prefixes a tool call / command in the activity trace
 
 	// RuleHeavy is the room's second rule weight, and it is spent on exactly
-	// three lines: the two full-bleed rules that close the frame above and below
-	// the reading area, and the turn separator at the top of a turn page.
+	// two lines: the full-bleed rule under the header, and the turn separator at
+	// the top of a turn page.
+	//
+	// It was three. §9.44 took the lower full-bleed rule away — the composer is a
+	// bordered box now and closes the frame by shape rather than by ink — so the
+	// weight is scarcer than §9.26 left it and says something narrower: the chrome
+	// stops here and the seats begin.
 	//
 	// A room that draws every horizontal line at one weight has no way to say
 	// which of them is the OUTLINE. §9.11 gave this surface one rule glyph and
@@ -61,6 +66,29 @@ type Glyphs struct {
 	// terminal configured to render ambiguous as wide shears this row the way it
 	// already shears the rules.
 	FocusRail string
+
+	// The four corners of the composer's box (§9.44).
+	//
+	// Only four glyphs are new here: the box's horizontal runs are Rule and its
+	// sides are Sep, because a box side IS a vertical rule between what is inside
+	// and what is outside — the same job Sep does between two columns — and
+	// minting a second vertical would be two marks for one meaning.
+	//
+	// The corners are the one thing this room had no character for. They are also
+	// the whole reason the box does not need the HEAVY weight the rule it replaced
+	// carried: closure used to be spelled by ink, and it is now spelled by SHAPE —
+	// four corners and two sides that meet — so the light weight is not a demotion
+	// but the signal moving to a carrier that survives NO_COLOR and --ascii intact
+	// (§9.26, amended).
+	//
+	// The ASCII partner is `+` in all four slots, and it is the same character
+	// ActOK already owns. That is Range's slot argument, not a collision: `+` here
+	// only ever appears at the two ends of a run of `-`, where an outcome mark
+	// cannot be — outcome marks follow a trace entry inside a column, never at the
+	// end of a border. One `+` for all four corners because ASCII has no cornering
+	// characters at all, and a box drawn with `/` and `\` reads as a diagram rather
+	// than as a frame.
+	BoxTL, BoxTR, BoxBL, BoxBR string
 
 	// Range joins the ends of a span of turn numbers — "turns 2–7" (§9.19).
 	//
@@ -121,16 +149,23 @@ func UnicodeGlyphs() Glyphs {
 		// still a RULE rather than a symbol — it reads as `│` with more ink,
 		// which is the whole claim the rail makes.
 		FocusRail: "▌", // ▌
-		Ellipsis:  "…", // …
-		Caret:     "_",
-		Warn:      "⚠", // ⚠
-		Focus:     "▸", // ▸
-		Prompt:    "›", // ›
-		Up:        "↑", // ↑
-		Down:      "↓", // ↓
-		Act:       "⚙", // ⚙
-		Range:     "–", // en dash, the typographic joiner for a numeric span
-		Idle:      "○", // ○
+		// U+256D..U+2570, the rounded forms. Rounded rather than square because
+		// the box is the one element on screen the user ACTS in, and the softer
+		// corner is what tells the eye it is an input rather than another panel.
+		BoxTL:    "╭", // ╭
+		BoxTR:    "╮", // ╮
+		BoxBL:    "╰", // ╰
+		BoxBR:    "╯", // ╯
+		Ellipsis: "…", // …
+		Caret:    "_",
+		Warn:     "⚠", // ⚠
+		Focus:    "▸", // ▸
+		Prompt:   "›", // ›
+		Up:       "↑", // ↑
+		Down:     "↓", // ↓
+		Act:      "⚙", // ⚙
+		Range:    "–", // en dash, the typographic joiner for a numeric span
+		Idle:     "○", // ○
 		// ✓ / ✗ / ? — the third is an ordinary question mark on purpose. It is
 		// the one character that reads as "not known" to everybody without a
 		// legend, and unlike a middle dot or an em dash it cannot be mistaken
@@ -173,9 +208,15 @@ func ASCIIGlyphs() Glyphs {
 		// never marks in the grid — the same slot argument Range's doc makes for
 		// the hyphen, and the reason this is reuse rather than a collision.
 		FocusRail: "[",
-		Ellipsis:  ">",
-		Caret:     "_",
-		Warn:      "!",
+		// See BoxTL's doc for why one character does all four corners, and why
+		// sharing ActOK's `+` is a slot reuse rather than a collision.
+		BoxTL:    "+",
+		BoxTR:    "+",
+		BoxBL:    "+",
+		BoxBR:    "+",
+		Ellipsis: ">",
+		Caret:    "_",
+		Warn:     "!",
 		// Focus cannot be ">": that is already the ASCII ellipsis here, and a
 		// mark that also means "truncated" is not a mark. Same reasoning, and
 		// the same answer, as the HUD's cursor.

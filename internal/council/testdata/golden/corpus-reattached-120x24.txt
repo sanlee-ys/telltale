@@ -16,9 +16,9 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                                                                                                                        
 ▌ this seat's thread came back. the     │  this seat's thread came back. the    │  this seat's thread came back. the    
 ▌ next brief continues it.              │  next brief continues it.             │  next brief continues it.             
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ›                                                                                                                     
-  VIEW     ⚠ reattached from ~/.telltale/council/room.json — turn 109 was the last, saved just now, 3/3 seats restored  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+           ⚠ reattached from ~/.telltale/council/room.json — turn 109 was the last, saved just now, 3/3 seats restored  
