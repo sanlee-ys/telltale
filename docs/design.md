@@ -1563,13 +1563,19 @@ Rules that outrank convenience:
    pointers for absent-now vs. undeclared capability for can't-know, liveness classified
    by the HUD from `LastActivity` with an adapter override only on positive vendor
    evidence, and `Validate` as the machine-checked honest-gauge gate.
-3. HUD refresh model — **PROVISIONALLY ANSWERED, revisit with measurement:** a 1 s
-   `tea.Tick` poll, not a file watcher. The survey's inputs argue for it: 837 sessions
-   across 33 directories, transcripts up to 7.7 MB, and a projects tree that provably
-   mutates mid-sweep. `Discover` is stat-only and `Read` is head+tail bounded, which is
-   what makes polling affordable; a watcher over a mutating tree on Windows is a larger
-   correctness surface for a smaller win. Not yet measured on a cold cache — that is the
-   open part.
+3. ~~HUD refresh model~~ — **ANSWERED, and the measurement it was waiting for has been
+   taken.** A 1 s `tea.Tick` poll, not a file watcher. The survey's inputs argued for it:
+   837 sessions across 33 directories, transcripts up to 7.7 MB, and a projects tree that
+   provably mutates mid-sweep. `Discover` is stat-only and `Read` is head+tail bounded,
+   which is what made polling affordable; a watcher over a mutating tree on Windows is a
+   larger correctness surface for a smaller win.
+
+   The open part was the cold cache, and `BenchmarkScan` closed it over a synthesized
+   1,400-session corpus: the warm scan went 798 ms → **82 ms** with the `(size, mtime)`
+   cache, and on the live corpus 1.84–3.37 s → **181–204 ms**. **The cold scan did not
+   move** (896 ms → 994 ms, unchanged within noise), and that is the answer rather than a
+   remaining gap: the first frame must genuinely read everything, which is what the
+   spinner exists for. The poll was never the cost; re-reading unchanged files was.
 4. ~~Exact Claude/Codex on-disk data sources~~ — **ANSWERED, §3.1–3.3**, with Claude
    verified live and Codex's first live pass run 2026-08-01 (§3.4; short remainder
    itemized there).
@@ -2402,7 +2408,10 @@ screen. Nothing in §7 may reach for it.
   header has no room for at all — a stated reason wherever a vendor has nothing to say.
   What remains is not this limitation but §7.17's own: an aged-out relay reading and one
   that never arrived render alike.
-- The 1 s poll has not been measured on a cold cache over an 837-session tree (§6 Q3).
+- ~~The 1 s poll has not been measured on a cold cache over an 837-session tree (§6 Q3).~~
+  **Measured** — see §6 Q3 and the `BenchmarkScan` table. The cold scan is the half that
+  did NOT improve, and that is the ruling rather than the residue: the first frame has to
+  read everything, and the spinner is what covers it.
 - The burn forecast's sampling history lives in the process and dies with it. Restarting
   the HUD restarts the basis at zero, and for the first five minutes of every run there
   is no forecast at all. Persisting samples would mean writing to disk, which "telltale
