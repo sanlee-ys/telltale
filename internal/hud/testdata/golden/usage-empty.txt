@@ -1,6 +1,6 @@
  telltale  │  0 sessions
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- fleet usage  quota is a reading against a limit; spend is a count with none
+ fleet usage  quota is a reading against a limit; spend is a count with none  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         no vendor on this machine has reported a quota reading or a token count
 

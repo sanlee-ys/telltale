@@ -27,7 +27,7 @@ var embedded = []string{
 	// the token relay, after its display was retired — §7.16's amendment.
 	"cursor-without-spend",
 	// the fleet usage view — §7.17's generated renders.
-	"usage-fleet", "usage-empty",
+	"usage-fleet", "usage-empty", "usage-models", "usage-stale-relay",
 	// the grok seam — §3.9a, pasted beside the survey rather than in §7.3
 	// because the claim it proves is about that VENDOR, not about the grid: a
 	// store that holds real money renders with the COST column dropped.
@@ -45,6 +45,8 @@ var notEmbedded = map[string]string{
 	"readme":         "drawn into README.md's hero picture; see TestReadmeHeroImagesAreTheHudThatRenders",
 	"usage-floor":    "same fixture as usage-fleet at 60 columns; §7.17 describes the shed in prose",
 	"usage-ascii":    "same fixture as usage-fleet in the reduced glyph set; §7.17 states the claim survives it",
+	"usage-stale-ascii": "same fixture as usage-stale-relay in the reduced glyph set; " +
+		"§7.17 quotes the escalated heading inline as a one-line literal",
 }
 
 // The design doc is a contract, and a contract that drifts from the code is

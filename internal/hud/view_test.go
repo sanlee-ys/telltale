@@ -2,8 +2,10 @@ package hud
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -391,9 +393,15 @@ func grokState(w, h int) State {
 //     into Snapshot.Spend, which this fixture carries and this view ignores.
 //   - GEMINI — sessions on this machine and nothing to say about either: the
 //     absence line, with its reason.
-//   - GROK — the same shape as gemini and a different measured sentence: the
-//     one vendor here whose store holds real money, and still no quota and no
-//     token total anywhere on it (§3.9a).
+//   - GROK — the fleet's sixth vendor (#183), here from the day it arrived. It
+//     took the FALLBACK absence sentence until 2026-08-09 and now has one of
+//     its own, measured (§3.9a): the same shape as gemini's block and a
+//     different verdict behind it. It is also the vendor whose store holds real
+//     money and still gets no spend line, for the reason §7.17 Declined states.
+//
+// A vendor with no sessions, no quota and no total is deliberately NOT here: it
+// does not appear at all, which is what TestUsageOmitsAVendorItHasNothingToSayAbout
+// pins.
 func usageFleetState(w, h int) State {
 	st := NewState()
 	st.Now = pinned
@@ -427,8 +435,7 @@ func usageFleetState(w, h int) State {
 				withName("0d5a3c62")),
 			sess(model.VendorGrok, "00000000-1111-7222-8333-000000000001",
 				`C:\src\code\telltale`, "grok-4.5", 20*time.Second,
-				withName("Adapter Field Map Review"), withCtx(7),
-				withExtras("turn cost", "$0.0747")),
+				withName("Adapter Field Map Review"), withCtx(7)),
 		},
 		Vendors: []VendorView{
 			watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`,
@@ -468,6 +475,76 @@ func usageFleetState(w, h int) State {
 				CacheWriteTokens: 62004,
 			},
 		}},
+	}
+	st.Usage = true
+	return st
+}
+
+// usageStaleRelayState is the field report of 2026-08-09, reconstructed.
+//
+// A Claude relay entry written nineteen hours ago, reporting 15% of the seven-
+// day window. Every part of that is a state the product genuinely reaches: the
+// five-hour window is gone because quotacache drops a window whose reset has
+// passed (§7.15's self-expiry), the entry itself survives because it is inside
+// the 24h ceiling, and the reset it reports is still four days out so nothing
+// upstream has any reason to touch it. It rendered at full confidence and it
+// was read as current — the account was at 44%.
+//
+// agy's minute-old reading sits in the same frame deliberately: the escalation
+// has to be visible as a DIFFERENCE between two relayed blocks, not as a new
+// coat of paint on the concept "relayed".
+func usageStaleRelayState(w, h int) State {
+	st := usageFleetState(w, h)
+	st.Snap.Account[0] = quotacache.Account{
+		Vendor:    model.VendorClaude,
+		WrittenAt: pinned.Add(-19 * time.Hour),
+		Windows: []model.QuotaWindow{
+			window("seven_day", "7d", 15, 4*24*time.Hour+7*time.Hour),
+		},
+	}
+	return st
+}
+
+// usageModelsState is the models census's own scenario, and it holds every case
+// the row has to get right in one frame:
+//
+//   - CLAUDE — four sessions, three distinct models, one of them run twice. The
+//     row says three names, not four, and it says them in the grid's own
+//     normalized spelling rather than as raw ids.
+//   - CODEX — one session, one model, and a quota window under it, so the
+//     census and a reading sit in the same column without being confusable.
+//   - GEMINI — a session whose adapter sourced no model at all. The vendor still
+//     has a block, because it is on this machine; it has no models row, because
+//     absent renders absent and an em dash would claim telltale looked at a
+//     model and found it nameless.
+func usageModelsState(w, h int) State {
+	st := NewState()
+	st.Now = pinned
+	st.Width, st.Height = w, h
+	st.Snap = Snapshot{
+		At: pinned,
+		Sessions: []*model.Session{
+			sess(model.VendorClaude, "00000000-aaaa-4bbb-8ccc-000000000001",
+				`C:\src\code\telltale`, "claude-opus-5", 12*time.Second, withName("telltale")),
+			sess(model.VendorClaude, "00000000-aaaa-4bbb-8ccc-000000000002",
+				`C:\src\code\agent-ops`, "claude-sonnet-4-5", 3*time.Minute, withName("agent-ops")),
+			sess(model.VendorClaude, "00000000-aaaa-4bbb-8ccc-000000000003",
+				`C:\src\code\desk`, "claude-opus-5", 6*time.Minute, withName("desk")),
+			sess(model.VendorClaude, "00000000-aaaa-4bbb-8ccc-000000000004",
+				`C:\src\code\learning-notes`, "claude-haiku-4-5", 20*time.Minute, withName("learning-notes")),
+			sess(model.VendorCodex, "0f00dbaa-1234-4a77-9b02-000000000042",
+				`C:\src\code\notes-api`, "gpt-5.1-codex", 4*time.Minute, withName("notes-api"),
+				withQuota(window("seven_day", "7d", 79, 22*time.Hour+48*time.Minute))),
+			sess(model.VendorGemini, "session-2026-08-02T09-58-0a1b2c3d",
+				`c:\src\code\portfolio`, "", 9*time.Minute, withName("portfolio")),
+		},
+		Vendors: []VendorView{
+			watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`,
+				(&claudecode.Adapter{}).Capabilities()),
+			watching(model.VendorCodex, `%USERPROFILE%\.codex`, fullCaps),
+			watching(model.VendorGemini, `%USERPROFILE%\.gemini\tmp`,
+				(&gemini.Adapter{}).Capabilities()),
+		},
 	}
 	st.Usage = true
 	return st
@@ -857,21 +934,37 @@ func goldenCases() []goldenCase {
 		// carrying its age, relayed quota fresh enough not to, a relayed
 		// reading and a scan-derived token total under one vendor, and three
 		// vendors with nothing saying which kind of nothing each one is.
-		{name: "usage-fleet", state: func() State { return usageFleetState(120, 24) }},
+		{name: "usage-fleet", state: func() State { return usageFleetState(120, 28) }},
 
 		// The same view at the 60-column floor. The gauges are gone — the grid's
 		// own shed order, because the bar re-states a number that is still on
 		// screen — and every fact survives, including the relayed reading's age
 		// and the spend total's window.
-		{name: "usage-floor", state: func() State { return usageFleetState(60, 24) }},
+		{name: "usage-floor", state: func() State { return usageFleetState(60, 28) }},
 
 		// ASCII. The distinction between a reading against a limit and a count
 		// with no limit is carried by words and by which vocabulary each line
 		// uses, so nothing about it depends on the Unicode set.
-		{name: "usage-ascii", ascii: true, state: func() State { return usageFleetState(120, 24) }},
+		{name: "usage-ascii", ascii: true, state: func() State { return usageFleetState(120, 28) }},
 
 		// Nothing measured anywhere: a sentence, not a table of dashes.
 		{name: "usage-empty", state: func() State { return usageEmptyState(120, 10) }},
+
+		// The models census: dedupe across four Claude sessions, a vendor whose
+		// sessions carry no model at all (absent renders absent, and absent here
+		// is no row rather than an em dash), and the grid's own normalization —
+		// `claude-opus-5` reads `Opus 5` on both surfaces.
+		{name: "usage-models", state: func() State { return usageModelsState(120, 14) }},
+
+		// The nineteen-hour reading that started this (§7.17). Same fixture as
+		// usage-fleet with Claude's relay aged past the fleet's shortest quota
+		// window: the age gains the warning glyph and the sentence says why,
+		// while agy's minute-old reading beside it is untouched.
+		{name: "usage-stale-relay", state: func() State { return usageStaleRelayState(120, 27) }},
+
+		// The same escalation in the reduced set. The claim is carried by the
+		// glyph and the sentence, so `!` replaces `⚠` and nothing else moves.
+		{name: "usage-stale-ascii", ascii: true, state: func() State { return usageStaleRelayState(120, 27) }},
 
 		// Find mode: the footer becomes the query line and says how to leave.
 		{name: "find-active", state: func() State {
@@ -1181,7 +1274,7 @@ func usageSpendClaimOf(body []string) string {
 // made.
 func TestUsageNeverRendersAQuotaLessVendorAsZero(t *testing.T) {
 	g := UnicodeGlyphs()
-	for _, line := range usageBodyOf(t, usageFleetState(120, 24), g) {
+	for _, line := range usageBodyOf(t, usageFleetState(120, 28), g) {
 		for _, v := range []string{" gemini", " cursor", " grok"} {
 			if strings.HasPrefix(line, v) && strings.Contains(line, "%") {
 				t.Errorf("a vendor with no quota source rendered a percentage:\n%s", line)
@@ -1205,7 +1298,12 @@ func TestUsageNeverRendersAQuotaLessVendorAsZero(t *testing.T) {
 func TestUsageSpendBorrowsNoneOfQuotasVocabulary(t *testing.T) {
 	for _, ascii := range []bool{false, true} {
 		g := GlyphsFor(ascii)
-		spent := usageSpendClaimOf(usageBodyOf(t, usageFleetState(120, 24), g))
+		var spent string
+		for _, line := range usageBodyOf(t, usageFleetState(120, 28), g) {
+			if strings.Contains(line, "spent") {
+				spent = line
+			}
+		}
 		if spent == "" {
 			t.Fatalf("ascii=%v: no spend line in the usage body", ascii)
 		}
@@ -1236,7 +1334,7 @@ func TestUsageSpendBorrowsNoneOfQuotasVocabulary(t *testing.T) {
 // monotonic — and this one goes down when a conversation is deleted.
 func TestUsageTotalNeverPrintsWithoutItsWindow(t *testing.T) {
 	for _, w := range []int{200, 120, 100, 80, 72, 60} {
-		spent := usageSpendClaimOf(usageBodyOf(t, usageFleetState(w, 24), UnicodeGlyphs()))
+		spent := usageSpendClaimOf(usageBodyOf(t, usageFleetState(w, 28), UnicodeGlyphs()))
 		if spent == "" {
 			t.Errorf("width %d: the spend line vanished entirely", w)
 			continue
@@ -1259,7 +1357,7 @@ func TestUsageTotalNeverPrintsWithoutItsWindow(t *testing.T) {
 // necessary in the first place.
 func TestUsageSpendWrapsRatherThanOverflowing(t *testing.T) {
 	for _, w := range []int{200, 120, 100, 90, 80, 72, 65, 60} {
-		body := usageBodyOf(t, usageFleetState(w, 24), UnicodeGlyphs())
+		body := usageBodyOf(t, usageFleetState(w, 28), UnicodeGlyphs())
 		claim := usageSpendClaimOf(body)
 		if claim == "" {
 			t.Errorf("width %d: no spend claim at all", w)
@@ -1280,7 +1378,7 @@ func TestUsageSpendWrapsRatherThanOverflowing(t *testing.T) {
 
 	// And the wrap buys dress back rather than merely surviving: a row to
 	// itself fits a window level the shared row could not.
-	narrow := usageSpendClaimOf(usageBodyOf(t, usageFleetState(60, 24), UnicodeGlyphs()))
+	narrow := usageSpendClaimOf(usageBodyOf(t, usageFleetState(60, 28), UnicodeGlyphs()))
 	if !strings.Contains(narrow, "\n") {
 		t.Fatalf("the 60-column render did not wrap, so this test pins nothing:\n%s", narrow)
 	}
@@ -1296,7 +1394,7 @@ func TestUsageSpendWrapsRatherThanOverflowing(t *testing.T) {
 // the total, which is the "zero is not absent" rule (§4a.1) applied to a
 // denominator instead of to a cell.
 func TestUsageSumsOnlyTheSessionsThatMeasuredSomething(t *testing.T) {
-	st := usageFleetState(120, 24)
+	st := usageFleetState(120, 28)
 
 	agy := 0
 	for _, s := range st.Snap.Sessions {
@@ -1336,7 +1434,7 @@ func TestUsageSumsOnlyTheSessionsThatMeasuredSomething(t *testing.T) {
 // one would have to read "1 session", because a view whose entire argument is
 // that it is careful cannot render "1 sessions".
 func TestUsageSpendWindowAgreesWithItsCount(t *testing.T) {
-	st := usageFleetState(120, 24)
+	st := usageFleetState(120, 28)
 	var kept []*model.Session
 	dropped := false
 	for _, s := range st.Snap.Sessions {
@@ -1362,7 +1460,7 @@ func TestUsageSpendWindowAgreesWithItsCount(t *testing.T) {
 // them apart. "The statusline writes it" is an action; "its store holds
 // experiment values" is a closed door.
 func TestUsageKeepsTheKindsOfAbsenceApart(t *testing.T) {
-	body := strings.Join(usageBodyOf(t, usageFleetState(120, 24), UnicodeGlyphs()), "\n")
+	body := strings.Join(usageBodyOf(t, usageFleetState(120, 28), UnicodeGlyphs()), "\n")
 	for _, want := range []string{
 		// structurally absent, with the measurement behind the verdict.
 		"its store holds experiment values, not usage",
@@ -1395,7 +1493,7 @@ func TestUsageKeepsTheKindsOfAbsenceApart(t *testing.T) {
 	// This line names the statusline, and that naming is the point. It is the
 	// one absence on this surface a user can act on, and an absence with an
 	// action behind it that does not say the action is just a shrug.
-	seam := usageFleetState(120, 24)
+	seam := usageFleetState(120, 28)
 	seam.Snap.Account = seam.Snap.Account[1:] // agy keeps its reading; claude loses one
 	seam.Snap.Sessions = append(seam.Snap.Sessions,
 		sess(model.VendorClaude, "00000000-aaaa-4bbb-8ccc-000000000009",
@@ -1432,7 +1530,7 @@ func TestUsageKeepsTheKindsOfAbsenceApart(t *testing.T) {
 // with no sessions, no quota and no total is not on this machine in any sense
 // telltale measured, and a block of dashes for it would assert otherwise.
 func TestUsageOmitsAVendorItHasNothingToSayAbout(t *testing.T) {
-	st := usageFleetState(120, 24)
+	st := usageFleetState(120, 28)
 	body := strings.Join(usageBodyOf(t, st, UnicodeGlyphs()), "\n")
 	// claude has a relayed reading and no sessions: it appears.
 	if !strings.Contains(body, " claude") {
@@ -1470,7 +1568,7 @@ func TestUsageOmitsAVendorItHasNothingToSayAbout(t *testing.T) {
 // retirement made newly reachable: agy alone can hold a total with no reading
 // beside it now, and it must not fall out of the view with the reading.
 func TestUsageKeepsAVendorThatOnlyHasATotal(t *testing.T) {
-	st := usageFleetState(120, 24)
+	st := usageFleetState(120, 28)
 	st.Snap.Account = nil
 	var agy string
 	for _, line := range usageBodyOf(t, st, UnicodeGlyphs()) {
@@ -1493,7 +1591,7 @@ func TestUsageKeepsAVendorThatOnlyHasATotal(t *testing.T) {
 // vendor moving must mean a vendor was added or removed — not that another
 // vendor's percentage crossed it.
 func TestUsageOrderIsTheFleetOrderNotTheReadings(t *testing.T) {
-	st := usageFleetState(120, 24)
+	st := usageFleetState(120, 28)
 	want := []string{" claude", " codex", " gemini", " agy", " cursor", " grok"}
 
 	check := func(label string) {
@@ -1541,7 +1639,7 @@ func TestUsageGivesTheGaugeRealRoom(t *testing.T) {
 	}
 	// The bar sheds and the number it encodes does not — the grid's rule
 	// (§7.2), and the reason shedding it is allowed at all.
-	narrow := strings.Join(usageBodyOf(t, usageFleetState(60, 24), g), "\n")
+	narrow := strings.Join(usageBodyOf(t, usageFleetState(60, 28), g), "\n")
 	if strings.Contains(narrow, g.Fill) {
 		t.Errorf("the bar survived the narrow tier:\n%s", narrow)
 	}
@@ -1560,6 +1658,463 @@ func TestTheDriftNoticeRendersUnderTheUsageView(t *testing.T) {
 	st.Usage = true
 	if got := Render(st, PlainStyles(), UnicodeGlyphs()); !strings.Contains(got, "codex drifted") {
 		t.Errorf("usage body: the drift notice is missing\n%s", got)
+	}
+}
+
+// -------------------------------------- the §7.17 reading pass (2026-08-09)
+
+// The second rule weight is a CHARACTER before it is a style, so it has to
+// survive the reduced set — and it can only do that on a mark nothing else has
+// claimed. This enumerates the whole claimed set, council's own test one
+// package over, so the next glyph cannot be added without meeting it.
+func TestTheHeavyRuleHasAnUnclaimedASCIIPartner(t *testing.T) {
+	a := asciiGlyphs()
+	claimed := []struct{ what, glyph string }{
+		{"the live dot", a.DotLive}, {"the idle dot", a.DotIdle}, {"the stale dot", a.DotStale},
+		{"the gauge fill", a.Fill}, {"the light rule and gauge track", a.Track},
+		{"the zone separator", a.Sep}, {"the absent marker", a.Absent},
+		{"the ellipsis", a.Ellipsis}, {"the reset prefix", a.Reset},
+		{"the warning prefix", a.Warn}, {"the selection cursor", a.Cursor},
+		{"the fan-out mark", a.Fork}, {"the fact separator", a.Mid},
+		{"the find caret", a.Caret},
+	}
+	for _, c := range claimed {
+		if a.RuleHeavy == c.glyph {
+			t.Errorf("the heavy rule is %q, which is already %s — a rule weight that also "+
+				"means something else is not a weight", a.RuleHeavy, c.what)
+		}
+	}
+	for i, f := range a.Spinner {
+		if a.RuleHeavy == f {
+			t.Errorf("the heavy rule is %q, which is spinner frame %d", a.RuleHeavy, i)
+		}
+	}
+	// And it has to read as a DOUBLED light rule rather than as a different
+	// symbol, in both sets. That is the one property this glyph needs and the
+	// reason `=` was chosen over the other unclaimed marks.
+	if a.RuleHeavy != "=" || UnicodeGlyphs().RuleHeavy != "━" {
+		t.Errorf("the heavy rule pair moved off council's (%q/%q) — §7.1 principle 5 says "+
+			"these are one product, and a second heavy-rule character is a second alphabet",
+			UnicodeGlyphs().RuleHeavy, a.RuleHeavy)
+	}
+}
+
+// §9.26's scarcity argument, asserted as a COUNT on the rendered frame rather
+// than as a property of the one call site. A second weight is worth exactly
+// what it is rare, and a rule on every vendor block would spend it fifteen
+// times a screen to restate an indent.
+func TestOnlyTheUsageTitleDrawsTheHeavyRule(t *testing.T) {
+	for _, ascii := range []bool{false, true} {
+		g := GlyphsFor(ascii)
+		count := func(st State) (lines, runs int) {
+			for _, l := range strings.Split(Render(st, PlainStyles(), g), "\n") {
+				if n := strings.Count(l, g.RuleHeavy); n > 0 {
+					lines++
+					runs += strings.Count(l, " "+g.RuleHeavy) // one leading boundary per run
+				}
+			}
+			return
+		}
+
+		usage := usageFleetState(120, 28)
+		if lines, runs := count(usage); lines != 1 || runs != 1 {
+			t.Errorf("ascii=%v: the usage view draws the heavy rule on %d lines in %d runs, want 1 and 1",
+				ascii, lines, runs)
+		}
+		// Every other body: none at all. The frame's own rules stay the interior
+		// weight, so a heading inside the outline can never be mistaken for it.
+		others := map[string]State{
+			"grid":   healthyState(120, 12),
+			"help":   func() State { st := healthyState(120, 20); st.Help = true; return st }(),
+			"detail": func() State { st := healthyState(120, 20); st.Detail = true; return st }(),
+			"empty":  func() State { st := usageEmptyState(120, 12); st.Usage = false; return st }(),
+		}
+		for name, st := range others {
+			if lines, _ := count(st); lines != 0 {
+				t.Errorf("ascii=%v: the %s body drew the heavy rule on %d lines", ascii, name, lines)
+			}
+		}
+	}
+}
+
+// One grid, not five per-vendor layouts. Claude's `5h` gauge starts where
+// codex's `7d` gauge starts and where agy's `gemini-weekly` gauge starts, and
+// the percentages and countdowns line up under each other across blocks —
+// which is the whole difference between a page a reader scans down one column
+// of and five little tables they have to re-find their place in.
+func TestUsageFactsShareOneColumnGridAcrossVendors(t *testing.T) {
+	g := UnicodeGlyphs()
+	for _, w := range []int{120, 99, 80, 60} {
+		labelAt := map[int][]string{}
+		contAt := map[int][]string{}
+		pctAt := map[int][]string{}
+		resetAt := map[int][]string{}
+		gaugeAt := map[int][]string{}
+		value := usageIndent + usageLabel + usageGap
+
+		for _, line := range usageBodyOf(t, usageFleetState(w, 28), g) {
+			if strings.TrimSpace(line) == "" || !strings.HasPrefix(line, strings.Repeat(" ", usageIndent)) {
+				continue
+			}
+			r := []rune(line)
+			// A CONTINUATION row — the spend line's window where it did not fit
+			// beside the counts (§7.17's amendment) — has no label, so it starts
+			// in the value column rather than in the label one. That is the grid
+			// being obeyed, not broken: an empty label cell is still a label
+			// cell. It is bucketed separately and held to the value column
+			// exactly, because the failure this test exists to catch would look
+			// identical — a row that landed there by drifting rather than by
+			// hanging.
+			if at := indexOfFirstNonSpace(r, 0); at == value {
+				contAt[at] = append(contAt[at], line)
+				continue
+			}
+			labelAt[indexOfFirstNonSpace(r, 0)] = append(labelAt[indexOfFirstNonSpace(r, 0)], line)
+			if i := runeIndex(r, '%'); i >= 0 {
+				pctAt[i] = append(pctAt[i], line)
+			}
+			if i := runeIndex(r, []rune(g.Reset)[0]); i >= 0 {
+				resetAt[i] = append(resetAt[i], line)
+			}
+			if i := indexOfAny(r, append([]string{g.Fill, g.Track}, g.Eighths...)); i >= 0 {
+				gaugeAt[i] = append(gaugeAt[i], line)
+			}
+			// The gap between the label cell and the value is structural, not
+			// incidental: a label one cell too long anywhere would shear every
+			// column to its right on that row alone.
+			for c := usageIndent + usageLabel; c < value && c < len(r); c++ {
+				if r[c] != ' ' {
+					t.Errorf("width %d: a label ran into the value column:\n%s", w, line)
+					break
+				}
+			}
+		}
+
+		// Right-aligned cells (the percentage) and left-aligned ones (the gauge,
+		// the models census, the spend facts) are checked by the column their
+		// own content lands in, because a right-aligned number's first glyph
+		// legitimately moves with the number's width.
+		for what, cols := range map[string]map[int][]string{
+			"the label column":    labelAt,
+			"the percentage":      pctAt,
+			"the reset countdown": resetAt,
+			"the gauge":           gaugeAt,
+		} {
+			if len(cols) > 1 {
+				t.Errorf("width %d: %s lands in %d different columns across vendors:\n%s",
+					w, what, len(cols), formatColumns(cols))
+			}
+		}
+		for col := range labelAt {
+			if col != usageIndent {
+				t.Errorf("width %d: labels start at column %d, not usageIndent (%d)", w, col, usageIndent)
+			}
+		}
+		for col := range contAt {
+			if col != value {
+				t.Errorf("width %d: a continuation row hangs at column %d, not the shared value column (%d)",
+					w, col, value)
+			}
+		}
+		for col := range gaugeAt {
+			if col != value {
+				t.Errorf("width %d: the gauge starts at column %d, not the shared value column (%d)",
+					w, col, value)
+			}
+		}
+	}
+}
+
+func indexOfFirstNonSpace(r []rune, from int) int {
+	for i := from; i < len(r); i++ {
+		if r[i] != ' ' {
+			return i
+		}
+	}
+	return -1
+}
+
+func indexOfAny(r []rune, glyphs []string) int {
+	for i, c := range r {
+		for _, gl := range glyphs {
+			if gl != "" && c == []rune(gl)[0] {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func runeIndex(r []rune, want rune) int {
+	for i, c := range r {
+		if c == want {
+			return i
+		}
+	}
+	return -1
+}
+
+func formatColumns(cols map[int][]string) string {
+	var keys []int
+	for k := range cols {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&b, "  col %d: %q\n", k, cols[k][0])
+	}
+	return b.String()
+}
+
+// The half of San's original ask that §7.17 shipped without: which models
+// actually did the work under each vendor. Every rule on that row is the
+// honest-gauge rule in different clothes, so they are pinned together.
+func TestUsageNamesTheModelsItSaw(t *testing.T) {
+	st := usageModelsState(120, 14)
+	body := usageBodyOf(t, st, UnicodeGlyphs())
+
+	var claude, codex string
+	inGemini := false
+	geminiRows := 0
+	for _, line := range body {
+		switch {
+		case strings.HasPrefix(line, " claude"), strings.HasPrefix(line, " codex"):
+			inGemini = false
+		case strings.HasPrefix(line, " gemini"):
+			inGemini = true
+			continue
+		}
+		if inGemini && strings.TrimSpace(line) != "" {
+			geminiRows++
+		}
+		if !strings.Contains(line, "models ") {
+			continue
+		}
+		if claude == "" {
+			claude = line
+		} else if codex == "" {
+			codex = line
+		}
+	}
+
+	// Deduped, sorted, and in the grid's own normalized spelling. Four sessions,
+	// three names, and never "claude-opus-5" beside "Opus 5".
+	want := "Haiku 4.5, Opus 5, Sonnet 4.5"
+	if !strings.Contains(claude, want) {
+		t.Errorf("the models row is %q, want the deduped sorted list %q", strings.TrimSpace(claude), want)
+	}
+	if strings.Contains(claude, "claude-opus-5") {
+		t.Errorf("a raw model id reached the models row; the grid normalizes it:\n%s", claude)
+	}
+	if n := strings.Count(claude, "Opus 5"); n != 1 {
+		t.Errorf("two sessions on one model listed it %d times:\n%s", n, claude)
+	}
+	if !strings.Contains(codex, "gpt-5.1-codex") {
+		t.Errorf("codex lost its model: %q", strings.TrimSpace(codex))
+	}
+
+	// A vendor whose sessions carry no model gets no row — not an em dash.
+	// An em dash claims telltale looked at a model and could not name it.
+	if geminiRows != 0 {
+		t.Errorf("gemini has sessions with no model and still drew %d fact rows", geminiRows)
+	}
+	joined := strings.Join(body, "\n")
+	if strings.Contains(joined, "models         "+UnicodeGlyphs().Absent) {
+		t.Errorf("an absent model census rendered as an absent VALUE:\n%s", joined)
+	}
+
+	// Only what is in this snapshot. Take the sessions away and the census goes
+	// with them, even though the vendor still has a quota reading to show.
+	st2 := usageFleetState(120, 28)
+	st2.Snap.Sessions = nil
+	for _, line := range usageBodyOf(t, st2, UnicodeGlyphs()) {
+		if strings.Contains(line, "models") {
+			t.Errorf("a models row survived a snapshot with no sessions — the census is "+
+				"remembering:\n%s", line)
+		}
+	}
+}
+
+// Overflow is announced, never clipped. `+3 more` is a count telltale measured;
+// a list cut with an ellipsis leaves the reader unable to tell whether one name
+// went missing or nine.
+func TestUsageModelOverflowSaysHowManyItDropped(t *testing.T) {
+	g := UnicodeGlyphs()
+	names := []string{"Haiku 4.5", "Opus 5", "Opus 5[1m]", "Sonnet 4.5", "Sonnet 5"}
+
+	// Wide: everything fits and nothing is announced.
+	full := usageModelsRow(names, 120, PlainStyles(), g)
+	for _, n := range names {
+		if !strings.Contains(full, n) {
+			t.Errorf("width 120: %q dropped from a row with room for it:\n%s", n, full)
+		}
+	}
+	if strings.Contains(full, "more") {
+		t.Errorf("width 120: a complete list still claimed an overflow:\n%s", full)
+	}
+
+	// At the floor the row has 36 cells. It keeps whole names and says how many
+	// it could not take.
+	floor := usageModelsRow(names, 60, PlainStyles(), g)
+	if lipgloss.Width(floor) > 59 {
+		t.Errorf("the models row overran the 60-column floor (%d):\n%s", lipgloss.Width(floor), floor)
+	}
+	if !strings.Contains(floor, "+3 more") {
+		t.Errorf("the floor row does not say how many models it dropped:\n%s", floor)
+	}
+	if !strings.Contains(floor, "Haiku 4.5, Opus 5") {
+		t.Errorf("the floor row cut a name short instead of dropping it whole:\n%s", floor)
+	}
+	if strings.Contains(floor, g.Ellipsis) {
+		t.Errorf("a name was clipped where a count would have been honest:\n%s", floor)
+	}
+	// And the marker's own width is reserved rather than hoped for: the count
+	// must be right, not merely present.
+	if strings.Contains(floor, "Sonnet") {
+		t.Errorf("the row kept a name it then claimed to have dropped:\n%s", floor)
+	}
+}
+
+// The field report of 2026-08-09, as an assertion. A nineteen-hour-old relayed
+// reading rendered at the same weight as a fresh one and was acted on; the age
+// was present and it was not loud.
+//
+// The escalation is carried by the WORD and the GLYPH first (§7.1 rule 2), so
+// this checks the plain and ascii renders for the fact and the coloured render
+// only for the second signal.
+func TestARelayedReadingGetsLouderAsItAges(t *testing.T) {
+	aged := func(d time.Duration) State {
+		st := usageStaleRelayState(120, 27)
+		st.Snap.Account[0].WrittenAt = pinned.Add(-d)
+		return st
+	}
+
+	for _, ascii := range []bool{false, true} {
+		g := GlyphsFor(ascii)
+		body := strings.Join(usageBodyOf(t, aged(19*time.Hour), g), "\n")
+		for _, want := range []string{
+			g.Warn + " 19h ago",                            // the glyph, beside the fact
+			"older than the fleet's shortest quota window", // the reason, in words
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("ascii=%v: the over-age reading never says %q:\n%s", ascii, want, body)
+			}
+		}
+		// The escalation is per reading, not per relay: agy's minute-old block is
+		// in the same frame and must be untouched.
+		for _, line := range strings.Split(body, "\n") {
+			if strings.HasPrefix(line, " agy") && strings.Contains(line, g.Warn) {
+				t.Errorf("ascii=%v: a fresh relayed reading was escalated too:\n%s", ascii, line)
+			}
+		}
+	}
+
+	// The threshold is quotaAgeWarn exactly, and it is the fleet's shortest
+	// quota window rather than a tuned number.
+	if quotaAgeWarn != 5*time.Hour {
+		t.Errorf("quotaAgeWarn is %v; §7.17 argues it from Claude's five_hour window", quotaAgeWarn)
+	}
+	g := UnicodeGlyphs()
+	below := strings.Join(usageBodyOf(t, aged(quotaAgeWarn-time.Minute), g), "\n")
+	if strings.Contains(below, g.Warn) {
+		t.Errorf("a reading inside the shortest window was escalated:\n%s", below)
+	}
+	if !strings.Contains(below, "· 4h ago") {
+		t.Errorf("a reading below the threshold lost its plain age:\n%s", below)
+	}
+	at := strings.Join(usageBodyOf(t, aged(quotaAgeWarn), g), "\n")
+	if !strings.Contains(at, g.Warn+" 5h ago") {
+		t.Errorf("a reading exactly at the threshold did not escalate:\n%s", at)
+	}
+
+	// Colour is the second signal, and it is the footer's own warning token.
+	coloured := Render(aged(19*time.Hour), NewStyles(true), g)
+	if !strings.Contains(coloured, "\x1b[33m") {
+		t.Error("the over-age reading carries no warning colour")
+	}
+	// It never escalates past warn. quotacache's 24h drop is a disappearance,
+	// not a louder warning, and there is no honest boundary between the two.
+	if strings.Contains(coloured, "\x1b[31m"+"quota relayed") {
+		t.Error("the relayed heading reached the critical band; §7.17 gives it one step")
+	}
+	// And the reading itself is untouched: escalating the AGE must not restyle
+	// the percentage, whose severity is a statement about the account.
+	plain := strings.Join(usageBodyOf(t, aged(19*time.Hour), g), "\n")
+	if !strings.Contains(plain, "15%") {
+		t.Errorf("the over-age block stopped rendering its reading:\n%s", plain)
+	}
+}
+
+// The same field report, on the surface it was actually read from (§7.17
+// amended). The `u` view escalating while the glance line stayed muted left the
+// product loud where a reader looks on purpose and quiet where they merely
+// glance, which is backwards.
+func TestTheHeaderEscalatesAnOverAgeReadingToo(t *testing.T) {
+	aged := func(d time.Duration) State {
+		st := usageStaleRelayState(120, 27)
+		st.Snap.Account[0].WrittenAt = pinned.Add(-d)
+		return st
+	}
+
+	// The word and the glyph carry it in both glyph sets — the reduced one is
+	// the harder case, since `!` is a weaker mark than `⚠`.
+	for _, ascii := range []bool{false, true} {
+		g := GlyphsFor(ascii)
+		got := quotaBlock(aged(19*time.Hour), PlainStyles(), g, 120)
+		if !strings.Contains(got, g.Warn+" "+quotaAgeWord+" 19h ago") {
+			t.Errorf("ascii=%v: the header renders an over-age reading quietly: %q", ascii, got)
+		}
+		// Per reading, not per relay: agy's minute-old block shares the line.
+		if n := strings.Count(got, g.Warn); n != 1 {
+			t.Errorf("ascii=%v: want one escalated block, got %d: %q", ascii, n, got)
+		}
+	}
+
+	// The threshold is §7.17's, shared rather than restated — a second copy is
+	// how the header and the view would disagree about one reading.
+	g := UnicodeGlyphs()
+	below := quotaBlock(aged(quotaAgeWarn-time.Minute), PlainStyles(), g, 120)
+	if strings.Contains(below, g.Warn) {
+		t.Errorf("a reading inside the fleet's shortest window was escalated: %q", below)
+	}
+	if !strings.Contains(below, "· 4h ago") {
+		t.Errorf("a reading below the threshold lost its plain age: %q", below)
+	}
+	if !strings.Contains(quotaBlock(aged(quotaAgeWarn), PlainStyles(), g, 120),
+		g.Warn+" "+quotaAgeWord+" 5h ago") {
+		t.Error("a reading exactly at the threshold did not escalate")
+	}
+
+	// The word and the age survive every level down to the barest; only the
+	// reason sheds. The alarm is the fact, the argument is the decoration.
+	for _, w := range []int{MinWidth, 64, 72, 80, 99, 120, 148, 200} {
+		got := quotaBlock(aged(19*time.Hour), PlainStyles(), g, w)
+		if lipgloss.Width(got) > w {
+			t.Errorf("width %d: escalated quota line is %d columns: %q", w, lipgloss.Width(got), got)
+		}
+		// MinWidth drops whole trailing blocks; claude may be one of them.
+		if w > MinWidth && !strings.Contains(got, g.Warn+" "+quotaAgeWord+" 19h ago") {
+			t.Errorf("width %d: the escalation shed something it may not: %q", w, got)
+		}
+	}
+	// The reason rides the most dressed level, which a single-vendor line
+	// reaches. If nothing can reach it, it is a clause that never renders.
+	solo := aged(19 * time.Hour)
+	solo.Snap.Account = solo.Snap.Account[:1]
+	solo.Snap.Sessions = nil
+	if got := quotaBlock(solo, PlainStyles(), g, 120); !strings.Contains(got, usageAgeReason) {
+		t.Errorf("the reason never renders on any header line: %q", got)
+	}
+
+	// Colour is the second signal, and the reading keeps its own severity: the
+	// percentage speaks for the account, the suffix for the measurement.
+	coloured := quotaBlock(aged(19*time.Hour), NewStyles(true), g, 120)
+	if !strings.Contains(coloured, "\x1b[33m") {
+		t.Error("the over-age header reading carries no warning colour")
+	}
+	if !strings.Contains(coloured, "15%") {
+		t.Errorf("the over-age header block stopped rendering its reading: %q", coloured)
 	}
 }
 
@@ -1735,7 +2290,7 @@ func TestNoLineExceedsTheTerminalWidth(t *testing.T) {
 		// The usage view is a third body with its own line budget — its
 		// headings carry sentences rather than cells, which is exactly the
 		// shape that overruns a narrow frame.
-		out := Render(usageFleetState(w, 24), PlainStyles(), UnicodeGlyphs())
+		out := Render(usageFleetState(w, 28), PlainStyles(), UnicodeGlyphs())
 		for i, line := range strings.Split(out, "\n") {
 			if n := len([]rune(line)); n > w {
 				t.Errorf("width %d, usage: line %d is %d columns\n%s", w, i, n, line)

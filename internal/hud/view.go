@@ -388,18 +388,41 @@ func quotaVendors(st State) []quotaVendorBlock {
 	return out
 }
 
+// quotaAgeWord is the header's WORD half of the over-age escalation (§7.17,
+// amended 2026-08-09), and it is the piece that never sheds.
+//
+// The usage view can afford to carry its claim in a sentence, so its barest
+// level falls back to the glyph alone. The header cannot and must not: this is
+// the surface a reader GLANCES at — the one the field report was actually read
+// on — so the level that survives every shed is the level that has to say what
+// is wrong without the reader knowing what `⚠` costs them. One word buys that,
+// and "stale" is the word this codebase already uses for a reading that has
+// outlived its own currency (DotStale, the footer's stale-scan notice).
+//
+// It names a STATE rather than restating the duration. "19h old" would be the
+// number a second time; "stale 19h ago" is a verdict with its evidence beside
+// it, which is the same shape as the footer's `⚠ last scan 1m ago`.
+const quotaAgeWord = "stale"
+
 // quotaDress is one level of the quota line's shed cascade.
 type quotaDress struct {
 	gauges     bool
 	countdowns bool
 	forecasts  bool
 	fullNames  bool
+	// ageReason carries the ARGUMENT for an over-age relayed reading —
+	// §7.17's `older than the fleet's shortest quota window` — beside the
+	// verdict. It is the first thing shed and it is the only piece of the
+	// escalation that ever is: §7.17's own grammar is that a narrow terminal
+	// loses the argument, not the alarm.
+	ageReason bool
 }
 
 // quotaDressLevels is the shed order, most dressed first. What sheds is
 // decoration and what never sheds is fact, in the grid's own cascade
-// grammar (COST goes, then the gauge, the number never does): forecasts
-// first (a derived projection), then full vendor names down to the
+// grammar (COST goes, then the gauge, the number never does): the over-age
+// reason first (an argument for a verdict the line still states), then
+// forecasts (a derived projection), then full vendor names down to the
 // established two-letter tags, then the bars (the percentage beside each
 // bar says the same thing), then countdowns. Names shed before gauges on
 // purpose — the tag carries the same fact in two cells, while a gauge
@@ -407,7 +430,14 @@ type quotaDress struct {
 // window label, reading, and — for relayed blocks — the reading's age,
 // because shedding the age would re-present a stale number as fresh,
 // which is worse than showing nothing.
+//
+// The reason sheds FIRST rather than last because it is the longest clause on
+// the line by a wide margin and the only one whose absence costs a reader
+// nothing they cannot see: `⚠ stale 19h ago` survives every level below it,
+// so what a narrow terminal loses is why the reading is distrusted, never
+// that it is. That is §7.17's grammar unchanged, one surface over.
 var quotaDressLevels = []quotaDress{
+	{gauges: true, countdowns: true, forecasts: true, fullNames: true, ageReason: true},
 	{gauges: true, countdowns: true, forecasts: true, fullNames: true},
 	{gauges: true, countdowns: true, fullNames: true},
 	{gauges: true, countdowns: true},
@@ -510,9 +540,48 @@ func renderQuotaVendor(b quotaVendorBlock, d quotaDress, st State, sty Styles, g
 		// The basis rule (§7.12): the scope of a claim travels with the
 		// number. "6% · 2h ago" is a measurement with its time attached;
 		// "6%" alone would be the relay presenting last night as now.
-		out += " " + sty.Muted.Render(g.Mid+" "+theme.Age(b.age)+" ago")
+		out += " " + quotaAgeSuffix(b, d, sty, g)
 	}
 	return out
+}
+
+// quotaAgeSuffix is the relayed reading's age as the HEADER speaks it, muted
+// while the reading is merely old and escalated once it is over-age.
+//
+// §7.17 (2026-08-09) built this escalation for the `u` view and deliberately
+// left the header alone, which left the product louder on the surface a reader
+// OPENS than on the surface they glance at — and the field report that forced
+// the whole thing was read off the glance line. This closes that, in §7.17's
+// own order and off §7.17's own threshold: word, then glyph, then hue.
+//
+//   - WORD. `stale` rides at every dress level, and the reason rides the top
+//     one. §7.1 rule 2 is that colour never carries a distinction alone, and
+//     the reduced glyph set is the harder case than NO_COLOR: `!` is a weaker
+//     mark than `⚠`, so the sentence has to stand without either.
+//   - GLYPH. `g.Warn`, the same mark the footer's stale-scan notice uses.
+//   - HUE. SevWarn, and it styles the WHOLE suffix rather than the four
+//     characters of the age — partly because the verdict is what changed and
+//     partly for CLAUDE.md's ANSI trap: a suffix with escapes in its middle is
+//     a string the narrow-width paths may cut through.
+//
+// The reading itself is untouched. Its percentage keeps its own severity hue,
+// because that is a statement about the ACCOUNT and this is a statement about
+// the measurement — the same separation §7.17 draws.
+//
+// The threshold and the reason are read from §7.17's constants rather than
+// restated here. Two copies of `5 * time.Hour` is how the header and the view
+// would come to disagree about the same reading, which is the failure
+// `quotaVendors` being shared already exists to prevent.
+func quotaAgeSuffix(b quotaVendorBlock, d quotaDress, sty Styles, g Glyphs) string {
+	age := theme.Age(b.age) + " ago"
+	if b.age < quotaAgeWarn {
+		return sty.Muted.Render(g.Mid + " " + age)
+	}
+	text := g.Mid + " " + g.Warn + " " + quotaAgeWord + " " + age
+	if d.ageReason {
+		text += " " + g.Mid + " " + usageAgeReason
+	}
+	return sty.SevWarn.Render(text)
 }
 
 // accountQuota picks the windows the header block speaks for.

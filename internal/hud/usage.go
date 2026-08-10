@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -34,7 +35,15 @@ import (
 //     filling a CapNone field with a plausible guess. It gets a verb and its
 //     accumulation window instead.
 //
-// The spend half was reshaped on 2026-08-09 by the owner's ruling (§7.16 and
+// A third kind of line joined them on 2026-08-09 and it belongs to NEITHER
+// claim: the MODELS row names which models this scan actually saw working under
+// a vendor. It is a census, not a reading — no limit, no total, nothing to
+// compare it against — so it borrows neither vocabulary and simply lists what
+// was there. It sits in the same label column as the other two, which is what
+// makes the three legible as three kinds of statement about one vendor rather
+// than as three layouts.
+//
+// The SPEND half was reshaped the same day, by the owner's ruling (§7.16 and
 // §7.17 amendments). Cursor's relayed total no longer renders anywhere; agy's
 // does, and it is a DIFFERENT kind of sum, which is why the window wording
 // differs too. Cursor's was a meter — a file that only ever went up. agy's is
@@ -79,7 +88,65 @@ const (
 	// order (§7.2): the bar goes before the number, because the bar is a
 	// redundant encoding of a number that stays on screen.
 	usageGaugeCompact = 12
+
+	// usageRuleMin is the shortest heavy rule the title line will draw. Below
+	// it the rule stops reading as a rule and starts reading as a stray pair of
+	// glyphs after a sentence, which is worse than no rule at all — the same
+	// judgement the footer makes when it drops a notice rather than showing two
+	// cells of one.
+	usageRuleMin = 4
 )
+
+// quotaAgeWarn is where a relayed reading stops being merely OLD and starts
+// being one a reader should not act on without re-running the vendor.
+//
+// The defect it answers is a field report (2026-08-09) and it is the sharpest
+// possible statement of the problem: a nineteen-hour-old relayed reading of
+// 15% rendered at full confidence beside a live gauge, while the account was
+// actually at 44%. Nothing was dishonest — the age was on screen, `· 19h ago`,
+// exactly as §7.15 requires — and it was still read as current, because a
+// muted four-character suffix is the same weight as every other piece of
+// chrome on the line. The age was PRESENT and it was not LOUD.
+//
+// **Five hours, and the number is argued rather than tuned.** It is the
+// shortest quota window telltale has measured anywhere in the fleet — Claude's
+// `five_hour` (§3.1) — and therefore the shortest span over which a vendor is
+// known to reset a limit wholesale. A reading older than that has outlived the
+// fastest-moving quota this product knows about: whatever window it reports,
+// an entire window of the shortest kind could have opened and closed since it
+// was taken, so the reader may no longer assume the number describes now.
+// Below five hours the reading is old and still bounded by something; above it
+// there is no window short enough to bound it.
+//
+// Three things it deliberately is NOT:
+//
+//   - It is not the per-block shortest window. `model.QuotaWindow` carries no
+//     duration — only a label, a percentage and a reset time — so a per-block
+//     threshold would have to INFER a length by parsing "5h" or "seven_day",
+//     and a threshold derived from a display string is the class of guess §4a.1
+//     rejects. Worse, it would have failed on the very reading that prompted
+//     this: quotacache had already dropped Claude's expired 5h window, so the
+//     surviving block reported only `7d` and a per-block rule would have stayed
+//     silent at nineteen hours.
+//   - It is not a second reason to DROP a reading. `quotacache` owns expiry —
+//     a window whose reset has passed, or an entry past 24h, never reaches the
+//     HUD (§7.15). This view renders everything it is given and changes only
+//     how loudly. Dropping earlier than the reader does would hide a
+//     measurement telltale holds.
+//   - It is not a freshness gauge. There is no denominator for "how fresh" —
+//     the same argument that keeps a bar off the spend line.
+const quotaAgeWarn = 5 * time.Hour
+
+// usageAgeReason is the WORD half of the escalation, and §7.1 rule 2 is why it
+// exists: the hue is the second signal, so the sentence has to carry the claim
+// on a monochrome console with no glyph set worth the name.
+//
+// It says "the fleet's" rather than "its" on purpose. Five hours is the
+// shortest window in the FLEET, not necessarily in this block — an agy weekly
+// reading six hours old has not outlived its own window, and a sentence
+// claiming it had would trade one over-confident render for one over-stated
+// warning.
+const usageAgeReason = "older than the fleet's shortest quota window"
 
 // usageGaugeFor sizes the bar for a terminal width, on the grid's breakpoints
 // rather than on new ones. A second set of breakpoints is a second thing to
@@ -271,8 +338,39 @@ var usageHeadingNotes = []string{
 	"",
 }
 
+// usageHeading is the one line in the HUD that draws the heavy rule.
+//
+// The defect it fixes is §9.23's, one surface over: `fleet usage` and ` claude`
+// started in the same column at the same weight, so the body's TITLE read as a
+// peer of one of its entries — the outline whispering while its entries shout.
+//
+// The rule goes ON the title rather than under it, which is council's ruling
+// rather than a preference: §9.11 spent a whole item removing a heading
+// followed by a horizontal rule, on the finding that such a rule says nothing
+// the heading had not, and ruled that a heading carries its own. It costs zero
+// rows — which is what makes it affordable on a body with a line budget — and
+// it cannot be confused with the frame, which is the light weight at full
+// bleed one row above.
+//
+// The rule yields to the legend, never the other way round: the note is fitted
+// first and the rule takes what is left, because a legend is a statement and a
+// rule is chrome. At the 60-column floor that leaves ten cells, and if it ever
+// left fewer than usageRuleMin the line simply has no rule.
+//
+// **The vendor headings deliberately get NO rule, not even the light one.**
+// §9.26's whole argument is that a second weight is worth only as much as it is
+// scarce, and a rule on every block would spend it fifteen times a screen to
+// re-state what an indent, a blank row and the identity hue already say. Air is
+// the boundary strength this body can afford (§9.11's ranking), and it already
+// has exactly one row of it between blocks — the room's own threshold, and a
+// second row is nothing the design asked for.
 func usageHeading(st State, sty Styles, g Glyphs) string {
-	return usageFit(" "+sty.Text.Render("fleet usage"), usageHeadingNotes, st.Width, sty, g)
+	head := usageFit(" "+sty.Text.Render("fleet usage"), usageHeadingNotes, st.Width, sty.Muted, g)
+	room := st.Width - 1 - lipgloss.Width(head) - 2
+	if room < usageRuleMin {
+		return head
+	}
+	return head + "  " + sty.Rule().Render(strings.Repeat(g.RuleHeavy, room))
 }
 
 // usageBlockLines renders one vendor: a heading that states the QUOTA seam, and
@@ -288,21 +386,149 @@ func usageHeading(st State, sty Styles, g Glyphs) string {
 //
 // A vendor with neither therefore falls out of the same code path as one line
 // with no facts under it, rather than needing a case of its own.
+//
+// The MODELS row comes first, before the quota windows and before spend, and
+// the order is an argument rather than an accident: it names who did the work,
+// and the rows under it say what that work cost — subject before predicate. It
+// does not separate the heading from its own evidence, because the heading
+// states a PROVENANCE ("relayed by the statusline") rather than a number; the
+// windows are not its continuation, they are the next fact down.
 func usageBlockLines(st State, b usageBlock, cells int, sty Styles, g Glyphs) []string {
-	head := " " + sty.Identity.Render(string(b.vendor))
+	// The vendor NAME is the one place on this surface that spends a per-vendor
+	// hue (§7.17, ratified 2026-08-09; the HUD half of council's §9.28). Six
+	// blocks stack in one column here, so position answers nothing about which
+	// vendor a paragraph belongs to — the condition council named for when a hue
+	// earns its place. The dress beside it is NOT retinted: it is chrome, and
+	// past quotaAgeWarn it is a warning that has to keep SevWarn.
+	head := " " + sty.VendorIdentity(b.vendor).Render(string(b.vendor))
+
+	if b.quota != nil {
+		head = usageFit(head, usageSourceDress(*b.quota, g), st.Width, usageSourceStyle(*b.quota, sty), g)
+	} else {
+		head = usageFit(head, usageQuotaAbsence(b.vendor, g), st.Width, sty.Muted, g)
+	}
 
 	var lines []string
+	if row := usageModelsRow(usageModelsSeen(st, b.vendor), st.Width, sty, g); row != "" {
+		lines = append(lines, row)
+	}
 	if b.quota != nil {
-		head = usageFit(head, usageSourceDress(*b.quota, g), st.Width, sty, g)
 		lines = append(lines, usageQuotaLines(st, *b.quota, cells, sty, g)...)
-	} else {
-		head = usageFit(head, usageQuotaAbsence(b.vendor, g), st.Width, sty, g)
 	}
 	if b.spend != nil {
 		lines = append(lines, usageSpendLines(st, *b.spend, sty, g)...)
 	}
 	return append([]string{head}, lines...)
 }
+
+// usageModelsSep joins two model names, and it is a comma rather than the g.Mid
+// separator every other pair of facts on this surface uses. The distinction is
+// real: `·` separates two DIFFERENT claims (a percentage from its age, a total
+// from its window), and these are one claim with several members. A list joined
+// by the fact separator reads as several readings.
+const usageModelsSep = ", "
+
+// usageModelsSeen is the model display names this scan actually observed for a
+// vendor: deduped, and sorted rather than left in scan order.
+//
+// Three rules, and each of them is the honest-gauge rule wearing different
+// clothes.
+//
+//   - **Only what is in this snapshot.** Never a remembered list, never the
+//     vendor's catalogue. The row's claim is "these models did work on this
+//     machine, and telltale saw it" — a name that survived from a previous scan
+//     would be a claim about the past presented as the present, which is the
+//     same defect the relay's age exists to prevent.
+//   - **The grid's own normalization**, through DisplayModel, so `claude-opus-5`
+//     is `Opus 5` in both places and a reader never has to work out that two
+//     spellings are one model. A session whose adapter could not source a model
+//     contributes nothing — absent renders absent, and a vendor where NO session
+//     has a name gets no row at all rather than an em dash. An em dash would
+//     claim telltale looked and found nothing nameable; the missing row claims
+//     only that there is nothing here to say.
+//   - **Sorted, not ranked.** Ordering by recency or by session count would make
+//     the list reshuffle every time a turn lands, and §7.1 rule 4 budgets the
+//     movement on this screen at one cell. Alphabetical is the ordering nothing
+//     in the data can perturb.
+func usageModelsSeen(st State, v model.VendorID) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range st.Snap.Sessions {
+		if s.Vendor != v {
+			continue
+		}
+		name := DisplayModel(s.Model)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// usageModelsRow lays the names into the shared fact column, and overflows
+// honestly rather than clipping.
+//
+// The cap is the ROOM rather than a magic number, which is the same rule every
+// other line on this surface follows: what fits is drawn, what does not is
+// announced. `+2 more` is a count telltale measured, so the row never becomes a
+// claim that two models were all there was — the failure mode of a list
+// truncated with an ellipsis, where the reader cannot tell whether one name was
+// dropped or nine. Names are never cut mid-word to squeeze another in; the
+// marker's own width is reserved before the last name is accepted.
+//
+// The one exception is a terminal so narrow that even the FIRST name does not
+// fit, where the name is truncated with the ellipsis and the marker still says
+// how many are missing. That cannot happen at the 60-column floor (36 cells of
+// room) and it is handled anyway, because "cannot happen" is how a grid shears.
+func usageModelsRow(names []string, width int, sty Styles, g Glyphs) string {
+	if len(names) == 0 {
+		return ""
+	}
+	room := width - 1 - usageIndent - usageLabel - usageGap
+	if room < 1 {
+		return ""
+	}
+
+	text, kept := "", 0
+	for i, n := range names {
+		next := n
+		if text != "" {
+			next = text + usageModelsSep + n
+		}
+		// Reserve the marker's width whenever a name would be left over, so
+		// accepting this one can never be what pushes the marker off the line.
+		reserve := 0
+		if i < len(names)-1 {
+			reserve = lipgloss.Width(usageModelsMore(len(names) - i - 1))
+		}
+		if lipgloss.Width(next)+reserve > room {
+			break
+		}
+		text, kept = next, i+1
+	}
+	if kept == 0 {
+		marker := usageModelsMore(len(names) - 1)
+		text = truncate(names[0], room-lipgloss.Width(marker), g.Ellipsis)
+		if text == "" {
+			return ""
+		}
+		kept = 1
+	}
+
+	// Identity, the token the grid already spends on a model name (§7.5) — the
+	// same fact in the same hue on both surfaces, rather than a second colour
+	// for a concept theme already has one for.
+	value := sty.Identity.Render(text)
+	if kept < len(names) {
+		value += sty.Muted.Render(usageModelsMore(len(names) - kept))
+	}
+	return usageRow("models", value, sty, g)
+}
+
+func usageModelsMore(n int) string { return "  +" + strconv.Itoa(n) + " more" }
 
 // usageFit appends the first dress level that fits beside a heading, and
 // truncates the last one rather than dropping it.
@@ -311,23 +537,57 @@ func usageBlockLines(st State, b usageBlock, cells int, sty Styles, g Glyphs) []
 // statement attached, which reads as a rendering bug rather than as a fact —
 // the footer's rule for its last surviving notice, applied here for the same
 // reason.
-func usageFit(head string, dress []string, width int, sty Styles, g Glyphs) string {
+//
+// The style is a PARAMETER rather than `sty.Muted` inline, because one dress on
+// this surface is not chrome: an over-age relayed reading renders its whole
+// statement in the warning token (usageSourceStyle). Styling the dress whole,
+// at the one point it is placed, is also what keeps the escape sequences out of
+// the middle of the string — `truncate` walks runes and would happily cut
+// through an ANSI sequence, and the goldens render PlainStyles and would never
+// see it (CLAUDE.md's "ANSI trap").
+func usageFit(head string, dress []string, width int, dressSty lipgloss.Style, g Glyphs) string {
 	for i, d := range dress {
 		if d == "" {
 			return head
 		}
 		if lipgloss.Width(head)+2+lipgloss.Width(d) <= width-1 {
-			return head + "  " + sty.Muted.Render(d)
+			return head + "  " + dressSty.Render(d)
 		}
 		if i == len(dress)-1 {
 			room := width - 1 - lipgloss.Width(head) - 2
 			if room < 1 {
 				return head
 			}
-			return head + "  " + sty.Muted.Render(truncate(d, room, g.Ellipsis))
+			return head + "  " + dressSty.Render(truncate(d, room, g.Ellipsis))
 		}
 	}
 	return head
+}
+
+// usageSourceStyle is the hue half of the age escalation, and it is the SECOND
+// signal — the dress text already carries the warning glyph and the reason in
+// words, so this only makes it findable (§7.1 rule 2).
+//
+// The whole statement changes token rather than just the four characters of the
+// age. Two reasons, and the first is the honest one: the sentence IS the
+// warning once the reading is over-age — "quota relayed by the statusline"
+// stops being provenance trivia and becomes the explanation of why a number on
+// screen may be wrong. The second is mechanical, and it is CLAUDE.md's ANSI
+// trap: a partially styled dress is a string with escapes in the middle, and
+// the narrow-width path truncates dresses rune by rune.
+//
+// SevWarn on a sentence rather than on a value is the footer's own precedent —
+// §7.5 gives the token "value ≥ 60; **warning notices**" — and the footer's
+// stale-scan line already reads `⚠ last scan 1m ago` in exactly this token.
+// There is deliberately no SevCrit step: §9.26's lesson is that a second level
+// is worth what it is scarce, and the only boundary above this one that is not
+// invented is quotacache's 24h drop, which is a disappearance rather than a
+// warning.
+func usageSourceStyle(b quotaVendorBlock, sty Styles) lipgloss.Style {
+	if b.relayed && b.age >= quotaAgeWarn {
+		return sty.SevWarn
+	}
+	return sty.Muted
 }
 
 // usageSourceDress names where a vendor's quota reading came from, most dressed
@@ -342,13 +602,29 @@ func usageFit(head string, dress []string, width int, sty Styles, g Glyphs) stri
 // The AGE survives every level, including the barest. Shedding it would
 // re-present a stale number as fresh, which is the one thing §7.15 says the
 // relay may never do — so the phrase around the age is what gives way.
+//
+// Past quotaAgeWarn the age escalates, and the escalation is carried by the
+// text before it is carried by the hue: the warning glyph joins the age at
+// every level including the barest, and the REASON rides the two dressed
+// levels. That ordering is the shed grammar unchanged — the age is the fact and
+// never sheds, the sentence explaining it is decoration and does. What the
+// barest level loses is the argument, not the alarm.
 func usageSourceDress(b quotaVendorBlock, g Glyphs) []string {
 	if !b.relayed {
 		return []string{"quota read from its own store, this scan", "scan-fresh", ""}
 	}
+	mid := " " + g.Mid + " "
+	if b.age >= quotaAgeWarn {
+		aged := mid + g.Warn + " " + theme.Age(b.age) + " ago" + mid + usageAgeReason
+		return []string{
+			"quota relayed by the statusline" + aged,
+			"relayed" + aged,
+			g.Warn + " " + theme.Age(b.age) + " ago",
+		}
+	}
 	age := ""
 	if b.age >= quotaAgeShown {
-		age = " " + g.Mid + " " + theme.Age(b.age) + " ago"
+		age = mid + theme.Age(b.age) + " ago"
 	}
 	return []string{
 		"quota relayed by the statusline" + age,
