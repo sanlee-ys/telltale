@@ -119,7 +119,11 @@ launcher and council never drives it.
 Adapter path resolution is portable by construction — `os.UserHomeDir()` and
 `os.UserConfigDir()`, which return the right root on all three platforms. The
 gap is **verification, not portability**: every adapter's live-corpus pass was
-run on Windows. No macOS or Linux corpus pass is recorded for any of the five.
+run on Windows. No macOS or Linux corpus pass is recorded for any of the six —
+grok joined the list on 2026-08-09 (design.md §3.9a), surveyed against 30
+sessions on the Windows box and nowhere else. Its root honours `GROK_HOME`,
+which the vendor's own startup log names, so the override is portable too and is
+likewise unexercised off Windows.
 
 That means a macOS run is expected to work and has not been shown to. Treat a
 missing or empty adapter on macOS as unverified rather than broken, and record

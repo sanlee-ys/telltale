@@ -33,15 +33,24 @@ func TestUsageNamesEverySeat(t *testing.T) {
 // TestUsageDescribesCouncilSeatsNotHudFilter guards the neighbouring trap.
 //
 // Two different flags spell themselves `--vendor`: council's seat roster and
-// the HUD's filter, and they take DIFFERENT vocabularies — the HUD has a gemini
-// row and no grok one (parseFilter), council has a grok seat and no gemini one
-// (mentionAliases). They are not drifting copies of one list, so a well-meaning
-// sweep that "fixes" one to match the other would break both. This test states
-// that asymmetry so it reads as deliberate rather than as the next thing to
-// tidy up.
+// the HUD's filter, and they take DIFFERENT vocabularies. They are not drifting
+// copies of one list, so a well-meaning sweep that "fixes" one to match the
+// other would break both. This test states the asymmetry so it reads as
+// deliberate rather than as the next thing to tidy up.
+//
+// The asymmetry used to run both ways: the HUD had a gemini row and no grok
+// one, council a grok seat and no gemini one. internal/adapter/grok closed half
+// of it — grok is now a HUD filter too, and the assertion that it was not is
+// gone rather than weakened, because a test asserting an absence that has been
+// deliberately filled is a test that has to be deleted the day the work lands.
+// Gemini is the half that remains: it has an adapter and no seat, because
+// nothing drives it headlessly from council.
 func TestUsageDescribesCouncilSeatsNotHudFilter(t *testing.T) {
-	if _, err := parseFilter("grok"); err == nil {
-		t.Error("the HUD filter now accepts grok — its --vendor help and this test need updating together")
+	if _, err := parseFilter("grok"); err != nil {
+		t.Errorf("the HUD filter no longer accepts grok (%v) — internal/adapter/grok reports rows under that id", err)
+	}
+	if _, err := parseFilter("gemini"); err != nil {
+		t.Errorf("the HUD filter no longer accepts gemini: %v", err)
 	}
 	if _, err := council.ParseSeats("gemini"); err == nil {
 		t.Error("council now seats gemini — the council --vendor help derives from SeatNames, but this test's premise is stale")

@@ -17,6 +17,7 @@ import (
 	cursoradapter "github.com/sanlee-ys/telltale/internal/adapter/cursor"
 	"github.com/sanlee-ys/telltale/internal/adapter/drift"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
+	grokadapter "github.com/sanlee-ys/telltale/internal/adapter/grok"
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/quotacache"
 	"github.com/sanlee-ys/telltale/internal/usagecache"
@@ -322,6 +323,36 @@ func spendState(w, h int) State {
 				CacheWriteTokens: 62004,
 			},
 		}},
+	}
+	return st
+}
+
+// grokState is a grok-only frame: two sessions from the same store, one titled
+// and one from a headless run that the vendor never titled, and one with no
+// signals.json yet so its context is absent rather than zero.
+func grokState(w, h int) State {
+	st := NewState()
+	st.Now = pinned
+	st.Width, st.Height = w, h
+	st.Snap = Snapshot{
+		At: pinned,
+		Sessions: []*model.Session{
+			sess(model.VendorGrok, "00000000-1111-7222-8333-000000000001",
+				`C:\src\code\telltale`, "grok-4.5", 20*time.Second,
+				withName("Adapter Field Map Review"), withCtx(7),
+				withExtras("ctx tokens", "39k", "ctx window", "500k",
+					"turn cost", "$0.0747", "turn tokens", "143k")),
+			// A `--single` run: session_summary is "", there is no
+			// generated_title key at all, and no turn boundary has written
+			// signals.json. Both absences are the vendor having nothing to say.
+			sess(model.VendorGrok, "00000000-1111-7222-8333-000000000002",
+				`C:\src\code\example-app`, "grok-4.5", 6*time.Minute,
+				withExtras("turn cost", "$0.0306", "turn tokens", "19k")),
+		},
+		Vendors: []VendorView{
+			watching(model.VendorGrok, `%USERPROFILE%\.grok\sessions`,
+				grokadapter.New().Capabilities()),
+		},
 	}
 	return st
 }
@@ -755,6 +786,17 @@ func goldenCases() []goldenCase {
 		// there is no denominator anywhere in this reading.
 		{name: "spend-cursor", state: func() State {
 			return spendState(120, 10)
+		}},
+
+		// The grok seam (§3.9a), and it is here for one claim: this is the
+		// vendor whose store holds a real dollar figure, and the COST column is
+		// still dropped. The money is a per-TURN reading with no session total
+		// anywhere on disk, so it lives in the detail pane's extras where its
+		// label says which turn it belongs to, and the grid asserts nothing.
+		// The context bar beside it is UNMARKED — grok reports the percentage
+		// rather than deriving it, the second vendor after Cursor to do so.
+		{name: "grok-row", state: func() State {
+			return grokState(120, 9)
 		}},
 
 		// ------------------------------------------------- the usage view

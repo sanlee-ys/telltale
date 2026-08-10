@@ -38,11 +38,13 @@ the argument; this file does not restate either.
   that began with a letter (§9.39's dated amendment). The prompt is now
   attached (`--single=…`) and every argv test uses a fenced, brief-shaped
   prompt. The rule that generalises: **probe a vendor with a prompt shaped
-  like a brief, not like a greeting.** Two things are deliberately NOT done and should not be mistaken
-  for oversights. **There is no `internal/adapter/grok`**, so the HUD cannot see
-  grok sessions at all; council drives this vendor, the gauges do not observe
-  it, and closing that is a separate piece of work with its own on-disk-format
-  survey. **The seat has no fleet guards wired** — grok's own config carries
+  like a brief, not like a greeting.** One thing is deliberately NOT done and should not be mistaken
+  for an oversight. **`internal/adapter/grok` now exists** (§3.9a), so grok
+  sessions render as HUD rows with name, model, workspace, a vendor-reported
+  context percentage and last activity — the gauges observe this vendor as well
+  as drive it. The COST column still stays dropped on those rows: grok writes a
+  per-turn dollar figure and no session total, so the money reaches the detail
+  pane as a labeled extra and never the grid. **The seat has no fleet guards wired** — grok's own config carries
   `[compat.claude] hooks = false` and its native hook system
   (`grok hooks-add`/`hooks-trust`) has nothing installed into it — which under
   agent-ops ADR-012 is an open obligation on the fleet rather than a reason to

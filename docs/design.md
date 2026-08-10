@@ -337,18 +337,18 @@ JSONL stays canonical and readable without SQLite.
 
 ### 3.3 Cross-vendor capability matrix — the asymmetry is a design fact, not a bug
 
-| Field | Claude (disk) | Codex (disk) | Gemini (disk, §3.7) | Antigravity (disk, §3.8) | Cursor (disk, §3.9) |
-|---|---|---|---|---|---|
-| session id, cwd, git branch | yes | yes | id yes; cwd via `projects.json`; branch no | id yes; cwd via the trajectory blob's `file:///` URI; branch no | id yes; cwd via `workspaceStorage/<id>/workspace.json`; branch no |
-| model | yes | yes | yes (per message) | yes (per generation, id + display name) | yes (`modelConfig.modelName`, one string; sometimes the literal `default`) |
-| token counts | yes | yes | yes (per message) | yes (per generation, self-checking) | context totals yes; per-message counts present and **always 0** |
-| context window size | **no** | yes | **no** (static table in CLI source only) | **no** (statusline payload only) | yes (`contextTokenLimit`) |
-| context % | **not derivable** | **derived** | **not derivable** | **not derivable** | **reported** (the vendor persists its own; derived from raw counts only if it is missing) |
-| quota / rate limits | **no** (statusline stdin only) | yes | **no** (runtime 429 handling only) | **no** (statusline stdin only; never persisted) | **no** — plan *entitlements* on disk, no consumption record |
-| cost USD | no (stdin only) | no | no | no | **no** — `usageData` `{}`, token counts unpopulated zeros |
-| process liveness | registry exists, deliberately unread (§3.1) | none | none | `steps.status` exists, structural only (never observed in-flight) | `status`/`generatingBubbleIds` exist, structural only (never observed in-flight); Hooks is the real seam |
-| session title | yes | no | yes (`summary` metadata) | **no** — the only free text on disk is prompt content | yes (`value.name`, vendor-generated) |
-| sub-agent count | **derived** (`subagents/` sidecar, §3.1) | **no** | **derived** (`chats/<parent-id>/` nest) | **no** — `parent_references` observed empty | **no** — `isSubagent`/`numSubComposers` observed zero throughout |
+| Field | Claude (disk) | Codex (disk) | Gemini (disk, §3.7) | Antigravity (disk, §3.8) | Cursor (disk, §3.9) | Grok (disk, §3.9a) |
+|---|---|---|---|---|---|---|
+| session id, cwd, git branch | yes | yes | id yes; cwd via `projects.json`; branch no | id yes; cwd via the trajectory blob's `file:///` URI; branch no | id yes; cwd via `workspaceStorage/<id>/workspace.json`; branch no | id yes; cwd verbatim in `summary.json`; branch **yes, unused** (`head_branch`, only when the cwd is a repo) |
+| model | yes | yes | yes (per message) | yes (per generation, id + display name) | yes (`modelConfig.modelName`, one string; sometimes the literal `default`) | yes (`current_model_id`, one string) |
+| token counts | yes | yes | yes (per message) | yes (per generation, self-checking) | context totals yes; per-message counts present and **always 0** | yes (per turn in `updates.jsonl`, plus a context total in `signals.json`) |
+| context window size | **no** | yes | **no** (static table in CLI source only) | **no** (statusline payload only) | yes (`contextTokenLimit`) | yes (`contextWindowTokens`) |
+| context % | **not derivable** | **derived** | **not derivable** | **not derivable** | **reported** (the vendor persists its own; derived from raw counts only if it is missing) | **reported** (`contextWindowUsage`, an integer the vendor truncates) |
+| quota / rate limits | **no** (statusline stdin only) | yes | **no** (runtime 429 handling only) | **no** (statusline stdin only; never persisted) | **no** — plan *entitlements* on disk, no consumption record | **no** — nothing account-level anywhere in the store |
+| cost USD | no (stdin only) | no | no | no | **no** — `usageData` `{}`, token counts unpopulated zeros | **per turn yes, session total no** — `costUsdTicks`, unit measured; no cumulative figure exists |
+| process liveness | registry exists, deliberately unread (§3.1) | none | none | `steps.status` exists, structural only (never observed in-flight) | `status`/`generatingBubbleIds` exist, structural only (never observed in-flight); Hooks is the real seam | `active_sessions.json` exists and was **measured empty during a live turn**; `events.jsonl` phases outlive the process |
+| session title | yes | no | yes (`summary` metadata) | **no** — the only free text on disk is prompt content | yes (`value.name`, vendor-generated) | yes (`generated_title`, vendor-generated; absent on headless runs) |
+| sub-agent count | **derived** (`subagents/` sidecar, §3.1) | **no** | **derived** (`chats/<parent-id>/` nest) | **no** — `parent_references` observed empty | **no** — `isSubagent`/`numSubComposers` observed zero throughout | **no** — a `spawn_subagent` tool exists, nothing about it reaches disk |
 
 Codex is `CapNone` for the sub-agent count and not merely empty. Sub-agent *threads* do
 exist in the Codex format — `session_meta.payload.agent_nickname` marks one, and the
@@ -366,7 +366,11 @@ Cursor is the first vendor to put a context percentage on disk as a number *it* 
 which makes it the only unmarked bar in that frame. Everything else about it is the
 asymmetry again from the other side: it is also the first vendor whose store holds live
 credentials, so the adapter's most load-bearing property is the list of things it does
-not read (§3.9, decisions/007).
+not read (§3.9, decisions/007). Grok is the second to report a percentage, and the first
+to write a **dollar figure** to disk at all — and the COST column still auto-hides on its
+rows, because what it writes is one turn's cost and never the session's (§3.9a). "Nothing
+sources cost" became "nothing sources a session cost", which is a narrower sentence and
+the same column.
 
 **Percentage comparability.** Codex's own
 `TokenUsage::percent_of_context_window_remaining` subtracts `BASELINE_TOKENS = 12000`
@@ -828,6 +832,162 @@ the derived-percentage path did not fire on live data (no real session was missi
 `contextUsagePercent` while carrying raw counts), and the corpus is one machine, one day,
 one Cursor version.
 
+### 3.9a Grok CLI seam — surveyed live 2026-08-09; the first vendor that writes money down
+
+**Environment:** grok 1.0.0 (3cd0d0cbce), Windows 11, signed in against grok.com, model
+`grok-4.5`. Closed source and undocumented — `~/.grok/README.md` is user-facing product
+prose, not a format spec — so this is the Claude Code / Cursor method again: a read-only
+live survey over the real store, every claim measured, nothing carried over from
+`--help`. **Numbered against the sections above rather than after §3.10** so the survey
+sits with the surveys and the inventory keeps summarizing everything before it.
+
+The council seat (§9.39) already drives this vendor, and the HUD could not see it at all.
+This closes that; the seat's parser and this adapter now read the same wire from two
+sides, which is what let the cost unit below be pinned rather than assumed.
+
+**Store inventory.** Sessions are DIRECTORIES, not files:
+
+```
+~/.grok/
+  sessions/
+    session_search.sqlite                     a FILE at the root — full-text index
+    <percent-encoded-cwd>/
+      prompt_history.jsonl                    a FILE at workspace level
+      <uuid>/                                 ONE SESSION
+        summary.json      signals.json        chat_history.jsonl   events.jsonl
+        updates.jsonl     prompt_context.json system_prompt.txt    resources_state.json
+        rewind_points.jsonl  announcement_state.json  terminal/    *.lock
+  active_sessions.json   auth.json   worktrees.db   models_cache.json   logs/   memtrace/
+```
+
+**The variance is a finding, not noise.** Across 30 session directories in 8 workspaces,
+only five files were present in all 30: `summary.json`, `chat_history.jsonl`,
+`events.jsonl`, `prompt_context.json`, `system_prompt.txt`. `updates.jsonl` was in 29,
+`signals.json` in 23, `resources_state.json` in 13, a `terminal/` subdirectory in 5. The
+adapter therefore sources every required field from `summary.json` — the invariant — and
+treats a field that lives anywhere else as *absent now* when its file is missing, which is
+a first-class state here and not a failure.
+
+**Field map.**
+
+| Field | Verdict | Source, and what was measured |
+|---|---|---|
+| name | **MEASURED** | `summary.json` → `generated_title` (17 of 30), falling back to `session_summary`, which held the identical string on every session carrying both. A headless `--single` run has `session_summary: ""` and **no `generated_title` key at all** — verified by running one — so an unnamed grok row is absence, not a failed read. |
+| model | **MEASURED** | `summary.json` → `current_model_id`. `grok-4.5` on 30 of 30. Note the per-model usage blocks key off `grok-4.5-build` instead; the adapter reports the id the vendor puts in the session's own model field, not the billing variant. |
+| workspace | **MEASURED** | `summary.json` → `info.cwd`, absolute and native (`C:\Users\sanle\code\telltale`), on 30 of 30. The parent directory name carries the same path percent-encoded and is the **fallback** — see the round-trip note below. |
+| context % | **MEASURED** | `signals.json` → `contextWindowUsage`, an integer percentage the vendor computes, beside the raw `contextTokensUsed` / `contextWindowTokens` (500000 on every session). It TRUNCATES: 39656/500000 = 7.93 is written `7`, 22675/500000 = 4.535 is written `4`. The adapter reports the vendor's integer and does not recompute — grok is the second vendor after Cursor with no assumed denominator, and the more precise float would be a number the vendor never said. |
+| cost | **PER-TURN ONLY, so the field stays `CapNone`** | `updates.jsonl` → each `turn_completed` record's `usage.costUsdTicks`. The unit is measured twice over (below). It is **not cumulative**: one session's three turns read 455412000, 820464000, 747416000 ticks, the third smaller than the second. `"[a-z_]*cost[a-z_]*"` over every `.json`/`.jsonl` in the store matched `costUsdTicks` and **nothing else** — no session total exists anywhere. Summing needs every turn record and `updates.jsonl` reached **818 KB** in one session, past any bounded tail; a tail-window sum is a lower bound, and a lower bound in a column headed COST is a derived number wearing a read one's clothes. The **last turn's** cost is carried as a labeled Extra instead. |
+| quota | **ABSENT** | `"[a-z_]*(rate\|limit\|quota)[a-z_]*"` over the whole store returned only tool-configuration keys (`output_byte_limit`, `head_limit`). No window, no ordinal, no reset time reaches disk. |
+| last_activity | **MEASURED** | `summary.json` → `last_active_at` (29 of 30) then `updated_at` (30 of 30) then `created_at`, folded with the file's mtime per §6 Q8. `summary.json` is rewritten every turn, which is also why it — not the session DIRECTORY, whose mtime moves only when an entry is added — is the freshness hint `Discover` returns. |
+| liveness | **ABSENT, and this one was probed rather than reasoned about** | See below. |
+| sub-agent count | **ABSENT** | grok ships a `spawn_subagent` tool (it is in the tool list every headless run prints), and `"subagent[A-Za-z_]*"` matched nothing on disk outside the system prompt's own description of it. No nest, no count, no parent link. Same ruling as Codex (§3.3): declaring the field and emitting zero would assert something the format cannot check. |
+
+**The cost unit, pinned twice.** `costUsdTicks` is fixed-point USD at **1e10 ticks to the
+dollar**, and neither half of that was inferred from the name. First, grok's headless wire
+prints both forms of the same number on its `end` event, and three live runs on this box
+on 2026-08-09 gave `0.0306488 / 306488000`, `0.0315248 / 315248000` and
+`0.0382104 / 382104000` — exactly 1e10, three times. Second, the disk field is spelled
+differently (`costUsdTicks` vs the wire's `total_cost_usd_ticks`), so it had to be shown to
+be the same quantity and not merely a similarly named one: those three runs' on-disk values
+were read back and matched the wire's tick counts **value for value**. Without the second
+step this would be a plausible unit rather than a measured one.
+
+**`active_sessions.json` claims liveness and does not deliver it — measured.** With 30
+sessions in the store the file held the two bytes `[]`. It still held `[]` **while a
+headless turn was mid-flight**, sampled with `grok.exe` confirmed running by PID and with
+the file's own mtime freshly stamped by that run — so the vendor had written the file and
+written nothing in it. A registry that is empty during a live session cannot tell "nothing
+is running" from "the thing running is not the kind it tracks", and §4a.4 already names
+process-existence as the one case where an adapter can lie to the HUD undetectably. Not
+read.
+
+`events.jsonl` carries the other tempting signal — `phase_changed` (1765 of them in one
+session, spelling `waiting_for_model`, `streaming_reasoning`, `streaming_text`,
+`tool_execution`, `permission_prompt`), `turn_started` / `turn_ended` with an `outcome`,
+and a `permission_requested` that is a genuine needs-input state. It is left unread in v1
+for the reason the corpus itself demonstrates: the newest session ends on an **unresolved
+`permission_requested`** written minutes before grok exited, so "the last event is a
+prompt" and "a dead session was killed at a prompt" are the same bytes. A hint that stays
+true forever after the process is gone is worse than no hint. This is the strongest
+needs-input seam any vendor has offered so far and it is recorded here as the watch item,
+not spent.
+
+**The percent-encoding round-trips, and that is why this adapter may decode it.**
+`C%3A%5CUsers%5Csanle%5Ccode%5Ctelltale` is `C:\Users\sanle\code\telltale`: `:` as `%3A`,
+`\` as `%5C`, with letters, digits and a literal `-` passing through unescaped. Every one
+of the 8 workspace directory names decoded to exactly the `info.cwd` its sessions recorded,
+drive-letter case included. That is the opposite of §3.1's ruling for Claude Code, whose
+project slug maps both `\` and a literal `-` onto `-` and is therefore lossy — decoding
+*that* would invent a path. Grok's encoding is injective, so decoding it invents nothing,
+and the adapter uses it as the workspace fallback. It stays a fallback: the vendor's own
+record of its cwd outranks a key we reconstructed.
+
+**What is deliberately not opened, and why it is stated rather than assumed:**
+
+- **`~/.grok/auth.json`** holds the OAuth token. The adapter resolves no path outside the
+  sessions tree at all.
+- **`sessions/session_search.sqlite`** is an FTS5 index whose `session_docs` table carries
+  `(session_id, cwd, updated_at, title, content, content_hash)` — **`content` is transcript
+  text**. It would answer "what is this session about" in one query, and that is exactly the
+  trade this repo does not make: `summary.json` already has the vendor's own label.
+- **`prompt_context.json`** inlines the user's `CLAUDE.md`/`AGENTS.md` verbatim (39 KB on
+  one session). Same rule. A test plants a marker in both files and asserts nothing carrying
+  it reaches any displayable field, the way §3.9's credential allowlist is enforced.
+- **The `.lock` sidecars** beside `summary.json`, `chat_history.jsonl`, `updates.jsonl` and
+  `rewind_points.jsonl` are never opened and never created. The gauges read.
+
+**Two smaller findings worth writing down.** One session's `summary.json` carries
+`"sandbox_profile": "bogus-profile-xyz"` — the invalid profile §9.39 fed the CLI to prove
+`--sandbox` validates nothing. grok not only accepted it, it **persisted it**, which is why
+that key is not rendered as an Extra: it would put an unvalidated word on screen. And
+`summary.json` carries a git block (`git_root_dir`, `git_remotes`, `head_commit`,
+`head_branch`) on exactly the one session whose cwd was a git repo — a branch column is
+available for later, and is out of scope here.
+
+**The frame, generated by the build** (`internal/hud/testdata/golden/grok-row.txt`, at
+120 columns; both rows are synthesized). The COST column is not narrow here, it is
+ABSENT — the vendor writes dollars and no row claims a session total. The first row's
+bar carries no estimate marker because the percentage was read rather than derived; the
+second is a headless run with no title and no `signals.json`, so its label falls back to
+the workspace and its CONTEXT is an em dash rather than a zero:
+
+```
+ telltale  │  2 sessions  │  grok 2
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                               MODEL          CONTEXT                AGE
+ ● GR │ Adapter Field Map Review  C:\src\code                                 grok-4.5       ▊───────────     7% │  20s
+ ◐ GR │ example-app  C:\src\code                                              grok-4.5                         — │   6m
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+```
+
+**Adapter built, same day (`internal/adapter/grok`).** Name, model, workspace, context %
+and last_activity REPORTED; cost, quota, liveness and sub-agent count `CapNone`; the
+derived set deliberately EMPTY. `summary.json` and `signals.json` are read whole under a
+64 KB cap each (largest observed: 918 and 1538 bytes) and a file past its cap degrades the
+fields it feeds rather than being slurped; `updates.jsonl` is tail-read like every other
+JSONL here.
+
+**Live verification, same day** (`go test ./internal/adapter/grok -tags=live -run
+TestLiveGrokStore`, which drives the HUD's own `Scan` and `Render` over the real store and
+is excluded from CI because CI has no store to read): **31 sessions discovered and read**,
+**31 of 31** sourcing both a model and a workspace, 18 titled, 24 carrying a context
+reading, 24 carrying a turn cost. Every session passed `Validate`; not one produced a cost,
+a quota window, a sub-agent count or a liveness hint. The frame showed the zero-vs-absent
+distinction doing real work: the 7 sessions with no `signals.json` rendered an em dash in
+CONTEXT while their neighbours rendered an unmarked bar, on the same screen. First
+`Discover` plus 31 `Read`s completed in 80 ms.
+
+What this does **not** cover, itemized: no session was sampled while a turn was streaming
+(the `active_sessions.json` probe ran against a headless turn, not against a HUD scan); no
+interactive TUI session was running during a scan, so nothing exercised the NTFS-deferred
+mtime the Q8 fold exists for; the summary-past-its-cap path has never fired on real data;
+the corpus is one machine, one day, one grok version; and `active_sessions.json` has never
+been observed non-empty **at all**, so "it does not track headless sessions" is the most
+this survey can say about what it would otherwise contain.
+
 ### 3.10 The canary set — what each adapter actually watches
 
 Every survey above pins an adapter to a private, unversioned on-disk format. §7 records how
@@ -848,6 +1008,7 @@ has moved, and says so. `internal/adapter/drift` holds the mechanism; this is th
 | Antigravity | `agy 1.1.9` | `gen_metadata table` | model |
 | | | `trajectory_metadata_blob table` | workspace |
 | Cursor | `Cursor 3.14.7` | `composerHeaders timestamp columns` | last activity |
+| Grok CLI | `grok 1.0.0 (3cd0d0cbce)` | `summary.json info.id` — the identity envelope, on 30 of 30 sessions | name, model, workspace, last activity |
 
 The middle column quotes each canary by the **name the adapter gives it**, not a paraphrase, so
 the string in this table is the string in the code — which is what makes the guard tests below
@@ -2865,8 +3026,8 @@ these items are ordered by that sequence, not by version number.
    flagged-limitation pattern applied to a platform instead of a segment. The macOS
    label is point-in-time and SHA-bearing — the suite, build, statusline smokes, a
    53-session live Claude Code read and the HUD all ran on macOS at `052a9d6`
-   (ADR-005, second amendment) — while CI still runs `windows-latest` only, and four
-   of the five adapters have still never met a live macOS corpus.
+   (ADR-005, second amendment) — while CI still runs `windows-latest` only, and five
+   of the six adapters have still never met a live macOS corpus.
    The README positioning line — *"one local HUD for every coding agent you use"* —
    lands **with** this slice and deliberately not before it: a positioning claim that
    arrives ahead of a one-command install is a promise the reader has no way to act on.

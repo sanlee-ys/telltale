@@ -1,0 +1,10 @@
+{
+  "info": {
+    "id": "not-a-uuid",
+    "cwd": "C:\\src\\code\\example-app"
+  },
+  "session_summary": "Should Never Be Discovered",
+  "updated_at": "2026-08-09T19:00:00.000000000Z",
+  "current_model_id": "grok-4.5",
+  "chat_format_version": 1
+}

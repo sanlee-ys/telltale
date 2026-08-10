@@ -151,7 +151,7 @@ plus a line naming the fields that vendor **cannot** source at all. That last li
 answer to "why is this cell empty?", and it is the difference between "we have no value
 right now" and "this vendor never had one". `/` narrows the rows by name or path.
 
-`telltale hud` flags: `--vendor all|claude|codex|gemini|agy|cursor`, `--ascii` (also
+`telltale hud` flags: `--vendor all|claude|codex|gemini|agy|cursor|grok`, `--ascii` (also
 `TELLTALE_ASCII=1`), `--no-title`. `NO_COLOR` is honoured through the standard
 mechanism.
 
@@ -166,9 +166,9 @@ mechanism.
 - **A watch-mode HUD (TUI)** for parallel sessions — the cross-vendor surface, and a
   first-class UI investment (Go + Bubble Tea/Lipgloss; Windows Terminal is the reference
   environment). Ships with adapters for **Claude Code**, **Codex CLI**, **Gemini CLI**,
-  **Antigravity CLI** and **Cursor (Composer)**, each reading that vendor's own native
-  on-disk data — for Antigravity and Cursor that means a read-only SQLite reader written
-  into this repo rather than a 9 MB dependency added to it.
+  **Antigravity CLI**, **Cursor (Composer)** and **Grok CLI**, each reading that vendor's
+  own native on-disk data — for Antigravity and Cursor that means a read-only SQLite
+  reader written into this repo rather than a 9 MB dependency added to it.
 - **A documented adapter interface** — one module per vendor — so you can wire in
   anything else that leaves session data on disk. The worked example in
   [docs/design.md §4a.7](docs/design.md) is the method the Gemini adapter was actually

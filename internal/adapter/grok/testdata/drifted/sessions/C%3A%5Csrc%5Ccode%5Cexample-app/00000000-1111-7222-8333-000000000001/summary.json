@@ -1,0 +1,11 @@
+{
+  "info": {
+    "session_uuid": "00000000-1111-7222-8333-000000000001",
+    "workdir": "C:\\src\\code\\example-app"
+  },
+  "session_summary": "",
+  "created_at": "2026-08-09T19:03:08.969851700Z",
+  "updated_at": "2026-08-09T19:14:28.231464800Z",
+  "chat_format_version": 2,
+  "agent_name": "grok-build-plan"
+}

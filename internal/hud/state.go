@@ -21,10 +21,11 @@ const (
 	FilterGemini
 	FilterAntigravity
 	FilterCursor
+	FilterGrok
 )
 
 func (f Filter) Next() Filter {
-	if f >= FilterCursor {
+	if f >= FilterGrok {
 		return FilterAll
 	}
 	return f + 1
@@ -42,6 +43,8 @@ func (f Filter) String() string {
 		return string(model.VendorAntigravity)
 	case FilterCursor:
 		return string(model.VendorCursor)
+	case FilterGrok:
+		return string(model.VendorGrok)
 	default:
 		return "all"
 	}
@@ -59,6 +62,8 @@ func (f Filter) Accepts(v model.VendorID) bool {
 		return v == model.VendorAntigravity
 	case FilterCursor:
 		return v == model.VendorCursor
+	case FilterGrok:
+		return v == model.VendorGrok
 	default:
 		return true
 	}

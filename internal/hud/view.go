@@ -318,7 +318,7 @@ func headerIdentity(st State, sty Styles, g Glyphs) string {
 // IS the navigation here.
 var fleetOrder = []model.VendorID{
 	model.VendorClaude, model.VendorCodex, model.VendorGemini,
-	model.VendorAntigravity, model.VendorCursor,
+	model.VendorAntigravity, model.VendorCursor, model.VendorGrok,
 }
 
 func vendorCounts(st State, sty Styles) string {
@@ -830,11 +830,10 @@ func vendorTag(v model.VendorID) string {
 	case model.VendorCursor:
 		return "CU"
 	case model.VendorGrok:
-		// Listed even though no adapter reports grok sessions, so no HUD row
-		// carries this id today. It is here because council's copy of this map
-		// spells it GR and the two are asserted equal by literal — one product,
-		// one vocabulary. The fallback below would answer "GR" anyway; saying
-		// it out loud is what keeps the two maps comparable by eye.
+		// Council spelled this GR for a release before internal/adapter/grok
+		// existed, and the two are asserted equal by literal — one product, one
+		// vocabulary. The fallback below would answer "GR" anyway; saying it out
+		// loud is what keeps the two maps comparable by eye.
 		return "GR"
 	default:
 		s := strings.ToUpper(string(v))
