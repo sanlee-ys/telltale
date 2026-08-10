@@ -354,6 +354,9 @@ func TestANewTurnDoesNotMoveTheOpenPage(t *testing.T) {
 // write would quietly copy text while the vendor sat there — and their next move
 // is to press it again.
 func TestAGateOutranksTheTurnPage(t *testing.T) {
+	// Fallback path: the tail of this test asserts a clipboard command, and the
+	// subject is the gate's precedence over the page, not the mechanism.
+	stubNoNativeClipboard(t)
 	m := &Model{st: paged(), gateInputs: map[string]map[string]any{}}
 	m.st.Gates = []PendingGate{{
 		Vendor: model.VendorClaude, RequestID: "r1", ToolUseID: "t1",
@@ -434,6 +437,10 @@ func TestTheTurnPageOffersNoFocusKey(t *testing.T) {
 // keys produce it: a per-seat `y` would need a per-seat focus, and a projection
 // whose unit is the turn deliberately has none.
 func TestYankOnTheTurnPageTakesThePage(t *testing.T) {
+	// Fallback path, so the assertion below stays about the KEY rather than
+	// about which clipboard mechanism this machine happens to have. See
+	// stubNoNativeClipboard.
+	stubNoNativeClipboard(t)
 	for _, k := range []string{"y", "Y"} {
 		m := &Model{st: paged()}
 		m.st.Focus = 1 // Codex, whose turn-3 reply is empty

@@ -164,6 +164,10 @@ func TestYankTurnSkipsASeatThatSatOut(t *testing.T) {
 // misfire available in this keymap, because the user's next move is to press it
 // again.
 func TestAPendingGateStillGetsTheY(t *testing.T) {
+	// The second half asserts a clipboard COMMAND, so it needs the fallback
+	// mechanism — see stubNoNativeClipboard. What is under test is the routing
+	// (gate first, copy after), not which helper the copy lands in.
+	stubNoNativeClipboard(t)
 	m := &Model{st: replied(), gateInputs: map[string]map[string]any{}}
 	m.st.Gates = []PendingGate{{
 		Vendor: model.VendorClaude, RequestID: "r1", ToolUseID: "t1",
@@ -207,13 +211,21 @@ func TestYankIsTextInCompose(t *testing.T) {
 	}
 }
 
-// TestYankEmitsAClipboardCommand is as far as a test can reach.
+// TestYankEmitsAClipboardCommand is as far as a test can reach ON THE FALLBACK
+// PATH, and it now says which path it is testing.
 //
 // tea.SetClipboard returns a Cmd whose message the program turns into an OSC 52
 // write; whether the TERMINAL honours that sequence is unobservable from here,
 // and is labelled as inferred wherever it is claimed. What is checkable is that
 // the key produces the command carrying the right text.
+//
+// The stub is what keeps this honest on a machine that has a native helper. On
+// macOS `y` now copies through pbcopy and emits NO command at all — this test
+// passed for two days on Windows while the key did nothing on the Mac, because
+// it asserted the artifact rather than the effect. Forcing the fallback keeps
+// the OSC 52 path covered everywhere instead of only where it is the default.
 func TestYankEmitsAClipboardCommand(t *testing.T) {
+	stubNoNativeClipboard(t)
 	m := &Model{st: replied()}
 	m.st.Focus = 2
 

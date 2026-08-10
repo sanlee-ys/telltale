@@ -1698,9 +1698,28 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // documented way to CLEAR a clipboard, so a copy key that found nothing to copy
 // would silently destroy whatever the user had — the most expensive possible
 // spelling of "nothing happened".
+// AMENDED 2026-08-10, and the amendment is the paragraph above being measured
+// false. On macOS this key reported "copied …" and the clipboard was untouched:
+// Terminal.app does not implement OSC 52 clipboard writes and iTerm2 ships the
+// permission off. The limitation was not theoretical, it was untested — the
+// reference box happened to be the one terminal that honours the sequence, and
+// nothing in a suite could have caught it, because the only observer that can
+// settle it is the terminal.
+//
+// The native helper is tried FIRST wherever one exists (clipboard.go). Not
+// because it is better plumbing but because it is CHECKABLE: pbcopy's exit
+// status is a fact about the clipboard, and the escape sequence has none. OSC 52
+// remains the fallback and is still the only thing that works over SSH.
 func (m *Model) yank(y Yank) tea.Cmd {
 	m.st.Notice = y.Notice
 	if y.Empty() {
+		return nil
+	}
+	if nativeClipboard(y.Text) {
+		// Nothing more to emit. Sending the escape sequence as well would put
+		// the same text on the clipboard twice on a terminal that honours both,
+		// which is harmless, and would ALSO make the failure of one invisible
+		// behind the success of the other — which is not.
 		return nil
 	}
 	return tea.SetClipboard(y.Text)
