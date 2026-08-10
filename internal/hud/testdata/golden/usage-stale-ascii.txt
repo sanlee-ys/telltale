@@ -1,5 +1,4 @@
  telltale  |  7 sessions  |  codex 1  gemini 1  agy 3  cursor 1  grok 1
-                            ag gemini-weekly 38% ~ 3h00m  |  cc 7d 15% ~ 4d07h - ! stale 19h ago  |  cx 7d 79% ~ 22h48m
  ----------------------------------------------------------------------------------------------------------------------
  fleet usage  quota is a reading against a limit; spend is a count with none  =========================================
 
@@ -24,4 +23,5 @@
  grok  no quota anywhere - no window, no ordinal, no reset time on its disk
         models         grok-4.5
  ----------------------------------------------------------------------------------------------------------------------
+
  esc close   up/down scroll

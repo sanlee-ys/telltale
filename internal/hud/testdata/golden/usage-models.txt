@@ -1,4 +1,4 @@
- telltale  │  6 sessions  │  claude 4  codex 1  gemini 1                               codex 7d █████▌──   79% ↻ 22h48m
+ telltale  │  6 sessions  │  claude 4  codex 1  gemini 1
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  fleet usage  quota is a reading against a limit; spend is a count with none  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

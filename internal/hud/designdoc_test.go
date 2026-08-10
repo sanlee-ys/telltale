@@ -27,7 +27,7 @@ var embedded = []string{
 	// the token relay, after its display was retired — §7.16's amendment.
 	"cursor-without-spend",
 	// the fleet usage view — §7.17's generated renders.
-	"usage-fleet", "usage-empty", "usage-models", "usage-stale-relay",
+	"usage-fleet", "usage-empty", "usage-models", "usage-stale-relay", "usage-tall",
 	// the grok seam — §3.9a, pasted beside the survey rather than in §7.3
 	// because the claim it proves is about that VENDOR, not about the grid: a
 	// store that holds real money renders with the COST column dropped.

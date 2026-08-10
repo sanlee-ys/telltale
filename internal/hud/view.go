@@ -53,7 +53,12 @@ func Render(st State, sty Styles, g Glyphs) string {
 	rowSty := sty.Dim(stale)
 
 	headerDim := sty.Dim(st.scanAge() > criticalAfter && !st.Snap.At.IsZero())
-	quota := quotaBlock(st, headerDim, g, st.Width)
+	// The glance strip does not render over the surface that reads the same
+	// data properly (§7.17, amended 2026-08-09). See headerLines.
+	quota := ""
+	if !st.Usage {
+		quota = quotaBlock(st, headerDim, g, st.Width)
+	}
 	header := headerLines(st, lay, quota, sty, g)
 
 	full := st.Height >= fullChromeHeight
@@ -83,7 +88,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 		// file and the spend total from a hook's, and both already carry their
 		// own age (§7.15, §7.16) — borrowing the row area's staleness would
 		// de-emphasize readings whose freshness the scan does not describe.
-		body = usageLines(st, sty, g)
+		body = usageLines(st, bodyHeight, sty, g)
 	case st.Help:
 		body = helpLines(st, lay, hasCtx, hasCost, sty, g)
 	case st.Detail:
@@ -123,9 +128,18 @@ func Render(st State, sty Styles, g Glyphs) string {
 		}
 		body = body[start : start+bodyHeight]
 	}
-	for len(body) < bodyHeight {
-		body = append(body, "")
+
+	// The slack between what the body drew and the region it was given. Every
+	// body but one spends it BELOW the content and above the closing rule, which
+	// is what makes a short grid look like a list that ended. The usage page
+	// spends it below the RULE instead — see the closing-rule note below — so
+	// the two cases differ only in where these blanks are inserted, never in how
+	// many rows the frame occupies.
+	slack := bodyHeight - len(body)
+	if slack < 0 {
+		slack = 0
 	}
+	pageClosesItself := full && st.Usage
 
 	out := make([]string, 0, st.Height)
 	out = append(out, header...)
@@ -135,9 +149,34 @@ func Render(st State, sty Styles, g Glyphs) string {
 	if showColumns {
 		out = append(out, columnHeader(lay, sty, g))
 	}
+	if !pageClosesItself {
+		for i := 0; i < slack; i++ {
+			body = append(body, "")
+		}
+	}
 	out = append(out, body...)
 	if full {
+		// **The closing rule hugs the usage page's content rather than the
+		// frame's bottom edge** (§7.17, amended 2026-08-09), and it is the other
+		// half of the void fix. A rule sixty rows below the last vendor block
+		// technically bounds the page and reads as the terminal's edge — so the
+		// emptiness lands INSIDE the region and the page appears to fade out.
+		// Drawn where the content stops, the same rule makes the body a bounded
+		// region with a visible bottom, and the leftover rows are visibly
+		// outside it: unused terminal, not unfinished page. §9.11's
+		// boundary-strength grammar, in the HUD's own vocabulary — this is the
+		// weight the frame ALREADY owns, moved, rather than council's rails
+		// imported into a surface that has none.
+		//
+		// The grid keeps today's behaviour untouched. Its body is a list, and a
+		// list that ends early has ended; hugging its rule would put a hard edge
+		// under a row area that is still logically open for more rows.
 		out = append(out, rule(st.Width, sty, g))
+	}
+	if pageClosesItself {
+		for i := 0; i < slack; i++ {
+			out = append(out, "")
+		}
 	}
 	out = append(out, footerLine(st, len(rows), hiddenBelow, sty, g))
 	return strings.Join(out, "\n")
@@ -249,6 +288,28 @@ func columnsInUse(rows []*model.Session) (ctx, cost bool) {
 // honest and it bought no decision, so it was spending a header line the
 // header does not have. The relay underneath it is untouched and still
 // accumulating (§7.16's amendment); what came back is the line.
+//
+// **Over the `u` body the quota block is empty too, and that reversal is
+// #163's** (§7.17, amended 2026-08-09). #163 ruled the header untouched when
+// the usage view landed, and it was right for the GRID: there the strip is the
+// only place account quota appears at all, so its row buys a fact that is
+// otherwise off screen. Over the usage page it buys nothing. Every figure on it
+// — `ag gemini-weekly 38% ↻ 3h00m`, `cc 5h 42%`, `cx 7d 79%` — is restated in
+// the blocks below with a label column, a 20-cell gauge and the provenance
+// sentence the strip has no room for, so the reader is handed the same
+// measurement twice, once cramped and once legible, and the cramped copy is on
+// top.
+//
+// The principle, stated so the next surface does not have to rediscover it: a
+// GLANCE surface may not repeat the READ surface it sits above. The glance line
+// earns its row by being the only statement of a fact; where the body IS that
+// statement, the strip is duplication, and duplication is the worst thing to
+// spend a row on when the body below is short of them.
+//
+// Identity stays. `telltale │ 144 of 1380 sessions │ claude 961 codex 299` is
+// not restated anywhere below — the usage blocks report per-vendor ACCOUNT
+// standing, never a session census — so it is the one part of the header that
+// is still the only statement of its fact.
 func headerLines(st State, lay Layout, quota string, sty Styles, g Glyphs) []string {
 	left := headerIdentity(st, sty, g)
 

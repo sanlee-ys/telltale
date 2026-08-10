@@ -321,7 +321,14 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // someone has to remember to update.
 func (m *Model) scrollBody() []string {
 	if m.st.Usage {
-		return usageLines(m.st, m.styles, m.glyphs)
+		// Room zero, which asks for the TIGHT page — one blank row between
+		// blocks — and that is the right bound rather than a convenient one.
+		// usageAir only widens a gap when the widened page still fits its
+		// region, so an aired page can never overflow and can never be
+		// scrollable; the only body scrolling ever applies to is this one.
+		// Measuring the aired page here would hand `j` a bound that describes a
+		// layout the reader is not looking at.
+		return usageLines(m.st, 0, m.styles, m.glyphs)
 	}
 	rows := visibleSessions(m.st)
 	hasCtx, hasCost := columnsInUse(rows)
