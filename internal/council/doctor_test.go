@@ -67,6 +67,7 @@ func TestEveryOtherSeatIsAskedPlainly(t *testing.T) {
 // question — Avail is. A seat reported found on the strength of a path someone
 // typed would be the preflight inventing a file.
 func TestAnUnresolvedOverrideIsNotReportedAsFound(t *testing.T) {
+	noVendorOverrides(t)
 	missing := filepath.Join(t.TempDir(), "not-here.exe")
 	t.Setenv("TELLTALE_COUNCIL_CLAUDE_BIN", missing)
 	t.Setenv("PATH", t.TempDir())
@@ -103,6 +104,7 @@ type seatFor struct {
 // is the one that is working and silent until the end of the turn (§9.14). A
 // blank line there sends them looking for a fault that is not one.
 func TestEverySeatCarriesADeclaredCapability(t *testing.T) {
+	noVendorOverrides(t)
 	t.Setenv("PATH", t.TempDir())
 	seats := DoctorSeats()
 	if len(seats) == 0 {

@@ -20,11 +20,20 @@ import (
 // everywhere else — and a test that got this wrong would not fail, it would
 // quietly write into the developer's real ~/.telltale/council and leave a room
 // behind that a later --resume would find.
+//
+// The brief env is blanked for the same reason home is redirected: Run reads
+// TELLTALE_COUNCIL_BRIEF before it looks at anything else, so a developer who
+// keeps a live brief in their environment was running every Run-calling test
+// against their own config. Measured 2026-08-09: with the var naming a file
+// that had moved, TestRunRejectsAMissingCdDirectory failed on the brief's
+// open error instead of exercising the --cd refusal it exists for — a failure
+// CI can never see, because CI has no brief.
 func tempHome(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("USERPROFILE", dir)
+	t.Setenv(briefEnv, "")
 	return dir
 }
 

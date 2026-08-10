@@ -11,6 +11,25 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
+// noVendorOverrides blanks every seat's TELLTALE_COUNCIL_*_BIN for the length
+// of the test, iterating candidates() so a seat added later is covered without
+// anyone remembering this helper exists.
+//
+// It is for the tests that run detection across ALL seats: their assertions
+// are written against what detectOne does with PATH and knownPaths, and an
+// override var a developer keeps in their own environment preempts both. The
+// concrete failure it prevents is an override naming a binary that has since
+// moved — detectOne then reports "points at …, which does not exist", a note
+// that names neither PATH nor shim, and TestDetectNamesEveryMissingVendor
+// fails on that developer's machine while CI, which has no overrides, stays
+// green. Same class as tempHome's brief blanking, one env read over.
+func noVendorOverrides(t *testing.T) {
+	t.Helper()
+	for _, c := range candidates() {
+		t.Setenv(c.envVar, "")
+	}
+}
+
 // TestKindOfClassifiesShims is the Windows correctness case, not a style
 // preference: Go's os/exec runs .cmd and .bat through cmd.exe, whose argument
 // parsing cannot be safely quoted for arbitrary text. Misclassifying one of
@@ -99,6 +118,7 @@ func TestEnvOverrideIsHonoured(t *testing.T) {
 // what was looked for. A blank card would be the same failure as a HUD column
 // that renders an em dash for two different reasons.
 func TestDetectNamesEveryMissingVendor(t *testing.T) {
+	noVendorOverrides(t)
 	t.Setenv("PATH", t.TempDir())
 	for _, info := range Detect() {
 		if info.Avail == AvailInstalled {
