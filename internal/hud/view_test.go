@@ -1854,6 +1854,78 @@ func TestARelayedReadingGetsLouderAsItAges(t *testing.T) {
 	}
 }
 
+// The same field report, on the surface it was actually read from (§7.17
+// amended). The `u` view escalating while the glance line stayed muted left the
+// product loud where a reader looks on purpose and quiet where they merely
+// glance, which is backwards.
+func TestTheHeaderEscalatesAnOverAgeReadingToo(t *testing.T) {
+	aged := func(d time.Duration) State {
+		st := usageStaleRelayState(120, 27)
+		st.Snap.Account[0].WrittenAt = pinned.Add(-d)
+		return st
+	}
+
+	// The word and the glyph carry it in both glyph sets — the reduced one is
+	// the harder case, since `!` is a weaker mark than `⚠`.
+	for _, ascii := range []bool{false, true} {
+		g := GlyphsFor(ascii)
+		got := quotaBlock(aged(19*time.Hour), PlainStyles(), g, 120)
+		if !strings.Contains(got, g.Warn+" "+quotaAgeWord+" 19h ago") {
+			t.Errorf("ascii=%v: the header renders an over-age reading quietly: %q", ascii, got)
+		}
+		// Per reading, not per relay: agy's minute-old block shares the line.
+		if n := strings.Count(got, g.Warn); n != 1 {
+			t.Errorf("ascii=%v: want one escalated block, got %d: %q", ascii, n, got)
+		}
+	}
+
+	// The threshold is §7.17's, shared rather than restated — a second copy is
+	// how the header and the view would disagree about one reading.
+	g := UnicodeGlyphs()
+	below := quotaBlock(aged(quotaAgeWarn-time.Minute), PlainStyles(), g, 120)
+	if strings.Contains(below, g.Warn) {
+		t.Errorf("a reading inside the fleet's shortest window was escalated: %q", below)
+	}
+	if !strings.Contains(below, "· 4h ago") {
+		t.Errorf("a reading below the threshold lost its plain age: %q", below)
+	}
+	if !strings.Contains(quotaBlock(aged(quotaAgeWarn), PlainStyles(), g, 120),
+		g.Warn+" "+quotaAgeWord+" 5h ago") {
+		t.Error("a reading exactly at the threshold did not escalate")
+	}
+
+	// The word and the age survive every level down to the barest; only the
+	// reason sheds. The alarm is the fact, the argument is the decoration.
+	for _, w := range []int{MinWidth, 64, 72, 80, 99, 120, 148, 200} {
+		got := quotaBlock(aged(19*time.Hour), PlainStyles(), g, w)
+		if lipgloss.Width(got) > w {
+			t.Errorf("width %d: escalated quota line is %d columns: %q", w, lipgloss.Width(got), got)
+		}
+		// MinWidth drops whole trailing blocks; claude may be one of them.
+		if w > MinWidth && !strings.Contains(got, g.Warn+" "+quotaAgeWord+" 19h ago") {
+			t.Errorf("width %d: the escalation shed something it may not: %q", w, got)
+		}
+	}
+	// The reason rides the most dressed level, which a single-vendor line
+	// reaches. If nothing can reach it, it is a clause that never renders.
+	solo := aged(19 * time.Hour)
+	solo.Snap.Account = solo.Snap.Account[:1]
+	solo.Snap.Sessions = nil
+	if got := quotaBlock(solo, PlainStyles(), g, 120); !strings.Contains(got, usageAgeReason) {
+		t.Errorf("the reason never renders on any header line: %q", got)
+	}
+
+	// Colour is the second signal, and the reading keeps its own severity: the
+	// percentage speaks for the account, the suffix for the measurement.
+	coloured := quotaBlock(aged(19*time.Hour), NewStyles(true), g, 120)
+	if !strings.Contains(coloured, "\x1b[33m") {
+		t.Error("the over-age header reading carries no warning colour")
+	}
+	if !strings.Contains(coloured, "15%") {
+		t.Errorf("the over-age header block stopped rendering its reading: %q", coloured)
+	}
+}
+
 // The gauge's whole job is to not lie. This is the §7.4 table, verbatim.
 func TestGaugeScale(t *testing.T) {
 	g := UnicodeGlyphs()

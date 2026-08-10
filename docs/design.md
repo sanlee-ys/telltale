@@ -2595,7 +2595,9 @@ amendment to "the gauges never write" (§1, CLAUDE.md):
   from the future beyond clock-jitter tolerance.
 - **age travels with the reading** — past 5 minutes a relayed block carries
   `· 2h ago` at every dress level, the §7.12 basis rule applied to time: shedding
-  the age would re-present a stale number as fresh.
+  the age would re-present a stale number as fresh. Past `quotaAgeWarn` it stops
+  being muted chrome and escalates to `· ⚠ stale 19h ago`; §7.17 as amended
+  argues the threshold and owns both surfaces' wording.
 
 **One block per vendor, transcript outranks relay.** A vendor sourced from its own
 store (Codex) is re-measured every scan; its relay entry, if one ever exists, is as old
@@ -3083,7 +3085,7 @@ chrome on that line.
 
 ```
  telltale  │  4 sessions  │  codex 1  gemini 1  cursor 1  grok 1
-   ag gemini-weekly ██▋─────   38% ↻ 3h00m  │  cc 7d █───────   15% ↻ 4d07h · 19h ago  │  cx 7d █████▌──   79% ↻ 22h48m
+                            ag gemini-weekly 38% ↻ 3h00m  │  cc 7d 15% ↻ 4d07h · ⚠ stale 19h ago  │  cx 7d 79% ↻ 22h48m
                                cursor spent  in 48k · out 1.2k · cache read 1.9M · cache write 62k  · 14 turns over 10m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  fleet usage  quota is a reading against a limit; spend is a count with none  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3158,6 +3160,39 @@ account and this is a statement about the measurement.
 scarce, and the only boundary above this one that is not invented is `quotacache`'s 24h
 drop — which is a disappearance rather than a louder warning.
 
+#### Amended 2026-08-09: the header escalates too
+
+The pass above deliberately left the header alone, and recorded that as unfinished work
+rather than as a boundary. It was the wrong half to fix first: the reading that was acted
+on was read off the **glance** line, so the product ended up loud on the surface a reader
+opens on purpose and quiet on the surface they merely look at. The header now escalates on
+the same threshold, in the same order, off the same constants — `quotaAgeWarn` and the
+reason string are read from §7.17's declarations rather than restated, because two copies
+of `5 * time.Hour` is how the two surfaces would come to disagree about one reading.
+
+Past the threshold the header's age suffix becomes `· ⚠ stale 19h ago`, in `SevWarn`, with
+`· older than the fleet's shortest quota window` beside it at the most dressed level. The
+reduced set renders `- ! stale 19h ago`. The reading itself is untouched — 15% keeps its
+own severity hue, for §7.17's reason: that is a statement about the account and this is a
+statement about the measurement.
+
+**The header keeps a WORD where the view's barest level does not**, and that is the one
+place the two surfaces deliberately differ. §7.17's shed bottoms out at `⚠ 19h ago`,
+because by then the reader has opened a body on purpose and the sentence above it is still
+on screen. The header has no sentence anywhere and is read at a glance, so the level that
+survives every shed has to state the verdict without the reader knowing what `⚠` is
+supposed to cost them. `stale` is that word: it names a state rather than restating the
+duration (`19h old` would be the number a second time), and it is the word this codebase
+already spends on a reading that has outlived its currency — `DotStale`, and the footer's
+own `⚠ last scan 1m ago`.
+
+**What sheds is the argument and only the argument.** `ageReason` joins the dress ladder as
+a sixth level above the existing five and is the first thing dropped, ahead of forecasts:
+it is by a wide margin the longest clause on the line, and it is the only part of the
+escalation whose absence costs a reader something they cannot otherwise see. Everything
+below it — glyph, word, age — survives to the barest level, so a narrow terminal loses why
+the reading is distrusted, never that it is. Same grammar as the view, one surface over.
+
 #### Everything else is inherited, not invented
 
 - **`u` opens and closes it; `esc` closes it.** The esc chain gains a step and now reads
@@ -3201,12 +3236,66 @@ Added by the reading pass:
   a window label. Both above.
 - **A second blank row between blocks, and a light rule under each vendor heading.** The
   air-and-alignment note above.
-- **Per-vendor hues on this surface.** Council ratified exactly one hue exception (§9.28)
-  and it is for the SEAT — a concept the HUD does not have. Whether it extends to the fleet
-  usage view's vendor names is a question put to San on 2026-08-09 and **still open**; it
-  is not declined, it is unanswered, and nothing was built on a guess. If it is taken up it
-  arrives the way council's did: names only, 4-bit indices, the severity and chrome
-  families off limits, `PlainStyles`-identity by construction, and zero golden churn.
+
+#### Per-vendor hues: ratified, and exactly as far as council's went
+
+Answered 2026-08-09 (San), and it is a **yes**. The question §7.17 left open — whether
+council's seat-hue exception (§9.28) extends to this surface's vendor names — turned on
+whether the HUD has the concept the exception was granted for. It does, on this body and
+nowhere else: **six vendor blocks stack in one column**, each a heading with a paragraph
+under it, so position answers nothing about which vendor a reader is looking at. That is
+the exact condition §9.28 named. The grid does not qualify and does not get it — a row's
+vendor is already answered by a two-letter tag in a fixed column.
+
+It arrives on the terms the open question itself set, and every one of them is council's
+rather than a new argument:
+
+- **Names only.** The vendor NAME in each usage-block heading, and nothing else. Not the
+  seam sentence beside it (chrome, and past `quotaAgeWarn` a warning that must keep
+  `SevWarn`), not the gauges, percentages or countdowns (severity owns those), not the
+  spend line, not the models census (theme's identity hue, the same token the grid's
+  `MODEL` column spends), not the grid rows, and not the header's quota block — the glance
+  surface names its vendors by tag in a fixed order, so the question the hue answers is not
+  the one it is asking. `TestTheVendorHueIsSpentOnlyOnTheVendorName` walks the rendered
+  frame and fails if a hue reaches the header, a fact row or the footer.
+- **The assignments are council's, matched by literal value** — claude `5`, codex `6`, agy
+  `4`, cursor `12`, grok `14`, gemini falling back to the identity hue. A reader who learned
+  in the room that magenta is Claude must not meet a second colour for Claude one keypress
+  away. `TestVendorHuesMatchCouncilsSeats` writes council's numbers out and fails when one
+  copy moves without the other — the shape `TestStripTagsMatchTheHUDSpelling` already uses
+  for the two-letter tags, and for the same reason: the seam between the two surfaces is the
+  normalized session model and `internal/theme`'s numbers, and reaching across it for a
+  rendering detail is the coupling that seam exists to prevent.
+- **The map does NOT go into `internal/theme`**, and the stdlib rule is not why. These are
+  plain strings and would compile there. The reason is theme's own contract — one hue, one
+  meaning, across every surface that imports it — and `internal/statusline` has no vendor
+  blocks. Two packages holding the same map is the honest cost of keeping that contract
+  intact, and the parity test is what makes the cost bounded.
+- **4-bit indices, severity and chrome off limits.** `1`/`2`/`3` and their bright twins
+  `9`/`10`/`11` are the ramp this very surface draws its percentages in — a vendor heading
+  wearing red would read as an account in trouble — and `0`/`7`/`8`/`15` are the gauge track
+  and the terminal's own fore/background. `TestNoVendorHueIsASeverityOrChrome` fences it.
+- **`PlainStyles`-identity by construction, and zero golden churn.** One `retint` helper
+  returns the base style untouched when `Plain` is set, so no golden on this surface can see
+  the feature exist; **any golden diff on this change is a bug**, and none was produced.
+  `NO_COLOR` needs nothing new — `colorprofile` downsamples inside Bubble Tea exactly as
+  §7.5 describes.
+
+The **honest weakness is council's too**: `4`/`12` and `6`/`14` are two pairs of one hue at
+two intensities, and some schemes render each pair close. Council carries the distinction on
+the two-letter tags; here the thing being tinted is the vendor's full name, spelled out at
+the head of its own block, so this surface has more carrying it than the room does.
+
+Declined inside the ratification, and the list is closed:
+
+- **The hue on the grid rows and the header.** Position and the two-letter tag already
+  answer "which vendor" on both, so it would be the circus row §9.28 refused for council's
+  column headers, spent on a question the layout had already settled.
+- **A hue on the vendor tag as well as the name**, wherever the two appear together — double
+  the ink for a distinction the name already carries. Council's own declined list.
+- **Gemini given a hue of its own.** The legal set has one index left (`13`), and spending
+  it to complete a set is a palette entry with no argument behind it. Gemini takes the
+  identity-hue fallback and looks exactly as it always did.
 
 #### Known limitations
 
@@ -3226,14 +3315,19 @@ Added by the reading pass:
   took the fallback sentence because nobody has measured what its store says about an
   account. Its census row is populated, because that comes from the sessions rather than
   from a seam.
-- **The HEADER does not escalate an over-age reading; only this view does.** In the
-  `usage-stale-relay` frame above, the same nineteen-hour Claude reading renders
-  `cc 7d █─── 15% ↻ 4d07h · 19h ago` on the glance surface, muted, exactly as before. That
-  is deliberate for this pass — the header is unchanged, and its shed cascade has no room
-  for the clause that carries the claim in words — but it means the surface a reader
-  glances at is the one that still presents an old number quietly, and the surface they
-  open on purpose is the one that shouts. The header's own version of this is unfinished
-  work, not a settled boundary.
+- **One over-age block costs the whole header line its gauges.** The escalation is decided
+  per block, but the dress cascade is decided per LINE — one level has to fit every block
+  on it — so the eight columns `⚠ stale` adds to a single vendor can push the line down a
+  level that every vendor pays for. That is exactly what the `usage-stale-relay` frame
+  above shows: at 120 columns with three vendors the header was already flush against its
+  budget, so escalating Claude's reading dropped the bars from agy's and Codex's fresh
+  blocks too. The trade is deliberate and it is the cascade's existing grammar rather than
+  a new rule — the percentage beside each bar carries the reading, and a quietly stale
+  number is a worse failure than a missing bar — but it does mean the frame that
+  demonstrates the fix is also the frame that pays the most for it. A per-block dress
+  would fix it and is declined: blocks of different heights and vocabularies on one line
+  is a grid a reader has to reconstruct, and §7.2's whole argument is that they should
+  not have to.
 - **The models census counts sessions, not turns.** A model that ran once six hours ago and
   a model that has been running all morning are the same entry in the row. There is no
   per-model activity anywhere the HUD reads, so weighting the list would be an invention —

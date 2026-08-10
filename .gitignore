@@ -14,6 +14,19 @@ telltale*.exe
 # conditions they were taken under.
 *trace*.txt
 
+# PowerShell's module analysis cache, when it lands HERE instead of under
+# %LOCALAPPDATA%. Observed once as an untracked internal/council/Microsoft/…
+# tree after working in this repo on Windows; nothing in this repository spawns
+# PowerShell, in tests or at runtime — the only real processes the suite starts
+# are git and the Go test helper — so the writer is a vendor CLI or an agent
+# running a pwsh tool call with its cwd set here, which is outside this repo's
+# reach to fix. This is therefore a backstop and not a fix: it keeps the crumbs
+# out of `git status` (and out of an /adopt, the way .claude/ above once broke
+# one) rather than stopping them being written. If the spawn site is ever
+# pinned down inside this repo, redirect it with PSModuleAnalysisCachePath and
+# delete this block.
+Microsoft/Windows/PowerShell/
+
 # Claude Code's per-repo settings (approvals, local config). Machine-local
 # state, never content this repo ships — and the first live /adopt was
 # blocked by exactly this directory sitting untracked in the room tree.
