@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "prompt_mode": "extend",
+  "audience": "primary",
+  "agents_md_files": [
+    {
+      "file_name": "AGENTS.md",
+      "file_path": "C:\\src\\code\\example-app\\AGENTS.md",
+      "content": "SYNTHETIC-FORBIDDEN-CONTENT-MARKER: standing instructions the HUD must never surface."
+    }
+  ]
+}

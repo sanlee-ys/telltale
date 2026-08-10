@@ -68,7 +68,8 @@ func TestKeysCycleFilterAndSortAndToggleHelp(t *testing.T) {
 	m := send(t, newTestModel(), tea.WindowSizeMsg{Width: 120, Height: 10})
 
 	for _, want := range []Filter{
-		FilterClaude, FilterCodex, FilterGemini, FilterAntigravity, FilterCursor, FilterAll,
+		FilterClaude, FilterCodex, FilterGemini, FilterAntigravity, FilterCursor,
+		FilterGrok, FilterAll,
 	} {
 		m = send(t, m, key("v"))
 		if m.st.Filter != want {
