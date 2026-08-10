@@ -220,6 +220,34 @@ past its terminal's rasterizer. The bar here is the best native result on each
 platform, not pixel parity with the Mac; anything claiming otherwise is
 selling a screenshot.
 
+### The clipboard is not the same mechanism on both machines
+
+**Measured 2026-08-10**, and it is the one place where the reference box being
+Windows hid a real defect rather than merely flattering the render. `y` copied
+correctly on Windows Terminal and copied **nothing** on the macOS box, in the
+same build, while reporting `copied …` on both.
+
+The mechanism was OSC 52 — an escape sequence written into the terminal with no
+acknowledgement of any kind (design.md §9.15). Windows Terminal honours it.
+**Terminal.app does not implement it at all**, and **iTerm2 ships the permission
+off** (General → Selection → *"Applications in terminal may access clipboard"*).
+Because the sequence cannot be acknowledged, council had no way to tell the two
+outcomes apart, and the notice claimed the copy on both.
+
+Fixed by preferring the platform's own helper, which is checkable where the
+escape sequence is not:
+
+| platform | mechanism | can council tell whether it worked? |
+|---|---|---|
+| macOS | `pbcopy` | **yes** — exit status |
+| Linux | `wl-copy`, else `xclip -selection clipboard` | **yes** — exit status |
+| Windows | OSC 52 | no, and it does not need to: measured working |
+| over SSH, anywhere | OSC 52 | no — the standing limitation, unchanged |
+
+If `y` ever reports a copy and your clipboard is empty, the seat fell back to
+OSC 52 and the terminal ate it. That is a terminal fact, not a council bug —
+record the emulator and its version here.
+
 ## What does not travel between machines
 
 - **The room.** `~/.telltale/council/room.json` holds each vendor's *session

@@ -5301,7 +5301,7 @@ observe.
 |---|---|---|
 | the key produces the command, carrying the right text | asserted by a test that calls the `Cmd` | measured |
 | the sequence reaches the terminal | bubbletea writes it on the next message pump | read from the module source |
-| the terminal honours it | Windows Terminal accepts OSC 52 writes in current builds | **INFERRED** from documented behaviour, not run |
+| the terminal honours it | Windows Terminal accepts OSC 52 writes in current builds | ~~**INFERRED** from documented behaviour, not run~~ — **FALSIFIED on macOS, 2026-08-10** |
 
 That last row cannot be closed from inside this repo: the only observer that could settle it is
 the terminal, and it sends nothing back. So the notice claims what council **did** — "copied
@@ -5310,6 +5310,34 @@ person pressing `y` and then `ctrl+v`. The notice is not decoration for the same
 no acknowledgement available, it is the *only* feedback that the key did anything, and a silent
 copy would be indistinguishable from a terminal that ignored the sequence — the ambiguity
 §4a.1 forbids everywhere else here.
+
+**Amended 2026-08-10: the inference was wrong, and it took a second machine to
+see it.** On the macOS box `y` reported "copied …" and the clipboard was
+untouched, in the same build where the key works on the Windows one. Terminal.app
+does not implement OSC 52 clipboard writes at all; iTerm2 does but ships the
+permission off. Nothing was broken in council — the gauge was reporting an action
+it had structurally no way to observe, which is the failure §4a.1 exists to
+prevent, wearing the costume of a limitation everyone had already agreed to.
+
+**A native helper is now tried FIRST wherever one exists** (`clipboard.go`):
+`pbcopy` on darwin, `wl-copy` then `xclip` on linux, and nothing on Windows,
+where OSC 52 is measured working and a process spawn per keystroke would buy
+nothing. The reason is not that the helper is better plumbing — it is that it is
+**checkable**. `pbcopy`'s exit status is a fact about the clipboard; the escape
+sequence has none, and never will. OSC 52 stays as the fallback because it is the
+only mechanism that survives SSH.
+
+The two paths never both fire. Sending the sequence as well would put the text on
+the clipboard twice where both work — harmless — and would also hide the failure
+of one behind the success of the other, which is not.
+
+The test story changed with it, and this is the part worth carrying: the old test
+asserted the `Cmd` was produced, and **passed for two days while the key did
+nothing on macOS**. It was asserting the artifact rather than the effect, the
+mistake this file records four other times. The native path is now round-tripped
+through the OS (`pbcopy` in, `pbpaste` out) and the fallback is driven by a stub,
+so the mechanism a machine happens to have no longer decides which half of the
+feature its suite covers.
 
 **An empty yank issues no command at all.** Writing `""` through OSC 52 is the documented way
 to *clear* a clipboard, so a copy key that found nothing to copy would silently destroy
