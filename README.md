@@ -36,7 +36,7 @@ it was, what the verification changed about this project's guesses, and what eac
 owes. **Cursor (Composer)** is the first IDE-resident agent here, and the first whose store
 also holds live credentials, which is why that adapter's most load-bearing property is the
 list of things it does not read ([docs/design.md §3.9](docs/design.md)). **`telltale
-council`** seats the 4-vendor fleet, and every sandbox and streaming claim in it was
+council`** seats the 5-vendor fleet, and every sandbox and streaming claim in it was
 measured against a live run of that CLI rather than read off its `--help`
 ([docs/design.md §9](docs/design.md)).
 
@@ -138,9 +138,10 @@ dashes because none of those vendors writes a context-window size to disk, the C
 row's `~` marks a percentage telltale computed rather than read, the Gemini row's `⑂~2`
 chip is a sub-agent count telltale derived (and marks as derived) from the vendor's
 nested transcript tree, and the `COST` column is missing entirely because no vendor puts
-dollars on disk. None of those is rendered as a zero. Read the `CU` row against the `CX`
-row directly above it: both show a context bar, and only the Codex one is marked an
-estimate, because Cursor writes its own percentage down and telltale reads it. The `AG`
+a session total in dollars on disk — Grok writes a per-turn figure and still gets no COST
+cell for it. None of those is rendered as a zero. Read the `CU` and `GR` rows against the
+`CX` row: all three show a context bar, and only the Codex one is marked an estimate,
+because Cursor and Grok write their own percentages down and telltale reads them. The `AG`
 row is labelled by its conversation id for a different reason: Antigravity writes no
 session title anywhere, and the only free text on its disk is your prompts, which
 telltale will not read.
@@ -183,15 +184,17 @@ finished, they are load-bearing, and they are not the thing this is for. The sta
 code path never initializes the TUI framework (the single binary links it, but no Bubble
 Tea code runs on a statusline invocation).
 
-Honest claim, stated precisely: *dispatch across the 4-vendor fleet (Claude Code, Codex,
-Cursor, Antigravity); cross-vendor monitoring; vendor-native statusline where the seam
+Honest claim, stated precisely: *dispatch across the 5-vendor fleet (Claude Code, Codex,
+Cursor, Antigravity, Grok); cross-vendor monitoring; vendor-native statusline where the seam
 exists — and it exists twice: Claude Code and Antigravity CLI.* (Codex CLI has
 no statusline hook today. Antigravity was statusline-only until a re-survey found the
 transcript its own docs advertise, which is what made its HUD adapter buildable — the
 first verdict and the reversal are both in [docs/design.md §2.1/§3.8](docs/design.md).
 Cursor reaches telltale both ways: a built-in HUD adapter because its seam is on disk,
 and a council seat driven through `cursor-agent`'s own bundled `node.exe` — the `cursor`
-binary on PATH is only the editor launcher and council never drives it.)
+binary on PATH is only the editor launcher and council never drives it. Grok is a council
+seat and a HUD adapter on the same binary — the seat has no fleet guards wired yet, which
+is an open obligation on the fleet rather than a reason the column is missing.)
 
 **The gauges never write to anything that isn't theirs.** `telltale statusline` and
 `telltale hud` read vendor files, make no network calls, read no credentials, and no

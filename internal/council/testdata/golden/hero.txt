@@ -1,0 +1,24 @@
+  council READ  │  ~/code/telltale                                                                                          turn 1  │  5/5 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▌ ▸ 1 CC Claude Code ✓ done     │    2 CX Codex  ─────  ○ idle  │    3 AG Antigravity ○ idle    │    4 CU Cursor  ────  ○ idle  │    5 GR Grok  ──────  ○ idle  
+▌   ro:tools  tokens            │    ro:requested  final only   │    unsandboxed  final only    │    ro:requested  tokens       │    unsandboxed  tokens        
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+▌ ⚙ Glob                        │                               │                               │                               │                               
+▌ ⚙ Read                        │                               │                               │                               │                               
+▌ ⚙ Bash: go test ./...         │                               │                               │                               │                               
+▌                               │                               │                               │                               │                               
+▌ Tests pass.                   │  no turn dispatched yet.      │  no turn dispatched yet.      │  no turn dispatched yet.      │  no turn dispatched yet.      
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                                                                       │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+                                                            ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-5 seat  │  i compose  │  ? help  │  q quit  

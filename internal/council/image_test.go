@@ -21,14 +21,15 @@ import (
 // (ADR-001; docs/design.md §4a.1). Every one of those was invisible to CI,
 // because a picture nobody generates is a claim with no test under it.
 //
-// So the picture is the frame. Same State the `activity` golden pins, same
-// Render, same bytes — only the terminal's chrome is drawn around it. Change
-// how the room looks and this fails until the pictures are re-emitted, exactly
-// as a golden does.
+// So the picture is the frame. Same State the `hero` golden pins (heroRoom —
+// five addressable seats, not room()'s three-column unit fixture), same Render,
+// same bytes — only the terminal's chrome is drawn around it. Change how the
+// room looks and this fails until the pictures are re-emitted, exactly as a
+// golden does.
 
-// heroFrame is the council frame every surface shows: the `activity` golden
-// with its all-blank rows dropped. The blank rows are the room's empty
-// scrollback — real in a live terminal, dead weight in a picture.
+// heroFrame is the council frame every surface shows: the `hero` golden with
+// its all-blank rows dropped. The blank rows are the room's empty scrollback —
+// real in a live terminal, dead weight in a picture.
 //
 // This used to be one of two implementations. The other lived in a test
 // asserting the same drop against a copy of the frame quoted as text, first in
@@ -50,7 +51,7 @@ func heroFrame(styled string) []string {
 }
 
 func TestHeroImagesAreTheRoomThatRenders(t *testing.T) {
-	st := activityRoom()
+	st := heroRoom()
 	g := GlyphsFor(false)
 
 	// The coloured render must be the golden's bytes plus escapes and nothing
@@ -59,10 +60,22 @@ func TestHeroImagesAreTheRoomThatRenders(t *testing.T) {
 	// the picture would stop being a picture of the golden, and it would be the
 	// picture, not the golden, that was wrong.
 	plain := Render(st, PlainStyles(), g)
+	golden(t, "hero", plain)
 	for _, dark := range []bool{true, false} {
 		if got := stripANSI(Render(st, NewStyles(dark), g)); got != plain {
 			t.Fatalf("the coloured render is not the plain one with escapes added (isDark=%v)\n--- coloured, stripped ---\n%s\n--- plain ---\n%s",
 				dark, got, plain)
+		}
+	}
+
+	// The product seats five addressable vendors. A picture that still says
+	// 3/3 is the public claim that drifted after Cursor and Grok landed.
+	if !strings.Contains(plain, "5/5 seated") {
+		t.Errorf("the hero does not claim five seats are seated:\n%s", plain)
+	}
+	for _, tag := range []string{"CC", "CX", "AG", "CU", "GR"} {
+		if !strings.Contains(plain, tag) {
+			t.Errorf("the hero is missing seat tag %q", tag)
 		}
 	}
 
@@ -78,7 +91,7 @@ func TestHeroImagesAreTheRoomThatRenders(t *testing.T) {
 			lines := heroFrame(Render(st, NewStyles(tc.isDark), g))
 			got, err := svgframe.Render(svgframe.Frame{
 				Caption: "telltale council",
-				Alt:     "The telltale council room: three vendor seats side by side, the focused seat marked by a rail and a caret, each seat's sandbox posture named in words beneath it.",
+				Alt:     "The telltale council room: five vendor seats side by side, the focused seat marked by a rail and a caret, each seat's sandbox posture named in words beneath it.",
 				Lines:   lines,
 			}, tc.palette)
 			if err != nil {

@@ -68,7 +68,7 @@ func TestReadmeHeroImagesAreTheHudThatRenders(t *testing.T) {
 			lines := strings.Split(strings.TrimRight(Render(state(), NewStyles(tc.isDark), g), "\n"), "\n")
 			got, err := svgframe.Render(svgframe.Frame{
 				Caption: "telltale hud",
-				Alt:     "The telltale HUD: seven agent sessions from five vendors, each row naming its vendor, workspace, model, context window and age, with the cells no vendor can source left empty rather than filled in.",
+				Alt:     "The telltale HUD: eight agent sessions from six vendors, each row naming its vendor, workspace, model, context window and age, with the cells no vendor can source left empty rather than filled in.",
 				Lines:   lines,
 			}, tc.palette)
 			if err != nil {

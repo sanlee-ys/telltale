@@ -795,10 +795,15 @@ func goldenCases() []goldenCase {
 		// "v1-capabilities", sized so every row is visible (one pad line —
 		// the row area's slot math can't land on exactly five, and every new
 		// vendor adds a row: five at v1, six with agy, seven with Cursor).
+		// Public HUD hero. Eight sessions across every adapter the grid has —
+		// including Grok, whose row carries a vendor-reported (unmarked)
+		// context percentage and no COST cell, because the store only writes
+		// per-turn dollars and never a session total (§3.9a). Height is 14 so
+		// the eighth row still fits at 120 columns without shedding the footer.
 		{name: "readme", state: func() State {
 			st := NewState()
 			st.Now = pinned
-			st.Width, st.Height = 120, 13
+			st.Width, st.Height = 120, 14
 			st.Snap = Snapshot{
 				At: pinned,
 				Sessions: []*model.Session{
@@ -821,6 +826,15 @@ func goldenCases() []goldenCase {
 						withExtras("ctx tokens", "215k")),
 					agySession(2 * time.Minute),
 					cursorSession(70 * time.Second),
+					// Grok reports its own context percentage (CapReported) and
+					// writes no session cost — the 7% is unmarked on purpose,
+					// next to Codex's `~69.8%` estimate marker. Empty cost is
+					// CapNone, not zero.
+					sess(model.VendorGrok, "00000000-1111-7222-8333-000000000001",
+						`C:\src\code\telltale`, "grok-4.5", 45*time.Second,
+						withName("Adapter Field Map Review"), withCtx(7),
+						withExtras("ctx tokens", "39k", "ctx window", "500k",
+							"turn cost", "$0.0747", "turn tokens", "143k")),
 				},
 				Vendors: []VendorView{
 					watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`,
@@ -833,6 +847,8 @@ func goldenCases() []goldenCase {
 						(&agyadapter.Adapter{}).Capabilities()),
 					watching(model.VendorCursor, `%APPDATA%\Cursor\User`,
 						(&cursoradapter.Adapter{}).Capabilities()),
+					watching(model.VendorGrok, `%USERPROFILE%\.grok\sessions`,
+						grokadapter.New().Capabilities()),
 				},
 			}
 			return st
