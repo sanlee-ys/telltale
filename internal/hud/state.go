@@ -271,10 +271,17 @@ type State struct {
 	// account (§7.1's sixth rule) and the relayed token total names a
 	// cursor-agent CLI conversation the HUD's rows do not come from (§7.16) —
 	// so neither has a row to hang off, and both would be a per-session claim
-	// if they did. Detail, Help and Usage are mutually exclusive: one body at
-	// a time, enforced in Update rather than in Render, so the state can never
-	// describe two panes at once.
+	// if they did. Detail, Help, Usage and Week are mutually exclusive: one
+	// body at a time, enforced in Update rather than in Render, so the state
+	// can never describe two panes at once.
 	Usage bool
+
+	// Week opens the week page over the row area (§7.19): one line per
+	// vendor, the slow quota windows only. It is a lens over the same
+	// account data Usage renders, and a separate flag rather than a mode on
+	// Usage so each door has one key and the esc chain stays one-step-one-
+	// layer.
+	Week bool
 
 	// Burn is telltale's own sampling history of the account quota windows.
 	// It is HUD state, not schema (§4a): it describes this process's

@@ -480,6 +480,36 @@ func usageFleetState(w, h int) State {
 	return st
 }
 
+// weekState is the fleet fixture through the §7.19 lens, with agy's account
+// entry widened to all four observed buckets. The widening is the point of the
+// fixture: the render then exercises every leg of weeklyWindows at once — the
+// "-weekly" suffix selecting two windows under one vendor (and the second on a
+// continuation row), the last-window leg on Claude and Codex, and the dedupe
+// where agy's last window is already in the suffix set. The five-hour buckets
+// are in the fixture precisely so the golden proves they do NOT render.
+func weekState(w, h int) State {
+	st := usageFleetState(w, h)
+	st.Usage = false
+	st.Week = true
+	st.Snap.Account[1].Windows = []model.QuotaWindow{
+		window("3p-5h", "3p-5h", 0, 4*time.Hour+57*time.Minute),
+		window("3p-weekly", "3p-weekly", 0, 6*24*time.Hour+23*time.Hour),
+		window("gemini-5h", "gemini-5h", 12, 4*time.Hour+54*time.Minute),
+		window("gemini-weekly", "gemini-weekly", 38, 6*24*time.Hour+23*time.Hour),
+	}
+	return st
+}
+
+// weekStaleState is §7.17's nineteen-hour field report seen through the week
+// page: the escalation has to survive the lens, because this page has no
+// block heading to carry it — the suffix on the row is all there is (§7.15).
+func weekStaleState(w, h int) State {
+	st := usageStaleRelayState(w, h)
+	st.Usage = false
+	st.Week = true
+	return st
+}
+
 // usageStaleRelayState is the field report of 2026-08-09, reconstructed.
 //
 // A Claude relay entry written nineteen hours ago, reporting 15% of the seven-
@@ -651,7 +681,10 @@ func goldenCases() []goldenCase {
 		// so this was never a correctness bug; it was a frame the design doc
 		// pastes showing the product hiding its exit.
 		{name: "help", state: func() State {
-			st := healthyState(120, 17)
+			// 18 rows: 17 fitted the overlay exactly until the week page's
+			// `w` row joined the key list, and the height moves with the list
+			// so the frame keeps showing its own exit.
+			st := healthyState(120, 18)
 			st.Help = true
 			return st
 		}},
@@ -997,6 +1030,21 @@ func goldenCases() []goldenCase {
 		// block rather than at the frame's bottom, so what is left over reads as
 		// unused terminal instead of an unfinished page.
 		{name: "usage-tall", state: func() State { return usageTallState(120, 52) }},
+
+		// ------------------------------------------------- the week page
+
+		// The scoping glance (§7.19): every vendor on one screen, slow windows
+		// only. Claude and Codex each show their last (longest) window; agy
+		// shows both vendor-named weekly pools, the second on a continuation
+		// row; the four five-hour buckets in the fixture render nowhere; the
+		// three quota-less vendors keep §7.17's absence sentences; spend is
+		// absent by design.
+		{name: "week", state: func() State { return weekState(120, 18) }},
+
+		// The nineteen-hour reading through the lens: the row's suffix carries
+		// the word, the glyph and the age, while agy's minute-old rows beside
+		// it carry nothing (§7.15's age rule with no heading to ride on).
+		{name: "week-stale", state: func() State { return weekStaleState(120, 18) }},
 
 		// Find mode: the footer becomes the query line and says how to leave.
 		{name: "find-active", state: func() State {

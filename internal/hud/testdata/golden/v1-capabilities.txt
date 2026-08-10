@@ -7,4 +7,4 @@
  ● AG │ 4c8b21a7  C:\src\code                                                 Gemini 3.6 F…                    — │   2m
  ◐ GE │ glossary tooltips ⑂~2  c:\src\code                                    gemini-3-pro                     — │   3m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys

@@ -5,6 +5,7 @@
         ↑/↓    move the selection  (also j / k)
         enter  open the detail pane for the selected session
         u      what each vendor has left, and what it spent
+        w      this week: the fleet's slow windows only
         /      find: narrow rows by name or path
         esc    close the pane, or cancel the find, or quit
         v      vendor: all > claude > codex >

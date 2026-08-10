@@ -11,4 +11,4 @@
  ○ CX │ notes-api  C:\src\code                                                gpt-5.1-codex  █▍────────── ~12.5% │  22m
 
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- q quit   / find   enter detail   u usage   v vendor   s sort   a all   ? keys
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
