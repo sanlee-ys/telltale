@@ -1,6 +1,5 @@
- telltale  │  4 sessions  │  codex 1  gemini 1  cursor 1  grok 1
+ telltale  │  7 sessions  │  codex 1  gemini 1  agy 3  cursor 1  grok 1
                       ag gemini-weekly 38% ↻ 3h00m  │  cc 5h 42% ↻ 2h13m  7d 6% ↻ 5d00h · 2h ago  │  cx 7d 79% ↻ 22h48m
-                               cursor spent  in 48k · out 1.2k · cache read 1.9M · cache write 62k  · 14 turns over 10m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  fleet usage  quota is a reading against a limit; spend is a count with none  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -16,13 +15,14 @@
         models         gemini-3-pro
 
  agy  quota relayed by the statusline
+        models         Gemini 3.6 Flash (High)
         gemini-weekly  ███████▎────────────    38%  ↻ 3h00m
+        spent          uncached in 1.2M · out 13.1k  · summed across 2 sessions on disk, this scan
 
  cursor  no quota anywhere · its store holds experiment values, not usage
         models         composer-2.5
-        spent          in 48k · out 1.2k · cache read 1.9M · cache write 62k  · 14 turns over 10m
 
- grok  no quota telltale can read
+ grok  no quota anywhere · no window, no ordinal, no reset time on its disk
         models         grok-4.5
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  esc close   ↑/↓ scroll

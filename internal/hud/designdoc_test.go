@@ -24,8 +24,8 @@ var embedded = []string{
 	"shape-drift", "empty-drifted",
 	// the quota relay — §7.15's generated render.
 	"quota-fleet",
-	// the token relay — §7.16's generated render.
-	"spend-cursor",
+	// the token relay, after its display was retired — §7.16's amendment.
+	"cursor-without-spend",
 	// the fleet usage view — §7.17's generated renders.
 	"usage-fleet", "usage-empty", "usage-models", "usage-stale-relay",
 	// the grok seam — §3.9a, pasted beside the survey rather than in §7.3

@@ -1,6 +1,7 @@
 package hud
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/theme"
-	"github.com/sanlee-ys/telltale/internal/usagecache"
 )
 
 // The fleet usage view (design.md §7.17).
@@ -42,6 +42,16 @@ import (
 // was there. It sits in the same label column as the other two, which is what
 // makes the three legible as three kinds of statement about one vendor rather
 // than as three layouts.
+//
+// The SPEND half was reshaped the same day, by the owner's ruling (§7.16 and
+// §7.17 amendments). Cursor's relayed total no longer renders anywhere; agy's
+// does, and it is a DIFFERENT kind of sum, which is why the window wording
+// differs too. Cursor's was a meter — a file that only ever went up. agy's is
+// a scan, summed over the conversations that are on disk at this moment, so
+// deleting a conversation makes it smaller. A window that said "since <date>"
+// would be a claim about a meter this number is not, and the wording the spend
+// line actually uses says "on disk" at every dress level for exactly that
+// reason.
 //
 // It REPLACES the row area rather than floating over it, the detail pane's
 // precedent (§7.11): a panel covering the thing being monitored is a monitor
@@ -163,7 +173,30 @@ func usageGaugeFor(width int) int {
 type usageBlock struct {
 	vendor   model.VendorID
 	quota    *quotaVendorBlock
-	spend    *usagecache.Total
+	spend    *scanSpend
+	sessions int
+}
+
+// scanSpend is one vendor's token consumption as this scan measured it: the
+// sum of the per-session counts, and the number of sessions that contributed
+// one.
+//
+// The session count is not decoration — it IS the accumulation window, and
+// §7.16's rule that a sum never prints without its window binds here exactly as
+// it bound the relay's. It is a count of the sessions that contributed a
+// MEASURED reading, not of the vendor's sessions: a conversation that has not
+// called a model yet, and one whose counts failed the adapter's self-check,
+// both carry no model.Session.Tokens and are therefore in neither the sum nor
+// the count. That is what makes "summed across 5 sessions on disk" exact rather
+// than approximately true — it names the five, and never folds a sixth in as a
+// zero.
+//
+// The consequence a reader has to be able to see is that this number can go
+// DOWN. Deleting a conversation removes its counts from the next scan's sum,
+// which a meter can never do; "on disk" is the word carrying that, and it
+// survives every dress level below.
+type scanSpend struct {
+	in, out  int64
 	sessions int
 }
 
@@ -174,15 +207,17 @@ type usageBlock struct {
 // source speaks for a vendor is how the two surfaces would come to disagree
 // about the same account, and a header and a detail view that contradict each
 // other are worse than either alone.
+//
+// Spend comes from the sessions this scan read, and from nowhere else. It used
+// to come from the hook relay's file as well (§7.16); the owner retired that
+// DISPLAY on 2026-08-09 and the relay keeps running, so Snapshot.Spend is still
+// filled by every scan and is deliberately read by nothing here.
 func usageBlocks(st State) []usageBlock {
 	quotas := map[model.VendorID]quotaVendorBlock{}
 	for _, q := range quotaVendors(st) {
 		quotas[q.vendor] = q
 	}
-	spend := map[model.VendorID]usagecache.Total{}
-	for _, t := range st.Snap.Spend {
-		spend[t.Vendor] = t
-	}
+	spend := scanSpendByVendor(st)
 	sessions := map[model.VendorID]int{}
 	for _, s := range st.Snap.Sessions {
 		sessions[s.Vendor]++
@@ -214,10 +249,13 @@ func usageBlocks(st State) []usageBlock {
 	}
 
 	// A reading from a vendor fleetOrder does not name still gets a block,
-	// sorted, after the ones it does. The relay files are written by whatever
-	// statusline ran, and a cache entry telltale can read but cannot place is
-	// a measurement — dropping it because the fleet table has not caught up
-	// would be the view hiding data it has.
+	// sorted, after the ones it does. The quota relay files are written by
+	// whatever statusline ran, and a cache entry telltale can read but cannot
+	// place is a measurement — dropping it because the fleet table has not
+	// caught up would be the view hiding data it has. A scan-derived total
+	// cannot reach here from an unnamed vendor today, since it is summed from
+	// sessions and fleetOrder names every vendor with an adapter; it is swept
+	// anyway so the two sources cannot fall out of step later.
 	var extra []model.VendorID
 	for v := range quotas {
 		if !seen[v] {
@@ -232,6 +270,39 @@ func usageBlocks(st State) []usageBlock {
 	sort.Slice(extra, func(i, j int) bool { return extra[i] < extra[j] })
 	for _, v := range extra {
 		add(v)
+	}
+	return out
+}
+
+// scanSpendByVendor sums the measured per-session token counts this scan read,
+// one entry per vendor that produced at least one.
+//
+// It is arithmetic over measured integers and nothing else — no rate, no
+// pricing, no projection — which is the whole of what §4a.1 allows a derived
+// number to be here: addition of readings, presented with the count of readings
+// it added. Every vendor is eligible; only agy writes token counts an adapter
+// can read today (§3.8), so only agy has an entry, and a second vendor that
+// starts reporting them arrives on this surface with no code change.
+//
+// A session with no Tokens contributes nothing and is not counted, and the
+// difference between "no Tokens" and "Tokens that are zero" is doing real work:
+// the first is a conversation that never called a model, or one whose read
+// failed its self-check and said so in Diagnostics; the second would be a
+// measured nothing. Only the second may sit in the sum.
+func scanSpendByVendor(st State) map[model.VendorID]scanSpend {
+	var out map[model.VendorID]scanSpend
+	for _, s := range st.Snap.Sessions {
+		if s == nil || s.Tokens == nil {
+			continue
+		}
+		if out == nil {
+			out = map[model.VendorID]scanSpend{}
+		}
+		t := out[s.Vendor]
+		t.in += s.Tokens.Input
+		t.out += s.Tokens.Output
+		t.sessions++
+		out[s.Vendor] = t
 	}
 	return out
 }
@@ -307,11 +378,11 @@ func usageHeading(st State, sty Styles, g Glyphs) string {
 //
 // The heading always speaks about quota — where the reading came from, or why
 // there is none — and never about spend. That asymmetry is deliberate and it is
-// what makes a spend-only vendor legible: Cursor's block would otherwise show a
-// token total under a bare name and leave the reader to guess whether its quota
-// was missing, zero, or simply not drawn. The spend line explains itself in its
-// own vocabulary (a verb and a window, §7.16) and needs no heading; the absence
-// of a quota reading explains nothing at all unless something says it out loud.
+// what makes a spend-bearing vendor legible: agy's block would otherwise show a
+// relayed percentage and a token total with nothing saying they came from two
+// different seams. The spend line explains itself in its own vocabulary (a verb
+// and a window, §7.16) and needs no heading; the absence of a quota reading
+// explains nothing at all unless something says it out loud.
 //
 // A vendor with neither therefore falls out of the same code path as one line
 // with no facts under it, rather than needing a case of its own.
@@ -345,7 +416,7 @@ func usageBlockLines(st State, b usageBlock, cells int, sty Styles, g Glyphs) []
 		lines = append(lines, usageQuotaLines(st, *b.quota, cells, sty, g)...)
 	}
 	if b.spend != nil {
-		lines = append(lines, usageSpendLine(st, *b.spend, sty, g))
+		lines = append(lines, usageSpendLines(st, *b.spend, sty, g)...)
 	}
 	return append([]string{head}, lines...)
 }
@@ -566,14 +637,15 @@ func usageSourceDress(b quotaVendorBlock, g Glyphs) []string {
 // three kinds of nothing apart (§4a.1). Two of them render; the third collapses
 // into one of those two, deliberately, and §7.17 records that as a limitation.
 //
-//   - STRUCTURALLY ABSENT — Gemini and Cursor have no account quota anywhere a
-//     passive reader can see, relay or not (§7.15). For Cursor that verdict was
-//     re-measured on 2026-08-08 and came back harder: the only account figures
-//     on its disk are Statsig experiment values stamped
-//     `is_user_in_experiment:false`, never consumption (§7.16). Nothing the
-//     user can do changes this, so the line names the seam rather than an
-//     action — telling someone to go and enable a thing that does not exist is
-//     worse than telling them nothing.
+//   - STRUCTURALLY ABSENT — Gemini, Cursor and grok have no account quota
+//     anywhere a passive reader can see, relay or not (§7.15). For Cursor that
+//     verdict was re-measured on 2026-08-08 and came back harder: the only
+//     account figures on its disk are Statsig experiment values stamped
+//     `is_user_in_experiment:false`, never consumption (§7.16). grok's is
+//     §3.9a's, measured the same way and 2026-08-09. Nothing the user can do
+//     changes any of them, so the line names the seam rather than an action —
+//     telling someone to go and enable a thing that does not exist is worse
+//     than telling them nothing.
 //   - SEAM EXISTS, NEVER SEEN — Claude's and agy's quota reaches disk only when
 //     `telltale statusline` renders it and writes the relay entry (§7.15). This
 //     line names the statusline, because that IS the action: the reading turns
@@ -610,6 +682,27 @@ func usageQuotaAbsence(v model.VendorID, g Glyphs) []string {
 	case model.VendorCursor:
 		return []string{
 			"no quota anywhere" + mid + "its store holds experiment values, not usage",
+			"no quota anywhere",
+		}
+	case model.VendorGrok:
+		// The measured sentence, from §3.9a's survey rather than from the
+		// vendor's docs: a regex for rate/limit/quota across the whole store
+		// matched tool-configuration keys and nothing else, so no window, no
+		// ordinal and no reset time reaches disk at all.
+		//
+		// This vendor is also the one place the block's quota-only rule needed
+		// defending rather than merely following. grok is the first vendor that
+		// writes MONEY down (§3.9a), so it is the one a reader might expect a
+		// spend line under — and it gets none, because the only figure on its
+		// disk is a per-TURN cost with no session or account total anywhere,
+		// which the detail pane already labels as the turn's. Summing a tail of
+		// an 818 KB append-only file would be a lower bound wearing a total's
+		// clothes. The absence is therefore the honest render, and the reasoning
+		// lives in §7.17 rather than on this line: the heading speaks about
+		// quota and never about spend, and buying grok an exception would cost
+		// every other block its meaning.
+		return []string{
+			"no quota anywhere" + mid + "no window, no ordinal, no reset time on its disk",
 			"no quota anywhere",
 		}
 	default:
@@ -655,7 +748,34 @@ func usageQuotaLines(st State, b quotaVendorBlock, cells int, sty Styles, g Glyp
 	return out
 }
 
-// usageSpendLine renders the running token total under its vendor.
+// usageSpendWindows is the shed cascade for the accumulation window, most
+// dressed first, and every level is a complete statement of the same claim.
+//
+// Nothing here is optional decoration, which is why this cascade drops WORDS
+// and never facts. §7.16's rule — a sum is only honest while it says what it is
+// a sum of — means the count and the "on disk" both have to reach the narrowest
+// terminal telltale renders on:
+//
+//   - the COUNT, because it is the window. Without it the line is a token
+//     figure with no scope, the "48k pretending to be a state" §7.16 forbids.
+//   - "on disk", because it is the difference between this sum and the meter
+//     Cursor's used to be. A total summed over what is on disk right now goes
+//     DOWN when a conversation is deleted, and a reader who has been told only
+//     "across 5 sessions" has been given a number they will reasonably expect
+//     to be monotonic.
+//
+// "summed" and "this scan" are the two words that can go, in that order: the
+// first is implied by the arithmetic being on screen, and the second by the
+// view being live.
+var usageSpendWindows = []string{
+	"summed across %s on disk, this scan",
+	"summed across %s on disk",
+	"across %s on disk",
+	"%s on disk",
+}
+
+// usageSpendLines renders the vendor's measured token consumption under it —
+// one row where the whole claim fits on one, and two where it does not.
 //
 // The verb is the LABEL here rather than a word beside the vendor's name, which
 // is the one thing this surface changes about §7.16's rendering — and it makes
@@ -664,23 +784,79 @@ func usageQuotaLines(st State, b quotaVendorBlock, cells int, sty Styles, g Glyp
 // same kind of statement about the same vendor and visibly different numbers.
 //
 // Everything §7.16 forbids stays forbidden: no gauge, no percentage, no
-// countdown, and the accumulation window travels at every dress level. The shed
-// cascade is spendDressLevels, unchanged, so this line and the header's can
-// never disagree about what a narrow terminal is allowed to drop.
-func usageSpendLine(st State, t usagecache.Total, sty Styles, g Glyphs) string {
-	var line string
-	for _, d := range spendDressLevels {
-		line = usageRow("spent", spendFacts(t, d, st, sty, g), sty, g)
-		if !d.cache || !d.turns {
-			// Dropping is never silent — the footer's rule, and the header
-			// spend line's.
-			line += " " + sty.Muted.Render(g.Ellipsis)
-		}
+// countdown, and the accumulation window travels at every dress level.
+//
+// "uncached in" rather than "in" is not a nicety. agy's adapter reads the
+// vendor's UNCACHED input count (§3.8's `#1.#4.#2`); the cache-read component
+// sits at a field number the survey marks lower-confidence and the adapter
+// refuses to fold in. Labelling the number "in" would quietly promote a partial
+// figure to a whole one, and this line is the one place a reader would have no
+// way to catch that.
+//
+// # Why this one thing wraps when nothing else on this surface does
+//
+// Every other line here sheds: it drops decoration until the facts fit, which
+// works because every other line HAS decoration — a gauge that re-states a
+// number still on screen, a phrase around an age. This line is facts only. Two
+// token counts, a label that has to say "uncached", and a window §7.16 forbids
+// printing the sum without: at 60 columns those do not fit on one row and there
+// is nothing left to spend.
+//
+// The header solved that problem by dropping whole vendor blocks, because a
+// header has a hard budget of one or two lines. This is a BODY, and it scrolls
+// (§7.17) — so it can pay a second row, and a second row costs nothing a reader
+// values next to a sum that has stopped saying what it summed. The window moves
+// down, hanging under the counts in the same indent, and it re-runs its own
+// cascade there: a row to itself buys back the dress the shared row could not
+// afford, so the narrow render says MORE about the window than the cramped
+// single-line one would have.
+//
+// It carries no leading glyph to mark the continuation. The mid dot separates
+// facts on a line everywhere else in this product, and giving it a second job
+// here is the failure §9.26 is a whole section about.
+func usageSpendLines(st State, sp scanSpend, sty Styles, g Glyphs) []string {
+	counts := sty.Muted.Render("uncached in") + " " + sty.Text.Render(theme.Tokens(sp.in)) +
+		" " + sty.Muted.Render(g.Mid) + " " +
+		sty.Muted.Render("out") + " " + sty.Text.Render(theme.Tokens(sp.out))
+	windows := usageSpendWindowLevels(sp.sessions)
+
+	for _, w := range windows {
+		line := usageRow("spent", counts+"  "+sty.Muted.Render(g.Mid+" "+w), sty, g)
 		if lipgloss.Width(line) <= st.Width-1 {
-			return line
+			return []string{line}
 		}
 	}
-	return line
+
+	out := []string{usageRow("spent", counts, sty, g)}
+	for i, w := range windows {
+		// The label column is empty on the continuation: "spent" is a verb and
+		// this row is not a second thing that was spent.
+		cont := usageRow("", sty.Muted.Render(w), sty, g)
+		if lipgloss.Width(cont) <= st.Width-1 || i == len(windows)-1 {
+			return append(out, cont)
+		}
+	}
+	return out
+}
+
+// usageSpendWindowLevels renders the window's cascade for a session count, most
+// dressed first.
+func usageSpendWindowLevels(sessions int) []string {
+	out := make([]string, 0, len(usageSpendWindows))
+	for _, w := range usageSpendWindows {
+		out = append(out, fmt.Sprintf(w, plural(sessions, "session", "sessions")))
+	}
+	return out
+}
+
+// plural renders a count with the noun that agrees with it. One conversation is
+// a window too, and "1 sessions on disk" reads as a rendering bug in a view
+// whose entire argument is that it is careful.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return strconv.Itoa(n) + " " + many
 }
 
 // usageRow places one labelled fact under a vendor heading.
