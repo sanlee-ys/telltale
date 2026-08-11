@@ -20,10 +20,10 @@
 // # What the write is allowed to be
 //
 //   - numbers only, never content. An Entry is a vendor id, two timestamps, a
-//     turn count and four token totals. There is no field a reply, a prompt,
-//     a path or an email address could occupy — see internal/cursorhook, where
-//     the payload's `text`, `transcript_path` and `user_email` are discarded
-//     before this package is ever called.
+//     window count and the token totals the vendor reports. There is no field
+//     a reply, a prompt, a path or an email address could occupy — see
+//     internal/cursorhook and internal/grokotel, where everything but the
+//     numbers is discarded before this package is ever called.
 //   - one file per vendor under ~/.telltale/usage/, written atomically
 //     (temp + rename in the same directory) so the HUD never reads a torn
 //     entry.
@@ -72,36 +72,61 @@ const (
 	futureSkew = 5 * time.Minute
 )
 
-// Delta is one turn's measured consumption — the unit Add accumulates.
+// Delta is one reading's measured consumption — the unit Add accumulates.
 //
-// Plain int64s, not pointers: a Delta is built only from a turn that reported
-// all four counts (cursorhook.Turn.Complete), because a partial turn summed
-// into a running total understates it invisibly. Absence is handled before
-// this type, which is why this type does not have to model it.
+// The three counts every relayed vendor reports are plain int64s: a Delta is
+// built only from a reading that reported its vendor's complete count set
+// (cursorhook.Turn.Complete, grokotel's api_request gate), because a partial
+// reading summed into a running total understates it invisibly.
+//
+// CacheWriteTokens and ReasoningTokens are pointers because they are counts
+// only ONE vendor each has: Cursor's hook reports cache writes and no
+// reasoning; grok's export reports reasoning and has no cache-write type at
+// all. nil here means "not a count this vendor keeps", which is §4a.1's
+// absent — a zero would claim a measurement the vendor never made.
 type Delta struct {
+	// Turns and Requests carry the window unit this delta advances — exactly
+	// one of them, set by the vendor's converter. Cursor's hook fires once per
+	// agent response (Turns: 1); grok's collector counts one api_request event
+	// (Requests: 1). Add refuses a delta that advances neither: counts with no
+	// window unit would float free of the thing that makes them readable.
+	Turns    int
+	Requests int
+
 	InputTokens      int64
 	OutputTokens     int64
 	CacheReadTokens  int64
-	CacheWriteTokens int64
+	CacheWriteTokens *int64
+	ReasoningTokens  *int64
 }
 
 // Entry is one vendor's cache file: a running total, and everything a reader
 // needs to know what the total is a total OF.
 //
-// Since and Turns are not decoration. A sum with no window is a number
-// pretending to be a state — "48.0k tokens" answers nothing unless it also
-// says over how many turns and since when. Both travel in the file and both
-// travel to the screen; §7.16 forbids rendering the sum without them.
+// Since and the window count are not decoration. A sum with no window is a
+// number pretending to be a state — "48.0k tokens" answers nothing unless it
+// also says over how many turns (or api requests) and since when. Both travel
+// in the file and both travel to the screen; §7.16 forbids rendering the sum
+// without them.
+//
+// The optional fields are omitempty on purpose, and the omissions are claims:
+// a cursor.json carries no reasoning_tokens key because Cursor reports no
+// such count, and a grok.json carries no cache_write_tokens key because
+// grok's export has no such type. Serializing either as 0 would collapse
+// "not a count this vendor keeps" into "measured zero" — §4a.1's distinction,
+// applied to the serialized form.
 type Entry struct {
 	Vendor    string    `json:"vendor"`
 	Since     time.Time `json:"since"`
 	WrittenAt time.Time `json:"written_at"`
-	Turns     int       `json:"turns"`
+	Turns     int       `json:"turns,omitempty"`
+	Requests  int       `json:"requests,omitempty"`
 
-	InputTokens      int64 `json:"input_tokens"`
-	OutputTokens     int64 `json:"output_tokens"`
-	CacheReadTokens  int64 `json:"cache_read_tokens"`
-	CacheWriteTokens int64 `json:"cache_write_tokens"`
+	InputTokens      int64  `json:"input_tokens"`
+	OutputTokens     int64  `json:"output_tokens"`
+	CacheReadTokens  int64  `json:"cache_read_tokens"`
+	CacheWriteTokens *int64 `json:"cache_write_tokens,omitempty"`
+	ReasoningTokens  *int64 `json:"reasoning_tokens,omitempty"`
 }
 
 // Total is a read-side result: an Entry whose vendor id has been narrowed to
@@ -158,6 +183,11 @@ func Add(dir, vendor string, d Delta, now time.Time) error {
 	if vendor == "" {
 		return nil
 	}
+	// A delta that advances no window unit is refused whole: its counts would
+	// join a total whose "over N turns" could no longer say what it spans.
+	if d.Turns <= 0 && d.Requests <= 0 {
+		return nil
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
@@ -168,11 +198,13 @@ func Add(dir, vendor string, d Delta, now time.Time) error {
 		e = prev
 	}
 	e.WrittenAt = now
-	e.Turns++
+	e.Turns += d.Turns
+	e.Requests += d.Requests
 	e.InputTokens += d.InputTokens
 	e.OutputTokens += d.OutputTokens
 	e.CacheReadTokens += d.CacheReadTokens
-	e.CacheWriteTokens += d.CacheWriteTokens
+	e.CacheWriteTokens = addOptional(e.CacheWriteTokens, d.CacheWriteTokens)
+	e.ReasoningTokens = addOptional(e.ReasoningTokens, d.ReasoningTokens)
 
 	raw, err := json.Marshal(e)
 	if err != nil {
@@ -199,6 +231,24 @@ func Add(dir, vendor string, d Delta, now time.Time) error {
 		return err
 	}
 	return nil
+}
+
+// addOptional folds an optional count. nil + nil stays nil (neither the total
+// nor the delta claims the vendor has this count); a present delta onto a nil
+// total OPENS the count rather than pretending a prior zero existed. A fresh
+// pointer is always returned so no caller's Entry aliases another's.
+func addOptional(total, d *int64) *int64 {
+	if total == nil && d == nil {
+		return nil
+	}
+	var sum int64
+	if total != nil {
+		sum += *total
+	}
+	if d != nil {
+		sum += *d
+	}
+	return &sum
 }
 
 // ReadAll returns every vendor's surviving total, sorted by vendor id for a
@@ -250,13 +300,19 @@ func readEntry(path string, now time.Time) (Entry, bool) {
 	if e.Since.After(e.WrittenAt.Add(futureSkew)) {
 		return Entry{}, false
 	}
-	// Turns is what makes the sum readable; a total claiming zero turns, or a
-	// negative count, is a broken reading rather than a small one.
-	if e.Turns <= 0 {
+	// The window count is what makes the sum readable; a total claiming zero
+	// turns AND zero requests, or a negative count anywhere, is a broken
+	// reading rather than a small one.
+	if e.Turns < 0 || e.Requests < 0 || e.Turns+e.Requests == 0 {
 		return Entry{}, false
 	}
-	if e.InputTokens < 0 || e.OutputTokens < 0 || e.CacheReadTokens < 0 || e.CacheWriteTokens < 0 {
+	if e.InputTokens < 0 || e.OutputTokens < 0 || e.CacheReadTokens < 0 {
 		return Entry{}, false
+	}
+	for _, v := range []*int64{e.CacheWriteTokens, e.ReasoningTokens} {
+		if v != nil && *v < 0 {
+			return Entry{}, false
+		}
 	}
 	return e, true
 }

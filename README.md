@@ -199,17 +199,19 @@ is an open obligation on the fleet rather than a reason the column is missing.)
 **The gauges never write to anything that isn't theirs.** `telltale statusline` and
 `telltale hud` read vendor files, make no network calls, read no credentials, and no
 keybinding can mutate vendor state or send anything to a running agent. What telltale
-writes to disk is three files of its own under `~/.telltale/`, all keys and numbers,
+writes to disk is three stores of its own under `~/.telltale/`, all keys and numbers,
 never content: council's room file (`council/room.json` — the vendor session ids
 reattaching needs and the room's workspace, no transcript, output or brief content),
 the statusline's quota relay (`quota/<vendor>.json` — the rate-limit windows it
 just rendered, so the HUD can show account quota per vendor instead of only for
 vendors whose stores carry it; [docs/design.md §7.15](docs/design.md)), and the
-cursor token relay (`usage/<vendor>.json` — a running total of the token counts
-Cursor's `afterAgentResponse` hook reports per turn, so the HUD can say what this
-machine spent; [docs/design.md §7.16](docs/design.md)). That last one is spend, not
-quota: there is no denominator anywhere in it, so it never renders as a percentage
-or a bar, and Cursor's account quota stays visibly absent. `telltale
+token relay (`usage/<vendor>.json` — a running total of per-turn token counts,
+with two writers: `telltale hook cursor` reads Cursor's `afterAgentResponse`
+payload on stdin, and `telltale otel grok` is a loopback listener grok's own
+OpenTelemetry exporter pushes to; [docs/design.md §7.16, §7.16a](docs/design.md)).
+That last one is spend, not quota: there is no denominator anywhere in it, so it
+never renders as a percentage or a bar, and Cursor's and grok's account quota
+stay visibly absent. `telltale
 council` remains the one mode that acts on the world, and it is labelled as one
 everywhere it can be: it spawns vendor CLIs, it is entered only by typing the
 subcommand, it is not reachable from the HUD, and it shares no keybinding with it.

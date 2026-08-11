@@ -341,7 +341,7 @@ func spendState(w, h int) State {
 				InputTokens:      48012,
 				OutputTokens:     1203,
 				CacheReadTokens:  1904221,
-				CacheWriteTokens: 62004,
+				CacheWriteTokens: model.Ptr(int64(62004)),
 			},
 		}},
 	}
@@ -472,7 +472,7 @@ func usageFleetState(w, h int) State {
 				InputTokens:      48012,
 				OutputTokens:     1203,
 				CacheReadTokens:  1904221,
-				CacheWriteTokens: 62004,
+				CacheWriteTokens: model.Ptr(int64(62004)),
 			},
 		}},
 	}
@@ -1258,6 +1258,60 @@ func TestTheRetiredDisplayStillHasItsRelayUnderneath(t *testing.T) {
 	}
 	if st.Snap.Spend[0].InputTokens == 0 || st.Snap.Spend[0].Turns == 0 {
 		t.Errorf("the relayed entry carries no measurement to have been retired: %+v", st.Snap.Spend[0])
+	}
+}
+
+// grok's collector (§7.16a) fills the same snapshot field the cursor relay
+// does, and its display is HELD under the same ruling that retired cursor's —
+// wired write-to-read, rendered nowhere. Pinned separately from the cursor
+// test because the entry's SHAPE differs (requests for turns, reasoning for
+// cache-write) and a renderer reinstated for one shape could miss the other.
+func TestTheGrokSpendRelayRendersNowhere(t *testing.T) {
+	withGrokSpend := func(w, h int) State {
+		st := grokState(w, h)
+		st.Snap.Spend = []usagecache.Total{{
+			Vendor: model.VendorGrok,
+			Entry: usagecache.Entry{
+				Vendor:          string(model.VendorGrok),
+				Since:           pinned.Add(-9 * time.Minute),
+				WrittenAt:       pinned.Add(-40 * time.Second),
+				Requests:        6,
+				InputTokens:     81292,
+				OutputTokens:    224,
+				CacheReadTokens: 10240,
+				ReasoningTokens: model.Ptr(int64(168)),
+			},
+		}}
+		return st
+	}
+	for _, ascii := range []bool{false, true} {
+		g := GlyphsFor(ascii)
+		for _, w := range []int{200, 120, 80, 60} {
+			for _, usage := range []bool{false, true} {
+				st := withGrokSpend(w, 14)
+				st.Usage = usage
+				got := Render(st, PlainStyles(), g)
+				if line := spendLineOf(got); line != "" {
+					t.Errorf("ascii=%v width=%d usage=%v: grok's held total rendered:\n%s",
+						ascii, w, usage, line)
+				}
+				// The counts themselves, in case a future line loses the verb
+				// before it loses the number. 81.2k is the fixture's input
+				// total, 10.2k its cache-read total.
+				for _, n := range []string{"81.2k", "10.2k", "reasoning"} {
+					if strings.Contains(got, n) {
+						t.Errorf("ascii=%v width=%d usage=%v: a relayed figure survived (%s):\n%s",
+							ascii, w, usage, n, got)
+					}
+				}
+			}
+		}
+	}
+	// And the relay half: the entry is in the snapshot, carrying a real
+	// measurement, so reinstating a display stays a call site.
+	st := withGrokSpend(120, 12)
+	if len(st.Snap.Spend) != 1 || st.Snap.Spend[0].Requests == 0 || st.Snap.Spend[0].InputTokens == 0 {
+		t.Fatalf("the fixture lost the relayed total the hold is defined against: %+v", st.Snap.Spend)
 	}
 }
 

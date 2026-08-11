@@ -1,6 +1,6 @@
 // telltale — an honest gauge for your coding agents.
 //
-// One binary, five modes (decisions/002, decisions/008):
+// One binary, six modes (decisions/002, decisions/008):
 //
 //	telltale statusline   read a vendor statusline JSON payload on stdin, print one
 //	                      line (Claude Code, or Antigravity CLI via its documented
@@ -9,6 +9,9 @@
 //	telltale council      dispatch room: one brief to several vendor CLIs at once
 //	telltale hook <v>     vendor hook relay: a per-turn payload on stdin, token
 //	                      counts to ~/.telltale/usage/, nothing on stdout
+//	telltale otel <v>     vendor telemetry collector: a loopback OTLP listener the
+//	                      vendor's own exporter pushes to, token counts to
+//	                      ~/.telltale/usage/ (design.md §7.16a)
 //	telltale doctor       launch-time preflight: which vendor binaries are here,
 //	                      what version each reports, and what was never checked
 //
@@ -56,6 +59,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/council"
 	"github.com/sanlee-ys/telltale/internal/cursorhook"
 	"github.com/sanlee-ys/telltale/internal/doctor"
+	"github.com/sanlee-ys/telltale/internal/grokotel"
 	"github.com/sanlee-ys/telltale/internal/hud"
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/quotacache"
@@ -85,6 +89,11 @@ func main() {
 		}
 	case "hook":
 		runHook(os.Args[2:])
+	case "otel":
+		if err := runOtel(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "telltale otel:", err)
+			os.Exit(1)
+		}
 	case "doctor":
 		if err := runDoctor(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "telltale doctor:", err)
@@ -176,6 +185,32 @@ func relayQuota(vendor string, windows []quotacache.Window) {
 // non-zero is a hook that can colour a vendor's turn with an error the user
 // did not cause, and telltale's cache is never worth that; the reason goes to
 // stderr for `--debug`-style inspection and the turn continues.
+// runOtel starts the vendor telemetry collector (design.md §7.16a). Unlike
+// the hook relay it is a foreground server: it holds a loopback socket open
+// and the VENDOR's exporter pushes to it, so the gauges' no-network-calls
+// contract (§4a.5) is untouched — they only ever read the file this writes.
+func runOtel(args []string) error {
+	if len(args) == 0 {
+		return errors.New("want a vendor (grok)")
+	}
+	if args[0] != "grok" {
+		return errors.New("unknown vendor " + args[0] + " (want grok)")
+	}
+	fs := flag.NewFlagSet("telltale otel grok", flag.ContinueOnError)
+	addr := fs.String("addr", grokotel.DefaultAddr, "listen address (loopback only)")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	dir, err := usagecache.Dir()
+	if err != nil {
+		return err
+	}
+	srv := grokotel.New(dir, func(format string, a ...any) {
+		fmt.Printf(format+"\n", a...)
+	})
+	return srv.Run(*addr)
+}
+
 func runHook(args []string) {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "telltale hook: want a vendor (cursor)")
@@ -394,6 +429,12 @@ usage:
   telltale hook cursor   (wire into ~/.cursor/hooks.json as an afterAgentResponse
                          command hook) read one turn's token counts on stdin,
                          add them to this machine's running total, print nothing
+  telltale otel grok     receive grok's external OpenTelemetry export on
+                         loopback and add each api request's token counts to
+                         this machine's running total. The push is grok's:
+                         enable it with [telemetry] otel_enabled = true and
+                         otel_logs_exporter = "otlp" in ~/.grok/config.toml,
+                         then leave this running while grok runs
   telltale doctor        launch-time preflight: which vendor binaries are on
                          this machine, where each was found, what version it
                          reports — and, said out loud rather than left blank,
@@ -417,6 +458,11 @@ telltale doctor flags:
   --width <n>                 wrap column for the report (default 80)
 It prints words and no colour, so it reads the same in a terminal, in a pipe and
 in a pasted issue; --ascii and NO_COLOR have nothing to switch off.
+
+telltale otel grok flags:
+  --addr <host:port>          listen address (default 127.0.0.1:4318, the OTLP
+                              http default). Loopback only; any other host is
+                              refused at startup
 
 telltale council is ONE persistent room. Run it with no arguments: it reopens
 the saved room, reattaches every vendor's own session, and continues the

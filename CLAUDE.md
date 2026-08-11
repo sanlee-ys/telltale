@@ -162,15 +162,19 @@ exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
 - the **statusline's quota relay** — `quota/<vendor>.json`, the rate-limit
   windows it just rendered, written after the line is on stdout so the HUD can
   attribute account quota per vendor (design.md §7.15, amended 2026-08-07).
-- the **cursor token relay** — `usage/<vendor>.json`, a running total of the
-  token counts Cursor's `afterAgentResponse` hook reports per turn (design.md
-  §7.16, added 2026-08-08). Written by `telltale hook cursor`, which is its own
-  mode rather than a flag on a gauge: a hook's stdout is parsed by the vendor as
-  a hook result, so that path prints nothing at all and exits 0 on every branch.
-  **Its DISPLAY was retired by the owner on 2026-08-09** (§7.16's amendment) —
-  the write, the cache and the HUD's read of it are all untouched, and nothing
-  renders the total today. Don't "clean up" the reader on the grounds that it is
-  unused; being wired is the point of it.
+- the **token relay** — `usage/<vendor>.json`, a running total of per-turn
+  token counts, with two writers and one schema. `telltale hook cursor` reads
+  Cursor's `afterAgentResponse` payload on stdin (design.md §7.16, added
+  2026-08-08); it is its own mode rather than a flag on a gauge because a
+  hook's stdout is parsed by the vendor as a hook result, so that path prints
+  nothing at all and exits 0 on every branch. `telltale otel grok` (§7.16a,
+  added 2026-08-10) is a loopback-only OTLP listener that grok's own external
+  OpenTelemetry exporter pushes to — the push is grok's, so the gauges still
+  make no network calls; they only read the file it writes. **The DISPLAY of
+  both totals is retired/held by the owner** (§7.16's amendment, applied to
+  grok on arrival) — the writes, the cache and the HUD's read of them are all
+  wired, and nothing renders a total today. Don't "clean up" the reader on the
+  grounds that it is unused; being wired is the point of it.
 
 Each carries a test pinning the serialized form to keys and numbers. If you're
 adding a feature to `internal/hud` or `internal/statusline` that would write

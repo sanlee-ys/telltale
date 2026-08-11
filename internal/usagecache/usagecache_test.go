@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -17,7 +18,13 @@ var pinned = time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 func ip(v int64) *int64 { return &v }
 
 func turn(in, out, cr, cw int64) Delta {
-	return Delta{InputTokens: in, OutputTokens: out, CacheReadTokens: cr, CacheWriteTokens: cw}
+	return Delta{Turns: 1, InputTokens: in, OutputTokens: out, CacheReadTokens: cr, CacheWriteTokens: ip(cw)}
+}
+
+// req is a grok-shaped delta: one api_request, reasoning present, cache_write
+// absent because grok's export has no such type (§4a.1 on the wire).
+func req(in, out, re, cr int64) Delta {
+	return Delta{Requests: 1, InputTokens: in, OutputTokens: out, CacheReadTokens: cr, ReasoningTokens: ip(re)}
 }
 
 func TestTurnsAccumulateIntoOneTotal(t *testing.T) {
@@ -40,9 +47,13 @@ func TestTurnsAccumulateIntoOneTotal(t *testing.T) {
 	if e.Turns != 2 {
 		t.Errorf("turns = %d, want 2", e.Turns)
 	}
-	if e.InputTokens != 300 || e.OutputTokens != 30 ||
-		e.CacheReadTokens != 3000 || e.CacheWriteTokens != 110 {
+	if e.InputTokens != 300 || e.OutputTokens != 30 || e.CacheReadTokens != 3000 ||
+		e.CacheWriteTokens == nil || *e.CacheWriteTokens != 110 {
 		t.Errorf("totals = %+v", e.Entry)
+	}
+	// Cursor reports no reasoning count; a zero here would be an invented one.
+	if e.ReasoningTokens != nil {
+		t.Errorf("a cursor total grew a reasoning count: %d", *e.ReasoningTokens)
 	}
 	// Since is the FIRST turn's instant and does not move; WrittenAt is the
 	// last. The pair is what makes the sum readable at all.
@@ -126,6 +137,74 @@ func TestTheCacheCarriesKeysAndNumbersOnly(t *testing.T) {
 			t.Errorf("unexpected cache field %q", k)
 		}
 	}
+	// The two grok-only keys may not leak into a cursor entry: their absence
+	// is the claim that Cursor keeps neither count (§4a.1 in the serialized
+	// form).
+	for _, k := range []string{"reasoning_tokens", "requests"} {
+		if _, leaked := top[k]; leaked {
+			t.Errorf("cursor entry grew a %q key it has no measurement for", k)
+		}
+	}
+}
+
+// The grok-shaped entry is the same contract from the other side: requests as
+// the window unit, reasoning present, and NO cache_write or turns key — grok's
+// export has no cache-write type and this relay counts api requests, not
+// turns. A zero in either place would be an invented measurement.
+func TestTheGrokShapedEntryCarriesItsOwnKeysOnly(t *testing.T) {
+	dir := t.TempDir()
+	if err := Add(dir, "grok", req(20323, 56, 42, 2560), pinned); err != nil {
+		t.Fatal(err)
+	}
+	if err := Add(dir, "grok", req(100, 4, 8, 16), pinned.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "grok.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		t.Fatal(err)
+	}
+	for k := range top {
+		switch k {
+		case "vendor", "since", "written_at", "requests",
+			"input_tokens", "output_tokens", "cache_read_tokens", "reasoning_tokens":
+		default:
+			t.Errorf("unexpected grok cache field %q", k)
+		}
+	}
+
+	got := ReadAll(dir, pinned.Add(2*time.Minute))
+	if len(got) != 1 {
+		t.Fatalf("ReadAll = %+v", got)
+	}
+	e := got[0]
+	if e.Requests != 2 || e.Turns != 0 {
+		t.Errorf("window = %d requests %d turns, want 2 requests only", e.Requests, e.Turns)
+	}
+	if e.InputTokens != 20423 || e.OutputTokens != 60 || e.CacheReadTokens != 2576 {
+		t.Errorf("totals = %+v", e.Entry)
+	}
+	if e.ReasoningTokens == nil || *e.ReasoningTokens != 50 {
+		t.Errorf("reasoning total = %v, want 50", e.ReasoningTokens)
+	}
+	if e.CacheWriteTokens != nil {
+		t.Errorf("a grok total grew a cache-write count: %d", *e.CacheWriteTokens)
+	}
+}
+
+// A delta that advances neither window unit is refused whole: its counts
+// would join a total whose window could no longer say what it spans.
+func TestADeltaWithNoWindowUnitIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	if err := Add(dir, "grok", Delta{InputTokens: 5}, pinned); err != nil {
+		t.Fatal(err)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("a windowless delta was written: %v", entries)
+	}
 }
 
 // End to end from the wire: a REAL payload shape, carrying the reply text and
@@ -196,12 +275,10 @@ func TestAnIncompleteTurnIsNotAccumulated(t *testing.T) {
 		InputTokens: ip(1), OutputTokens: ip(2), CacheReadTokens: ip(3), CacheWriteTokens: ip(4),
 	}
 	d, ok := FromCursorTurn(complete)
-	if !ok || d != turnDelta(1, 2, 3, 4) {
+	if !ok || !reflect.DeepEqual(d, turn(1, 2, 3, 4)) {
 		t.Errorf("FromCursorTurn = %+v, %v", d, ok)
 	}
 }
-
-func turnDelta(in, out, cr, cw int64) Delta { return turn(in, out, cr, cw) }
 
 // A malformed or incoherent file is a non-event, not an error banner, and it
 // must not take a readable sibling down with it (§7.7 shows less on failure).
