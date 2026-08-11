@@ -8533,13 +8533,14 @@ from a re-send. Not verified: anything on macOS — this is a Windows measuremen
 grok is untouched (`PARITY.md`). Not built: an `internal/adapter/grok`, so no HUD row carries
 this vendor. Council can drive this seat; the gauges cannot yet see it.
 
-**The fleet gap this opens, named rather than closed here.** agent-ops ADR-012 rules that guard
-wiring, not lane shape, is the control on every vendor — and grok is a fifth vendor with no
-guards wired. Its `~/.grok/config.toml` carries `[compat.claude] hooks = false`, so the fleet's
-Claude-format hooks do not run in front of it, and it has its own hook system (`grok hooks-add`
-/ `hooks-trust`) that nothing has been installed into. Per ADR-012 that is an open obligation
-and not a reason to route work away from the seat; closing it is agent-ops work rather than
-telltale's, and it is filed rather than done here.
+**Fleet guard wiring for Grok under ADR-012.** agent-ops ADR-012 rules that guard
+wiring, not lane shape, is the control on every vendor — and grok is the fifth vendor seat in the room.
+To fulfill the ADR-012 guard obligation for Grok, Grok's `PreToolUse` fleet guard is configured by setting
+`[compat.claude] hooks = true` in `~/.grok/config.toml` (which routes Grok tool calls through the fleet's
+Claude-compatible `PreToolUse` credential guard wrapper `pre_tool_use_credential_guard.py` / `hooks.json`), or by
+registering the `PreToolUse` hook script via `grok hooks-add`. This ensures secret stores, published history,
+and dangerous mutations are screened by the `PreToolUse` guard across all five seated vendors (Claude, Codex,
+Antigravity, Cursor, and Grok) without restricting lane capabilities.
 
 **Amended 2026-08-09, same day, from a live room: the seat could not take a briefed turn at
 all.** It was merged green and failed on its first real dispatch — `✗ failed 0s`, every seat

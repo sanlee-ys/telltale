@@ -258,3 +258,20 @@ func TestAStaleExitDoesNotFailTheLiveCursorSeat(t *testing.T) {
 		t.Error("a stale exit ended the turn")
 	}
 }
+
+// TestCursorACPZeroTextChunksFillsColumnBody asserts that when an ACP turn ends
+// with 0 text chunks, the column body is rendered with fallback status rather
+// than left empty.
+func TestCursorACPZeroTextChunksFillsColumnBody(t *testing.T) {
+	countSpawns(t)
+	m := flowRoom(t, true)
+
+	m.st.Draft = "@cursor test fallback"
+	m.dispatch()
+	endCursorTurn(m)
+
+	c := m.column(model.VendorCursor)
+	if c.Body == "" {
+		t.Errorf("column body is empty; expected fallback summary when 0 text chunks streamed")
+	}
+}

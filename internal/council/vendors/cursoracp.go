@@ -3,6 +3,7 @@ package vendors
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -114,6 +115,11 @@ type acpProtocol struct {
 	// be a string as easily as a number.
 	perms   map[string]json.RawMessage
 	permSeq int
+
+	// turnTextChunks and turnActs track turn activity to build a fallback
+	// summary when an ACP stream returns 0 text chunks before ending.
+	turnTextChunks int
+	turnActs       []string
 }
 
 var _ runner.Protocol = (*acpProtocol)(nil)
@@ -407,6 +413,8 @@ var ErrACPTurnNotStarted = errors.New(
 func (a *acpProtocol) Turn(prompt string) ([][]byte, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.turnTextChunks = 0
+	a.turnActs = nil
 	if a.dead {
 		return nil, ErrACPHandshakeFailed
 	}
@@ -674,6 +682,9 @@ func (a *acpProtocol) notification(msg acpLine) ([]runner.Event, [][]byte) {
 		// ("Second line:" + " `bravo`\n\nDONE"); any separator this adapter added
 		// would be a character the vendor did not write.
 		if t := up.chunkText(); t != "" {
+			a.mu.Lock()
+			a.turnTextChunks++
+			a.mu.Unlock()
 			return []runner.Event{{Kind: runner.KindText, Text: t}}, nil
 		}
 
@@ -692,6 +703,21 @@ func (a *acpProtocol) notification(msg acpLine) ([]runner.Event, [][]byte) {
 
 	case "tool_call", "tool_call_update":
 		if act, ok := acpAct(up); ok {
+			if act.Text != "" {
+				a.mu.Lock()
+				title := act.Text
+				alreadyHave := false
+				for _, existing := range a.turnActs {
+					if existing == title {
+						alreadyHave = true
+						break
+					}
+				}
+				if !alreadyHave {
+					a.turnActs = append(a.turnActs, title)
+				}
+				a.mu.Unlock()
+			}
 			return []runner.Event{{Kind: runner.KindActivity, Acts: []runner.ActCall{act}}}, nil
 		}
 
@@ -893,8 +919,10 @@ func (a *acpProtocol) response(msg acpLine) ([]runner.Event, [][]byte) {
 		return nil, lines
 
 	case "session/prompt":
+		textChunks := a.turnTextChunks
+		acts := append([]string(nil), a.turnActs...)
 		a.mu.Unlock()
-		return acpTurnEnded(msg), nil
+		return acpTurnEnded(msg, textChunks, acts), nil
 	}
 	a.mu.Unlock()
 	return nil, nil
@@ -957,11 +985,9 @@ func (a *acpProtocol) fail(note string) []runner.Event {
 
 // acpTurnEnded reads the response a turn resolves with.
 //
-// This is the ONLY end-of-turn signal there is. The process does not exit, and
-// unlike print mode there is no `result` line on the stream to carry one — the
-// turn ends by the request the room sent being answered, which is precisely why
-// a ParseFunc could not have driven this seat.
-func acpTurnEnded(msg acpLine) []runner.Event {
+// When textChunks is 0, a turn summary / fallback status is captured on the
+// end event's Text field so the column is not left empty.
+func acpTurnEnded(msg acpLine, textChunks int, acts []string) []runner.Event {
 	if msg.Error != nil {
 		return []runner.Event{{
 			Kind: runner.KindError, EndsTurn: true,
@@ -979,7 +1005,11 @@ func acpTurnEnded(msg acpLine) []runner.Event {
 		// words it. An empty reason is treated as a clean end rather than as an
 		// error, because a turn that produced a whole reply and then resolved
 		// without saying why is not evidence of a failure.
-		return []runner.Event{{Kind: runner.KindMeta, EndsTurn: true}}
+		ev := runner.Event{Kind: runner.KindMeta, EndsTurn: true}
+		if textChunks == 0 {
+			ev.Text = acpFallbackSummary(acts, out.StopReason)
+		}
+		return []runner.Event{ev}
 	}
 	// Anything else — the schema also carries `refusal`, `max_tokens` and
 	// `max_turn_requests`, none of them observed here. Reported as a failure in
@@ -990,6 +1020,16 @@ func acpTurnEnded(msg acpLine) []runner.Event {
 		Kind: runner.KindError, EndsTurn: true,
 		Note: "the vendor stopped this turn: " + out.StopReason,
 	}}
+}
+
+func acpFallbackSummary(acts []string, stopReason string) string {
+	if len(acts) > 0 {
+		return fmt.Sprintf("[Turn completed with 0 text chunks: %d tool call(s) executed (%s)]", len(acts), strings.Join(acts, ", "))
+	}
+	if stopReason == "cancelled" {
+		return "[Turn cancelled with 0 text chunks streamed]"
+	}
+	return "[Turn completed with 0 text chunks streamed]"
 }
 
 // acpFailed ends the turn on a handshake that did not complete.

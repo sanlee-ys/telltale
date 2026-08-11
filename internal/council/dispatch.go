@@ -838,9 +838,15 @@ func (m *Model) applyEvents(batch []runner.Event) {
 					// fact rather than picking a story, and points at the one
 					// receipt a race still has — the diff.
 					c.Note = "the turn ended with nothing streamed — this seat sends no final reply, so the diff is the attempt's only receipt"
+					if c.Body == "" {
+						c.Body = "[Turn completed with 0 text chunks streamed — see diff]"
+					}
 				}
 				m.finishColumn(c, PhaseDone)
 			} else if ev.EndsTurn && m.isPersistent(ev.Vendor) {
+				if strings.TrimSpace(c.Body) == "" {
+					c.Body = "[Turn completed with 0 text chunks streamed]"
+				}
 				m.finishColumn(c, PhaseDone)
 			}
 
@@ -912,6 +918,9 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				c.Note = "the vendor process ended mid-turn — the next brief starts a new session"
 				m.finishColumn(c, PhaseFailed)
 				continue
+			}
+			if strings.TrimSpace(c.Body) == "" {
+				c.Body = "[Turn completed with 0 text chunks streamed]"
 			}
 			m.finishColumn(c, PhaseDone)
 
