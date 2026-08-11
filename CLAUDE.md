@@ -176,7 +176,16 @@ exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
   wired, and nothing renders a total today. Don't "clean up" the reader on the
   grounds that it is unused; being wired is the point of it.
 
-Each carries a test pinning the serialized form to keys and numbers. If you're
+A fourth exception is different in kind and says so: the **event sink**
+(`telltale events`, design.md §7.21) stores hook payloads VERBATIM under
+`~/.telltale/events/` — content, not numbers-and-keys. What contains it is
+scope, not redaction: it is its own foreground mode the operator starts, the
+server binds loopback only, and no gauge reads or renders its files. The
+numbers-and-keys rule above still binds everything the gauges themselves
+write.
+
+Each of the three relay exceptions carries a test pinning the serialized form
+to keys and numbers. If you're
 adding a feature to `internal/hud` or `internal/statusline` that would write
 anywhere else, shell out, or touch a credential store, that is almost certainly
 the wrong package for it.
