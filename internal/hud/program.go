@@ -26,6 +26,13 @@ type Options struct {
 	Filter   Filter
 	ASCII    bool
 	NoTitle  bool
+
+	// Hide drops these vendors from every body for the whole run (§7.20). It
+	// is applied to the snapshot as each scan lands — not in Render — so the
+	// grid, the vendor lines, the quota strip, the u page and the w page all
+	// agree without each checking the list. The footer states the hide for as
+	// long as it is in force.
+	Hide []model.VendorID
 }
 
 // Model is the Bubble Tea model. It owns State plus the things Render must not
@@ -59,6 +66,7 @@ func New(opts Options) *Model {
 func stateWith(opts Options) State {
 	st := NewState()
 	st.Filter = opts.Filter
+	st.Hidden = opts.Hide
 	st.Now = time.Now()
 	// Resolved once here so the render path never reads the environment.
 	if home, err := os.UserHomeDir(); err == nil {
@@ -123,8 +131,60 @@ func (m *Model) scanCmd() tea.Cmd {
 		if dir, err := usagecache.Dir(); err == nil {
 			snap.Spend = usagecache.ReadAll(dir, snap.At)
 		}
-		return scanResultMsg{snap: snap}
+		return scanResultMsg{snap: dropHidden(snap, m.opts.Hide)}
 	}
+}
+
+// dropHidden strips the hide list's vendors from a snapshot: sessions, vendor
+// lines, relayed account quota and relayed spend alike.
+//
+// It runs here, once per scan, rather than as a check in each render path,
+// because the snapshot is the one place all four bodies read from — a hide
+// applied to the grid but forgotten by the week page would show a vendor the
+// footer claims is hidden, which is the exact disagreement §7.20 forbids. The
+// header's session count and per-vendor census come from the same slices, so
+// the numbers stay consistent with the rows for free.
+func dropHidden(snap Snapshot, hide []model.VendorID) Snapshot {
+	if len(hide) == 0 {
+		return snap
+	}
+	hidden := func(v model.VendorID) bool {
+		for _, h := range hide {
+			if h == v {
+				return true
+			}
+		}
+		return false
+	}
+	sessions := snap.Sessions[:0:0]
+	for _, s := range snap.Sessions {
+		if !hidden(s.Vendor) {
+			sessions = append(sessions, s)
+		}
+	}
+	snap.Sessions = sessions
+	vendors := snap.Vendors[:0:0]
+	for _, v := range snap.Vendors {
+		if !hidden(v.Vendor) {
+			vendors = append(vendors, v)
+		}
+	}
+	snap.Vendors = vendors
+	account := snap.Account[:0:0]
+	for _, a := range snap.Account {
+		if !hidden(a.Vendor) {
+			account = append(account, a)
+		}
+	}
+	snap.Account = account
+	spend := snap.Spend[:0:0]
+	for _, s := range snap.Spend {
+		if !hidden(s.Vendor) {
+			spend = append(spend, s)
+		}
+	}
+	snap.Spend = spend
+	return snap
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -283,7 +343,18 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.st.Usage = false
 		m.st.Scroll = 0
 	case "v":
-		m.st.Filter = m.st.Filter.Next()
+		// The cycle skips hidden vendors: a filter that can only ever select
+		// an empty grid is a dead stop on a one-key cycle. FilterAll has no
+		// vendor and is never skipped, so the loop always terminates there.
+		f := m.st.Filter.Next()
+		for {
+			v, ok := f.VendorID()
+			if !ok || !m.st.hiddenHas(v) {
+				break
+			}
+			f = f.Next()
+		}
+		m.st.Filter = f
 		m.resetSelection()
 	case "s":
 		m.st.Sort = m.st.Sort.Next()

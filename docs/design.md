@@ -4044,6 +4044,37 @@ draw sentences — zero and absent, still different states on the page built for
   registry to learn the vendor's new word, which is the same posture every verbatim-
   vocabulary surface here takes (§7.15's convert rule).
 
+### 7.20 `--hide`: the standing hide list (2026-08-10)
+
+The owner's request, near-verbatim: hide gemini and cursor, because only the CLI vendors
+are in use these days. The `v` filter cannot answer it — a filter narrows one launch to
+one vendor, and this is the opposite ask: every launch, every vendor EXCEPT two. So the
+HUD takes a hide list: `--hide gemini,cursor`, with the env var `TELLTALE_HUD_HIDE` as the
+flag's default. The env var is the standing per-machine preference (TELLTALE_ASCII's
+precedent) and the flag always wins, including `--hide ""` to see everything for one
+launch without unsetting the variable.
+
+**Where the hide is applied.** To the snapshot, as each scan lands — not in Render. The
+grid, the vendor lines, the fleet quota strip, the `u` page and the `w` page all read the
+same snapshot, so stripping it once is what keeps five surfaces from ever disagreeing
+about who is hidden. The header census comes from the same slices, so its counts match the
+rows for free.
+
+**How this survives the honesty rule.** A monitor that silently hides rows is a liar
+(§7.1), and a hidden vendor has no backstop at all: it leaves the "N of M" census
+entirely, and no keypress re-reads the choice. So the footer states `hidden gemini cursor`
+for the whole run, and the notice outranks the filter and the query in the drop order —
+only the two ⚠ facts sit above it. The `v` cycle skips hidden vendors, because a filter
+that can only ever select an empty grid is a dead stop on a one-key cycle; a `--vendor`
+naming a hidden vendor at startup is refused loudly rather than opened onto a
+contradiction.
+
+**What this is not.** Not an uninstall: the adapters stay registered, and the vocabulary
+(`agy`/`antigravity`, `cursor`/`composer`) is parseFilter's own, so the two flags cannot
+disagree about what a vendor is called. The list is deduplicated and sorted at parse time
+so the footer's wording is stable no matter how it was typed. `--hide all` is refused: a
+HUD told to hide every vendor is a request to not run it.
+
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 
 Rigor stays the floor; features and front-end craft are the priority axis from here.

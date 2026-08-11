@@ -152,9 +152,10 @@ plus a line naming the fields that vendor **cannot** source at all. That last li
 answer to "why is this cell empty?", and it is the difference between "we have no value
 right now" and "this vendor never had one". `/` narrows the rows by name or path.
 
-`telltale hud` flags: `--vendor all|claude|codex|gemini|agy|cursor|grok`, `--ascii` (also
-`TELLTALE_ASCII=1`), `--no-title`. `NO_COLOR` is honoured through the standard
-mechanism.
+`telltale hud` flags: `--vendor all|claude|codex|gemini|agy|cursor|grok`, `--hide
+gemini,cursor` (a standing hide list; `TELLTALE_HUD_HIDE` is its default, the footer
+states the hide), `--ascii` (also `TELLTALE_ASCII=1`), `--no-title`. `NO_COLOR` is
+honoured through the standard mechanism.
 
 ## What it is
 
