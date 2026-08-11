@@ -47,6 +47,7 @@ package usagecache
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -200,11 +201,28 @@ func Add(dir, vendor string, d Delta, now time.Time) error {
 	e.WrittenAt = now
 	e.Turns += d.Turns
 	e.Requests += d.Requests
-	e.InputTokens += d.InputTokens
-	e.OutputTokens += d.OutputTokens
-	e.CacheReadTokens += d.CacheReadTokens
-	e.CacheWriteTokens = addOptional(e.CacheWriteTokens, d.CacheWriteTokens)
-	e.ReasoningTokens = addOptional(e.ReasoningTokens, d.ReasoningTokens)
+	// Every count folds through the overflow check, and one overflow refuses
+	// the WHOLE delta: a wrapped total goes negative, which readEntry then
+	// drops — so one absurd delta would silently erase the accumulated window.
+	// Real counts sit ten orders of magnitude under the edge; anything that
+	// reaches it is a broken or hostile reading, and a broken reading is
+	// refused, not folded (§7.16's partial-turn rule, applied to arithmetic).
+	var ok bool
+	if e.InputTokens, ok = addChecked(e.InputTokens, d.InputTokens); !ok {
+		return errOverflow
+	}
+	if e.OutputTokens, ok = addChecked(e.OutputTokens, d.OutputTokens); !ok {
+		return errOverflow
+	}
+	if e.CacheReadTokens, ok = addChecked(e.CacheReadTokens, d.CacheReadTokens); !ok {
+		return errOverflow
+	}
+	if e.CacheWriteTokens, ok = addOptional(e.CacheWriteTokens, d.CacheWriteTokens); !ok {
+		return errOverflow
+	}
+	if e.ReasoningTokens, ok = addOptional(e.ReasoningTokens, d.ReasoningTokens); !ok {
+		return errOverflow
+	}
 
 	raw, err := json.Marshal(e)
 	if err != nil {
@@ -233,22 +251,39 @@ func Add(dir, vendor string, d Delta, now time.Time) error {
 	return nil
 }
 
+// errOverflow names the refusal so the caller's stderr line says what
+// happened rather than implying a disk problem.
+var errOverflow = errors.New("token count would overflow the running total; delta not counted")
+
+// addChecked is int64 addition that reports a wrap instead of performing it.
+// Both operands are non-negative on every path here (negative deltas are
+// refused by the converters, negative totals by readEntry), so the only wrap
+// possible is past MaxInt64, which shows as a negative sum.
+func addChecked(a, b int64) (int64, bool) {
+	sum := a + b
+	return sum, sum >= a
+}
+
 // addOptional folds an optional count. nil + nil stays nil (neither the total
 // nor the delta claims the vendor has this count); a present delta onto a nil
 // total OPENS the count rather than pretending a prior zero existed. A fresh
 // pointer is always returned so no caller's Entry aliases another's.
-func addOptional(total, d *int64) *int64 {
+func addOptional(total, d *int64) (*int64, bool) {
 	if total == nil && d == nil {
-		return nil
+		return nil, true
 	}
-	var sum int64
+	var a, b int64
 	if total != nil {
-		sum += *total
+		a = *total
 	}
 	if d != nil {
-		sum += *d
+		b = *d
 	}
-	return &sum
+	sum, ok := addChecked(a, b)
+	if !ok {
+		return nil, false
+	}
+	return &sum, true
 }
 
 // ReadAll returns every vendor's surviving total, sorted by vendor id for a

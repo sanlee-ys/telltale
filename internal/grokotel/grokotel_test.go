@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/binary"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -284,6 +285,38 @@ func TestAGzipBodyIsAccepted(t *testing.T) {
 	if e := readCache(t, dir); e.InputTokens != 7 {
 		t.Errorf("totals = %+v", e)
 	}
+}
+
+// The body cap must hold on the DECOMPRESSED side: gzip expands up to
+// ~1000:1, and any local process can reach the port, so a small compressed
+// POST must not be able to balloon past the cap in memory.
+func TestAGzipBombIsRefused(t *testing.T) {
+	s, dir := serve(t)
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	if _, err := io.CopyN(gz, zeros{}, maxBody+2); err != nil {
+		t.Fatal(err)
+	}
+	gz.Close()
+	req := httptest.NewRequest(http.MethodPost, "/v1/logs", &buf)
+	req.Header.Set("Content-Encoding", "gzip")
+	w := httptest.NewRecorder()
+	s.handler().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("an oversized body wrote something: %v", entries)
+	}
+}
+
+type zeros struct{}
+
+func (zeros) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 0
+	}
+	return len(p), nil
 }
 
 func TestTheBindRefusesNonLoopback(t *testing.T) {

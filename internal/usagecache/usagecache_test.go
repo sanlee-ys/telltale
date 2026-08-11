@@ -195,6 +195,25 @@ func TestTheGrokShapedEntryCarriesItsOwnKeysOnly(t *testing.T) {
 	}
 }
 
+// A delta that would wrap the running total past MaxInt64 is refused whole:
+// a wrapped total goes negative, readEntry drops it, and the accumulated
+// window would silently vanish — one absurd reading erasing every real one.
+func TestAnOverflowingDeltaIsRefusedWhole(t *testing.T) {
+	dir := t.TempDir()
+	huge := int64(1) << 62
+	if err := Add(dir, "grok", req(huge, 1, 1, 1), pinned); err != nil {
+		t.Fatal(err)
+	}
+	err := Add(dir, "grok", req(huge, 1, 1, 1), pinned.Add(time.Minute))
+	if err == nil {
+		t.Fatal("an overflowing delta was accepted")
+	}
+	got := ReadAll(dir, pinned.Add(2*time.Minute))
+	if len(got) != 1 || got[0].Requests != 1 || got[0].InputTokens != huge {
+		t.Fatalf("the refused delta still moved the total: %+v", got)
+	}
+}
+
 // A delta that advances neither window unit is refused whole: its counts
 // would join a total whose window could no longer say what it spans.
 func TestADeltaWithNoWindowUnitIsRefused(t *testing.T) {

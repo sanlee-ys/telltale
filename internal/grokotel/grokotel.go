@@ -93,6 +93,18 @@ const maxBody = 8 << 20
 // is the same thing a first delivery would do.
 const seenHorizon = 24 * time.Hour
 
+// maxTrackedSessions and maxTrackedSeqs bound the replay guard's memory. This
+// is a long-lived foreground server on a port every local process can reach,
+// so "one entry per record forever" is not an acceptable growth curve. Both
+// bounds are far past anything measured (one headless turn = one session and
+// single-digit sequences); crossing one sheds the OLDEST guard state, which
+// weakens duplicate refusal for exactly the records old enough that the
+// exporter's retry horizon has long passed them.
+const (
+	maxTrackedSessions = 1024
+	maxTrackedSeqs     = 1 << 16
+)
+
 // Server accumulates api_request counts into one vendor cache file. It is a
 // single process holding a single mutex, which quietly retires §7.16's known
 // read-modify-write race for this vendor: every Add on grok.json goes through
@@ -143,7 +155,15 @@ func (s *Server) Run(addr string) error {
 		return err
 	}
 	s.logf("telltale otel grok: listening on %s, writing %s", ln.Addr(), filepath.Join(s.dir, "grok.json"))
-	server := &http.Server{Handler: s.handler(), ReadHeaderTimeout: 10 * time.Second}
+	// Full read and idle timeouts, not just headers: a local process that
+	// trickles a body forever would otherwise hold a connection open
+	// indefinitely. The measured exporter completes a POST in milliseconds.
+	server := &http.Server{
+		Handler:           s.handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
 	return server.Serve(ln)
 }
 
@@ -214,9 +234,22 @@ func readBody(r *http.Request) ([]byte, error) {
 			return nil, err
 		}
 		defer gz.Close()
-		rd = gz
+		// The cap must hold on the DECOMPRESSED side too: gzip expands up to
+		// ~1000:1, so a small compressed POST could otherwise balloon past
+		// the cap in io.ReadAll and take the collector down — and any local
+		// process can reach this port, which is the same threat the loopback
+		// bind exists for. One byte of headroom turns "at the cap" into a
+		// detectable "past the cap".
+		rd = io.LimitReader(gz, maxBody+1)
 	}
-	return io.ReadAll(rd)
+	body, err := io.ReadAll(rd)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxBody {
+		return nil, fmt.Errorf("body larger than %d bytes", maxBody)
+	}
+	return body, nil
 }
 
 // respondOK is the OTLP success shape: 200 with an empty Export*Response
@@ -287,6 +320,9 @@ func (s *Server) isReplay(r apiRequest, now time.Time) bool {
 	}
 	sess := s.seen[r.sessionID]
 	if sess == nil {
+		if len(s.seen) >= maxTrackedSessions {
+			s.evictOldestSession()
+		}
 		sess = &sessionSeen{seqs: map[uint64]struct{}{}}
 		s.seen[r.sessionID] = sess
 	}
@@ -295,6 +331,26 @@ func (s *Server) isReplay(r apiRequest, now time.Time) bool {
 		s.logf("telltale otel grok: replayed batch; api request already counted")
 		return true
 	}
+	if len(sess.seqs) >= maxTrackedSeqs {
+		// Reset rather than grow: the sequences shed are tens of thousands of
+		// records old, far past any retry.
+		sess.seqs = map[uint64]struct{}{}
+	}
 	sess.seqs[r.sequence] = struct{}{}
 	return false
+}
+
+// evictOldestSession drops the guard state with the oldest last-seen time.
+// Caller holds s.mu and has already pruned everything past seenHorizon.
+func (s *Server) evictOldestSession() {
+	var oldestID string
+	var oldest time.Time
+	for id, sess := range s.seen {
+		if oldestID == "" || sess.last.Before(oldest) {
+			oldestID, oldest = id, sess.last
+		}
+	}
+	if oldestID != "" {
+		delete(s.seen, oldestID)
+	}
 }
