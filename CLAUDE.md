@@ -154,7 +154,10 @@ This is the thing the whole codebase optimizes for, more than idiomatic Go. Read
 
 **The gauges never write to anything that isn't theirs.** `telltale statusline`
 and `telltale hud` read vendor files, make no network calls, read no credentials,
-and no keybinding mutates vendor state. **Three** deliberate, bounded exceptions
+and no keybinding mutates vendor state. `telltale snapshot` (design.md §7.22) is
+a third reader of the same scan and holds the contract with one item spare — it
+writes nothing at all, not even the quota relay, because it renders no quota of
+its own to relay. **Three** deliberate, bounded exceptions
 exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
 
 - `telltale council` — spawns vendor CLIs; writes `council/room.json` (session

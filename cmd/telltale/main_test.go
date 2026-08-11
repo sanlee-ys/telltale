@@ -30,6 +30,50 @@ func TestUsageNamesEverySeat(t *testing.T) {
 	}
 }
 
+// TestSnapshotFailsLoudOnWhatItCannotDo pins the flag contract of the one mode
+// whose reader is a program.
+//
+// It matters more here than in the interactive modes. A person who mistypes a
+// HUD flag sees the wrong screen and retries; a script that mistypes a snapshot
+// flag would, if the flag were ignored, receive a well-formed document that
+// answers a different question — and nothing downstream can tell. So every
+// input this mode cannot honour is an error with the correction in it, and the
+// document is never printed.
+func TestSnapshotFailsLoudOnWhatItCannotDo(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"unknown flag", []string{"--json"}, "not defined"},
+		{"positional argument", []string{"claude"}, "unexpected argument"},
+		{"unknown vendor", []string{"--vendor", "chatgpt"}, "unknown --vendor"},
+		{"zero timeout", []string{"--timeout", "0"}, "positive duration"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := runSnapshot(tc.args)
+			if err == nil {
+				t.Fatalf("runSnapshot(%v) printed a document instead of refusing", tc.args)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q does not carry the correction %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestUsageNamesTheSnapshotMode: the mode exists, so the help has to say so.
+// Same failure shape as TestUsageNamesEverySeat above — a reader who does not
+// see it in the help never runs it.
+func TestUsageNamesTheSnapshotMode(t *testing.T) {
+	for _, want := range []string{"telltale snapshot", "--compact", "unsupported"} {
+		if !strings.Contains(usageText, want) {
+			t.Errorf("usage text never mentions %q", want)
+		}
+	}
+}
+
 // TestUsageDescribesCouncilSeatsNotHudFilter guards the neighbouring trap.
 //
 // Two different flags spell themselves `--vendor`: council's seat roster and

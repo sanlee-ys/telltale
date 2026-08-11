@@ -1,6 +1,6 @@
 // telltale — an honest gauge for your coding agents.
 //
-// One binary, seven modes (decisions/002, decisions/008):
+// One binary, eight modes (decisions/002, decisions/008):
 //
 //	telltale statusline   read a vendor statusline JSON payload on stdin, print one
 //	                      line (Claude Code, or Antigravity CLI via its documented
@@ -15,6 +15,8 @@
 //	telltale events       fleet event sink: a loopback server hook emitters POST
 //	                      to, a durable log under ~/.telltale/events/, and a
 //	                      WebSocket stream per insert (design.md §7.21)
+//	telltale snapshot     the fleet's current gauge state as one JSON document,
+//	                      for a reader that is a program (design.md §7.22)
 //	telltale doctor       launch-time preflight: which vendor binaries are here,
 //	                      what version each reports, and what was never checked
 //
@@ -42,6 +44,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -68,6 +71,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/hud"
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/quotacache"
+	"github.com/sanlee-ys/telltale/internal/snapshot"
 	"github.com/sanlee-ys/telltale/internal/statusline"
 	"github.com/sanlee-ys/telltale/internal/usagecache"
 )
@@ -102,6 +106,11 @@ func main() {
 	case "events":
 		if err := runEvents(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "telltale events:", err)
+			os.Exit(1)
+		}
+	case "snapshot":
+		if err := runSnapshot(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "telltale snapshot:", err)
 			os.Exit(1)
 		}
 	case "doctor":
@@ -329,6 +338,88 @@ func runDoctor(args []string) error {
 	return nil
 }
 
+// allAdapters is the registered adapter set, in one place because two read
+// modes now consume it. The HUD and the snapshot must never disagree about
+// which vendors exist — a snapshot missing a vendor the HUD draws would be a
+// silent omission in the surface a program trusts.
+func allAdapters() []model.Adapter {
+	return []model.Adapter{
+		claudecode.New(), codex.New(), gemini.New(),
+		agyadapter.New(), cursor.New(), grokadapter.New(),
+	}
+}
+
+// runSnapshot is the machine-readable read mode (design.md §7.22): one scan,
+// one JSON document on stdout, exit 0.
+//
+// A separate mode rather than a flag on `hud`, for the reason `doctor` is one:
+// what it prints goes somewhere else. The HUD owns the alternate screen and
+// runs until you quit it; this reads once, writes to a pipe, and returns. It
+// enters no TUI and renders no gauge, so no v1 gate surface is on this path.
+//
+// It is a READ, and it takes the gauges' contract with it: it scans vendor
+// stores and the account relay, calls no network, reads no credential, and
+// writes nothing at all — not even the statusline's quota relay, because this
+// mode renders no quota of its own to relay.
+func runSnapshot(args []string) error {
+	fs := flag.NewFlagSet("telltale snapshot", flag.ContinueOnError)
+	vendor := fs.String("vendor", "all", "report one vendor only: all, claude, codex, gemini, agy, cursor, grok")
+	compact := fs.Bool("compact", false, "print the document on one line instead of indented")
+	// One deadline for the run rather than per vendor, because there is no
+	// frame to keep drawing: a scan that cannot finish reports what it has and
+	// says so in scan_error, which is a truthful document rather than a hang.
+	timeout := fs.Duration("timeout", 10*time.Second, "how long the scan gets before it reports what it has")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	// A positional argument is almost always a flag someone forgot the dashes
+	// on. Failing here with the correction beats printing a document that
+	// silently ignored what was typed.
+	if fs.NArg() > 0 {
+		return errors.New("unexpected argument " + fs.Arg(0) + " (this mode takes flags only: --vendor, --compact, --timeout)")
+	}
+	if *timeout <= 0 {
+		return errors.New("--timeout wants a positive duration")
+	}
+
+	filter, err := parseFilter(*vendor)
+	if err != nil {
+		return err
+	}
+	adapters := allAdapters()
+	if v, ok := filter.VendorID(); ok {
+		adapters = nil
+		for _, a := range allAdapters() {
+			if a.Vendor() == v {
+				adapters = append(adapters, a)
+			}
+		}
+		// A filter naming a vendor no adapter serves would print an empty
+		// document that looks like an idle fleet. The seat roster and the
+		// adapter roster are allowed to differ (model.VendorGrok was a seat
+		// before it was an adapter), so this is a real case and not a typo.
+		if len(adapters) == 0 {
+			return errors.New("--vendor " + string(v) + " has no HUD adapter, so there is nothing to snapshot")
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+	snap := hud.Scan(ctx, adapters, time.Now())
+	// The account relay rides the scan here exactly as it does in the HUD
+	// (design.md §7.15): read after the scan, off any render path, and a
+	// missing directory contributes nothing rather than failing the document.
+	if dir, err := quotacache.Dir(); err == nil {
+		snap.Account = quotacache.ReadAll(dir, snap.At)
+	}
+	out, err := snapshot.Encode(snapshot.Build(snap, model.DefaultLivenessThresholds), *compact)
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(out)
+	return err
+}
+
 func runHUD(args []string) error {
 	fs := flag.NewFlagSet("telltale hud", flag.ContinueOnError)
 	vendor := fs.String("vendor", "all", "vendor filter at startup: all, claude, codex, gemini, agy, cursor, grok")
@@ -372,14 +463,11 @@ func runHUD(args []string) error {
 		// Every vendor is always registered. An adapter whose vendor is not
 		// installed reports ErrVendorAbsent and vanishes from the HUD; there
 		// is nothing to configure and nothing to fail.
-		Adapters: []model.Adapter{
-			claudecode.New(), codex.New(), gemini.New(),
-			agyadapter.New(), cursor.New(), grokadapter.New(),
-		},
-		Filter:  filter,
-		Hide:    hidden,
-		ASCII:   useASCII,
-		NoTitle: *noTitle,
+		Adapters: allAdapters(),
+		Filter:   filter,
+		Hide:     hidden,
+		ASCII:    useASCII,
+		NoTitle:  *noTitle,
 	})
 }
 
@@ -536,6 +624,14 @@ usage:
                          command with --source-app <name> as the one per-repo
                          edit. Nothing renders these events yet; the sink runs
                          dark until something connects to /stream
+  telltale snapshot      read the fleet once and print its state as JSON on
+                         stdout: a per-vendor block and a pre-computed fleet
+                         rollup, so an agent gets its answer from one command
+                         and one parse. Absent is null and a measured zero is
+                         0; a derived value is named in "estimated" and a
+                         field the vendor can never source is named in
+                         "unsupported". Numbers and keys only — no session
+                         name, workspace, transcript or reply text
   telltale doctor        launch-time preflight: which vendor binaries are on
                          this machine, where each was found, what version it
                          reports — and, said out loud rather than left blank,
@@ -554,6 +650,15 @@ telltale hud flags:
                               the hide, and the v cycle skips those vendors
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
+
+telltale snapshot flags:
+  --vendor all|claude|codex|gemini|agy|cursor|grok
+                              report one vendor only (default all)
+  --compact                   print the document on one line instead of
+                              indented
+  --timeout <dur>             how long the scan gets before it reports what it
+                              has (default 10s). A scan that runs out says so
+                              in scan_error rather than hanging or lying
 
 telltale doctor flags:
   --timeout <dur>             how long each vendor gets to answer --version
