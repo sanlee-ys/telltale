@@ -4075,6 +4075,69 @@ disagree about what a vendor is called. The list is deduplicated and sorted at p
 so the footer's wording is stable no matter how it was typed. `--hide all` is refused: a
 HUD told to hide every vendor is a request to not run it.
 
+### 7.21 The event sink — every hook, one durable stream (2026-08-11)
+
+**What it is.** `telltale events` is a loopback-only HTTP server plus a durable log. An
+emitter POSTs one hook event to `/events`; the sink appends it to a JSONL day file under
+`~/.telltale/events/`, and rebroadcasts it to every WebSocket client on `/stream`. Two read
+endpoints serve a future viewer: `GET /events/recent?limit=N` (newest first) and
+`GET /events/filter-options` (the DISTINCT of the three tag axes: `source_app`,
+`session_id`, `hook_event_type`). The design is a re-implementation from a published
+observability shape (an emitter, one events table, a live stream); no code was taken from
+the reference, which carries no license.
+
+**Why it exists.** The fleet runs four vendors and each one's hooks fire into that vendor's
+own log, in that vendor's own shape. The sink is the one place a hook event from any vendor
+can land in one shape: any process that can pipe JSON is a source. `tools/emit-event.py` is
+the reference emitter (stdlib-only Python, `uv run`-invocable): it reads the hook payload
+on stdin, promotes the fields a reader filters on (`tool_name`, `tool_use_id`, `error`,
+`agent_id`, `agent_type`, `stop_hook_active`), stamps epoch-millisecond time, and POSTs.
+Its hard rules are the hook contract: a 5 second timeout, no retry, and exit 0 on every
+path — a sink that is down costs the agent at most 5 seconds and one stderr line, never a
+failed turn. There is no summarization pass anywhere: the payload travels and is stored
+verbatim.
+
+**Distribution is one edit per repo.** The wiring pattern is a hook command of the shape
+`uv run <path>/tools/emit-event.py --source-app <repo-name>` — `--source-app` is the only
+per-repo change. Claude Code payloads carry `hook_event_name` and `session_id`, so no other
+flag is needed there; a wrapper for a vendor whose payload lacks the name passes
+`--event-type`.
+
+**Why the store is JSONL, not SQLite.** The reference keeps an `events` table with indexes
+on the three tag axes and the timestamp. This repo takes no dependency for a storage path
+(decisions/001), and `internal/sqlite` is a byte-level READER with no write path — so the
+contract the indexes serve is met with stdlib parts: one JSONL file per UTC day, the
+retention window held in memory, distinct-value sets kept beside it. The two queries the
+endpoints need — last N by arrival, DISTINCT of three columns — are exactly what that shape
+answers. The WebSocket is hand-rolled for the same reason (`internal/eventsink/ws.go`):
+the sink speaks one direction of one frame type, and that is a page of checked stdlib code,
+not a dependency.
+
+**Retention, which the reference does not have.** `--retain <days>` (default 30). The sweep
+runs at startup and then hourly: memory drops events past the window, and a day file is
+deleted only when its whole day is past it. The file-name pattern is affirmative
+(`YYYY-MM-DD.jsonl`), so the sweep can never delete a file it did not write.
+
+**The boundary this moves, said out loud.** This is the first content-bearing store under
+`~/.telltale/` — rows carry the hook payload verbatim, not numbers-and-keys. Three facts
+keep it inside the read/write contract: it is its own foreground mode the operator starts
+(the `otel` precedent — the gauges gain no write), it binds loopback only and refuses any
+other host at startup, and nothing in the gauges reads or renders these files. CLAUDE.md's
+boundary section names the exception.
+
+**Dark by design, and the v1 gate.** v1 is gate-held (§1) and this subsystem touches no
+gate surface: no council code, no HUD or statusline render, no new seat. The sink runs dark
+— events accrue and stream, and nothing in telltale displays them yet. A viewer is a later
+call site, not a re-plumb; §7.16's held-display precedent is the model.
+
+**Verified live, 2026-08-11, Windows 11.** A fake PreToolUse payload piped into
+`tools/emit-event.py` against a running `telltale events`: the POST returned the stored
+row, the row landed in `~/.telltale/events/<day>.jsonl`, `GET /events/recent` returned it,
+`GET /events/filter-options` listed its three axes, and a WebSocket client connected to
+`/stream` received `{type:"initial"}` on connect and `{type:"event"}` on the insert. The
+sink-down path was exercised the same day: with no server listening, the emitter printed
+one stderr line and exited 0.
+
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 
 Rigor stays the floor; features and front-end craft are the priority axis from here.

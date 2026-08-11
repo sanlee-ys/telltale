@@ -1,6 +1,6 @@
 // telltale — an honest gauge for your coding agents.
 //
-// One binary, six modes (decisions/002, decisions/008):
+// One binary, seven modes (decisions/002, decisions/008):
 //
 //	telltale statusline   read a vendor statusline JSON payload on stdin, print one
 //	                      line (Claude Code, or Antigravity CLI via its documented
@@ -12,6 +12,9 @@
 //	telltale otel <v>     vendor telemetry collector: a loopback OTLP listener the
 //	                      vendor's own exporter pushes to, token counts to
 //	                      ~/.telltale/usage/ (design.md §7.16a)
+//	telltale events       fleet event sink: a loopback server hook emitters POST
+//	                      to, a durable log under ~/.telltale/events/, and a
+//	                      WebSocket stream per insert (design.md §7.21)
 //	telltale doctor       launch-time preflight: which vendor binaries are here,
 //	                      what version each reports, and what was never checked
 //
@@ -60,6 +63,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/council"
 	"github.com/sanlee-ys/telltale/internal/cursorhook"
 	"github.com/sanlee-ys/telltale/internal/doctor"
+	"github.com/sanlee-ys/telltale/internal/eventsink"
 	"github.com/sanlee-ys/telltale/internal/grokotel"
 	"github.com/sanlee-ys/telltale/internal/hud"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -93,6 +97,11 @@ func main() {
 	case "otel":
 		if err := runOtel(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "telltale otel:", err)
+			os.Exit(1)
+		}
+	case "events":
+		if err := runEvents(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "telltale events:", err)
 			os.Exit(1)
 		}
 	case "doctor":
@@ -210,6 +219,35 @@ func runOtel(args []string) error {
 		fmt.Printf(format+"\n", a...)
 	})
 	return srv.Run(*addr)
+}
+
+// runEvents starts the fleet event sink (design.md §7.21): a loopback HTTP
+// server hook emitters POST to, a durable JSONL log under
+// ~/.telltale/events/, and a WebSocket stream that rebroadcasts each insert.
+// Like `otel`, it is a foreground server the operator runs on purpose; the
+// gauges never read or write its files.
+func runEvents(args []string) error {
+	fs := flag.NewFlagSet("telltale events", flag.ContinueOnError)
+	addr := fs.String("addr", eventsink.DefaultAddr, "listen address (loopback only)")
+	retain := fs.Int("retain", 30, "days of events to keep; the sweep runs at startup and then hourly")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *retain <= 0 {
+		return errors.New("--retain wants a positive number of days")
+	}
+	dir, err := eventsink.Dir()
+	if err != nil {
+		return err
+	}
+	store, err := eventsink.Open(dir, time.Duration(*retain)*24*time.Hour, nil)
+	if err != nil {
+		return err
+	}
+	srv := eventsink.NewServer(store, func(format string, a ...any) {
+		fmt.Printf(format+"\n", a...)
+	})
+	return srv.Run(*addr, time.Hour)
 }
 
 func runHook(args []string) {
@@ -490,6 +528,14 @@ usage:
                          enable it with [telemetry] otel_enabled = true and
                          otel_logs_exporter = "otlp" in ~/.grok/config.toml,
                          then leave this running while grok runs
+  telltale events        fleet event sink: receive one hook event per POST on
+                         loopback, append it to a durable log under
+                         ~/.telltale/events/, and rebroadcast it to every
+                         connected WebSocket client. Any process that can pipe
+                         JSON is a source — wire tools/emit-event.py as a hook
+                         command with --source-app <name> as the one per-repo
+                         edit. Nothing renders these events yet; the sink runs
+                         dark until something connects to /stream
   telltale doctor        launch-time preflight: which vendor binaries are on
                          this machine, where each was found, what version it
                          reports — and, said out loud rather than left blank,
@@ -522,6 +568,15 @@ telltale otel grok flags:
   --addr <host:port>          listen address (default 127.0.0.1:4318, the OTLP
                               http default). Loopback only; any other host is
                               refused at startup
+
+telltale events flags:
+  --addr <host:port>          listen address (default 127.0.0.1:4519).
+                              Loopback only; any other host is refused at
+                              startup
+  --retain <days>             days of events to keep (default 30). The sweep
+                              runs at startup and then hourly; a day file is
+                              deleted only when its whole day is past the
+                              window
 
 telltale council is ONE persistent room. Run it with no arguments: it reopens
 the saved room, reattaches every vendor's own session, and continues the
