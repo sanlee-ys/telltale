@@ -107,7 +107,11 @@ telltale council --cd ../telltale-council
 That is also the fleet's own ruling rather than a local convenience: `agent-ops` ADR-012
 rules capability parity — every vendor reads and writes, and guard wiring rather than lane
 shape is the control. A column that looked read-only because of a broken sandbox was never
-a safety property; it was a defect wearing one's clothes.
+a safety property; it was a defect wearing one's clothes. To fulfill the ADR-012 guard
+obligation for Grok, Grok's `PreToolUse` fleet guard is configured via `[compat.claude] hooks = true`
+in `~/.grok/config.toml` (or by registering the `PreToolUse` hook via `grok hooks-add`). This routes
+Grok tool invocations through the standard `PreToolUse` credential-guard screen (denying secret leaks
+and dangerous mutations) without restricting Grok's execution capability.
 
 The `⚙` lines are the activity trace: what a vendor is *doing* — the tool call, and the
 command it ran — interleaved with what it says.

@@ -50,6 +50,28 @@ func (f Filter) String() string {
 	}
 }
 
+// VendorID is the vendor a single-vendor filter selects, and false for
+// FilterAll. The footer and the hide list both compare filters to vendors,
+// and one mapping here beats two switch statements that can drift apart.
+func (f Filter) VendorID() (model.VendorID, bool) {
+	switch f {
+	case FilterClaude:
+		return model.VendorClaude, true
+	case FilterCodex:
+		return model.VendorCodex, true
+	case FilterGemini:
+		return model.VendorGemini, true
+	case FilterAntigravity:
+		return model.VendorAntigravity, true
+	case FilterCursor:
+		return model.VendorCursor, true
+	case FilterGrok:
+		return model.VendorGrok, true
+	default:
+		return "", false
+	}
+}
+
 func (f Filter) Accepts(v model.VendorID) bool {
 	switch f {
 	case FilterClaude:
@@ -300,6 +322,25 @@ type State struct {
 	// Render stays pure over State (no environment reads on the view path;
 	// review finding 2026-08-01). Empty disables home redaction.
 	Home string
+
+	// Hidden is the launch-time hide list (`--hide` / TELLTALE_HUD_HIDE,
+	// §7.20). The scan already dropped these vendors from the snapshot, so
+	// Render never has to check it row by row; the field exists so the footer
+	// can STATE the hide — a monitor that silently hides vendors is the same
+	// liar as one that silently hides rows — and so the `v` cycle can skip
+	// filters that could only ever show an empty grid. Sorted at parse time,
+	// so the footer's wording is stable frame to frame.
+	Hidden []model.VendorID
+}
+
+// hiddenHas reports whether a vendor is on the launch-time hide list.
+func (st State) hiddenHas(v model.VendorID) bool {
+	for _, h := range st.Hidden {
+		if h == v {
+			return true
+		}
+	}
+	return false
 }
 
 // NewState returns a State with the defaults filled in.

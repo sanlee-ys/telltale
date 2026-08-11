@@ -45,6 +45,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -293,6 +294,11 @@ func runDoctor(args []string) error {
 func runHUD(args []string) error {
 	fs := flag.NewFlagSet("telltale hud", flag.ContinueOnError)
 	vendor := fs.String("vendor", "all", "vendor filter at startup: all, claude, codex, gemini, agy, cursor, grok")
+	// The env var is the flag's DEFAULT, not a second mechanism: a typed
+	// --hide always wins, including --hide "" to see everything for one launch
+	// without unsetting the variable. TELLTALE_ASCII set the precedent for a
+	// per-machine standing preference living in the environment.
+	hide := fs.String("hide", os.Getenv("TELLTALE_HUD_HIDE"), "comma list of vendors the HUD leaves out entirely (default $TELLTALE_HUD_HIDE); the footer states the hide")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
 	if err := fs.Parse(args); err != nil {
@@ -302,6 +308,20 @@ func runHUD(args []string) error {
 	filter, err := parseFilter(*vendor)
 	if err != nil {
 		return err
+	}
+	hidden, err := parseHide(*hide)
+	if err != nil {
+		return err
+	}
+	// A startup filter naming a hidden vendor is a contradiction, and failing
+	// loudly here beats opening on an empty grid whose footer says both
+	// "filter gemini" and "hidden gemini".
+	if v, ok := filter.VendorID(); ok {
+		for _, h := range hidden {
+			if h == v {
+				return errors.New("--vendor " + string(v) + " is on the hide list (--hide / TELLTALE_HUD_HIDE); drop one of the two")
+			}
+		}
 	}
 
 	// ASCII mode is a switch independent of colour. NO_COLOR is not handled
@@ -319,6 +339,7 @@ func runHUD(args []string) error {
 			agyadapter.New(), cursor.New(), grokadapter.New(),
 		},
 		Filter:  filter,
+		Hide:    hidden,
 		ASCII:   useASCII,
 		NoTitle: *noTitle,
 	})
@@ -410,6 +431,40 @@ func parseFilter(s string) (hud.Filter, error) {
 	}
 }
 
+// parseHide reads the `--hide` comma list into vendor ids (§7.20). It rides
+// parseFilter for the vocabulary — both agy spellings, `composer` for cursor —
+// so the two flags can never disagree about what a vendor is called, and it
+// rejects `all`: a HUD told to hide every vendor is a request to not run it.
+// The result is deduplicated and sorted so the footer's wording is stable no
+// matter how the list was typed.
+func parseHide(s string) ([]model.VendorID, error) {
+	if s == "" {
+		return nil, nil
+	}
+	seen := map[model.VendorID]bool{}
+	var out []model.VendorID
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		f, err := parseFilter(part)
+		if err != nil {
+			return nil, errors.New("unknown --hide vendor " + part + " (want claude, codex, gemini, agy, cursor or grok)")
+		}
+		v, ok := f.VendorID()
+		if !ok {
+			return nil, errors.New("--hide all would hide every vendor; run nothing instead")
+		}
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out, nil
+}
+
 // usageText is the long help.
 //
 // It is a package-level const rather than a literal inside usage() so
@@ -447,6 +502,10 @@ usage:
 telltale hud flags:
   --vendor all|claude|codex|gemini|agy|cursor|grok
                               start with a vendor filter applied
+  --hide <list>               comma list of vendors the HUD leaves out entirely
+                              (default $TELLTALE_HUD_HIDE; --hide "" overrides
+                              the variable for one launch). The footer states
+                              the hide, and the v cycle skips those vendors
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
 

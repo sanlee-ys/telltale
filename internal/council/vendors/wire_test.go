@@ -368,3 +368,33 @@ func TestCursorACPWireLoadNotFoundIsPinnedAt_2026_08_04(t *testing.T) {
 		}
 	}
 }
+
+// TestCursorACPZeroTextChunksRendersFallbackSummary asserts that when an ACP stream
+// emits 0 text chunks before ending, the turn end event carries a fallback summary.
+func TestCursorACPZeroTextChunksRendersFallbackSummary(t *testing.T) {
+	p := newACPProtocol("C:/Users/dev/code/example-app", "", PostureWrite)
+	p.Turn("do something with tools")
+	p.Opening()
+	p.Inbound([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{}}}`))
+	p.Inbound([]byte(`{"jsonrpc":"2.0","id":2,"result":{"sessionId":"test-session"}}`))
+
+	// Tool call without text chunks
+	p.Inbound([]byte(`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"test-session","update":{"sessionUpdate":"tool_call","toolCallId":"call-1","title":"Read File","kind":"read"}}}`))
+	evs, _ := p.Inbound([]byte(`{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}`))
+
+	var end *runner.Event
+	for i := range evs {
+		if evs[i].EndsTurn {
+			end = &evs[i]
+		}
+	}
+	if end == nil {
+		t.Fatal("turn end event missing")
+	}
+	if end.Text == "" {
+		t.Error("end.Text is empty; expected fallback summary when 0 text chunks were streamed")
+	}
+	if !strings.Contains(end.Text, "0 text chunks") || !strings.Contains(end.Text, "Read File") {
+		t.Errorf("end.Text = %q, want summary naming 0 text chunks and tool call Read File", end.Text)
+	}
+}

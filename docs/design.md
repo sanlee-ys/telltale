@@ -4044,6 +4044,37 @@ draw sentences — zero and absent, still different states on the page built for
   registry to learn the vendor's new word, which is the same posture every verbatim-
   vocabulary surface here takes (§7.15's convert rule).
 
+### 7.20 `--hide`: the standing hide list (2026-08-10)
+
+The owner's request, near-verbatim: hide gemini and cursor, because only the CLI vendors
+are in use these days. The `v` filter cannot answer it — a filter narrows one launch to
+one vendor, and this is the opposite ask: every launch, every vendor EXCEPT two. So the
+HUD takes a hide list: `--hide gemini,cursor`, with the env var `TELLTALE_HUD_HIDE` as the
+flag's default. The env var is the standing per-machine preference (TELLTALE_ASCII's
+precedent) and the flag always wins, including `--hide ""` to see everything for one
+launch without unsetting the variable.
+
+**Where the hide is applied.** To the snapshot, as each scan lands — not in Render. The
+grid, the vendor lines, the fleet quota strip, the `u` page and the `w` page all read the
+same snapshot, so stripping it once is what keeps five surfaces from ever disagreeing
+about who is hidden. The header census comes from the same slices, so its counts match the
+rows for free.
+
+**How this survives the honesty rule.** A monitor that silently hides rows is a liar
+(§7.1), and a hidden vendor has no backstop at all: it leaves the "N of M" census
+entirely, and no keypress re-reads the choice. So the footer states `hidden gemini cursor`
+for the whole run, and the notice outranks the filter and the query in the drop order —
+only the two ⚠ facts sit above it. The `v` cycle skips hidden vendors, because a filter
+that can only ever select an empty grid is a dead stop on a one-key cycle; a `--vendor`
+naming a hidden vendor at startup is refused loudly rather than opened onto a
+contradiction.
+
+**What this is not.** Not an uninstall: the adapters stay registered, and the vocabulary
+(`agy`/`antigravity`, `cursor`/`composer`) is parseFilter's own, so the two flags cannot
+disagree about what a vendor is called. The list is deduplicated and sorted at parse time
+so the footer's wording is stable no matter how it was typed. `--hide all` is refused: a
+HUD told to hide every vendor is a request to not run it.
+
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 
 Rigor stays the floor; features and front-end craft are the priority axis from here.
@@ -8533,13 +8564,14 @@ from a re-send. Not verified: anything on macOS — this is a Windows measuremen
 grok is untouched (`PARITY.md`). Not built: an `internal/adapter/grok`, so no HUD row carries
 this vendor. Council can drive this seat; the gauges cannot yet see it.
 
-**The fleet gap this opens, named rather than closed here.** agent-ops ADR-012 rules that guard
-wiring, not lane shape, is the control on every vendor — and grok is a fifth vendor with no
-guards wired. Its `~/.grok/config.toml` carries `[compat.claude] hooks = false`, so the fleet's
-Claude-format hooks do not run in front of it, and it has its own hook system (`grok hooks-add`
-/ `hooks-trust`) that nothing has been installed into. Per ADR-012 that is an open obligation
-and not a reason to route work away from the seat; closing it is agent-ops work rather than
-telltale's, and it is filed rather than done here.
+**Fleet guard wiring for Grok under ADR-012.** agent-ops ADR-012 rules that guard
+wiring, not lane shape, is the control on every vendor — and grok is the fifth vendor seat in the room.
+To fulfill the ADR-012 guard obligation for Grok, Grok's `PreToolUse` fleet guard is configured by setting
+`[compat.claude] hooks = true` in `~/.grok/config.toml` (which routes Grok tool calls through the fleet's
+Claude-compatible `PreToolUse` credential guard wrapper `pre_tool_use_credential_guard.py` / `hooks.json`), or by
+registering the `PreToolUse` hook script via `grok hooks-add`. This ensures secret stores, published history,
+and dangerous mutations are screened by the `PreToolUse` guard across all five seated vendors (Claude, Codex,
+Antigravity, Cursor, and Grok) without restricting lane capabilities.
 
 **Amended 2026-08-09, same day, from a live room: the seat could not take a briefed turn at
 all.** It was merged green and failed on its first real dispatch — `✗ failed 0s`, every seat

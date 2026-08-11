@@ -1274,6 +1274,19 @@ func footerLine(st State, visible, hiddenBelow int, sty Styles, g Glyphs) string
 		notices = append(notices, footerNotice{rankFilter,
 			"filter " + st.Filter.String(), sty.Muted})
 	}
+	if len(st.Hidden) > 0 {
+		// The launch-time hide (§7.20) is stated for the same reason the
+		// filter is, and for the whole run: it was chosen once at launch, and
+		// a reader who did not type it — a second person at the terminal, or
+		// the person who typed it a week ago — has no other way to learn that
+		// two vendors' rows are not merely absent but excluded.
+		names := make([]string, 0, len(st.Hidden))
+		for _, v := range st.Hidden {
+			names = append(names, string(v))
+		}
+		notices = append(notices, footerNotice{rankHide,
+			"hidden " + strings.Join(names, " "), sty.Muted})
+	}
 	if st.Sort != SortActivity {
 		notices = append(notices, footerNotice{rankSort, "sort " + st.Sort.String(), sty.Muted})
 	}
@@ -1360,11 +1373,16 @@ type footerNotice struct {
 //     the moment a scan succeeds.
 //   - drift is that same fact minus the self-clearing: it stays true, and
 //     unsaid, until somebody goes and looks. It is the last notice to go.
+//   - the launch-time hide (§7.20) outranks the filter and the query because
+//     it has no backstop at all: hidden vendors leave the "N of M" census
+//     entirely, no keypress re-reads the choice, and it stays true for the
+//     whole run. Only the two ⚠ facts outrank it.
 const (
 	rankSort = iota
 	rankHiddenBelow
 	rankFilter
 	rankQuery
+	rankHide
 	rankStale
 	rankDrift
 )
