@@ -22,10 +22,14 @@ func FromCursorTurn(t cursorhook.Turn) (Delta, bool) {
 	if !t.Complete() || !t.Nonnegative() {
 		return Delta{}, false
 	}
+	cw := *t.CacheWriteTokens // copied so the Delta does not alias the payload
 	return Delta{
+		Turns:            1, // the hook fires once per agent response
 		InputTokens:      *t.InputTokens,
 		OutputTokens:     *t.OutputTokens,
 		CacheReadTokens:  *t.CacheReadTokens,
-		CacheWriteTokens: *t.CacheWriteTokens,
+		CacheWriteTokens: &cw,
+		// ReasoningTokens stays nil: Cursor's payload has no such count, and
+		// nil is how the cache says so (§4a.1).
 	}, true
 }

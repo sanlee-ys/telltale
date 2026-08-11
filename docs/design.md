@@ -73,7 +73,8 @@ is the third, and it does not sit on the pipeline above:
 **The gauges never write, with three bounded exceptions — all under `~/.telltale/`, all
 numbers and keys only, never content.** `telltale council` keeps `council/room.json` (the
 session ids reattaching needs); the statusline relays `quota/<vendor>.json` after its line
-is on stdout (§7.15); and `telltale hook` accumulates `usage/<vendor>.json` (§7.16). Each
+is on stdout (§7.15); and `usage/<vendor>.json` accumulates per-turn token counts from two
+writers, `telltale hook` (§7.16) and the `telltale otel` collector (§7.16a). Each store
 is atomic (temp+rename), best-effort, self-expiring on read, and pinned by a test that
 walks the serialized form field by field. No transcript, prompt, reply, path or address
 reaches any of the three. Anything else that wants to write from `internal/hud` or
@@ -999,6 +1000,35 @@ and not ours. It is the cursor relay's shape (§7.16), and it is emphatically no
 window. Cost: a double opt-in, an endpoint, and a collector to run; the `console` exporter is
 no shortcut because the doc says it is suppressed in the `agent` and `headless` entrypoints.
 Recorded as the seam, not spent.
+
+**The seam was spent on 2026-08-10 — `telltale otel grok` is the collector (§7.16a).**
+Before it was built, the doc's schema table was checked against the wire the way this
+section's header demands: a dump collector on 127.0.0.1:4318, and a live headless
+`grok -p "hi"` from grok 1.0.0 (3cd0d0cbce) with the double opt-in set. What arrived,
+versus what the doc says:
+
+- Transport as documented: OTLP http/protobuf POSTs to `/v1/logs` and `/v1/metrics`,
+  `Content-Type: application/x-protobuf`, uncompressed, from `OTel-OTLP-Exporter-Rust/0.32.0`.
+  The batches flushed before the headless process exited, at the default export intervals —
+  a short `-p` run loses nothing. The fleet-policy startup suppression the doc warns about
+  was not observed to delay anything on this signed-in box.
+- `grok_code.api_request` events carry `input_tokens`, `output_tokens`, `reasoning_tokens`
+  and `cache_read_tokens` as int attributes — all four on one record — beside `model`,
+  `duration_ms`, `stop_reason`, `session.id`, a per-session monotonic `event.sequence`,
+  `user.id` and `team.id`. The event name arrives in the LogRecord's `event_name` field,
+  not as an attribute.
+- The `grok_code.token.usage` metric (delta temporality, by `model` and `type`) carried
+  **the same four counts value-for-value** as the same turn's api_request event:
+  20323/56/42/2560 on both sides of one capture. One number, two envelopes.
+- `turn_completed` carries outcome and duration and **no token counts**, as the table says.
+- One departure from the doc's letter: `OTEL_METRICS_INCLUDE_SESSION_ID` defaults on, but
+  the token.usage data points carried no `session.id` — only `session.count`'s did. Nothing
+  here reads metrics, so nothing turns on it; recorded because the doc says otherwise.
+
+The quota verdict above is unchanged by any of this: nothing on the stream carries a
+window, a reset or a limit. What was added is a **spend count** (§7.16's vocabulary — a
+count with no denominator), accumulated per api_request event into
+`~/.telltale/usage/grok.json`, display held. §7.16a is the design record.
 
 A measurement of the completions headers would not move the verdict, because three separate
 rules already close this and none of them turns on whether the number exists:
@@ -2954,6 +2984,117 @@ wanted per-turn cost is, at this version, the one surface that provably cannot s
 - The counter says nothing about *which* conversation or model spent the tokens, by the
   design ruling above. If a future seam makes a CLI conversation joinable to a HUD row,
   that is a new claim and needs its own section.
+
+### 7.16a The OTLP collector — what grok spent, pushed rather than hooked (2026-08-10)
+
+§3.9a closed grok's quota question three times over and ended on a seam: the vendor's one
+designed-for-reporting surface is an external OpenTelemetry stream that carries **spend and
+no quota at all**. This section is that seam, spent. `telltale otel grok` is a loopback-only
+OTLP/HTTP listener; grok's own exporter pushes to it, and each `grok_code.api_request`
+event's four token counts are folded into `~/.telltale/usage/grok.json` — the same cache,
+accumulation ruling and refusal gates as §7.16, fed by a push instead of a hook. The
+measured export shapes, capture environment and grok version are pinned in §3.9a's export
+addendum; `internal/grokotel`'s package doc carries the same facts beside the code.
+
+**Why a listening socket does not breach §4a.5.** The adapter contract's "no network
+calls" protects two things: a gauge that can stall on a wire, and a gauge that can *reach
+out* — toward an endpoint, with credentials, spending from the pool it reads. The
+collector does neither, and the direction of the arrow is the whole argument: telltale
+opens a socket on 127.0.0.1 and **the push is grok's**, exactly as §3.9a recorded when it
+named the seam. The gauges still make no network calls and read no credentials; they read
+the FILE this mode writes, exactly as they read the hook relay's. It is its own mode for
+the same reason `telltale hook cursor` is (§7.16's boundary amendment): its I/O contract —
+a foreground server holding a port — belongs to neither gauge. The bind refuses any
+non-loopback address at startup, mechanically: a collector reachable off-box would be an
+open door wearing a gauge's name.
+
+**One source, chosen over a redundant second.** The stream carries the same counts twice —
+per-request on `api_request` events, aggregated on the `token.usage` metric — and §3.9a's
+capture measured them value-for-value equal. The collector reads the EVENTS and
+acknowledges `/v1/metrics` without reading it: one record is one claim, an event carries
+all four counts atomically (so §7.16's complete-or-refused gate maps onto it unchanged),
+and reading both envelopes would be two chances to count one number. The 200 on the
+unread path matters — an unacknowledged export is retried, and making the exporter loop
+on a signal nobody reads would spend grok's batches on nothing.
+
+**The window unit is the api request, and the entry says so.** grok's counts arrive per
+API call, not per turn (`turn_completed` carries no counts — measured), so the cache
+entry's window count is `requests`, a new sibling of `turns` in the §7.16 schema. The
+same amendment gave the schema `reasoning_tokens` and made two fields *optional with
+their absence meaning something*: a cursor entry carries `cache_write_tokens` and no
+`reasoning_tokens`, a grok entry the reverse, because each vendor's file may only claim
+the counts its vendor keeps — §4a.1's zero-versus-absent rule, applied to the serialized
+form. `TestTheGrokShapedEntryCarriesItsOwnKeysOnly` and the cursor keys test pin both
+shapes field by field.
+
+**What the wire carries and what survives.** Every record arrives with `session.id`,
+`user.id`, `team.id`, `model` and timing beside the counts; with a content gate open it
+would carry prompt text. Four counts survive. The extraction is an allowlist the same way
+`internal/cursorhook`'s struct is — an attribute key with no case in the parser falls
+through unread — and `TestNothingFromTheWireReachesDisk` plants content markers on a real
+record shape (plus a gate-open `user_prompt` event) and asserts nothing but the numbers
+reaches the file. `session.id` and `event.sequence` are read into collector *memory* for
+one purpose: the exporter retries unacknowledged batches, and a total that counts a
+retried batch twice is overstated by an amount nothing can name. A replayed
+(session, sequence) pair is refused; the guard is never written to disk.
+
+**The display is held, and it is the owner's own ruling applied.** §7.16's amendment
+retired the cursor spend line because a running count for a vendor with no ceiling
+anywhere buys no decision — and grok is *more* ceiling-less than Cursor, not less: §3.9a
+swept its disk twice, probed the free network half and read the vendor's own monitoring
+schema, and no quota exists anywhere. §7.17's Declined already refused grok a spend line
+sourced from disk ticks. So this relay ships exactly as the cursor one now stands: write,
+cache and the HUD's read of it wired (`Snapshot.Spend` carries the entry; nothing renders
+it), display a call site away, and the accumulating file means the day a display is ever
+ruled in it has history rather than starting from that minute.
+`TestTheGrokSpendRelayRendersNowhere` pins the hold at every width, in both glyph sets,
+with the usage view open and closed.
+
+**Wiring it on a machine** (the enable is machine-local config, deliberately not in this
+repo):
+
+```toml
+# ~/.grok/config.toml — grok's double opt-in, pointed at the default local endpoint
+[telemetry]
+otel_enabled = true
+otel_logs_exporter = "otlp"
+```
+
+then leave the collector running while grok runs:
+
+```
+telltale otel grok
+```
+
+It listens on 127.0.0.1:4318 (OTLP's http default, so the zero-flag pairing finds
+itself; `--addr` moves it, loopback only) and prints one line per counted request. The
+content gates (`otel_log_user_prompts`, `otel_log_tool_details`) stay off; the collector
+keeps nothing they would add, and the planted-marker test is the proof, but a
+content-free wire is strictly better than a filtered one. Verified end to end on
+2026-08-10: a config-driven `grok -p "hi"` (grok 1.0.0 (3cd0d0cbce), no env overrides,
+default batch intervals) against the running collector produced
+`{"vendor":"grok","requests":1,"input_tokens":23767,"output_tokens":96,
+"cache_read_tokens":1408,"reasoning_tokens":81,…}` — real numbers, keys only.
+
+#### Known limitations
+
+- **The collector must be running to hear the push.** grok's exporter retries briefly and
+  then drops a batch; spend accrued while the collector is down is not counted later. The
+  counter goes quiet rather than drifting — the §7.7-preferred failure — but "quiet"
+  here can also look like "nothing spent", and only the window's `since` says how long
+  the file has been accumulating.
+- **The replay guard is memory-only.** A batch retried across a collector restart is
+  counted twice; bounded by one batch, and accepted for the same reason §7.16 accepted
+  its write race — a guard file would be a second store keyed on session ids.
+- **A record without `session.id` or `event.sequence` is counted unguarded** rather than
+  refused: both ids exist on every measured record, and if a later grok drops them the
+  honest failure is a counter exposed to duplicate retries, not one that silently stops.
+- **The schema is the vendor's alpha (`grok_code.schema.version = v1`)** and the
+  collector does not read the version attribute. A rename lands as quiet non-counting —
+  visible as a counter that stops moving, and §3.9a's capture is the shape to re-measure
+  against.
+- The capture behind every claim here is one machine, one day, one grok version, one
+  signed-in account. The §3.4 discipline applies: re-measure before extending any claim.
 
 ### 7.17 `u`: the fleet usage view — two claims, and never one
 
