@@ -171,6 +171,9 @@ honoured through the standard mechanism.
   **Antigravity CLI**, **Cursor (Composer)** and **Grok CLI**, each reading that vendor's
   own native on-disk data — for Antigravity and Cursor that means a read-only SQLite
   reader written into this repo rather than a 9 MB dependency added to it.
+- **A machine-readable read mode** — `telltale snapshot` prints the fleet's current state
+  as one JSON document, for a reader that is a program rather than a person. It gets its
+  own section below.
 - **A documented adapter interface** — one module per vendor — so you can wire in
   anything else that leaves session data on disk. The worked example in
   [docs/design.md §4a.7](docs/design.md) is the method the Gemini adapter was actually
@@ -253,6 +256,45 @@ resume rather than a re-sent transcript, so no session ever holds another's hist
 vocabulary, the routing grammar, the reading keys and the turn view, taking an answer out
 of the room with `y`, and every flag. [docs/design.md §9](docs/design.md) is the record
 behind it: what was measured per vendor, what each seam cost, and what is still unverified.
+
+## `telltale snapshot` — the fleet as JSON
+
+```
+telltale.exe snapshot
+```
+
+One scan, one JSON document on stdout, exit 0. It reads the same vendor stores the HUD
+reads, and it prints numbers instead of a frame — so an agent gets its answer from one
+command and one parse, and never from scraping a TUI or reading `~/.telltale/` behind
+telltale's back.
+
+Three flags: `--vendor <id>` reports one vendor, `--compact` prints the document on one
+line, and `--timeout <dur>` bounds the scan (default 10s). An unknown flag, an unknown
+vendor or a stray argument is refused with the correction and prints no document — a
+script that mistypes a flag must not receive a well-formed answer to a different
+question.
+
+The schema is `{schema_version, generated_at, scan_error, fleet, vendors[]}`, and it
+carries this project's honesty rules rather than restating them in prose:
+
+| the document says | it means |
+|---|---|
+| `"cost_usd_total": 0` | measured zero |
+| `"cost_usd_total": null` | no reading right now |
+| `"unsupported": ["cost"]` | this vendor exposes no such thing, ever |
+| `"estimated": ["context_pct"]` | the adapter computed that value; it was not reported |
+| `"quota": []` | no relayed account reading — never an implied 0% |
+
+No optional key is ever omitted, so an absent value and a changed schema can never look
+alike. `fleet` is the pre-computed rollup — the session count, the liveness census, the
+vendor census by status, the highest context percentage anywhere and the total cost — so
+the common question costs no arithmetic on the reader's side.
+
+It renders **numbers and keys, never content**: no session names, workspace paths,
+transcripts, briefs or reply text, and no per-session rows at all. It writes nothing, calls
+no network and reads no credential. [docs/design.md §7.22](docs/design.md) is the full
+schema record and the reasoning; `internal/snapshot/testdata/golden/zero-vs-absent.json`
+is the build-failing test that the two kinds of nothing stay apart.
 
 ## The honest-gauge rule
 

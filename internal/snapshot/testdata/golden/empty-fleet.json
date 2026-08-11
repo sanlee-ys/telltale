@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-11T17:30:00Z",
+  "scan_error": null,
+  "fleet": {
+    "sessions": 0,
+    "live": 0,
+    "idle": 0,
+    "stale": 0,
+    "unknown": 0,
+    "vendors_watching": 0,
+    "vendors_not_detected": 2,
+    "vendors_unreadable": 0,
+    "vendors_drifted": 0,
+    "context_pct_max": null,
+    "cost_usd_total": null,
+    "last_activity": null
+  },
+  "vendors": [
+    {
+      "vendor": "claude",
+      "status": "not detected",
+      "error": null,
+      "sessions": 0,
+      "live": 0,
+      "drifted": 0,
+      "context_pct_max": null,
+      "cost_usd_total": null,
+      "subagents_max": null,
+      "last_activity": null,
+      "quota": [],
+      "quota_read_at": null,
+      "estimated": [],
+      "unsupported": []
+    },
+    {
+      "vendor": "codex",
+      "status": "not detected",
+      "error": null,
+      "sessions": 0,
+      "live": 0,
+      "drifted": 0,
+      "context_pct_max": null,
+      "cost_usd_total": null,
+      "subagents_max": null,
+      "last_activity": null,
+      "quota": [],
+      "quota_read_at": null,
+      "estimated": [],
+      "unsupported": [
+        "context_pct",
+        "cost",
+        "subagents"
+      ]
+    }
+  ]
+}

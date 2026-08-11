@@ -4138,6 +4138,97 @@ row, the row landed in `~/.telltale/events/<day>.jsonl`, `GET /events/recent` re
 sink-down path was exercised the same day: with no server listening, the emitter printed
 one stderr line and exited 0.
 
+### 7.22 `telltale snapshot` — the read mode whose reader is a program (2026-08-11)
+
+**What it is.** `telltale snapshot` runs one scan and prints the fleet's current gauge
+state as a single JSON document on stdout, then exits 0. It is the same scan the HUD
+runs — `hud.Scan` plus the account relay — reshaped by `internal/snapshot` instead of
+rendered into a frame. Three flags: `--vendor` (one vendor only, the HUD's vocabulary),
+`--compact` (one line instead of indented), `--timeout` (default 10s).
+
+**Why it exists.** The fleet's own agents are now a reader of this data, and neither
+existing read surface serves them. The statusline answers one vendor in one line of styled
+text. The HUD is a full-screen TUI that runs until you quit it, and its output is a frame
+of box-drawing characters an agent would have to scrape. Both are built for eyes. An agent
+that wants to know whether anything is close to its context window, what the fleet has
+spent, or which vendor stopped reading, had no answer that was not a screen-scrape — so it
+either did not ask, or it read `~/.telltale/` directly and coupled itself to a cache
+format that is nobody's API.
+
+**A separate mode, for `doctor`'s reason.** What it prints goes somewhere else. The HUD
+owns the alternate screen; this writes to a pipe and returns. Nothing on this path enters
+the TUI, renders a gauge, or touches council — which is what keeps it clear of the v1
+gate (§1). It is additive: no existing surface changes.
+
+**The schema, and the four rules that shape it.** The document is
+`{schema_version, generated_at, scan_error, fleet, vendors[]}`.
+
+- **Zero and absent stay different** (§4a.1). A measured zero is the number `0`. An
+  absent value is `null`. No sentinel numbers, and **no `omitempty` anywhere**: an
+  optional key is always present, carrying `null`. That last part is the sharper half —
+  a key that vanishes when its value is absent makes "no reading" and "this schema moved
+  under me" the same observation for the consumer, which is the zero-vs-absent collapse
+  one level up. `internal/snapshot/testdata/golden/zero-vs-absent.json` pins it beside
+  the HUD's golden of the same name, and `TestZeroIsANumberAndAbsentIsNull` asserts the
+  two states differ in JSON *type*, not merely in bytes.
+- **A derived value says so.** Each vendor block carries `estimated`, the sorted list of
+  `model.Field` names whose value here an adapter computed rather than read. It is the
+  JSON form of the render layer's `~`.
+- **"Can't know" is not "absent now".** Each vendor block also carries `unsupported`, the
+  fields that vendor exposes nothing for, ever. A `null` on a field named there is a
+  capability statement; a `null` anywhere else is this moment's reading. The HUD spends a
+  whole column-drop rule on this distinction; JSON gets it for two lists. Both lists cover
+  the SESSION-sourced fields only, and the first live run is what settled that: an
+  adapter's quota capability describes what a session exposes, while the `quota` array
+  comes from the account relay, so listing quota in both put `agy` in the document with
+  two relayed windows and the word `quota` under `unsupported` — two true statements that
+  read as one contradiction.
+- **Definitive empty states.** A list with nothing in it is `[]`, never `null`. A reader
+  must never handle two spellings of "nothing".
+
+**Pre-computed aggregates, because the alternative is every consumer doing the same
+arithmetic.** `fleet` carries the session count, the liveness census (`live`, `idle`,
+`stale`, and `unknown` as its own count rather than folded into `stale`, which is an
+age claim those rows cannot support), the vendor census by status, the highest context
+percentage anywhere, and the total cost. `context_pct_max` is a max and not a mean: the
+fleet question is "is anything close to its window", which an average over idle sessions
+hides.
+
+**Two things are deliberately absent.** There are **no per-session rows**. Partly that is
+the rollup being the product — an agent wants one answer per vendor, not a list to fold —
+and partly it is the read/write boundary: a session's honest identity is its name and its
+workspace path, and this surface renders numbers and keys, never content.
+`TestNoSessionContentReachesTheDocument` plants markers in every content-bearing field of
+a session and requires that none survives, including the session id.
+And there are **no token counts**. The relay is wired and the HUD reads it, but the
+DISPLAY is held by the owner (§7.16's amendment, applied to grok in §7.16a). A JSON field
+is a rendering; adding one here would end that hold as a side effect of a different
+feature. `TestSpendIsNotRendered` pins the omission so the day the hold lifts is a
+decision, not a drift.
+
+**Quota comes from the account relay and never from a row** (§7.15, §7.1's sixth rule).
+Hanging a window off a session would assert a per-session limit no vendor publishes.
+`quota_read_at` travels with it, because a quota figure without the age of its reading is
+a number the consumer cannot judge.
+
+**It writes nothing.** The gauges' contract holds on this path with one item spare: it
+reads vendor stores and the quota relay, calls no network, reads no credential, and does
+not even write the quota relay — it renders no quota of its own to relay.
+
+**Verified live, 2026-08-11, Windows 11.** `telltale snapshot` against the reference box's
+real stores returned a document carrying all six adapters, 1423 sessions with a liveness
+census that summed to that count, `agy`'s two relayed quota windows with their reading
+time, and `estimated: ["subagents"]` on claude against `estimated: []` on cursor. The
+zero-vs-absent pair appeared in that real document without being staged: `agy`'s
+`3p-weekly` window carried `"used_pct": 0` — a measured zero — beside five vendors whose
+`quota_read_at` was `null`.
+`--compact` returned the same document on one line and `--vendor codex` returned that
+vendor alone. `--json`, a positional argument, `--vendor chatgpt` and `--timeout 0` each
+printed a corrective error, no document, and exit 1.
+
+That run is also what found the quota-capability contradiction described above; the
+contradiction was fixed and the run repeated.
+
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 
 Rigor stays the floor; features and front-end craft are the priority axis from here.
