@@ -4176,6 +4176,11 @@ row, the row landed in `~/.telltale/events/<day>.jsonl`, `GET /events/recent` re
 sink-down path was exercised the same day: with no server listening, the emitter printed
 one stderr line and exited 0.
 
+**Retention verified 2026-08-11, same box.** The startup sweep deleted a synthetic
+`2026-06-30.jsonl` staged beside the live day file and logged `retention sweep deleted 1
+day files`, and the same run left `2026-08-11.jsonl` byte-identical by SHA-256 — so the
+sweep drops a day past the 30-day window and keeps a day inside it.
+
 ### 7.22 `telltale snapshot` — the read mode whose reader is a program (2026-08-11)
 
 **What it is.** `telltale snapshot` runs one scan and prints the fleet's current gauge
