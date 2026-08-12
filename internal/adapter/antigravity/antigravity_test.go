@@ -64,17 +64,19 @@ func TestCapabilityTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, f := range []model.Field{
-		model.FieldName, model.FieldModel, model.FieldWorkspace, model.FieldLastActivity,
+		model.FieldModel, model.FieldWorkspace, model.FieldLastActivity,
 	} {
 		if caps.Capability(f) != model.CapReported {
 			t.Errorf("%s = %v, want reported", f, caps.Capability(f))
 		}
 	}
-	// The five the package doc argues at length are unsourceable. A change
+	// The six the package doc argues at length are unsourceable. A change
 	// here is a claim about the vendor's disk and must be argued in §3.8
-	// first, not slipped in with a capability bit.
+	// first, not slipped in with a capability bit. name joined this list
+	// 2026-08-12: no on-disk title exists, so the HUD sources the row's
+	// label itself rather than this adapter filling it from the id.
 	for _, f := range []model.Field{
-		model.FieldContextPercent, model.FieldCost, model.FieldQuota,
+		model.FieldName, model.FieldContextPercent, model.FieldCost, model.FieldQuota,
 		model.FieldLiveness, model.FieldSubagents,
 	} {
 		if caps.Capability(f) != model.CapNone {
@@ -133,8 +135,8 @@ func TestAbsentVendorDirectory(t *testing.T) {
 func TestHappyPathRead(t *testing.T) {
 	s := mustRead(t, idHappy)
 
-	if s.Name == nil || *s.Name != "00000000" {
-		t.Errorf("name = %v, want the conversation id's first 8 characters", s.Name)
+	if s.Name != nil {
+		t.Errorf("name = %v, want absent — no on-disk title, the HUD sources the label itself", *s.Name)
 	}
 	if s.ID != idHappy {
 		t.Errorf("id = %q, want the full conversation id", s.ID)
@@ -550,15 +552,6 @@ func TestFileURIConversion(t *testing.T) {
 		if got != c.want {
 			t.Errorf("pathFromFileURI(%q) = %q, want %q", c.uri, got, c.want)
 		}
-	}
-}
-
-func TestShortIDLeavesShortIDsAlone(t *testing.T) {
-	if got := shortID("abc"); got != "abc" {
-		t.Errorf("shortID(abc) = %q", got)
-	}
-	if got := shortID(idHappy); got != "00000000" {
-		t.Errorf("shortID = %q", got)
 	}
 }
 

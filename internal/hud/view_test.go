@@ -173,10 +173,12 @@ var fullCaps = model.Capabilities{
 	),
 }
 
-// agySession is an Antigravity CLI row as the real adapter produces one: the
-// session's NAME is the head of its conversation id, because the vendor writes
-// no human title anywhere a public repo may read — the only free text on its
-// disk is prompt content. The model display string is the vendor's own, long
+// agySession is an Antigravity CLI row as the real adapter produces one: NAME
+// is absent, because the vendor writes no human title anywhere a public repo
+// may read — the only free text on its disk is prompt content — so the row
+// falls back to the workspace basename (§9.11-style HUD fallback, ruled
+// 2026-08-12; the adapter declares FieldName CapNone rather than fill it from
+// the conversation id). The model display string is the vendor's own, long
 // enough that the 13-column MODEL cell truncates it, which is what the HUD
 // really shows and therefore what the golden must pin.
 //
@@ -188,7 +190,6 @@ var fullCaps = model.Capabilities{
 func agySession(age time.Duration) *model.Session {
 	return sess(model.VendorAntigravity, "4c8b21a7-0e35-4a12-9f6b-000000000001",
 		`C:\src\code\example-app`, "", age,
-		withName("4c8b21a7"),
 		withModel(&model.Model{ID: "gemini-3.6-flash", DisplayName: "Gemini 3.6 Flash (High)"}),
 		withExtras("uncached in", "40k", "output", "380", "generations", "2"),
 		withTokens(40512, 380))
@@ -422,7 +423,6 @@ func usageFleetState(w, h int) State {
 			// over more than one and its count is not decoration.
 			sess(model.VendorAntigravity, "9b1e07f4-2a66-4c30-8d51-000000000002",
 				`C:\src\code\telltale`, "", 8*time.Minute,
-				withName("9b1e07f4"),
 				withModel(&model.Model{ID: "gemini-3.6-flash", DisplayName: "Gemini 3.6 Flash (High)"}),
 				withExtras("uncached in", "1M", "output", "12k", "generations", "9"),
 				withTokens(1_204_880, 12_744)),
@@ -431,8 +431,7 @@ func usageFleetState(w, h int) State {
 			// is the difference between a window that names what it summed and
 			// one that quietly folds an absence in as a zero.
 			sess(model.VendorAntigravity, "0d5a3c62-77bb-4e19-91af-000000000003",
-				`C:\src\code\agent-ops`, "", 40*time.Minute,
-				withName("0d5a3c62")),
+				`C:\src\code\agent-ops`, "", 40*time.Minute),
 			sess(model.VendorGrok, "00000000-1111-7222-8333-000000000001",
 				`C:\src\code\telltale`, "grok-4.5", 20*time.Second,
 				withName("Adapter Field Map Review"), withCtx(7)),
@@ -780,11 +779,12 @@ func goldenCases() []goldenCase {
 		// Codex sources a derived context percentage and real quota windows;
 		// Gemini sources name/model/workspace and a derived sub-agent count,
 		// with no quota, context or cost anywhere on its disk seam; Antigravity
-		// sources the same four fields as Gemini minus the sub-agent count,
-		// labelled by its conversation id because the only free text on its
-		// disk is somebody's prompt; and Cursor sources a context percentage the
-		// vendor itself wrote down, which is why its CONTEXT cell carries a bar
-		// and no estimate marker beside the Codex row's computed one.
+		// sources model/workspace/last_activity only — no on-disk title, so its
+		// row falls back to the workspace basename the same way Gemini's does
+		// when a session has none of its own (ruled 2026-08-12); and Cursor
+		// sources a context percentage the vendor itself wrote down, which is
+		// why its CONTEXT cell carries a bar and no estimate marker beside the
+		// Codex row's computed one.
 		{name: "v1-capabilities", state: func() State {
 			st := NewState()
 			st.Now = pinned
