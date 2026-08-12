@@ -84,7 +84,7 @@ snapshot:
   version_template: "{{ incpatch .Version }}-SNAPSHOT-{{ .ShortCommit }}"
 
 changelog:
-  # Plain git log, ascending, no grouping — NOT goreleaser's default
+  # Plain git log, sorted by subject — NOT goreleaser's default
   # Conventional-Commits grouping and NOT `use: github-native`.
   #
   # Two reasons, both specific to this repo. First, CLAUDE.md's commit voice is
@@ -97,6 +97,17 @@ changelog:
   # body with GitHub's generated notes, which would delete the platform-label
   # table below — and that table is the part of the release that has to be
   # true.
+  #
+  # `sort: asc` sorts the subjects ALPHABETICALLY. It does not order the
+  # entries by date, and this comment claimed "ascending" for long enough to
+  # mislead a reader who expected a log. The v0.2.0-rc.1 rehearsal
+  # (run 31551519867) rendered 80 entries in area-prefix order: arena…, ci:,
+  # council:, docs:, and so on.
+  #
+  # The sort stays. This repo writes every subject as "area: sentence", so an
+  # alphabetical sort collects the entries by area, and that is the grouping
+  # `use: git` gives up above. A reader who wants the order things landed in
+  # reads `git log` or the PR list.
   use: git
   sort: asc
   filters:
@@ -111,6 +122,17 @@ release:
   # Draft, always. Publishing is outward-facing and stays a human action;
   # goreleaser's job ends at "the artifacts and the notes are staged".
   draft: true
+  # auto = the tag decides. A tag with a prerelease part (-rc, -beta) stages a
+  # prerelease; a plain vX.Y.Z stages a full release.
+  #
+  # This key was unset, and it defaults to false. The v0.2.0-rc.1 rehearsal
+  # (run 31551519867) measured what that costs: the staged release carried
+  # `isPrerelease: false` while goreleaser's own scoop step skipped the bucket
+  # upload with `reason=release is prerelease`. One file read the tag two
+  # different ways. The scoop half was right and the release object was wrong,
+  # and the release object is the half a user sees — so a published rc could
+  # have arrived labelled as a full release.
+  prerelease: auto
   header: |
     **An honest gauge for your coding agents.**
 
