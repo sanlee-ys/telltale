@@ -4150,7 +4150,7 @@ the reference, which carries no license.
 **Why it exists.** The fleet runs four vendors and each one's hooks fire into that vendor's
 own log, in that vendor's own shape. The sink is the one place a hook event from any vendor
 can land in one shape: any process that can pipe JSON is a source. `tools/emit-event.py` is
-the reference emitter (stdlib-only Python, `uv run`-invocable): it reads the hook payload
+the reference emitter (stdlib-only Python, no dependency to install): it reads the hook payload
 on stdin, promotes the fields a reader filters on (`tool_name`, `tool_use_id`, `error`,
 `agent_id`, `agent_type`, `stop_hook_active`), stamps epoch-millisecond time, and POSTs.
 Its hard rules are the hook contract: a 5 second timeout, no retry, and exit 0 on every
@@ -4159,7 +4159,7 @@ failed turn. There is no summarization pass anywhere: the payload travels and is
 verbatim.
 
 **Distribution is one edit per repo.** The wiring pattern is a hook command of the shape
-`uv run <path>/tools/emit-event.py --source-app <repo-name>` — `--source-app` is the only
+`python3 <path>/tools/emit-event.py --source-app <repo-name>` — `--source-app` is the only
 per-repo change. Claude Code payloads carry `hook_event_name` and `session_id`, so no other
 flag is needed there; a wrapper for a vendor whose payload lacks the name passes
 `--event-type`.
@@ -4203,6 +4203,33 @@ one stderr line and exited 0.
 `2026-06-30.jsonl` staged beside the live day file and logged `retention sweep deleted 1
 day files`, and the same run left `2026-08-11.jsonl` byte-identical by SHA-256 — so the
 sweep drops a day past the 30-day window and keeps a day inside it.
+
+**Live drive, 2026-08-11/12.** The runs above used a piped fake payload. A real
+vendor-invoked firing is now recorded. On the Windows reference box (Claude Code
+2.1.226→2.1.228), an interactive Claude Code session (v2.1.228) in the repo directory
+ran one Bash tool call. The project-local PostToolUse hook posted to the sink, and the
+sink stored row id 4 with `source_app` `"telltale"`, the real session id, and the
+verbatim PostToolUse payload (`tool_input`, `tool_response`, `transcript_path`, `cwd`).
+The sink had run since about 11:58 local; the row landed 2026-08-12T02:38Z (timestamp
+1786502282870). The drive found two traps, and both are measurements, not readings of a
+document.
+
+**Trap 1 — headless print mode does not run PostToolUse hooks.** In `claude -p` print
+mode, PostToolUse hooks NEVER ran: not from the project's `.claude/settings.local.json`
+with workspace trust accepted, not passed through `--settings`, with and without a
+`matcher` key. The measurement is a breadcrumb test. Two hooks wrote a file by two
+different mechanisms (`cmd /c echo` to a file, and `python -c` writing a file), and zero
+files appeared. So the hooks were not invoked at all — this is not an invoked-and-failed
+hook. **Do not generalize this to the council gate's stream-json surface.** §9.8's probe
+measured PreToolUse firing over `--input-format stream-json` the same night. The two
+runtimes differ; measure each one.
+
+**Trap 2 — `uv run` in a hook command exits before the script runs.** A hook command of
+the form `uv run <path>/tools/emit-event.py` exits 2 with the error ``No environment file
+found at: `.env` `` on any machine where `UV_ENV_FILE` is set globally. A PostToolUse hook failure is
+silent in normal use, so the hook looks wired and stores nothing. The working shape is a
+direct interpreter invocation. `tools/emit-event.py` is stdlib-only and needs no `uv`.
+The `telltale events` usage text now recommends the direct form.
 
 ### 7.22 `telltale snapshot` — the read mode whose reader is a program (2026-08-11)
 
@@ -4294,6 +4321,13 @@ printed a corrective error, no document, and exit 1.
 
 That run is also what found the quota-capability contradiction described above; the
 contradiction was fixed and the run repeated.
+
+**The stated reader has now consumed it, 2026-08-12.** At 2026-08-12T01:59Z an agent
+session ran `telltale snapshot --compact` (binary built at main `01770ec`) and answered
+real fleet questions from the parsed JSON: 6 vendors watching, 1,443 sessions, 1 live,
+`context_pct_max` 75.8 on codex, and `agy` quota with 4 windows of which `gemini-weekly`
+carried 11.9 `used_pct`. Zero-vs-absent held in the document the agent read: `cost` was
+`null` everywhere, and a `used_pct` of 0 was the number 0.
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 
