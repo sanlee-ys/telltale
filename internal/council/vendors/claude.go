@@ -400,6 +400,21 @@ const autoAllowedTools = "Bash(git add:*),Bash(git commit:*),Bash(git push:*)," 
 //     and nothing was created. Without this flag "nothing writes without your
 //     keystroke" is simply false, and it would be false quietly.
 //
+//     AMENDED 2026-08-11, and the amendment does not retire the paragraph
+//     above. Re-measured on Claude Code 2.1.226, two trials: an allow rule
+//     still pre-approves `mkdir` and the directory still lands, so that
+//     sentence holds. What it does not say is that the allow rule is only
+//     step FIVE. An `ask` rule is step three, and it reaches the callback the
+//     allow rule would have skipped — measured, two trials, on the same shape
+//     the machine's own settings allow. A PreToolUse hook returning
+//     permissionDecision "ask" does the same and names itself in the request
+//     (`decision_reason_type: "hook"`). So this flag is one way to be honest
+//     rather than the only one, and the alternative keeps the user's deny
+//     rules, commands and hooks instead of dropping them. The build is NOT
+//     authorised and is not made here; design.md §9.8's dated block carries
+//     the rig, every arm and what it does not settle, and STATE.md carries the
+//     open ruling.
+//
 // The cost of the third was stated rather than buried, and then it was PAID
 // rather than left standing: dropping the setting sources also drops the user's
 // own hooks and their user-level commands from this seat. Half of that is

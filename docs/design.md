@@ -5036,6 +5036,12 @@ call they cover never reaches the gate at all. Without that flag, "nothing write
 keystroke" is simply false — and false quietly, on a machine whose owner wrote those rules
 years ago for a different purpose.
 
+**Amended 2026-08-11, at the end of this section.** That paragraph is still true and it is
+still the record of 2026-08-04. It reads one step of the evaluation, not the step above it: an
+`ask` rule is consulted BEFORE an `allow` rule, and it reaches the callback the allow rule
+would have skipped. So the third flag is no longer the only way to be honest. The measurement
+and the build it implies are below.
+
 **One limit is stated on the badge rather than buried here.** Shell commands the CLI itself
 classifies as read-only are approved without asking — `git status` was ungated under both
 setting-source configurations, and so is `echo` — so the claim is about calls that *change*
@@ -5094,6 +5100,98 @@ the `WRITES` badge, the user's settings left alone — and therefore no injected
 either, since a room that loads those settings natively would otherwise run every hook twice.
 Gating is the default because the room the user opened is the one they are looking at;
 unattended is the exception and has to be typed.
+
+#### The gate can keep the user's settings, measured 2026-08-11 — and the build is not authorised
+
+Nothing changed in the product on this date. This block records a probe, and the ruling it
+waits for. `STATE.md` carries the same item as build-awaiting-owner-ruling.
+
+**The claim.** Claude Code evaluates a tool call in six steps, in this order: hooks, deny
+rules, ask rules, permission mode, allow rules, then the `canUseTool` callback. That is the
+live documentation of 2026-08-11 (`code.claude.com/docs/en/agent-sdk/permissions`), not
+memory. `ask` is step three and `allow` is step five, so an `ask` rule reaches the callback
+that an `allow` rule would have skipped. The same docs say a `PreToolUse` hook may return
+`permissionDecision` `"allow"`, `"deny"`, `"ask"` or `"defer"`, and that `ask` beats `allow`
+when both apply. If either holds in the binary, the gate can keep `--setting-sources` and
+gate anyway — and keeping them carries the user's own hooks, deny rules and user-level
+commands back in natively, which is the whole of what this seat gives up today.
+
+**The rig, because this repo does not read a claim off a doc.** A probe replicated this
+seat's own argv — `baseArgs` plus `Session`, gated posture, `--model haiku` added to keep the
+turns cheap — spawned it against a throwaway directory, wrote one turn on stdin as `Turn()`
+builds it, and answered any `can_use_tool` request with `behavior: "deny"` as `Decide()`
+builds it. `--setting-sources ""` was dropped on every arm except the one that reproduces
+what council ships. **The decisive observable is the filesystem, never the stream**: the
+brief asked for one command that creates a marker, and the arm is read by whether the marker
+is on disk. Claude Code 2.1.226, Windows 11, `claude-haiku-4-5` on every turn, two trials
+each.
+
+| arm | what it changed | requests | marker created | trials |
+|---|---|---|---|---|
+| **A** adopter | zero-rule `CLAUDE_CONFIG_DIR`, no `--setting-sources` | — | — | **blocked** |
+| **A2** | user settings live, `touch probe-marker` | 0 | **yes** | 2/2 |
+| **A3** | user settings live, `install -d probe-marker` | 1 | no | 2/2 |
+| **B1** | user settings live, `mkdir probe-marker` | 0 | **yes** | 2/2 |
+| **B2** | B1 plus an injected `ask` rule for `Bash(mkdir:*)` | 1 | no | 2/2 |
+| **C** | user settings live, injected `PreToolUse` hook returns `"ask"` | 1 | no | 2/2 |
+| **C control** | same hook wiring, hook returns no decision | 0 | **yes** | 2/2 |
+| **shipped** | council's argv today, `--setting-sources ""` | 1 | no | 2/2 |
+
+**B1 says the 2026-08-04 finding still reproduces.** An allow rule covers `mkdir`, the call
+ran, and the directory is on disk. Nothing here retires the original measurement.
+
+**B2 is the decisive arm.** One rule was added — `{"permissions":{"ask":["Bash(mkdir:*)"]}}`
+in a `--settings` file — over settings that already allow the same shape. The call raised a
+request, the denial was honoured, and nothing was created. The request named its own cause:
+`"decision_reason_type":"rule"`.
+
+**C says a hook can do the same job, and says more on the way through.** A hooks-only
+`--settings` file whose `PreToolUse` hook returns `permissionDecision: "ask"` gated the same
+allow-covered call, and the request arrived carrying `"decision_reason_type":"hook"` with the
+hook's own sentence in `decision_reason`. The hook wrote a breadcrumb on every trial, so its
+run is provable off the stream. **The control matters as much as the arm**: C changed two
+things at once, a `--settings` file and an "ask" behind it, so the same file was run again
+with a hook that returns nothing. The call went ungated and the directory landed. The
+decision causes the gate, not the file.
+
+**Two facts fell out that were not the question.** `--settings` composes with the user's
+settings rather than replacing them — every sources-live arm ran the user's own `SessionEnd`
+hooks, including the arms passing `--settings`, and the shipped arm ran none. And a write
+shape no rule covers already reaches the gate with sources live (A3), so today's flag is not
+what makes the gate fire; it is what makes it fire *uniformly*.
+
+**What build this implies, and it is the hook rather than the rule.** A2 is why. `touch`
+creates a file and it ran ungated on both trials, so the user's rules cover more shapes than
+anyone would enumerate, and an `ask` list built shape by shape leaks exactly the way an allow
+list leaks. That is the same defect `hookset.go` already refuses by naming one key instead of
+deleting many. A matcherless `PreToolUse` hook has no list to leak: the documentation's own
+advice for a check that must run on every tool call is a hook, for this reason. So the shape
+to build is council injecting its own `PreToolUse` hook that answers `"ask"`, into the same
+ephemeral `--settings` file it already writes, and **dropping `--setting-sources ""`** — which
+returns the user's deny rules, their user-level commands and their hooks to the gated seat,
+and retires the hooks copy in `hookset.go` along with the badge that reports whether it
+worked.
+
+**What is NOT settled, and each item is a reason the build waits.**
+
+- **The adopter arm did not run.** A temporary `CLAUDE_CONFIG_DIR` holds no credentials, so
+  the turn died at `"apiKeySource":"none"` and `Not logged in · Please run /login` before any
+  tool call. Copying a credential store into a probe directory is a redline, so the arm stays
+  unrun. The shipped arm is the nearest evidence for the same question: with no rules in
+  force at all, the call reached the prompt on both trials.
+- **A matcherless hook was never measured.** This rig measured a `Bash` matcher. The claim
+  that one hook sees every tool call is documentation, and documentation is what this section
+  exists to distrust.
+- **Composition with the user's own `PreToolUse` hooks is unmeasured.** The docs rank `deny`
+  over `defer` over `ask` over `allow` when several apply. Council would be adding a second
+  hook to a file the user also populates, and the credential guard is exactly the hook that
+  must not be weakened by the addition.
+- **A hook is a process per tool call.** The seat that was re-founded to stop paying process
+  cost per turn (§9.33, §9.36) would take on a spawn per call. Nothing here timed it.
+- **The badge's sentence would have to change.** Today it claims a guard because a hooks file
+  exists. Under this build the guard IS the gate, and "the user's hooks are carried" stops
+  being a separate claim — a badge that kept saying it would be reporting a file that no
+  longer does that job.
 
 ### 9.9 The room remembers — a conversation, not a ticker
 
