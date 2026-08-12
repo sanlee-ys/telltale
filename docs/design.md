@@ -728,16 +728,21 @@ optional; the branch segment's live confirmation is the itemized remainder here.
 **Adapter built, 2026-08-02 (`internal/adapter/antigravity`).** What the
 adapter took from this survey and what it left:
 
-- **Took:** Name (conversation id, shortened for the grid — the only label on disk that
-  is not somebody's prompt), Model (`#1.#21` display name, `#1.#19` id fallback),
-  Workspace (the trajectory blob's URI, converted to a native path), LastActivity (the
-  Q8 fold over the transcript's newest `created_at` and the mtimes of the transcript,
-  the database and its sidecar — the sidecar because on a live conversation that is the
-  file being written). All four REPORTED; nothing is derived.
+- **Took:** Model (`#1.#21` display name, `#1.#19` id fallback), Workspace (the
+  trajectory blob's URI, converted to a native path), LastActivity (the Q8 fold over the
+  transcript's newest `created_at` and the mtimes of the transcript, the database and its
+  sidecar — the sidecar because on a live conversation that is the file being written).
+  All three REPORTED; nothing is derived. Name was sourced from the conversation id at
+  first shipping (shortened for the grid, the only label on disk that is not somebody's
+  prompt) — **revised 2026-08-12 (ruled):** the HUD row's Name showed the id prefix
+  instead of the workspace basename every other vendor with no on-disk title falls back
+  to, so Name moved from REPORTED to `CapNone` and the adapter no longer writes it; the
+  HUD sources the row's label itself, the same fallback a Gemini row takes with no
+  summary of its own.
 - **Left:** context % (the numerator is measured and the denominator is not — the token
-  totals are display-only extras instead), cost, quota, liveness and subagents, all
-  `CapNone` for the reasons itemized above. The liveness and subagent deferrals are
-  pending live observation, not pending effort.
+  totals are display-only extras instead), cost, quota, liveness, subagents and (as of
+  the 2026-08-12 revision) name, all `CapNone` for the reasons itemized above. The
+  liveness and subagent deferrals are pending live observation, not pending effort.
 - **The identity is asserted, not assumed:** every generation must satisfy `thinking +
   answer == output` before its numbers count. A generation that fails contributes
   nothing and the row says a self-check failed. Across the live corpus on the day the
@@ -2080,13 +2085,15 @@ floating panel on a monitor obscures the thing being monitored.
 **I — the v1 capability mix (120 cols).** What the real adapters actually render today:
 Claude sources neither context nor cost from disk, Codex sources a **derived** context
 percentage (marked `~`) and real quota windows. Nothing sources cost, so the `COST`
-column auto-hides and its width returns to `SESSION`. The `AG` row is labelled by the
-head of its conversation id because the only free text on agy's disk is prompt content
-(§3.8), and its `MODEL` cell truncates because the vendor's display string is 23
-characters against a 13-column cell — both are what the HUD really shows. The `CU` row
-is the one to read next to the `CX` row: both carry a context bar, and only one of them
-carries a `~`, because Cursor persists its own `contextUsagePercent` and telltale reads
-it rather than computing one (§3.9).
+column auto-hides and its width returns to `SESSION`. The `AG` row carries no `Name`
+at all — the only free text on agy's disk is prompt content (§3.8), so this field is
+`CapNone` and the HUD falls back to the workspace basename, the same fallback a Gemini
+row takes when it has no summary of its own (ruled 2026-08-12). Its `MODEL` cell
+truncates because the vendor's display string is 23 characters against a 13-column
+cell — both are what the HUD really shows. The `CU` row is the one to read next to the
+`CX` row: both carry a context bar, and only one of them carries a `~`, because Cursor
+persists its own `contextUsagePercent` and telltale reads it rather than computing one
+(§3.9).
 
 ```
  telltale  │  5 sessions  │  claude 1  codex 1  gemini 1  agy 1  cursor 1               codex 5h ██████▎─ 88.4% ↻ 3h02m
@@ -2095,7 +2102,7 @@ it rather than computing one (§3.9).
  ● CC │ telltale  C:\src\code                                                 Opus 5                           — │  12s
  ● CU │ multi-vendor orchestration  C:\src\code                               composer-2.5   ████▏───────    37% │   1m
  ● CX │ example-app  C:\src\code                                              gpt-5.1-codex  ███████▋──── ~69.8% │   1m
- ● AG │ 4c8b21a7  C:\src\code                                                 Gemini 3.6 F…                    — │   2m
+ ● AG │ example-app  C:\src\code                                              Gemini 3.6 F…                    — │   2m
  ◐ GE │ glossary tooltips ⑂~2  c:\src\code                                    gemini-3-pro                     — │   3m
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys

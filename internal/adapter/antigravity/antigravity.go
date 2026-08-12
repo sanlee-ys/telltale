@@ -27,6 +27,14 @@
 //
 // # What this adapter cannot know, and why
 //
+//   - name — no human title exists anywhere on disk for this vendor (the only
+//     strings a conversation carries are its own protobuf-decoded fields and
+//     its id; see the PII trap below). Filling Name from the id anyway would
+//     read as a report the vendor never made, so this field is CapNone, the
+//     same declaration Codex carries for the same reason. The HUD sources the
+//     row's label itself instead — workspace basename, falling back to the
+//     raw session id (ruled 2026-08-12; decisions/006 originally deferred
+//     this call to the field survey).
 //   - context_pct — the token NUMERATOR is on disk but the window size is not.
 //     agy's 1,048,576-token window appears nowhere in the conversation state;
 //     it reaches telltale only through the statusline payload (§2.1). A
@@ -69,8 +77,7 @@
 //     prompt text and file contents, and the account email appears in the
 //     vendor's own log. This adapter reads structural fields only. Nothing
 //     model-authored or user-authored reaches a Session field, a diagnostic, or
-//     a log line — which is also why the session's NAME is its conversation
-//     id: it is the only label on disk that is not somebody's prompt.
+//     a log line.
 package antigravity
 
 import (
@@ -118,12 +125,6 @@ const maxDBBytes = 64 << 20
 // observation clock has no readable age and degrades to absent rather than
 // rendering "0s".
 const futureSkew = 2 * time.Second
-
-// nameLen is how much of the conversation id becomes the session's display
-// name. Eight hex characters is the vendor's own short form and matches the
-// id8 the Gemini CLI embeds in a session filename; the full id is always on
-// the detail pane's `session` line.
-const nameLen = 8
 
 // Protobuf field numbers from docs/design.md §3.8. They are
 // reverse-engineered from a live corpus, unversioned, and every value read
@@ -199,17 +200,18 @@ func (a *Adapter) Root() string { return a.root }
 
 func (a *Adapter) Vendor() model.VendorID { return Vendor }
 
-// Capabilities is static. See the package doc for why five fields are absent.
+// Capabilities is static. See the package doc for why six fields are absent.
 //
-// Everything declared is REPORTED, nothing is DERIVED: the model string and
-// the workspace URI are read verbatim from the vendor's own blobs (the URI's
-// conversion to a native path is a unit conversion, not a computation), the
-// name is the vendor's conversation id, and last_activity is the fresher of
-// two signals the vendor itself wrote.
+// name is CapNone: no human title exists on disk for this vendor, so this
+// adapter never writes Name and the HUD sources the row's label itself
+// instead (ruled 2026-08-12; see the package doc). Everything else declared
+// is REPORTED, nothing is DERIVED: the model string and the workspace URI are
+// read verbatim from the vendor's own blobs (the URI's conversion to a native
+// path is a unit conversion, not a computation), and last_activity is the
+// fresher of two signals the vendor itself wrote.
 func (a *Adapter) Capabilities() model.Capabilities {
 	return model.Capabilities{
 		Reported: model.NewFieldSet(
-			model.FieldName,
 			model.FieldModel,
 			model.FieldWorkspace,
 			model.FieldLastActivity,
@@ -319,11 +321,14 @@ func (g generation) checks() bool { return g.thinking+g.answer == g.out }
 // database only ever adds to it.
 func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Session, error) {
 	now := time.Now()
+	// Name stays unset: no human title exists on disk for this vendor (see
+	// the package doc), so this field is CapNone and the HUD supplies the
+	// row's label itself — workspace basename, then the raw id — the same
+	// fallback Gemini's rows take when their own on-disk title is absent.
 	s := &model.Session{
 		Vendor:     Vendor,
 		ID:         ref.ID,
 		ObservedAt: now,
-		Name:       model.Ptr(shortID(ref.ID)),
 	}
 
 	// The transcript is the session. A conversation with none is not a row:
@@ -803,17 +808,6 @@ func modTime(path string) time.Time {
 		return time.Time{}
 	}
 	return info.ModTime()
-}
-
-// shortID is the conversation id trimmed for the grid. The vendor writes no
-// human title anywhere a public repo may read (the only free text on disk is
-// prompt content), so the id IS the label — and the full one is on the detail
-// pane's session line, one keystroke away.
-func shortID(id string) string {
-	if len(id) <= nameLen {
-		return id
-	}
-	return id[:nameLen]
 }
 
 func setExtra(s *model.Session, label, value string) {
