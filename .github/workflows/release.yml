@@ -45,7 +45,14 @@ jobs:
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
-          version: '~> v2'
+          # An exact version, not the `~> v2` range it replaced. The range
+          # resolves to whatever v2 release exists on tag day, so the tool that
+          # cuts the artifacts is a different tool from the one anybody
+          # measured. v2.17.1 is the version PR #136 ran `goreleaser check` and
+          # `goreleaser release --snapshot --clean` against, so it is the only
+          # version this config is verified under. Raise it deliberately, and
+          # rehearse the raise with an `-rc` tag the same way.
+          version: 'v2.17.1'
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
