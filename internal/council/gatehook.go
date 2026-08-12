@@ -123,8 +123,18 @@ func NewGateHook() GateHook {
 //
 // The double quote is safe to add unconditionally: bash strips it, and a path
 // containing a literal double quote is not a path Windows can produce.
+//
+// The separator swap is strings.ReplaceAll rather than filepath.ToSlash, and
+// the difference is not cosmetic — CI caught it. ToSlash is a NO-OP on Linux,
+// because a backslash is a legal filename character there, so it makes this
+// function's behaviour depend on the host Go compiled for. The string is not
+// consumed by the host: it is consumed by bash, on every platform, where a
+// backslash is the escape character and can never survive as itself. So the
+// swap is unconditional, and a Linux path containing a literal backslash — a
+// path nothing on this project produces — is the accepted cost of a rule that
+// is the same everywhere.
 func hookCommand(exe string) string {
-	return `"` + filepath.ToSlash(exe) + `" ` + gatehook.Mode + " " + gatehook.Verb
+	return `"` + strings.ReplaceAll(exe, `\`, "/") + `" ` + gatehook.Mode + " " + gatehook.Verb
 }
 
 // gateHookSettings builds the file, and it is built by NAMING the one key it

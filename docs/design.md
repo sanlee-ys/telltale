@@ -5350,8 +5350,14 @@ first three arms measured nothing because bash ate every backslash of a native W
 `exit_code: 127`, `outcome: "error"` — and **a hook that fails to run makes no decision, so
 every call ran ungated while the badge went on claiming a gate**. It was found only because a
 `SessionStart` hook was planted in the same file to prove the file was read at all, which costs
-no model turn. Council quotes the command and passes it through `filepath.ToSlash`;
+no model turn. Council quotes the command and swaps the separators;
 `TestTheHookCommandSurvivesGitBash` pins both.
+
+**The first fix for it was wrong, and the Linux CI job is what said so.** `filepath.ToSlash` is
+a **no-op on Linux**, where a backslash is a legal filename character, so it made the
+conversion depend on the host Go compiled for. The string is not read by the host — it is read
+by bash, on every platform, where a backslash is the escape character and cannot survive as
+itself. The swap is now unconditional, and the test feeds a Windows path on every runner.
 
 **(b) The hook costs tens of milliseconds, and the operator's own settings cost more.** The
 measure is the interval between the assistant's `tool_use` block landing on stdout and the

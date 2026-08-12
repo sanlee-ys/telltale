@@ -77,6 +77,12 @@ func TestTheHookIsMatcherless(t *testing.T) {
 // past the gate while the badge still claims one — the quietest failure this
 // feature has. Forward slashes fix the separators and the quotes fix the spaces
 // in `C:\Program Files\…`, and both are needed.
+//
+// The input is a Windows path on EVERY runner, including the Linux one, and
+// that is the assertion rather than an oversight. The first version of this
+// used filepath.ToSlash, which is a no-op on Linux, and this test is what
+// failed there — the swap has to be a fact about the shell reading the string,
+// not about the machine that built the binary.
 func TestTheHookCommandSurvivesGitBash(t *testing.T) {
 	cmd := hookCommand(`C:\Program Files\telltale\telltale.exe`)
 
