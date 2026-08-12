@@ -769,6 +769,29 @@ per-session state, `bubbleId:*` and `ofsContent:*` hold the message payloads.
 | liveness | **PARTIAL, never observed in flight** | `composerData.status` (`completed`, `aborted`, `none`), `generatingBubbleIds`, `hasBlockingPendingActions`. All read terminal or empty across the corpus; no session was ever sampled mid-generation. |
 | subagents | **ABSENT (structural only)** | `isSubagent` 0, `numSubComposers` 0, `subComposerIds` `[]` on every row. The fields exist; the observation does not. |
 
+**Amended 2026-08-11: a larger survey HARDENED the `cost` row and CORRECTED the reason
+behind the `quota` row. The corrected reading lived only in §7.16 until now.** The two
+rows above rest on the 2026-08-02 corpus — 8 `composerData` blobs and 310 message rows.
+A re-verification on 2026-08-08 (§7.16) read a bigger one and found the same thing
+harder: `usageData` was `{}` in **19 of 19** blobs, `tokenCount` was zero in **1,622 of
+1,622** message rows, and 78 `turn_ended` records and 51 transcripts carried status and
+no numbers. `cost` **ABSENT** therefore gets stronger, not weaker, and the original
+counts above stay as the smaller measurement they were.
+
+The `quota` row's VERDICT stands and its REASON does not. The row reads `credit_dollars:
+25` and `included_usage_dollars: 40` as plan ENTITLEMENT — what the plan grants. The
+2026-08-08 survey measured those constants as **Statsig experiment values stamped
+`is_user_in_experiment:false`**, and they were the only account figures anywhere on that
+disk. So they describe an experiment this account is not in, not what this account was
+granted. §7.17's absence table already renders Cursor as `no quota anywhere · its store
+holds experiment values, not usage` on exactly that measurement.
+
+What follows from both rows is the same: nothing about consumption reaches the store as
+a byproduct of a turn, so the number is FETCHED rather than found. **Cursor Hooks is the
+real token seam** — the vendor's own documented `afterAgentResponse` step hands a command
+hook the turn's token counts on stdin, and §7.16 is the record of it, including why print
+mode's derived `inputTokens` was refused.
+
 **Most rows are not sessions.** 9 header rows, of which **5** were: the empty-state
 draft (`composerId` literally `empty-state-draft`, `isDraft` true), two pre-created
 composers a new window makes before anyone types (no title, no `lastUpdatedAt`), and two
@@ -8725,17 +8748,45 @@ CLI, which is the ADR-008 failure mode in its purest form. That test ran: the fi
 returned the exact expected text, a session id and a positive cost; the resume turn came back on
 the SAME session id and recalled its own first answer, which is what distinguishes a real resume
 from a re-send. Not verified: anything on macOS — this is a Windows measurement, and the Mac's
-grok is untouched (`PARITY.md`). Not built: an `internal/adapter/grok`, so no HUD row carries
-this vendor. Council can drive this seat; the gauges cannot yet see it.
+grok is untouched (`PARITY.md`). ~~Not built: an `internal/adapter/grok`, so no HUD row carries
+this vendor. Council can drive this seat; the gauges cannot yet see it.~~
+
+**Amended 2026-08-11: it was built, and this paragraph went on saying otherwise.**
+`internal/adapter/grok` landed in PR #183, on the live survey §3.9a records (2026-08-09),
+so grok sessions render as
+HUD rows with name, model, workspace, a vendor-REPORTED context percentage and last
+activity. The gauges now observe this vendor as well as drive it, and the seat's parser
+and the adapter read the same wire from two sides. One thing stays dropped and it is not
+an oversight: grok writes a per-turn dollar figure and no session total anywhere, so the
+last turn's cost reaches the detail pane as a labeled Extra and never the `COST` column
+(§3.9a).
 
 **Fleet guard wiring for Grok under ADR-012.** agent-ops ADR-012 rules that guard
 wiring, not lane shape, is the control on every vendor — and grok is the fifth vendor seat in the room.
-To fulfill the ADR-012 guard obligation for Grok, Grok's `PreToolUse` fleet guard is configured by setting
+~~To fulfill the ADR-012 guard obligation for Grok, Grok's `PreToolUse` fleet guard is configured by setting
 `[compat.claude] hooks = true` in `~/.grok/config.toml` (which routes Grok tool calls through the fleet's
 Claude-compatible `PreToolUse` credential guard wrapper `pre_tool_use_credential_guard.py` / `hooks.json`), or by
 registering the `PreToolUse` hook script via `grok hooks-add`. This ensures secret stores, published history,
 and dangerous mutations are screened by the `PreToolUse` guard across all five seated vendors (Claude, Codex,
-Antigravity, Cursor, and Grok) without restricting lane capabilities.
+Antigravity, Cursor, and Grok) without restricting lane capabilities.~~
+
+**Corrected 2026-08-11: the struck sentences were instructions, and none of it is wired.**
+Two things were wrong at once. First the reading: `[compat.claude] hooks` is `false` on
+this box, and grok's native hook system (`grok hooks-add` / `grok hooks-trust`) has
+nothing installed into it, so **the seat has no fleet guards wired today** — the struck
+text described a configuration that does not exist and stated the screening as a fact.
+`STATE.md` carries the same measurement. Second the shape: this file records what was
+measured about a vendor, and those sentences told a reader how to configure a machine. A
+design record is not a runbook, and a runbook here would go stale silently on a box
+nobody re-measured.
+
+What replaces them is the obligation, recorded and routed rather than acted on. Under
+agent-ops ADR-012 an unwired vendor is an **open obligation on the FLEET**, never a
+reason to avoid the seat or to route work away from it — the gap closes by building the
+guard. **That work belongs to agent-ops and not to this repository.** telltale seats the
+vendor and states each seat's own posture on screen; it does not own the fleet's guard
+layer, and nothing here wires one. This paragraph exists so the next reader of §9.39
+learns the obligation is open, and learns where it is owned.
 
 **Amended 2026-08-09, same day, from a live room: the seat could not take a briefed turn at
 all.** It was merged green and failed on its first real dispatch — `✗ failed 0s`, every seat
