@@ -17,6 +17,10 @@ git tag v0.2.0 && git push origin v0.2.0
 release exists. The owner ruled on 2026-08-11 that this ref stays where it is.
 The first release therefore cuts at a higher version.
 
+The changelog carries a known consequence, and the owner ruled it intended on
+2026-08-12: goreleaser diffs from the previous tag, so the v0.2.0 release
+notes start at PR #130 and do not restate the history before `v0.1.0`.
+
 That is the whole of it. `.github/workflows/release.yml` fires on the `v*` tag
 and does the rest:
 
