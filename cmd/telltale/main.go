@@ -621,9 +621,14 @@ usage:
                          ~/.telltale/events/, and rebroadcast it to every
                          connected WebSocket client. Any process that can pipe
                          JSON is a source — wire tools/emit-event.py as a hook
-                         command with --source-app <name> as the one per-repo
-                         edit. Nothing renders these events yet; the sink runs
-                         dark until something connects to /stream
+                         command, python3 <path>/tools/emit-event.py
+                         --source-app <name>, with --source-app as the one
+                         per-repo edit. The script is stdlib-only: avoid
+                         "uv run" in a hook command, because a globally set
+                         UV_ENV_FILE makes it exit before the script runs and
+                         a hook failure is silent. Nothing renders these events
+                         yet; the sink runs dark until something connects to
+                         /stream
   telltale snapshot      read the fleet once and print its state as JSON on
                          stdout: a per-vendor block and a pre-computed fleet
                          rollup, so an agent gets its answer from one command
