@@ -1,6 +1,6 @@
 # goreleaser — the whole of tag day.
 #
-# `git tag v0.1.0 && git push origin v0.1.0` is the only command a release
+# `git tag v0.2.0 && git push origin v0.2.0` is the only command a release
 # takes; `.github/workflows/release.yml` runs the repo's own gate on
 # windows-latest and then runs this file. Nothing here fires on a merge to
 # main: the workflow's only trigger is a v* tag, so this config is inert until

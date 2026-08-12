@@ -19,7 +19,10 @@ to measured tool output, nothing narrated, nothing guessed.
 
 ---
 
-**Status: pre-v1, under active development.** All three modes are built.
+**Status: pre-v1, under active development.** All three surfaces are built — the room,
+the statusline and the HUD. The same binary carries five more modes that render no
+surface of their own: the relays (`telltale hook`, `telltale otel`), the preflight
+(`telltale doctor`), and the observation modes (`telltale events`, `telltale snapshot`).
 
 **v1 is a snapshot, not a freeze.** It cuts when three checkable gates hold — nothing on
 the surface is half-finished or unused by its own author, the README is verified true
@@ -179,7 +182,7 @@ honoured through the standard mechanism.
   [docs/design.md §4a.7](docs/design.md) is the method the Gemini adapter was actually
   built with, kept alongside what live verification changed about its guesses.
 
-One binary, three modes: `telltale statusline`, `telltale hud` and `telltale council` —
+One binary, three surfaces: `telltale statusline`, `telltale hud` and `telltale council` —
 and they are not three co-equal products. **The room is the product; the gauges are the
 infrastructure under it.** The statusline and the HUD are where this project surveyed each
 vendor's seam and wrote down what it found, and the honest-gauge rule they were built
@@ -187,6 +190,16 @@ under is the rule a council column inherits when it states a sandbox posture. Th
 finished, they are load-bearing, and they are not the thing this is for. The statusline
 code path never initializes the TUI framework (the single binary links it, but no Bubble
 Tea code runs on a statusline invocation).
+
+Three surfaces are not the whole binary, and this file does not claim they are. The
+binary has eight modes, and `telltale` run with no argument prints all of them. The
+five that draw no surface stand behind these three: the
+**relays** (`telltale hook <vendor>`, `telltale otel <vendor>`) read one turn's token
+counts and print nothing; the **preflight** (`telltale doctor`) reports which vendor
+binaries this machine has; and the **observation modes** (`telltale events`, `telltale
+snapshot`) answer a program rather than a person. `telltale snapshot`, `telltale events`
+and `telltale doctor` get their own sections below; the two relays are described under
+the read/write boundary, because a relay is a write.
 
 Honest claim, stated precisely: *dispatch across the 5-vendor fleet (Claude Code, Codex,
 Cursor, Antigravity, Grok); cross-vendor monitoring; vendor-native statusline where the seam
@@ -202,9 +215,9 @@ is an open obligation on the fleet rather than a reason the column is missing.)
 
 **The gauges never write to anything that isn't theirs.** `telltale statusline` and
 `telltale hud` read vendor files, make no network calls, read no credentials, and no
-keybinding can mutate vendor state or send anything to a running agent. What telltale
-writes to disk is three stores of its own under `~/.telltale/`, all keys and numbers,
-never content: council's room file (`council/room.json` — the vendor session ids
+keybinding can mutate vendor state or send anything to a running agent. What the gauges
+and the room write is three stores of their own under `~/.telltale/`, all keys and
+numbers, never content: council's room file (`council/room.json` — the vendor session ids
 reattaching needs and the room's workspace, no transcript, output or brief content),
 the statusline's quota relay (`quota/<vendor>.json` — the rate-limit windows it
 just rendered, so the HUD can show account quota per vendor instead of only for
@@ -215,7 +228,17 @@ payload on stdin, and `telltale otel grok` is a loopback listener grok's own
 OpenTelemetry exporter pushes to; [docs/design.md §7.16, §7.16a](docs/design.md)).
 That last one is spend, not quota: there is no denominator anywhere in it, so it
 never renders as a percentage or a bar, and Cursor's and grok's account quota
-stay visibly absent. `telltale
+stay visibly absent.
+
+**A fourth store carries content, and it is named as an exception rather than
+counted with the three.** The event sink (`telltale events`, below) stores each hook payload
+VERBATIM under `~/.telltale/events/` — content, not keys and numbers. What contains
+it is scope, not redaction: it is its own foreground mode that you start, its server
+binds loopback only, and no gauge reads or renders those files. The keys-and-numbers
+rule above still binds every store the gauges themselves write
+([docs/design.md §7.21](docs/design.md)).
+
+`telltale
 council` remains the one mode that acts on the world, and it is labelled as one
 everywhere it can be: it spawns vendor CLIs, it is entered only by typing the
 subcommand, it is not reachable from the HUD, and it shares no keybinding with it.
@@ -295,6 +318,40 @@ transcripts, briefs or reply text, and no per-session rows at all. It writes not
 no network and reads no credential. [docs/design.md §7.22](docs/design.md) is the full
 schema record and the reasoning; `internal/snapshot/testdata/golden/zero-vs-absent.json`
 is the build-failing test that the two kinds of nothing stay apart.
+
+## `telltale events` — the fleet event sink, and it runs dark
+
+```
+telltale.exe events
+```
+
+One hook event per POST on loopback, appended to a durable log under
+`~/.telltale/events/` and rebroadcast to every client connected to `/stream`. Any
+process that can pipe JSON is a source: wire `tools/emit-event.py` as a hook command,
+where `--source-app <name>` is the one per-repo edit. Two flags: `--addr <host:port>`
+(default `127.0.0.1:4519`; any other host is refused at startup) and `--retain <days>`
+(default 30).
+
+**Nothing renders these events.** The sink runs dark by design — events accrue and
+stream, and no telltale surface displays one. A viewer is a later call site, not a
+re-plumb. This is also the one store that holds content rather than keys and numbers,
+and the read/write boundary above names it as the fourth exception.
+[docs/design.md §7.21](docs/design.md) carries the record.
+
+## `telltale doctor` — the launch-time preflight
+
+```
+telltale.exe doctor
+```
+
+Which vendor binaries are on this machine, where each one was found, and what version
+each one reports — plus, said out loud rather than left blank, what was never checked.
+Auth and network always read `not checked`: nothing here probes a login or calls the
+network, and a preflight that implied otherwise would be trusted on the one day it was
+wrong. It runs each vendor bounded to `<binary> --version`, writes nothing, and gives
+each seat its own `--timeout` (default 15s) so a wedged vendor costs its own deadline
+and not the report. The report is words and no colour, so it reads the same in a
+terminal, in a pipe and in a pasted issue.
 
 ## The honest-gauge rule
 

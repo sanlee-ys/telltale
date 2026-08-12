@@ -9,8 +9,13 @@ argument.
 ## Tag day is one command
 
 ```
-git tag v0.1.0 && git push origin v0.1.0
+git tag v0.2.0 && git push origin v0.2.0
 ```
+
+**v0.2.0, not v0.1.0.** A `v0.1.0` ref already exists on `origin`, at
+`dd9d1d7`. That commit predates `release.yml`, so the tag fired no run and no
+release exists. The owner ruled on 2026-08-11 that this ref stays where it is.
+The first release therefore cuts at a higher version.
 
 That is the whole of it. `.github/workflows/release.yml` fires on the `v*` tag
 and does the rest:
@@ -75,19 +80,19 @@ stays a human action. The flow, on the day:
 2. Get the archive's hash. `checksums.txt` on the release already has it, or:
 
    ```
-   winget hash https://github.com/sanlee-ys/telltale/releases/download/v0.1.0/telltale_0.1.0_windows_amd64.zip
+   winget hash https://github.com/sanlee-ys/telltale/releases/download/v0.2.0/telltale_0.2.0_windows_amd64.zip
    ```
 
 3. Copy `winget/` to `manifests/s/sanlee-ys/telltale/<version>/` in a fork of
    `microsoft/winget-pkgs`, and replace the three placeholders in all three
-   files: `{{VERSION}}` (the version WITHOUT the leading `v` — `0.1.0`, not
-   `v0.1.0`; the tag keeps its `v` only inside the URL), `{{SHA256}}`, and
+   files: `{{VERSION}}` (the version WITHOUT the leading `v` — `0.2.0`, not
+   `v0.2.0`; the tag keeps its `v` only inside the URL), `{{SHA256}}`, and
    `{{RELEASE_DATE}}` (`YYYY-MM-DD`).
 4. Validate locally before opening the PR:
 
    ```
-   winget validate --manifest manifests/s/sanlee-ys/telltale/0.1.0
-   winget install --manifest manifests/s/sanlee-ys/telltale/0.1.0
+   winget validate --manifest manifests/s/sanlee-ys/telltale/0.2.0
+   winget install --manifest manifests/s/sanlee-ys/telltale/0.2.0
    telltale council
    ```
 

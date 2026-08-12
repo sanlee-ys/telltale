@@ -20,10 +20,14 @@ Description: |-
   shown as absent rather than as a plausible zero, and a value it derived is
   marked as derived.
 
-  One binary, three modes: `telltale council` (the dispatch room), `telltale
-  statusline` (an in-prompt statusline for Claude Code and Antigravity CLI),
-  and `telltale hud` (a watch-mode TUI across Claude Code, Codex CLI, Gemini
-  CLI, Antigravity CLI and Cursor).
+  One binary. `telltale council` is the dispatch room, and it is the product.
+  The two gauges under it are `telltale statusline` (an in-prompt statusline
+  for Claude Code and Antigravity CLI) and `telltale hud` (a watch-mode TUI
+  across Claude Code, Codex CLI, Gemini CLI, Antigravity CLI, Cursor and Grok
+  CLI). The same binary carries `telltale snapshot` (the fleet state as one
+  JSON document for a program to read), `telltale doctor` (a launch-time
+  preflight over the vendor binaries), and the relays that collect token
+  counts and fleet events.
 
   Windows is the continuously verified target: every commit runs the suite,
   the build and binary-level smokes on windows-latest.
