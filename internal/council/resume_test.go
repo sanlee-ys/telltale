@@ -151,7 +151,7 @@ func TestARoomRecordingNoTurnsIsRefused(t *testing.T) {
 		t.Fatal("a room recording no turns was restored")
 	}
 
-	m := newWithBrief(Options{}, Brief{}, HookSet{}, re)
+	m := newWithBrief(Options{}, Brief{}, GateHook{}, re)
 	if len(m.sessions) != 0 {
 		t.Error("a refused room restored sessions anyway")
 	}
@@ -494,7 +494,7 @@ func TestTheSavedRoomHoldsKeysAndNeverContent(t *testing.T) {
 	draft := "what should we do about the seat"
 
 	m := newWithBrief(Options{Dir: "/home/dev/code/telltale"},
-		Brief{Path: "/home/dev/private/brief.md", Text: secret}, HookSet{}, Reattachment{})
+		Brief{Path: "/home/dev/private/brief.md", Text: secret}, GateHook{}, Reattachment{})
 	m.st.Turn = 2
 	m.st.Draft = draft
 	// A NARROWED roster, so the roster key is actually present below rather than
@@ -586,7 +586,7 @@ func TestTheSavedRoomHoldsKeysAndNeverContent(t *testing.T) {
 // directory and immediately quit.
 func TestNothingIsWrittenBeforeTheFirstTurn(t *testing.T) {
 	home := tempHome(t)
-	m := newWithBrief(Options{Dir: "/home/dev/code/telltale"}, Brief{}, HookSet{}, Reattachment{})
+	m := newWithBrief(Options{Dir: "/home/dev/code/telltale"}, Brief{}, GateHook{}, Reattachment{})
 	m.saveRoom()
 
 	if _, err := os.Stat(filepath.Join(home, ".telltale", "council")); !os.IsNotExist(err) {
@@ -635,7 +635,7 @@ func TestAgeIsCoarserThanASecond(t *testing.T) {
 
 func reattachedModel(t *testing.T, room SavedRoom, opts Options) *Model {
 	t.Helper()
-	return newWithBrief(opts, Brief{}, HookSet{}, Reattachment{
+	return newWithBrief(opts, Brief{}, GateHook{}, Reattachment{
 		Path: "/home/dev/.telltale/council/abc.json",
 		Room: room,
 	})
@@ -722,7 +722,7 @@ func TestOnlyASeatedColumnIsMarkedRestored(t *testing.T) {
 func TestASavedRoomDeclinedByFreshIsMentionedBeforeItIsReplaced(t *testing.T) {
 	tempHome(t)
 	ws := resolveWorkspace("")
-	m := newWithBrief(Options{Fresh: true}, Brief{}, HookSet{}, Reattachment{
+	m := newWithBrief(Options{Fresh: true}, Brief{}, GateHook{}, Reattachment{
 		Path:    "/home/dev/.telltale/council/room.json",
 		Room:    savedRoom(ws),
 		Offered: true,
@@ -744,7 +744,7 @@ func TestASavedRoomDeclinedByFreshIsMentionedBeforeItIsReplaced(t *testing.T) {
 
 func TestAnIgnoredSavedRoomSaysSoAndStartsFresh(t *testing.T) {
 	tempHome(t)
-	m := newWithBrief(Options{}, Brief{}, HookSet{}, Reattachment{
+	m := newWithBrief(Options{}, Brief{}, GateHook{}, Reattachment{
 		Path:    "/home/dev/.telltale/council/abc.json",
 		Ignored: "the saved room file is not readable json",
 	})
@@ -788,7 +788,7 @@ func TestAFreshRoomGainsNothing(t *testing.T) {
 // NOT re-send the brief: that context is already in the history being replayed.
 func TestFirstDispatchAfterReattachResumesTheThread(t *testing.T) {
 	tempHome(t)
-	m := newWithBrief(Options{}, Brief{Path: "p", Text: "OPERATING CONTEXT"}, HookSet{}, Reattachment{
+	m := newWithBrief(Options{}, Brief{Path: "p", Text: "OPERATING CONTEXT"}, GateHook{}, Reattachment{
 		Room: SavedRoom{
 			Workspace: resolveWorkspace(""),
 			Turn:      3,
@@ -840,7 +840,7 @@ func (refusingVendor) NextTurn(prompt, workspace, binary, sessionID string, p ve
 // TestAStaleIdOnASpawnPerTurnSeatIsDroppedAfterOneTurn.
 func TestAVendorThatCannotBuildAResumeStartsFreshAndIsBriefed(t *testing.T) {
 	tempHome(t)
-	m := newWithBrief(Options{}, Brief{Path: "p", Text: "OPERATING CONTEXT"}, HookSet{}, Reattachment{
+	m := newWithBrief(Options{}, Brief{Path: "p", Text: "OPERATING CONTEXT"}, GateHook{}, Reattachment{
 		Room: SavedRoom{
 			Workspace: resolveWorkspace(""),
 			Turn:      3,
@@ -902,7 +902,7 @@ func TestARestoredThreadIsSpentExactlyOnce(t *testing.T) {
 	// A real hooks path, so the guard assertion below is a claim rather than
 	// two empty strings agreeing with each other.
 	hooksPath := filepath.Join(t.TempDir(), "council-hooks.json")
-	m := newWithBrief(Options{Write: true}, Brief{}, HookSet{Path: hooksPath}, Reattachment{
+	m := newWithBrief(Options{Write: true}, Brief{}, GateHook{Path: hooksPath}, Reattachment{
 		Room: SavedRoom{
 			Workspace: resolveWorkspace(""),
 			Turn:      1,
@@ -1262,7 +1262,7 @@ func TestACancelledTurnKeepsTheThreadOnProbation(t *testing.T) {
 // the four seats, on the ordinary path of reattaching a room a few days later.
 func TestAStaleIdOnASpawnPerTurnSeatIsDroppedAfterOneTurn(t *testing.T) {
 	tempHome(t)
-	m := newWithBrief(Options{}, Brief{Path: "p", Text: "OPERATING CONTEXT"}, HookSet{}, Reattachment{
+	m := newWithBrief(Options{}, Brief{Path: "p", Text: "OPERATING CONTEXT"}, GateHook{}, Reattachment{
 		Room: SavedRoom{
 			Workspace: resolveWorkspace(""),
 			Turn:      3,

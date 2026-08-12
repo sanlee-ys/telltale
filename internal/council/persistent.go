@@ -502,11 +502,17 @@ func (m *Model) queueGate(c *Column, g *runner.Gate) {
 	if g == nil || g.RequestID == "" {
 		return
 	}
-	// Two ways a call is approved without a card, and they are not the same
-	// claim. autoApproveRoutine is a judgement about the CALL — this one is
-	// routine, on a list that has been argued over. !Asking is a decision about
-	// the ROOM: the user said stop asking, so nothing is being classified and
-	// nothing is being trusted, the answer is just yes.
+	// THREE ways a call is approved without a card, and they are not the same
+	// claim. autoApproveRoutine is a judgement about the CALL — this shell
+	// command is routine, on a list that has been argued over.
+	// isReadOnlyTool is a judgement about the TOOL — this one changes nothing,
+	// by name, and it is here because council's gate hook made these calls
+	// visible for the first time (gatehook.go): `Read` and `Glob` raised no
+	// request at all under the older posture and raise one under the hook, so
+	// without this line the same build that closed the gate's last hole would
+	// have tripled the cards. !Asking is a decision about the ROOM: the user
+	// said stop asking, so nothing is being classified and nothing is being
+	// trusted, the answer is just yes.
 	//
 	// It is checked here rather than left to the invocation because a process
 	// already running keeps the gate flags it was spawned with. `a` pressed
@@ -514,7 +520,7 @@ func (m *Model) queueGate(c *Column, g *runner.Gate) {
 	// keep asking until the turn ended — the promise broken at the moment it
 	// was made. The respawn that drops the flags happens later, on the next
 	// dispatch, through seatPosture.
-	if !m.st.Asking() || autoApproveRoutine(g) {
+	if !m.st.Asking() || autoApproveRoutine(g) || isReadOnlyTool(g.Tool) {
 		m.sendDecision(PendingGate{
 			Vendor: c.Vendor, RequestID: g.RequestID, ToolUseID: g.ToolUseID,
 			Text: g.Text,

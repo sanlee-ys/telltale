@@ -47,7 +47,7 @@ func TestStateMDStaleNoticeJoinsReattach(t *testing.T) {
 	t.Cleanup(func() { measureStateMDBehind = orig })
 	measureStateMDBehind = func(string) (int, bool) { return 3, true }
 
-	m := newWithBrief(Options{Dir: t.TempDir()}, Brief{}, HookSet{}, Reattachment{
+	m := newWithBrief(Options{Dir: t.TempDir()}, Brief{}, GateHook{}, Reattachment{
 		Path:    "-",
 		Ignored: "the saved room could not be read",
 	})
@@ -67,7 +67,7 @@ func TestNewWithBriefSurfacesStateMDStaleness(t *testing.T) {
 	t.Cleanup(func() { measureStateMDBehind = orig })
 	measureStateMDBehind = func(string) (int, bool) { return 7, true }
 
-	m := newWithBrief(Options{Dir: t.TempDir()}, Brief{}, HookSet{}, Reattachment{})
+	m := newWithBrief(Options{Dir: t.TempDir()}, Brief{}, GateHook{}, Reattachment{})
 	if !strings.Contains(m.st.Notice, "STATE.md is 7 commits behind HEAD") {
 		t.Fatalf("room opened without the staleness notice: %q", m.st.Notice)
 	}

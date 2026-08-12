@@ -189,9 +189,10 @@ type Model struct {
 	// being able to reach it.
 	brief Brief
 
-	// hooks is the user's own hook configuration, copied into a file of its
-	// own so the gated seat can be pointed at it.
-	hooks HookSet
+	// hooks is council's own PreToolUse gate hook, written to a settings file
+	// of its own so the gated seat can be pointed at it. Named `hooks` from
+	// when it held the operator's; what it holds now is the room's own gate.
+	hooks GateHook
 
 	// flowChain holds the active workflow DAG sequence if an orchestrated flow was dispatched.
 	flowChain *FlowChain
@@ -293,10 +294,10 @@ type Model struct {
 // The brief is loaded by Run before this, so a bad path fails before the
 // alternate screen is entered rather than as an unreadable error behind a TUI.
 func New(opts Options) *Model {
-	return newWithBrief(opts, Brief{}, HookSet{}, Reattachment{})
+	return newWithBrief(opts, Brief{}, GateHook{}, Reattachment{})
 }
 
-func newWithBrief(opts Options, b Brief, hs HookSet, re Reattachment) *Model {
+func newWithBrief(opts Options, b Brief, hs GateHook, re Reattachment) *Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &Model{
 		opts:       opts,
@@ -1943,15 +1944,14 @@ func (m *Model) View() tea.View {
 	return v
 }
 
-// wantsHooks reports whether this room is the one that needs its hooks copied.
+// wantsGateHook reports whether this room is the one that gates.
 //
-// Exactly the room that passes --setting-sources "", and it is written as the
-// same condition as seatPosture's rather than as "a write room" so the two
-// cannot drift apart. A read-only or --auto room loads the user's settings
-// natively: there is nothing to repair there, no reason to leave a temporary
-// file on disk for it, and injecting the hooks anyway would fire each of them
-// twice.
-func wantsHooks(opts Options) bool { return opts.Write && !opts.Auto }
+// Written as the same condition as seatPosture's rather than as "a write room"
+// so the two cannot drift apart. A read-only or --auto room has nobody to ask,
+// so a hook that answers "ask" there would stall the seat on a question no card
+// is drawn for — and there is no reason to leave a temporary file on disk for a
+// room that will not read it.
+func wantsGateHook(opts Options) bool { return opts.Write && !opts.Auto }
 
 // Run starts the room.
 //
@@ -2063,9 +2063,9 @@ func Run(opts Options) error {
 	// declined; see seatsFor.
 	opts.Seats = seatsFor(opts.Seats, re.Room.Seats, re.Active() && !re.Offered)
 
-	var hooks HookSet
-	if wantsHooks(opts) {
-		hooks = LoadHookSet()
+	var hooks GateHook
+	if wantsGateHook(opts) {
+		hooks = NewGateHook()
 	}
 	// Cleaned up here as well as in teardown. teardown covers the quit paths;
 	// this covers every other way out of a program, including one that returns

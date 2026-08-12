@@ -135,7 +135,7 @@ func TestHeaderStatesBriefedOrNot(t *testing.T) {
 // boolean crosses into State.
 func TestBriefContentNeverReachesState(t *testing.T) {
 	secret := "the private division-of-labour convention"
-	m := newWithBrief(Options{}, Brief{Path: "p", Text: secret}, HookSet{}, Reattachment{})
+	m := newWithBrief(Options{}, Brief{Path: "p", Text: secret}, GateHook{}, Reattachment{})
 	m.st.Width, m.st.Height = 120, 24
 
 	if !m.st.Briefed {

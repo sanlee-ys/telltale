@@ -211,21 +211,19 @@ Nothing open. The last one here was the 44 seconds, and it was measured
 
 ## Known gaps, not yet owned
 
-- **BUILD AWAITING AN OWNER RULING, 2026-08-11. The gated seat can keep the
-  user's settings, because an `ask` beats an `allow`.** Measured on Claude Code
-  2.1.226, two trials per arm, in throwaway directories: an injected `ask` rule
-  for a shape the machine's own settings ALLOW raised a permission request and
-  the denial held, and a `PreToolUse` hook returning `permissionDecision: "ask"`
-  did the same. A control with the same hook file and no decision ran ungated,
-  so the decision is the cause rather than the file. `--setting-sources ""`
-  therefore stops being the only honest build, and dropping it returns the
-  user's deny rules, their user-level commands and their hooks to the seat.
-  **Nothing was built.** [design.md §9.8](docs/design.md)'s dated block carries
-  the rig, all eight arms, the recommendation (inject a hook, not a rule list —
-  a `touch` that creates a file ran ungated, so a shape list leaks like an allow
-  list) and the five things the probe did not settle. Two of those five decide
-  the build: a matcherless hook was never measured, and a hook is a process per
-  tool call on a seat re-founded to stop paying process cost.
+- **UNMEASURED, 2026-08-12. Council now adds a `PreToolUse` hook to a file the
+  operator also populates, and the two have never been run together.** This is
+  the one item left over from the gate-hook build that shipped the same day
+  ([design.md §9.8](docs/design.md), second dated block — the build itself is
+  done, and the four other open items with it). The docs rank `deny` over
+  `defer` over `ask` over `allow` when several hooks answer, which makes a
+  weakening unlikely: a `deny` from the operator's own hook beats council's
+  `ask`. "Unlikely by documentation" is the standard of evidence that section
+  exists to distrust, and the credential guard is exactly the hook that must not
+  come back weaker for council having added one beside it. What would settle it
+  is one arm of the same rig: a probe settings file carrying council's gate hook,
+  run on a machine whose own `PreToolUse` hook denies a known shape, asserting
+  the denial still holds.
 
 - **ATTRIBUTED, 2026-08-08. Spawning was never the cost; `wait` is, and only on
   the three seats that are not persistent.** One traced `@all` turn, all four

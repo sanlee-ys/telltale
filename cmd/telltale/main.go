@@ -7,8 +7,12 @@
 //	                      product marker — ADR-004)
 //	telltale hud          cross-vendor watch-mode TUI
 //	telltale council      dispatch room: one brief to several vendor CLIs at once
-//	telltale hook <v>     vendor hook relay: a per-turn payload on stdin, token
+//	telltale hook cursor  vendor hook relay: a per-turn payload on stdin, token
 //	                      counts to ~/.telltale/usage/, nothing on stdout
+//	telltale hook gate    the council gate's own PreToolUse hook: one "ask"
+//	                      decision on stdout, per tool call, on the gated Claude
+//	                      seat only. Nobody types it; the room writes a settings
+//	                      file naming it (design.md §9.8)
 //	telltale otel <v>     vendor telemetry collector: a loopback OTLP listener the
 //	                      vendor's own exporter pushes to, token counts to
 //	                      ~/.telltale/usage/ (design.md §7.16a)
@@ -67,6 +71,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/cursorhook"
 	"github.com/sanlee-ys/telltale/internal/doctor"
 	"github.com/sanlee-ys/telltale/internal/eventsink"
+	"github.com/sanlee-ys/telltale/internal/gatehook"
 	"github.com/sanlee-ys/telltale/internal/grokotel"
 	"github.com/sanlee-ys/telltale/internal/hud"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -261,14 +266,40 @@ func runEvents(args []string) error {
 
 func runHook(args []string) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "telltale hook: want a vendor (cursor)")
+		fmt.Fprintln(os.Stderr, "telltale hook: want cursor or gate")
 		return
 	}
 	switch args[0] {
 	case "cursor":
 		runCursorHook()
+	case gatehook.Verb:
+		runGateHook()
 	default:
-		fmt.Fprintln(os.Stderr, "telltale hook: unknown vendor "+args[0]+" (want cursor)")
+		fmt.Fprintln(os.Stderr, "telltale hook: unknown hook "+args[0]+" (want cursor or gate)")
+	}
+}
+
+// runGateHook answers one PreToolUse hook invocation on the gated council seat:
+// ask, every time, about every tool (design.md §9.8, amended 2026-08-12).
+//
+// Nobody types this. `telltale council --write` writes a settings file naming
+// it and points the Claude seat at it, and Claude Code runs it once per tool
+// call — so this is the hottest path in the binary and it does the least work
+// of anything in it.
+//
+// Two properties it must not lose. Stdin is DRAINED before anything is
+// printed: the vendor writes the tool payload down that pipe, and a hook that
+// exits without reading gives the vendor a broken pipe instead of a decision.
+// And exactly one thing is written to stdout, because a hook's stdout IS its
+// result — a stray line here is not a log message, it is a malformed decision,
+// and a malformed decision is a call that runs ungated behind a badge still
+// claiming the gate. Everything that could go wrong goes to stderr.
+func runGateHook() {
+	if _, err := io.Copy(io.Discard, os.Stdin); err != nil {
+		fmt.Fprintln(os.Stderr, "telltale hook gate:", err)
+	}
+	if _, err := os.Stdout.Write(gatehook.Decision()); err != nil {
+		fmt.Fprintln(os.Stderr, "telltale hook gate:", err)
 	}
 }
 

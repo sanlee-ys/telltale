@@ -19,7 +19,7 @@ import (
 func dispatchedRoom(t *testing.T, opts Options) *Model {
 	t.Helper()
 	tempHome(t)
-	m := newWithBrief(opts, Brief{}, HookSet{}, Reattachment{})
+	m := newWithBrief(opts, Brief{}, GateHook{}, Reattachment{})
 	m.st.Turn = 1
 	m.sessions[model.VendorClaude] = "claude-sess-1"
 	return m

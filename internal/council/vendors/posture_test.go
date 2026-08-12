@@ -65,6 +65,12 @@ func TestUngatedWritePostureCanLandWork(t *testing.T) {
 	}
 }
 
+// FirstTurn is the spawn-per-turn path, which is never handed a gate-hook file
+// — so it gets the fallback posture, and that is the safe default rather than
+// an oversight: a caller that has not been taught about the hook must not
+// launch a seat keeping the operator's allow rules with nothing in front of
+// them. The persistent path is where the hook rides; see
+// TestAWiredGateHookKeepsTheOperatorsSettings.
 func TestGatedPostureLeavesCommandClassificationToCouncil(t *testing.T) {
 	spec, _ := Claude{}.FirstTurn("brief", `C:\ws`, "claude", PostureWriteGated)
 	if !slices.Contains(spec.Args, "--setting-sources") {

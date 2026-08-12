@@ -5137,6 +5137,11 @@ Three flags turn it on, none is optional, and **two of them do nothing alone**:
 | `--permission-mode manual` | makes the call ask rather than assume | alone, there is nobody to ask, so the call short-circuits to *"you haven't granted it yet"* and the vendor gives up |
 | `--setting-sources ""` | stops the user's own permission rules pre-approving the call | measured on a machine allowing `Bash(mkdir:*)`: `mkdir zzz` **ran ungated** and the directory was created |
 
+**The third flag became a FALLBACK on 2026-08-12** and the table row is the record of why it
+was ever needed. Council injects its own `PreToolUse` hook instead, which runs at step one and
+beats an allow rule at step five, so the operator's settings stay loaded. The dated block at
+the end of this section carries the measurements and the build.
+
 The third is the honesty of the whole feature, and it is the one nobody would have thought to
 test. Permission *allow rules* in settings files are consulted **before** the callback, so a
 call they cover never reaches the gate at all. Without that flag, "nothing writes without your
@@ -5153,6 +5158,12 @@ and the build it implies are below.
 classifies as read-only are approved without asking — `git status` was ungated under both
 setting-source configurations, and so is `echo` — so the claim is about calls that *change*
 things and is worded that way everywhere.
+
+**RETIRED 2026-08-12, and kept because it is the record of a hole that existed for eight days.**
+Everything in the next four paragraphs describes council copying the USER's hooks into the
+ephemeral file. The seat no longer drops their settings, so there is nothing to copy and a copy
+would run every one of their hooks twice. The ephemeral file survives, built the same way and
+for the same reason, carrying council's own gate hook instead.
 
 **The second limit was a hole, and it is now closed.** Dropping the setting sources also
 dropped the user's own hooks and user-level commands from that seat. Half of that is the
@@ -5210,8 +5221,10 @@ unattended is the exception and has to be typed.
 
 #### The gate can keep the user's settings, measured 2026-08-11 — and the build is not authorised
 
-Nothing changed in the product on this date. This block records a probe, and the ruling it
-waits for. `STATE.md` carries the same item as build-awaiting-owner-ruling.
+**Superseded by the block below it, 2026-08-12, and kept whole.** Nothing changed in the
+product on this date; this is the record of the probe and of the ruling it waited for. The
+ruling came the next day — measure the two open unknowns, build only if both support it — and
+both did.
 
 **The claim.** Claude Code evaluates a tool call in six steps, in this order: hooks, deny
 rules, ask rules, permission mode, allow rules, then the `canUseTool` callback. That is the
@@ -5270,13 +5283,13 @@ what makes the gate fire; it is what makes it fire *uniformly*.
 **What build this implies, and it is the hook rather than the rule.** A2 is why. `touch`
 creates a file and it ran ungated on both trials, so the user's rules cover more shapes than
 anyone would enumerate, and an `ask` list built shape by shape leaks exactly the way an allow
-list leaks. That is the same defect `hookset.go` already refuses by naming one key instead of
+list leaks. That is the same defect `hookset.go` (now `gatehook.go`) already refuses by naming one key instead of
 deleting many. A matcherless `PreToolUse` hook has no list to leak: the documentation's own
 advice for a check that must run on every tool call is a hook, for this reason. So the shape
 to build is council injecting its own `PreToolUse` hook that answers `"ask"`, into the same
 ephemeral `--settings` file it already writes, and **dropping `--setting-sources ""`** — which
 returns the user's deny rules, their user-level commands and their hooks to the gated seat,
-and retires the hooks copy in `hookset.go` along with the badge that reports whether it
+and retires the hooks copy in `hookset.go` (the file became `gatehook.go`) along with the badge that reports whether it
 worked.
 
 **What is NOT settled, and each item is a reason the build waits.**
@@ -5299,6 +5312,120 @@ worked.
   exists. Under this build the guard IS the gate, and "the user's hooks are carried" stops
   being a separate claim — a badge that kept saying it would be reporting a file that no
   longer does that job.
+
+#### The two deciding measurements, and the build, 2026-08-12
+
+The owner ruled: measure the two items above that decide the build, then build only if both
+measurements support it. Both did, and the build is in. Claude Code **2.1.228** (the box moved
+on from 2.1.226 between the two dates), Windows 11, `claude-haiku-4-5` on every turn, two
+trials per arm, throwaway directories, the same rig as the block above — a probe replicating
+this seat's own argv, one turn written on stdin as `Turn()` builds it, `can_use_tool` answered
+as `Decide()` builds it, and **the decisive observable is the filesystem, never the stream**.
+The adopter arm stays unrun for the same reason: copying a credential store into a probe
+directory is a redline.
+
+**(a) A matcherless hook fires for every tool shape, and the ask reaches the card.** The arm
+kept the operator's settings live — no `--setting-sources ""` — and injected one `PreToolUse`
+entry with no `matcher` field, returning `permissionDecision: "ask"`.
+
+| arm | `mkdir gate-a` (an allow rule covers it) | `install -d gate-b` (no rule covers it) | `Write gate-c.txt` (not a shell command) | on disk | trials |
+|---|---|---|---|---|---|
+| **M** matcherless hook returns `"ask"` | request, `hook` | request, `hook` | request, `hook` | nothing | 2/2 |
+| **M control** same file, hook returns no decision | **no request, directory created** | request | request | `gate-a` | 2/2 |
+| **shipped binary** the file council now writes, `telltale hook gate` | request, `hook` | request, `hook` | request, `hook` | nothing | 2/2 |
+
+Every request carried `"decision_reason_type":"hook"` and the hook's own sentence in
+`decision_reason`, forwarded verbatim to the `can_use_tool` card. **The control is what makes
+this a finding**: the same file, the same hook process running — its breadcrumbs prove it — and
+only the decision removed. `mkdir` went ungated and the directory landed, which also
+re-reproduces the 2026-08-04 bypass on 2.1.228. The decision causes the gate, not the file.
+
+**The matcher forms were measured against each other** in one turn, four entries side by side
+writing to four breadcrumb files: **matcherless, `"*"` and `""` each saw both the `Bash` call
+and the `Write` call; `"Bash"` saw only the `Bash` call.** That one hook sees every tool call
+was documentation until this turn. The absent field is what ships, of the three equivalent
+forms, because it is the only one that cannot later be read as a pattern somebody should widen.
+
+**A Windows trap, and it is the worst failure this feature has.** Claude Code hands the hook
+command to **`/usr/bin/bash`** — Git Bash, on the platform this product primarily targets. The
+first three arms measured nothing because bash ate every backslash of a native Windows path:
+
+```
+/usr/bin/bash: line 1: C:UserssanleAppDataLocalTempclaudeC--…askhook.exe: command not found
+```
+
+`exit_code: 127`, `outcome: "error"` — and **a hook that fails to run makes no decision, so
+every call ran ungated while the badge went on claiming a gate**. It was found only because a
+`SessionStart` hook was planted in the same file to prove the file was read at all, which costs
+no model turn. Council quotes the command and swaps the separators;
+`TestTheHookCommandSurvivesGitBash` pins both.
+
+**The first fix for it was wrong, and the Linux CI job is what said so.** `filepath.ToSlash` is
+a **no-op on Linux**, where a backslash is a legal filename character, so it made the
+conversion depend on the host Go compiled for. The string is not read by the host — it is read
+by bash, on every platform, where a backslash is the escape character and cannot survive as
+itself. The swap is now unconditional, and the test feeds a Windows path on every runner.
+
+**(b) The hook costs tens of milliseconds, and the operator's own settings cost more.** The
+measure is the interval between the assistant's `tool_use` block landing on stdout and the
+`can_use_tool` request landing — the window Claude Code evaluates permissions and runs hooks in.
+
+| arm | per-call gap, all samples (ms) | median | trials |
+|---|---|---|---|
+| **shipped today** — `--setting-sources ""`, no hooks at all | 23.0, 12.3, 21.2, 10.5, 6.8 | **12.3** | 2 |
+| operator's settings live, **no** council hook | 284.6, 280.5, 291.0, 234.6 | **282** | 2 |
+| live + council's hook, a 3 MB probe binary | 358.9, 351.7, 249.5, 348.4, 298.4, 258.4 | **323** | 2 |
+| live + council's hook, **the shipped 14 MB `telltale.exe`** | 523.6, 491.2, 461.2, 451.8, 439.7, 362.7 | **456** | 2 |
+
+Read the rows against each other rather than against zero, because **most of the delta is not
+the hook**. Loading the operator's settings at all costs ~270 ms per call — that is their own
+`PreToolUse` hooks running, and it is the thing this build BUYS, not a price it adds. Council's
+own hook adds **~41 ms** as a small binary and **~174 ms** as the shipped one. Measured
+directly, outside the CLI, 20 spawns through the same Git Bash: the small binary is
+**36.2 ms median**, `telltale.exe` is **54.4 ms median** — the 14 MB single binary links the TUI
+framework on a path that runs once per tool call, which is ADR-002's statusline argument
+arriving at a second door. Against a warm Claude turn of 6.4 s (`STATE.md`'s traced `@all`), three
+gated calls add ~0.5 s. That is the owner's "tens of milliseconds is fine" band at the binary's
+own cost and inside it at the process's; it is nowhere near the "a second per call" that fails.
+
+**What shipped.** Council writes an ephemeral `--settings` file containing exactly one key,
+`hooks`, holding one matcherless `PreToolUse` entry that runs `telltale hook gate` — a new mode
+beside `telltale hook cursor`, which drains stdin and prints one decision object and nothing
+else. `--setting-sources ""` is **dropped**, so the gated seat loads the operator's deny rules,
+their user-level commands and their own hooks again. `--permission-mode manual` is **kept**:
+the documentation makes it an alias for `default` on 2.1.200+, which would make it decoration,
+but every arm of both probes carried it and nothing has measured the seat without it — the same
+rule that kept `--permission-prompt-tool stdio` when it was absent from `--help`.
+
+**The fallback is the old build, not a hole.** A room whose hook file cannot be written — no
+temp directory, a binary that cannot locate itself — passes `--setting-sources ""` and gates the
+2026-08-04 way. It gives up the operator's settings and the column says so. Weaker in what it
+keeps, never weaker at the gate.
+
+**One cost was not on the list of five, and it changed the room.** The hook asks about
+EVERYTHING, which is the point — and `Read`, `Glob` and `git status` raised **no request at all**
+under the old flag, because Claude Code approves what it classifies read-only before the
+callback. Under the hook all three raise one. Shipping only the hook would have tripled the
+cards, and this room already knows what that costs: the first session with the gate carded the
+user thirty-four times, which is why `autoApproveRoutine` exists. So council answers them
+itself — `autoApproveRoutine` for shell commands, and a new positive list of tool names that
+change nothing (`Read`, `Glob`, `Grep`, `NotebookRead`) for the calls that are not shell
+commands. Positive, so a tool Claude Code adds next month draws a card rather than being waved
+through; `TodoWrite` is deliberately absent, because nothing here measured what it writes.
+
+**The badge's sentence changed, as the fifth item predicted.** It no longer claims the
+operator's permission rules are dropped, because they are not. The wired branch says their
+settings stay loaded and that council's own hook asks first; the fallback branch says the
+settings were dropped and why. Both branches still say nothing runs until you answer.
+
+**Of the five unsettled items, two are settled, two are retired by the build, and one remains.**
+The matcherless hook and the per-call cost are measured above. The badge sentence and the
+`--setting-sources ""` question are decided by what shipped. **Composition with the operator's
+own `PreToolUse` hooks is still unmeasured** — council now adds a second hook to a file the
+operator also populates, the docs rank `deny` over `defer` over `ask` over `allow` when several
+apply, and the credential guard is exactly the hook that must not be weakened by the addition.
+The ranking makes a weakening unlikely (a `deny` from their hook beats council's `ask`), and
+"unlikely by documentation" is the standard of evidence this section exists to distrust.
 
 ### 9.9 The room remembers — a conversation, not a ticker
 
@@ -6363,7 +6490,7 @@ be there.
 being the answer to "what is the room doing" and becomes only the seed.** `dispatch.go` already
 says this for the request path — "`m.st.Asking`, not `m.opts.Auto`: the flag only SEEDS this at
 launch" — and the two misses were both places that had not heard. Every `opts.*` read on a
-demoted control is now either a launch-time decision (`wantsHooks`, the `savedPosture` record) or
+demoted control is now either a launch-time decision (`wantsGateHook`, the `savedPosture` record) or
 a bug, and the way to tell them apart is to ask whether an in-room control can move the state
 underneath it. Both fixes are pinned by tests rather than comments for the same reason: in every
 room nobody typed a control into, the flag and the state agree, so the fixtures cannot tell them
