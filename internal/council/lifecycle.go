@@ -19,17 +19,36 @@ import (
 //   - /arena drop <seat> (or all) deletes a racer's worktree and branch,
 //     refusing while either still holds work the room has not taken.
 //
-// THE ADOPT IS A MERGE, NOT A CHECKOUT, and that fork is deliberate.
-// claude-squad's adopt checks the attempt's branch out over the user's — which
-// moves HEAD, rewrites the working tree wholesale, and leaves the user's own
-// branch behind. A room may not mutate more state than the act requires
-// (§9.37's whole posture: offer, never take), so council does the smallest git
-// operation that lands the work: `git merge --no-ff arena/t<N>/<seat>` in the
-// room's repo, on the branch the user is already on. --no-ff so the adoption
-// is a visible event in history — a fast-forward would dissolve the race into
-// the room's own line, and the merge commit is the receipt that says where the
-// work came from. The user's branch, HEAD, and uncommitted files (none — see
-// the clean-tree gate) are exactly where they were, plus one merge.
+// THE ADOPT IS A MERGE ONTO A FRESH BRANCH, and both halves of that are
+// deliberate.
+//
+// The merge half is the older fork. claude-squad's adopt checks the attempt's
+// branch out over the user's — which rewrites the working tree wholesale and
+// leaves the user's own branch behind. A room may not mutate more state than
+// the act requires (§9.37's whole posture: offer, never take), so council does
+// the smallest git operation that lands the work: `git merge --no-ff
+// arena/t<N>/<seat>`, with --no-ff so the adoption is a visible event in
+// history — a fast-forward would dissolve the race into the room's own line,
+// and the merge commit is the receipt that says where the work came from.
+//
+// THE FRESH BRANCH IS THE OWNER'S RULING OF 2026-08-11 (§9.37's open question,
+// option b). The merge used to land on whatever branch the room was standing
+// on, which for most workspaces is local `main`. That is the smallest act git
+// can perform and it was the wrong one HERE: the owner's standing workflow is
+// branch-then-PR on every repo and every machine, never a commit straight to
+// main, so the first live adoption (race t9) ended with FOUR hand-run git
+// commands — cut a branch, move the merge onto it, reset main back to origin,
+// push — before the work could become a PR. So adopt now cuts
+// `adopt/t<N>-<vendor>` from the room's current HEAD, checks it out, and merges
+// there. The branch the room was on never moves, and the hand-off shrinks from
+// four commands to one: `gh pr create`, which the notice names.
+//
+// The cost is stated rather than hidden: council now mints a branch name in the
+// operator's repo, which is a bigger footprint than one merge commit. It stays
+// revertible with one command (`git checkout <old branch>` and `git branch -D`),
+// it is only ever cut on the user's own y, and a FAILED adoption removes it
+// again — a room left standing on an empty branch it cut for a merge that never
+// landed would be the verb charging for its own failure.
 //
 // Neither verb consults the room's read/write posture. Posture governs what
 // the SEATS may do (§9.16); both of these run only on the user's own y or
@@ -151,24 +170,132 @@ func (m *Model) adoptCommand(arg string) bool {
 		return true
 	}
 
-	// Armed. The question names the exact command y will run — the same
+	// Armed. The question names the exact commands y will run — the same
 	// contract the flow write gate keeps ("y authorizes @codex → docs/out.md")
 	// — because the answer to "may I?" is only informed if the "what" is on
-	// screen. When the racer's work is still uncommitted (arena seats do not
-	// commit; commit-per-turn is on §9.37's deferred list), the commit that
-	// precedes the merge is named too: it writes to the racer's own branch,
-	// but a y that quietly ran two commands after promising one would be the
-	// card lying about its own scope.
+	// screen. Two clauses are conditional on what is actually true: the commit
+	// that precedes the merge when the racer's work is still uncommitted, and
+	// the branch cut, which is named because it is the one thing the adoption
+	// leaves in the repo besides the merge.
+	//
+	// THE NAME IS RESOLVED HERE, NOT AT y, and then carried on adoptOnto. A card
+	// promising `adopt/t9-claude` whose y cut `adopt/t9-claude-2` would be the
+	// card lying about its own scope, which is the defect this whole gate
+	// exists to avoid. A ref minted between the arming and the y is the
+	// remaining window, and that one ends as a named checkout failure with git's
+	// own line rather than as a silent rename.
 	branch := arenaBranch(race.raceN, v)
+	onto, err := freeAdoptBranch(race.workspace, race.raceN, v)
+	if err != nil {
+		m.st.Notice = "adopt: " + err.Error()
+		return true
+	}
 	m.adoptPending = v
-	q := "adopt " + string(v) + "? y runs git merge --no-ff " + branch
+	m.adoptOnto = onto
+	q := "adopt " + string(v) + "? y cuts " + onto + " and runs git merge --no-ff " + branch
 	if len(dirty) > 0 {
-		q = "adopt " + string(v) + "? y commits its worktree to " + branch +
-			", then runs git merge --no-ff " + branch
+		q = "adopt " + string(v) + "? y commits its worktree, cuts " + onto +
+			" and runs git merge --no-ff " + branch
 	}
 	m.st.Notice = q + " · n cancels"
 	m.setDraft("")
 	return true
+}
+
+// adoptBranch names the branch an adoption lands on, from the same race number
+// every other arena name carries (§9.37's renumbering rule: the race number,
+// never the turn).
+//
+// `adopt/t<N>-<vendor>`, with the seat joined by a dash rather than a slash, so
+// the arena branch and its adoption are told apart at the end of the name
+// instead of in the middle: `arena/t9/claude` and `adopt/t9-claude` sit beside
+// each other in one `git branch` listing, where the eye reads the last segment.
+func adoptBranch(raceN int, v model.VendorID) string {
+	return "adopt/t" + itoa(raceN) + "-" + string(v)
+}
+
+// adoptBranchLimit caps the collision suffixes freeAdoptBranch will try. A repo
+// holding 50 adoptions of one racer from one race is a state to report, not to
+// keep counting through.
+const adoptBranchLimit = 50
+
+// freeAdoptBranch picks the name this adoption cuts: adoptBranch's own spelling
+// when nothing holds it, else the first free `-2`, `-3` … suffix.
+//
+// A COLLISION IS ORDINARY, not exotic. Race numbers repeat by design —
+// arenaRaceNumber scans `refs/heads/arena/` alone, so dropping a race's
+// branches frees its number for the next race to mint again (§9.37's own note
+// that t9's leftovers were dropped and the scan will mint t9 next) — and an
+// operator can adopt, revert the merge, and adopt again. Reusing the name would
+// either fail the checkout or land the merge on an older adoption's branch,
+// where the PR would carry work nobody asked about.
+//
+// ONE SCAN, NOT A PROBE PER CANDIDATE. `for-each-ref` over the adopt namespace
+// answers every candidate at once, and it separates "no such branch" from "git
+// could not answer" — which `rev-parse --verify --quiet` cannot, since both
+// exit 1 with nothing on stderr. A scan that cannot run degrades to the plain
+// name with the adoption still running (arenaRaceNumber's rule): the worst case
+// is the collision itself, and `git checkout -b` reports that by name, carrying
+// git's own fatal line.
+func freeAdoptBranch(workspace string, raceN int, v model.VendorID) (string, error) {
+	name := adoptBranch(raceN, v)
+	out, err := gitOut(workspace, "for-each-ref", "--format=%(refname:short)", "refs/heads/adopt/")
+	if err != nil {
+		return name, nil
+	}
+	taken := map[string]bool{}
+	for _, ref := range strings.Split(out, "\n") {
+		if ref != "" {
+			taken[ref] = true
+		}
+	}
+	if !taken[name] {
+		return name, nil
+	}
+	for i := 2; i <= adoptBranchLimit; i++ {
+		if cand := name + "-" + itoa(i); !taken[cand] {
+			return cand, nil
+		}
+	}
+	return "", gitError(name + " and every suffix through -" + itoa(adoptBranchLimit) +
+		" already exist — delete one before adopting this racer again")
+}
+
+// roomRef names where the room's HEAD stands, in the form `git checkout` takes
+// back: the branch name when one is checked out, else the commit itself.
+//
+// Both forms are read because both are reachable. A workspace on a detached
+// HEAD is unusual and entirely legal, and an adoption that could not name where
+// it started could not put the room back after a merge that failed.
+func roomRef(workspace string) (string, error) {
+	if name, err := gitOut(workspace, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil && name != "" {
+		return name, nil
+	}
+	return gitOut(workspace, "rev-parse", "HEAD")
+}
+
+// undoAdoptBranch puts the room back where it started after an adoption that
+// did not land, and returns the sentence saying where the room now stands.
+//
+// A FAILED ADOPTION LEAVES NOTHING BEHIND. The branch was cut for a merge that
+// never arrived, so it holds exactly what the room's own branch holds and
+// deleting it loses nothing — while leaving it would hand the operator a repo
+// standing on an empty branch they never asked for, as the receipt of a failure.
+// This is the conservative half of the 2026-08-11 ruling: the ruling covers
+// where a SUCCESSFUL adoption lands, and the alternative reading — leave the
+// room on the fresh branch so the conflict is resolved there — is recorded in
+// §9.37's ruling block rather than chosen here.
+//
+// Each step that cannot be taken is named rather than swallowed, because what
+// the room is standing on is the one fact the next command depends on.
+func undoAdoptBranch(workspace, from, onto string) string {
+	if _, err := gitOut(workspace, "checkout", from); err != nil {
+		return "the room is left on " + onto + " — git checkout " + from + " puts it back"
+	}
+	if _, err := gitOut(workspace, "branch", "-D", onto); err != nil {
+		return "the room is back on " + from + ", with an empty " + onto + " left behind"
+	}
+	return "the room is back on " + from
 }
 
 // adoptSeat performs the adopt the gate approved, and returns the sentence the
@@ -188,13 +315,19 @@ func (m *Model) adoptCommand(arg string) bool {
 //  2. Re-check the room tree is clean. Between arming and y no turn can run
 //     (the pending gate swallows every key), but nothing stops an external
 //     process from writing to the workspace — the check is one git status.
-//  3. `git merge --no-ff --no-edit <branch>` in the room repo. On failure:
+//  3. `git checkout -b adopt/t<N>-<vendor>` in the room repo: the fresh branch
+//     the 2026-08-11 ruling lands the adoption on, cut from wherever the room
+//     is standing. Where the room stood is read FIRST, because it is what a
+//     failure has to restore.
+//  4. `git merge --no-ff --no-edit <branch>` on that new branch. On failure:
 //     if a merge is actually in progress (MERGE_HEAD exists — a conflict
 //     stopped it midway), `git merge --abort` puts the tree back and the
 //     notice says a human merge is needed; if no merge started (git refused
 //     outright), the tree was never touched and the notice says that instead.
 //     The two endings are different facts and are not collapsed (§4a.1).
-func (m *Model) adoptSeat(v model.VendorID) string {
+//     Either way the branch cut in step 3 is removed and the room goes back to
+//     the branch it was on (undoAdoptBranch).
+func (m *Model) adoptSeat(v model.VendorID, onto string) string {
 	race := m.lastRace
 	if race == nil {
 		// Unreachable from the gate, which only arms over a live race — kept so
@@ -206,6 +339,15 @@ func (m *Model) adoptSeat(v model.VendorID) string {
 		return string(v) + " has no kept worktree from race t" + itoa(race.raceN)
 	}
 	branch := arenaBranch(race.raceN, v)
+	if onto == "" {
+		// Unreachable from the gate, which resolves the name when it arms. Kept
+		// so a future caller cannot land an adoption on an unnamed branch — the
+		// same defensive shape the nil-race check above keeps.
+		var err error
+		if onto, err = freeAdoptBranch(race.workspace, race.raceN, v); err != nil {
+			return "adopt: " + err.Error()
+		}
+	}
 
 	dirty, err := worktreePorcelain(tree)
 	if err != nil {
@@ -229,19 +371,42 @@ func (m *Model) adoptSeat(v model.VendorID) string {
 			" the merge could harm (" + roomDirty[0] + ") — nothing was merged; commit or stash them first"
 	}
 
+	// Where the room stands, read before anything moves it: this is the ref a
+	// failed adoption returns to, and reading it after the checkout would read
+	// the branch the adoption itself just cut.
+	from, err := roomRef(race.workspace)
+	if err != nil {
+		return "adopt: " + err.Error()
+	}
+	if _, err := gitOut(race.workspace, "checkout", "-b", onto); err != nil {
+		// Nothing to restore: the checkout is the first act that moves the room,
+		// so a checkout that failed leaves it exactly where it was.
+		return "the branch could not be cut: " + err.Error() + " — the room is still on " + from
+	}
+
 	if _, err := gitOut(race.workspace, "merge", "--no-ff", "--no-edit", branch); err != nil {
+		conflicted := false
 		if _, mh := gitOut(race.workspace, "rev-parse", "--verify", "MERGE_HEAD"); mh == nil {
 			// A conflict stopped the merge midway. Aborting is the restore, not
 			// a retreat: the alternative leaves the user's repo mid-merge with
 			// conflict markers they never asked for, discovered later as a
 			// broken build. The work is still whole on the arena branch.
+			conflicted = true
 			_, _ = gitOut(race.workspace, "merge", "--abort")
-			return "the merge failed: " + err.Error() +
-				" — aborted, the room tree is restored; adopting " + branch + " needs a human merge"
 		}
-		return "the merge failed: " + err.Error() + " — the room tree is untouched"
+		where := undoAdoptBranch(race.workspace, from, onto)
+		if conflicted {
+			return "the merge failed: " + err.Error() + " — aborted, the room tree is restored and " +
+				where + "; adopting " + branch + " needs a human merge"
+		}
+		return "the merge failed: " + err.Error() + " — the room tree is untouched and " + where
 	}
-	return "adopted " + string(v) + " — " + branch + " is merged; /arena drop " + string(v) + " removes its worktree"
+	// The next command is named because the adoption is deliberately NOT the
+	// end of the hand-off: publishing is the operator's act, as it is for every
+	// other commit (§9.37's founding posture), and the branch this now stands on
+	// is what makes that act one command instead of four.
+	return "adopted " + string(v) + " onto " + onto +
+		" — gh pr create opens the PR · /arena drop " + string(v) + " removes its worktree"
 }
 
 // parseArenaDrop recognises the drop verb inside a /arena draft: "drop",

@@ -8231,8 +8231,14 @@ where the predicted risk lived:
   rendered ✗, correctly). The fix is NOT a blind `Bash(git -C:*)` — that constant also serves
   `--auto` in real workspaces, where pre-approving every `-C` form is a wider grant than the
   verbs it lists — and the vendor file already warns its rule grammar has not been driven.
-  What this needs first is one measured probe of whether the rule syntax can scope a verb
-  behind `-C` at all; the finding is filed, the measurement is the next step.
+  ~~What this needs first is one measured probe of whether the rule syntax can scope a verb
+  behind `-C` at all; the finding is filed, the measurement is the next step.~~ **The probe
+  ran, 2026-08-09, and closed this.** A four-arm probe on the reference box measured the
+  matcher as prefix-only, with no rule spelling that scopes a verb behind `-C`, so
+  `Bash(git -C:*)` stays rejected and a seat runs plain `git` — its cwd is already the
+  workspace. The record is `STATE.md`'s "Closed without code" entry with its 2026-08-10
+  amendment, plus `autoAllowedTools` in `internal/council/vendors/claude.go`. Do not re-open
+  it without a new measurement.
 
 **Amendment, 2026-08-08: the finish line and the `d` key.** Two deferrals came off the list:
 
@@ -8480,12 +8486,14 @@ typed room command; both are §9.17 verbs, reachable mid-session with no flag an
 (`lifecycle.go`). The shapes borrow from the two products that had already worked this seam —
 claude-squad's adopt, Pane's deletion guard — with one deliberate fork each:
 
-- **`/adopt <seat>` merges; it does not check out.** claude-squad's adopt is a checkout of the
+- **`/adopt <seat>` merges; it does not check ~~out~~ the racer's branch out.** claude-squad's
+  adopt is a checkout of the
   attempt's branch over the user's — which moves HEAD, rewrites the tree wholesale, and leaves
   the user's own branch behind. That is more state than the act requires, and §9.37's whole
   posture is offer-never-take, so council does the least-magic git operation that lands the
-  work: `git merge --no-ff arena/t<N>/<seat>` in the room's repo, on the branch the user is
-  already standing on. `--no-ff` keeps the adoption a visible event in history — the merge
+  work: `git merge --no-ff arena/t<N>/<seat>` in the room's repo, ~~on the branch the user is
+  already standing on~~ **on a fresh branch council cuts for it — ruled 2026-08-11, the last
+  block in this section; the merge itself is unchanged**. `--no-ff` keeps the adoption a visible event in history — the merge
   commit is the receipt saying where the work came from. Because arena seats leave their work
   uncommitted (commit-per-turn is still deferred), a dirty attempt is first committed in its
   OWN worktree, on its OWN arena branch, under the user's own git config — and the y/n card
@@ -8654,14 +8662,16 @@ codex seat raced under the preamble and ended with "nothing pushed." One race is
 an instruction a vendor obeyed once is still an instruction, so the sentence above stands
 exactly as written and this measurement does not promote it to a control.
 
-**Open question, 2026-08-09: where should an adoption land?** Filed from the first live
+**Open question, 2026-08-09 — RULED 2026-08-11, option (b): where should an adoption land?**
+Filed from the first live
 `/adopt` rather than decided, because the answer depends on a convention the room cannot see.
 `/adopt` merges into the room repo's current branch — for most workspaces, local `main` — and
 that is the smallest honest act the verb can perform. But an operator whose repos are run
 branch→PR (this project's own convention, and this operator's standing rule across every
 machine) then holds a merge commit on a local `main` that must never be pushed as-is; the
 first live adoption ended with four hand-run git commands turning the merge into a PR branch
-and resetting `main` back to origin. Options, none ruled on: (a) keep the current shape and
+and resetting `main` back to origin. Options, ~~none ruled on~~ **(b) ruled, 2026-08-11 — the
+block below**: (a) keep the current shape and
 document the hand-off (an adoption is a local act; publishing is the operator's, as it
 already is for every other commit); (b) `/adopt` onto a NEW branch cut from the room's HEAD
 (`adopt/t<N>-<vendor>`?), never touching the current branch — closer to branch→PR, but the
@@ -8669,6 +8679,56 @@ room minting branch names in the operator's repo is a bigger footprint than one 
 flag or second verb for each. The founding posture — offer, never take — leans (b) no further
 than it leans (a): both are one revertible act on the operator's own y. Whoever picks this up
 starts from the measured friction: four commands, once per adoption, only on branch→PR repos.
+
+**Ruling, 2026-08-11: an adoption lands on a fresh branch, never on the branch the workspace
+has checked out.** The owner ruled option (b), and the reason is the convention the room
+could not see: the owner's workflow is branch-then-PR on every repo and every machine, and a
+commit straight to `main` is never made. The room's own posture does not decide this — both
+options are one revertible act on the operator's y — so the measured friction decides it, and
+the friction is four hand-run git commands per adoption on every branch→PR repo. A fresh
+branch turns that hand-off into one `gh pr create`. What was built:
+
+- **The name is `adopt/t<N>-<vendor>`, cut from the room's current HEAD and checked out.** The
+  race number, never the turn, like every other arena name (the renumbering amendment above).
+  The seat is joined by a dash rather than a slash so `arena/t9/claude` and `adopt/t9-claude`
+  differ in the last segment, which is where a reader of `git branch` looks. `--no-ff` and the
+  commit-then-merge order are untouched: what moved is WHERE the merge lands, not what it does.
+- **A collision takes the next free suffix** (`-2`, `-3`, … to 50, then a named refusal). The
+  collision is ordinary rather than exotic: race numbers repeat once a race's branches are
+  dropped, since the scan that numbers a race reads `refs/heads/arena/` alone, and an operator
+  can adopt, revert and adopt again. Reusing the name would either fail the checkout or land
+  the merge on an older adoption's branch, where the PR would carry work nobody asked about.
+  The free name is resolved WHEN THE CARD ARMS and carried to the `y`, because a card that
+  named `adopt/t9-claude` and then cut `adopt/t9-claude-2` would be the card describing
+  something other than what it ran — the one contract this gate exists to keep. One
+  `for-each-ref` over the adopt namespace answers every candidate at once and separates "no
+  such branch" from "git could not answer"; a scan that cannot run degrades to the plain name
+  with the adoption still running, and `git checkout -b` reports the collision with git's own
+  fatal line.
+- **A failed adoption leaves nothing behind.** The branch is cut for a merge, so a merge that
+  conflicts or refuses ends with the branch deleted and the room back on the branch it came
+  from — an empty branch handed over as the receipt of a failure would be the verb charging
+  for its own failure. The two failure endings stay two facts (§4a.1): a conflict aborts and
+  says a human merge is needed, a merge that never started says the tree is untouched, and
+  both now also say where the room stands. A restore that cannot finish says THAT instead,
+  naming the branch the room is left on and the command that puts it back.
+- **The alternative reading, recorded rather than taken**: leave the room standing on the
+  fresh branch after a conflict, so the human merge happens there. It is defensible — that is
+  where the resolution belongs — and it was not chosen, because the ruling covers where a
+  SUCCESSFUL adoption lands and a failure quietly moving the operator to a new branch is a
+  state change nobody asked for. If a live conflict makes the restore feel wrong, this is the
+  line to amend.
+- **Existing refusals are untouched**, and so are their tests: the dirty-room gate with its
+  untracked-bystander rule, the zero-change refusal, the mid-turn refusal, and `/arena drop`'s
+  unmerged-commit guard, which reads the room's HEAD and therefore counts zero as soon as the
+  adopt branch holds the merge.
+
+Verification, on this section's own terms: the mechanics — the branch cut and checked out, the
+room's own branch not moving, the suffix on a taken name, the conflict restore, and the notice
+naming the branch and `gh pr create` — are pinned by offline tests against real temp
+repositories (`lifecycle_test.go`). **No live adoption has run under this shape yet**, and the
+debt is one `/arena` whose winner is adopted and pushed as a PR. Stated here rather than
+implied paid, the way every other amendment in this section states it.
 
 ### 9.38 paste lands whole, and never sends (2026-08-09)
 

@@ -241,11 +241,20 @@ type Model struct {
 	// merged into the room's repo (/adopt, lifecycle.go), empty when nothing is.
 	//
 	// Confirmed for /write's reason, not `c`'s: nothing is destroyed by an
-	// adopt — the merge is revertible with git's own tools — but it MUTATES THE
-	// USER'S REPO, which no other act in this room does without a y. The
-	// question on the card names the exact git command, because "may I?" is
-	// only answerable when the "what" is on screen.
+	// adopt — the merge is revertible with git's own tools, and the branch it
+	// cuts with `git branch -D` — but it MUTATES THE USER'S REPO, which no
+	// other act in this room does without a y. The question on the card names
+	// the exact git commands, because "may I?" is only answerable when the
+	// "what" is on screen.
 	adoptPending model.VendorID
+	// adoptOnto is the branch the pending adoption will cut and merge onto —
+	// resolved when the card arms (freeAdoptBranch), not when y is pressed.
+	//
+	// It rides beside adoptPending rather than being recomputed at y for the
+	// card's own contract: the question on screen names this branch, and a y
+	// that cut a different one — the collision suffix moves the name — would
+	// make the card a description of something else.
+	adoptOnto string
 	// lastRace is the most recent /arena race's receipt: workspace, turn, base,
 	// and each racer's kept worktree (lifecycle.go). Nil until a race runs.
 	// Held on Model rather than State because Render never reads it — the
@@ -682,14 +691,16 @@ func (m *Model) clearGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // Anything that is not y or n cancels, matching clearGateKey and writeGateKey
 // rather than the flow gate, for the same reason those two give: this
 // interrupts nothing, the question is one sentence on screen, and the safe
-// reading of a key nobody meant to press is to merge nothing. The command y
-// runs was named on the card when adoptCommand armed it (lifecycle.go).
+// reading of a key nobody meant to press is to merge nothing. The commands y
+// runs — and the branch it cuts — were named on the card when adoptCommand
+// armed it (lifecycle.go).
 func (m *Model) adoptGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	v := m.adoptPending
-	m.adoptPending = ""
+	onto := m.adoptOnto
+	m.adoptPending, m.adoptOnto = "", ""
 	switch msg.String() {
 	case "y":
-		m.st.Notice = m.adoptSeat(v)
+		m.st.Notice = m.adoptSeat(v, onto)
 	case "n":
 		m.st.Notice = "kept — nothing was merged"
 	default:

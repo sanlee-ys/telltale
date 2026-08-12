@@ -461,17 +461,21 @@ nothing is named on the column rather than silently skipped; a copy that fails s
 seat with the reason, and its half-seeded worktree stays on disk with the other receipts.
 Copy only, never execute: the repo cannot run code on your machine by containing a file.
 
-**`/adopt <seat>` takes the winner — as a merge, behind a y/n card that names the exact
-command.** `y` runs `git merge --no-ff arena/t<N>/<seat>` in the room's repo, on the
-branch you are already standing on — never a checkout, so your own branch and HEAD stay
-where they were, plus one merge commit saying where the work came from. When the attempt's
-worktree still holds uncommitted work, the card says the commit comes first, and names
-both commands. Adopt refuses while a turn is in flight, refuses a racer that changed
+**`/adopt <seat>` takes the winner — onto a fresh branch, behind a y/n card that names the
+exact commands.** `y` cuts `adopt/t<N>-<vendor>` from where the room is standing, checks it
+out, and runs `git merge --no-ff arena/t<N>/<seat>` there — so the branch you were on does
+not move at all, and the hand-off is one `gh pr create`, which the notice names. The name is
+taken as spelled unless something already holds it, in which case the next free suffix
+(`-2`, `-3`, …) is used and the card says so before you press `y`. When the attempt's
+worktree still holds uncommitted work, the card says the commit comes first, and names every
+command. Adopt refuses while a turn is in flight, refuses a racer that changed
 nothing (an empty merge commit would claim work that does not exist), and refuses — with
 the path count — while the room's own tree is dirty, because a merge must never eat your
 uncommitted work. A merge that conflicts is aborted, your tree restored, the attempt
 intact on its branch, and the notice hands the merge to a human; one that failed before
-starting says the tree is untouched instead — two different endings, kept apart.
+starting says the tree is untouched instead — two different endings, kept apart. Either way
+the branch cut for the merge is deleted and the room goes back where it was, so a failed
+adoption leaves nothing behind.
 
 **`/arena drop <seat>` deletes a racer's worktree and branch, and the force is a spelling,
 not a keystroke.** Drop refuses while a worktree holds uncommitted changes (counted), and
@@ -489,11 +493,13 @@ The record behind all of this — the rulings, which live race verified what, an
 still owed — is [design.md §9.37](design.md). Read it before trusting the edges, because
 they are not all at the same standard. **Live-verified** as of race t9 (2026-08-09): the
 core race and its ranks, the honest zeros, every attempt surviving as a commit,
-`/adopt` and `/arena drop` end to end, `x` on a stuck racer, and the conduct line's one
+`/adopt` and `/arena drop` end to end — adopt in the shape it had that day, a merge onto the
+room's own branch — `x` on a stuck racer, and the conduct line's one
 observed compliance. **Live in part**: the `arena · so far` stat has been watched reading a
 measured nothing mid-race but never watched *grow*; the cursor seat's throwaway racer has
 been spawned, streamed and killed live but never watched finish on its own. **Not yet
-exercised by any live race**: `u`, and `.worktreeinclude` seeding — both pinned by offline
+exercised by any live race**: `u`, `.worktreeinclude` seeding, and the fresh branch adopt
+cuts (ruled 2026-08-11) — all pinned by offline
 tests against real git repositories, and named here rather than rounded up to settled.
 
 ## Flags
