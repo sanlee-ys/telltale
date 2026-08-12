@@ -778,15 +778,23 @@ telltale council flags:
   --no-title                  leave the terminal window title alone
 
 statusline and hud read vendor files, never call the network, and never send
-anything to a running agent. telltale's own state lives under ~/.telltale/ and
-is keys and numbers only: the statusline relays the quota it just rendered
-(quota/<vendor>.json) so the hud can attribute account quota per vendor, the
-cursor hook adds each turn's token counts to a running total
+anything to a running agent. The state the gauges write lives under
+~/.telltale/ and is keys and numbers only: the statusline relays the quota it
+just rendered (quota/<vendor>.json) so the hud can attribute account quota per
+vendor, the cursor hook adds each turn's token counts to a running total
 (usage/<vendor>.json) so the hud can say what this machine spent, and council
 keeps one room file (council/room.json) holding the session ids reattaching
 needs — no transcript, output, prompt or brief content in any of them. council
 is the deliberate exception to reading only: it spawns vendor CLIs, and each
 column states its own posture on screen.
+
+A fourth store carries content, and it is named as an exception rather than
+counted with the three. The event sink (telltale events) keeps each hook
+payload VERBATIM under ~/.telltale/events/ — content, not keys and numbers.
+What contains it is scope, not redaction: the sink is its own foreground mode
+that you start, its server binds loopback only, and no gauge reads or renders
+those files. The keys-and-numbers rule above still binds every store the
+gauges themselves write.
 
 Tokens spent are NOT quota. Cursor exposes no account limit without a network
 call, so the hud shows what was consumed and never a percentage of anything.`
