@@ -465,6 +465,34 @@ across all 32 populated `rate_limits`; no API-key-signature session; no `.zst`
 anywhere under `sessions/`. Oldest native rollout is 2026-08-01, so the `.zst`
 pass stays unobservable before ~2026-08-08.
 
+*Re-scan 2026-08-11:* 316 native rollouts, 1,251 populated `rate_limits`. All three
+owed items stay negative. Two of them now rest on 316 rollouts rather than the 5 of
+2026-08-02, and a fourth observation changes what the API-key capture must look for.
+
+- **Mid-stream nulls: still zero**, now across 316 rollouts rather than 5. The
+  conservative "clearing" reading stays unfalsified rather than confirmed.
+- **`secondary`: still null** in all 1,251 populated `rate_limits`. A plus plan does
+  not populate it.
+- **`.zst`: still zero files** under `sessions/` — and this item is no longer blocked
+  on time. The oldest native rollout is 2026-08-01, so it was 10 days old at the scan,
+  and Codex wrote new rollouts on 9 later days. The pass is **measured absent on this
+  box, not unobservable**. The prediction above expired on ~2026-08-08.
+- **A `rate_limits` object can report "no windows" without being absent.** 21
+  `token_count` records across 4 native `codex_exec` sessions (`cli_version`
+  0.146.0, 2026-08-07 and 2026-08-08) carry a `rate_limits` OBJECT whose `primary`,
+  `secondary`, `plan_type`, `limit_name`, `individual_limit` and
+  `spend_control_reached` are all null, beside `limit_id:"premium"` and a `credits`
+  block. Each of those sessions is null from its FIRST `token_count`, so this is not
+  a mid-stream clear and it does not settle §3.2.
+
+  **What it costs the owed capture.** `tools/scan-passive-tail.py` detects the
+  API-key signature as `rate_limits is None` alone, so a session of this shape
+  passes it unseen and reports as negative. Whoever runs the capture must check
+  both signatures: an absent `rate_limits`, and a present one whose windows are all
+  null. **The cause is deliberately not stated here** — nobody recorded which auth
+  mode those four sessions ran under, so a claim that they are API-key sessions
+  would be an inference, and §4a.1 forbids one dressed as a reading.
+
 ### 3.5 Framing rule — now measured, not assumed (see §4)
 
 The §4 hazards were quantified against the live Claude corpus:
