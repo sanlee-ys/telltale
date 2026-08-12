@@ -67,7 +67,7 @@ the argument; this file does not restate either.
   had paid — including §9.37 telling you no live `/adopt` had run three
   paragraphs above an open question filed *from* the first live `/adopt`).
 
-  **What is genuinely still unpaid, and how to pay it.** Three items, in
+  **What is genuinely still unpaid, and how to pay it.** Four items, in
   ascending cost. Nothing here needs a session of its own; item 1 costs no API
   spend at all. **The symlink-refusal item that led this list is paid** —
   Developer Mode went on 2026-08-09 and the test PASSES on this box; the
@@ -119,6 +119,13 @@ the argument; this file does not restate either.
      Cost: one short brief to one seat — cents, and a few minutes. Note the
      race will mint **t9** again: t9's branches were dropped but t8's survive,
      and the number comes from the refs.
+
+  4. **A live `/adopt` under the shape ruled 2026-08-11** — the verb now cuts
+     `adopt/t<N>-<vendor>` from the room's HEAD, checks that branch out, and
+     merges the racer's branch there; a conflicted merge restores the branch
+     the room came from. Offline tests pin those mechanics and no live
+     adoption has run under them, so it pays with one race whose winner you
+     adopt and then push with `gh pr create` (design.md §9.37).
 
   **Housekeeping this turned up, not owned:** 27 `arena/t<N>/<vendor>` branches
   and 28 sibling `telltale-arena-t*` worktrees from races t2–t8 are still on
