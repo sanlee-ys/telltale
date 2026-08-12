@@ -90,6 +90,9 @@ func TestAdoptMergesTheRacerIntoTheRoom(t *testing.T) {
 	if !strings.Contains(m.st.Notice, "commits its worktree") {
 		t.Errorf("the question hides the commit that precedes the merge: %q", m.st.Notice)
 	}
+	if !strings.Contains(m.st.Notice, "cuts adopt/t4-codex") {
+		t.Errorf("the question hides the branch the adoption cuts: %q", m.st.Notice)
+	}
 	m.adoptGateKey(key("y"))
 
 	if !strings.Contains(m.st.Notice, "adopted codex") {
@@ -108,6 +111,71 @@ func TestAdoptMergesTheRacerIntoTheRoom(t *testing.T) {
 	}
 	if _, err := os.Stat(m.lastRace.trees[model.VendorCodex]); err != nil {
 		t.Error("adopt deleted the worktree — that is drop's job, on the user's word")
+	}
+}
+
+// TestAdoptLandsOnAFreshBranch is the 2026-08-11 ruling (§9.37's open question,
+// option b): the merge lands on adopt/t<N>-<vendor>, the room is left standing
+// there, and the branch the room came from does not move at all — which is what
+// makes the hand-off one `gh pr create` instead of the four hand-run git
+// commands the first live adoption cost.
+func TestAdoptLandsOnAFreshBranch(t *testing.T) {
+	m, ws := racedModel(t, model.VendorCodex)
+	scribble(t, m, model.VendorCodex, "answer.go", "package answer\n")
+	mainAt, err := gitOut(ws, "rev-parse", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	adopt(t, m, "codex", "y")
+
+	if !strings.Contains(m.st.Notice, "adopted codex onto adopt/t4-codex") {
+		t.Fatalf("the notice does not name the branch the adoption landed on: %q", m.st.Notice)
+	}
+	if !strings.Contains(m.st.Notice, "gh pr create") {
+		t.Errorf("the notice does not name the next command: %q", m.st.Notice)
+	}
+	if on, _ := gitOut(ws, "symbolic-ref", "--short", "HEAD"); on != "adopt/t4-codex" {
+		t.Errorf("the room was left on %q, not on the branch it cut", on)
+	}
+	// The whole point: main is exactly where it was, so nothing has to be
+	// reset before it is pushed.
+	if now, _ := gitOut(ws, "rev-parse", "main"); now != mainAt {
+		t.Errorf("main moved during the adoption: %q → %q", mainAt, now)
+	}
+	if n, _ := gitOut(ws, "rev-list", "--count", "main..adopt/t4-codex"); n != "2" {
+		t.Errorf("the adopt branch holds %s commits over main, want the attempt plus its merge", n)
+	}
+}
+
+// TestAdoptSuffixesAColliderRatherThanFailing: race numbers repeat once a
+// race's branches are dropped, and an operator can adopt the same racer twice,
+// so a taken adopt/t<N>-<vendor> takes the next name instead of failing or —
+// far worse — landing the merge on an older adoption's branch. The card names
+// the suffixed branch too, because the card names what y actually runs.
+func TestAdoptSuffixesAColliderRatherThanFailing(t *testing.T) {
+	m, ws := racedModel(t, model.VendorCodex)
+	scribble(t, m, model.VendorCodex, "answer.go", "package answer\n")
+	// The older adoption's branch, still sitting in the repo.
+	if _, err := gitOut(ws, "branch", "adopt/t4-codex"); err != nil {
+		t.Fatal(err)
+	}
+	squatterAt, _ := gitOut(ws, "rev-parse", "adopt/t4-codex")
+
+	adopt(t, m, "codex", "")
+	if !strings.Contains(m.st.Notice, "cuts adopt/t4-codex-2") {
+		t.Fatalf("the card does not name the free branch: %q", m.st.Notice)
+	}
+	m.adoptGateKey(key("y"))
+
+	if !strings.Contains(m.st.Notice, "adopted codex onto adopt/t4-codex-2") {
+		t.Fatalf("the adoption did not take the next free name: %q", m.st.Notice)
+	}
+	if on, _ := gitOut(ws, "symbolic-ref", "--short", "HEAD"); on != "adopt/t4-codex-2" {
+		t.Errorf("the room was left on %q", on)
+	}
+	if now, _ := gitOut(ws, "rev-parse", "adopt/t4-codex"); now != squatterAt {
+		t.Errorf("the older adoption's branch was moved: %q → %q", squatterAt, now)
 	}
 }
 
@@ -236,6 +304,18 @@ func TestAdoptConflictAbortsCleanly(t *testing.T) {
 	}
 	if _, err := gitOut(ws, "rev-parse", "--verify", "MERGE_HEAD"); err == nil {
 		t.Error("the repo is still mid-merge — abort did not run")
+	}
+	// An adoption that did not land leaves nothing behind: the room is back on
+	// its own branch and the branch cut for the merge is gone, rather than an
+	// empty branch handed over as the receipt of a failure.
+	if !strings.Contains(m.st.Notice, "the room is back on main") {
+		t.Errorf("the notice does not say where the room now stands: %q", m.st.Notice)
+	}
+	if on, _ := gitOut(ws, "symbolic-ref", "--short", "HEAD"); on != "main" {
+		t.Errorf("the room was left on %q after a failed adoption", on)
+	}
+	if out, _ := gitOut(ws, "branch", "--list", "adopt/t4-codex"); out != "" {
+		t.Errorf("the failed adoption left its branch behind: %q", out)
 	}
 	if body, _ := os.ReadFile(filepath.Join(ws, "a.txt")); string(body) != "room's line\n" {
 		t.Errorf("a.txt was left as %q — the room's own content did not survive", body)
