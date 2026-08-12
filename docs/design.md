@@ -80,6 +80,16 @@ walks the serialized form field by field. No transcript, prompt, reply, path or 
 reaches any of the three. Anything else that wants to write from `internal/hud` or
 `internal/statusline` is in the wrong package.
 
+**Amended 2026-08-11: a FOURTH store exists, it carries content, and the paragraph above
+was never corrected for it.** The event sink (`telltale events`, §7.21) writes each hook
+payload VERBATIM under `~/.telltale/events/`. It does not widen the rule above, because
+what contains it is scope rather than redaction: it is its own foreground mode the
+operator starts, its server binds loopback only and refuses any other host, and nothing
+in the gauges reads or renders those files. So the three counted above stay
+numbers-and-keys, and the fourth is named as an exception instead of being folded into
+them. §7.21 carries the record and CLAUDE.md's boundary section carries the same
+exception.
+
 The two gauge paths share exactly two packages: `internal/model` (the schema) and
 `internal/theme` (thresholds and value formatters). `internal/theme` is stdlib-only and
 holds no style type, which is what lets both surfaces share the numbers while the
