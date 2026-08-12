@@ -72,12 +72,18 @@ func TestSessionKeepsThePostureFlags(t *testing.T) {
 	}
 }
 
-// TestGatedPostureCarriesAllThreeFlags.
+// TestGatedPostureWithNoHookFallsBackToDroppingTheSettings.
 //
-// None of the three is optional and two of them do nothing alone, which is
+// This is the OLD gate, and it has to keep working: a room whose gate hook
+// could not be written still gates, by dropping the operator's settings so no
+// allow rule can pre-approve a call. The alternative — launching with their
+// allow rules loaded and a `gated` badge on the column — is the 2026-08-04
+// bypass restored, where an allowlisted `mkdir` ran with no card.
+//
+// None of these flags is optional and two of them do nothing alone, which is
 // exactly the shape of thing a later edit removes as redundant. Each is pinned
 // with the measurement that justifies it.
-func TestGatedPostureCarriesAllThreeFlags(t *testing.T) {
+func TestGatedPostureWithNoHookFallsBackToDroppingTheSettings(t *testing.T) {
 	spec, err := Claude{}.Session(`C:\ws`, "claude", "", PostureWriteGated)
 	if err != nil {
 		t.Fatal(err)
@@ -94,10 +100,11 @@ func TestGatedPostureCarriesAllThreeFlags(t *testing.T) {
 	if i := slices.Index(spec.Args, "--permission-mode"); i < 0 || spec.Args[i+1] != "manual" {
 		t.Errorf("--permission-mode manual missing from %v; auto mode approves before the gate", spec.Args)
 	}
-	// The honesty of the whole feature. Permission allow rules in the user's
-	// settings are consulted BEFORE the callback: measured, an allowlisted
-	// `mkdir zzz` ran ungated with default sources and raised a request with
-	// sources dropped.
+	// With no hook in front of it, this is the only thing holding the gate.
+	// Permission allow rules in the user's settings are consulted BEFORE the
+	// callback: measured on 2026-08-04 and again on 2.1.228 on 2026-08-12, an
+	// allowlisted `mkdir zzz` ran ungated with default sources and the
+	// directory landed on disk.
 	i := slices.Index(spec.Args, "--setting-sources")
 	if i < 0 || spec.Args[i+1] != "" {
 		t.Errorf("--setting-sources \"\" missing from %v; the user's own allow rules would silently bypass the gate", spec.Args)
@@ -145,50 +152,63 @@ func TestAutoAndGatedAreDifferentInvocations(t *testing.T) {
 	}
 }
 
-// TestGatedPostureCarriesTheHooksFile.
+// TestAWiredGateHookKeepsTheOperatorsSettings is the whole 2026-08-12 build in
+// one assertion pair, and the two halves are one trade rather than two changes.
 //
-// The gate drops --setting-sources, which drops the user's hooks with their
-// permission rules. Only one of those two was meant to go. --settings carries
-// the hooks back, measured composing with the dropped sources: a planted
-// PreToolUse hook denied a call in exactly this configuration, and the same call
-// ran unscreened without the flag.
-func TestGatedPostureCarriesTheHooksFile(t *testing.T) {
-	spec, err := Claude{}.Session(`C:\ws`, "claude", `C:\tmp\h\hooks.json`, PostureWriteGated)
+// Measured before it was written, on Claude Code 2.1.228, two trials, three
+// tool shapes: a matcherless PreToolUse hook returning permissionDecision
+// "ask" gated a `mkdir` the operator's own allow rules cover, an `install -d`
+// no rule covers, and a `Write`. Every request carried decision_reason_type
+// "hook". Because the hook is step one and an allow rule is step five, the
+// sources no longer have to be dropped — so the operator's deny rules, their
+// user-level commands and their own hooks come back to this seat.
+//
+// The failure this pins is the tempting half-edit: keeping --setting-sources ""
+// alongside the hook. It would still gate, and it would silently go on
+// withholding the deny rules that are the reason the build was worth making.
+func TestAWiredGateHookKeepsTheOperatorsSettings(t *testing.T) {
+	spec, err := Claude{}.Session(`C:\ws`, "claude", `C:\tmp\h\gate.json`, PostureWriteGated)
 	if err != nil {
 		t.Fatal(err)
 	}
 	i := slices.Index(spec.Args, "--settings")
-	if i < 0 || spec.Args[i+1] != `C:\tmp\h\hooks.json` {
-		t.Fatalf("--settings missing from %v; the seat would run with nothing but the gate in front of it", spec.Args)
+	if i < 0 || spec.Args[i+1] != `C:\tmp\h\gate.json` {
+		t.Fatalf("--settings missing from %v; the seat would run with no gate hook at all", spec.Args)
 	}
-	// The sources stay dropped. If a future edit ever traded one for the other,
-	// the user's allow rules would come back and calls would walk past the gate.
-	if j := slices.Index(spec.Args, "--setting-sources"); j < 0 || spec.Args[j+1] != "" {
-		t.Errorf("--setting-sources \"\" was lost when --settings arrived: %v", spec.Args)
+	if slices.Contains(spec.Args, "--setting-sources") {
+		t.Errorf("the gate hook is wired AND the settings are still dropped: %v", spec.Args)
+	}
+	// The gate itself is unchanged by the trade. Both flags still ride.
+	if j := slices.Index(spec.Args, "--permission-prompt-tool"); j < 0 || spec.Args[j+1] != "stdio" {
+		t.Errorf("a hooked gated seat lost the stdio prompt tool: %v", spec.Args)
+	}
+	if j := slices.Index(spec.Args, "--permission-mode"); j < 0 || spec.Args[j+1] != "manual" {
+		t.Errorf("a hooked gated seat lost --permission-mode manual: %v", spec.Args)
 	}
 }
 
 // TestOnlyTheGatedPostureCarriesTheHooksFile.
 //
-// The read and --auto postures load the user's settings natively, so injecting
-// the same hooks again would run every one of them twice. A guard that asks two
-// questions per call is a guard people switch off.
+// The gate hook answers "ask" to every tool call, and the read and --auto
+// postures have nobody to ask: --auto is the room the user opened precisely so
+// that nothing would stop for a keystroke. Injecting it there would stall the
+// seat on a question no card is ever drawn for.
 func TestOnlyTheGatedPostureCarriesTheHooksFile(t *testing.T) {
 	for _, p := range []Posture{PostureRead, PostureWrite} {
-		spec, err := Claude{}.Session("", "claude", `C:\tmp\h\hooks.json`, p)
+		spec, err := Claude{}.Session("", "claude", `C:\tmp\h\gate.json`, p)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if slices.Contains(spec.Args, "--settings") {
-			t.Errorf("posture %v took the hooks file: %v — its settings are loaded natively, so the hooks would fire twice", p, spec.Args)
+			t.Errorf("posture %v took the gate hook: %v — it has nobody to answer the ask it would raise", p, spec.Args)
 		}
 	}
 }
 
-// TestNoHooksFileMeansNoFlag. An empty path is the room reporting that it found
-// nothing to carry over. Passing --settings with an empty value would be a flag
-// pointing at nothing, and the CLI answers that with "Settings file not found"
-// — which kills the seat instead of degrading it.
+// TestNoHooksFileMeansNoFlag. An empty path is the room reporting that it could
+// not write its gate hook. Passing --settings with an empty value would be a
+// flag pointing at nothing, and the CLI answers that with "Settings file not
+// found" — which kills the seat instead of degrading it.
 func TestNoHooksFileMeansNoFlag(t *testing.T) {
 	spec, err := Claude{}.Session("", "claude", "", PostureWriteGated)
 	if err != nil {

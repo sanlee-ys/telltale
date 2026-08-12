@@ -44,7 +44,7 @@ func TestLiveCursorACPMultiTurn(t *testing.T) {
 	}
 	m := newWithBrief(Options{
 		Dir: ws, Seats: seats, Write: true, Fresh: true,
-	}, Brief{}, HookSet{}, Reattachment{})
+	}, Brief{}, GateHook{}, Reattachment{})
 
 	cursor := m.column(model.VendorCursor)
 	if cursor == nil || cursor.Avail != AvailInstalled {

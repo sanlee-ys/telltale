@@ -54,7 +54,7 @@ func cdRoom(t *testing.T) (*Model, string, string) {
 			t.Fatal(err)
 		}
 	}
-	m := newWithBrief(Options{Dir: a}, Brief{}, HookSet{}, Reattachment{})
+	m := newWithBrief(Options{Dir: a}, Brief{}, GateHook{}, Reattachment{})
 	return m, a, b
 }
 

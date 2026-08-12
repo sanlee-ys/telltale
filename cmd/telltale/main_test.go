@@ -1,10 +1,13 @@
 package main
 
 import (
+	"io"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/sanlee-ys/telltale/internal/council"
+	"github.com/sanlee-ys/telltale/internal/gatehook"
 )
 
 // TestUsageNamesEverySeat stops the long help from describing a smaller room
@@ -98,5 +101,48 @@ func TestUsageDescribesCouncilSeatsNotHudFilter(t *testing.T) {
 	}
 	if _, err := council.ParseSeats("gemini"); err == nil {
 		t.Error("council now seats gemini — the council --vendor help derives from SeatNames, but this test's premise is stale")
+	}
+}
+
+// TestHookGateWritesTheDecisionAndNothingElse is the end-to-end assertion for
+// the mode nobody types.
+//
+// The unit test in internal/gatehook pins the JSON. This one pins the WIRING —
+// that `hook gate` reaches it at all, and that stdout carries the decision and
+// only the decision. That second half is why this exists as a separate test: a
+// hook's stdout IS its result, so one stray banner or debug line printed
+// anywhere on this path is not noise, it is a malformed decision. Claude Code
+// then reads no decision, and every tool call on the gated seat runs while the
+// column still says nothing runs without a keystroke.
+func TestHookGateWritesTheDecisionAndNothingElse(t *testing.T) {
+	stdin, stdout := os.Stdin, os.Stdout
+	defer func() { os.Stdin, os.Stdout = stdin, stdout }()
+
+	// A realistic payload, because the mode has to drain it: the vendor writes
+	// the tool call down this pipe and a hook that exits without reading gives
+	// it a broken pipe instead of an answer.
+	in, inw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		io.WriteString(inw, `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"mkdir zzz"}}`)
+		inw.Close()
+	}()
+	out, outw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin, os.Stdout = in, outw
+
+	runHook([]string{gatehook.Verb})
+	outw.Close()
+
+	got, err := io.ReadAll(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(gatehook.Decision()) {
+		t.Errorf("stdout = %q, want exactly %q", got, gatehook.Decision())
 	}
 }

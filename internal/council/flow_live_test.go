@@ -43,7 +43,7 @@ func TestLiveFlowCursorThenCodex(t *testing.T) {
 		Seats: seats,
 		Write: true,
 		Fresh: true,
-	}, Brief{}, HookSet{}, Reattachment{})
+	}, Brief{}, GateHook{}, Reattachment{})
 
 	cursor := m.column(model.VendorCursor)
 	codex := m.column(model.VendorCodex)

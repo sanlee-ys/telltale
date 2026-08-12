@@ -53,7 +53,7 @@ func (c Claude) FirstTurn(prompt, workspace, binary string, p Posture) (runner.S
 	return runner.Spec{
 		Vendor: c.ID(),
 		Binary: binary,
-		Args:   c.baseArgs(p),
+		Args:   c.baseArgs(p, false),
 		// The prompt goes on stdin, never in argv. Claude Code resolves to a
 		// native .exe here so argv would technically be safe, but stdin also
 		// sidesteps the ~32K Windows command-line limit, which a multi-turn
@@ -70,7 +70,7 @@ func (c Claude) NextTurn(prompt, workspace, binary, sessionID string, p Posture)
 	return runner.Spec{
 		Vendor:      c.ID(),
 		Binary:      binary,
-		Args:        append(c.baseArgs(p), "--resume", sessionID),
+		Args:        append(c.baseArgs(p, false), "--resume", sessionID),
 		StdinPrompt: prompt,
 		Dir:         workspace,
 	}, nil
@@ -88,18 +88,23 @@ func (c Claude) NextTurn(prompt, workspace, binary, sessionID string, p Posture)
 // what puts the process into realtime streaming input. --resume is deliberately
 // absent: there is nothing to resume, because the session never ended.
 //
-// hooksFile is an ABSOLUTE path to a settings file containing the user's hooks
-// and nothing else, or empty. See gateArgs for why it is only ever applied to
-// the gated posture, and internal/council/hookset.go for what is in it.
+// hooksFile is an ABSOLUTE path to a settings file containing council's own
+// PreToolUse gate hook and nothing else, or empty. See gateArgs for why it is
+// only ever applied to the gated posture, and internal/council/gatehook.go for
+// what is in it and what it was measured doing.
+//
+// Its presence decides the posture, which is why this is the one place
+// baseArgs is told about it: a wired hook keeps the operator's settings and
+// gates on the hook; an unwired one drops the settings and gates on the flag.
 func (c Claude) Session(workspace, binary, hooksFile string, p Posture) (runner.Spec, error) {
-	args := append(c.baseArgs(p), "--input-format", "stream-json")
+	gateHooked := p == PostureWriteGated && hooksFile != ""
+	args := append(c.baseArgs(p, gateHooked), "--input-format", "stream-json")
 	// Gated posture ONLY, and the condition is the point rather than a
-	// precaution. --settings is repair for a hole --setting-sources "" opens,
-	// and --setting-sources "" is passed in exactly one posture. In the other
-	// two the user's settings are loaded natively, so injecting the same hooks
-	// again would run each of them twice — a guard that asks the user two
-	// questions per call is a guard people turn off.
-	if p == PostureWriteGated && hooksFile != "" {
+	// precaution. The hook makes every call ask; a room that is not gating has
+	// nobody to ask, so injecting it there would stall the seat on a question
+	// with no listener. In the read and --auto postures the operator's settings
+	// are loaded natively and nothing needs adding.
+	if gateHooked {
 		args = append(args, "--settings", hooksFile)
 	}
 	return runner.Spec{
@@ -146,11 +151,12 @@ func (c Claude) Session(workspace, binary, hooksFile string, p Posture) (runner.
 // FAST and FREE — no model turn is spent — which is why the caller may simply
 // let the seat die once and start it fresh on the next brief rather than
 // pre-flighting the id.
-// The hooks file rides along unchanged, and that is not incidental: a resumed
-// seat is a gated seat like any other, and one that came back without the
-// user's own PreToolUse screen while the badge still said the guard was wired
-// would be the quietest false claim in the room. Reattaching restores a
-// conversation, never a weaker posture.
+// The gate hook file rides along unchanged, and that is not incidental: a
+// resumed seat is a gated seat like any other, and one that came back without
+// the hook would keep the operator's allow rules with nothing in front of them
+// while the badge still said every call was gated — the quietest false claim
+// the room could make. Reattaching restores a conversation, never a weaker
+// posture.
 func (c Claude) SessionResume(workspace, binary, hooksFile, sessionID string, p Posture) (runner.Spec, error) {
 	if sessionID == "" {
 		return runner.Spec{}, ErrNoResume
@@ -260,7 +266,16 @@ func (Claude) Decide(requestID string, allow bool, reason string, input map[stri
 	})
 }
 
-func (c Claude) baseArgs(p Posture) []string {
+// baseArgs builds the invocation for a posture.
+//
+// gateHooked says whether council wired its own PreToolUse hook for this spawn,
+// and it exists as a parameter rather than as a field because only ONE call
+// site knows the answer: Session is handed the settings path. Every other
+// caller passes false and gets the fallback posture, which is safe by
+// construction — a path that has not been taught about the hook cannot
+// accidentally launch a seat that keeps the operator's allow rules with nothing
+// in front of them.
+func (c Claude) baseArgs(p Posture, gateHooked bool) []string {
 	args := []string{
 		"-p",
 		"--output-format", "stream-json",
@@ -294,7 +309,11 @@ func (c Claude) baseArgs(p Posture) []string {
 		return append(args, "--permission-mode", "acceptEdits", "--allowedTools", autoAllowedTools)
 
 	case PostureWriteGated:
-		return append(args, gateArgs...)
+		args = append(args, gateArgs...)
+		if !gateHooked {
+			args = append(args, gateFallbackArgs...)
+		}
+		return args
 	}
 	return append(args, "--disallowedTools", deniedTools)
 }
@@ -391,58 +410,60 @@ const autoAllowedTools = "Bash(git add:*),Bash(git commit:*),Bash(git push:*)," 
 //     waiting. Together with the flag above, the request appears on stdout and
 //     the turn blocks on it.
 //
-//   - --setting-sources "" , and this one is the whole honesty of the feature.
-//     Permission ALLOW RULES in the user's settings files are consulted BEFORE
-//     the callback, so a call they cover never reaches the gate. Measured on a
-//     machine whose settings allow `Bash(mkdir:*)`: with default setting
-//     sources, `mkdir zzz` ran ungated and the directory was created; with
-//     sources dropped, the same call raised a request, the denial was honoured
-//     and nothing was created. Without this flag "nothing writes without your
-//     keystroke" is simply false, and it would be false quietly.
+// THERE WERE THREE, AND THE THIRD IS NOW A FALLBACK. `--setting-sources ""`
+// was the whole honesty of this feature from 2026-08-04 to 2026-08-12, and the
+// measurement that put it here has never been contradicted: permission ALLOW
+// RULES in the user's settings files are consulted BEFORE the callback, so a
+// call they cover never reaches the gate. Measured on a machine whose settings
+// allow `Bash(mkdir:*)`, and re-measured on 2.1.228 the day it was replaced:
+// with default setting sources and nothing in front of them, `mkdir zzz` ran
+// ungated and the directory was created.
 //
-//     AMENDED 2026-08-11, and the amendment does not retire the paragraph
-//     above. Re-measured on Claude Code 2.1.226, two trials: an allow rule
-//     still pre-approves `mkdir` and the directory still lands, so that
-//     sentence holds. What it does not say is that the allow rule is only
-//     step FIVE. An `ask` rule is step three, and it reaches the callback the
-//     allow rule would have skipped — measured, two trials, on the same shape
-//     the machine's own settings allow. A PreToolUse hook returning
-//     permissionDecision "ask" does the same and names itself in the request
-//     (`decision_reason_type: "hook"`). So this flag is one way to be honest
-//     rather than the only one, and the alternative keeps the user's deny
-//     rules, commands and hooks instead of dropping them. The build is NOT
-//     authorised and is not made here; design.md §9.8's dated block carries
-//     the rig, every arm and what it does not settle, and STATE.md carries the
-//     open ruling.
+// What that paragraph reads is step FIVE of a six-step evaluation, and what it
+// never read is step one. A PreToolUse hook returning permissionDecision "ask"
+// runs first and beats the allow rule underneath it — measured 2026-08-12,
+// three tool shapes, two trials, `decision_reason_type: "hook"` on every
+// request. So council now injects its own hook (internal/council/gatehook.go)
+// and KEEPS the operator's settings, and this flag survives only as the
+// fallback for a room where that hook could not be written. See gateFallbackArgs.
 //
-// The cost of the third was stated rather than buried, and then it was PAID
-// rather than left standing: dropping the setting sources also drops the user's
-// own hooks and their user-level commands from this seat. Half of that is
-// deliberate — the allow rules are what the gate is replacing — and half was
-// collateral. A PreToolUse hook is a screen the user built, nothing was
-// replacing it, and the calls it covered are disproportionately the ones the
-// gate never sees, because a shell command the CLI classifies read-only is
-// approved without asking.
+// What the change buys, and it is the reason it was worth measuring twice: the
+// operator's DENY rules, their user-level commands and their own PreToolUse
+// hooks are loaded by the gated seat again. All three were collateral of the
+// flag. The deny rules matter most — dropping them made this the one seat on
+// the machine where a rule saying "never touch that" was not in force.
 //
-// The hooks are now carried back in on --settings, which composes with
-// --setting-sources "" (measured; see hookset.go for the two verbatim lines).
-// The allow rules are NOT, and that separation is enforced by construction
-// rather than by care: the file council writes is built by naming the single
-// key `hooks`, because the same spike showed a permissions block in that file
-// re-admits the rules and puts calls straight past the gate.
-//
-// What is still dropped, and stays dropped: the user's user-level slash
-// commands, and their permission rules. Only the hooks come back.
-//
-// One limit that no flag closes: shell commands the CLI itself classifies as
-// read-only are approved without asking. `git status` was ungated under BOTH
-// setting-source configurations. The claim this posture supports is about
-// calls that change things, and it is worded that way everywhere it appears.
+// A limit no flag closed is now closed BY the hook, and it cost the room
+// something: shell commands the CLI classifies read-only used to be approved
+// without asking. `Read`, `Glob` and `git status` each raised no request at all
+// under the flag, and each raises one under the hook. Council answers those
+// itself — autoApproveRoutine for shell commands, readOnlyTools for the tool
+// calls that are not shell commands — so the operator sees no more cards than
+// before while the gate now genuinely sees everything.
 var gateArgs = []string{
 	"--permission-prompt-tool", "stdio",
 	"--permission-mode", "manual",
-	"--setting-sources", "",
 }
+
+// gateFallbackArgs is the older, weaker-but-honest posture, used when council's
+// own gate hook could not be wired.
+//
+// The choice it encodes: a room that cannot write its hook file must not simply
+// launch with the operator's allow rules loaded and a `gated` badge on the
+// column, because that is the 2026-08-04 bypass restored — an allowlisted
+// `mkdir` running with no card. Dropping the setting sources gates every call
+// again at the cost of the operator's own settings, which is exactly what
+// shipped for the eight days before the hook existed. The badge says which of
+// the two the room got.
+//
+// --permission-mode manual is NOT dropped in either posture, and its removal is
+// deliberately not attempted here. The docs make it an alias for `default` on
+// 2.1.200+, which would make it decoration — but every arm of both probes
+// carried it, so nothing has measured the seat without it, and this file does
+// not remove a flag on the strength of a documentation sentence. That is the
+// same rule that made --permission-prompt-tool stdio survive being absent from
+// --help.
+var gateFallbackArgs = []string{"--setting-sources", ""}
 
 // toolCalls reads the tool_use blocks of one assistant message.
 //

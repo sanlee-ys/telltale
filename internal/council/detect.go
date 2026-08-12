@@ -564,30 +564,40 @@ func writeDetail(v model.VendorID, asking bool) string {
 // gatedDetail is what the gated column defends, and the two branches differ in
 // what they CLAIM rather than in tone.
 //
-// The shared half is the gate itself. The half that varies is the seat's other
-// screen: this posture passes --setting-sources "", which drops the user's
-// permission allow rules on purpose — a rule that pre-approves a call is
-// exactly what a gate cannot sit behind — and used to drop their hooks with
-// them, as collateral. Whether the hooks came back is a fact about a file on
-// disk, so it is read from that file and not from an intention.
+// The shared half is the gate itself, and it got stronger on 2026-08-12. It
+// used to end on a carve-out — shell commands the CLI classifies read-only were
+// approved before the callback, so `git status` and every `Read` went past
+// unseen. Council's own PreToolUse hook answers "ask" with no matcher, so every
+// call now reaches the room; the ones that change nothing are answered by
+// council rather than by the CLI, which is a decision the operator can read in
+// this repo instead of one buried in a vendor's classifier.
 //
-// The read-only carve-out is stated in both branches and matters more in the
-// absent one: a shell command the CLI itself classifies read-only is approved
-// without asking, so with no hook wired those calls have nothing at all in
-// front of them. That is precisely the case the wired branch closes, and it is
-// why "the guard is absent" is worth a sentence rather than a shrug.
+// The half that varies is WHICH of the two gates the seat got, and this is the
+// sentence that had to change. Until 2026-08-12 both branches said the
+// operator's permission rules were dropped, because they were: the seat passed
+// --setting-sources "". A wired hook keeps them — their deny rules, their
+// user-level commands and their own hooks are in force again — and it is the
+// ask hook, not the missing rules, that holds the gate. An unwired hook falls
+// back to dropping the sources, which still gates and still says so.
+//
+// Both facts are read off a file on disk rather than off an intention, which is
+// the property that survived the rewrite: a temp directory that could not be
+// created and a binary that could not locate itself end in the same place, and
+// the column says which gate it actually got.
 func gatedDetail(hooked bool) string {
 	const shared = "this column asks before every tool " +
-		"call that changes anything: y approves, n denies, and nothing runs " +
-		"until you answer. Your settings' permission allow rules are dropped " +
-		"for this seat on purpose, and shell commands the CLI itself classifies " +
-		"read-only are approved without asking"
+		"call: y approves, n denies, and nothing runs until you answer. Reads, " +
+		"globs and routine shell commands are answered yes for you, by council " +
+		"rather than by the CLI"
 	if hooked {
-		return shared + ". Your own hooks are carried into this seat and do run " +
-			"in front of it, including on the calls the gate is not asked about"
+		return shared + ". Your own settings stay loaded for this seat — your " +
+			"deny rules and your own hooks are in force — because council's own " +
+			"hook asks first and an ask beats an allow rule underneath it"
 	}
-	return shared + ". No hooks were carried into this seat — none were found to " +
-		"copy — so the calls the gate is not asked about have nothing screening them"
+	return shared + ". Council's own gate hook could not be wired here, so this " +
+		"seat drops your settings instead — your allow rules would otherwise " +
+		"approve calls before the gate saw them, and your deny rules and hooks " +
+		"go with them"
 }
 
 // canGate reports whether a seat can be asked to ask about EVERYTHING that
