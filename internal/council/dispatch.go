@@ -896,6 +896,46 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				m.finishColumn(c, PhaseFailed)
 				continue
 			}
+			// The OTHER half of the two-processes-one-vendor-id split, and the
+			// one the guard below cannot see. A ONE-SHOT racer ends its turn by
+			// EXITING — that is the whole protocol for it (there is no live
+			// session to answer, which is what separates it from the ephemeral
+			// branch above) — so this KindDone is the column's only retirement
+			// signal. When the same vendor also runs a persistent ROOM seat, the
+			// stale-exit guard below reads that live process as "this seat is
+			// fine" and eats the racer's exit, and the column then streams until
+			// the user cancels: the exact outcome KindDone's own attribution
+			// comment names, reached by the path it did not cover.
+			//
+			// MEASURED, 2026-08-13, race t10 on the reference box: the racer
+			// exited 52s in with its reply complete, the room went on rendering
+			// `streaming` for 21 minutes, and no diff, commit, rank or seed
+			// receipt ever ran. Race t9 sits on disk in the same state, from
+			// before the gate-hook build, so this predates #223 rather than
+			// following from it. The trigger is a WARM seat: race before the
+			// room has sent Claude an ordinary brief and m.procs is empty, the
+			// guard never fires, and the race lands — which is why earlier races
+			// passed and why this one did not.
+			//
+			// giveUpSeat's comment already knew the guard eats this exit and
+			// judged it harmless, correctly, for ITS path: a given-up column is
+			// already terminal when the exit arrives. On the ordinary path the
+			// column is not, and the same swallow is the difference between a
+			// race that finishes and one that cannot.
+			//
+			// dropProcess is deliberately NOT called here. The exit belongs to
+			// the racer; the room's own seat is still running, and forgetting a
+			// live process would leave it running and invisible — the state this
+			// product refuses, and the reason this is its own branch rather than
+			// a hole poked in the guard.
+			if m.arenaRacing(ev.Vendor) {
+				c.Body += m.flush(ev.Vendor)
+				if strings.TrimSpace(c.Body) == "" {
+					c.Body = "[Turn completed with 0 text chunks streamed]"
+				}
+				m.finishColumn(c, PhaseDone)
+				continue
+			}
 			if p, ok := m.procs[ev.Vendor]; ok && p.sess != nil && p.sess.Alive() {
 				continue
 			}
@@ -1657,6 +1697,24 @@ func (m *Model) ephemeralRacer(v model.VendorID) seatSession {
 		return nil
 	}
 	return m.turn.arenaEphemeral[v]
+}
+
+// arenaRacing reports whether this vendor is racing on a ONE-SHOT process this
+// turn — the sibling of ephemeralRacer, and read from the turn for the same
+// reason it is.
+//
+// The two together are the whole of the attribution KindDone needs: a vendor
+// racing at all wears its exit itself, and a vendor that is not gets the
+// stale-exit guard. Keyed presence is the test rather than liveness, because a
+// handle is not a session and cannot be asked whether it is alive — which is
+// exactly the case: the process has already exited, and the map is what says
+// whose exit it was.
+func (m *Model) arenaRacing(v model.VendorID) bool {
+	if m.turn == nil {
+		return false
+	}
+	_, racing := m.turn.arenaHandles[v]
+	return racing
 }
 
 // cancelTurn stops everything in flight. The columns keep whatever they already

@@ -67,20 +67,25 @@ the argument; this file does not restate either.
   had paid — including §9.37 telling you no live `/adopt` had run three
   paragraphs above an open question filed *from* the first live `/adopt`).
 
-  **What is genuinely still unpaid, and how to pay it.** Four items, in
-  ascending cost. Nothing here needs a session of its own; item 1 costs no API
-  spend at all. **The symlink-refusal item that led this list is paid** —
-  Developer Mode went on 2026-08-09 and the test PASSES on this box; the
-  measurement and its two mechanics live in [PARITY.md](PARITY.md).
+  **What is genuinely still unpaid, and how to pay it.** Three items, and one
+  race pays the first two. **The symlink-refusal item that led this list is
+  paid** — Developer Mode went on 2026-08-09 and the test PASSES on this box;
+  the measurement and its two mechanics live in [PARITY.md](PARITY.md).
+  **§9.38's composer paste is paid too**, on 2026-08-13: one insertion, three
+  composer rows, zero dispatches, on Windows Terminal 1.24.11911.0 (design.md
+  §9.38 carries the build and the one half of it still unexercised).
 
-  1. **§9.38's composer paste** (design.md §9.38's own "live verification
-     owed"). No vendors, no race, no spend: open `telltale council` in Windows
-     Terminal, copy a three-line snippet, paste. Expect ONE insertion, three
-     composer rows, ZERO dispatches; then enter sends it as one brief. A paste
-     that lands as separate turns means the terminal did not bracket it —
-     record the Windows Terminal build in `PARITY.md`, because that is a
-     vendor fact, not a council bug.
-  2. **`.worktreeinclude` seeding** and 3. **`u` undo on a real racer commit**
+  **Read this before attempting any of the three.** All three were UNPAYABLE
+  until 2026-08-13, and the drive that tried them is what found out why: a race
+  against a seat the room had already used never retired its column, so the
+  settled arena block — which is where the seed receipt, the commit receipt,
+  `u`'s base and `/adopt`'s candidate all come from — never arrived. The cause
+  and the fix are in design.md §9.37's dated block. **The fix is verified
+  offline only; no live race has landed under it**, so the first of these
+  races is also the fix's own live verification, and a race that hangs again
+  is a reopening rather than a repeat.
+
+  1. **`.worktreeinclude` seeding** and 2. **`u` undo on a real racer commit**
      — both need one live race, and **one race pays both**. The design doc
      frames the seeding debt as needing "a repo that actually needs a `.env`";
      it does not. This repo can pay it with a throwaway git-ignored file:
@@ -108,32 +113,35 @@ the argument; this file does not restate either.
      - **Between turns** (`u` refuses while a turn is in flight): `esc` to view
        mode, focus that seat, press `u`, then `y`. Expect the card to name the
        base, then the stat to STAY on the column under an "undone" line, and
-       `git -C ../telltale-arena-t9-claude log --oneline -1` to be back at the
-       base. That pays item 3. Press `u` again to see the already-undone
+       `git -C ../telltale-arena-t<N>-claude log --oneline -1` to be back at the
+       base. That pays item 2. Press `u` again to see the already-undone
        refusal, which costs nothing.
      - Clean up: `/arena drop claude!`, then `rm .worktreeinclude` and
        `rm -r dist`. **Then put the roster back** — a typed `--vendor` list is
        saved as the room's roster, so the next launch is still one seat until
        `/seat all` or `--vendor all`.
 
-     Cost: one short brief to one seat — cents, and a few minutes. Note the
-     race will mint **t9** again: t9's branches were dropped but t8's survive,
-     and the number comes from the refs.
+     Cost: one short brief to one seat — cents, and a few minutes. The number
+     comes from the refs, and `arena/t10/claude` now exists (the race that
+     found the finish bug), so the next race mints **t11**.
 
-  4. **A live `/adopt` under the shape ruled 2026-08-11** — the verb now cuts
+  3. **A live `/adopt` under the shape ruled 2026-08-11** — the verb now cuts
      `adopt/t<N>-<vendor>` from the room's HEAD, checks that branch out, and
      merges the racer's branch there; a conflicted merge restores the branch
      the room came from. Offline tests pin those mechanics and no live
      adoption has run under them, so it pays with one race whose winner you
      adopt and then push with `gh pr create` (design.md §9.37).
 
-  **Housekeeping this turned up, not owned:** 27 `arena/t<N>/<vendor>` branches
-  and 28 sibling `telltale-arena-t*` worktrees from races t2–t8 are still on
-  the reference box (`telltale-arena-t5-codex` is at a detached HEAD — the
-  residue of the racer that pushed its own PR). Kept-until-deleted is the
-  ruling, so this is a decision to make rather than a bug: `/arena drop` only
-  reaches the current room's race, so clearing older ones is
-  `git worktree remove` + `git branch -D` by hand.
+  **Housekeeping this turned up, not owned:** 9 `arena/t<N>/<vendor>` branches
+  and 4 sibling `telltale-arena-t*` worktrees are still on the reference box
+  (counted 2026-08-13; the 27-and-28 this entry used to claim were cleared by
+  somebody at some point, which is the hand-maintained-count failure this file
+  warns about in its own opening). Kept-until-deleted is the ruling, so this is
+  a decision to make rather than a bug: `/arena drop` only reaches the CURRENT
+  room's race, so anything from a room that has since closed — t9 and t10
+  included — is `git worktree remove` + `git branch -D` by hand. t9 and t10
+  both hold an uncommitted racer edit and sit at their base commit; that is the
+  finish bug's residue, not work anyone lost.
 
 - **QUEUED, unowned — the post-audit build list (2026-08-09; shrunk same
   day).** The steal sweep's survivors, reconciled against an independent

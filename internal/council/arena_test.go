@@ -1161,3 +1161,91 @@ func TestARaceThatOutranItsTurnStillCommitsAndUndoes(t *testing.T) {
 		t.Errorf("the leftover branch moved: %q", got)
 	}
 }
+
+// oneShotRacer is a racerHandle that records its kill, standing in for the
+// process dispatch's arena branch keys by vendor. Kill is the whole interface.
+type oneShotRacer struct{ killed bool }
+
+func (h *oneShotRacer) Kill() { h.killed = true }
+
+// TestAWarmSeatsRacerRetiresOnItsOwnExit is the one-shot half of KindDone's
+// two-processes-one-vendor-id attribution rule, and it exists because the room
+// shipped without it.
+//
+// A one-shot racer ends its turn by EXITING, so that exit is its column's only
+// retirement signal. When the same vendor ALSO runs a persistent room seat, the
+// stale-exit guard reads that live process as "this seat is fine" and eats the
+// exit — and the column then streams until the user cancels, with no diff, no
+// commit, no rank and no seed receipt, because every one of those runs inside
+// finishColumn.
+//
+// Measured on the reference box, race t10, 2026-08-13: the racer exited 52
+// seconds in with its reply complete and the room rendered `streaming` for 21
+// minutes. The trigger is a WARM seat — m.procs must already hold a live
+// process for that vendor, which is why a race run before the room's first
+// ordinary brief always landed and this one could not.
+func TestAWarmSeatsRacerRetiresOnItsOwnExit(t *testing.T) {
+	ws := gitRepo(t)
+	raceN, base, trees, _, _, err := arenaSetup(ws, 4, []model.VendorID{model.VendorClaude})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m := clearModel()
+	m.st.Workspace = ws
+	c := m.column(model.VendorClaude)
+	c.Phase = PhaseStreaming
+	c.TurnN = 4
+	c.Body = "done."
+	handle := &oneShotRacer{}
+	m.turn = &turnState{
+		live:         map[model.VendorID]bool{model.VendorClaude: true},
+		persistent:   map[model.VendorID]bool{},
+		arena:        true,
+		arenaRaceN:   raceN,
+		arenaBase:    base,
+		arenaTrees:   trees,
+		arenaHandles: map[model.VendorID]racerHandle{model.VendorClaude: handle},
+		cancel:       func() {},
+	}
+	// The room's own seat, ALIVE, wearing the same vendor id — the whole
+	// precondition. deadSession reports Alive() true.
+	m.procs[model.VendorClaude] = &seatProc{sess: deadSession{}, dir: ws}
+
+	m.applyEvents([]runner.Event{{Vendor: model.VendorClaude, Kind: runner.KindDone}})
+
+	if c.Phase != PhaseDone {
+		t.Fatalf("phase = %v — the racer's exit did not retire its column; a live room seat ate it", c.Phase)
+	}
+	if c.Arena == nil {
+		t.Error("the column landed with no arena result — the diff, the commit and the seed receipt all live behind this")
+	}
+	if _, ok := m.procs[model.VendorClaude]; !ok {
+		t.Error("the racer's exit took the ROOM's live process with it — it is still running and now invisible")
+	}
+	if m.turn != nil && m.turn.live[model.VendorClaude] {
+		t.Error("the landed racer never left the turn's live set, so the turn cannot end")
+	}
+}
+
+// TestABackgroundRoomSeatDeathDoesNotRetireAOneShotRace is the rule's other
+// half, and the reason arenaRacing is keyed presence rather than a hole in the
+// guard: a vendor that is NOT racing keeps the stale-exit guard exactly as it
+// was, so an ordinary turn's predecessor exit is still discarded.
+func TestABackgroundRoomSeatDeathDoesNotRetireAOneShotRace(t *testing.T) {
+	m := clearModel()
+	c := m.column(model.VendorClaude)
+	c.Phase = PhaseStreaming
+	m.turn = &turnState{
+		live:       map[model.VendorID]bool{model.VendorClaude: true},
+		persistent: map[model.VendorID]bool{model.VendorClaude: true},
+		cancel:     func() {},
+	}
+	m.procs[model.VendorClaude] = &seatProc{sess: deadSession{}}
+
+	m.applyEvents([]runner.Event{{Vendor: model.VendorClaude, Kind: runner.KindDone}})
+
+	if c.Phase != PhaseStreaming {
+		t.Errorf("phase = %v — a predecessor's exit retired a column its process was not driving", c.Phase)
+	}
+}
