@@ -8894,9 +8894,12 @@ branch turns that hand-off into one `gh pr create`. What was built:
 Verification, on this section's own terms: the mechanics — the branch cut and checked out, the
 room's own branch not moving, the suffix on a taken name, the conflict restore, and the notice
 naming the branch and `gh pr create` — are pinned by offline tests against real temp
-repositories (`lifecycle_test.go`). **No live adoption has run under this shape yet**, and the
-debt is one `/arena` whose winner is adopted and pushed as a PR. Stated here rather than
-implied paid, the way every other amendment in this section states it.
+repositories (`lifecycle_test.go`). **Paid 2026-08-14** by race t14 on the reference box: the
+card named the branch and the merge before the `y`, `adopt/t14-claude` was cut and checked
+out, `git merge --no-ff arena/t14/claude` landed as `91c5f3e`, `main` did not move, and the
+notice named `gh pr create`. The push half was deliberately not run — the racer's payload was
+a throwaway date comment, and opening a PR to prove a verb works would put noise in the
+repository to record that the repository is fine.
 
 #### A warm seat's racer could not finish, 2026-08-13 — measured, then fixed
 
@@ -8949,10 +8952,20 @@ OnItsOwnExit` was verified to fail without the change, reproducing the hang as
 `phase = streaming`; its sibling pins that a non-racing vendor's predecessor exit is still
 discarded.
 
-**What this does not pay.** The live debts below it are still owed and were unpayable while
-this stood, because the seed receipt, the commit receipt, `u` and `/adopt` all render out of
-the settled block that never arrived. The fix is verified offline; **no live race has landed
-under it yet.**
+**Verified live the same day.** Race t13, one Claude seat, first dispatch of a cold room:
+the column retired in **18 seconds** and drew the whole settled block — `arena
+arena/t13/claude`, `seeded 1 file`, `no untracked file matches ".env"`, `1st of 1 · done ·
+18s`, `committed 1ef0f00.` and the diff stat. Eighteen seconds against twenty-one minutes is
+the measurement. Race t14 then landed the same way with a warm seat behind it, which is the
+arm that matters: it is the state the bug needed.
+
+**And it paid the three debts that had been stuck behind it.** `u` on t13 reset the branch to
+`ba2d00b` with the stat kept above an `undone` line, and a second press refused as already
+undone; the reset was confirmed against git rather than against the room's own claim.
+`/adopt claude` on t14 cut `adopt/t14-claude`, ran the `--no-ff` merge, left `main` at
+`ba2d00b` and named `gh pr create` — the first live adoption under the shape ruled
+2026-08-11, and the debt this section states three paragraphs above its own dated block is
+now paid.
 
 ### 9.38 paste lands whole, and never sends (2026-08-09)
 
