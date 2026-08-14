@@ -8898,6 +8898,62 @@ repositories (`lifecycle_test.go`). **No live adoption has run under this shape 
 debt is one `/arena` whose winner is adopted and pushed as a PR. Stated here rather than
 implied paid, the way every other amendment in this section states it.
 
+#### A warm seat's racer could not finish, 2026-08-13 — measured, then fixed
+
+**A race against a seat the room had already used never ended.** Race t10 on the reference
+box: one Claude racer, a one-line edit, and the room rendered `streaming` for **21 minutes**
+after the racer had exited. The vendor was not slow and did not fail. Its transcript ends at
+52 seconds with a complete reply, and by then no process wearing that vendor id was left alive
+except the room's own persistent seat. Nothing downstream ran — no diff, no commit, no rank,
+no seed receipt — because all of them live inside `finishColumn`, and `finishColumn` was never
+called.
+
+**Both of the column's exits were closed at once, which is why nothing caught it.** A one-shot
+racer ends its turn by exiting, so `KindDone` is its only retirement signal; the two earlier
+paths do not apply to it, and each declines for its own correct reason. `arenaEphemeral` is
+populated only for a `Conversational` seat, so `ephemeralRacer` is nil for this vendor. The
+arena spawn never sets `turnState.persistent`, correctly — the racer *is* a spawn — so
+`isPersistent` is false. That leaves `KindDone`, and `KindDone` reaches the stale-exit guard
+first: a terminal event names a **vendor**, not a process, so a live entry in `m.procs` reads
+as "this seat is fine" and the exit is discarded as a predecessor's. The room's persistent
+Claude seat is exactly such an entry.
+
+**The failure mode was already written down, one path over.** `KindDone`'s own attribution
+comment names it for the ACP racer — a guard "reading a live ROOM process as *this seat is
+fine* would leave the race column streaming forever and the turn unable to end" — and fixes it
+with the `ephemeralRacer` check. `giveUpSeat`'s comment then observes that the guard eats a
+racer's exit when a room process wears the id, and judges it harmless. For `giveUpSeat` that
+judgement is right: a given-up column is already terminal when the exit lands. On the ordinary
+path the column is not, and the same swallow is the difference between a race that finishes
+and one that cannot. Two processes wear one vendor id for every racing seat, not only for the
+one whose racer happens to be a live session.
+
+**The trigger is a warm seat, and it is why this survived several clean races.** `m.procs`
+must already hold a live process for that vendor when the race dispatches. Race before the
+room's first ordinary brief and the guard never fires, which is what t9-on-2026-08-09 did when
+all four seats raced and a winner was adopted. The drive that found this sent two ordinary
+briefs first, so the seat was warm. It also means codex, agy and grok racers were never
+affected: none of those vendors holds a persistent process, so their exits pass the guard
+untouched. The bug reached exactly one seat, and it is the seat the room dispatches to by
+default.
+
+**The fix is attribution, not a hole in the guard.** `arenaRacing` is the one-shot sibling of
+`ephemeralRacer` — keyed presence in `arenaHandles`, because a handle is not a session and
+cannot be asked whether it is alive, which is precisely the case at hand: the process has
+already exited and the map is the only record of whose exit it was. A racing vendor's
+`KindDone` retires its column; a vendor that is not racing keeps the stale-exit guard exactly
+as it was. `dropProcess` is deliberately not called on that path — the exit belongs to the
+racer, the room's own seat is still running, and forgetting a live process would leave it
+running and invisible, which is the state this product refuses. `TestAWarmSeatsRacerRetires-
+OnItsOwnExit` was verified to fail without the change, reproducing the hang as
+`phase = streaming`; its sibling pins that a non-racing vendor's predecessor exit is still
+discarded.
+
+**What this does not pay.** The live debts below it are still owed and were unpayable while
+this stood, because the seed receipt, the commit receipt, `u` and `/adopt` all render out of
+the settled block that never arrived. The fix is verified offline; **no live race has landed
+under it yet.**
+
 ### 9.38 paste lands whole, and never sends (2026-08-09)
 
 The ask, in the operator's words: *"how i can paste things into the area i can type in."* The
@@ -8966,6 +9022,17 @@ into the room. Expected: one insertion, three rows in the composer, zero dispatc
 sends it as one brief. If the paste instead lands as separate turns, the terminal did not
 bracket it — record the terminal build in PARITY.md, because that is a measured vendor fact,
 not a council bug.
+
+**Paid, 2026-08-13, on Windows Terminal 1.24.11911.0.** A three-line snippet pasted into a
+live room landed as ONE insertion, three composer rows, and **zero dispatches**; `ctrl+u` then
+cleared it and reported the count, which is the second half of the same gesture and is why the
+clear is evidence too — a paste that had dispatched would have left nothing to clear. The
+terminal build is named because the bracketing is the terminal's half of the contract and a
+version is the only thing that claim can be pinned to; PARITY.md stays out of it, since that
+file records a machine BEHAVING DIFFERENTLY and this machine behaved as specified. **One half
+of the check is still unexercised**, stated rather than rounded up: the draft was cleared
+instead of sent, so "enter sends it as one brief" has not been observed on a pasted multi-line
+draft. The property that was owed — a paste never sends — is the one that was measured.
 
 **Amendment, 2026-08-09 — the ergonomic other half: ctrl+u clears the draft.** Paste changed
 the arithmetic on regret. A draft used to cost at most a typed sentence, so backspace's
