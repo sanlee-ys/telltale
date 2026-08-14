@@ -54,7 +54,21 @@ the argument; this file does not restate either.
   seats: t9 raced the room as it was that morning, and a record of what ran is
   not a place to write down what would run today. The next race is 5-of-5.
 
-- **The arena family's live debt is mostly paid** (2026-08-09, race t9 on the
+- **The arena family's live debt is PAID IN FULL** (2026-08-14). Everything
+  below this paragraph is the history of how it got there; nothing in it is
+  owed. Races t13 and t14 on the reference box closed the last three items in
+  one sitting — `seeded 1 file` with its named `.env` no-match notice, a `u`
+  undo whose branch really went back to its base and whose second press refused
+  as already undone, and a live `/adopt` that cut `adopt/t14-claude`, merged
+  `arena/t14/claude` with `--no-ff`, left `main` where it stood and named
+  `gh pr create` as the next command. The same sitting was the first live race
+  under the finish fix (design.md §9.37): 18 seconds to retire, against the 21
+  minutes that found the bug. §9.38's composer paste is paid too, on Windows
+  Terminal 1.24.11911.0 — one insertion, three composer rows, zero dispatches.
+  **The one thing still unexercised is named in design.md §9.38** and is not an
+  arena debt: a pasted multi-line draft has never been sent with enter.
+
+- **How the family got here** (2026-08-09, race t9 on the
   reference box, after three earlier races each exposed and funded a fix —
   swallowed worktree errors, turn-number collisions, the agy print-timeout,
   a racer pushing mid-race, a stalled seat holding the turn). t9 was the clean
@@ -67,81 +81,35 @@ the argument; this file does not restate either.
   had paid — including §9.37 telling you no live `/adopt` had run three
   paragraphs above an open question filed *from* the first live `/adopt`).
 
-  **What is genuinely still unpaid, and how to pay it.** Three items, and one
-  race pays the first two. **The symlink-refusal item that led this list is
-  paid** — Developer Mode went on 2026-08-09 and the test PASSES on this box;
-  the measurement and its two mechanics live in [PARITY.md](PARITY.md).
-  **§9.38's composer paste is paid too**, on 2026-08-13: one insertion, three
-  composer rows, zero dispatches, on Windows Terminal 1.24.11911.0 (design.md
-  §9.38 carries the build and the one half of it still unexercised).
+  **The symlink-refusal item that led the old unpaid list is paid** — Developer
+  Mode went on 2026-08-09 and the test PASSES on this box; the measurement and
+  its two mechanics live in [PARITY.md](PARITY.md). The three items under it
+  are paid as of 2026-08-14 and their recipe is deliberately gone: a
+  step-by-step for work nobody owes is the derived-fact copy this file's
+  opening warns about, and the measurements it produced belong in design.md
+  §9.37 rather than here.
 
-  **Read this before attempting any of the three.** All three were UNPAYABLE
-  until 2026-08-13, and the drive that tried them is what found out why: a race
-  against a seat the room had already used never retired its column, so the
-  settled arena block — which is where the seed receipt, the commit receipt,
-  `u`'s base and `/adopt`'s candidate all come from — never arrived. The cause
-  and the fix are in design.md §9.37's dated block. **The fix is verified
-  offline only; no live race has landed under it**, so the first of these
-  races is also the fix's own live verification, and a race that hangs again
-  is a reopening rather than a repeat.
+  **One thing that drive established is worth keeping, because it is not
+  written anywhere else.** All three were UNPAYABLE beforehand and nobody knew
+  it: a race against a seat the room had already dispatched to never retired
+  its column, so the settled arena block — the seed receipt, the commit
+  receipt, `u`'s base and `/adopt`'s candidate all come out of it — never
+  arrived. Two earlier drives hit it and both wrote it off as a quit. **A debt
+  that will not pay may be a broken feature rather than an unfinished errand**,
+  and the tell was that its residue looked identical every time: an uncommitted
+  racer edit on a branch still sitting at its base.
 
-  1. **`.worktreeinclude` seeding** and 2. **`u` undo on a real racer commit**
-     — both need one live race, and **one race pays both**. The design doc
-     frames the seeding debt as needing "a repo that actually needs a `.env`";
-     it does not. This repo can pay it with a throwaway git-ignored file:
-
-     ```
-     mkdir dist && echo probe > dist/arena-seed-probe.txt   # /dist/ is ignored
-     printf 'dist/arena-seed-probe.txt\n.env\n' > .worktreeinclude
-     ```
-
-     Two lines on purpose: the first matches, the second matches nothing, so
-     one race shows both `seeded 1 files` and the named no-match notice — the
-     seed line's zero-vs-absent rule, live. (Verified 2026-08-09 that
-     `git ls-files --others` in this repo does enumerate that path, which is
-     the candidate set `loadSeedPlan` reads.) Then, in the room:
-
-     - `telltale council --fresh --vendor claude` — **seat one vendor.** A race
-       is not routable, so the roster IS the cost control; the four-seat
-       default is roughly 4× the spend for nothing this debt needs.
-     - `/arena add a one-line comment to the top of internal/council/glyphs.go
-       saying nothing but the date` — a brief that reliably CHANGES a file.
-       Watch the `arena · so far` block appear and **grow** (that pays the
-       remaining half of §9.37's live-stat note), and check the column says
-       `seeded 1 files` plus the no-match notice.
-     - When it lands: expect a diff stat and `committed <sha>.`
-     - **Between turns** (`u` refuses while a turn is in flight): `esc` to view
-       mode, focus that seat, press `u`, then `y`. Expect the card to name the
-       base, then the stat to STAY on the column under an "undone" line, and
-       `git -C ../telltale-arena-t<N>-claude log --oneline -1` to be back at the
-       base. That pays item 2. Press `u` again to see the already-undone
-       refusal, which costs nothing.
-     - Clean up: `/arena drop claude!`, then `rm .worktreeinclude` and
-       `rm -r dist`. **Then put the roster back** — a typed `--vendor` list is
-       saved as the room's roster, so the next launch is still one seat until
-       `/seat all` or `--vendor all`.
-
-     Cost: one short brief to one seat — cents, and a few minutes. The number
-     comes from the refs, and `arena/t10/claude` now exists (the race that
-     found the finish bug), so the next race mints **t11**.
-
-  3. **A live `/adopt` under the shape ruled 2026-08-11** — the verb now cuts
-     `adopt/t<N>-<vendor>` from the room's HEAD, checks that branch out, and
-     merges the racer's branch there; a conflicted merge restores the branch
-     the room came from. Offline tests pin those mechanics and no live
-     adoption has run under them, so it pays with one race whose winner you
-     adopt and then push with `gh pr create` (design.md §9.37).
-
-  **Housekeeping this turned up, not owned:** 9 `arena/t<N>/<vendor>` branches
-  and 4 sibling `telltale-arena-t*` worktrees are still on the reference box
-  (counted 2026-08-13; the 27-and-28 this entry used to claim were cleared by
-  somebody at some point, which is the hand-maintained-count failure this file
-  warns about in its own opening). Kept-until-deleted is the ruling, so this is
-  a decision to make rather than a bug: `/arena drop` only reaches the CURRENT
-  room's race, so anything from a room that has since closed — t9 and t10
-  included — is `git worktree remove` + `git branch -D` by hand. t9 and t10
-  both hold an uncommitted racer edit and sit at their base commit; that is the
-  finish bug's residue, not work anyone lost.
+  **Housekeeping, not owned:** 8 `arena/t<N>/<vendor>` branches and 2 `adopt/*`
+  branches (counted 2026-08-14, after the drive cleared t9, t10, t13 and t14).
+  Two of them, t11 and t12, still have worktrees; the rest are from t3, t5 and
+  t8 and have none. Kept-until-deleted is the ruling, so
+  this is a decision rather than a bug. Two things a future session should know
+  before clearing them: `/arena drop` only reaches the CURRENT room's race, so
+  anything from a closed room is `git worktree remove` + `git branch -D` by
+  hand, and a worktree must go WITH its branch — deleting branches alone drops
+  the highest ref and the next race re-mints a number a leftover worktree still
+  holds. This count has now been wrong twice by wide margins; re-count it
+  rather than trusting the number above.
 
 - **QUEUED, unowned — the post-audit build list (2026-08-09; shrunk same
   day).** The steal sweep's survivors, reconciled against an independent
@@ -232,6 +200,16 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   is one arm of the same rig: a probe settings file carrying council's gate hook,
   run on a machine whose own `PreToolUse` hook denies a known shape, asserting
   the denial still holds.
+
+  **Narrowed by a live drive, 2026-08-14, and NOT closed.** The built seat was
+  driven for real with the operator's settings loaded: the postures page showed
+  the wired sentence, a `Read` drew no card, a `Write` drew one and landed on
+  `y`, and a piped shell command carded because `autoApproveRoutine` cannot
+  read a pipe as routine. So the two hook sets demonstrably COEXIST without
+  breaking the gate — which is worth knowing and is not what this gap asks.
+  **No operator `deny` was exercised**, so whether their credential guard still
+  holds with council's `ask` beside it is exactly as unmeasured as before. The
+  rig above is still the thing that would settle it.
 
 - **ATTRIBUTED, 2026-08-08. Spawning was never the cost; `wait` is, and only on
   the three seats that are not persistent.** One traced `@all` turn, all four
