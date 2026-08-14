@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/sanlee-ys/telltale/releases/download/v0.2.0/telltale_0.2.0_windows_amd64.zip",
+            "bin": [
+                "telltale.exe"
+            ],
+            "hash": "7a2401aad45ba1ac91e3ada364bbc692f4901f0c92873eaed08a47d433772528"
+        }
+    },
+    "homepage": "https://github.com/sanlee-ys/telltale",
+    "license": "MIT",
+    "description": "An honest gauge for your coding agents — a dispatch room for several vendor CLIs, on a statusline and a cross-vendor HUD where every number is traceable to measured tool output."
+}
