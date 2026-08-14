@@ -45,13 +45,17 @@ measured against a live run of that CLI rather than read off its `--help`
 
 ## Install
 
-**First release pending.** v1 cuts when the snapshot gates hold (above), so nothing is
-tagged yet and the two package-manager lines below do not resolve today. They are
-written down rather than promised later because the packaging is built and exercised:
-`.goreleaser.yaml` and `.github/workflows/release.yml` cut all four binaries, the
-checksums and the scoop manifest from a `v*` tag, and the whole path has been run end
-to end in snapshot mode. Until the tag, build from source — one command, and it needs
-nothing but Go.
+**v0.2.0 is released** (2026-08-14, the first release; the snapshot gates held). The
+repo's own CI gate ran before any artifact was built, and the release attaches four
+archives with a `checksums.txt`. Read the per-download verification labels on the
+release itself before you pick one — they say what was measured, and they differ by
+platform.
+
+One honest note on the scoop line below, in this project's usual terms: the manifest is
+committed and **mechanically** verified — its URL resolves and its SHA-256 matches the
+published archive byte for byte — but no one has yet run `scoop install telltale` on a
+machine, so the install itself is unexercised rather than proven. Building from source
+is the path this project runs every day.
 
 **From source** — works now:
 
@@ -60,7 +64,7 @@ go build -o telltale.exe ./cmd/telltale
 ./telltale.exe council
 ```
 
-**Windows, scoop** — once the first release is published:
+**Windows, scoop** — the bucket is live; the install is unexercised (above):
 
 ```
 scoop bucket add telltale https://github.com/sanlee-ys/telltale
