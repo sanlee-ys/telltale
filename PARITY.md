@@ -32,7 +32,7 @@ weaker than a live run, it says so.
 | **Codex** | **`unsandboxed`** | `-s read-only` is not a read/write distinction on Windows — it is a seat that cannot spawn anything at all. Verified against codex-cli 0.146.0 on Windows 11: a sandboxed spawn fails with `CreateProcessAsUserW ... (Windows error 5)`, including one asked merely to list a directory. Both postures therefore pass `danger-full-access` on Windows, and the badge says `unsandboxed` rather than claiming a restriction that is not there. |
 | **Cursor** | **no sandbox request at all**, and **no workspace-trust screen** | Both are properties of the ACP server this seat now runs on, not of the platform: the protocol has no sandbox parameter and no trust step. The old row said `--sandbox enabled` kills the turn on Windows — true of print mode, verified 2026-08-04 against 2026.07.23-e383d2b, and no longer a flag council passes on any OS. Trust is the sharper half: verified 2026-08-08 against 2026.08.04-aaa8809, a directory print mode refused with "⚠ Workspace Trust Required" was written to over ACP with no prompt. |
 | **Antigravity** | same as elsewhere | `unsandboxed` on every platform — it was asked to write a file under both of its own read-only flags and wrote it. Refuted, not unverified. |
-| **Grok** | **measured here, unverified elsewhere** | `unsandboxed`, on two different kinds of evidence. `--permission-mode plan` was REFUTED: asked to write a file under it, grok 1.0.0 (3cd0d0cbce) wrote the file, exactly as the control run without it did. `--sandbox` is not refuted but UNOBSERVABLE: handed `bogus-profile-xyz` it neither errored nor warned and answered normally at exit 0, so council has no way to tell a real profile from a typo and asks for neither flag. Nothing in the invocation is platform-specific, so a macOS run is *expected* to work and has not been shown to. |
+| **Grok** | **measured on both, and they differ** | `unsandboxed` on both platforms, but only one of the two arms behaves the same way. `--permission-mode plan` is REFUTED on **both**: asked to write a file under it, grok 1.0.0 (3cd0d0cbce) wrote the file, exactly as the control run without it did — Windows 2026-08-09, macOS 2026-08-14 (file confirmed on disk, not taken from the reply). `--sandbox` **diverges**: UNOBSERVABLE on Windows (handed `bogus-profile-xyz` it neither errored nor warned and answered normally at exit 0), but **validated and fail-closed on macOS** — the same nonsense profile against the same build warns `sandbox could not be applied`, then errors *"Refusing to start with its protections missing"* and exits 1 without a turn. See the macOS section below for what that does and does not license. |
 
 **Cursor's ACP seat is unverified off Windows, 2026-08-08.** Every one of the
 thirteen arms behind that seat ran on Windows 11 against cursor-agent
@@ -47,20 +47,34 @@ that path too, since the Mac is where print mode's trust prompt was least likely
 to be hit. Record what you find here rather than in `docs/design.md §9.36`, which
 is the Windows capture and should stay one.
 
-**The Grok seat is unverified off Windows, 2026-08-09.** Every measurement behind
-that seat ran on Windows 11 against grok 1.0.0 (3cd0d0cbce), signed in against
-grok.com rather than an API key. Nothing in the invocation is platform-specific —
-`--output-format streaming-json` plus a trailing `-p` — so a macOS run is
-*expected* to work and has not been shown to. Four things are worth checking
-there specifically, because each is a claim the seat makes: that
-`grok --sandbox <nonsense> -p "hi"` is silently accepted there too (the whole
-reason council passes no sandbox flag); that `--permission-mode plan` still
-writes the file; that the installer's POSIX path guess in `grokKnownPaths` —
-`~/.grok/bin/grok` — is where the binary actually lands; and that `grok` resolves
-to a native executable rather than a shell shim, since the argv transport for
-the brief depends on it. `go test ./internal/council/vendors -tags=live -run
-TestLiveGrok` is the one command that exercises the invocation end to end.
-Record what you find here rather than in `docs/design.md` §9.39, which is the
+**The Grok seat is now measured on macOS too, 2026-08-14** — Intel x86_64, macOS
+26.5.2, grok 1.0.0 (3cd0d0cbcebe), the same build the Windows capture used. The
+four questions this file listed as unverified off Windows are answered, and
+three of the four came back as expected:
+
+| question | macOS answer |
+|---|---|
+| Is `grok --sandbox <nonsense> -p …` silently accepted here too? | **No — this is the one that diverges.** It warns, then refuses to start and exits 1 without taking a turn |
+| Does `--permission-mode plan` still write the file? | **Yes — refuted, same as Windows.** `wrote.txt` confirmed on disk afterwards |
+| Is `grokKnownPaths`' POSIX guess `~/.grok/bin/grok` where the binary lands? | **Yes.** It is a symlink to `~/.grok/downloads/grok-macos-x86_64`; the installer also drops `~/.local/bin/grok` pointing at it, which is what resolves on PATH |
+| Is `grok` a native executable rather than a shell shim? | **Yes** — `telltale doctor` reports `drivable ok … a native executable`, so the brief's argv transport holds here |
+
+`go test ./internal/council/vendors -tags=live -run TestLiveGrok` PASSED on this
+box (17.82s, two turns, one reused session id), which is the invocation exercised
+end to end rather than flag by flag.
+
+**What the `--sandbox` divergence does and does not license.** It does not change
+what council should pass today. The reason council asks for neither flag is that
+`--sandbox` cannot be relied on *across* the fleet's platforms, and a flag that
+fail-closes on one OS and is a no-op on another is still not a posture the badge
+can honestly claim — the seat is `unsandboxed` either way, because the arm that
+actually restricts writes (`--permission-mode plan`) is refuted on both. What it
+does change is the stated *reason*: "grok cannot tell a real profile from a typo"
+is a Windows fact, not a grok fact, and anywhere that sentence is the whole
+justification it is now half-true. Whether macOS's validation is worth spending a
+per-platform code path on is a design call nobody has made; it is not made here.
+
+Record further findings here rather than in `docs/design.md` §9.39, which is the
 Windows capture and should stay one.
 
 **Windows launch-parent trap when driving cursor-agent by hand.** Launched from a
@@ -141,9 +155,9 @@ one:
 |---|---|---|
 | `claude` | `~/.local/bin/claude` | `2.1.222 (Claude Code)` |
 | `codex` | `/usr/local/bin/codex` | `codex-cli 0.146.0` |
-| `agy` | `~/.local/bin/agy` | `1.1.10` |
+| `agy` | `~/.local/bin/agy` | `1.1.10` (`1.1.11` on the 2026-08-14 re-run) |
 | `cursor` | `~/.local/bin/cursor-agent` | `2026.08.04-aaa8809` |
-| `grok` | **`binary FAILED`** | not checked — no binary to run |
+| `grok` | `~/.local/bin/grok` | `grok 1.0.0 (3cd0d0cbcebe)` — **installed since; see below** |
 
 All four installed seats report `drivable ok` as **native executables**, which is
 the row that matters beyond the version string: it is the measurement behind
@@ -159,12 +173,20 @@ launching a real vendor binary, so the first one pays that vendor's start-up —
 don't read a multi-second `--version` row as a hung seat, and don't quote a warm
 number as the cost of the check.
 
-`grok` is **not installed on this box**, which is a capability gap and not a
-doctor defect — the row is the report working. It refutes nothing the Grok seat
-claims: the four grok questions this file lists as unverified off Windows need an
-install before they can be answered, and they stay unverified. That install is
-queued as a dated Mac entry in `dotfiles/PARITY.md`; fold anything further into
-that entry rather than opening a second one.
+**`grok` was missing on 2026-08-10 and is installed now.** The original row read
+`binary FAILED`, which was the report working rather than a doctor defect. It was
+installed later the same day, and a re-run on **2026-08-14** (binary built from
+`main` at `230ba54`) reports **all five seats `binary ok` + `drivable ok`, every
+one a native executable** — 15 checks passed, 0 failed, over 5 seats. So this box
+now seats the same five the Windows box does, and the capability-parity gap the
+`dotfiles/PARITY.md` Mac entry tracked is closed; that entry is retired.
+
+Two things the re-run surfaced that are worth keeping. `agy` reported `1.1.11`
+rather than the `1.1.10` above — it self-updates, so a version row here is a
+timestamp, not a pin. And `grok`'s probe was the **fastest** of the five at
+0.03s, against `agy`'s 7.02s cold; don't read a slow `--version` as a sick seat
+or a fast one as a healthy install, which is the whole reason `auth` and
+`network` stay `not checked`.
 
 Treat a wrong-looking doctor row on the Mac as unverified rather than broken, and
 record what you find here.
