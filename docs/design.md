@@ -1188,11 +1188,19 @@ has moved, and says so. `internal/adapter/drift` holds the mechanism; this is th
 | Antigravity | `agy 1.1.9` | `gen_metadata table` | model |
 | | | `trajectory_metadata_blob table` | workspace |
 | Cursor | `Cursor 3.14.7` | `composerHeaders timestamp columns` | last activity |
-| Grok CLI | `grok 1.0.0 (3cd0d0cbce)` | `summary.json info.id` — the identity envelope, on 30 of 30 sessions | name, model, workspace, last activity |
+| Grok CLI | `grok 1.0.4 (d846eb93d9)` | `summary.json info.id` — the identity envelope, on 30 of 30 sessions | name, model, workspace, last activity |
 
 The middle column quotes each canary by the **name the adapter gives it**, not a paraphrase, so
 the string in this table is the string in the code — which is what makes the guard tests below
 able to check it at all.
+
+**Grok's row moved to 1.0.4 on 2026-08-14, and the row's two halves were re-checked to different
+depths.** The version came from re-measuring the seat after four patch bumps went unnoticed
+(§9.39's 2026-08-14 amendment). What was re-read on disk is one session directory that 1.0.4
+itself wrote: `info.id` is there, so is every other key `internal/adapter/grok` names, and a
+rate/limit/quota sweep over it still matches nothing account-level. What was NOT re-run is the
+30-session census the canary's own phrase quotes — that number is still the 2026-08-09 survey's,
+and it is left saying so rather than quietly re-attributed to a build it was never counted on.
 
 **One table rather than a paragraph in each of §3.1–3.9**, deliberately, and against the first
 instinct that a canary is a survey finding belonging beside its own survey. It is — but the
@@ -9265,6 +9273,65 @@ Worth stating for the next adapter, because it generalises past this vendor: **a
 should be shaped like a brief, not like a greeting.** Three of this file's captures used
 friendly one-liners, and the one hazard they could never have surfaced is the one that took
 the seat down on its first real turn.
+
+**Amended 2026-08-14: the drift alarm fired, and the seat was re-measured rather than re-dated.**
+grok reached **1.0.4 (d846eb93d9)**, four patch versions past the pin every claim above rests on,
+and nothing in the repository had noticed. PR #174 added version-pinned wire fixtures for exactly
+this, so this is the mechanism working, not a surprise. The re-measure cost three billed turns and
+one free one, and it is written up as a measurement because a version bump is not evidence that
+anything changed — nor evidence that nothing did.
+
+**The wire is unchanged, and that is a checked claim rather than an impression.** The 1.0.4
+capture and the 1.0.0 one were diffed by SHAPE — frame types, key names, nesting, value types —
+and they are identical. The single difference in the two files is the KEY of the `modelUsage`
+map, `grok-4.5-build` → `grok-4.6-build`, which is a model id rather than a schema key, and one
+this seat's parser never reads. `testdata/wire/grok-1.0.4-turn.jsonl` replaces the 1.0.0 file.
+
+**Both containment flags are still dead.**
+
+- `--permission-mode plan` is refuted again, with the write landing again: the `write` tool was
+  called, the update reported `completed`, the process exited 0, and `probe-plan.txt` held
+  `WROTE` on disk. `--help` still offers `plan` among six permission modes, which is the whole
+  point — the help text has said the same thing across five builds while the flag has never once
+  been observed to stop a write.
+- `--sandbox` is still unobservable on Windows: `bogus-profile-xyz` drew no error, no warning and
+  exit 0. **This one was re-probed for free, and the technique generalises.** It was passed
+  alongside `--single=/context` — a prompt this vendor is already known to eat — because profile
+  validation happens at startup, so a refusal surfaces before any model turn. A turn that is
+  never billed still answers the question. macOS still diverges and fails closed (`PARITY.md`).
+
+**The flag that earned its re-run is `--resume`.** 1.0.4's help spells it
+`-r, --resume [<SESSION_ID_OR_TITLE>]` — an OPTIONAL value that also matches session titles,
+where the pinned build took a required id. An optional-value flag is precisely the clap shape
+whose SEPARATED form can stop binding, and this seat passes the id separated. Had it stopped
+binding, every follow-up turn would have quietly become a fresh conversation — the room's worst
+failure mode, because it looks like success. It did not: the resumed turn echoed the same
+`sessionId`, recalled the first turn's own word, and reported `input_tokens` 454 against
+`cache_read_input_tokens` 21504. The conversation was on the vendor's side.
+
+**The slash hazard survives, and so does the absent-cost shape.** `--single=/context` still
+produces `available_commands`, then an `end` with no usage, no cost and no text, at exit 0. So
+`TotalCostUSD`'s pointer-ness is measured on the CURRENT build rather than inherited from the
+pinned one.
+
+**What grok gained, and what it did not.** `grok models` now offers `grok-4.6` (default) and
+`grok-4.5`, where the 2026-08-09 survey found one model. The CLI has a `grok trace` subcommand
+that exports or uploads a session's trace data. **Neither changes a verdict here, and nothing is
+built on either.** Quota is still structurally absent (§7.16a, #195): a rate/limit/quota sweep
+over a session directory 1.0.4 itself wrote matches nothing account-level, and `grok trace` moves
+a transcript rather than reporting a ceiling. The telemetry seam §7.16a already spends is the
+OTLP push, and it is untouched.
+
+**One shape was measured that nobody had looked at before, and it is recorded as new rather than
+as drift.** A WRITE tool call's `content` element is a diff —
+`{"type":"diff","path":…,"oldText":"","newText":"WROTE\n"}` — with no nested `content` object, so
+`grokDetail` reads nothing from it. No write call was captured at 1.0.0, so this is a gap in the
+original measurement rather than a change under us, and `grok.go` says so at the function. It is
+left alone: a detail renders only on a FAILED outcome, and composing a sentence out of
+`oldText`/`newText` would be this package writing the vendor's line for it (§9.6a).
+
+**Not re-verified at 1.0.4:** the bad-`--resume`-id error shape, the `--verbatim` and
+`--prompt-json` slash channels, and anything on macOS.
 
 ### 9.40 the room said something was stopped and never said which seat (2026-08-09)
 

@@ -6,6 +6,10 @@ prompt was `reply with the word ok` in every case — the cheapest thing that st
 produces a whole turn. `wire_test.go` replays each file through that seat's own
 parser.
 
+**grok's file was re-captured 2026-08-14 at 1.0.4**, and its prompt is FENCED
+rather than bare: the same `---` opening that a briefed room sends. See "The
+alarm fired once" below.
+
 These exist for one reason: **a vendor can change its frames between a rehearsal
 and demo day, and nothing else in this repository would notice.** Every other
 fixture in this package is a shape somebody wrote down, including
@@ -26,13 +30,41 @@ from the vendor's own `--version` at capture time.
 | `claude-2.1.226-resume-not-found.jsonl` | `claude` 2.1.226 |
 | `codex-0.147.0-turn.jsonl` | `codex-cli` 0.147.0 |
 | `agy-1.1.11-turn.jsonl` | `agy` 1.1.11 |
-| `grok-1.0.0-turn.jsonl` | `grok` 1.0.0 (3cd0d0cbce) |
+| `grok-1.0.4-turn.jsonl` | `grok` 1.0.4 (d846eb93d9) |
 | `cursor-agent-2026.08.04-aaa8809-turn.jsonl` | `cursor-agent` 2026.08.04-aaa8809 |
 | `cursor-agent-2026.08.04-aaa8809-load-not-found.jsonl` | `cursor-agent` 2026.08.04-aaa8809 |
 
 Three of the five bumped past the version their adapter's doc comments were
 written against — Claude Code 2.1.220 → 2.1.226, codex-cli 0.146.0 → 0.147.0,
 agy 1.1.10 → 1.1.11 — which is the drift these files exist to make visible.
+
+## The alarm fired once, and this is what it found (2026-08-14)
+
+grok reached **1.0.4 (d846eb93d9)** — four patch versions past the pin — with
+nothing in this repository noticing. That is the case these files were added for,
+so the seat was re-measured against the installed binary rather than re-pinned by
+editing a string.
+
+**The wire is unchanged.** The 1.0.4 capture was diffed against the 1.0.0 one by
+shape rather than by eye: frame types, key names, nesting and ordering are
+identical. The only shape difference anywhere in the two files is the KEY of the
+`modelUsage` map, `grok-4.5-build` → `grok-4.6-build` — a model id, not a schema
+key, and one no adapter here reads. `grok models` now offers `grok-4.6` (default)
+and `grok-4.5`, where the 1.0.0 survey found one model.
+
+**The old file is replaced rather than kept, and that is not the same as editing
+one.** The rule above forbids editing an old capture, because that restates a
+measurement nobody re-ran; it does not ask for one file per build forever. 1.0.0
+is gone from every box this project runs on, so its fixture pins a claim nobody
+can re-check, and its shape is a subset of the new one's. Git history holds it.
+What must never happen is the third option — keeping `grok-1.0.0-turn.jsonl` as
+the name while putting 1.0.4 bytes in it.
+
+**The prompt changed on purpose.** This capture is FENCED — it opens with the
+`---` a briefed room sends — where the other four are the bare `reply with the
+word ok`. design.md §9.39 records a seat that shipped broken for a day behind a
+green live test whose prompt began with a letter, and a capture is a probe like
+any other. The reply is still `ok`, so nothing downstream moved.
 
 ## How they were sanitized
 
