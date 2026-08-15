@@ -5435,6 +5435,18 @@ apply, and the credential guard is exactly the hook that must not be weakened by
 The ranking makes a weakening unlikely (a `deny` from their hook beats council's `ask`), and
 "unlikely by documentation" is the standard of evidence this section exists to distrust.
 
+**The per-call cost tolerance is HELD — owner ruling, 2026-08-15.** The measurement above
+stands: the shipped 14 MB binary costs ~54 ms per gated call because the one binary links
+the TUI framework, and a sibling hook binary would save ~133 ms per gated call. The owner
+ruled the saving does not buy an ADR-002 amendment: roughly half a second across three
+gated calls on a 6.4 s turn sits inside the "tens of milliseconds is fine" band the build
+was accepted under, and the split's real price is not the binary — it is the packaging
+(the scoop manifest ships one exe), `hookCommand`'s self-location, room/hook version skew,
+and a missing-sibling fallback whose only honest shape is `--setting-sources ""`, which
+trades away the operator's settings to save milliseconds. The one-binary shape stands
+unamended. Reopen this only with a measurement that changes the arithmetic: more gated
+calls per turn than the ~3 assumed, or a vendor change that raises the per-call floor.
+
 ### 9.9 The room remembers — a conversation, not a ticker
 
 Everything above builds a very good way to **send one turn**. What it did not build is
