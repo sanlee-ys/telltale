@@ -19,13 +19,14 @@ import (
 // calls it "synthesized shapes". A synthesized line proves the parser handles the
 // shape its author believed in. It cannot prove the vendor still sends it.
 //
-// So each fixture here is one short REAL turn, captured on 2026-08-09 on the
-// Windows reference box, through the exact argv the seat builds, and then
-// SANITIZED: every session id, uuid, path, username and operator-private command
-// list replaced with an obviously-fake value of the same type and format, by
-// string substitution rather than by re-marshalling, so keys, nesting, ordering
-// and types are byte-identical to what came off the wire. `testdata/wire/README.md`
-// records what was substituted and what could not be captured at all.
+// So each fixture here is one short REAL turn, captured on the Windows reference
+// box through the exact argv the seat builds, and then SANITIZED: every session
+// id, uuid, path, username and operator-private command list replaced with an
+// obviously-fake value of the same type and format, by string substitution rather
+// than by re-marshalling, so keys, nesting, ordering and types are byte-identical
+// to what came off the wire. Four were captured 2026-08-09; grok's was re-captured
+// 2026-08-14 at 1.0.4. `testdata/wire/README.md` records what was substituted and
+// what could not be captured at all.
 //
 // THE VERSION IS IN THE FILENAME, and that is the mechanism rather than a label.
 // A fixture is a claim about ONE build of one CLI. When a vendor is upgraded, the
@@ -33,6 +34,12 @@ import (
 // which would silently restate a measurement nobody re-ran. If a bump changes the
 // frames, these tests fail loudly, here, against a file that names the version
 // they were true of.
+//
+// The mechanism has now fired once and the result is recorded rather than assumed:
+// grok reached 1.0.4 with nobody noticing four patch bumps, the seat was re-measured
+// against it on 2026-08-14, and the wire came back UNCHANGED (design.md §9.39's
+// 2026-08-14 amendment). A fixture that survives a bump is not a wasted one — it is
+// the only thing that turns "probably fine" into a checked claim.
 //
 // The bar every fixture in this directory has to clear (ADR-001, design.md
 // §4a.1): **a frame that could not be captured is NOT written from
@@ -43,7 +50,7 @@ const (
 	claudeWireVersion = "2.1.226"            // claude --version
 	codexWireVersion  = "0.147.0"            // codex --version -> codex-cli 0.147.0
 	agyWireVersion    = "1.1.11"             // agy --version
-	grokWireVersion   = "1.0.0 (3cd0d0cbce)" // grok --version
+	grokWireVersion   = "1.0.4 (d846eb93d9)" // grok --version
 	cursorWireVersion = "2026.08.04-aaa8809" // cursor-agent --version
 )
 
@@ -256,19 +263,31 @@ func TestAgyWireIsPinnedAt_1_1_11(t *testing.T) {
 	}
 }
 
-// TestGrokWireIsPinnedAt_1_0_0 replays a real `grok --output-format
+// TestGrokWireIsPinnedAt_1_0_4 replays a real `grok --output-format
 // streaming-json` turn.
 //
 // Three properties this fixture pins, each of which is a judgement call in
 // grok.go rather than an accident of the schema:
 //
 //   - `text` deltas are genuinely token-level and concatenate to the reply.
-//   - `thought` deltas are DROPPED. This capture is 13 thought frames against 1
+//   - `thought` deltas are DROPPED. This capture is 32 thought frames against 1
 //     of text, which is the ratio that argument was made on.
 //   - `end` carries the vendor's OWN total_cost_usd, which is why this is the
 //     one seat besides Claude that may show money at all.
-func TestGrokWireIsPinnedAt_1_0_0(t *testing.T) {
-	p := replay(Grok{}, wireFixture(t, "grok-1.0.0-turn.jsonl"))
+//
+// The 1.0.0 capture this replaces was taken with the prompt `reply with the word
+// ok`, and this one is FENCED — the same `---` opening a briefed room sends. That
+// is not cosmetic: §9.39's whole lesson is that a probe shaped like a greeting
+// verified a case the product never sends, and the fixture is now the shape it
+// does. The reply is still `ok`, so the assertions below did not move.
+//
+// What the 1.0.0 → 1.0.4 re-capture found, stated so the next reader does not
+// re-derive it: the frame types, the key names, their nesting and their ordering
+// are IDENTICAL. The one shape difference anywhere in the file is the key of the
+// `modelUsage` map, `grok-4.5-build` → `grok-4.6-build`, which is the model id
+// rather than a schema key — and this adapter does not read that map at all.
+func TestGrokWireIsPinnedAt_1_0_4(t *testing.T) {
+	p := replay(Grok{}, wireFixture(t, "grok-1.0.4-turn.jsonl"))
 
 	if p.body != "ok" {
 		t.Errorf("streamed body = %q, want %q", p.body, "ok")

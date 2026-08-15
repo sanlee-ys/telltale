@@ -119,7 +119,24 @@ const Vendor = model.VendorGrok
 // version — `chat_format_version` is 1 on every session and is a record-format
 // ordinal, not a build — so a drift report here carries the pin and no observed
 // counterpart. The build string is the one `grok --version` prints.
-const verifiedAgainst = "grok 1.0.0 (3cd0d0cbce)"
+//
+// Moved to 1.0.4 on 2026-08-14, and the scope of what was re-checked is stated
+// rather than implied, because it is NARROWER than the 30-session survey the
+// package doc describes. What was re-read: one session directory written by
+// 1.0.4 itself, holding every key this adapter names — `info.id`, `info.cwd`,
+// `generated_title`, `session_summary`, `current_model_id`, `last_active_at`,
+// `updated_at`, `created_at`; signals.json's `contextWindowUsage`,
+// `contextTokensUsed`, `contextWindowTokens`; and updates.jsonl's
+// `params.update.sessionUpdate: "turn_completed"` carrying `usage.costUsdTicks`.
+// `chat_format_version` is still 1. The quota verdict was re-run the same way
+// the survey ran it — a rate/limit/quota key sweep over the new directory — and
+// it still matches nothing account-level, so quota stays CapNone.
+//
+// What was NOT re-done: the file-presence census across many sessions and many
+// workspaces, and the `active_sessions.json` liveness measurement. Those
+// verdicts still rest on the 2026-08-09 survey, and this constant does not
+// promise otherwise.
+const verifiedAgainst = "grok 1.0.4 (d846eb93d9)"
 
 // canarySummaryInfoID is summary.json's identity envelope, `info.id`.
 //

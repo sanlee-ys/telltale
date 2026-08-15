@@ -41,6 +41,17 @@
 //   - turn_completed events carry outcome and duration and NO token counts,
 //     exactly as the vendor's schema table says.
 //
+// **NOT re-measured at grok 1.0.4 (2026-08-14).** The seat was re-verified when
+// four unnoticed patch bumps turned up (design.md §9.39's amendment), and that
+// pass covered the council wire, the flags and the on-disk store — it did NOT
+// re-run this export capture, which needs its own instrumented turn. Two things
+// were checked from outside and neither moves a verdict here: quota is still
+// structurally absent (a rate/limit/quota sweep of a store 1.0.4 wrote matches
+// nothing account-level, so #195's closed-enum finding stands), and 1.0.4 has a
+// `grok trace` subcommand that exports or uploads a session's trace data, which
+// moves a transcript rather than reporting a ceiling. Nothing here is built on
+// it. The bullets above stay pinned to 1.0.0 until somebody re-runs them.
+//
 // # What of the stream is kept
 //
 // Four counts, and nothing else. The record's model, duration, stop reason,

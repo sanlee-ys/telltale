@@ -32,7 +32,7 @@ weaker than a live run, it says so.
 | **Codex** | **`unsandboxed`** | `-s read-only` is not a read/write distinction on Windows — it is a seat that cannot spawn anything at all. Verified against codex-cli 0.146.0 on Windows 11: a sandboxed spawn fails with `CreateProcessAsUserW ... (Windows error 5)`, including one asked merely to list a directory. Both postures therefore pass `danger-full-access` on Windows, and the badge says `unsandboxed` rather than claiming a restriction that is not there. |
 | **Cursor** | **no sandbox request at all**, and **no workspace-trust screen** | Both are properties of the ACP server this seat now runs on, not of the platform: the protocol has no sandbox parameter and no trust step. The old row said `--sandbox enabled` kills the turn on Windows — true of print mode, verified 2026-08-04 against 2026.07.23-e383d2b, and no longer a flag council passes on any OS. Trust is the sharper half: verified 2026-08-08 against 2026.08.04-aaa8809, a directory print mode refused with "⚠ Workspace Trust Required" was written to over ACP with no prompt. |
 | **Antigravity** | same as elsewhere | `unsandboxed` on every platform — it was asked to write a file under both of its own read-only flags and wrote it. Refuted, not unverified. |
-| **Grok** | **measured on both, and the platforms differ** | The seat is `unsandboxed` on both platforms. `--permission-mode plan` is REFUTED on both. grok 1.0.0 (3cd0d0cbce) wrote the file under that flag, and the control run without the flag also wrote it. Windows measured this on 2026-08-09 and macOS on 2026-08-14. The macOS run confirmed the file on disk and did not use the reply text. `--sandbox` DIVERGES. On Windows the flag is UNOBSERVABLE: given `bogus-profile-xyz`, grok printed no error and no warning, and it answered normally at exit 0. On macOS the same build validates the profile and fails closed. It prints `sandbox could not be applied`, then it prints `Refusing to start with its protections missing`, and it exits 1 with no turn. The macOS section below states what this result does and does not permit. |
+| **Grok** | **measured on both, and the platforms differ** | The seat is `unsandboxed` on both platforms. `--permission-mode plan` is REFUTED on both. grok 1.0.0 (3cd0d0cbce) wrote the file under that flag, and the control run without the flag also wrote it. Windows measured this on 2026-08-09 and macOS on 2026-08-14. The macOS run confirmed the file on disk and did not use the reply text. `--sandbox` DIVERGES. On Windows the flag is UNOBSERVABLE: given `bogus-profile-xyz`, grok printed no error and no warning, and it answered normally at exit 0. On macOS the same build validates the profile and fails closed. It prints `sandbox could not be applied`, then it prints `Refusing to start with its protections missing`, and it exits 1 with no turn. The macOS section below states what this result does and does not permit. **Re-measured on Windows at grok 1.0.4 (d846eb93d9) on 2026-08-14, and both results held.** The write landed again under `--permission-mode plan`, and `bogus-profile-xyz` again drew no error and exit 0. **The two machines now run different builds** — Windows 1.0.4, macOS 1.0.0 — so the divergence is no longer a same-build one. See the note below. |
 
 **Cursor's ACP seat is unverified off Windows, 2026-08-08.** Every one of the
 thirteen arms behind that seat ran on Windows 11 against cursor-agent
@@ -77,6 +77,19 @@ a typo" is a fact about Windows, not a fact about grok. Any text that uses that
 sentence as the whole justification is now half true. A per-platform code path
 for the macOS validation is a design decision. Nobody has made that decision,
 and this file does not make it.
+
+**The two machines went out of step the same day, 2026-08-14.** The paragraph
+above says the Mac runs "the build that the Windows capture used". That stopped
+being true hours later: Windows was found on **grok 1.0.4 (d846eb93d9)**, four
+patch versions on, and was re-measured there (design.md §9.39's 2026-08-14
+amendment). The Mac is still on 1.0.0. Nothing above is withdrawn — a measurement
+keeps the build it was taken on — but the `--sandbox` divergence is now a
+DIFFERENT-build comparison, and it can no longer rule out a version difference as
+the cause. **What would settle it: update the Mac's grok and re-run the
+`bogus-profile-xyz` probe there.** If the Mac still fails closed at 1.0.4, the
+divergence is the platform; if it stops, it was the version all along. Until
+somebody runs it, the row keeps the weaker claim. Also unrun on the Mac at any
+build: the wire capture, and `--resume` against 1.0.4's optional-value spelling.
 
 Record further findings here. Do not record them in `docs/design.md` §9.39,
 which is the Windows capture and must stay one.

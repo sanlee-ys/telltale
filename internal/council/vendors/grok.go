@@ -16,6 +16,16 @@ import (
 // where the help text and the measurement disagree are recorded as
 // measurements: see grokBaseArgs on --sandbox and --permission-mode.
 //
+// **Re-verified 2026-08-14 against grok 1.0.4 (d846eb93d9), default model
+// grok-4.6.** The vendor had moved four patch versions with nothing here
+// noticing, and the version-pinned wire fixture is what said so
+// (testdata/wire/README.md). Every claim in this file was re-run rather than
+// re-dated, and every one of them held: the frame shapes are identical, the
+// argv still drives a briefed turn, --resume still resumes, both containment
+// flags are still dead, and the slash hazard still eats a leading `/`. Each
+// paragraph below carries the build it was last measured against, so a claim
+// nobody re-ran cannot borrow a fresher date from a neighbour.
+//
 // This seat is the fifth column and the first that reports MONEY. Its `end`
 // event carries a `total_cost_usd` the vendor computed itself, so unlike Codex
 // and Antigravity — whose adapters leave CostUSD nil forever because they
@@ -47,6 +57,15 @@ func (Grok) ID() model.VendorID { return model.VendorGrok }
 // evidence of its effect — and it is the second time the room has caught it by
 // feeding a vendor a deliberately invalid value rather than a plausible one.
 //
+// Still unobservable at 1.0.4, re-probed 2026-08-14 and re-probed for FREE,
+// which is worth copying. The same bogus profile was passed alongside a prompt
+// the vendor is already known to eat (`--single=/context`, see grokSlashEaten):
+// profile validation happens at startup, so a refusal would surface before any
+// model turn, and a turn that is never billed answers the question at no cost.
+// It answered the way 1.0.0 did — two `available_commands`, an `end` with no
+// usage, no cost and no text, exit 0, empty stderr. macOS still diverges and
+// fails closed on the same input; PARITY.md holds that row.
+//
 // **--permission-mode plan is not passed, because it was REFUTED.** Measured
 // with the write actually landing, which is the strong form of the evidence:
 //
@@ -61,6 +80,12 @@ func (Grok) ID() model.VendorID { return model.VendorGrok }
 // the model reached for. This is the Antigravity ledger a second time (ADR-008,
 // seventeenth amendment) and it lands the same way: council does not ask for a
 // restriction that has never been observed to restrict.
+//
+// Still refuted at 1.0.4, re-run 2026-08-14 with a FENCED prompt and the write
+// landing again: `write` called, `status:"completed"`, exit 0, probe-plan.txt on
+// disk holding WROTE. `--help` still advertises `plan` among six permission
+// modes, which is the point — the help text has said the same thing across five
+// builds while the flag has never once been observed to stop a write.
 //
 // Deliberately absent, and not for lack of noticing: --always-approve, and
 // --permission-mode with `dontAsk` / `bypassPermissions`. The default headless
@@ -158,6 +183,17 @@ func (g Grok) FirstTurn(prompt, workspace, binary string, p Posture) (runner.Spe
 // never begin with a hyphen, so the hazard grokPromptArgs exists to route around
 // does not reach this flag. Both spellings were measured working here; the plain
 // one is kept because it is the one the vendor documents.
+//
+// RE-MEASURED at 1.0.4 on 2026-08-14, and this flag is the one that earned the
+// re-run rather than inheriting it. 1.0.4's help spells it
+// `-r, --resume [<SESSION_ID_OR_TITLE>]` — an OPTIONAL value that also matches
+// session titles, where the pinned build took a required id. An optional-value
+// flag is exactly the clap shape whose separated form can stop binding, which
+// would silently turn every follow-up turn into a fresh conversation. It did
+// not: the separated argv resumed, the `end` frame echoed the same sessionId
+// back, the turn recalled the first turn's own word, and it reported
+// input_tokens 454 against cache_read_input_tokens 21504 — the conversation was
+// on the vendor's side. The 1.0.0 evidence shape, reproduced.
 func (g Grok) NextTurn(prompt, workspace, binary, sessionID string, p Posture) (runner.Spec, error) {
 	if sessionID == "" {
 		return runner.Spec{}, ErrNoResume
@@ -263,6 +299,12 @@ type grokLine struct {
 // no text, and the process exits 0. On screen that is a column that finishes
 // instantly with nothing in it.
 //
+// Still eaten at 1.0.4 (2026-08-14): `--single=/context` produced two
+// `available_commands` frames and an `end` with no usage, no cost and no text,
+// at exit 0. That run is also the standing evidence for TotalCostUSD being a
+// pointer — the absent-cost shape is measured on the current build, not
+// inherited from the pinned one.
+//
 // Three channels were tried on 2026-08-09 and all three were eaten:
 //
 //	-p "/context"                              → no text, no usage
@@ -365,6 +407,21 @@ func grokOutcome(status *string) runner.ActStatus {
 
 // grokDetail is the vendor's own first line about a call, never a sentence
 // composed here (§9.6a).
+//
+// It reads ONE shape of content element — `{"type":"content","content":{"type":
+// "text","text":…}}`, which is what a read returns — and the 1.0.4 re-measure
+// found a second one it does not read. A WRITE call's element is a diff instead:
+// `{"type":"diff","path":…,"oldText":"","newText":"WROTE\n"}`, with no nested
+// `content` object at all, so this returns "" for it.
+//
+// Recorded rather than fixed, and the distinction matters: no write call was
+// captured at 1.0.0, so this is a shape nobody had looked at, NOT a shape that
+// changed under us. Two reasons it stays as it is. A detail is only rendered on
+// a FAILED outcome, and a write that failed carries an error rather than a
+// completed diff. And composing a sentence out of oldText/newText would be this
+// package writing the vendor's line for it, which §9.6a forbids by name. If a
+// failing write ever turns out to carry its reason in a diff element, that is a
+// measurement, and it is the thing to add here.
 func grokDetail(gl grokLine) string {
 	for _, c := range gl.Content {
 		if c.Content.Text != "" {
