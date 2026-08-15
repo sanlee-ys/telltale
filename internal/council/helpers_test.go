@@ -91,10 +91,10 @@ func TestShortSHAOnlyEverShortens(t *testing.T) {
 //
 // The teens are the whole reason ordinal is three lines instead of one, and the
 // pairs are what make the rule testable: 1/11/21/101/111 all end in the same
-// digit and only two of them take "st". Council seats four today, so everything
-// past 4th is guarding an assumption rather than a live case — which is exactly
-// the doc comment's argument for writing the rule out, and the reason the test
-// goes past the rank the room can currently produce.
+// digit and only two of them take "st". Council seats five today (§9.39), so
+// everything past 5th is guarding an assumption rather than a live case — which
+// is exactly the doc comment's argument for writing the rule out, and the reason
+// the test goes past the rank the room can currently produce.
 func TestOrdinalSpellsTheTeensRule(t *testing.T) {
 	for _, tc := range []struct {
 		n    int
@@ -104,7 +104,8 @@ func TestOrdinalSpellsTheTeensRule(t *testing.T) {
 		{1, "1st"},
 		{2, "2nd"},
 		{3, "3rd"},
-		{4, "4th"}, // the last rank four seats can produce
+		{4, "4th"},
+		{5, "5th"}, // the last rank five seats can produce
 		{9, "9th"},
 		{10, "10th"},
 		{11, "11th"}, // the teens: ends in 1, still "th"

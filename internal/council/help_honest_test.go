@@ -1,6 +1,7 @@
 package council
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -127,6 +128,67 @@ func TestTheHelpPanelNeverLosesItsWayOut(t *testing.T) {
 					tc.name, tc.w, tc.h, pg.page, pg.want, strings.Join(rows, "\n"))
 			}
 		}
+	}
+}
+
+// TestTheHelpPanelNamesEverySeatItCanReach is the panel's version of
+// cmd/telltale's TestUsageNamesEverySeat, and it exists for the same measured
+// failure.
+//
+// grok became the fifth seat (§9.39) and eight surfaces went on describing the
+// four the room had before it. SeatNames() was extracted to derive all eight —
+// and this panel was not among them, so it kept its hand-typed roster: `--help`
+// named the seat and `?`, the surface a user inside the room actually reaches
+// for, did not. Two rows carried it — the routing row listed four lanes, and
+// the focus row offered `1-4` over a key handler that has bound 1-9 against
+// VisibleColumns() the whole time.
+//
+// Walked rather than pinned to a string, so the assertion is "the roster is
+// named" and not "it is punctuated this way" — rewrapping the panel stays free,
+// and a sixth seat fails this test until both rows carry it.
+func TestTheHelpPanelNamesEverySeatItCanReach(t *testing.T) {
+	g := GlyphsFor(false)
+	st := room()
+	st.Width, st.Height = 120, 60
+	page := strings.Join(helpKeys(layoutFor(st, g), PlainStyles(), g), "\n")
+
+	for _, seat := range SeatNames() {
+		if !strings.Contains(page, "@"+seat) {
+			t.Errorf("the help panel never names the %q lane — @%s routes a turn, and the "+
+				"one page that teaches routing says the seat does not exist\n%s", seat, seat, page)
+		}
+	}
+
+	// The range's top is the roster's size. A room that seats five and offers
+	// `1-4` hides a seat behind a key that already works.
+	if want := "1-" + strconv.Itoa(len(SeatNames())); !strings.Contains(page, want) {
+		t.Errorf("the focus row does not offer %q for a %d-seat roster\n%s",
+			want, len(SeatNames()), page)
+	}
+}
+
+// TestHelpKeyColHoldsTheProseColumn. helpKeyCol pads a DERIVED key, and a
+// derived key is the one thing this panel's hand-counted leading spaces could
+// never survive: the focus row's key grows a cell the day the roster reaches ten
+// seats, and a misaligned prose column is the exact defect helpIndent was
+// extracted to end.
+//
+// Where the rendered row lands is pinned by TestTheHelpPanelStillFitsItsBudget
+// (seatnum_test.go), which already reads that row's prose offset against
+// helpIndent. This is the unit underneath it, exercised at the key widths a
+// five-seat roster cannot produce yet.
+func TestHelpKeyColHoldsTheProseColumn(t *testing.T) {
+	for _, key := range []string{"tab / 1-5", "tab / 1-12", "i / enter", ""} {
+		if got := len(helpKeyCol(key)); got != helpIndent {
+			t.Errorf("helpKeyCol(%q) is %d cells, not helpIndent (%d) — the prose column shears",
+				key, got, helpIndent)
+		}
+	}
+	// An over-long key keeps a separating space rather than colliding with the
+	// prose or being truncated into a different key.
+	long := strings.Repeat("x", helpIndent)
+	if got := helpKeyCol(long); !strings.HasSuffix(got, " ") || !strings.Contains(got, long) {
+		t.Errorf("helpKeyCol(%q) = %q — an over-long key must keep its whole text and a space", long, got)
 	}
 }
 

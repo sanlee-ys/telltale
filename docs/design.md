@@ -1,6 +1,6 @@
 # telltale — design doc
 
-Status: v1 surface built; v1 cuts when the snapshot gates hold (§1). The honest-gauge
+Status: v1 is cut — **v0.2.0, released 2026-08-14**, the snapshot gates held (§1). The honest-gauge
 rule requires every segment's data source to be named here before that segment ships; the
 tables below are the authority the eval harness tests against.
 
@@ -4611,6 +4611,53 @@ the turn outright on Windows, so it is not passed there.
 
 This is the inverse of the HUD, where Cursor *is* a built-in adapter (ADR-007) because its seam
 is on disk rather than behind a CLI.
+
+#### The vendors this room does not seat, and the class of evidence behind each (2026-08-15)
+
+This list existed only in the owner's private notes, which meant it bound nothing and was one
+lost file away from being re-derived vendor by vendor. It is here so a future session can tell
+**"we looked and said no"** from **"nobody has looked"** — two states this project has already
+ruled must never render alike (§4a.1), applied to a decision rather than to a value.
+
+Every entry names the CLASS of its evidence, because they are not the same strength. An
+unmeasured rejection stated as a measured one is the honest-gauge defect committed in prose,
+and this doc's own §9.2 is the record of what that costs: the first draft of ADR-008 claimed
+enforcement for four seats when one had a mechanism.
+
+- **Warp** — **REJECTED, measured.** There is no blocking hook anywhere in the product: no
+  surface at which a tool call is held while something else decides. So the fleet's guard
+  requirement cannot be satisfied here, and that requirement is not council's own — council
+  gates the seats it spawns (§9.8), while agent-ops ADR-012 requires each vendor to be
+  guard-wired mechanically, per vendor. A vendor with nothing to wire cannot be brought inside
+  it, and routing work away from an unwired vendor is explicitly not how that gap closes.
+- **Amazon Q** — **REJECTED on vendor status**, which is a weaker class than a measurement and
+  is named as one: the product is dead / end-of-life. There is nothing left here to measure.
+- **Amp** — **REJECTED on platform.** WSL-only on Windows, and its threads live server-side.
+  Windows is this product's primary target (ADR-002), so a WSL-only binary is not a seat here;
+  and a vendor whose conversation state sits on someone else's server gives §9.4's native
+  resume nothing on this machine to resume from.
+- **Goose** — **REJECTED on platform.** No Windows path at all. The same ADR-002 reason as
+  Amp, without the second problem.
+- **Every BYO-harness re-host** — **REJECTED as a class**, rather than one vendor at a time.
+  Each of them re-hosts a model family that already has a seat here. §9.4's whole argument for
+  turn 1 being blind is that the answers are *independent*; a harness wrapped around a model
+  already in the room buys a column that agrees with an existing one for the reason a copy
+  agrees with its original. That is a surface, not an opinion, and the room is priced per seat
+  (§9.21).
+- **Kimi Code 0.34.0** — **INSTALLED, WAITLISTED, UNVERIFIED. This is not a rejection**, and
+  it must not be read as one. The binary is on the reference box; its hook surface and its
+  session surface have never been observed, so there is no measurement to seat it on and none
+  to refuse it on either. One trap is recorded because it is the obvious wrong shortcut: the
+  legacy `kimi-cli` documentation is **VOID** for this binary — it describes a different
+  program — and any claim read out of it would be exactly the "read off `--help`" evidence
+  §9.2 refuses.
+- **Qwen Code** — **RUNNER-UP: measured, and it fails on one specific thing.** It has a real
+  statusline hook, which is more than several seated vendors offer. What its payload does not
+  carry is any rate-limit window, so the quota relay (§7.15) would have nothing to write and
+  the header could speak for this vendor only by inventing the numbers it renders. Under
+  §4a.1 that is `CapNone` rather than a plausible fill, which leaves a seat whose gauge is
+  permanently blank. This is the one entry worth re-checking when a vendor payload changes;
+  the rejections above do not move until the vendor does.
 
 ### 9.2 Two claims the room refuses to leave implicit
 
