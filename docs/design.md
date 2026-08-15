@@ -4389,6 +4389,13 @@ these items are ordered by that sequence, not by version number.
    screenshot, a PR grounded in running it, package-manager feedback, or an unsolicited
    statement of use. Engagement without that (a comment, a question, a hot take) answers
    a different question, and is read as such.
+
+   **Amended 2026-08-15: the hypothesis is room-led, because the product is.** The wording
+   above was written 2026-08-02 and names the HUD, four days before the
+   council-is-the-product ruling (§1); the post that goes out leads with the room, so the
+   signal above is read as evidence about cross-harness visibility of the ROOM — one brief
+   answered by five vendor CLIs side by side, with the gauges as the infrastructure under
+   it. The signal test itself is unchanged, and so is item 3's exclusion.
 3. **Needs-input / blocked / done state is the first post-validation feature** — the
    attention-routing job, and the reason the product is positioned the way it is. It is
    built where the vendor seams already support it: Claude Code hooks, Codex notify
