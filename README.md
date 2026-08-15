@@ -1,9 +1,10 @@
 # telltale
 
-**An honest gauge for your coding agents.** A dispatch room where several vendor CLIs
-answer one brief side by side, each column claiming only what was measured about that
-vendor — standing on a statusline and a cross-vendor HUD where every number is traceable
-to measured tool output, nothing narrated, nothing guessed.
+**A dispatch room for your coding agents.** One brief, answered by five vendor CLIs
+side by side — Claude Code, Codex, Antigravity, Cursor and Grok — each column claiming
+only what was measured about that vendor. Under the room, an honest gauge: a statusline
+and a cross-vendor HUD where every number is traceable to measured tool output, nothing
+narrated, nothing guessed.
 
 > A telltale is the ribbon on a sail that shows true airflow. Sailors watch whether
 > it streams smoothly or flutters to judge the sail's trim. It doesn't interpret;
@@ -19,10 +20,11 @@ to measured tool output, nothing narrated, nothing guessed.
 
 ---
 
-**Status: pre-v1, under active development.** All three surfaces are built — the room,
-the statusline and the HUD. The same binary carries five more modes that render no
-surface of their own: the relays (`telltale hook`, `telltale otel`), the preflight
-(`telltale doctor`), and the observation modes (`telltale events`, `telltale snapshot`).
+**Status: v1 shipped as v0.2.0 on 2026-08-14; development continues daily.** All three
+surfaces are shipped — the room, the statusline and the HUD. The same binary carries
+five more modes that render no surface of their own: the relays (`telltale hook`,
+`telltale otel`), the preflight (`telltale doctor`), and the observation modes
+(`telltale events`, `telltale snapshot`).
 
 **v1 is a snapshot, not a freeze.** It cuts when three checkable gates hold — nothing on
 the surface is half-finished or unused by its own author, the README is verified true
