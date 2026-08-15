@@ -173,6 +173,45 @@ the argument; this file does not restate either.
   convention mandates `git -C` precisely to avoid `cd &&` chains: right in a
   terminal, inverted inside a seat. `CLAUDE.md` carries the instruction; this
   entry carries why.
+
+  **Amended 2026-08-14, after PR #223: still true, but only in the posture
+  that was never PR #223's subject.** #223 (`230ba54`, merged 2026-08-12)
+  rewired the GATED posture only — it dropped `--setting-sources ""` as the
+  default and made council inject its own `PreToolUse` hook
+  (`internal/council/gatehook.go`) — and never touched `PostureWrite` or the
+  `autoAllowedTools` constant this entry is about. That constant, and the
+  `--allowedTools` prefix-only matcher it feeds, still cannot see through
+  `-C`; nothing in the code measured this changing, so the original finding
+  stands unmodified for the ungated write posture.
+
+  What #223 makes worth saying explicitly is that the GATED posture
+  (`PostureWriteGated`) never had this problem, on a *different* mechanism
+  than the one this entry measures: council answers its own gate with
+  `autoApproveRoutine`, which calls `safeGitArgs`
+  (`internal/council/persistent.go`), and that function strips a leading
+  `-C <path>` pair before classifying the subcommand — `git -C <path> status`
+  and `git status` land on the identical branch. `gate_git_test.go` pins
+  `"git -C /tmp/ws status"` in the same allow-list as `"git status"`. That
+  stripping shipped 2026-08-05 in PR #69, a week before this entry's own
+  2026-08-09 measurement and eight days before #223 — so the gated posture was
+  never the bug, and #223 could not have fixed something that was never
+  broken there.
+
+  Reconciled live, same day: the owner's own write-seat session ran
+  `git -C C:/Users/sanle/code/telltale check-ignore -v dist/gate-drive.txt`
+  and it drew a card the seat answered — but `check-ignore` is not one of
+  `safeGitArgs`'s recognized subcommands (`status`, `log`, `diff`, `show`,
+  `fetch`, `add`, `commit`, `pull`, `push`, `switch`, `checkout`, `branch`),
+  so that call would have carded with or without `-C`. It confirms the
+  instruction was followed, not the size of the `-C` penalty in whichever
+  posture that session was running.
+
+  **Net: the instruction in `CLAUDE.md` stays, unconditionally, for a
+  narrower reason than either amendment states alone.** A seat cannot see its
+  own posture from inside, plain `git` costs nothing extra in the posture
+  where `-C` was never a problem, and it avoids the approval in the posture
+  where it still is. `CLAUDE.md` now names both mechanisms and both
+  postures.
 - **Negative routing** (`@all` minus a seat) — **shipped 2026-08-04**, and this
   file went on listing it as an unowned gap for two days afterwards. `-@vendor`,
   the expansion of `-@all` into a list of exclusions, and the refusal to mix the

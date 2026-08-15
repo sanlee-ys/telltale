@@ -24,14 +24,30 @@ if ($out -match '5h|7d') { throw "honest-gauge violation: quota rendered without
 If you touch a statusline segment, expect a similar assertion to exist or to be worth
 adding — this repo tests the rendered string, not just that the code ran.
 
-**Run git as plain `git`, never `git -C <path>` — if you are a council seat.** The
-seat's allowlist is prefix-matched, so `Bash(git commit:*)` cannot match a command
-beginning `git -C`, and no rule spelling fixes it (`STATE.md` carries the measurement
-and why `Bash(git -C:*)` stays rejected). Your cwd is already the workspace, so `-C`
-buys nothing and costs every git call an approval. This **inverts** the usual advice:
-outside a seat, `git -C` is preferred precisely to avoid `cd &&` chains. Same trap on
-`gh` — `gh pr` and `gh run` are allowlisted, `gh api` is not, so reach for the
-porcelain rather than the API.
+**Run git as plain `git`, never `git -C <path>` — if you are a council seat.**
+This is posture-dependent, and PR #223 did not change it either way — read
+`STATE.md`'s "write seat's `git -C` allowlist gap" entry for the full
+measurement. In the **ungated write posture** (`PostureWrite`), Claude Code's
+own `--allowedTools` matcher answers your permission prompts, and it is
+prefix-only: `autoAllowedTools` in `internal/council/vendors/claude.go` grants
+`Bash(git status:*)` and friends, but that cannot match a command beginning
+`git -C`, and no rule spelling fixes it (`Bash(git -C:*)` stays rejected —
+it would pre-approve every `-C` verb, destructive ones included). Your cwd is
+already the workspace, so `-C` buys nothing and costs that posture's git calls
+an approval. In the **gated posture** (`PostureWriteGated`, the one PR #223
+hardened), a different mechanism answers instead — council's own
+`autoApproveRoutine`, via `safeGitArgs` in `internal/council/persistent.go` —
+and it strips a leading `-C <path>` before classifying the command, so
+`git -C <path> status` and `git status` are already the same call to the gate
+(`internal/council/gate_git_test.go` pins this). That classifier predates
+PR #223 by a week and PR #223 never touched it, so the gated posture was never
+the bug this instruction describes. Write plain `git` regardless: a seat
+cannot tell which posture it is running under, plain `git` costs nothing extra
+when gated, and it saves an approval when ungated. This **inverts** the usual
+advice: outside a seat, `git -C` is preferred precisely to avoid `cd &&`
+chains. Same trap on `gh` in the ungated posture — `gh pr` and `gh run` are
+allowlisted there, `gh api` is not, so reach for the porcelain rather than the
+API.
 
 ## Golden tests: the actual workflow and its traps
 
