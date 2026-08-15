@@ -3683,6 +3683,48 @@ func init() {
 	}
 }
 
+// helpKeyCol writes a help row's key column, padded to helpIndent.
+//
+// Every other row on the panel is a string literal whose leading spaces were
+// counted once by hand, which is safe exactly as long as the key never changes
+// width. One of them now derives from the roster (`tab / 1-5`), so its width
+// moves the day a sixth seat lands — and hand-counted padding beside a derived
+// key is a misalignment waiting for a release rather than a typo anyone can
+// see. Over-long keys keep one separating space rather than colliding with the
+// prose; nothing on this panel is near that, and silently truncating a key
+// would be worse than a row that is one cell wide.
+func helpKeyCol(key string) string {
+	if pad := helpIndent - 2 - len(key); pad > 0 {
+		return "  " + key + strings.Repeat(" ", pad)
+	}
+	return "  " + key + " "
+}
+
+// seatMentions is the addressable roster spelled the way a user types it into
+// the composer: `@claude @codex @agy @cursor @grok`, in seating order.
+//
+// Derived from SeatNames() for the reason that function exists (mentions.go):
+// what a surface SAYS the room accepts has to come from what the room accepts.
+// Aliases stay out — `@antigravity` works, and printing it here would make a
+// five-seat room read as six.
+func seatMentions() string {
+	names := SeatNames()
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		out = append(out, "@"+n)
+	}
+	return strings.Join(out, " ")
+}
+
+// seatTop is the highest seat number the focus keys can reach, as a string.
+//
+// Positions, not identities: `1` is the leftmost column on screen, so the
+// numbers renumber when a seat folds out and the row that prints this says "by
+// position" rather than pretending a seat owns a number. The TOP of the range
+// is the roster's size, because that is the largest room this build can seat —
+// the same number `--vendor all` and `-@all` are derived from.
+func seatTop() string { return strconv.Itoa(len(SeatNames())) }
+
 // helpTitle is a help page's heading, in the grammar every other heading in this
 // room already uses: the name at weight, a rule, and what this page is about
 // anchored at the right.
@@ -3760,7 +3802,15 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// that one announces itself in the footer while the line is still being
 		// typed, and again as a notice on enter, so it is the one rule on this
 		// list that does not need a row to be discovered.
-		"  @codex       name a lane: @claude @codex @agy @cursor; @all convenes everyone",
+		//
+		// The lane list is DERIVED from SeatNames() rather than typed out.
+		// It was typed out, and it named four seats for the whole life of
+		// the fifth: `@grok` routed correctly from the day §9.39 landed,
+		// while the one panel that teaches routing said the seat did not
+		// exist. That is the same defect SeatNames() was extracted to end
+		// everywhere the roster was listed by hand, and this panel was not
+		// on that sweep's list — so `--help` named grok and `?` did not.
+		"  @codex       name a lane: " + seatMentions() + "; @all convenes everyone",
 		"               -@codex excludes one. Unaddressed goes to claude. Leading only: \"ask @claude\" is prose",
 		// One line, like pgup/pgdn below and for the same reason: the panel has
 		// to fit a 24-row terminal with q and ? still on screen.
@@ -3810,7 +3860,16 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// seat, or go straight to one. "move" paid for it. The numbers are
 		// POSITIONS, left to right, so they renumber when a seat folds out; the
 		// line says "by position" rather than pretending a seat owns a number.
-		"  tab / 1-4    focus between columns — in compose too; 1-4 goes straight to a seat, by position",
+		//
+		// The RANGE is derived too, and for a sharper reason than the lane
+		// list above: viewKey binds every digit 1-9 over VisibleColumns()
+		// precisely so no room size is hard-coded there (program.go), and
+		// then this row hard-coded one anyway. The key column is padded by
+		// helpKeyCol rather than by hand, so a two-digit roster cannot
+		// shear the prose column off helpIndent.
+		helpKeyCol("tab / 1-"+seatTop()) +
+			"focus between columns — in compose too; 1-" + seatTop() +
+			" goes straight to a seat, by position",
 		"  ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too",
 		"  pgup/pgdn    scroll by a screenful, in compose too (space = pgdn in view mode);",
 		// The turn keys land on the row that already holds the other jumps rather
@@ -3896,15 +3955,30 @@ func helpBadgeGloss() []struct {
 			"nothing restricts this vendor at the OS level. MEASURED,",
 			"not assumed — treat this column as able to change your files",
 		}},
-		// Both of these named --write alone until /write existed. The flag was
-		// the only way to reach either badge and now it is not, so a legend
-		// still crediting it would send a reader looking for a relaunch — the
-		// §9.17 defect, reappearing in the glossary that explains the thing.
+		// These two credited `--write or /write`, and the flag half of that was
+		// false the day it was written. **`--write` is accepted and IGNORED**
+		// (cmd/telltale/main.go): the room writes by DEFAULT and `--read` is
+		// the opt-out. A legend crediting the flag sends a reader off to
+		// relaunch with a word that does nothing — the §9.17 defect, committed
+		// inside the glossary that exists to explain the room's vocabulary —
+		// and it is the honesty rule aimed at a control surface: what a
+		// surface says reaches a posture has to be what reaches it.
+		//
+		// It names the way OUT rather than the way in, because the way in is
+		// now "do nothing". Everyone reading this is already in this posture;
+		// the only question left for them is how to leave it.
+		//
+		// ONE ROW EACH, and that is a hard constraint rather than a style
+		// choice. helpPostures' load-bearing line — WORKSPACE, not any of
+		// these words — sits at the last row above the fold in the smallest
+		// room this panel draws in (80x24 with a collapsed-seat notice), so a
+		// second row here pushes it off. TestHelpFitsTheSmallestRoom catches
+		// it; it caught this.
 		{SandboxWrite, []string{
-			"--write or /write: this column may edit and run in the workspace",
+			"the DEFAULT: this column may edit and run. --read opts out",
 		}},
 		{SandboxGated, []string{
-			"--write or /write, and this seat asks first — y approves, n denies",
+			"as WRITES, and this seat asks first — y approves, n denies",
 		}},
 	}
 }

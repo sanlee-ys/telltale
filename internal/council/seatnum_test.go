@@ -275,6 +275,10 @@ func TestTheSeatKeysSurviveASCII(t *testing.T) {
 // TestTheHelpPanelStillFitsItsBudget. The seat keys were merged onto the row
 // that already names `tab` rather than given one of their own — the panel's
 // budget is 17 rows and the `?` line is the only documented way out of it.
+//
+// The range is read from SeatNames() rather than spelled `1-4`, because it was
+// spelled `1-4` and went on saying so through the whole life of the fifth seat
+// (§9.39). A test that pins the stale number is how the stale number survives.
 func TestTheHelpPanelStillFitsItsBudget(t *testing.T) {
 	lay := resolveLayout(120, 40, 3, false)
 	sty, g := PlainStyles(), UnicodeGlyphs()
@@ -283,17 +287,18 @@ func TestTheHelpPanelStillFitsItsBudget(t *testing.T) {
 	if helpExit(page) < 0 {
 		t.Fatal("the help page lost its way out")
 	}
+	seatKeys := "1-" + strconv.Itoa(len(SeatNames()))
 	row := ""
 	for _, l := range page {
 		if strings.HasPrefix(strings.TrimSpace(l), "tab") {
 			row = l
 		}
-		if strings.HasPrefix(strings.TrimSpace(l), "1-4 ") {
+		if strings.HasPrefix(strings.TrimSpace(l), seatKeys+" ") {
 			t.Errorf("the seat keys took a row of their own: %q", l)
 		}
 	}
-	if !strings.Contains(row, "1-4") {
-		t.Errorf("the focus row does not name the seat keys: %q", row)
+	if !strings.Contains(row, seatKeys) {
+		t.Errorf("the focus row does not name the seat keys (%s): %q", seatKeys, row)
 	}
 	// The key column has to line up with every other row's.
 	if i := strings.Index(row, "focus"); i != helpIndent {

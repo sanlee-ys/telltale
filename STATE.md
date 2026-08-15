@@ -13,17 +13,38 @@ off work. `unknown` is a legal value; an honest blank beats a plausible guess.
 
 ## Current objective
 
-Pre-v1. The active push is making `telltale council` usable as a daily driver:
-one terminal, five seats, readable and steerable without opening five vendor
-apps.
+v1 is cut: **v0.2.0, 2026-08-14**. The room is built, tagged and downloadable,
+and every claim it makes was checked by the person who wrote it.
+
+**The next minor is the OUTWARD CHAIN** (owner's ruling, 2026-08-15). Three
+links, in this order, and each one is the input to the next:
+
+1. **The demo path is defined.** One named route through the room, written
+   down rather than improvised on the day. A separate entry owns what that
+   path is; this one owns only that it must exist first, because both links
+   below consume it.
+2. **The first 5-of-5 arena race runs.** Every seat racing one brief at once.
+   The grok-seat entry below has said "the next race is 5-of-5" since the
+   fifth seat landed, and it has not run — so a five-seat room is still a
+   claim this project has never driven under load.
+3. **The launch post fires.** The post, the install it points at, and a reader
+   who arrives at the room the post described.
+
+**What the chain buys is a room that has been witnessed** — driven end to end
+by someone who did not build it. That is the one thing a tag cannot supply and
+the one thing this project has never had. It is also the standard the v1 gates
+were written against ([docs/design.md §1](docs/design.md)): a stranger who
+reads the post and installs must find the room the post described. The tag
+asserted that; the chain tests it.
+
+Nothing here pauses development. Work merged after the tag is the next minor,
+and the tag itself stays one command (design.md §8).
 
 **The direction is recorded rather than remembered** (2026-08-06; v1 gate
 re-cut 2026-08-08): council is the product, the gauges are the infrastructure
-under it, and **v1 is a snapshot that cuts when three checkable gates hold —
-not when development goes quiet**. Cutting v1 as gauges only was the standing
-alternative and it is rejected. `README.md` and
-[docs/design.md §1](docs/design.md) hold the binding copies, the gates, and
-the argument; this file does not restate either.
+under it. Cutting v1 as gauges only was the standing alternative and it was
+rejected. `README.md` and [docs/design.md §1](docs/design.md) hold the binding
+copies, the gates and the argument; this file does not restate any of them.
 
 ## In flight
 
@@ -99,17 +120,26 @@ the argument; this file does not restate either.
   and the tell was that its residue looked identical every time: an uncommitted
   racer edit on a branch still sitting at its base.
 
-  **Housekeeping, not owned:** 8 `arena/t<N>/<vendor>` branches and 2 `adopt/*`
-  branches (counted 2026-08-14, after the drive cleared t9, t10, t13 and t14).
-  Two of them, t11 and t12, still have worktrees; the rest are from t3, t5 and
-  t8 and have none. Kept-until-deleted is the ruling, so
-  this is a decision rather than a bug. Two things a future session should know
-  before clearing them: `/arena drop` only reaches the CURRENT room's race, so
-  anything from a closed room is `git worktree remove` + `git branch -D` by
-  hand, and a worktree must go WITH its branch — deleting branches alone drops
-  the highest ref and the next race re-mints a number a leftover worktree still
-  holds. This count has now been wrong twice by wide margins; re-count it
-  rather than trusting the number above.
+  **Housekeeping, not owned:** every race leaves an `arena/t<N>/<vendor>`
+  branch behind, `/adopt` leaves an `adopt/*` branch, and some of them still
+  hold worktrees. Kept-until-deleted is the ruling, so leftovers are a decision
+  rather than a bug.
+
+  **This file no longer carries the count.** It carried one twice and it was
+  wrong both times, by wide margins — a hand-maintained copy of a derived fact
+  is precisely what this file's own opening warns against, and git already
+  holds the answer. Ask git:
+
+  ```
+  git branch --list "arena/*" "adopt/*"
+  git worktree list
+  ```
+
+  Two things a future session should know before clearing anything: `/arena
+  drop` only reaches the CURRENT room's race, so anything from a closed room is
+  `git worktree remove` + `git branch -D` by hand, and a worktree must go WITH
+  its branch — deleting branches alone drops the highest ref and the next race
+  re-mints a number a leftover worktree still holds.
 
 - **QUEUED, unowned — the post-audit build list (2026-08-09; shrunk same
   day).** The steal sweep's survivors, reconciled against an independent
@@ -243,8 +273,20 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   **Narrowed by a live drive, 2026-08-14, and NOT closed.** The built seat was
   driven for real with the operator's settings loaded: the postures page showed
   the wired sentence, a `Read` drew no card, a `Write` drew one and landed on
-  `y`, and a piped shell command carded because `autoApproveRoutine` cannot
-  read a pipe as routine. So the two hook sets demonstrably COEXIST without
+  `y`, and a shell command carded — **for its redirection, not for its pipe.**
+  The command was `ls -la dist/ 2>&1 | head -30`, and the reason first written
+  down here was the wrong one. `routineSegments`
+  (`internal/council/persistent.go`) has split `|` and `&&` since PR #73
+  (2026-08-05) and classifies each segment on its own; `ls` and `head` are both
+  in `readOnlyCommands`, so `ls -la dist/ | head -30` passes untouched. What
+  refused this command is that function's FIRST guard, which rejects any
+  command containing `<` or `>` before it splits anything — redirection writes
+  to a path the classifier never inspects, and `2>&1` is real redirection
+  rather than a spelling worth carving out by hand. `gate_git_test.go` already
+  pins `go test ./... 2>&1 | tail -2` as refused for that exact reason. The
+  card was right; only the sentence explaining it was not.
+
+  So the two hook sets demonstrably COEXIST without
   breaking the gate — which is worth knowing and is not what this gap asks.
   **No operator `deny` was exercised**, so whether their credential guard still
   holds with council's `ask` beside it is exactly as unmeasured as before. The

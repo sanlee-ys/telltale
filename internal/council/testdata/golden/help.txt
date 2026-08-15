@@ -3,11 +3,11 @@
   council  ──────────────────────────────────────────────────────────────────  one brief, several agents, side by side  
     i / enter    compose a brief; enter dispatches — to claude, or whoever is @mentioned (@all = everyone)              
     ctrl+j/u/esc ctrl+j puts a newline in the brief (it grows to six rows); ctrl+u clears it; esc leaves, keeping it    
-    @codex       name a lane: @claude @codex @agy @cursor; @all convenes everyone                                       
+    @codex       name a lane: @claude @codex @agy @cursor @grok; @all convenes everyone                                 
                  -@codex excludes one. Unaddressed goes to claude. Leading only: "ask @claude" is prose                 
     /cd <dir>    move the room; /read /write (y); /seat /unseat; /arena races; c clears, u undoes (y); /trace <file>    
     y / Y        copy this seat's reply, or the whole turn (in turn view, both) — while a gate waits, y/n answer it     
-    tab / 1-4    focus between columns — in compose too; 1-4 goes straight to a seat, by position                       
+    tab / 1-5    focus between columns — in compose too; 1-5 goes straight to a seat, by position                       
     ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too                                      
     pgup/pgdn    scroll by a screenful, in compose too (space = pgdn in view mode);                                     
                  g / G first turn or newest; [ ] step one turn at a time                                                
