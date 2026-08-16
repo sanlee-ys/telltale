@@ -102,15 +102,17 @@ func TestDiscoverEnumeratesConversationsNotTheSummaryIndex(t *testing.T) {
 			t.Errorf("ref %s has no freshness hint", r.ID)
 		}
 	}
-	// Six conversations exist on disk; conversation_summaries.db names one.
-	// Trusting the index would hide five sessions that are right there.
-	for _, want := range []string{idHappy, idWAL, idBroken, idNoWorkspace, idZero, idNoTranscript} {
+	// Seven conversations exist on disk; conversation_summaries.db names one.
+	// Trusting the index would hide six sessions that are right there.
+	for _, want := range []string{
+		idHappy, idWAL, idBroken, idNoWorkspace, idZero, idNoTranscript, idMultiChunk,
+	} {
 		if !got[want] {
 			t.Errorf("conversation %s was not discovered", want)
 		}
 	}
-	if len(refs) != 6 {
-		t.Errorf("discovered %d conversations, want 6: %v", len(refs), got)
+	if len(refs) != 7 {
+		t.Errorf("discovered %d conversations, want 7: %v", len(refs), got)
 	}
 	// The sidecars are not sessions.
 	for id := range got {
@@ -491,8 +493,8 @@ func TestEveryProducedSessionValidates(t *testing.T) {
 			t.Errorf("session %s: %v", s.Key(), err)
 		}
 	}
-	if read != 5 {
-		t.Errorf("read %d sessions, want 5 (six conversations, one with no transcript)", read)
+	if read != 6 {
+		t.Errorf("read %d sessions, want 6 (seven conversations, one with no transcript)", read)
 	}
 }
 

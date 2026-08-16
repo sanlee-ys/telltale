@@ -29,8 +29,17 @@ The shapes reproduced here are the ones §3.8 recorded from agy 1.1.9:
   top-level #4                   a UUID that is CONSTANT per conversation —
                                  the trap the adapter must not dedup on
   trajectory_metadata_blob.data  workspace URI at #1.#1 and again flat at #7
+
+One fixture is different in kind and says so at its own definition: the
+multi-chunk conversation reproduces a shape NOBODY HAS MEASURED. Every other
+fixture here is synthetic data in a measured shape; that one is synthetic data
+in a shape extended from the measured one by the adapter's own contract,
+because no live multi-chunk conversation has ever been captured. See
+gen_multichunk below and the 2026-08-16 amendment in design.md §3.8.
 """
 
+import datetime
+import json
 import os
 import pathlib
 import shutil
@@ -179,7 +188,6 @@ def transcript(conv_id, stamps):
             rec["thinking"] = marker + " reasoning here"
             rec["tool_calls"] = [{"name": "read_file", "exit_code": 0}]
         lines.append(rec)
-    import json
 
     (d / "transcript.jsonl").write_text(
         "".join(json.dumps(r, sort_keys=True) + "\n" for r in lines), encoding="utf8"
@@ -201,6 +209,7 @@ CONV = {
     "noworkspace": "00000000-dddd-4eee-8fff-000000000004",
     "zero": "00000000-dddd-4eee-8fff-000000000005",
     "notranscript": "00000000-dddd-4eee-8fff-000000000006",
+    "multichunk": "00000000-dddd-4eee-8fff-000000000007",
 }
 
 CONST_UUID = "cafe0000-0000-4000-8000-00000000feed"
@@ -309,6 +318,112 @@ def gen_notranscript():
     con.close()
 
 
+# ------------------------------------------------------- the multi-chunk case
+
+# SYNTHESIZED, and that word is load-bearing here in a way it is not for the
+# fixtures above. Those reproduce shapes design.md §3.8 MEASURED. This one does
+# not: no live multi-chunk conversation has ever been captured. §3.8's 1.1.13
+# re-read found the `logs/chunks/` tree on the 4 newest conversations and every
+# one of them held exactly ONE chunk, byte-identical (md5) to the flat file.
+#
+# So this fixture pins the ADAPTER'S CONTRACT WITH ITSELF — what telltale does
+# when a second chunk is on disk — and it makes no claim about what agy writes.
+# A live multi-chunk capture is still the missing instrument. The shape is the
+# measured single-chunk shape extended along the vendor's own naming:
+#
+#   logs/transcript.jsonl                       the flat file the adapter reads
+#   logs/chunks/transcript/00000000.jsonl       the flat file's first half,
+#   logs/chunks/transcript/00000001.jsonl       and its second half, byte for byte
+#   logs/chunks/transcript_full/0000000N.jsonl  the untruncated sibling
+#
+# Two properties are deliberate. The flat file is LARGER than the adapter's
+# head+tail read budget (64 KiB + 256 KiB), because a transcript big enough to
+# chunk is the first one that splits that read at all — every fixture above is
+# under 1 KiB and leaves the head path unexecuted. And the `transcript_full`
+# chunks carry a POISON timestamp (the same trick the flat transcript_full.jsonl
+# already plays), dated in the past so the future-skew guard cannot silently
+# swallow it: if the adapter ever switches to the chunk tree on the strength of
+# its name, last_activity moves to 23:59 and a test says so.
+
+MULTICHUNK_STEPS = (300, 400)          # records in chunk 0, records in chunk 1
+MULTICHUNK_START = "2026-08-01T09:00:00Z"
+MULTICHUNK_PAD = 300                   # filler chars, sized to cross the budget
+MULTICHUNK_POISON = "2026-08-01T23:59:00Z"
+READ_BUDGET = (64 << 10) + (256 << 10)  # headBytes + tailBytes in antigravity.go
+
+
+def multichunk_records(count, first_index, start):
+    """One chunk's worth of transcript records, newest last."""
+    marker = "SYNTHETIC-PROMPT-TEXT-MUST-NEVER-RENDER"
+    out = []
+    for i in range(count):
+        idx = first_index + i
+        ts = start + datetime.timedelta(seconds=idx)
+        rec = {
+            "step_index": idx,
+            "source": "USER_EXPLICIT" if idx == 0 else "MODEL",
+            "type": "USER_INPUT" if idx == 0 else "MODEL_RESPONSE",
+            "status": "DONE",
+            "created_at": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            # `truncated_fields` is a real key §3.8 counted 345 of at 1.1.13.
+            # The adapter's `step` struct is an allowlist, so it costs nothing —
+            # which is the point of carrying it.
+            "truncated_fields": ["content"],
+            "thinking": marker + " " + ("reasoning " * MULTICHUNK_PAD)[:MULTICHUNK_PAD],
+            "tool_calls": [{"name": "read_file", "exit_code": 0}],
+        }
+        out.append(json.dumps(rec, sort_keys=True) + "\n")
+    return "".join(out)
+
+
+def gen_multichunk():
+    """A conversation whose transcript has been chunked twice."""
+    cid = CONV["multichunk"]
+    g = generation("gemini-3.6-flash", "Gemini 3.6 Flash (High)",
+                   tokens(9000, 120, 100, 20, "resp-0000000000000060"))
+    con = build_db(conv_path(cid), cid, [gen_blob([g], CONST_UUID)],
+                   "file:///C:/src/code/example-app")
+    con.close()
+
+    start = datetime.datetime.strptime(MULTICHUNK_START, "%Y-%m-%dT%H:%M:%SZ")
+    n0, n1 = MULTICHUNK_STEPS
+    chunk0 = multichunk_records(n0, 0, start)
+    chunk1 = multichunk_records(n1, n0, start)
+
+    d = ROOT / "brain" / cid / ".system_generated" / "logs"
+    d.mkdir(parents=True, exist_ok=True)
+    # The flat file is the concatenation, byte for byte. That is the one
+    # relationship the single-chunk corpus measured (md5 identity), carried
+    # forward to two chunks rather than invented.
+    flat = chunk0 + chunk1
+    (d / "transcript.jsonl").write_text(flat, encoding="utf8", newline="")
+    if len(flat.encode("utf8")) <= READ_BUDGET:
+        raise SystemExit(
+            f"multi-chunk transcript is {len(flat.encode('utf8'))} bytes, which does not "
+            f"exceed the adapter's {READ_BUDGET}-byte head+tail budget — raise "
+            f"MULTICHUNK_STEPS or MULTICHUNK_PAD, or the fixture pins nothing new"
+        )
+
+    (d / "transcript_full.jsonl").write_text(
+        json.dumps({"step_index": 999, "created_at": "2030-01-01T00:00:00Z"}) + "\n",
+        encoding="utf8", newline="",
+    )
+
+    ct = d / "chunks" / "transcript"
+    ct.mkdir(parents=True, exist_ok=True)
+    (ct / "00000000.jsonl").write_text(chunk0, encoding="utf8", newline="")
+    (ct / "00000001.jsonl").write_text(chunk1, encoding="utf8", newline="")
+
+    cf = d / "chunks" / "transcript_full"
+    cf.mkdir(parents=True, exist_ok=True)
+    for i in range(2):
+        (cf / f"{i:08d}.jsonl").write_text(
+            json.dumps({"step_index": 900 + i, "created_at": MULTICHUNK_POISON},
+                       sort_keys=True) + "\n",
+            encoding="utf8", newline="",
+        )
+
+
 if __name__ == "__main__":
     if ROOT.exists():
         shutil.rmtree(ROOT)
@@ -319,7 +434,8 @@ if __name__ == "__main__":
     gen_noworkspace()
     gen_zero()
     gen_notranscript()
-    # The stale index the adapter must never consult: one row for six
+    gen_multichunk()
+    # The stale index the adapter must never consult: one row for seven
     # conversations, exactly as observed.
     idx = sqlite3.connect(ROOT / "conversation_summaries.db")
     idx.execute("CREATE TABLE `summaries` (`id` text, `title` text)")
