@@ -394,11 +394,18 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   untouched (§9.33's dated payment block). What that lane left open, stated
   there: the linger's CAUSE is unmeasured, the tool-using turn's tail is
   unmeasured (probing it needs `danger-full-access`, a redline), and the other
-  spawn-per-turn vendors never set `EndsTurn`, so their tails are untouched.
-  Two adjacent council holes it named: `InFlight()` misses a failed agy turn
-  (`KindError` with exit 0 retires nothing, so the seat is neither busy nor
-  settling while `q` is refused), and a `/cd` alone persists only at the next
-  completed turn or teardown, so it survives a quit but not a crash. The
+  spawn-per-turn vendors never set `EndsTurn`, so their tails are untouched —
+  for agy this now has a sharper edge, because a failed agy turn settles at the
+  vendor's own `status: "ERROR"` line while the turn clock keeps billing until
+  exit, and no capture of the agy process exit after a failed turn exists.
+  The two adjacent council holes that lane named are closed by the same day's
+  second wave: a failed agy turn settles its column instead of leaving the
+  room idle-but-locked, and a `/cd` persists when it happens (both carried in
+  dated design.md amendments; `gh pr list` has the numbers). Two small
+  unowned residues from that wave: `telltale events` still greets a taken
+  127.0.0.1:4519 with the raw Go bind error (`telltale otel grok` got the
+  named-error treatment; the event sink did not), and the OTLP collision has
+  no binary smoke in CI. The
   **Windows `danger-full-access` finding does not port to `codex app-server`**
   — that path has its own `windowsSandbox/*` surface nobody has probed; any
   seat move re-measures rather than inherits. The **agy statusline payload is still pinned at 1.1.9** and
