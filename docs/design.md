@@ -1256,8 +1256,8 @@ negated, which costs coverage and claims nothing false. Nothing is built on this
 measured-silence advisory that would consume it sits on the post-demo shelf by owner
 ruling, and this block exists so that work starts from a measurement instead of a memory.
 
-**What this does not cover.** The three registering turns all ran in one cwd on one box at
-one build. No two sessions were ever registered at once, so the multi-record ordering is
+**What this does not cover.** Every registering session ran in one cwd on one box at one
+build. No two sessions were ever registered at once, so the multi-record ordering is
 unmeasured. `active_sessions.lock` was never opened and `active_sessions.json.tmp` was
 never observed mid-write, so the write is atomic by the vendor's own naming rather than by
 observation here. The adapter reads none of these bytes, and this measurement did not
