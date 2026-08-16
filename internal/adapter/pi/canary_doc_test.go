@@ -19,8 +19,8 @@ func TestTheCanaryInventoryMatchesThisAdapter(t *testing.T) {
 	if !piInventoryRow(doc) {
 		t.Skip("design.md §3.10 has no Pi row; parent must add the inventory row")
 	}
-	if !strings.Contains(doc, verifiedAgainst) {
-		t.Errorf("design.md §3.10 does not name the version this adapter is pinned to (%q)", verifiedAgainst)
+	if !strings.Contains(doc, VerifiedAgainst) {
+		t.Errorf("design.md §3.10 does not name the version this adapter is pinned to (%q)", VerifiedAgainst)
 	}
 	if !strings.Contains(doc, canarySessionHeaderID.Name) {
 		t.Errorf("design.md §3.10 does not name the %q canary; the inventory has drifted from the adapter", canarySessionHeaderID.Name)

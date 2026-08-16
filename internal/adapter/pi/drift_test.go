@@ -59,7 +59,7 @@ func TestARenamedSessionHeaderSaysSo(t *testing.T) {
 	if report == "" {
 		t.Fatalf("a first record with no type=session id reported no drift: %v", s.Diagnostics)
 	}
-	if !strings.Contains(report, canarySessionHeaderID.Name) || !strings.Contains(report, verifiedAgainst) {
+	if !strings.Contains(report, canarySessionHeaderID.Name) || !strings.Contains(report, VerifiedAgainst) {
 		t.Errorf("report = %q", report)
 	}
 	if strings.Contains(report, "store reports") {

@@ -81,10 +81,10 @@ import (
 // Vendor is the stable id for rows this adapter produces.
 const Vendor = model.VendorPi
 
-// verifiedAgainst names the vendor build this adapter's field map was read
+// VerifiedAgainst names the vendor build this adapter's field map was read
 // from. §3.9b surveyed source at v0.84.2. This pin is the binary on this
 // Windows box.
-const verifiedAgainst = "pi 0.84.1"
+const VerifiedAgainst = "pi 0.84.1"
 
 // canarySessionHeaderID is the first JSONL record: type "session" and a
 // non-empty id. Four of four live files start that way. cwd, the activity
@@ -308,7 +308,7 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		return nil, err
 	}
 
-	w := drift.NewWatch(verifiedAgainst, canarySessionHeaderID)
+	w := drift.NewWatch(VerifiedAgainst, canarySessionHeaderID)
 	var bad, good int
 	var newestTS time.Time
 	var lastInfoName string
