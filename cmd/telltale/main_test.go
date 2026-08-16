@@ -33,6 +33,50 @@ func TestUsageNamesEverySeat(t *testing.T) {
 	}
 }
 
+// TestTheFirstFrameIsShortAndNamesTheModeThatMeasures pins the zero-config
+// entry point (design.md §7.7, 2026-08-15).
+//
+// Measured before the change: a bare `telltale` printed all of `usageText` —
+// 203 lines — on stderr, and exited 2. Nothing in it was untrue; it was still
+// the answer that strands a stranger, because the one mode that tells them
+// anything about THEIR machine was entry eight of eight, sixty lines down,
+// under the word "preflight". The two properties asserted here are what fixed
+// that, and both are easy to lose to a later edit that "just adds one more
+// paragraph".
+func TestTheFirstFrameIsShortAndNamesTheModeThatMeasures(t *testing.T) {
+	lines := strings.Count(firstFrameText, "\n") + 1
+	if lines > 30 {
+		t.Errorf("the first frame is %d lines; it exists because 203 was too many, "+
+			"and a frame nobody reads to the end is the manual again", lines)
+	}
+	for _, want := range []string{"telltale doctor", "telltale hud", "telltale council",
+		"telltale statusline", "telltale help", "telltale version"} {
+		if !strings.Contains(firstFrameText, want) {
+			t.Errorf("the first frame never names %q", want)
+		}
+	}
+	// `telltale help` has to be a command, not a suggestion. Before this frame
+	// existed every route to usageText was an error path, so the pointer would
+	// have been the frame inventing one.
+	if !strings.Contains(usageText, "telltale help") {
+		t.Error("the long help does not name `telltale help`, which the first frame sends readers to")
+	}
+}
+
+// TestTheFirstFrameClaimsNothingAboutThisMachine. main() has stat'd no store
+// and resolved no binary by the time this prints, so any sentence about what is
+// installed, configured or missing would be the invented claim ADR-001 refuses.
+// The frame's whole job is to point at the modes that DO measure.
+func TestTheFirstFrameClaimsNothingAboutThisMachine(t *testing.T) {
+	for _, forbidden := range []string{
+		"not configured", "no vendor", "not installed", "nothing is set up", "not detected",
+	} {
+		if strings.Contains(strings.ToLower(firstFrameText), forbidden) {
+			t.Errorf("the first frame asserts %q, which nothing has measured at this point", forbidden)
+		}
+	}
+}
+
 // TestSnapshotFailsLoudOnWhatItCannotDo pins the flag contract of the one mode
 // whose reader is a program.
 //

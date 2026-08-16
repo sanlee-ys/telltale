@@ -1049,7 +1049,59 @@ func emptyLines(st State, sty Styles, g Glyphs) []string {
 	// table below cannot shove it sideways between frames.
 	out := centerBlock([]string{sty.Text.Render(head)}, st.Width)
 	out = append(out, "")
-	return append(out, centerBlock(block, st.Width)...)
+	out = append(out, centerBlock(block, st.Width)...)
+
+	// The zero-config frame gets one more line, and only that frame (§7.7,
+	// 2026-08-15). Measured on a clean profile: six vendors, every one of them
+	// `not detected`, and every path telltale looked in named — true, complete,
+	// and silent about the one question the reader now has, which is whether any
+	// vendor is installed at all. This screen cannot answer it. It reads STORES,
+	// and a vendor CLI that has never been run has no store to find, so `not
+	// detected` six times is the same picture on a bare machine and on a machine
+	// with five vendors nobody has opened yet. `telltale doctor` resolves the
+	// BINARIES, which is exactly the measurement missing here.
+	//
+	// The condition is deliberately the narrowest one that means it. Every
+	// vendor `not detected` and nothing else: a store that is watching needs no
+	// remedy, a store that drifted has a different one, and a store the OS
+	// refused wants a permission fixed rather than a binary found — doctor would
+	// report that vendor's binary `ok` and send the reader further from the
+	// answer. So empty-watching, empty-drifted and empty-unreadable are all
+	// untouched by this.
+	//
+	// Last, and shed rather than wrapped when it does not fit — council's
+	// collapsedNotice rule, for its reason: the remedy is the least urgent part
+	// of the frame and the first thing a narrow terminal should give up. Being
+	// last also makes it the first line clipped when the body is taller than the
+	// row area, which is the same ordering asked of the height.
+	if nothingDetected(st.Snap.Vendors) {
+		hint := "telltale doctor checks the vendor binaries; this screen reads their stores"
+		if lipgloss.Width(hint) <= avail {
+			out = append(out, "")
+			out = append(out, centerBlock([]string{sty.Muted.Render(hint)}, st.Width)...)
+		}
+	}
+	return out
+}
+
+// nothingDetected reports the one snapshot the doctor pointer is for: at least
+// one vendor was looked for, and every one of them came back `not detected`.
+//
+// An empty vendor slice is false rather than true. No vendor looked for is not
+// the same fact as every vendor missing, and the frame it produces has no table
+// under the heading for the pointer to be a conclusion about — the same
+// zero-versus-absent distinction §4a.1 makes about a gauge, asked one level up
+// about the scan itself.
+func nothingDetected(vs []VendorView) bool {
+	if len(vs) == 0 {
+		return false
+	}
+	for _, v := range vs {
+		if v.Status != StatusNotDetected {
+			return false
+		}
+	}
+	return true
 }
 
 // driftScope is the measurement behind the word: how many of the vendor's
