@@ -3713,6 +3713,46 @@ default batch intervals) against the running collector produced
 `{"vendor":"grok","requests":1,"input_tokens":23767,"output_tokens":96,
 "cache_read_tokens":1408,"reasoning_tokens":81,…}` — real numbers, keys only.
 
+**Amended 2026-08-16 — the collision on 4318, measured and then named.** 4318 is OTLP/HTTP's
+registered port. That is why this mode defaults to it, and it is also why every other local
+OTLP receiver takes it: Jaeger, the OpenTelemetry Collector and the vendor agents all default
+there. So the most likely startup on a working machine is the one that cannot bind, and
+nobody had measured what that looked like. **Measured 2026-08-16**, Windows 11, `main` at
+`4e0cf6b`, with a throwaway listener holding 127.0.0.1:4318: `telltale otel grok` printed one
+line on stderr and exited 1.
+
+```
+telltale otel: listen tcp 127.0.0.1:4318: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+```
+
+So the failure was already loud and already correctly coded. Nothing pretended to collect,
+and nothing hung. What the line did not carry is what to do next, and there are three parts
+to that: the likely holder is another OTLP collector, `--addr` moves this side (the flag
+already existed and was already documented), and moving this side ALONE counts nothing,
+because grok's exporter goes on posting to 4318. A collector listening on a port nobody
+pushes to reads exactly like "grok spent nothing", which is the failure §7.7 rates worst.
+The message now states all three and keeps the bind error verbatim underneath it. On a port
+the operator chose it names no likely holder, because telltale cannot know who took 4444, and
+it says that instead of guessing. `TestAHeldPortSaysWhoLikelyHasItAndHowToMove` and
+`TestTheDefaultPortCollisionNamesTheOtherCollectors` pin both branches;
+`TestAMovedPortBindsAndCountsARequest` pins that the way out works, and
+`TestAMovedPortIsStillLoopbackOnly` keeps the loopback bind absolute across the flag.
+
+The redirect the message prescribes is `OTEL_EXPORTER_OTLP_ENDPOINT=http://<addr>` in grok's
+own environment, beside the `[telemetry]` pair above. **That redirect is NOT measured, and
+the message says so on the line that prescribes it.** The capture pinned the exporter as
+OTel-OTLP-Exporter-Rust/0.32.0 posting to the default endpoint with no variable set; nothing
+here re-ran an export with the variable moved. A named knob marked unverified beats no knob
+at all, and marking it is §4a.1's estimate rule applied to a sentence instead of a number.
+
+One Windows detail earns its line, because the portable-looking version of it is wrong.
+`errors.Is(err, syscall.EADDRINUSE)` is FALSE on Windows for a real collision: the bind
+returns errno 10048 (`WSAEADDRINUSE`), while Windows builds define `syscall.EADDRINUSE` as
+one of Go's synthetic `APPLICATION_ERROR` constants, 536870914 on this box (measured, go
+1.26). Windows is the primary target (ADR-002), so a one-arm check would have detected the
+collision on the two platforms CI does not run and missed it on the one it does. The
+detection carries both arms and cites the measurement beside them.
+
 #### Known limitations
 
 - **The collector must be running to hear the push.** grok's exporter retries briefly and
@@ -3730,6 +3770,10 @@ default batch intervals) against the running collector produced
   collector does not read the version attribute. A rename lands as quiet non-counting —
   visible as a counter that stops moving, and §3.9a's capture is the shape to re-measure
   against.
+- **The endpoint redirect is prescribed, not measured** (2026-08-16 amendment). Moving the
+  collector with `--addr` is measured; moving grok's exporter to meet it rests on the
+  exporter library's documented variable, not on a re-run capture. The startup message and
+  this section both say so, so nobody quotes it as verified later.
 - The capture behind every claim here is one machine, one day, one grok version, one
   signed-in account. The §3.4 discipline applies: re-measure before extending any claim.
 

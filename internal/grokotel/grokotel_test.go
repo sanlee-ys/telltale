@@ -5,7 +5,9 @@ import (
 	"compress/gzip"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -324,6 +326,164 @@ func TestTheBindRefusesNonLoopback(t *testing.T) {
 	for _, addr := range []string{"0.0.0.0:4318", "192.168.1.10:4318", "[::]:4318"} {
 		if err := s.Run(addr); err == nil || !strings.Contains(err.Error(), "loopback") {
 			t.Errorf("Run(%q) = %v, want a loopback refusal", addr, err)
+		}
+	}
+}
+
+// --- the port every other OTLP collector wants too ------------------------
+
+// freePort returns a loopback port nothing holds right now, by binding one and
+// letting it go. It is a starting point, not a reservation — the same honesty
+// nextAddr's doc states — and that is fine for a test that binds it again
+// immediately.
+func freePort(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, port, err := net.SplitHostPort(ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln.Close()
+	return port
+}
+
+func TestDefaultAddrCarriesTheDefaultPort(t *testing.T) {
+	_, port, err := net.SplitHostPort(DefaultAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if port != defaultPort {
+		t.Errorf("DefaultAddr port = %q, defaultPort = %q: the collision message reads the wrong one", port, defaultPort)
+	}
+}
+
+// A held port is the failure this mode is most likely to meet, and before
+// 2026-08-16 it arrived as the raw net.Listen error (listen's doc has the
+// measured line). The test pins every fact the operator needs out of it,
+// because dropping any one of them leaves a collector that listens and counts
+// nothing.
+func TestAHeldPortSaysWhoLikelyHasItAndHowToMove(t *testing.T) {
+	port := freePort(t)
+	addr := net.JoinHostPort("127.0.0.1", port)
+	holder, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatalf("could not hold %s for the test: %v", addr, err)
+	}
+	defer holder.Close()
+
+	s, dir := serve(t)
+	ln, err := s.listen(addr)
+	if err == nil {
+		ln.Close()
+		t.Fatal("listen succeeded on a held port")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		addr,                          // which address failed
+		"already in use",              // what happened
+		"--addr",                      // how to move this side
+		"OTEL_EXPORTER_OTLP_ENDPOINT", // how to move grok's side
+		"counts nothing",              // why moving only one side is not enough
+		"~/.grok/config.toml",         // where grok's own export config lives
+		"§7.16a",                      // where the record is
+		"bind error:",                 // the raw error is kept, not swallowed
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("the collision message never says %q:\n%s", want, msg)
+		}
+	}
+	// The way out it offers must be a different port from the one that failed.
+	suggested := nextAddr("127.0.0.1", port)
+	if suggested == addr || !strings.Contains(msg, suggested) {
+		t.Errorf("the message suggests no port other than the failed one (%s):\n%s", addr, msg)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "grok.json")); statErr == nil {
+		t.Error("a failed bind wrote a cache file")
+	}
+}
+
+// On the shared default the message may name the likely holder; on a port the
+// operator chose it may not, because telltale knows nothing about who took it.
+func TestTheDefaultPortCollisionNamesTheOtherCollectors(t *testing.T) {
+	shared := portTaken(DefaultAddr, defaultPort, "127.0.0.1:4319", errors.New("bind: taken")).Error()
+	if !strings.Contains(shared, "OTLP collector") || !strings.Contains(shared, "OpenTelemetry Collector") {
+		t.Errorf("the default-port collision does not name the likely holder:\n%s", shared)
+	}
+	if !strings.Contains(shared, "127.0.0.1:4319") {
+		t.Errorf("the default-port collision suggests no port to move to:\n%s", shared)
+	}
+
+	chosen := portTaken("127.0.0.1:4444", "4444", "127.0.0.1:4445", errors.New("bind: taken")).Error()
+	if strings.Contains(chosen, "OTLP collector") {
+		t.Errorf("a chosen port's collision guesses at a holder telltale cannot know:\n%s", chosen)
+	}
+	if !strings.Contains(chosen, "cannot say which one") {
+		t.Errorf("a chosen port's collision does not admit it cannot name the holder:\n%s", chosen)
+	}
+}
+
+func TestTheSuggestedPortIsNotTheOneThatFailed(t *testing.T) {
+	for _, tc := range []struct{ host, port, want string }{
+		{"127.0.0.1", "4318", "127.0.0.1:4319"},
+		{"127.0.0.1", "4319", "127.0.0.1:4320"},
+		{"::1", "4318", "[::1]:4319"},
+		// Unparseable and last-port fall back to the default plus one rather
+		// than to arithmetic on nonsense.
+		{"127.0.0.1", "otlp", "127.0.0.1:4319"},
+		{"127.0.0.1", "65535", "127.0.0.1:4319"},
+	} {
+		if got := nextAddr(tc.host, tc.port); got != tc.want {
+			t.Errorf("nextAddr(%q, %q) = %q, want %q", tc.host, tc.port, got, tc.want)
+		}
+	}
+}
+
+// The way out the message offers has to work: a moved port binds, and the
+// collector on it counts a real record.
+func TestAMovedPortBindsAndCountsARequest(t *testing.T) {
+	s, dir := serve(t)
+	addr := net.JoinHostPort("127.0.0.1", freePort(t))
+	ln, err := s.listen(addr)
+	if err != nil {
+		t.Fatalf("listen(%q) = %v", addr, err)
+	}
+	defer ln.Close()
+	if ln.Addr().String() != addr {
+		t.Errorf("listening on %s, asked for %s", ln.Addr(), addr)
+	}
+	go http.Serve(ln, s.handler())
+
+	body := logsBody(apiRequestRecord("aaaaaaaa-0000-4000-8000-000000000009", 1, 700, 70, 7, 77))
+	resp, err := http.Post("http://"+addr+"/v1/logs", "application/x-protobuf", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	e := readCache(t, dir)
+	if e.Requests != 1 || e.InputTokens != 700 || e.OutputTokens != 70 {
+		t.Errorf("a request pushed to the moved port was not counted: %+v", e)
+	}
+}
+
+// The loopback rule is absolute, and moving the port may not become a way
+// around it: a non-loopback host is refused whatever port it carries.
+func TestAMovedPortIsStillLoopbackOnly(t *testing.T) {
+	s, _ := serve(t)
+	for _, addr := range []string{"0.0.0.0:4319", "192.168.1.10:4400", "[::]:9999"} {
+		ln, err := s.listen(addr)
+		if err == nil {
+			ln.Close()
+			t.Errorf("listen(%q) bound off loopback", addr)
+			continue
+		}
+		if !strings.Contains(err.Error(), "loopback") {
+			t.Errorf("listen(%q) = %v, want a loopback refusal", addr, err)
 		}
 	}
 }

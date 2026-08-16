@@ -831,7 +831,13 @@ in a pasted issue; --ascii and NO_COLOR have nothing to switch off.
 telltale otel grok flags:
   --addr <host:port>          listen address (default 127.0.0.1:4318, the OTLP
                               http default). Loopback only; any other host is
-                              refused at startup
+                              refused at startup. 4318 is also what every other
+                              local OTLP receiver takes, so on a machine already
+                              running one the startup fails with "already in
+                              use" and names the way out. Moving this side is
+                              half of it: set OTEL_EXPORTER_OTLP_ENDPOINT to the
+                              same address in grok's environment, or grok keeps
+                              pushing to 4318 and this collector counts nothing
 
 telltale events flags:
   --addr <host:port>          listen address (default 127.0.0.1:4519).
