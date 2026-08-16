@@ -117,10 +117,10 @@ import (
 // Vendor is the stable id for rows this adapter produces.
 const Vendor = model.VendorCursor
 
-// verifiedAgainst names the vendor build the field map was surveyed against
+// VerifiedAgainst names the vendor build the field map was surveyed against
 // (§3.9). The store carries no version of its own, so a drift report here
 // carries the pin and no observed counterpart.
-const verifiedAgainst = "Cursor 3.14.7"
+const VerifiedAgainst = "Cursor 3.14.7"
 
 // canaryRowClock is the header row's activity timestamps, any one of which is
 // enough to date a session.
@@ -590,7 +590,7 @@ func (a *Adapter) parse(snap *snapshot, db *sqlite.File) error {
 
 	// The clock columns are not fatal — a store with none of them still names
 	// its sessions — so they are a canary rather than a schema error.
-	snap.watch = drift.NewWatch(verifiedAgainst, canaryRowClock)
+	snap.watch = drift.NewWatch(VerifiedAgainst, canaryRowClock)
 	for _, col := range []string{colLastUpdatedAt, colRecency, colCheckpointAt} {
 		if _, ok := idx[col]; ok {
 			snap.watch.Saw(canaryRowClock)

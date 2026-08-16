@@ -74,10 +74,10 @@ import (
 // Vendor is the stable id for rows this adapter produces.
 const Vendor = model.VendorGemini
 
-// verifiedAgainst names the vendor build this adapter's field map was read at
+// VerifiedAgainst names the vendor build this adapter's field map was read at
 // (see the package doc). Nothing in the recording states the writer's version,
 // so a drift report here carries the pin and no observed counterpart.
-const verifiedAgainst = "gemini-cli v0.53.1"
+const VerifiedAgainst = "gemini-cli v0.53.1"
 
 // canaryMetadata is the recording's opening line — sessionId plus projectHash,
 // the first thing chatRecordingService.ts writes for every session, and the only
@@ -350,7 +350,7 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	var bad, good int
 	var newestTS time.Time
 	var sessionID string
-	w := drift.NewWatch(verifiedAgainst, canaryMetadata)
+	w := drift.NewWatch(VerifiedAgainst, canaryMetadata)
 	noteTS := func(raw string) {
 		if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil &&
 			ts.After(newestTS) && !ts.After(now.Add(futureSkew)) {

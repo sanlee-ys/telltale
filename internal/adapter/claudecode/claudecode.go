@@ -62,9 +62,9 @@ import (
 // Vendor is the stable id for rows this adapter produces.
 const Vendor = model.VendorClaude
 
-// verifiedAgainst names the vendor build this adapter's field map was read from
+// VerifiedAgainst names the vendor build this adapter's field map was read from
 // (see the package doc). It is what a drift report is measured against.
-const verifiedAgainst = "Claude Code 2.1.219"
+const VerifiedAgainst = "Claude Code 2.1.219"
 
 // canarySessionID is the record envelope's identity field. The survey found it
 // on the first record of 60 of 60 transcripts sampled, and on the housekeeping
@@ -583,7 +583,7 @@ func (a *Adapter) parse(locator string, info fs.FileInfo) (*parsed, error) {
 	p := &parsed{
 		size:  info.Size(),
 		mod:   info.ModTime(),
-		watch: drift.NewWatch(verifiedAgainst, canarySessionID),
+		watch: drift.NewWatch(VerifiedAgainst, canarySessionID),
 	}
 
 	// The head window must end where the tail window begins, or records in

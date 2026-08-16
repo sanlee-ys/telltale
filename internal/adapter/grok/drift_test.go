@@ -65,7 +65,7 @@ func TestARenamedInfoEnvelopeSaysSo(t *testing.T) {
 	if report == "" {
 		t.Fatalf("a summary.json with no info.id reported no drift: %v", s.Diagnostics)
 	}
-	if !strings.Contains(report, canarySummaryInfoID.Name) || !strings.Contains(report, verifiedAgainst) {
+	if !strings.Contains(report, canarySummaryInfoID.Name) || !strings.Contains(report, VerifiedAgainst) {
 		t.Errorf("report = %q", report)
 	}
 	// Nothing inside a session directory states the writer's build, and the

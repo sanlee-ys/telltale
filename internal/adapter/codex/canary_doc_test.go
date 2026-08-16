@@ -18,7 +18,7 @@ const designDoc = "../../../docs/design.md"
 // answering it five subsections apart is how it went unanswered for a release.
 // So it is written once and pinned here, beside the truth it copies.
 //
-// Asserted on the canary's own Name and on verifiedAgainst rather than on prose
+// Asserted on the canary's own Name and on VerifiedAgainst rather than on prose
 // around them, because those two strings are what a reader re-verifying this
 // vendor would go looking for.
 func TestTheCanaryInventoryMatchesThisAdapter(t *testing.T) {
@@ -28,8 +28,8 @@ func TestTheCanaryInventoryMatchesThisAdapter(t *testing.T) {
 	}
 	doc := string(b)
 
-	if !strings.Contains(doc, verifiedAgainst) {
-		t.Errorf("design.md §3.10 does not name the version this adapter is pinned to (%q)", verifiedAgainst)
+	if !strings.Contains(doc, VerifiedAgainst) {
+		t.Errorf("design.md §3.10 does not name the version this adapter is pinned to (%q)", VerifiedAgainst)
 	}
 	for _, c := range []string{canaryEnvelopeType.Name, canarySessionMeta.Name} {
 		if !strings.Contains(doc, c) {

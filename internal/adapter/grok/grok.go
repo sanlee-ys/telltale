@@ -136,7 +136,7 @@ import (
 // Vendor is the stable id for rows this adapter produces.
 const Vendor = model.VendorGrok
 
-// verifiedAgainst names the vendor build this adapter's field map was read from
+// VerifiedAgainst names the vendor build this adapter's field map was read from
 // (see the package doc). Nothing inside a session directory states the writer's
 // version — `chat_format_version` is 1 on every session and is a record-format
 // ordinal, not a build — so a drift report here carries the pin and no observed
@@ -163,7 +163,7 @@ const Vendor = model.VendorGrok
 // rather than on 1.0.0. See the package doc's liveness section for the result.
 // The adapter still opens none of those bytes, so nothing in the field map
 // moved with it.
-const verifiedAgainst = "grok 1.0.4 (d846eb93d9)"
+const VerifiedAgainst = "grok 1.0.4 (d846eb93d9)"
 
 // canarySummaryInfoID is summary.json's identity envelope, `info.id`.
 //
@@ -483,7 +483,7 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		return s, ctx.Err()
 	}
 
-	w := drift.NewWatch(verifiedAgainst, canarySummaryInfoID)
+	w := drift.NewWatch(VerifiedAgainst, canarySummaryInfoID)
 
 	var sum summaryDoc
 	sampled := 0

@@ -67,7 +67,7 @@ func TestARenamedEnvelopeDiscriminatorSaysSo(t *testing.T) {
 	if report == "" {
 		t.Fatalf("a rollout whose envelopes carry no type reported no drift: %v", s.Diagnostics)
 	}
-	for _, want := range []string{"envelope type", "session_meta record", verifiedAgainst} {
+	for _, want := range []string{"envelope type", "session_meta record", VerifiedAgainst} {
 		if !strings.Contains(report, want) {
 			t.Errorf("the report does not carry %q: %q", want, report)
 		}

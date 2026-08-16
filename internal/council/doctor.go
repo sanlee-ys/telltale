@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sanlee-ys/telltale/internal/adapter/pins"
 	"github.com/sanlee-ys/telltale/internal/council/vendors"
 	"github.com/sanlee-ys/telltale/internal/doctor"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -43,6 +44,18 @@ func DoctorSeats() []doctor.Seat {
 		}
 		if s.Drivable {
 			s.DrivableDetail = drivableDetail(info)
+		}
+		// The survey pin, for the same reason the capability declaration is
+		// attached here: doctor stays stdlib-only and holds no inventory of its
+		// own, and this is already the one place that flattens what the rest of
+		// the repo knows into a preflight's shape. A seat with no surveyed
+		// adapter behind it keeps a zero Pin and renders no pin line.
+		if p, ok := pins.For(v); ok {
+			s.Pin = doctor.Pin{
+				VerifiedAgainst: p.VerifiedAgainst,
+				Section:         p.Section,
+				Incomparable:    p.Incomparable,
+			}
 		}
 		// A resolved binary with no note still owes the reader a sentence: an
 		// unusable seat always carries one (classify writes it), but a seat that
