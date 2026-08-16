@@ -4,7 +4,8 @@
 //
 //	telltale statusline   read a vendor statusline JSON payload on stdin, print one
 //	                      line (Claude Code, or Antigravity CLI via its documented
-//	                      product marker — ADR-004)
+//	                      product marker — ADR-004; Cursor CLI via an explicit
+//	                      --vendor cursor, because it stamps no marker — §2.2)
 //	telltale hud          cross-vendor watch-mode TUI
 //	telltale council      dispatch room: one brief to several vendor CLIs at once
 //	telltale hook cursor  vendor hook relay: a per-turn payload on stdin, token
@@ -69,6 +70,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/claude"
 	"github.com/sanlee-ys/telltale/internal/council"
 	"github.com/sanlee-ys/telltale/internal/cursorhook"
+	"github.com/sanlee-ys/telltale/internal/cursorstatus"
 	"github.com/sanlee-ys/telltale/internal/doctor"
 	"github.com/sanlee-ys/telltale/internal/eventsink"
 	"github.com/sanlee-ys/telltale/internal/gatehook"
@@ -103,7 +105,7 @@ func main() {
 		// reader at the manual without inventing a command.
 		fmt.Println(usageText)
 	case "statusline":
-		runStatusline()
+		runStatusline(os.Args[2:])
 	case "hud":
 		if err := runHUD(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "telltale hud:", err)
@@ -144,16 +146,72 @@ func main() {
 	}
 }
 
-func runStatusline() {
-	// One statusline command serves two vendors. Routing is the documented
-	// `product` field, an affirmative marker: agy stamps "antigravity" on
-	// every payload and Claude Code's payload has no product field at all.
-	// Stdin is read once; both parsers see the same bytes.
+// runStatusline serves three vendors from one subcommand, by two different
+// routing mechanisms — and the split is a property of the payloads, not a
+// preference.
+//
+// Two of them route on the documented `product` field, an affirmative marker:
+// agy stamps "antigravity" on every payload and Claude Code's payload has no
+// product field at all (ADR-004). Stdin is read once; every parser sees the
+// same bytes.
+//
+// Cursor cannot join that scheme. Its payload carries NO vendor name of any
+// kind — measured across live captures at cursor-agent 2026.08.04-aaa8809 —
+// and it is deliberately Claude-shaped, because the vendor documents the seam
+// as "aligned with Claude Code's status line". Routing it by structure
+// (`render_width_chars` present, `cost` absent) would be a heuristic over a
+// payload the vendor may grow at any release, and the failure mode is silent:
+// a misrouted Claude payload renders a plausible line with its quota missing.
+// So Cursor routes on `--vendor cursor`, written once into the `command`
+// string in `~/.cursor/cli-config.json` (design.md §2.2).
+func runStatusline(args []string) {
+	fs := flag.NewFlagSet("telltale statusline", flag.ContinueOnError)
+	vendor := fs.String("vendor", "", "route to this vendor's parser explicitly "+
+		"(cursor|claude|antigravity); default routes on the payload's own product marker")
+	if err := fs.Parse(args); err != nil {
+		// The never-crash-the-host rule covers this path's own argv too: flag
+		// has already printed the reason, and the host keeps its previous line
+		// when a statusline command exits non-zero with empty stdout.
+		os.Exit(0)
+	}
+
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
 		os.Exit(0)
 	}
+	noColor := os.Getenv("NO_COLOR") != ""
+
+	// An explicit flag WINS over the marker probe. It is the only signal one of
+	// these vendors has, and a routing override that could be overruled by a
+	// guess would not be an override.
+	switch *vendor {
+	case string(model.VendorCursor):
+		in, err := cursorstatus.Parse(bytes.NewReader(raw))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
+			os.Exit(0)
+		}
+		fmt.Println(statusline.RenderCursor(in, statusline.Options{NoColor: noColor}))
+		// No quota relay, and the absence is the honest answer rather than a
+		// gap: this payload carries no rate-limit window, no quota bucket and
+		// no cost anywhere. §7.15's file holds what a gauge just rendered, so
+		// there is nothing to write — and writing an empty or invented reading
+		// would let the HUD attribute a quota nobody measured.
+		return
+	case string(model.VendorAntigravity), "antigravity":
+		renderAntigravity(raw, noColor)
+		return
+	case string(model.VendorClaude):
+		renderClaude(raw, noColor)
+		return
+	case "":
+		// Fall through to the marker probe below.
+	default:
+		fmt.Fprintf(os.Stderr, "telltale: unknown --vendor %q (want cursor, claude or antigravity)\n", *vendor)
+		os.Exit(0)
+	}
+
 	// A probe failure is bad input, full stop — it must take the clean-exit
 	// path. Falling through to the Claude parser would be worse than nothing:
 	// claude.Parse uses a streaming decoder that reads only the FIRST JSON
@@ -167,18 +225,24 @@ func runStatusline() {
 		fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
 		os.Exit(0)
 	}
-
-	noColor := os.Getenv("NO_COLOR") != ""
 	if probe.Product == antigravity.Product {
-		in, err := antigravity.Parse(bytes.NewReader(raw))
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
-			os.Exit(0)
-		}
-		fmt.Println(statusline.RenderAntigravity(in, statusline.Options{NoColor: noColor}))
-		relayQuota(string(model.VendorAntigravity), quotacache.FromAntigravity(in.Quota, time.Now()))
+		renderAntigravity(raw, noColor)
 		return
 	}
+	renderClaude(raw, noColor)
+}
+
+func renderAntigravity(raw []byte, noColor bool) {
+	in, err := antigravity.Parse(bytes.NewReader(raw))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "telltale: bad statusline input:", err)
+		os.Exit(0)
+	}
+	fmt.Println(statusline.RenderAntigravity(in, statusline.Options{NoColor: noColor}))
+	relayQuota(string(model.VendorAntigravity), quotacache.FromAntigravity(in.Quota, time.Now()))
+}
+
+func renderClaude(raw []byte, noColor bool) {
 	in, err := claude.Parse(bytes.NewReader(raw))
 	if err != nil {
 		// A gauge must never crash the host UI: on bad input, render nothing
@@ -668,8 +732,9 @@ Three modes need no configuration at all. Run one of them:
                      side. This is the mode the project is for.
 
 One mode is wired in rather than run: point Claude Code's — or Antigravity
-CLI's — statusLine.command at ` + "`telltale statusline`" + `. The README's Install
-section carries the settings block to paste.
+CLI's — statusLine.command at ` + "`telltale statusline`" + `. Cursor CLI's wants
+` + "`telltale statusline --vendor cursor`" + `, because its payload carries no marker
+to route on. The README's Install section carries the settings block to paste.
 
   telltale help      every mode and every flag
   telltale version   the tag this binary was built from`
@@ -688,6 +753,9 @@ const usageText = `telltale — an honest gauge for your coding agents
 
 usage:
   telltale statusline    (wire into Claude Code settings.json statusLine command)
+                         --vendor cursor|claude|antigravity routes explicitly;
+                         without it the payload's own product marker decides.
+                         Cursor NEEDS the flag — it stamps no marker (§2.2).
   telltale hud           cross-vendor session HUD
   telltale council       dispatch room: one brief, several agents, side by side
   telltale hook cursor   (wire into ~/.cursor/hooks.json as an afterAgentResponse

@@ -1,0 +1,29 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000002",
+  "session_name": "New Agent",
+  "transcript_path": "/fake/.cursor/projects/fake-project/agent-transcripts/00000000-0000-4000-8000-000000000002/00000000-0000-4000-8000-000000000002.jsonl",
+  "render_width_chars": 116,
+  "cwd": "/fake/code/example-app",
+  "autorun": false,
+  "model": {
+    "id": "composer-2.5",
+    "display_name": "Composer 2.5 Fast"
+  },
+  "workspace": {
+    "current_dir": "/fake/code/example-app",
+    "project_dir": "/fake/.cursor/projects/fake-project",
+    "added_dirs": []
+  },
+  "version": "2026.08.04-aaa8809",
+  "output_style": {
+    "name": "compact"
+  },
+  "context_window": {
+    "total_input_tokens": null,
+    "total_output_tokens": null,
+    "context_window_size": null,
+    "used_percentage": null,
+    "remaining_percentage": null,
+    "current_usage": null
+  }
+}

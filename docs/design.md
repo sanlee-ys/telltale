@@ -173,6 +173,88 @@ Schema verification record: documented contract (antigravity.google/docs/cli/sta
 cross-checked against a six-payload live capture from a real interactive session on agy
 1.1.9, 2026-08-02 (§3.8). Fixtures are synthesized to the observed shapes.
 
+### 2.2 Cursor CLI statusline (added 2026-08-16)
+
+`telltale statusline` serves a third vendor. `cursor-agent` reads a top-level `statusLine`
+object from `~/.cursor/cli-config.json` and hands the command a JSON payload on stdin —
+the same seam shape as the other two. Measured at **cursor-agent 2026.08.04-aaa8809** on
+Windows 11, live capture first and source read second; §7.16's dated amendment carries the
+per-surface measurement and `internal/cursorstatus`'s package doc carries the shapes.
+
+```json
+{"statusLine":{"type":"command","command":"telltale statusline --vendor cursor",
+               "padding":0,"updateIntervalMs":300,"timeoutMs":2000}}
+```
+
+**Routing is an explicit flag, and that is a finding rather than a shortcut.** This
+payload carries no `product` field, no `hook_event_name`, and no other vendor name —
+`version` holds the CLI's own build string, which is a value and not a marker. It is
+Claude-shaped on purpose: the vendor's bundled `statusline` skill says the spec "is
+aligned with Claude Code's status line", and the two overlap on `session_id`,
+`transcript_path`, `cwd`, `model.*`, `workspace.*`, `version` and `output_style.name`.
+So §2.1's affirmative-marker scheme cannot be extended to it, and guessing from structure
+(`render_width_chars` present, `cost` absent) would be a heuristic over a payload the
+vendor may grow at any release — with a silent failure mode, since a misrouted Claude
+payload renders a plausible line with its quota missing. `--vendor cursor` is written once
+into the config above and wins over the marker probe.
+
+| Segment | Source (exact field) | Empty/degraded state | Status |
+|---|---|---|---|
+| Model | stdin `model.display_name` (falls back to `model.id`) | hide if both empty | **built** |
+| Context % | stdin `context_window.used_percentage` — the ONE context number this vendor sources rather than computes | hide segment; a session before its first API call sends every `context_window` key as `null`, which is an unread field and not a zero | **built** |
+| Autorun | stdin `autorun` — no counterpart in either other vendor's payload; renders only when `true` | `false` and absent both hide (see below) | **built** |
+| Worktree | stdin `worktree.name`, same `⌥` mark as the Claude path | hide segment | **built** (documented; not observed live) |
+| Folder | stdin `workspace.current_dir` (fallback `cwd`), basename only | hide segment | **built** |
+
+**Two fields are REFUSED, and they are the reason this section is careful.**
+`context_window` arrives with six keys; two of them are computed by the CLI from a third
+and named as though they were read. From the bundle's own payload builder in
+`./src/ui.tsx` at the pinned build, where `Ve` is the usage reading and `Ke` the window
+size:
+
+```
+m = null!=Ve?Ve:null,                                        // used_percentage
+f = null!=m ? Math.max(0,Math.round(10*(100-m))/10) : null,  // remaining_percentage
+v = null!=Ke&&null!=m ? Math.round(m/100*Ke) : null          // total_input_tokens
+```
+
+The vendor documents it too — its `statusline` skill calls `total_input_tokens`
+"Estimated input tokens (derived from used_percentage)". A token count that is really a
+rounded percentage, under a name that reads like a meter, is the ADR-001 violation print
+mode's `inputTokens` already cost this repo once (§7.16). **They are absent from
+`internal/cursorstatus`'s structs rather than parsed-and-ignored**, on the
+`internal/cursorhook` rule: the struct is the allowlist, `encoding/json` drops every field
+with no destination, and a field that does not exist cannot be reached by a later change
+that did not read the comment. `TestCursorDerivedFieldsNeverRender` feeds a fixture
+carrying both, populated and plausible, and asserts neither number reaches the line.
+
+Also not rendered: `context_window_size` (genuinely vendor-reported, but nothing draws it
+— add it back with the segment that wants it) and `current_usage` (observed only as
+`null`, so its populated shape is unmeasured and declaring one would be inventing a
+schema). There is **no quota, no rate limit and no cost anywhere in this payload**, so
+this path writes no quota relay at all (§7.15) — the absence is the honest answer, not a
+gap.
+
+**The autorun asymmetry is deliberate and is not the zero-vs-absent rule being bent.**
+That rule governs gauge READINGS, where 0% and "no source" are two facts a user must tell
+apart. `autorun` is a posture flag with a default: `false` is the ordinary state of every
+session, and a segment that says "nothing unusual" on every line teaches the reader to
+stop looking. Off and absent both render nothing; on renders a word, in yellow, because
+it is the state where the agent may run a command without asking.
+
+**Budget.** The vendor's `timeoutMs` defaults to 2000 with a floor of 50, and
+`updateIntervalMs` is clamped to >= 300. The 2000ms is its kill deadline, not an
+allowance: the binary is respawned on every debounced update, so ADR-002's
+single-digit-millisecond target is unchanged and `BenchmarkRenderCursor` pins it.
+
+Schema verification record: two live payloads captured 2026-08-16 from a real interactive
+session (the shape with every `context_window` key null — that session had made no API
+call), cross-checked against the vendor's bundled `statusline` skill and a source read of
+`./src/hooks/use-status-line.ts` and `./src/ui.tsx` at 2026.08.04-aaa8809. Fixtures are
+synthesized to the observed shapes; the populated-context fixture is synthesized to the
+documented one, because no captured payload ever carried a number there. **That is the one
+gap in this record** — see §7.16's amendment for the hand-back that closes it.
+
 ## 3. HUD (v1)
 
 One row per live session, both vendors; per-row: vendor, session identity, model,
@@ -3390,6 +3472,79 @@ cursor` is not exposed to this today, because it is the one event that does not 
 - The counter says nothing about *which* conversation or model spent the tokens, by the
   design ruling above. If a future seam makes a CLI conversation joinable to a HUD row,
   that is a new claim and needs its own section.
+
+#### The statusline seam, measured per surface (2026-08-16)
+
+A third Cursor seam, measured on the same build the two above were measured on —
+**cursor-agent 2026.08.04-aaa8809**, Windows 11. `~/.cursor/cli-config.json` accepts a
+top-level `statusLine` object using the stdin-JSON/stdout-text contract telltale already
+implements twice. §2.2 is the design record and the renderer shipped; this is the
+measurement.
+
+**The §7.16 lesson was applied before the fact.** "A config that validates is not a
+subsystem that initializes" is what the deny-composition block above cost to learn, so no
+surface was reasoned about — each was driven with a marker command that tees its stdin to
+a file and exits 0.
+
+| surface | how it was driven | marker fired |
+|---|---|---|
+| interactive TUI, real console | hidden-window `cmd /c cursor-agent.cmd`, known workspace | **yes** (2 invocations inside 0.4s) |
+| ACP | `cursor-agent acp`, `initialize` + `session/new` — the handshake `cursoracp.go` builds | **no** |
+| print mode | `cursor-agent -p`, one real turn | **no** |
+| interactive argv, piped stdio | no TTY | **no** — the TUI never mounts at all |
+| interactive, workspace never opened before | same as row 1, in a fresh git worktree | **no**, 2 trials totalling 55s |
+
+The source read agrees and explains the shape of it: the invocation is a React hook
+(`./src/hooks/use-status-line.ts`) called from the ink chat component in `./src/ui.tsx`,
+and `statusLine` appears in exactly one bundle chunk (`8674.index.js`). No headless surface
+mounts that component. The last row is recorded as measured and its mechanism was not
+chased — the fresh worktree had no `~/.cursor/projects/` entry and the workspace that fired
+did.
+
+**So this seam repeats §7.16's conclusion rather than relieving it: council's Cursor seat
+runs on ACP (§9.36), and this seam is interactive-only.** Two seams now, both real, both
+invisible to the one surface that wanted them. The reason is different each time — an
+unfired event there, an unmounted component here — and neither generalizes to the other,
+which is the mistake the 2026-08-15 amendment above exists to correct.
+
+**No vendor marker, so routing is a flag.** Every captured payload was checked. There is no
+`product`, no `hook_event_name`, and no other vendor name; `version` carries the CLI build
+string, a value rather than a marker. The payload is Claude-shaped by the vendor's own
+statement of intent. §2.1's affirmative-marker scheme therefore cannot be extended, and
+`telltale statusline --vendor cursor` is the routing (§2.2 argues why a structural guess
+was refused).
+
+**The BOM is NOT on this seam — and the check is now in the code anyway.** The trap note
+above records that cursor's HOOK payload begins with a UTF-8 BOM, which breaks a plain JSON
+parse. The statusline payload does not: both captures began `7B 22 73` (`{"s`).
+`cursorstatus.Parse` strips one regardless, and `TestCursorBOMIsStripped` pins it. One
+vendor writing two seams with two encodings is the case where three bytes of caution are
+cheaper than rediscovering the difference.
+
+**The ACP `usage` field is parsed and deliberately goes nowhere.** The response schema in
+`8096.index.js` declares session/prompt's result as `{stopReason, usage?}`, with usage as
+`{inputTokens, outputTokens, totalTokens, cachedReadTokens?, cachedWriteTokens?,
+thoughtTokens?}`. The thirteen live arms of §9.36 saw no `usage` on any turn, and that
+finding stands — the schema says optional and this build never sent one. `acpTurnEnded` now
+parses it into `acpUsage` and **nothing reads it, relays it or renders it.** The reason to
+stop there is on the record twice already: print mode's `result.usage` published a CLI-
+computed `inputTokens` under that exact name, and the statusline seam does the same thing
+today with `total_input_tokens`. Whether ACP's `inputTokens` is raw or derived is an open
+question a live capture at a pinned version must close, and displaying it first would be
+the violation rather than the discovery of one.
+
+**Hand-back — the one measurement this session could not take.** Every captured payload
+came from a session that had made no API call, so `context_window` arrived with all six
+keys `null`. The populated shape is therefore documented and synthesized, never observed:
+`used_percentage` has been read from the bundle as vendor-sourced, but its live magnitude
+and precision have not been seen. Closing it needs a human at a real TTY, which is the one
+thing an agent cannot drive here. Roughly a minute:
+
+1. Add to `~/.cursor/cli-config.json`:
+   `"statusLine":{"type":"command","command":"telltale statusline --vendor cursor"}`
+2. Run `cursor-agent` in a workspace it has opened before, and send any one prompt.
+3. Read the line above the input. `ctx N%` appearing after the reply is the confirmation;
+   the segment staying hidden means `used_percentage` is null for longer than assumed.
 
 ### 7.16a The OTLP collector — what grok spent, pushed rather than hooked (2026-08-10)
 

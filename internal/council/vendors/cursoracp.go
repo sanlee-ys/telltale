@@ -998,6 +998,24 @@ func (a *acpProtocol) fail(note string) []runner.Event {
 	return acpFailed(note)
 }
 
+// acpUsage is the optional token block the ACP schema declares on a
+// session/prompt response. See the field comment in acpTurnEnded for the
+// version it was read at, the measurement that found it absent, and why nothing
+// consumes it yet.
+//
+// Pointers on the three optional counts so that "the vendor did not send this"
+// stays distinguishable from "the vendor sent zero" the day a capture arrives —
+// the distinction the whole product exists to keep, and the one that is
+// impossible to add back after the fact if the struct flattened it.
+type acpUsage struct {
+	InputTokens       int64  `json:"inputTokens"`
+	OutputTokens      int64  `json:"outputTokens"`
+	TotalTokens       int64  `json:"totalTokens"`
+	CachedReadTokens  *int64 `json:"cachedReadTokens"`
+	CachedWriteTokens *int64 `json:"cachedWriteTokens"`
+	ThoughtTokens     *int64 `json:"thoughtTokens"`
+}
+
 // acpTurnEnded reads the response a turn resolves with.
 //
 // When textChunks is 0, a turn summary / fallback status is captured on the
@@ -1011,6 +1029,31 @@ func acpTurnEnded(msg acpLine, textChunks int, acts []string) []runner.Event {
 	}
 	var out struct {
 		StopReason string `json:"stopReason"`
+		// Usage is PARSED AND NOTHING ELSE — nothing reads it, nothing relays
+		// it, nothing renders it. That is the whole of the change, deliberately.
+		//
+		// The field names come from the ACP response schema in the bundle at
+		// cursor-agent 2026.08.04-aaa8809 (`8096.index.js`), where the
+		// session/prompt response is declared as `{stopReason, usage?}` and
+		// usage as `{inputTokens, outputTokens, totalTokens, cachedReadTokens?,
+		// cachedWriteTokens?, thoughtTokens?}`. So the shape is a source read at
+		// a pinned version, not a guess.
+		//
+		// It was also measured ABSENT: the thirteen live arms of 2026-08-08
+		// (§9.36) resolved every turn with `{"stopReason":…}` and nothing
+		// beside it, which is the file-header claim above and it still stands.
+		// The schema says optional; this build never sent one.
+		//
+		// Why it stops here rather than continuing into the token relay: this
+		// vendor has already published a DERIVED token count under a raw-sounding
+		// name once. Print mode's `result.usage` carried an `inputTokens` the CLI
+		// computed rather than read (§7.16), and the statusline seam does it
+		// again today — `total_input_tokens` there is `used_percentage × window
+		// size`, which the vendor's own docs call derived. `inputTokens` is
+		// exactly the name that burned, so whether THIS one is raw is an open
+		// question that only a live capture at a pinned version can close.
+		// Displaying it first and asking after is the ADR-001 violation itself.
+		Usage *acpUsage `json:"usage"`
 	}
 	_ = json.Unmarshal(msg.Result, &out)
 	switch out.StopReason {
