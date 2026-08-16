@@ -365,6 +365,33 @@ no network and reads no credential. [docs/design.md §7.22](docs/design.md#s7-22
 schema record and the reasoning; `internal/snapshot/testdata/golden/zero-vs-absent.json`
 is the build-failing test that the two kinds of nothing stay apart.
 
+### A worked consumer
+
+[`tools/fleet-prompt.ps1`](tools/fleet-prompt.ps1) is one PowerShell function that runs
+the command once, parses the line, and returns a fleet segment for a prompt:
+
+```
+. .\tools\fleet-prompt.ps1
+Get-TelltaleFleetLine
+```
+
+Driven on Windows PowerShell 5.1 against this machine's real stores, that prints:
+
+```
+tt 6 watching | 1554 sessions, 3 live | ctx ~75.8% codex | quota 12.2% agy/gemini-weekly
+```
+
+It carries the rules above into a caller rather than restating them. A null prints
+nothing: a fleet with no context reading anywhere has no `ctx` segment at all, while a
+measured zero prints as `0%`. The `~` is there because codex's block lists `context_pct`
+under `estimated`. An unknown `schema_version` prints an empty line rather than a guess.
+
+[`docs/snapshot.schema.json`](docs/snapshot.schema.json) is the contract it reads against
+— the same file CI validates the built binary's output with. Its `-FromFile` parameter
+reads a document instead of running the binary, which is how the refused store, the
+drifted store and the scan error were driven: those are shapes a healthy machine does not
+produce, and `internal/snapshot/testdata/golden/` carries all four.
+
 ## `telltale events` — the fleet event sink, and it runs dark
 
 ```
