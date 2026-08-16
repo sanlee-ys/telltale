@@ -188,6 +188,64 @@ func TestWaitingIsNotStreaming(t *testing.T) {
 	golden(t, "waiting-vs-streaming", a)
 }
 
+// TestWaitingOnYouIsNotStreaming is the same claim through the CLOCK.
+//
+// TestWaitingIsNotStreaming above guards the word: a seat with nothing to show
+// must not render as one that is showing something. This guards the figure under
+// that word, and it is the same failure by a different route — a seat stopped
+// behind an approval card is not streaming either, and for five minutes it said
+// `⋮ streaming 5m0s`. The number was real wall clock and it was still a false
+// reading, because what it measured was a person reading a card (§9.45).
+//
+// Two states that must not render alike, exactly as above: one seat blocked on
+// the operator, one seat with the identical wall clock and no card at all.
+func TestWaitingOnYouIsNotStreaming(t *testing.T) {
+	now := time.Date(2026, 8, 15, 12, 5, 0, 0, time.UTC)
+
+	blocked := room()
+	blocked.Turn, blocked.Now = 1, now
+	blocked.Columns[0].Phase, blocked.Columns[0].TurnN = PhaseStreaming, 1
+	blocked.Columns[0].Prompt = "write the file"
+	blocked.Columns[0].Started = now.Add(-5 * time.Minute)
+	blocked.Gates = []PendingGate{{
+		Vendor: model.VendorClaude, RequestID: "r1", Text: "Write: a.txt",
+		StoppedAt: now.Add(-4*time.Minute - 48*time.Second),
+	}}
+
+	working := room()
+	working.Turn, working.Now = 1, now
+	working.Columns[0].Phase, working.Columns[0].TurnN = PhaseStreaming, 1
+	working.Columns[0].Prompt = "write the file"
+	working.Columns[0].Started = now.Add(-5 * time.Minute)
+	working.Columns[0].Body = "Considering the tradeoffs."
+
+	a, b := render(blocked), render(working)
+	if a == b {
+		t.Fatal("a seat stopped on the operator renders identically to one that is working")
+	}
+	// The seat that really has been streaming for five minutes keeps its five
+	// minutes. Only the blocked one gives them up, and it gives them to a figure
+	// that says where they went — the vendor's twelve seconds, and the rest
+	// named as the operator's.
+	if !strings.Contains(b, "streaming 5m0s") {
+		t.Error("a seat nobody blocked lost its own five minutes")
+	}
+	if strings.Contains(a, "streaming 5m0s") {
+		t.Error("a stopped seat still wears the operator's wait as streaming")
+	}
+	if !strings.Contains(a, "streaming 12s") {
+		t.Error("the blocked seat does not state the vendor's own time")
+	}
+	if !strings.Contains(a, "you 4m48s") {
+		t.Error("no figure on the frame says how long the room waited on the operator")
+	}
+	// And the working seat says nothing about the operator — absent, not zero,
+	// which is the distinction zero-vs-absent.txt exists for.
+	if strings.Contains(b, "you ") {
+		t.Error("a seat that was never gated grew an operator figure")
+	}
+}
+
 // TestEveryGranularityIsExplained mirrors TestEveryBadgeIsExplained, one badge
 // column over.
 //

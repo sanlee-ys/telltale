@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -62,6 +63,11 @@ type turnEntry struct {
 	CostUSD     *float64
 	CostSession bool
 
+	// GateWait is the operator's own share of this seat's turn, carried across
+	// so the page states the same split the column does (§9.45). Unmeasured on
+	// every turn that raised no approval card, which draws no figure at all.
+	GateWait runner.Span
+
 	// Started is the live turn's dispatch time, and zero on a filed record. The
 	// clock on a running seat comes from State.Now minus this, exactly as the
 	// column header's does, so Render still reads no clock of its own.
@@ -102,7 +108,8 @@ func (s State) turnEntries(n int) []turnEntry {
 				Phase: c.Phase, Gran: c.Gran,
 				Prompt: c.Prompt, Quoted: c.Quoted,
 				Body: c.Body, Acts: c.Acts,
-				Elapsed: c.Elapsed, CostUSD: c.CostUSD, CostSession: c.CostSession,
+				Elapsed: c.Elapsed, GateWait: c.GateWait,
+				CostUSD: c.CostUSD, CostSession: c.CostSession,
 				Started: c.Started, Live: true,
 			}
 			if !c.Skipped {
@@ -126,7 +133,8 @@ func (s State) turnEntries(n int) []turnEntry {
 				Prompt: h.Prompt, Quoted: h.Quoted,
 				Body: h.Body, Acts: h.Acts,
 				Note: h.Note, NoteDetail: h.NoteDetail, NoteCalm: h.NoteCalm,
-				Elapsed: h.Elapsed, CostUSD: h.CostUSD, CostSession: h.CostSession,
+				Elapsed: h.Elapsed, GateWait: h.GateWait,
+				CostUSD: h.CostUSD, CostSession: h.CostSession,
 			})
 			break
 		}
@@ -325,16 +333,31 @@ func labelledRule(label, meta string, w int, ruleGlyph string, head lipgloss.Sty
 // them and dropping it on the common case would leave four rules that differ
 // only by a name.
 func seatMeta(st State, e turnEntry, g Glyphs) string {
+	// The operator's share, once, whichever branch below states the clock — and
+	// the LONG spelling, because a page rule is the full frame wide and the room
+	// says `waiting on you` everywhere it has the cells for it (§9.45).
+	//
+	// The OPEN stretch is added only to a live entry. State.Gates is a queue of
+	// cards up right now, which belong to the turn in flight; folding it into a
+	// filed record would grow a finished turn's figure every second the room
+	// stayed stopped on a later one.
+	op := e.GateWait
+	if e.Live {
+		op = operatorWait(st, e.Vendor, e.GateWait)
+	}
 	parts := []string{phaseMark(e.Phase, st, g) + " " + e.Phase.String()}
 	switch {
 	case e.Live && (e.Phase == PhaseWaiting || e.Phase == PhaseStreaming):
 		// A running seat's clock is State.Now minus its own start, which is
 		// where the column header reads it from — never a clock inside Render.
-		if s := elapsedSince(st, e.Started); s != "" {
+		if s := elapsedSince(st, e.Started, op); s != "" {
 			parts = append(parts, s)
 		}
 	case e.Elapsed > 0:
-		parts = append(parts, dur(e.Elapsed))
+		parts = append(parts, dur(vendorElapsed(e.Elapsed, op)))
+	}
+	if s := operatorCell(op, longForm); s != "" {
+		parts = append(parts, s)
 	}
 	if e.CostUSD != nil {
 		cost := "$" + strconv.FormatFloat(*e.CostUSD, 'f', 4, 64)

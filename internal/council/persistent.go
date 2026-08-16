@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/council/vendors"
@@ -560,15 +561,71 @@ func (m *Model) queueGate(c *Column, g *runner.Gate) {
 		old = strings.TrimRight(m.redactWhole(g.OldContent), "\n")
 		next = strings.TrimRight(m.redactWhole(g.NewContent), "\n")
 	}
+	// The operator's stopwatch starts HERE, at the one place a card is raised,
+	// and never in Render (§9.45).
+	//
+	// A seat that is ALREADY stopped keeps the stamp it is already carrying. The
+	// vendor did not stop twice, and re-stamping would both restart the figure
+	// on screen and hide the stretch before this card from the charge — see
+	// PendingGate.StoppedAt. Every carded request is stamped one way or the
+	// other, so the "has this seat's last card gone" test upstream is a question
+	// about the queue rather than about which entries happen to carry a time.
+	//
+	// The three auto-approved routes above return before this line and therefore
+	// contribute nothing, which is the honest reading: nobody was asked, so
+	// nobody waited.
+	stopped, already := m.st.gateStoppedAt(c.Vendor)
+	if !already {
+		stopped = time.Now()
+	}
 	m.st.Gates = append(m.st.Gates, PendingGate{
 		Vendor:    c.Vendor,
 		RequestID: g.RequestID,
 		ToolUseID: g.ToolUseID,
 		Text:      text,
+		StoppedAt: stopped,
 		Old:       old,
 		New:       next,
 	})
 	m.gateInputs[g.RequestID] = g.Input
+}
+
+// chargeGateWait adds one finished stretch of operator wait to a seat's turn
+// (§9.45).
+//
+// Called AFTER the queue has been changed, with the stamp read BEFORE it. The
+// stretch being closed is the one that started when this seat's first card went
+// up, and the card carrying that stamp is exactly the one just removed whenever
+// there is anything to charge — so the caller has to have read it already.
+//
+// It charges nothing while the seat still has a card up. One assistant message
+// can raise a parallel batch, each request blocks separately, and the vendor
+// does not resume until the last of them is answered — so the stopwatch runs
+// over the SEAT, and adding a stretch per card would bill one person's one wait
+// two or three times.
+//
+// The clock is read here rather than passed in because this is Model, not
+// Render: the room's own side may look at a clock, and the rule that forbids it
+// applies to the renderer (CLAUDE.md, TestRenderIsPure).
+func (m *Model) chargeGateWait(v model.VendorID, stoppedAt time.Time) {
+	if stoppedAt.IsZero() {
+		return
+	}
+	if _, stopped := m.st.gateStoppedAt(v); stopped {
+		return
+	}
+	c := m.column(v)
+	if c == nil {
+		return
+	}
+	// Measured either way, including across a clock adjustment that makes the
+	// interval negative. A card went up and came down; that the machine's clock
+	// moved under it does not turn the wait into an absence, and zero is the
+	// honest floor for a stretch this room can no longer size.
+	if d := time.Since(stoppedAt); d > 0 {
+		c.GateWait.D += d
+	}
+	c.GateWait.Measured = true
 }
 
 // autoApproveRoutine recognizes the operations that make up an ordinary
@@ -812,6 +869,9 @@ func (m *Model) decideGate(allow bool) {
 		return
 	}
 	pending := m.st.Gates[0]
+	// Read before the queue is changed: this is when the seat STOPPED, which is
+	// the oldest stamp it has up and not necessarily this card's own (§9.45).
+	stoppedAt, _ := m.st.gateStoppedAt(pending.Vendor)
 	m.st.Gates = m.st.Gates[1:]
 	input := m.gateInputs[pending.RequestID]
 	delete(m.gateInputs, pending.RequestID)
@@ -830,6 +890,11 @@ func (m *Model) decideGate(allow bool) {
 	}
 
 	m.sendDecision(pending, allow, input)
+	// Charged where the decision is SENT, and here rather than inside
+	// sendDecision, because sendDecision has a second caller: queueGate's
+	// auto-approve branch answers without ever showing a card, and an operator
+	// who was never asked did not wait (§9.45).
+	m.chargeGateWait(pending.Vendor, stoppedAt)
 
 	if len(m.st.Gates) == 0 {
 		m.st.Notice = ""
@@ -869,6 +934,7 @@ func (m *Model) sendDecision(pending PendingGate, allow bool, input map[string]a
 // no longer waiting would invite a keystroke that decides nothing, and the room
 // would keep saying it was gating.
 func (m *Model) dropGates(v model.VendorID) {
+	stoppedAt, _ := m.st.gateStoppedAt(v)
 	kept := m.st.Gates[:0]
 	for _, g := range m.st.Gates {
 		if g.Vendor == v {
@@ -878,4 +944,9 @@ func (m *Model) dropGates(v model.VendorID) {
 		kept = append(kept, g)
 	}
 	m.st.Gates = kept
+	// The card came down without an answer — the turn was cancelled, or the
+	// process died under it — and the wait it cost is charged anyway. The
+	// operator really did hold this seat for that stretch, and a turn that ends
+	// badly is the one whose numbers a reader goes back to (§9.45).
+	m.chargeGateWait(v, stoppedAt)
 }
