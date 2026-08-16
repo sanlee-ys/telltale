@@ -3770,15 +3770,30 @@ is re-openable against that field and nothing else.
 
 #### Known limitations
 
-- **No live capture backs the field list.** The shape rests on a source read of one build on
-  one machine. §3.4's discipline applies: re-measure before extending any claim, and a capture
-  is still the instrument that would prove what the *host* actually sends versus what the
-  bundle can assemble.
+- **A live capture now backs the field list — closed 2026-08-16, the same day.** The
+  dispatcher wore a tee for one interactive session and came out again; the host was the same
+  pinned 2.1.233. Seven fires landed, all inside one prompt (one `session_id`, one
+  `prompt_id`). Every fire satisfied `TAw`'s arithmetic: `total_input_tokens` equalled the
+  three `current_usage` input fields summed (e.g. 2 + 1122 + 66355 = 67479), and
+  `total_output_tokens` equalled `current_usage.output_tokens`. Two refusals above were also
+  witnessed rather than argued: two adjacent fires repeated one call byte-for-byte on the
+  token block (a summer counts that call twice), and `total_output_tokens` fell 169 → 3
+  between fires inside the one prompt — a "total" that decreases, with no `/compact`
+  involved. The host sent 16 top-level keys, a strict subset of what the bundle can assemble:
+  `vim`, `pr`, `remote`, `agent_type`, `workspace.repo` and `worktree` never appeared (the
+  session's cwd was not a repo), and `permission_mode` stayed absent — §2's exclusion holds
+  on the wire, not only at the call site. The capture also found one field the source read
+  missed: `effort` (`{"level": ...}`), present on every fire; it joins the
+  deliberately-unmodelled list in the next limitation. Still open: one session on one
+  machine, `prompt_id`'s rotation across prompts unobserved, and the occupancy level's
+  decrease after `/compact` unwitnessed (the output half's decrease above is the same
+  property on the cheaper field).
 - **The payload has grown fields this struct still ignores** — measured present at 2.1.233 and
   deliberately unmodelled, because nothing needs them: `exceeds_200k_tokens`, `fast_mode`,
   `output_style`, `thinking`, `vim`, `pr`, `remote`, `agent_type`, `workspace.added_dirs`,
   `workspace.repo`, an expanded `worktree`, and three more `cost` fields
-  (`total_api_duration_ms`, `total_lines_added`, `total_lines_removed`). Unknown fields are
+  (`total_api_duration_ms`, `total_lines_added`, `total_lines_removed`). The live capture
+  added `effort` to this list — the source read missed it entirely. Unknown fields are
   ignored by design (§2), which is why that growth was a non-event.
 - **§2's "permission mode is not in the payload" survives, for a changed reason.** `py` CAN
   emit `permission_mode`, but the statusline calls it with two arguments, so the field is
