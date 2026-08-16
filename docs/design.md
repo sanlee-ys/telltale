@@ -9009,6 +9009,94 @@ is built on that here.**
 because a single app-server turn would have reported turn 1's 4.509s as if it were the warm number
 and oversold nothing or undersold everything depending on which row was quoted.
 
+#### 2026-08-16: the linger gets an owner — what rides the tail, and what the column says now
+
+The block above ended with item 4 and a named gap: *"this vendor's linger is larger, and nothing
+here checked whether council waits on it."* It did wait on it. This is the check, the answer, and
+the fix.
+
+**The room's side of it, read from source first.** `vendors/codex.go` parsed `turn.completed` into
+a bare `KindMeta`, which `applyEvents` uses to adopt a session id and record a cost — codex sends
+neither on that line. Nothing else consumed it. A spawn-per-turn seat retired only on `KindDone`,
+the process exit. So the answer-complete marker was arriving, being parsed, and changing nothing:
+the column held `streaming` from the last token until the process died, and the elapsed it kept
+was the process's lifetime rather than the answer's.
+
+**Re-measured, because §9.33 spent one trial on this and the number is the whole argument.** Same
+build as §9.33 (`codex-cli 0.147.0`, Windows 11), so nothing here is confounded by a version
+change. Instrument: the installed binary, `codex exec --json` with the seat's own argv shape, a
+brief-shaped prompt behind `brief.go`'s fence, in a throwaway directory outside any repo.
+**`-s read-only`, not the seat's Windows `danger-full-access`** — a probe does not need write
+access, and the prompt tells the model to use no tools, so §9.33's Windows spawn refusal is never
+reached. It ran clean twice, which is a small measured aside worth keeping: `-s read-only` on
+Windows breaks codex's *child* spawns, not codex itself.
+
+| | trial 1 | trial 2 |
+|---|---|---|
+| `thread.started` | 1.914s | 0.537s |
+| `item.completed` (the answer) | 6.417s | 4.405s |
+| **`turn.completed`** | **6.619s** | **4.499s** |
+| last rollout write | 6.670s | 4.723s |
+| stdout/stderr close | 10.869s | 8.554s |
+| process exit | 10.870s | 8.555s |
+| **linger** | **4.251s** | **4.056s** |
+
+**Nothing rides the tail, and that is the finding this change rests on.** The concern was that
+receipts or vendor-side bookkeeping might be paid after the answer, which would make an early
+settle a lie about a turn still in progress. It is not: on both trials `turn.completed` is the
+LAST line on stdout, stderr stays empty throughout, and the vendor's own rollout file under
+`~/.codex/sessions/` takes its final write 51ms and 224ms after that line — roughly four seconds
+*before* the exit. The rollout was polled at 250ms rather than diffed before-and-after, so this is
+an observation of when writes stopped, not an inference from a file that changed.
+
+The linger itself is 4.06s and 4.25s here against §9.33's 7.94s on the same build. **The size is
+not stable and must not be quoted as a constant**; the shape is, and the shape is what the render
+has to survive.
+
+**What changed, and the line it does not cross.** `turn.completed` now carries `EndsTurn`, and
+`applyEvents` grew a third branch for a spawn-per-turn seat that names its own end of turn — a
+case that did not exist before, because the batch CLIs all ended a turn by dying. That branch
+**settles the column without retiring it**: phase to `done`, elapsed stamped at the answer, body
+completed, and the seat stays in `m.turn.live`.
+
+The split is the whole design, and the reason is mechanical rather than tasteful.
+`turnColumnFinished` cancels the turn's context; `runner.Start` kills the child on that context.
+Retiring the column at the marker would therefore **kill the process four seconds early**, and
+that is refused even though the tail measured empty — both probe turns used no tools, so a turn
+that ran commands is unmeasured, and probing one needs `danger-full-access`, which a probe does
+not get. Shortening a vendor's life on evidence that does not cover the case is the
+inference-dressed-as-measurement move §4a.1 exists to refuse. The exit still arrives, still runs
+`KindDone`, and still retires the column. It just no longer decides what the column *says*.
+
+Two consequences fell out, and both are corrections rather than costs:
+
+- **The turn clock stops at the answer.** `clock.observe` already ended a turn on `EndsTurn`, and
+  its comment said a spawn-per-turn child never sets it. That comment is now false and is fixed.
+  The old reading billed the linger to the vendor's turn time, so the seat was timed on how long
+  its process took to get out of the way.
+- **`Busy()` and the footer came apart, and had to.** `Busy()` is derived from column phases, so
+  it goes false the moment the seat settles — correctly: nothing is working. But the turn is still
+  live, and `q` is refused while a turn is live, so the footer's `Busy()` test would have
+  advertised a key that answers with a notice (§7.8). The footer now asks `InFlight()`
+  (`Busy() || Settling()`) instead. `Busy()`'s own doc claimed it drove the meaning of `ctrl+c`;
+  it never did — that key reads `Model.turn` — and the stale claim is corrected rather than
+  preserved.
+
+**The linger is rendered, not hidden.** Between the two moments the room would otherwise go
+completely quiet — no spinner, every column reading `done` — with the composer still locked. That
+is a room that looks wedged for a different reason than before, which is not a fix. So a settled
+seat renders `done 4s exiting`: a WORD, after the clock so it cannot be read as part of the
+figure, and a word rather than a glyph or a colour because what it prevents is a reader concluding
+the room is stuck, and that reader may be on `--ascii` or `NO_COLOR` (§7.1 rule 2).
+
+**What is NOT claimed.** The linger's cause is still unknown — this block measures when it starts
+and ends and what does not happen during it, and nothing about why the vendor holds the process
+open. `codex app-server` (§9.33's third arm) has no linger at all because the process is meant to
+stay up, so the seat-move case gains an argument here; it is recorded, not acted on, exactly as
+§9.33 left it.
+
+**Spend:** two billed turns, both trivial prompts on `read-only`.
+
 ### 9.34 the rebuttal stopped naming its authors
 
 A `ctrl+r` turn used to quote each seat's answer under its vendor's name: *"quoted reply from

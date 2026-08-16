@@ -179,8 +179,16 @@ func (c *clock) observe(ev Event) {
 	c.sawOutput(time.Now())
 	if ev.EndsTurn {
 		// A process that will take another turn says the turn is over with a
-		// line, and only the adapter knows which line that is. A spawn-per-turn
-		// child never sets this and ends on its exit instead.
+		// line, and only the adapter knows which line that is.
+		//
+		// This used to add "a spawn-per-turn child never sets this and ends on
+		// its exit instead", and that is no longer true: the codex adapter sets
+		// it on `turn.completed` and then the process lingers seconds before
+		// dying. Which is the honest boundary for a CLOCK, not merely a tolerable
+		// one — the old reading billed that linger to the turn, so the seat was
+		// timed on how long its process took to get out of the way. end() is a
+		// no-op once closed, so the exit's own end() below is now the fallback
+		// for a child that dies without ever naming its end of turn.
 		c.end(time.Now())
 	}
 }

@@ -331,6 +331,28 @@ type Column struct {
 	// Quoted reports that the current turn's brief carried the other seats'
 	// previous answers.
 	Quoted bool
+	// Settling reports that this seat has ANSWERED but its process has not
+	// exited yet — the column is terminal, the turn is not.
+	//
+	// It exists for one vendor's measured behaviour and is written to name the
+	// general case rather than that vendor. Codex ends a turn with a
+	// `turn.completed` line and then lingers seconds before exiting (4.06s and
+	// 4.25s measured 2026-08-16 on codex-cli 0.147.0; 7.94s in §9.33 on the same
+	// build). The column settles on the line, because a seat that has delivered
+	// its answer is not working; the TURN cannot end until the process is gone,
+	// because the turn's context is what kills the child and the process may
+	// still be doing vendor-side bookkeeping this repo has not measured.
+	//
+	// Rendering it is not decoration. Between those two moments the room has no
+	// spinner and every column reads `done`, which is the picture of a finished
+	// turn — while the composer is still locked and `q` is still refused. One
+	// word on the column is what keeps that from being a room that has silently
+	// stopped responding (§7.8).
+	//
+	// Cleared by finishColumn, which is the one place every retirement passes
+	// through, and by startTurn, so a seat cannot carry it into a turn it is
+	// answering fresh.
+	Settling bool
 	// Note carries the one-line reason for Failed/Cancelled, and the
 	// explanation on an unavailable column.
 	Note string
@@ -557,6 +579,9 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	c.Note = ""
 	c.NoteDetail = ""
 	c.NoteCalm = false
+	// A seat dispatched to again is working, whatever its last process was still
+	// doing when the room moved on.
+	c.Settling = false
 	// This seat is in the turn, so whatever it sat out is behind it now.
 	c.Skipped = false
 	// The marker retires the moment the brief it was warning about is sent: from
@@ -1173,8 +1198,13 @@ func NewState() State {
 // disagree about whether anything is asking.
 func (s State) Asking() bool { return !s.GateOff }
 
-// Busy reports whether any column is still working. Drives the spinner and the
-// meaning of ctrl+c.
+// Busy reports whether any column is still working. Drives the spinner.
+//
+// It used to say it drove the meaning of ctrl+c as well. It never did — that
+// key reads Model.turn (program.go) — and the distinction stopped being
+// pedantic once a column could settle ahead of its process: Busy goes false
+// while the turn is still live, so a footer that had spent this predicate on
+// ctrl+c would have offered `q` into a turn that refuses it. See Settling.
 func (s State) Busy() bool {
 	for _, c := range s.Columns {
 		if c.Phase == PhaseWaiting || c.Phase == PhaseStreaming {
@@ -1183,6 +1213,32 @@ func (s State) Busy() bool {
 	}
 	return false
 }
+
+// Settling reports that a seat has answered and its process has not exited.
+//
+// The room is between two true things here: nothing is working, and the turn is
+// not over. Derived from the columns rather than stored, for the same reason
+// Gating is — a second home for the fact is a second thing to forget to reset.
+func (s State) Settling() bool {
+	for _, c := range s.Columns {
+		if c.Settling {
+			return true
+		}
+	}
+	return false
+}
+
+// InFlight reports that a turn is not finished, whether or not anything is
+// still producing output. It is what the FOOTER asks before it chooses between
+// offering `ctrl+c cancel` and `q quit`.
+//
+// Busy alone was that test, and it was right for exactly as long as a column's
+// last phase change and its process's death were the same event. They are not
+// on a seat that settles early, and the failure is not cosmetic: `q` is refused
+// outright while a turn is live, so the footer would name a key that answers
+// with a notice. A footer must never advertise a key that does nothing (§7.8,
+// and the same argument that dropped `f` and `tab` from a one-seat room).
+func (s State) InFlight() bool { return s.Busy() || s.Settling() }
 
 // Gating reports that a vendor is blocked on a decision.
 //

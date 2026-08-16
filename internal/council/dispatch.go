@@ -848,6 +848,60 @@ func (m *Model) applyEvents(batch []runner.Event) {
 					c.Body = "[Turn completed with 0 text chunks streamed]"
 				}
 				m.finishColumn(c, PhaseDone)
+			} else if ev.EndsTurn {
+				// A SPAWN-PER-TURN seat that names its own end of turn, which
+				// until now nothing did: the batch CLIs ended a turn by dying and
+				// the column read the exit. Codex says it twice — `turn.completed`
+				// and then, seconds later, the exit — and the gap between the two
+				// is dead time the column used to render as `streaming`. Measured
+				// at 4.06s and 4.25s on codex-cli 0.147.0, and at 7.94s in §9.33
+				// on the same build; on a demo stage that reads as a hang.
+				//
+				// So the PHASE settles here and the RETIREMENT does not. The
+				// column stops claiming to work, stamps the elapsed it actually
+				// earned, and stays in m.turn.live — which is the whole point of
+				// splitting them. turnColumnFinished is what cancels the turn's
+				// context, and that context is what runner.Start kills the child
+				// on, so retiring here would kill a process that is still winding
+				// down. The tail was measured empty (vendors/codex.go carries the
+				// capture) but only for a turn that ran no tools, and shortening a
+				// vendor's life on evidence that does not cover the tool path is
+				// the inference-not-measurement move ADR-001 exists to refuse.
+				// The exit still arrives, still runs KindDone, and still retires
+				// this column; it just no longer decides what the column SAYS.
+				//
+				// Elapsed is stamped here rather than left to finishColumn, and
+				// that is a correctness change of its own: finishColumn only fills
+				// it when it is zero, so the number the column keeps is now the
+				// time to the ANSWER instead of the time to the process's exit.
+				// The old figure billed the user four seconds of nothing.
+				//
+				// The body is completed here too. flush ran at the top of this
+				// branch, this is the vendor's last line on both captures, and a
+				// column that says `done` while its placeholder is still four
+				// seconds away would be settling into a lie about a different
+				// field.
+				if strings.TrimSpace(c.Body) == "" {
+					c.Body = "[Turn completed with 0 text chunks streamed]"
+				}
+				if c.Elapsed == 0 && !c.Started.IsZero() {
+					c.Elapsed = time.Since(c.Started)
+				}
+				if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
+					c.Phase = PhaseDone
+					// Settling is the linger made visible. Without it the room
+					// goes quiet — no spinner, every column reading `done` — while
+					// the composer is still locked and the footer offers `q`,
+					// which key() then refuses. That is §7.8's surprise, created
+					// by this very change, so the fact that produced it is put on
+					// screen rather than left to be inferred.
+					c.Settling = true
+				}
+				// NOT cancellation-aware, unlike finishColumn. A ctrl+c during the
+				// linger cannot un-answer a turn that already answered: the reply
+				// is on screen and in the vendor's rollout. The keystroke kills the
+				// process, KindDone lands on a column that is already terminal, and
+				// `done` is what it stays.
 			}
 
 		case runner.KindDone:
@@ -1071,6 +1125,11 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 	// retirement passes through; the per-event flushes remain and are
 	// harmless — a flushed redactor yields "".
 	c.Body += m.flush(c.Vendor)
+	// The linger is over by definition: every path into this function is the
+	// process ending, one way or another. Cleared here rather than in the
+	// KindDone branch so a seat that settles and then FAILS its exit — or is
+	// killed by a ctrl+c during the linger — cannot keep the word either.
+	c.Settling = false
 	// Whatever this seat was waiting to be told, it is no longer waiting. A card
 	// left up for a vendor that has stopped asking invites a keystroke that
 	// decides nothing, and the footer would go on claiming the room is gated.
