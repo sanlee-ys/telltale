@@ -53,11 +53,11 @@ archives with a `checksums.txt`. Read the per-download verification labels on th
 release itself before you pick one — they say what was measured, and they differ by
 platform.
 
-One honest note on the scoop line below, in this project's usual terms: the manifest is
-committed and **mechanically** verified — its URL resolves and its SHA-256 matches the
-published archive byte for byte — but no one has yet run `scoop install telltale` on a
-machine, so the install itself is unexercised rather than proven. Building from source
-is the path this project runs every day.
+One honest note on the scoop line below, in this project's usual terms: the install was
+exercised once, on Windows 11 on 2026-08-14 — scoop verified the archive's SHA-256
+itself, the installed binary reported `telltale 0.2.0`, and `telltale doctor` ran clean
+through it. One exercised install is one data point, not a support matrix. Building from
+source is the path this project runs every day.
 
 **From source** — works now:
 
@@ -66,7 +66,7 @@ go build -o telltale.exe ./cmd/telltale
 ./telltale.exe council
 ```
 
-**Windows, scoop** — the bucket is live; the install is unexercised (above):
+**Windows, scoop** — the bucket is live; exercised once on 2026-08-14 (above):
 
 ```
 scoop bucket add telltale https://github.com/sanlee-ys/telltale
