@@ -24,9 +24,10 @@ links, in this order, and each one is the input to the next:
    path is; this one owns only that it must exist first, because both links
    below consume it.
 2. **The first 5-of-5 arena race runs.** Every seat racing one brief at once.
-   The grok-seat entry below has said "the next race is 5-of-5" since the
-   fifth seat landed, and it has not run — so a five-seat room is still a
-   claim this project has never driven under load.
+   **RAN, 2026-08-15/16, race t9** — three clean finishes with commit receipts,
+   two seats given up with `x` after vendor-side stalls, both keeping their
+   receipts, and `/adopt` exercised through its dirty-room refusal and then
+   cleanly. The full record is design.md §9.37's dated payment block.
 3. **The launch post fires.** The post, the install it points at, and a reader
    who arrives at the room the post described.
 
@@ -64,9 +65,12 @@ copies, the gates and the argument; this file does not restate any of them.
      enter, the composer footer states the resolved ROUTE: the seat names, plus
      the seat count from two seats up. The footer says which seats the turn
      reaches. It shows no money, and this beat must never promise a price.
-     **Awaiting its first live run.** The demo pastes a multi-line brief, and
-     [design.md §9.38](docs/design.md) records that a pasted draft has never
-     been sent with enter. Typing the brief is the fallback.
+     **Paid, 2026-08-15/16.** A pasted three-line brief was sent with enter:
+     one dispatch, and the newlines verified as bytes in the seat's own
+     transcript ([design.md §9.38](docs/design.md)'s dated payment). One
+     caveat rides with it: the composer DREW the three-line draft as one row
+     (the render gap below), so the demo should type or paste the brief and
+     trust the wire, not the row count.
   4. **One honesty beat.** A column whose vendor reported no cost renders no
      cost cell at all. A turn that reported zero renders `$0.0000`. The two
      states stay apart on screen. The `~` estimate marker is NOT on this
@@ -80,10 +84,10 @@ copies, the gates and the argument; this file does not restate any of them.
      phase word and its own clock. An attempt that changed something shows
      `committed <sha>.`. `/adopt` cuts `adopt/t<N>-<vendor>` behind a y/n card
      and merges the attempt there.
-     **Awaiting its first live run, twice over.** No 5-of-5 race has ever run:
-     grok landed after the last full race, so the next race is the first with
-     five seats. No live race has watched the `arena · so far` stat grow from a
-     non-empty read either ([design.md §9.37](docs/design.md)).
+     **Paid, 2026-08-15/16, race t9 — both halves.** The first 5-of-5 ran, and
+     two columns were watched drawing a non-empty `arena · so far` that GREW
+     before the settled block replaced it ([design.md §9.37](docs/design.md)'s
+     dated payment carries the full record, including the two give-ups).
   7. **`telltale hud`.** The grid shows the fleet at a glance. `enter` opens the
      detail pane, whose `not sourced` line names the fields that vendor can
      never source. A `~` on a context cell marks a percentage telltale computed
@@ -92,9 +96,9 @@ copies, the gates and the argument; this file does not restate any of them.
      of JSON carries the same truth as the grid, for a reader that is a program.
      Absent is `null`, a measured zero is `0`, and no optional key is omitted.
 
-  **The path is recorded, not frozen.** Beats 3 and 6 keep their markers until
-  the owner's next drive pays them. Do not strike a marker without a live run
-  behind it, and do not write down a result neither beat has produced.
+  **The path is frozen as recorded.** Both markers were paid by the owner's
+  drive on 2026-08-15/16 (race t9), each with a live run behind it. The one
+  residue is beat 3's render caveat, owned in the gaps below.
 
 - **The Grok seat is landed, was broken on its first live turn, and is fixed.**
   The fifth seat (§9.39) is built, registered, and verified end to end against
@@ -119,9 +123,12 @@ copies, the gates and the argument; this file does not restate any of them.
   agent-ops ADR-012 is an open obligation on the fleet rather than a reason to
   avoid the seat. That work belongs in agent-ops, not here.
 
-  It also arrived AFTER race t9 below, which is why that entry still says four
-  seats: t9 raced the room as it was that morning, and a record of what ran is
-  not a place to write down what would run today. The next race is 5-of-5.
+  It also arrived AFTER the first race t9 below (2026-08-09), which is why that
+  entry says four seats: a record of what ran is not a place to write down what
+  would run today. The first 5-of-5 has since run — the SECOND race numbered t9
+  (2026-08-15/16; the first t9's branches were cleared, and race numbers come
+  from the refs, so the number was honestly re-minted — lifecycle.go rules that
+  intended). Design.md §9.37's dated payment block is that race's record.
 
 - **The arena family's live debt is PAID IN FULL** (2026-08-14). Everything
   below this paragraph is the history of how it got there; nothing in it is
@@ -203,11 +210,11 @@ copies, the gates and the argument; this file does not restate any of them.
   1. **A scripted fallback demo tape** (optional, taste work): a checked-in
      recording script (e.g. VHS) that captures the demo path end-to-end, so
      a vendor or network failure on the day cannot erase the presentation.
-     **Unblocked 2026-08-15, and now waiting on the drive rather than on a
-     decision.** The demo path is defined above, so there is a route to
-     record. Two of its beats still carry an awaiting-first-live-run marker,
-     and a tape cut before that drive would script a claim nobody has watched.
-     Record it after the drive pays those two beats.
+     **Recordable as of 2026-08-15/16.** The demo path is defined above and
+     both of its markers are paid, so a tape now captures claims somebody has
+     watched. The recording chain is its own decision (the research sweep's
+     roadmap names PowerSession-rs + agg and the reasons VHS cannot record on
+     this machine); nothing here picks it.
 
   Post-demo shelf — decided, deliberately not queued: a measured-silence
   advisory ("no event for 5m", never "stalled"); rendering an explicit
@@ -305,6 +312,29 @@ Nothing open. The last one here was the 44 seconds, and it was measured
 2026-08-08; the finding and the unowned work left over from it are below.
 
 ## Known gaps, not yet owned
+
+- **OBSERVED 2026-08-15/16, the drive that paid the demo path found three.**
+  Each was measured once, in a live 5/5 room on Windows Terminal 1.24.11911.0;
+  none is owned.
+  1. **The composer draws a multi-line draft as one row.** The pasted
+     three-line brief reached the seat with its newlines intact — verified as
+     bytes in the vendor's session transcript — while the composer rendered
+     the draft as a single row before enter. The 2026-08-13 check drew three
+     rows in a ONE-seat room on the same terminal build, so the suspect is the
+     composer's height behavior under a full seat strip, not the paste path.
+     The wire is right and the drawing is wrong (design.md §9.38's dated
+     amendment carries both halves).
+  2. **`/trace` records nothing for an arena turn.** The trace was armed
+     before the race and the file holds only the preceding ordinary turn's
+     line. An arena turn therefore produces no per-seat spawn/wait/stream
+     split — which is exactly the split the ATTRIBUTED bullet below still
+     lacks for grok, and why it stays lacking.
+  3. **The room opened with workspace `~` instead of restoring the saved
+     repo.** The reattach restored the roster (5/5 came back) but the
+     workspace cell read `~`, and `/trace dist/…` resolved against the home
+     directory until a hand `/cd`. Whether an intervening session legitimately
+     saved `~` or the restore dropped the field is undetermined — check
+     `~/.telltale/council/room.json`'s history before assuming either.
 
 - **UNMEASURED, 2026-08-12. Council now adds a `PreToolUse` hook to a file the
   operator also populates, and the two have never been run together.** This is
