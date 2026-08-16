@@ -91,6 +91,14 @@ jobs:
           if ($out -match '\$') { throw "honest-gauge violation: cost rendered for a vendor with no cost field: $out" }
           $claude = Get-Content internal/statusline/testdata/full.json -Raw | ./telltale.exe statusline
           if ($claude -notmatch 'Opus') { throw "Claude payload misrouted after the product probe: $claude" }
+          # full.json carries the real 2.1.233 context_window token block. Those
+          # counts describe ONE API call and total_input_tokens is the window's
+          # occupancy, so the statusline must render none of them (design.md
+          # §7.16b) — asserted here on the shipped binary, not just the package.
+          if ($claude -match '16000|12000|2800|1200') { throw "honest-gauge violation: a per-API-call token count rendered: $claude" }
+          # ...and must relay none of them. The token relay accumulates per-turn
+          # counts only; there is no per-turn count in this payload to write.
+          if (Test-Path "$env:USERPROFILE\.telltale\usage\claude.json") { throw "the Claude statusline wrote a token relay; §7.16b measured no per-turn count it could honestly write" }
       - name: Smoke (Cursor routing through the real binary)
         shell: pwsh
         run: |
@@ -116,6 +124,12 @@ jobs:
           # This payload has no quota, no rate limit and no cost, so the relay
           # must stay silent for it — an empty reading is still a reading.
           if (Test-Path "$env:USERPROFILE\.telltale\quota\cursor.json") { throw "quota relay wrote for a vendor whose payload carries no quota" }
+          # Nor a token relay, for the same reason §7.16b asserts it for Claude:
+          # this payload's only token-shaped numbers are the two the CLI derives
+          # from used_percentage, and they are not on the struct at all (§2.2).
+          # The cursor HOOK writes this same file, which is why the assertion
+          # lives here — before the hook smoke step further down creates it.
+          if (Test-Path "$env:USERPROFILE\.telltale\usage\cursor.json") { throw "the Cursor statusline wrote a token relay; its only token-shaped numbers are CLI-derived" }
       - name: Smoke (quota relay through the real binary)
         shell: pwsh
         run: |
