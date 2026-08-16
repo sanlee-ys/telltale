@@ -4168,10 +4168,22 @@ can land in one shape: any process that can pipe JSON is a source. `tools/emit-e
 the reference emitter (stdlib-only Python, no dependency to install): it reads the hook payload
 on stdin, promotes the fields a reader filters on (`tool_name`, `tool_use_id`, `error`,
 `agent_id`, `agent_type`, `stop_hook_active`), stamps epoch-millisecond time, and POSTs.
-Its hard rules are the hook contract: a 5 second timeout, no retry, and exit 0 on every
-path — a sink that is down costs the agent at most 5 seconds and one stderr line, never a
-failed turn. There is no summarization pass anywhere: the payload travels and is stored
-verbatim.
+Its hard rules are the hook contract: a quarter-second connect probe before the POST, a
+5 second timeout on the POST itself, no retry, and exit 0 on every path — a sink that is
+down costs the agent the probe and one stderr line, never a failed turn. There is no
+summarization pass anywhere: the payload travels and is stored verbatim.
+
+**Trap 3 — "5 second timeout" never bounded the down path, and `localhost` was the wrong
+host (measured 2026-08-15, Windows 11, during a fleet-wide slow-hook audit).** A refused
+connect is not a timeout: Winsock retries it internally for ~2 seconds per address family
+before surfacing WinError 10061, so the original emitter — one POST, no probe — cost
+~4.4s of blocked agent time on EVERY hook event while the sink was down (transcripts
+recorded p50 4.3–4.5s per PostToolUse across Read/Bash/Edit/Write). The `localhost`
+default doubled the damage and taxed the up path too: the sink binds `127.0.0.1` only,
+and Windows resolves `localhost` to `::1` first, so every event paid the full retry
+cycle against `::1` before trying the address the sink actually listens on. Hence the
+probe (a 0.25s bounded connect answers "is anyone listening"; measured: down sink now
+costs ~0.26s plus interpreter start) and hence the default URL naming `127.0.0.1`.
 
 **Distribution is one edit per repo.** The wiring pattern is a hook command of the shape
 `python3 <path>/tools/emit-event.py --source-app <repo-name>` — `--source-app` is the only
