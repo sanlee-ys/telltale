@@ -1168,6 +1168,101 @@ the corpus is one machine, one day, one grok version; and `active_sessions.json`
 been observed non-empty **at all**, so "it does not track headless sessions" is the most
 this survey can say about what it would otherwise contain.
 
+#### `active_sessions.json` re-measured 2026-08-15 — the registry populates now, and liveness stays `CapNone`
+
+**Environment:** grok 1.0.4 (d846eb93d9), the same Windows 11 box, model `grok-4.6`, cwd
+`C:\Users\sanle`. The paragraph above is the reason this ran. The 2026-08-09 survey never
+saw the file hold anything, so it could not say what a populated registry would mean. The
+file holds records now, and a record with a **dead pid** was observed surviving overnight.
+That one fact makes the question answerable, so it was measured rather than argued. The
+measurement cost **3 grok model turns**; every other step below is a process start, which
+calls no model.
+
+**The record shape, from two sides.** The live file holds a JSON array of objects with four
+keys, and the binary at this pinned build names the same four: `struct ActiveSession` with
+`session_id`, `pid`, `cwd`, `opened_at`, written by `crates/codegen/xai-grok-active-sessions/src/lib.rs`
+through `active_sessions.lock`, `active_sessions.json.tmp` and `active_sessions.json`. A
+live record read verbatim:
+
+```json
+[
+  {
+    "session_id": "01a0084f-e3b1-7ff2-be5c-2afaed6a6581",
+    "pid": 17096,
+    "cwd": "C:\\Users\\sanle",
+    "opened_at": "2026-08-16T02:04:08.999641600Z"
+  }
+]
+```
+
+`session_id` is the session directory's own UUID, so the record joins to §3.9a's store
+directly. `pid` is the grok.exe process, confirmed against `tasklist` at the moment of
+capture. `cwd` is the workspace in native absolute form, and it equals the `info.cwd` the
+same session writes. `opened_at` is UTC RFC3339 and stamps the OPEN, not the process start:
+a resumed session gets a new `opened_at` and the same `session_id`. The vendor also names
+the failure mode itself, verbatim from the binary: `active_sessions.json is corrupted,
+starting with empty list`.
+
+**The four questions, each measured.**
+
+| Question | Answer | Evidence |
+|---|---|---|
+| Does a session start gain an entry, and is the pid real? | **Only when a session OPENS, and the pid is real.** | A fresh interactive session registered 0.7 s and 1.3 s after the first prompt was submitted, on two runs, and never before it. `pid 17096 -> ALIVE as grok.exe` at capture. A `--resume` registered 1.6 s after launch with **no prompt at all**, which is how the rest of this block was measured for free. |
+| Does a CLEAN exit reap the entry? | **Yes, immediately.** | `/exit` in the TUI returned the file to the two bytes `[]` within 0.3 s of the command, with its mtime freshly stamped. The process removes its own record on the way out. |
+| Does a KILLED process leave the entry behind? | **Yes, and the dead pid persists.** | `taskkill /T /F` on the pid the registry itself named left the record byte-identical, mtime unmoved, for the whole sampling window. `pid 17096 -> DEAD` while the record still claimed it. Reproduced twice, and it confirms the overnight observation deliberately. |
+| What are the exact fields and their meanings? | The four above. | Live file plus the pinned binary's own struct, which agree. |
+
+**The lifecycle, stated as write points.** Four events touch the file, and only these four
+were observed to. A session OPEN appends its record. A clean exit removes that session's
+record. Any grok agent start **rewrites the file and drops records whose pid is dead**. A
+kill removes nothing, so the record outlives the process until the next start sweeps it.
+
+**The sweep is pid-aware, not a truncation, and that was measured separately.** One stale
+record and one live session were put on disk together, then a second grok process was
+started. The stale record disappeared and the live record survived unchanged, so the sweep
+reads each pid rather than clearing the list. This also explains the overnight persistence
+with no contradiction: nothing swept the record because no grok agent started in between.
+
+**What does NOT register, measured one shape at a time.** Each of these ran with the file
+sampled every 0.3 s throughout, and each left it at `[]` while the process was alive:
+`grok -p <prompt>` (a full headless turn, which is the 2026-08-09 result reproduced at
+1.0.4), `grok agent stdio`, `grok agent leader`, and an interactive TUI sitting at its
+input box with a session directory already created and no prompt yet sent. Every one of
+those starts moved the file's mtime, so the vendor wrote the file and put nothing in it,
+exactly as the original survey found. `grok --version` does not touch the file at all.
+
+**Verdict: liveness stays `CapNone`, and §4a.4's ruling is not falsified.** A populated
+registry is not a liveness source, because both directions fail:
+
+- **Presence proves nothing.** A record can name a dead pid for an unbounded time. The
+  bound is the next grok agent start, which is an event telltale cannot predict and must
+  not cause. An adapter that read presence would report a session as live all night.
+- **Absence proves nothing.** Four live session shapes register nothing at all, and a
+  headless turn is one of them. An adapter that read absence would report a running turn as
+  gone.
+
+§4a.4 rules process-existence out for every vendor, and it named Claude's registry only as
+the first instance. A grok registry that populates is a different fact from a grok registry
+that is trustworthy, and only the second one would touch that ruling. It does not.
+
+**One usable shape falls out, and it is recorded rather than spent.** The registry supplies
+a `session_id` to `pid` binding, and a dead pid is checkable directly. So a stale
+`permission_requested` in `events.jsonl` (the needs-input seam §3.9a already recorded and
+declined) **can be NEGATED by a dead pid, and can never be ASSERTED by a live one**. The
+asymmetry is the whole content of the finding, and it survives its own caveats in one
+direction only. A recycled pid reads ALIVE, which withholds a negation rather than
+inventing one, so the failure is conservative. A session that never registered cannot be
+negated, which costs coverage and claims nothing false. Nothing is built on this. The
+measured-silence advisory that would consume it sits on the post-demo shelf by owner
+ruling, and this block exists so that work starts from a measurement instead of a memory.
+
+**What this does not cover.** Every registering session ran in one cwd on one box at one
+build. No two sessions were ever registered at once, so the multi-record ordering is
+unmeasured. `active_sessions.lock` was never opened and `active_sessions.json.tmp` was
+never observed mid-write, so the write is atomic by the vendor's own naming rather than by
+observation here. The adapter reads none of these bytes, and this measurement did not
+change that.
+
 ### 3.10 The canary set — what each adapter actually watches
 
 Every survey above pins an adapter to a private, unversioned on-disk format. §7 records how

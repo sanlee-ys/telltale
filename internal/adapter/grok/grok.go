@@ -72,6 +72,28 @@
 // activity timestamp, and the HUD classifies liveness from its age against the
 // one shared threshold set, identically for every vendor.
 //
+// RE-MEASURED 2026-08-15 at 1.0.4, because the file populates now and the
+// survey above could only say it was empty. The verdict does not move, and it
+// now rests on a harder measurement rather than on an absence. The record is
+// `session_id`, `pid`, `cwd`, `opened_at`. A session registers when it OPENS (a
+// fresh session at its first prompt, a `--resume` at launch), a clean exit
+// removes its own record, and any grok agent start rewrites the file and drops
+// records whose pid is dead. A KILLED process removes nothing, so a record can
+// name a dead pid until some later grok start sweeps it — observed surviving
+// overnight, and reproduced deliberately here.
+//
+// Both directions therefore fail, which is what keeps liveness CapNone.
+// Presence proves nothing: a record outlives its process for an unbounded time.
+// Absence proves nothing either: a headless `grok -p` turn, `grok agent stdio`,
+// `grok agent leader` and an idle interactive TUI all run while the file stays
+// `[]`. A populated registry is a different fact from a trustworthy one, and
+// only the second would touch §4a.4's vendor-general ruling.
+//
+// The one usable shape is EXCLUSIONARY and is recorded, not built on: the
+// registry binds a session_id to a pid, so a stale `permission_requested` can
+// be NEGATED by a dead pid and can never be ASSERTED by a live one. design.md
+// §3.9a carries the evidence, the caveats and the reason nothing consumes it.
+//
 // events.jsonl carries a second tempting signal — `phase_changed` (1765 of them
 // in one session), `turn_started`/`turn_ended`, and a `permission_requested`
 // that is a genuine needs-input state. It is left unread in v1 for the reason
@@ -133,9 +155,14 @@ const Vendor = model.VendorGrok
 // it still matches nothing account-level, so quota stays CapNone.
 //
 // What was NOT re-done: the file-presence census across many sessions and many
-// workspaces, and the `active_sessions.json` liveness measurement. Those
-// verdicts still rest on the 2026-08-09 survey, and this constant does not
-// promise otherwise.
+// workspaces. That verdict still rests on the 2026-08-09 survey, and this
+// constant does not promise otherwise.
+//
+// The `active_sessions.json` liveness measurement WAS re-done, on 2026-08-15 at
+// this same build, and it is the one part of the survey that now rests on 1.0.4
+// rather than on 1.0.0. See the package doc's liveness section for the result.
+// The adapter still opens none of those bytes, so nothing in the field map
+// moved with it.
 const verifiedAgainst = "grok 1.0.4 (d846eb93d9)"
 
 // canarySummaryInfoID is summary.json's identity envelope, `info.id`.
