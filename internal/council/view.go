@@ -1349,7 +1349,14 @@ func columnStatus(st State, c Column, g Glyphs) string {
 		// Kept after the turn ends. A finished column should still be able to
 		// say how long it made you wait, which is the only way the asymmetry
 		// between a streaming vendor and a final-only one is ever legible.
-		status += " " + dur(c.Elapsed)
+		//
+		// The operator's own share comes back out of it, exactly as it does
+		// while the turn is running (§9.45). The gate is why a turn ends this
+		// side of five minutes, and a `done 5m` that was four minutes of
+		// somebody reading a card is the same false reading after the fact as
+		// during. The test is on the WALL clock, so a turn that was all card
+		// still prints `done 0s` — a measured zero, not a blank.
+		status += " " + dur(vendorElapsed(c.Elapsed, c.GateWait))
 	}
 	return phaseMark(c.Phase, st, g) + " " + status
 }
@@ -1396,14 +1403,17 @@ func phaseMark(p Phase, st State, g Glyphs) string {
 }
 
 // elapsed is how long the current turn has been running, from State.Now rather
-// than the clock, so Render stays pure.
-func elapsed(st State, c Column) string { return elapsedSince(st, c.Started) }
+// than the clock, so Render stays pure — minus whatever of it was the operator's
+// own (§9.45).
+func elapsed(st State, c Column) string {
+	return elapsedSince(st, c.Started, operatorWait(st, c.Vendor, c.GateWait))
+}
 
 // elapsedSince is elapsed with the start time named rather than carried on a
 // Column, for the by-turn page's own seat rules (§9.22). Same purity contract:
 // the answer comes from State.Now, which a tick stamps, and never from a clock
 // inside Render.
-func elapsedSince(st State, started time.Time) string {
+func elapsedSince(st State, started time.Time, op runner.Span) string {
 	if started.IsZero() || st.Now.IsZero() {
 		return ""
 	}
@@ -1411,8 +1421,98 @@ func elapsedSince(st State, started time.Time) string {
 	if d < 0 {
 		return ""
 	}
-	return dur(d)
+	return dur(vendorElapsed(d, op))
 }
+
+// operatorWait is the OPERATOR's share of the turn running on one seat: the
+// stretches that have already ended, plus the one that is open right now
+// (§9.45).
+//
+// The open stretch is measured here, against State.Now, and that is the same
+// split Reattach.SavedAt uses: the room stamps when a card went up (queueGate)
+// and the renderer turns that stamp into an age. Nothing here reads a clock, so
+// two renders of one State agree and the goldens stay reproducible.
+//
+// An open card with no stamp adds NOTHING and does not make the span measured.
+// Every State a test types out by hand is unstamped, and inventing a duration
+// for one would be exactly the derived-figure error §4a.1 puts at the top of the
+// rejected list — the room would be reporting a wait nothing timed.
+func operatorWait(st State, v model.VendorID, closed runner.Span) runner.Span {
+	at, stopped := st.gateStoppedAt(v)
+	if !stopped || st.Now.IsZero() {
+		return closed
+	}
+	if d := st.Now.Sub(at); d > 0 {
+		closed.D += d
+	}
+	// A card is up and the room knows when it went up, so the wait is measured
+	// even before a second of it has passed: `0s` here is the honest reading of
+	// a question just asked, and it is a different statement from the blank a
+	// turn with no card draws.
+	closed.Measured = true
+	return closed
+}
+
+// vendorElapsed takes the operator's share back out of a turn's wall clock.
+//
+// This is the whole correction §9.45 makes. `⋮ streaming 5m` on a seat that was
+// stopped behind an approval card for four of those minutes is a stopped seat
+// rendered as a moving one — the failure TestWaitingIsNotStreaming's family
+// exists to catch, arrived at through the clock instead of through the word. The
+// number under a state word has to be time spent in that state.
+//
+// An unmeasured span changes nothing, which is what keeps every turn that raised
+// no card rendering exactly as it always did. The floor is zero rather than a
+// negative: the two figures are stamped by different code on the same clock, and
+// a turn whose arithmetic crosses is one this room cannot size rather than one
+// that ran backwards.
+func vendorElapsed(total time.Duration, op runner.Span) time.Duration {
+	if !op.Measured {
+		return total
+	}
+	if d := total - op.D; d > 0 {
+		return d
+	}
+	return 0
+}
+
+// operatorCell is the operator's own figure, in the widest spelling the surface
+// allows — and nothing at all when no card was ever raised (§9.45).
+//
+// **Two spellings, one fact, and the SURFACE picks.** `waiting on you 4m48s` is
+// the room's own phrase, already on the approval card and on the NEEDS YOU strip
+// above it, so a reader meets one vocabulary rather than three. It is twenty
+// cells. A three-up grid at 120 columns gives each column thirty-six, where the
+// long form is more than half the width and pushes the turn separator's clock
+// and cost off the line — so the grid sheds the LABEL and keeps the fact,
+// `you 4m48s`, which is §9.18's order (identity yields, the measurement does
+// not) applied to a phrase instead of a name. The by-turn page is full width and
+// says it whole.
+//
+// It is a tier rather than a per-line measurement on purpose, the same way
+// stripHeader and stripBadges pick a form: one rule a reader can learn, instead
+// of a cell that changes wording as a neighbouring number grows a digit.
+//
+// **Unmeasured renders EMPTY and measured-zero renders `0s`.** A turn with no
+// approval card did not cost the operator nothing; it never asked them anything
+// (§4a.1). A card answered inside a second did cost approximately nothing, and
+// that is a reading this room prints.
+func operatorCell(op runner.Span, form bool) string {
+	if !op.Measured {
+		return ""
+	}
+	if form == longForm {
+		return "waiting on you " + dur(op.D)
+	}
+	return "you " + dur(op.D)
+}
+
+// The two spellings operatorCell renders, named so a bare true or false at a
+// call site never has to be decoded against the signature.
+const (
+	shortForm = false
+	longForm  = true
+)
 
 // dur renders a duration at one-second resolution.
 //
@@ -1498,11 +1598,20 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		if n := len(c.History); n > 0 {
 			out = append(out, skipSpan(c.History[n-1].N+1, c.TurnN-1, w, sty, g)...)
 		}
-		// The current turn's separator carries the number and nothing else. Its
+		// The current turn's separator carries the number and ONE figure. Its
 		// clock and its cost are in the column header and the badge line, which
 		// is chrome that describes exactly this turn — repeating them a row
 		// later would be the room saying the same thing twice. A past turn has
 		// no chrome of its own, which is why the record carries them.
+		//
+		// The exception is the operator's own share (§9.45), and it is here
+		// because there is nowhere in the chrome to put it. The header is full:
+		// `▸ 1 CC Claude Code` and `⠋ streaming 12s` already spend thirty-three
+		// of a column's thirty-six cells, and the badge line's right edge is the
+		// cost's. So the figure that says where the missing minutes went sits on
+		// the line that names the turn they belong to — the same line that
+		// carries it for every turn already in the transcript (historyMeta), so
+		// the live turn and the filed one state it in one place and one spelling.
 		anchors = append(anchors, turnAnchor{N: c.TurnN, Off: len(out)})
 		// The echo yields to the band, and only the LIVE turn's does (§9.30).
 		// While the band is up the user's words are on screen once, full width,
@@ -1520,7 +1629,9 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		if c.TurnN == st.Turn && bandUp(st, g) {
 			prompt, quoted = "", false
 		}
-		out = append(out, turnHead(c.TurnN, "", prompt, quoted, w, sty, g)...)
+		out = append(out, turnHead(c.TurnN,
+			operatorCell(operatorWait(st, c.Vendor, c.GateWait), shortForm),
+			prompt, quoted, w, sty, g)...)
 	}
 
 	// The activity trace comes FIRST and is visually distinct, because it is
@@ -2049,8 +2160,9 @@ func labelRuleIn(label, meta string, w int, ruleGlyph string) string {
 	return s
 }
 
-// historyMeta is what a past turn reported: how it ended, how long it took, and
-// what it cost — on exactly the terms the live chrome states them.
+// historyMeta is what a past turn reported: how it ended, how long the VENDOR
+// took, how long it waited on the operator, and what it cost — on exactly the
+// terms the live chrome states them.
 func historyMeta(h TurnRecord) string {
 	var parts []string
 	// Only a turn that ended badly names its phase. "done" on every separator
@@ -2060,7 +2172,14 @@ func historyMeta(h TurnRecord) string {
 		parts = append(parts, h.Phase.String())
 	}
 	if h.Elapsed > 0 {
-		parts = append(parts, dur(h.Elapsed))
+		parts = append(parts, dur(vendorElapsed(h.Elapsed, h.GateWait)))
+	}
+	// Beside the clock it was taken out of, and in that order, because the two
+	// numbers are one accounting: this is what the vendor spent, this is what
+	// you did (§9.45). The grid's short spelling — the column is thirty-six
+	// cells and this line already carries a label, a clock and a cost.
+	if s := operatorCell(h.GateWait, shortForm); s != "" {
+		parts = append(parts, s)
 	}
 	if h.CostUSD != nil {
 		cost := "$" + strconv.FormatFloat(*h.CostUSD, 'f', 4, 64)

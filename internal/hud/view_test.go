@@ -1118,6 +1118,33 @@ func goldenCases() []goldenCase {
 			return st
 		}},
 
+		// The ZERO-CONFIG first frame: what a stranger sees on a clean profile,
+		// before any vendor has written anything. Measured 2026-08-15 by running
+		// the real scan with HOME, USERPROFILE and APPDATA pointed at an empty
+		// directory — six vendors, every one `not detected`, and it is the one
+		// empty state that carries the doctor pointer, because it is the one
+		// where "is anything even installed?" is the reader's next question and
+		// this screen cannot answer it (§7.7).
+		{name: "empty-nothing-detected", state: func() State {
+			st := NewState()
+			st.Now = pinned
+			st.Width, st.Height = 120, 14
+			st.Snap = Snapshot{
+				At: pinned,
+				Vendors: []VendorView{
+					{Vendor: model.VendorAntigravity, Root: `%USERPROFILE%\.gemini\antigravity-cli`,
+						Status: StatusNotDetected},
+					{Vendor: model.VendorClaude, Root: `%USERPROFILE%\.claude\projects`,
+						Status: StatusNotDetected},
+					{Vendor: model.VendorCodex, Root: `%USERPROFILE%\.codex`, Status: StatusNotDetected},
+					{Vendor: model.VendorCursor, Root: `%APPDATA%\Cursor\User`, Status: StatusNotDetected},
+					{Vendor: model.VendorGemini, Root: `%USERPROFILE%\.gemini\tmp`, Status: StatusNotDetected},
+					{Vendor: model.VendorGrok, Root: `%USERPROFILE%\.grok\sessions`, Status: StatusNotDetected},
+				},
+			}
+			return st
+		}},
+
 		// The third word: the directory exists and the OS refused.
 		{name: "empty-unreadable", state: func() State {
 			st := NewState()
@@ -2708,6 +2735,96 @@ func TestAnEmptyResultNamesTheQuery(t *testing.T) {
 	got := Render(st, PlainStyles(), UnicodeGlyphs())
 	if !strings.Contains(got, `no sessions matching "zzz"`) {
 		t.Errorf("the empty state does not name the query\n%s", got)
+	}
+}
+
+// The zero-config frame names the mode that can answer the question it cannot.
+//
+// Measured 2026-08-15 on a clean profile (empty HOME/USERPROFILE/APPDATA): the
+// empty state said "no active sessions", listed six vendors as `not detected`
+// with the path checked for each, and stopped. Every word true, and a reader
+// still cannot tell a bare machine from one holding five installed vendors that
+// have never been run — this screen reads stores, and an unrun vendor has none.
+// `telltale doctor` resolves the binaries, so it is the next step and the frame
+// says so.
+func TestTheZeroConfigEmptyStateNamesDoctor(t *testing.T) {
+	st := NewState()
+	st.Now = pinned
+	st.Width, st.Height = 120, 14
+	st.Snap = Snapshot{At: pinned, Vendors: []VendorView{
+		{Vendor: model.VendorClaude, Root: `%USERPROFILE%\.claude\projects`, Status: StatusNotDetected},
+		{Vendor: model.VendorCodex, Root: `%USERPROFILE%\.codex`, Status: StatusNotDetected},
+	}}
+	got := Render(st, PlainStyles(), UnicodeGlyphs())
+	if !strings.Contains(got, "telltale doctor") {
+		t.Errorf("a frame with nothing detected anywhere never names the mode that looks for binaries\n%s", got)
+	}
+}
+
+// ...and it is the ONLY empty state that names it. The three neighbours each
+// have a different remedy, and pointing all of them at doctor would be the
+// pointer meaning nothing: a watching store needs no remedy, a drifted one
+// needs the adapter re-verified, and a store the OS refused wants a permission
+// fixed — doctor would report that vendor's binary `ok` and lead the reader
+// away from the answer.
+func TestOnlyTheNothingDetectedFrameNamesDoctor(t *testing.T) {
+	base := func(vs ...VendorView) State {
+		st := NewState()
+		st.Now = pinned
+		st.Width, st.Height = 120, 14
+		st.Snap = Snapshot{At: pinned, Vendors: vs}
+		return st
+	}
+	rows := []*model.Session{sess(model.VendorCodex, "00000000-bbbb-4ccc-8ddd-000000000001",
+		`C:\src\code\notes-api`, "gpt-5.1-codex", 9*time.Hour)}
+	cases := map[string]State{
+		"watching": base(watching(model.VendorClaude, `%USERPROFILE%\.claude\projects`, fullCaps),
+			VendorView{Vendor: model.VendorCodex, Root: `%USERPROFILE%\.codex`, Status: StatusNotDetected}),
+		"unreadable": base(
+			VendorView{Vendor: model.VendorClaude, Root: `%USERPROFILE%\.claude\projects`,
+				Status: StatusUnreadable, Err: "Access is denied."},
+			VendorView{Vendor: model.VendorCodex, Root: `%USERPROFILE%\.codex`, Status: StatusNotDetected}),
+		"drifted": func() State {
+			st := base(drifted(model.VendorCodex, `%USERPROFILE%\.codex`, fullCaps, rows))
+			st.Snap.Sessions = rows
+			return st
+		}(),
+	}
+	for name, st := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := Render(st, PlainStyles(), UnicodeGlyphs()); strings.Contains(got, "telltale doctor") {
+				t.Errorf("the %s frame points at doctor, which is not its remedy\n%s", name, got)
+			}
+		})
+	}
+}
+
+// No vendor looked for is not every vendor missing. A snapshot with an empty
+// vendor slice has no table under the heading for the pointer to conclude
+// anything about, and asserting "nothing is installed" from a scan that named
+// nothing is the invented claim §4a.1 refuses one level up.
+func TestAnEmptyVendorListIsNotNothingDetected(t *testing.T) {
+	if nothingDetected(nil) {
+		t.Error("a snapshot that looked for no vendor claims every vendor is missing")
+	}
+}
+
+// The remedy gives way before the frame does — council's collapsedNotice rule,
+// applied here for its reason: it is the least urgent line on screen, so a
+// terminal too narrow to hold it drops it whole rather than tearing the frame.
+func TestTheDoctorPointerIsShedRatherThanTearingTheFrame(t *testing.T) {
+	for _, w := range []int{MinWidth, 60, 72, 80, 120} {
+		st := NewState()
+		st.Now = pinned
+		st.Width, st.Height = w, 14
+		st.Snap = Snapshot{At: pinned, Vendors: []VendorView{
+			{Vendor: model.VendorClaude, Root: `%USERPROFILE%\.claude\projects`, Status: StatusNotDetected},
+		}}
+		for _, line := range strings.Split(Render(st, PlainStyles(), UnicodeGlyphs()), "\n") {
+			if got := lipgloss.Width(line); got > w {
+				t.Errorf("width %d: the empty state draws %d columns", w, got)
+			}
+		}
 	}
 }
 

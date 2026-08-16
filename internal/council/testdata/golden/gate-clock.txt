@@ -1,0 +1,24 @@
+  council READ  │  ~/code/telltale                                                  turn 1  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  › split the operator's wait out of the turn clock                                                                     
+                                                                                                                        
+▌ ▸ 1 CC Claude Code ⠋ streaming 12s    │    2 CX Codex  ───────  ✓ done 1m36s  │    3 AG Antigravity  ─  ✓ done 1m36s  
+▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
+▌ ⚠ waiting on you: Write:              │                                       │                                       
+▌   internal/council/clock.go           │                                       │                                       
+▌   y approve   n deny   a stop asking  │                                       │                                       
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▌                                       │                                       │  turn 1  ───────────────────  you 0s  
+▌ turn 1  ─────────────────  you 4m48s  │  turn 1  ───────────────────────────  │  Asked once and was answered at       
+▌ I need to write the new file.         │  Nothing here needed asking about.    │  once.                                
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  GATE  ─╯  
+                Write: internal/council/clock.go  │  y approve  │  n deny  │  a stop asking  │  ctrl+c cancel the turn  

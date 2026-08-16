@@ -1276,6 +1276,101 @@ the corpus is one machine, one day, one grok version; and `active_sessions.json`
 been observed non-empty **at all**, so "it does not track headless sessions" is the most
 this survey can say about what it would otherwise contain.
 
+#### `active_sessions.json` re-measured 2026-08-15 — the registry populates now, and liveness stays `CapNone`
+
+**Environment:** grok 1.0.4 (d846eb93d9), the same Windows 11 box, model `grok-4.6`, cwd
+`C:\Users\sanle`. The paragraph above is the reason this ran. The 2026-08-09 survey never
+saw the file hold anything, so it could not say what a populated registry would mean. The
+file holds records now, and a record with a **dead pid** was observed surviving overnight.
+That one fact makes the question answerable, so it was measured rather than argued. The
+measurement cost **3 grok model turns**; every other step below is a process start, which
+calls no model.
+
+**The record shape, from two sides.** The live file holds a JSON array of objects with four
+keys, and the binary at this pinned build names the same four: `struct ActiveSession` with
+`session_id`, `pid`, `cwd`, `opened_at`, written by `crates/codegen/xai-grok-active-sessions/src/lib.rs`
+through `active_sessions.lock`, `active_sessions.json.tmp` and `active_sessions.json`. A
+live record read verbatim:
+
+```json
+[
+  {
+    "session_id": "01a0084f-e3b1-7ff2-be5c-2afaed6a6581",
+    "pid": 17096,
+    "cwd": "C:\\Users\\sanle",
+    "opened_at": "2026-08-16T02:04:08.999641600Z"
+  }
+]
+```
+
+`session_id` is the session directory's own UUID, so the record joins to §3.9a's store
+directly. `pid` is the grok.exe process, confirmed against `tasklist` at the moment of
+capture. `cwd` is the workspace in native absolute form, and it equals the `info.cwd` the
+same session writes. `opened_at` is UTC RFC3339 and stamps the OPEN, not the process start:
+a resumed session gets a new `opened_at` and the same `session_id`. The vendor also names
+the failure mode itself, verbatim from the binary: `active_sessions.json is corrupted,
+starting with empty list`.
+
+**The four questions, each measured.**
+
+| Question | Answer | Evidence |
+|---|---|---|
+| Does a session start gain an entry, and is the pid real? | **Only when a session OPENS, and the pid is real.** | A fresh interactive session registered 0.7 s and 1.3 s after the first prompt was submitted, on two runs, and never before it. `pid 17096 -> ALIVE as grok.exe` at capture. A `--resume` registered 1.6 s after launch with **no prompt at all**, which is how the rest of this block was measured for free. |
+| Does a CLEAN exit reap the entry? | **Yes, immediately.** | `/exit` in the TUI returned the file to the two bytes `[]` within 0.3 s of the command, with its mtime freshly stamped. The process removes its own record on the way out. |
+| Does a KILLED process leave the entry behind? | **Yes, and the dead pid persists.** | `taskkill /T /F` on the pid the registry itself named left the record byte-identical, mtime unmoved, for the whole sampling window. `pid 17096 -> DEAD` while the record still claimed it. Reproduced twice, and it confirms the overnight observation deliberately. |
+| What are the exact fields and their meanings? | The four above. | Live file plus the pinned binary's own struct, which agree. |
+
+**The lifecycle, stated as write points.** Four events touch the file, and only these four
+were observed to. A session OPEN appends its record. A clean exit removes that session's
+record. Any grok agent start **rewrites the file and drops records whose pid is dead**. A
+kill removes nothing, so the record outlives the process until the next start sweeps it.
+
+**The sweep is pid-aware, not a truncation, and that was measured separately.** One stale
+record and one live session were put on disk together, then a second grok process was
+started. The stale record disappeared and the live record survived unchanged, so the sweep
+reads each pid rather than clearing the list. This also explains the overnight persistence
+with no contradiction: nothing swept the record because no grok agent started in between.
+
+**What does NOT register, measured one shape at a time.** Each of these ran with the file
+sampled every 0.3 s throughout, and each left it at `[]` while the process was alive:
+`grok -p <prompt>` (a full headless turn, which is the 2026-08-09 result reproduced at
+1.0.4), `grok agent stdio`, `grok agent leader`, and an interactive TUI sitting at its
+input box with a session directory already created and no prompt yet sent. Every one of
+those starts moved the file's mtime, so the vendor wrote the file and put nothing in it,
+exactly as the original survey found. `grok --version` does not touch the file at all.
+
+**Verdict: liveness stays `CapNone`, and §4a.4's ruling is not falsified.** A populated
+registry is not a liveness source, because both directions fail:
+
+- **Presence proves nothing.** A record can name a dead pid for an unbounded time. The
+  bound is the next grok agent start, which is an event telltale cannot predict and must
+  not cause. An adapter that read presence would report a session as live all night.
+- **Absence proves nothing.** Four live session shapes register nothing at all, and a
+  headless turn is one of them. An adapter that read absence would report a running turn as
+  gone.
+
+§4a.4 rules process-existence out for every vendor, and it named Claude's registry only as
+the first instance. A grok registry that populates is a different fact from a grok registry
+that is trustworthy, and only the second one would touch that ruling. It does not.
+
+**One usable shape falls out, and it is recorded rather than spent.** The registry supplies
+a `session_id` to `pid` binding, and a dead pid is checkable directly. So a stale
+`permission_requested` in `events.jsonl` (the needs-input seam §3.9a already recorded and
+declined) **can be NEGATED by a dead pid, and can never be ASSERTED by a live one**. The
+asymmetry is the whole content of the finding, and it survives its own caveats in one
+direction only. A recycled pid reads ALIVE, which withholds a negation rather than
+inventing one, so the failure is conservative. A session that never registered cannot be
+negated, which costs coverage and claims nothing false. Nothing is built on this. The
+measured-silence advisory that would consume it sits on the post-demo shelf by owner
+ruling, and this block exists so that work starts from a measurement instead of a memory.
+
+**What this does not cover.** Every registering session ran in one cwd on one box at one
+build. No two sessions were ever registered at once, so the multi-record ordering is
+unmeasured. `active_sessions.lock` was never opened and `active_sessions.json.tmp` was
+never observed mid-write, so the write is atomic by the vendor's own naming rather than by
+observation here. The adapter reads none of these bytes, and this measurement did not
+change that.
+
 ### 3.10 The canary set — what each adapter actually watches
 
 Every survey above pins an adapter to a private, unversioned on-disk format. §7 records how
@@ -2514,6 +2609,84 @@ lost; a stale scan re-announces itself every tick and clears the moment a scan s
 drift does neither, and is the last to go. A single notice wider than the whole line is
 truncated rather than dropped — an ellipsis on a warning still says a warning is there,
 and a footer that dropped its last one would quietly claim nothing is wrong.
+
+#### The zero-config first frame — measured 2026-08-15, then narrowed
+
+The empty states above are all about a machine telltale already lives on. This subsection
+is about the frame before that: what a stranger sees on the first run, with nothing
+configured and no vendor store anywhere.
+
+**It was measured before anything was built.** A clean profile was made by pointing
+`HOME`, `USERPROFILE`, `APPDATA` and `LOCALAPPDATA` at an empty directory and running the
+real binary. The isolation was verified rather than assumed — `telltale snapshot` reported
+`vendors_not_detected: 6` and `sessions: 0`, so no real session leaked into any reading
+below.
+
+| Mode | What a stranger actually saw | Verdict |
+|---|---|---|
+| `telltale` (bare) | all 203 lines of `usageText`, on **stderr**, exit **2** | **fail** — true and useless. Eight modes, no start-here, and a failure code for typing the binary's own name |
+| `telltale hud` | `no active sessions`, then six vendors as `not detected` with the path checked for each | **partial** — every word true and complete, and silent on the reader's next question |
+| `telltale doctor` (vendors present) | five seats, binary path, version, and `not checked` said out loud for auth and network | **pass** on truth, no next step |
+| `telltale doctor` (bare `PATH`) | five `FAILED` rows under `0 checks passed, 5 failed` | **pass** on truth, and the frame most likely to read as telltale being broken |
+| `telltale council` | the room opens; unseatable seats fold out and `collapsedNotice` names each one and why | **pass** — not the zero-config entry point |
+
+The frame the HUD draws on that profile, generated by the build like every render in
+§7.3 — this is `empty-nothing-detected`, and the last line is what this subsection added:
+
+```
+ telltale  │  0 sessions
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                   no active sessions
+
+                             agy      not detected   %USERPROFILE%\.gemini\antigravity-cli
+                             claude   not detected   %USERPROFILE%\.claude\projects
+                             codex    not detected   %USERPROFILE%\.codex
+                             cursor   not detected   %APPDATA%\Cursor\User
+                             gemini   not detected   %USERPROFILE%\.gemini\tmp
+                             grok     not detected   %USERPROFILE%\.grok\sessions
+
+                       telltale doctor checks the vendor binaries; this screen reads their stores
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
+```
+
+**The HUD's gap was not the empty state; it was one question the empty state cannot
+answer.** The HUD reads STORES. A vendor CLI that is installed and has never been run has
+no store, so `not detected` six times is the same picture on a bare machine and on a
+machine holding five unopened vendors. `telltale doctor` resolves the BINARIES, which is
+exactly the missing measurement — so the frame now names it.
+
+Three changes, and the narrowing is the design:
+
+1. **A bare `telltale` prints a short first frame on stdout and exits 0.** A no-argument
+   run is a first run, not a usage error. An unknown SUBCOMMAND keeps stderr and exit 2,
+   because that one is an error and the manual is its correction. `telltale help` is new
+   and reaches `usageText` — before this, every route to the manual was an error path, so
+   the frame could not point at it without inventing a command.
+2. **The HUD's empty state carries one pointer line, in one case only:** every vendor
+   `not detected`, nothing watching, nothing drifted, nothing unreadable. A watching store
+   needs no remedy; a drifted one needs the adapter re-verified; a store the OS refused
+   wants a permission fixed, and doctor would report that vendor's binary `ok` and lead
+   the reader away from the answer. `empty-watching`, `empty-drifted` and `empty-unreadable`
+   are byte-identical after this change, which is the check that the narrowing held.
+3. **`doctor` closes with a `What runs next` paragraph**, branching on the seat count the
+   summary above already printed and claiming nothing more. The no-seat branch says the
+   report is working rather than telltale failing, and still leaves a command that runs.
+
+**Nothing invented, at either end (ADR-001).** `firstFrameText` prints before `main` has
+stat'd a store or resolved a binary, so it asserts nothing about the machine at all — it
+names modes and points at the one that measures, and `TestTheFirstFrameClaimsNothingAboutThisMachine`
+keeps it that way. `nextStep` stays pure over its `Report` and never touches auth or
+network, which are `not checked` on every seat, always.
+
+| Fixture | Condition | Where it is asserted | Assertion |
+|---|---|---|---|
+| `empty-nothing-detected` | six vendors, every one `not detected` | golden + `TestTheZeroConfigEmptyStateNamesDoctor` | The frame names `telltale doctor` — the measurement this screen cannot make. |
+| the other three empty states | watching / drifted / unreadable | `TestOnlyTheNothingDetectedFrameNamesDoctor` | None of them names doctor. A pointer on every frame is a pointer meaning nothing. |
+| no vendor looked for | an empty vendor slice | `TestAnEmptyVendorListIsNotNothingDetected` | Not the same fact as every vendor missing (§4a.1, one level up from the gauge). |
+| narrow terminal | the pointer at `MinWidth`–120 cols | `TestTheDoctorPointerIsShedRatherThanTearingTheFrame` | Shed whole, never wrapped and never past the frame — council's `collapsedNotice` rule, for its reason. |
+| first frame | `firstFrameText` | `TestTheFirstFrameIsShortAndNamesTheModeThatMeasures` | Under 30 lines, and it names every mode it sends a reader to. |
+| doctor next step | no seat ready, and one ready | `TestTheReportSaysWhatToRunNext` | Both branches name a command that runs on the machine just described. |
 
 ### 7.8 Keyboard
 
@@ -4276,10 +4449,22 @@ can land in one shape: any process that can pipe JSON is a source. `tools/emit-e
 the reference emitter (stdlib-only Python, no dependency to install): it reads the hook payload
 on stdin, promotes the fields a reader filters on (`tool_name`, `tool_use_id`, `error`,
 `agent_id`, `agent_type`, `stop_hook_active`), stamps epoch-millisecond time, and POSTs.
-Its hard rules are the hook contract: a 5 second timeout, no retry, and exit 0 on every
-path — a sink that is down costs the agent at most 5 seconds and one stderr line, never a
-failed turn. There is no summarization pass anywhere: the payload travels and is stored
-verbatim.
+Its hard rules are the hook contract: a quarter-second connect probe before the POST, a
+5 second timeout on the POST itself, no retry, and exit 0 on every path — a sink that is
+down costs the agent the probe and one stderr line, never a failed turn. There is no
+summarization pass anywhere: the payload travels and is stored verbatim.
+
+**Trap 3 — "5 second timeout" never bounded the down path, and `localhost` was the wrong
+host (measured 2026-08-15, Windows 11, during a fleet-wide slow-hook audit).** A refused
+connect is not a timeout: Winsock retries it internally for ~2 seconds per address family
+before surfacing WinError 10061, so the original emitter — one POST, no probe — cost
+~4.4s of blocked agent time on EVERY hook event while the sink was down (transcripts
+recorded p50 4.3–4.5s per PostToolUse across Read/Bash/Edit/Write). The `localhost`
+default doubled the damage and taxed the up path too: the sink binds `127.0.0.1` only,
+and Windows resolves `localhost` to `::1` first, so every event paid the full retry
+cycle against `::1` before trying the address the sink actually listens on. Hence the
+probe (a 0.25s bounded connect answers "is anyone listening"; measured: down sink now
+costs ~0.26s plus interpreter start) and hence the default URL naming `127.0.0.1`.
 
 **Distribution is one edit per repo.** The wiring pattern is a hook command of the shape
 `python3 <path>/tools/emit-event.py --source-app <repo-name>` — `--source-app` is the only
@@ -4619,6 +4804,36 @@ that file is the procedure, and neither restates the other.
 What this does **not** discharge: the README hero visual and the zero-config first
 frame are the other two pieces of adoption item 1 and are untouched here, and the
 positioning line still lands with the slice, not ahead of it.
+
+#### The recording chain: PowerSession-rs + agg (measured 2026-08-16)
+
+The demo tape records with **PowerSession-rs 0.1.16 and agg 1.9.0**, both
+installed from winget at user scope with no administrator rights
+(`Watfaq.PowerSession`, `asciinema.agg`). VHS is rejected rather than deferred:
+it cannot record on this Windows build (charmbracelet/vhs #631, dead since
+2025-06) and it renders xterm.js, which is not the Windows Terminal this
+product targets under ADR-002 — a tape of the wrong terminal is the packaging
+form of a rendered guess. The chain was proven against the real binary in
+ascending difficulty, and the hard case passed: `telltale hud` recorded its
+alternate screen (`ESC[?1049h` and `ESC[?1049l` each captured once), its ANSI
+palette colour (47 cyan, 19 green, 7 bright-black foreground codes) and its
+restore. The restore was tested against real scrollback rather than an escape
+count — a marker line, the TUI, a second marker line — and the rendered final
+frame carries both markers and no TUI residue. Two limits are recorded with
+it, because both can produce a tape that looks successful and is not.
+`NO_COLOR` in the recording shell silently strips every hue, which is how the
+first capture came back monochrome. And agg's `--rows` re-runs the byte stream
+at a new size, so it recovers `telltale doctor`'s scrolled-off report (76 lines
+from a 30-row cast) but does nothing for a TUI that drew to the size it read —
+the HUD at `--rows 50` leaves twenty empty rows. The tape's geometry is
+therefore chosen before the recording starts, not after.
+[packaging/tape/README.md](../packaging/tape/README.md) is the runbook and
+carries the full measurement; this paragraph is the decision. **No cast or GIF
+enters this repository**: both captures were inspected, and they carry live
+session names, workspace paths and the absolute path of every vendor binary on
+the machine. The tape stays a personal artifact and the repository holds the
+script that makes it. What remains is not a tooling item — the owner drives the
+eight beats, because a scripted race would be an invented recording.
 
 Neither track discharges what verification already owes: §3.4's remaining passive-tail
 items stay open (§3.7's first live Gemini pass ran and passed 2026-08-03), and
@@ -8206,6 +8421,140 @@ than a detail, and each one is recorded here instead of guessed at:
 So the seat keeps its print-mode invocation for now, and the next lane starts with a number, a
 verified seam, and three named decisions instead of a guess.
 
+#### 2026-08-15: the same rig, pointed at the codex seat, and what a warm thread saves
+
+The rig above measured one vendor. This block runs it against a second one, and answers a
+question `STATE.md`'s 2026-08-08 trace could not. That trace shows the codex seat paying
+`wait=3.688s` before its first byte, while a cold binary start measures 190ms. Nothing said where
+the other ~3.5s went. **This is measurement only. It authorises no seat change.**
+
+**Version pinned first, and the subcommands were driven before they were believed.** Everything
+below is `codex-cli 0.147.0` on Windows 11 (`codex --version`). That is a NEWER build than the one
+`vendors/codex.go` cites. `codex app-server` and `codex app-server generate-json-schema` both
+exist on this build and both ran: the schema command wrote 46 files to a directory, and the server
+answered a live `initialize`. A subcommand named in `--help` is not evidence of a subcommand that
+runs, which is this repo's twice-earned lesson, so both were executed rather than read.
+
+**Instrument:** the installed `codex` binary, argv identical to the seat's first turn in
+`vendors/codex.go` (`-s danger-full-access --skip-git-repo-check --cd <ws> -`), with every stdout
+line stamped against the moment of launch. The prompt is **brief-shaped**: it opens with
+`brief.go`'s own `--- operating context ...---` fence and carries the request under it, because a
+greeting-shaped probe measures a transport the product never uses. One trial per arm, which is
+half of what §9.33 spent. Treat every figure below as one observation.
+
+#### The three-way capture, one identical turn
+
+`codex exec` (human), one trial. The seat does not use this renderer; it is here because it is the
+only arm that shows what the `--json` arm drops.
+
+| stamped line | at |
+|---|---|
+| spawn returned | 0.030s |
+| banner (`OpenAI Codex v0.147.0`) | 0.928s |
+| `hook: SessionStart` | 3.709s |
+| `hook: SessionStart Completed` | 4.201s |
+| the model's answer (`OK`) | 6.800s |
+| `tokens used` / `13,543` | 9.036s |
+| process exit | 15.519s |
+
+`codex exec --json`, one trial. This is the seat's own invocation.
+
+| stamped line | at |
+|---|---|
+| spawn returned | 0.014s |
+| `{"type":"thread.started",...}` | 1.153s |
+| `{"type":"turn.started"}` | 1.554s |
+| `{"type":"item.completed",...,"text":"OK"}` | 5.250s |
+| `{"type":"turn.completed","usage":{...}}` | 5.327s |
+| process exit | 13.266s |
+
+`codex app-server`, one process, one thread, two turns. The fixed half is paid once:
+
+| stamped line | at |
+|---|---|
+| spawn returned | 0.016s |
+| `initialize` response | 0.246s |
+| `thread/start` response, and the `thread/started` notification | 0.572s / 0.573s |
+
+Then the two turns, both on that one open thread:
+
+| turn | `turn/start` sent | `turn/started` | first `item/agentMessage/delta` | `turn/completed` | wait | stream | total |
+|---|---|---|---|---|---|---|---|
+| 1 | 0.576s | 0.836s | 5.085s | 5.259s | **4.509s** | 0.174s | 4.683s |
+| 2 | 5.263s | 5.303s | 6.467s | 6.705s | **1.204s** | 0.238s | **1.442s** |
+
+**A warm turn costs 1.44s, and 1.20s of that is the model.** Turn 2 asked what turn 1 had answered
+and got it right from the same pid, so this is one conversation in one process. Against the same
+prompt through `codex exec --json` the comparison is 1.442s against 5.327s to the last line, or
+against 13.266s to exit.
+
+**Four separate items make up the difference, and only one of them is process start.**
+
+1. **Process and thread start is 0.573s, not 3.5s.** `initialize` answers in 246ms and
+   `thread/start` in a further 326ms. Spawn itself is 16ms, which agrees with the 190ms class of
+   figure and confirms again that spawning was never the cost.
+2. **A `sessionStart` hook runs before the model does, and it is the operator's own.**
+   `hook/started` at 3.151s and `hook/completed` at 3.840s, and the notification names its source:
+   `"sourcePath":"C:\\Users\\sanle\\.codex\\hooks.json"`, `"source":"user"`, `"durationMs":838`.
+   The human arm shows the same hook as `hook: SessionStart` at 3.709s. **This item is
+   machine-specific.** A box with no `hooks.json` would not pay it, so it must never be quoted as
+   a property of the vendor.
+3. **Five MCP servers start on the same path.** `mcpServer/startupStatus/updated` fires for
+   `node_repl`, `context7`, `github`, `kb-agent` and `codex_apps`, and two of them go
+   `starting` to `cancelled` to `ready` across the turn. This is also operator config, and the
+   same caution applies.
+4. **The process lingers after it answers.** `exec --json` printed its last line at 5.327s and
+   exited at 13.266s, which is **7.94s** of linger. The human arm shows 6.48s of the same. §9.36's
+   "kill, never wait" rule was written for a different vendor and a ~2.5s linger. **This vendor's
+   linger is larger, and nothing here checked whether council waits on it.**
+
+**One comparison this block does NOT make.** The `exec --json` arm reached its first line at
+1.153s, well below `STATE.md`'s `wait=3.688s`. That trace ran a real brief through a real room
+with four seats starting at once, and this trial ran a trivial prompt alone. The 3.688s is not
+reproduced here and must not be treated as refuted.
+
+#### The hook question, answered by the captures
+
+**`codex exec --json` is the only one of the three surfaces that hides hook activity.** The human
+renderer prints `hook: SessionStart` and `hook: SessionStart Completed`. The protocol emits
+`hook/started` and `hook/completed`, each carrying the hook's id, event name, source path, source
+and `durationMs`. The `--json` stream emitted **four lines in total** for the whole turn
+(`thread.started`, `turn.started`, `item.completed`, `turn.completed`) and not one of them mentions
+a hook, an MCP server, or a rate limit.
+
+The protocol also carries two things the seat currently reads off disk instead:
+
+```
+{"method":"thread/tokenUsage/updated","params":{...,"tokenUsage":{"total":{"totalTokens":21130,...},"modelContextWindow":258400}}}
+{"method":"account/rateLimits/updated","params":{"rateLimits":{"limitId":"codex","primary":{"usedPercent":2,"windowDurationMins":10080,"resetsAt":1787369304},"secondary":null,"planType":"plus",...}}}
+```
+
+Those are the same fields §3.4 verified in the rollout files, arriving live on a socket. **Nothing
+is built on that here.**
+
+#### Seat-move viability, recorded and not acted on
+
+1. **Thread continuity exists.** `thread/started` arrived live at 0.573s. `thread/resume` is a
+   real request and its schema documents three routes (`thread_id`, `history`, `path`), plus
+   `thread/fork`. The `thread/start` result carries `thread.id`, an identical `sessionId`, and the
+   rollout `path` under `~/.codex/sessions/...`, which is the same id the adapter already reads.
+2. **The sandbox channel exists on this path, and it is wider than `-s`.** `thread/start` takes a
+   `sandbox` parameter, and the live response echoed `"sandbox":{"type":"dangerFullAccess"}`.
+   `turn/start` takes a per-turn `sandboxPolicy`. That is strictly more than `codex exec` offers,
+   where `-s` is first-turn-only and `codex exec resume` rejects it outright. Only
+   `danger-full-access` was driven here.
+3. **The Windows `danger-full-access` finding does NOT carry over, and needs its own re-check.**
+   The evidence is direct rather than inferential: this protocol has a Windows sandbox surface
+   that `codex exec` has no equivalent for. `windowsSandbox/setupStart` and
+   `windowsSandbox/readiness` are client requests, and `windowsSandbox/setupCompleted` and
+   `windows/worldWritableWarning` are server notifications. `vendors/codex.go`'s finding rests on
+   `-s read-only` failing every process spawn, and `read-only` was never sent on this path. Until
+   somebody sends it, the seat's badge rule stands unchanged.
+
+**Spend:** four billed turns. Two arms of one turn each, plus two turns on the app-server thread,
+because a single app-server turn would have reported turn 1's 4.509s as if it were the warm number
+and oversold nothing or undersold everything depending on which row was quoted.
+
 ### 9.34 the rebuttal stopped naming its authors
 
 A `ctrl+r` turn used to quote each seat's answer under its vendor's name: *"quoted reply from
@@ -9991,3 +10340,103 @@ worked and had been dropped for width since §9.29. Nothing was un-shed by hand;
 **No new hues.** The border and the sides are `Rule()`, i.e. muted chrome; the legend keeps the
 exact styles the mode word already had on the mode line, gate included. This change spends
 *shape*, which the palette does not pay for.
+
+### 9.45 the turn clock counted the operator's reading time as the vendor's work (2026-08-15)
+
+**A gated column said `⋮ streaming 5m` while nothing was streaming.** The room was stopped on an
+approval card, the vendor was blocked waiting to be told yes or no, and the five minutes on the
+header were five minutes of a person reading a diff. The number was real wall clock and it was
+still a false reading, because of the word it sat under: `streaming` is a claim that output is
+arriving, and this column had a stopped process behind it.
+
+That is the same failure `TestWaitingIsNotStreaming` was written for, arriving by a different
+route. That test guards the WORD — a seat with nothing to show must not render like a seat that is
+showing something. Nothing guarded the FIGURE under the word. A stopped seat wearing a moving
+seat's clock is the honest-gauge rule broken in the one place §4a.1 cares about most: the
+displayed value no longer describes the thing it is labelled with.
+
+**So the turn clock splits in two, and both halves are measured.** The column header states the
+VENDOR's own time — wall clock minus whatever of it the operator held — and the turn's separator
+states the operator's share beside the number it came out of:
+
+```
+▸ 1 CC Claude Code ⠋ streaming 12s
+  ro:tools  tokens
+⚠ waiting on you: Write:
+  internal/council/clock.go
+  y approve   n deny   a stop asking
+  …
+turn 1  ─────────────────  you 4m48s
+```
+
+Twelve seconds of vendor, four minutes and forty-eight seconds of operator, five minutes of wall
+clock — and the two figures add up to it, which is the property that makes the split worth
+drawing rather than merely correct.
+
+**The stopwatch runs over the SEAT, never over the card.** One assistant message can raise a
+parallel batch of requests and each one blocks separately, so a seat can have three cards up at
+once — and it is stopped ONCE. Summing the cards would bill one person's one wait three times. So
+`PendingGate.StoppedAt` is when the seat stopped, not when the card was raised: the first card of
+a stretch carries its own moment, every later card in the same stretch inherits that stamp, and
+the stretch closes when the LAST card goes. Stamping each card with its own moment was the first
+cut and it was wrong twice — the figure on screen jumped backwards when the first of two cards was
+answered, and the charge lost every second before the newest card, because the stretch's start
+left the queue with the card that owned it.
+
+**Stretches accumulate across one turn, and reset with it.** `Column.GateWait` is the operator's
+share of the turn in flight, `TurnRecord.GateWait` is the same fact for a turn in the transcript,
+and `startTurn` files one and clears the other. A turn that asked three times reports all three
+waits as one figure, because what it claims is the operator's share of THAT turn.
+
+**Auto-approved calls contribute nothing.** `queueGate` answers three ways without ever drawing a
+card — `autoApproveRoutine` (this shell command is routine), `isReadOnlyTool` (this tool changes
+nothing), and `!Asking` (the user said stop asking) — and all three return before the stamp. Nobody
+was asked, so nobody waited, and charging the operator for a decision they never saw would be the
+room inventing a measurement.
+
+**Zero and absent stay different, as they must.** The figure is a `runner.Span` rather than a
+duration, for the argument already written on that type: a turn that raised no card is UNMEASURED
+and renders nothing at all, while a card answered inside a second is a measured zero and renders
+`you 0s`. `gate-clock.txt` pins the three states side by side — an open card counting, an absent
+one, a measured zero — because each is only legible against the others.
+
+**Two spellings, one fact, and the surface picks.** `waiting on you 4m48s` is the room's own
+phrase, already on the approval card and on §9.40's `NEEDS YOU` strip, and it is twenty cells. A
+three-up room at 120 columns gives each column thirty-six, where the long form is more than half
+the width and pushes the separator's own clock and cost off the line. So the grid sheds the LABEL
+and keeps the fact — `you 4m48s` — which is §9.18's order applied to a phrase instead of a name,
+and the by-turn page, which is the full frame wide, says it whole. It is a width TIER rather than a
+per-line measurement, the same way `stripHeader` and `stripBadges` choose a form: one rule a reader
+can learn, instead of a cell that rewords itself when a neighbouring number grows a digit.
+
+**Why the separator and not the chrome.** The live turn's separator carried its number and nothing
+else, on the rule that a turn's clock and cost are in the header and the badge line and repeating
+them a row later would say one thing twice. The operator's share is the exception, and it is there
+because the chrome has no room for it: `▸ 1 CC Claude Code` and `⠋ streaming 12s` already spend
+thirty-three of thirty-six cells, and the badge line's right edge belongs to the cost. The
+separator is also where the figure lives for every turn already in the transcript (`historyMeta`),
+so the live turn and the filed one state it in one place and one spelling. What it costs is that
+the figure scrolls with the transcript — and what stays pinned in the chrome is the card itself,
+which says the room is stopped on you for as long as that is true.
+
+**Render stays pure.** The room stamps and the renderer subtracts, exactly as `Reattach.SavedAt`
+does: `queueGate` stamps when the card goes up, `decideGate` and `dropGates` charge when it comes
+down, and Render turns a stamp into an age against `State.Now`. An open card with no stamp — every
+State a test types out by hand — adds nothing and does not make the span measured, because a
+duration arrived at by arithmetic over an absence is the invented figure §4a.1 puts at the top of
+the rejected list. `TestGateClockIsPureOverState` pins it, and no existing golden moved.
+
+**The `--trace` line is deliberately unchanged.** `runner.TurnClock` already says a seat blocked on
+an approval card is inside its `Stream` span, "because from the process's side that is exactly what
+it is". That stays true: the runner cannot see the decision. A gate decision reaches a live seat
+through `Session.SendAside`, which is documented as carrying "an interrupt, a gate decision, a
+protocol reply" — undifferentiated bytes — so a gate span in the trace would need the runner to be
+told what it was writing, which is a change to that package's shape rather than to this figure.
+The room knows, and the room is where the split is drawn. Adding the span to the trace is a
+separate measurement with a separate seam to build.
+
+**Wall clock is still reported where wall clock is the claim.** `turnElapsed` — the by-turn page's
+figure for how long the whole turn took — is unchanged and still selects the longest seat's raw
+elapsed. That number is labelled as the turn's duration rather than as any vendor's, and the
+operator's own reading time really is part of how long the turn took. The per-seat rule under it
+carries the split, so the page states both without either one contradicting the other.

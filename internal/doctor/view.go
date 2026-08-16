@@ -85,7 +85,7 @@ func Render(r Report, o Options) string {
 
 	// The two standing unknowns, argued once. Printed even for an empty report:
 	// they are properties of what this mode does, not of what it found.
-	for _, note := range []string{authNote, networkNote, summary(r)} {
+	for _, note := range []string{authNote, networkNote, summary(r), nextStep(r)} {
 		b.WriteByte('\n')
 		for _, line := range wrap(note, cols) {
 			b.WriteString(line)
@@ -166,6 +166,40 @@ func summary(r Report) string {
 			"every check that ran come back ok. `not checked` is not a pass: auth and "+
 			"network are unknown to this report, on every seat, because it probes neither.",
 		passed, failed, notChecked, len(r.Seats), ready)
+}
+
+// nextStep names what to run after reading this, and it is the last paragraph
+// because it is the only one that is not a measurement (added 2026-08-15,
+// design.md §7.7).
+//
+// It earns its place on the first-run path. A stranger reaches this mode before
+// anything works, and on a machine with no vendor CLI the report they get is
+// five FAILED rows and a count that opens "0 checks passed" — every word of it
+// true, and nothing in it saying what to do or that telltale is behaving
+// correctly. That is the report stranding its reader.
+//
+// It stays PURE over the Report like everything else here, and it makes no
+// claim the report does not already carry: it branches on the seat count the
+// summary above just printed, and says nothing about auth, network, or whether
+// a vendor would answer.
+func nextStep(r Report) string {
+	ready := 0
+	for _, s := range r.Seats {
+		if s.Ready() {
+			ready++
+		}
+	}
+	if ready == 0 {
+		return "What runs next: no seat above passed every check that ran, which is this " +
+			"report working rather than telltale failing — council drives a vendor CLI, so " +
+			"install one and run this again. `telltale hud` runs either way, and it names " +
+			"every vendor store it looked in, found or not."
+	}
+	return "What runs next: `telltale council` opens the room with the seats above, and " +
+		"`telltale hud` reads what those vendors write to disk. The statusline is the one " +
+		"mode you wire in rather than run — put `telltale statusline` in Claude Code's or " +
+		"Antigravity CLI's `statusLine.command`; the README's Install section carries the " +
+		"block to paste."
 }
 
 func pad(s string, n int) string {

@@ -148,10 +148,67 @@ func TestSummaryNamesTheSkipsRatherThanBuryingThem(t *testing.T) {
 	absent.Found = false
 	out := render(Run([]Seat{seat("claude"), absent}, answering("1.0.0")))
 
-	tail := out[strings.LastIndex(out, "\n\n"):]
+	// The summary is found by its own words rather than by being the last
+	// paragraph. It stopped being last when nextStep was added below it
+	// (2026-08-15), and a positional assertion would have gone on passing
+	// against whatever paragraph happened to be there instead.
+	tail := paragraphContaining(out, "checks passed")
 	for _, want := range []string{"not checked", "is not a pass", "auth and network"} {
 		if !strings.Contains(tail, want) {
 			t.Errorf("the summary does not say %q:\n%s", want, tail)
+		}
+	}
+}
+
+// paragraphContaining returns the blank-line-delimited block holding needle,
+// with its wrap collapsed back to single spaces. The wrap column is a rendering
+// decision and a caller asserting on the WORDS must not have to know where the
+// line broke — otherwise every reflow of this prose breaks a test that has no
+// opinion about reflow.
+func paragraphContaining(out, needle string) string {
+	for _, p := range strings.Split(out, "\n\n") {
+		flat := strings.Join(strings.Fields(p), " ")
+		if strings.Contains(flat, needle) {
+			return flat
+		}
+	}
+	return ""
+}
+
+// TestTheReportSaysWhatToRunNext. The preflight is the mode a stranger reaches
+// first, and on a machine with no vendor CLI its whole report is FAILED rows
+// under a count that opens "0 checks passed" — true, and silent about both what
+// to do and about telltale working correctly. Every branch names a command.
+func TestTheReportSaysWhatToRunNext(t *testing.T) {
+	absent := seat("grok")
+	absent.Found = false
+
+	none := render(Run([]Seat{absent}, answering("1.0.0")))
+	next := paragraphContaining(none, "What runs next")
+	if next == "" {
+		t.Fatalf("a report with no seatable vendor never says what to run:\n%s", none)
+	}
+	// It must not read as telltale being broken, and it must leave the reader a
+	// command that works on the machine it just described.
+	for _, want := range []string{"install one", "telltale hud"} {
+		if !strings.Contains(next, want) {
+			t.Errorf("the no-seat next step does not say %q:\n%s", want, next)
+		}
+	}
+
+	some := render(Run([]Seat{seat("claude")}, answering("1.0.0")))
+	next = paragraphContaining(some, "What runs next")
+	for _, want := range []string{"telltale council", "telltale hud", "telltale statusline"} {
+		if !strings.Contains(next, want) {
+			t.Errorf("the ready next step does not name %q:\n%s", want, next)
+		}
+	}
+	// It says nothing the report did not measure. Auth and network are `not
+	// checked` on every seat, always, so a next step promising a seat will
+	// ANSWER would be the one dishonest sentence on an otherwise careful page.
+	for _, forbidden := range []string{"signed in", "ready to use", "will answer"} {
+		if strings.Contains(next, forbidden) {
+			t.Errorf("the next step claims %q, which this mode never probed:\n%s", forbidden, next)
 		}
 	}
 }

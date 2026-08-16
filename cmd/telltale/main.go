@@ -85,10 +85,23 @@ var version = "dev" // set via -ldflags at release time
 
 func main() {
 	if len(os.Args) < 2 {
-		usage()
-		os.Exit(2)
+		// A no-argument run is a FIRST run, not a usage error, so it prints the
+		// short frame on stdout and exits 0 (design.md §7.7, 2026-08-15). It
+		// used to print `usageText` — 203 lines, on stderr, exit 2 — which was
+		// accurate and was still the one answer that is not a next step: the
+		// stranger who typed the binary's own name got the whole reference
+		// manual and a failure code for it. An unknown SUBCOMMAND still takes
+		// that path below, because that one is an error and the manual is the
+		// correction.
+		fmt.Println(firstFrameText)
+		return
 	}
 	switch os.Args[1] {
+	case "help", "--help", "-h":
+		// The long help now has a name to reach it by. It had none: every route
+		// to `usageText` was an error path, so the frame above could not point a
+		// reader at the manual without inventing a command.
+		fmt.Println(usageText)
 	case "statusline":
 		runStatusline()
 	case "hud":
@@ -622,6 +635,45 @@ func parseHide(s string) ([]model.VendorID, error) {
 	return out, nil
 }
 
+// firstFrameText is what a stranger sees on a bare `telltale`, before anything
+// is configured and before any vendor has been looked for.
+//
+// It asserts NOTHING about this machine, and that is the constraint that shapes
+// it rather than a stylistic preference. main() has measured nothing by the time
+// this prints — no store stat'd, no binary resolved — so a line like "no vendor
+// is configured yet" would be exactly the invented claim ADR-001 exists to
+// refuse. Every sentence here is either about telltale itself (which modes
+// exist, what each one reads) or a pointer at the mode that DOES measure. The
+// one recommendation, "start here", is a recommendation and reads as one.
+//
+// It replaced `usageText` on this path for a reason worth writing down: the
+// manual was true and it stranded people anyway. 203 lines is not a first
+// frame — a reader cannot tell from it which of eight modes is the one to type
+// next, and `doctor`, which is that mode, was entry eight of eight, sixty lines
+// down, under the word "preflight". So the frame names three modes and says
+// which to start with, and `telltale help` keeps the manual one word away.
+const firstFrameText = `telltale — an honest gauge for your coding agents
+
+Three modes need no configuration at all. Run one of them:
+
+  telltale doctor    which vendor CLIs are on this machine, where each was
+                     found, what version it reports — and, said out loud
+                     rather than left blank, what was never checked. It runs
+                     ` + "`<binary> --version`" + ` and nothing else: no turn, no login,
+                     no network, and it writes nothing anywhere. Start here.
+  telltale hud       the cross-vendor session HUD. It reads the vendor stores
+                     it finds and names every one it does not, so an empty
+                     screen still says where it looked.
+  telltale council   the dispatch room: one brief, several agents, side by
+                     side. This is the mode the project is for.
+
+One mode is wired in rather than run: point Claude Code's — or Antigravity
+CLI's — statusLine.command at ` + "`telltale statusline`" + `. The README's Install
+section carries the settings block to paste.
+
+  telltale help      every mode and every flag
+  telltale version   the tag this binary was built from`
+
 // usageText is the long help.
 //
 // It is a package-level const rather than a literal inside usage() so
@@ -675,6 +727,9 @@ usage:
                          "not checked": nothing here probes a login or calls
                          the network, and a preflight that implied otherwise
                          would be trusted on the one day it was wrong
+  telltale help          this text. A bare "telltale" prints a short first
+                         frame instead — three modes that need no
+                         configuration, and which one to start with
   telltale version
 
 telltale hud flags:
@@ -835,6 +890,10 @@ gauges themselves write.
 Tokens spent are NOT quota. Cursor exposes no account limit without a network
 call, so the hud shows what was consumed and never a percentage of anything.`
 
+// usage answers a subcommand this binary does not have. It keeps stderr and
+// exit 2, and it keeps the whole manual: a mistyped word is an error, and the
+// correction for it is the list of words that would have worked. The
+// zero-argument case is not this case and no longer shares it.
 func usage() {
 	fmt.Fprintln(os.Stderr, usageText)
 }

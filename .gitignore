@@ -24,6 +24,21 @@ telltale*.exe
 # nobody can check, and deleting it is how the fix is verified — `git status`
 # stays clean across a full suite run with nothing hiding it.
 
+# Demo-tape captures. A cast of any real telltale surface carries live session
+# names, workspace paths and the absolute path of every vendor binary on the
+# machine — measured in both chain-proof captures, packaging/tape/README.md.
+# This repository is public, so those files are written outside the working
+# tree. This entry is the backstop for a capture written here by mistake; the
+# rule is in packaging/tape/README.md and it is not this line.
+*.cast
+*.gif
+
+# The exception, so this guard does not block work that is already planned.
+# The README hero visual is adoption item 1 (design.md §8) and belongs beside
+# the four committed SVGs in images/. A file there is a deliberate, reviewed
+# publication rather than a capture that landed in the tree by mistake.
+!images/*.gif
+
 # Claude Code's per-repo settings (approvals, local config). Machine-local
 # state, never content this repo ships — and the first live /adopt was
 # blocked by exactly this directory sitting untracked in the room tree.
