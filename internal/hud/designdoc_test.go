@@ -30,6 +30,10 @@ var embedded = []string{
 	"usage-fleet", "usage-empty", "usage-models", "usage-stale-relay", "usage-tall",
 	// the week page — §7.19's generated render.
 	"week",
+	// the zero-config first frame — §7.7's generated render, pasted beside the
+	// measurement it came from rather than in §7.3, for grok-row's reason: the
+	// claim it carries is about the FIRST RUN, not about the grid.
+	"empty-nothing-detected",
 	// the grok seam — §3.9a, pasted beside the survey rather than in §7.3
 	// because the claim it proves is about that VENDOR, not about the grid: a
 	// store that holds real money renders with the COST column dropped.
