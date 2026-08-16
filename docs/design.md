@@ -4168,10 +4168,22 @@ can land in one shape: any process that can pipe JSON is a source. `tools/emit-e
 the reference emitter (stdlib-only Python, no dependency to install): it reads the hook payload
 on stdin, promotes the fields a reader filters on (`tool_name`, `tool_use_id`, `error`,
 `agent_id`, `agent_type`, `stop_hook_active`), stamps epoch-millisecond time, and POSTs.
-Its hard rules are the hook contract: a 5 second timeout, no retry, and exit 0 on every
-path — a sink that is down costs the agent at most 5 seconds and one stderr line, never a
-failed turn. There is no summarization pass anywhere: the payload travels and is stored
-verbatim.
+Its hard rules are the hook contract: a quarter-second connect probe before the POST, a
+5 second timeout on the POST itself, no retry, and exit 0 on every path — a sink that is
+down costs the agent the probe and one stderr line, never a failed turn. There is no
+summarization pass anywhere: the payload travels and is stored verbatim.
+
+**Trap 3 — "5 second timeout" never bounded the down path, and `localhost` was the wrong
+host (measured 2026-08-15, Windows 11, during a fleet-wide slow-hook audit).** A refused
+connect is not a timeout: Winsock retries it internally for ~2 seconds per address family
+before surfacing WinError 10061, so the original emitter — one POST, no probe — cost
+~4.4s of blocked agent time on EVERY hook event while the sink was down (transcripts
+recorded p50 4.3–4.5s per PostToolUse across Read/Bash/Edit/Write). The `localhost`
+default doubled the damage and taxed the up path too: the sink binds `127.0.0.1` only,
+and Windows resolves `localhost` to `::1` first, so every event paid the full retry
+cycle against `::1` before trying the address the sink actually listens on. Hence the
+probe (a 0.25s bounded connect answers "is anyone listening"; measured: down sink now
+costs ~0.26s plus interpreter start) and hence the default URL naming `127.0.0.1`.
 
 **Distribution is one edit per repo.** The wiring pattern is a hook command of the shape
 `python3 <path>/tools/emit-event.py --source-app <repo-name>` — `--source-app` is the only
@@ -8097,6 +8109,140 @@ than a detail, and each one is recorded here instead of guessed at:
 
 So the seat keeps its print-mode invocation for now, and the next lane starts with a number, a
 verified seam, and three named decisions instead of a guess.
+
+#### 2026-08-15: the same rig, pointed at the codex seat, and what a warm thread saves
+
+The rig above measured one vendor. This block runs it against a second one, and answers a
+question `STATE.md`'s 2026-08-08 trace could not. That trace shows the codex seat paying
+`wait=3.688s` before its first byte, while a cold binary start measures 190ms. Nothing said where
+the other ~3.5s went. **This is measurement only. It authorises no seat change.**
+
+**Version pinned first, and the subcommands were driven before they were believed.** Everything
+below is `codex-cli 0.147.0` on Windows 11 (`codex --version`). That is a NEWER build than the one
+`vendors/codex.go` cites. `codex app-server` and `codex app-server generate-json-schema` both
+exist on this build and both ran: the schema command wrote 46 files to a directory, and the server
+answered a live `initialize`. A subcommand named in `--help` is not evidence of a subcommand that
+runs, which is this repo's twice-earned lesson, so both were executed rather than read.
+
+**Instrument:** the installed `codex` binary, argv identical to the seat's first turn in
+`vendors/codex.go` (`-s danger-full-access --skip-git-repo-check --cd <ws> -`), with every stdout
+line stamped against the moment of launch. The prompt is **brief-shaped**: it opens with
+`brief.go`'s own `--- operating context ...---` fence and carries the request under it, because a
+greeting-shaped probe measures a transport the product never uses. One trial per arm, which is
+half of what §9.33 spent. Treat every figure below as one observation.
+
+#### The three-way capture, one identical turn
+
+`codex exec` (human), one trial. The seat does not use this renderer; it is here because it is the
+only arm that shows what the `--json` arm drops.
+
+| stamped line | at |
+|---|---|
+| spawn returned | 0.030s |
+| banner (`OpenAI Codex v0.147.0`) | 0.928s |
+| `hook: SessionStart` | 3.709s |
+| `hook: SessionStart Completed` | 4.201s |
+| the model's answer (`OK`) | 6.800s |
+| `tokens used` / `13,543` | 9.036s |
+| process exit | 15.519s |
+
+`codex exec --json`, one trial. This is the seat's own invocation.
+
+| stamped line | at |
+|---|---|
+| spawn returned | 0.014s |
+| `{"type":"thread.started",...}` | 1.153s |
+| `{"type":"turn.started"}` | 1.554s |
+| `{"type":"item.completed",...,"text":"OK"}` | 5.250s |
+| `{"type":"turn.completed","usage":{...}}` | 5.327s |
+| process exit | 13.266s |
+
+`codex app-server`, one process, one thread, two turns. The fixed half is paid once:
+
+| stamped line | at |
+|---|---|
+| spawn returned | 0.016s |
+| `initialize` response | 0.246s |
+| `thread/start` response, and the `thread/started` notification | 0.572s / 0.573s |
+
+Then the two turns, both on that one open thread:
+
+| turn | `turn/start` sent | `turn/started` | first `item/agentMessage/delta` | `turn/completed` | wait | stream | total |
+|---|---|---|---|---|---|---|---|
+| 1 | 0.576s | 0.836s | 5.085s | 5.259s | **4.509s** | 0.174s | 4.683s |
+| 2 | 5.263s | 5.303s | 6.467s | 6.705s | **1.204s** | 0.238s | **1.442s** |
+
+**A warm turn costs 1.44s, and 1.20s of that is the model.** Turn 2 asked what turn 1 had answered
+and got it right from the same pid, so this is one conversation in one process. Against the same
+prompt through `codex exec --json` the comparison is 1.442s against 5.327s to the last line, or
+against 13.266s to exit.
+
+**Four separate items make up the difference, and only one of them is process start.**
+
+1. **Process and thread start is 0.573s, not 3.5s.** `initialize` answers in 246ms and
+   `thread/start` in a further 326ms. Spawn itself is 16ms, which agrees with the 190ms class of
+   figure and confirms again that spawning was never the cost.
+2. **A `sessionStart` hook runs before the model does, and it is the operator's own.**
+   `hook/started` at 3.151s and `hook/completed` at 3.840s, and the notification names its source:
+   `"sourcePath":"C:\\Users\\sanle\\.codex\\hooks.json"`, `"source":"user"`, `"durationMs":838`.
+   The human arm shows the same hook as `hook: SessionStart` at 3.709s. **This item is
+   machine-specific.** A box with no `hooks.json` would not pay it, so it must never be quoted as
+   a property of the vendor.
+3. **Five MCP servers start on the same path.** `mcpServer/startupStatus/updated` fires for
+   `node_repl`, `context7`, `github`, `kb-agent` and `codex_apps`, and two of them go
+   `starting` to `cancelled` to `ready` across the turn. This is also operator config, and the
+   same caution applies.
+4. **The process lingers after it answers.** `exec --json` printed its last line at 5.327s and
+   exited at 13.266s, which is **7.94s** of linger. The human arm shows 6.48s of the same. §9.36's
+   "kill, never wait" rule was written for a different vendor and a ~2.5s linger. **This vendor's
+   linger is larger, and nothing here checked whether council waits on it.**
+
+**One comparison this block does NOT make.** The `exec --json` arm reached its first line at
+1.153s, well below `STATE.md`'s `wait=3.688s`. That trace ran a real brief through a real room
+with four seats starting at once, and this trial ran a trivial prompt alone. The 3.688s is not
+reproduced here and must not be treated as refuted.
+
+#### The hook question, answered by the captures
+
+**`codex exec --json` is the only one of the three surfaces that hides hook activity.** The human
+renderer prints `hook: SessionStart` and `hook: SessionStart Completed`. The protocol emits
+`hook/started` and `hook/completed`, each carrying the hook's id, event name, source path, source
+and `durationMs`. The `--json` stream emitted **four lines in total** for the whole turn
+(`thread.started`, `turn.started`, `item.completed`, `turn.completed`) and not one of them mentions
+a hook, an MCP server, or a rate limit.
+
+The protocol also carries two things the seat currently reads off disk instead:
+
+```
+{"method":"thread/tokenUsage/updated","params":{...,"tokenUsage":{"total":{"totalTokens":21130,...},"modelContextWindow":258400}}}
+{"method":"account/rateLimits/updated","params":{"rateLimits":{"limitId":"codex","primary":{"usedPercent":2,"windowDurationMins":10080,"resetsAt":1787369304},"secondary":null,"planType":"plus",...}}}
+```
+
+Those are the same fields §3.4 verified in the rollout files, arriving live on a socket. **Nothing
+is built on that here.**
+
+#### Seat-move viability, recorded and not acted on
+
+1. **Thread continuity exists.** `thread/started` arrived live at 0.573s. `thread/resume` is a
+   real request and its schema documents three routes (`thread_id`, `history`, `path`), plus
+   `thread/fork`. The `thread/start` result carries `thread.id`, an identical `sessionId`, and the
+   rollout `path` under `~/.codex/sessions/...`, which is the same id the adapter already reads.
+2. **The sandbox channel exists on this path, and it is wider than `-s`.** `thread/start` takes a
+   `sandbox` parameter, and the live response echoed `"sandbox":{"type":"dangerFullAccess"}`.
+   `turn/start` takes a per-turn `sandboxPolicy`. That is strictly more than `codex exec` offers,
+   where `-s` is first-turn-only and `codex exec resume` rejects it outright. Only
+   `danger-full-access` was driven here.
+3. **The Windows `danger-full-access` finding does NOT carry over, and needs its own re-check.**
+   The evidence is direct rather than inferential: this protocol has a Windows sandbox surface
+   that `codex exec` has no equivalent for. `windowsSandbox/setupStart` and
+   `windowsSandbox/readiness` are client requests, and `windowsSandbox/setupCompleted` and
+   `windows/worldWritableWarning` are server notifications. `vendors/codex.go`'s finding rests on
+   `-s read-only` failing every process spawn, and `read-only` was never sent on this path. Until
+   somebody sends it, the seat's badge rule stands unchanged.
+
+**Spend:** four billed turns. Two arms of one turn each, plus two turns on the app-server thread,
+because a single app-server turn would have reported turn 1's 4.509s as if it were the warm number
+and oversold nothing or undersold everything depending on which row was quoted.
 
 ### 9.34 the rebuttal stopped naming its authors
 
