@@ -33,7 +33,7 @@ func gateClockRoom() State {
 	c.Body = "I need to write the new file."
 	st.Gates = []PendingGate{{
 		Vendor: model.VendorClaude, RequestID: "r2", ToolUseID: "t2",
-		Text:     "Write: internal/council/clock.go",
+		Text:      "Write: internal/council/clock.go",
 		StoppedAt: st.Now.Add(-4 * time.Minute),
 	}}
 
@@ -97,7 +97,7 @@ func TestGateClockSplitsTheOperatorsWait(t *testing.T) {
 // TestGateClockIsPureOverState is TestElapsedIsPureOverState for the second
 // figure this room now derives from a timestamp.
 //
-// The open stretch is State.Now minus PendingGate.OpenedAt, on the Reattach
+// The open stretch is State.Now minus PendingGate.StoppedAt, on the Reattach
 // .SavedAt precedent: the room stamps, the renderer subtracts. A clock read
 // inside Render would make every golden that carries an open card flaky in CI
 // and nowhere else.
@@ -113,7 +113,7 @@ func TestGateClockIsPureOverState(t *testing.T) {
 // TestAnUnstampedCardIsNotAWait.
 //
 // Every State typed out by hand — which is most of the ones in this package —
-// carries no OpenedAt. An unstamped card must add nothing rather than count from
+// carries no StoppedAt. An unstamped card must add nothing rather than count from
 // the epoch, or a fixture would render a fifty-year wait: a figure arrived at by
 // arithmetic over an absence, which is the top item on §4a.1's rejected list.
 func TestAnUnstampedCardIsNotAWait(t *testing.T) {

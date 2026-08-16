@@ -593,9 +593,10 @@ func (m *Model) queueGate(c *Column, g *runner.Gate) {
 // chargeGateWait adds one finished stretch of operator wait to a seat's turn
 // (§9.45).
 //
-// Called AFTER the queue has been changed, with the stamp read BEFORE it: the
+// Called AFTER the queue has been changed, with the stamp read BEFORE it. The
 // stretch being closed is the one that started when this seat's first card went
-// up, and that stamp is gone from the queue by the time the decision is sent.
+// up, and the card carrying that stamp is exactly the one just removed whenever
+// there is anything to charge — so the caller has to have read it already.
 //
 // It charges nothing while the seat still has a card up. One assistant message
 // can raise a parallel batch, each request blocks separately, and the vendor

@@ -408,7 +408,7 @@ type Column struct {
 	// raise a parallel batch of requests, and a seat held by three cards at once
 	// is stopped once; adding the three would charge the operator three times for
 	// one stretch. The stopwatch therefore runs from the FIRST card this seat had
-	// up to the moment its LAST one is answered — see gateOpenedAt.
+	// up to the moment its LAST one is answered — see gateStoppedAt.
 	//
 	// A runner.Span rather than a duration, for the field's own zero-vs-absent
 	// rule (§4a.1): a turn with no card at all is UNMEASURED and renders no
