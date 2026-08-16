@@ -458,7 +458,33 @@ func (Codex) ParseEvent(line []byte) (runner.Event, bool) {
 		// only token counts, so unlike the Claude adapter there is no final-text
 		// fallback available here — if no agent_message arrived, the column has
 		// nothing to show, and that is the truth rather than a gap to fill.
-		return runner.Event{Kind: runner.KindMeta}, true
+		//
+		// EndsTurn is set, and this is a spawn-per-turn seat, so that pairing is
+		// the unusual part and it is measured rather than assumed. This process
+		// DOES exit on its own, and the column used to wait for the exit — which
+		// meant the seat rendered `streaming` for seconds after the answer was
+		// complete and on screen. MEASURED 2026-08-16 against codex-cli 0.147.0
+		// on Windows 11, read-only posture, a brief-shaped prompt in a throwaway
+		// directory, two trials:
+		//
+		//	trial 1: turn.completed 6.619s → exit 10.870s   (4.251s of linger)
+		//	trial 2: turn.completed 4.499s → exit  8.555s   (4.056s of linger)
+		//
+		// §9.33 measured 7.94s of the same on this build, so the size varies and
+		// only the shape is stable. What makes it safe to settle the column here
+		// is the second half of that capture: NOTHING rides the tail. On both
+		// trials the last stdout line is this one, stderr stays empty, and the
+		// vendor's own rollout file under ~/.codex/sessions took its final write
+		// 51ms and 224ms after this event — i.e. ~4s BEFORE the exit. The receipts
+		// are complete when this line lands.
+		//
+		// What that does NOT license is killing the process, and council does not:
+		// both probe turns were told to use no tools, so a turn that ran commands
+		// is unmeasured here and would need danger-full-access to probe, which is
+		// a redline. So the exit is still what retires the column from the turn
+		// (dispatch.go, KindMeta's spawn-per-turn branch) — this event only makes
+		// the column stop claiming to be working.
+		return runner.Event{Kind: runner.KindMeta, EndsTurn: true}, true
 	}
 	return runner.Event{}, false
 }

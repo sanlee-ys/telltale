@@ -78,6 +78,14 @@ type turnEntry struct {
 	// "working — the reply arrives whole." is a claim about a turn in flight,
 	// and a turn in the transcript is over (pastTurn).
 	Live bool
+
+	// Settling carries Column.Settling onto this page, and it is carried for the
+	// same reason every other live field is: the page renders the same words the
+	// column does (columnStatus), and a seat that has answered while its process
+	// winds down must not read as plainly finished on one surface and
+	// `done … exiting` on the other. Only ever true on a LIVE entry — a filed
+	// record's process is long gone, so nothing sets it on the history path.
+	Settling bool
 }
 
 // turnEntries is who took turn n, in seating order.
@@ -111,6 +119,7 @@ func (s State) turnEntries(n int) []turnEntry {
 				Elapsed: c.Elapsed, GateWait: c.GateWait,
 				CostUSD: c.CostUSD, CostSession: c.CostSession,
 				Started: c.Started, Live: true,
+				Settling: c.Settling,
 			}
 			if !c.Skipped {
 				// A note on a SKIPPED column is about a later turn this seat sat
@@ -355,6 +364,13 @@ func seatMeta(st State, e turnEntry, g Glyphs) string {
 		}
 	case e.Elapsed > 0:
 		parts = append(parts, dur(vendorElapsed(e.Elapsed, op)))
+	}
+	// After the clock, exactly as columnStatus places it: the figure is the time
+	// to the ANSWER, and the linger must not read as part of it. Both surfaces
+	// say the same word for the same seconds, which is the point of carrying the
+	// field this far — the footer already keeps `ctrl+c` up on this page.
+	if e.Settling {
+		parts = append(parts, "exiting")
 	}
 	if s := operatorCell(op, longForm); s != "" {
 		parts = append(parts, s)

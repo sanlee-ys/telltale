@@ -244,6 +244,44 @@ func TestCodexTurnCompletedCarriesNoCost(t *testing.T) {
 	}
 }
 
+// TestCodexTurnCompletedIsTheAnswerCompleteMarker.
+//
+// This vendor answers and then lingers seconds before its process exits — 4.06s
+// and 4.25s measured 2026-08-16 against codex-cli 0.147.0, 7.94s in §9.33 on the
+// same build. Without EndsTurn the column has no signal but the exit, so it
+// renders `streaming` for that whole tail with the finished reply already on
+// screen. This is the line that stops it, and it is the LAST line both captures
+// saw, so nothing arrives after it to contradict a settled column.
+func TestCodexTurnCompletedIsTheAnswerCompleteMarker(t *testing.T) {
+	line := []byte(`{"type":"turn.completed","usage":{"input_tokens":20481,"output_tokens":5}}`)
+	ev, ok := Codex{}.ParseEvent(line)
+	if !ok {
+		t.Fatal("turn.completed was dropped; the column would wait for the process exit")
+	}
+	if !ev.EndsTurn {
+		t.Error("turn.completed did not end the turn — the seat renders as working for the whole linger")
+	}
+}
+
+// TestCodexOnlyTurnCompletedEndsTheTurn. EndsTurn settles a column, so a second
+// line carrying it would settle the seat early — mid-answer, with text still to
+// come. Every other line this adapter models must leave it false.
+func TestCodexOnlyTurnCompletedEndsTheTurn(t *testing.T) {
+	lines := [][]byte{
+		[]byte(`{"type":"thread.started","thread_id":"01a00b2f-33db-78a2-afda-fe64c26965e1"}`),
+		[]byte(`{"type":"turn.started"}`),
+		[]byte(`{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"OK"}}`),
+		[]byte(`{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"go test","exit_code":null,"status":"in_progress"}}`),
+		[]byte(`{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"go test","exit_code":0,"status":"failed"}}`),
+	}
+	for _, l := range lines {
+		ev, ok := Codex{}.ParseEvent(l)
+		if ok && ev.EndsTurn {
+			t.Errorf("%s ended the turn; only turn.completed may", l)
+		}
+	}
+}
+
 // TestCodexToolActivityIsNotRenderedAsSpeech: these are the real
 // command_execution lines from the sandbox probe. The room compares opinions,
 // not tool traces, and emitting a shell command as KindText would put words in

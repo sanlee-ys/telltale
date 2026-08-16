@@ -1358,6 +1358,17 @@ func columnStatus(st State, c Column, g Glyphs) string {
 		// still prints `done 0s` — a measured zero, not a blank.
 		status += " " + dur(vendorElapsed(c.Elapsed, c.GateWait))
 	}
+	if c.Settling {
+		// The answer landed; the process has not gone yet. A WORD rather than a
+		// second glyph or a colour, per §7.1 rule 2 — it has to survive --ascii
+		// and NO_COLOR, because what it is preventing is a reader concluding the
+		// room is wedged, and that reader may be on either.
+		//
+		// It sits AFTER the clock deliberately. The clock is this turn's earned
+		// figure and is now the time to the answer (dispatch.go); the linger is
+		// not part of it and must not look like it is.
+		status += " exiting"
+	}
 	return phaseMark(c.Phase, st, g) + " " + status
 }
 
@@ -3392,7 +3403,7 @@ func modeHints(st State, g Glyphs) []hint {
 			{key: "t", label: "grid"},
 			{key: "y", label: "yank", shed: true},
 		}
-		if st.Busy() {
+		if st.InFlight() {
 			return append(flowStopHint(hs, st), hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
 		}
 		return append(hs, hint{key: "?", label: "help"}, hint{key: "q", label: "quit"})
@@ -3432,7 +3443,7 @@ func modeHints(st State, g Glyphs) []hint {
 		if st.Help == HelpPostures {
 			hs[0].label = "close"
 		}
-		if st.Busy() {
+		if st.InFlight() {
 			return append(flowStopHint(hs, st), hint{key: "ctrl+c", label: "cancel"})
 		}
 		return append(hs, hint{key: "q", label: "quit"})
@@ -3486,7 +3497,7 @@ func modeHints(st State, g Glyphs) []hint {
 		hs = append(hs, hint{key: "1-" + strconv.Itoa(len(st.VisibleColumns())),
 			label: "seat", shed: true})
 	}
-	if st.Busy() {
+	if st.InFlight() {
 		return append(flowStopHint(hs, st), hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
 	}
 	return append(hs, hint{key: "i", label: "compose"},

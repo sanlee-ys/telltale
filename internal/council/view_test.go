@@ -848,6 +848,73 @@ func TestFrameHeightFitsTheTerminal(t *testing.T) {
 	}
 }
 
+// TestSettlingSeatSaysItIsStillExiting.
+//
+// A seat that has answered but whose process has not exited renders `done` — and
+// has to say the second half out loud. Between those two moments (4.06s and
+// 4.25s measured on codex-cli 0.147.0, 7.94s in §9.33) the room has no spinner
+// and every column reads finished, while the composer is still locked and `q` is
+// still refused. Without a word there, the room looks wedged.
+//
+// Asserted on the WORD, in both glyph sets: this is the signal that has to
+// survive --ascii and NO_COLOR, because a reader on either is exactly the reader
+// who cannot tell a quiet room from a stuck one (§7.1 rule 2).
+func TestSettlingSeatSaysItIsStillExiting(t *testing.T) {
+	for _, ascii := range []bool{false, true} {
+		g := GlyphsFor(ascii)
+		c := Column{
+			Vendor: model.VendorCodex, Label: "Codex", Avail: AvailInstalled,
+			Phase: PhaseDone, Elapsed: 4 * time.Second, Settling: true,
+		}
+		got := columnStatus(State{}, c, g)
+		if !strings.Contains(got, "done") {
+			t.Errorf("ascii=%v: status = %q, want the settled phase word", ascii, got)
+		}
+		if !strings.Contains(got, "exiting") {
+			t.Errorf("ascii=%v: status = %q — a settling seat does not say its process is still going", ascii, got)
+		}
+		// After the clock, never inside it: the figure is the time to the ANSWER,
+		// and a reader must not take the linger for part of it.
+		if strings.Index(got, "exiting") < strings.Index(got, "4s") {
+			t.Errorf("ascii=%v: status = %q — the linger word cut in front of the turn's own figure", ascii, got)
+		}
+
+		c.Settling = false
+		if quiet := columnStatus(State{}, c, g); strings.Contains(quiet, "exiting") {
+			t.Errorf("ascii=%v: a retired seat still claims to be exiting: %q", ascii, quiet)
+		}
+	}
+}
+
+// TestSettlingKeepsTheFooterOfferingCancel.
+//
+// The footer chooses `ctrl+c cancel` or `q quit`, and it used to ask Busy().
+// Busy() is derived from column phases, so a seat that settles ahead of its
+// process takes it false while the turn is still live — and `q` is refused
+// outright while a turn is live. A footer naming a key that answers with a
+// notice is §7.8's surprise, so the test is on the predicate the footer actually
+// reads.
+func TestSettlingKeepsTheFooterOfferingCancel(t *testing.T) {
+	st := State{Columns: []Column{{
+		Vendor: model.VendorCodex, Avail: AvailInstalled,
+		Phase: PhaseDone, Settling: true,
+	}}}
+	if st.Busy() {
+		t.Error("Busy() is true for a seat that has answered; the spinner would run over a finished column")
+	}
+	if !st.Settling() {
+		t.Error("Settling() missed a settling column")
+	}
+	if !st.InFlight() {
+		t.Error("InFlight() went false while a process was still alive — the footer would offer `q`")
+	}
+
+	st.Columns[0].Settling = false
+	if st.InFlight() {
+		t.Error("InFlight() stayed true after every seat retired")
+	}
+}
+
 // TestPhaseColors is the style half of the split: one escape code per terminal
 // phase, asserted with the coloured set rather than the plain one.
 func TestPhaseColors(t *testing.T) {
