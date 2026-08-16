@@ -7170,6 +7170,11 @@ opening a *file*, and the first thing that file receives is what the room alread
 filling while the trace is off, so stopping costs nothing and starting again reaches back over
 the gap.
 
+**One line carries a sixth field, and only a racer's does.** A turn dispatched by `/arena`
+appends `race=arena/t<N>` after `total=`. The runner cannot infer that from a `Spec`, so the
+room hands it over (`runner.Spec.Race`); §9.37's dated block of 2026-08-16 carries the seam,
+the probe behind it, and why an ordinary turn appends nothing rather than a dash.
+
 **Three deliberate refusals, each with a reason that is not "consistency":**
 
 - **No council-chosen path.** Bare `/trace` reports and never enables. A no-argument form that
@@ -9977,6 +9982,57 @@ undone; the reset was confirmed against git rather than against the room's own c
 `ba2d00b` and named `gh pr create` — the first live adoption under the shape ruled
 2026-08-11, and the debt this section states three paragraphs above its own dated block is
 now paid.
+
+**Amendment, 2026-08-16: a racer's turn says which race it was.** `STATE.md` recorded the gap
+on 2026-08-15/16: an operator armed `/trace` before a race, and the file held only the
+preceding ordinary turn's line. The report named the consequence correctly — grok's
+spawn/wait/stream split stayed unmeasured, because the arena is the one turn shape that
+dispatches grok.
+
+**The mechanism is a seam, not a dropped record.** A probe reproduced the arena's exact spawn
+shape against the real runner — `runner.Start`, a one-shot child, its own `Dir` — and the
+record came back: `grok spawn=5ms wait=43ms stream=2ms total=51ms`. So the clock does run for a
+racer, on both arena spawn paths. What the record could not say is that it was a racer.
+`runner/clock.go` states its own rule at the top: a `TurnClock` is keyed by the seat and the
+moment, because those are the only facts that package holds. The race number is not one of
+them. It is read off the repo's own arena refs at setup (`arenaRaceNumber`) and it lives on
+`turnState`, which is gone by the time the record is written — the runner emits at process
+exit, on its own goroutine. So four racers wrote four lines that named neither the race nor
+the worktree, and each line was byte-identical in SHAPE to an ordinary turn's line for the
+same seat. The trace held the race and could not point at it.
+
+**The fix carries the label the room already has.** `runner.Spec` gains `Race`, the one field
+in that struct the runner does not use and only carries. Council stamps it on both arena spawn
+paths: the batch seats through `FirstTurn` in dispatch's arena branch, and the merged cursor
+seat inside `startEphemeralRacer`, which builds its own spec through `cv.Open`. Both arms are
+stamped because a label applied at the obvious call site alone would leave that seat as the one
+racer nobody could find. `newClock` takes the race and fixes it for the life of the process,
+which is correct by §9.37's founding ruling: every attempt is a FRESH one-shot session, so no
+second turn on that process could belong to a different race.
+
+**Nothing is derived, and the ordinary line does not move.** The tag is `arena/t<N>`
+(`arenaRaceTag`), minted from the same race number as the branch, so a trace line and the
+worktree its attempt is parked on cannot disagree — the vendor is already a column on the line,
+and the two together spell `arenaBranch` exactly. The field is APPENDED after `total=`, so
+every reader that already parses a trace line keeps its field order; a test pins that position
+rather than trusting whoever edits `String` next. An ordinary turn appends nothing at all. That
+is §4a.1 rather than terseness: an unmeasured `Span` prints `-` because the stretch existed and
+was not measured, but an ordinary turn is not a race whose id went missing — it is not a race,
+so there is no field to mark absent, and `race=-` on every ordinary line would invent a
+category for the room's normal case.
+
+**What is verified, and what is not.** The council half is pinned at the spec, and that split
+is forced rather than chosen: a council test never spawns a vendor (`CLAUDE.md`), so the clock
+cannot run there and the spec is the whole of what that package contributes to the record. The
+runner half spawns for real and asserts the race survives onto the emitted line, with the
+spawn/wait split still measured beside it. `TestArenaSpecsCarryTheRaceIntoTheTrace` was
+verified failing before the change, on all four racers and both spawn paths. **The live half is
+owed.** No race has been run against this build, so the claim that a real `/trace` now holds an
+attributable racer line rests on the probe and the tests, not on a race. One thing this
+amendment deliberately does not claim: it does not explain the operator's empty file. The
+records are emitted, so the reported absence has some other cause, and the same drive recorded
+two candidates beside it — a room that opened on workspace `~`, and `/trace` resolving a
+relative path against it. That stays open and belongs to whoever runs the next live race.
 
 ### 9.38 paste lands whole, and never sends (2026-08-09)
 

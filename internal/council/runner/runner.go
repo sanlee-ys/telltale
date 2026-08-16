@@ -291,6 +291,28 @@ type Spec struct {
 	// means the prompt is already in Args (only safe for a native binary).
 	StdinPrompt string
 	Dir         string
+
+	// Race is the room's own name for a race this invocation is an attempt in,
+	// and it is the ONE fact on this struct that the runner does not use and
+	// only carries — straight onto the TurnClock the turn emits.
+	//
+	// It exists because the trace could not see a race. clock.go states, and
+	// still states, that a record is keyed by the seat and the moment because
+	// those are the only facts this package holds; the consequence nobody had
+	// measured is that a racer's line came out byte-identical in shape to an
+	// ordinary turn's line for the same seat. A room that raced four seats in
+	// their own worktrees wrote four lines that named neither the race nor the
+	// worktree, so the split the race was run to read could not be attributed
+	// to it (STATE.md, OBSERVED 2026-08-15/16).
+	//
+	// The room supplies it because the room is the only thing that knows: the
+	// race number is read off the repo's own arena refs at setup and lives on
+	// the turn. Passed rather than derived — the runner cannot infer a race
+	// from a Dir, and a guess at one would be exactly the invented value §4a.1
+	// forbids. Empty is the ordinary case and means this turn was not a race
+	// attempt, which is a different fact from a race whose id went missing;
+	// TurnClock.String omits the field rather than printing a placeholder.
+	Race string
 }
 
 // ParseFunc converts one line of a vendor's stdout into an event. Returning
@@ -348,7 +370,7 @@ func Start(ctx context.Context, spec Spec, out chan<- Event, parse ParseFunc) (*
 		return nil, ErrShellShimWithArgvPrompt
 	}
 
-	ck := newClock(spec.Vendor)
+	ck := newClock(spec.Vendor, spec.Race)
 	cmd := exec.Command(spec.Binary, spec.Args...)
 	cmd.Dir = spec.Dir
 

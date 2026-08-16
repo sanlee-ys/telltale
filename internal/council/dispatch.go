@@ -459,6 +459,15 @@ func (m *Model) dispatch() tea.Cmd {
 			// the comparison the race exists for is untouched — see
 			// arenaConduct for the ruling and the incident that forced it.
 			vendorPrompt = arenaConduct + "\n\n" + vendorPrompt
+			// The race, carried into the turn trace on every racer's spec
+			// (runner.Spec.Race). Stamped HERE, on both arms below, because
+			// this is the last point that still knows a spawn is an attempt:
+			// the record is written by the runner's clock when the process
+			// exits, on its own goroutine, long after this turn's state is
+			// gone. Without it a racer's trace line is byte-identical in
+			// shape to an ordinary turn's line for the same seat, which is
+			// the gap STATE.md recorded on 2026-08-15/16.
+			raceTag := arenaRaceTag(ts.arenaRaceN)
 			if cv, ok := v.(vendors.Conversational); ok {
 				// The one seat FirstTurn cannot carry. The ACP refounding made
 				// this vendor live-only (§9.36) and the first live race duly
@@ -468,7 +477,7 @@ func (m *Model) dispatch() tea.Cmd {
 				// one process, one session, one prompt, killed when the column
 				// lands. §9.36's own machinery pointed at a throwaway session,
 				// not a second protocol.
-				sess, err := m.startEphemeralRacer(ctx, cv, c, tree, vendorPrompt)
+				sess, err := m.startEphemeralRacer(ctx, cv, c, tree, vendorPrompt, raceTag)
 				if err != nil {
 					failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 					continue
@@ -483,6 +492,7 @@ func (m *Model) dispatch() tea.Cmd {
 					failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 					continue
 				}
+				spec.Race = raceTag
 				h, err := startProcess(ctx, spec, m.events, v.ParseEvent)
 				if err != nil {
 					failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})

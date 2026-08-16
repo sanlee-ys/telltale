@@ -237,6 +237,22 @@ func arenaBranch(raceN int, v model.VendorID) string {
 	return "arena/t" + itoa(raceN) + "/" + string(v)
 }
 
+// arenaRaceTag names one race for the turn trace: `arena/t<N>`, the branch
+// name with the vendor left off.
+//
+// Left off because the trace line already carries the seat as its own column,
+// so repeating it would widen every racer's line to say a thing it has already
+// said. The tag and the vendor beside it spell arenaBranch exactly, which is
+// the property that makes a trace line reachable: a slow racer's line names
+// the worktree and the branch its attempt is parked on, so the timing and the
+// diff are one lookup apart rather than a reconstruction from the clock.
+//
+// Minted from the RACE number rather than the turn number, for the reason
+// arenaRaceNumber exists at all: the two disagree the moment a room relaunches
+// over leftover arena refs, and a tag built from the turn would point at a
+// branch that belongs to an older room's race.
+func arenaRaceTag(raceN int) string { return "arena/t" + itoa(raceN) }
+
 // arenaRaceNumber reads the number the next race must clear: one past the
 // highest N among the workspace's existing arena/t<N>/... branches, floored
 // at the room's own turn number (a repo with no arena refs races as t<turn>,

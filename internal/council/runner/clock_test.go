@@ -168,7 +168,7 @@ func TestPersistentSeatSpawnsOnceAndSaysSo(t *testing.T) {
 // by a card would report the time AFTER the keystroke and hide the wait that
 // was the reason to look.
 func TestGateDecisionDoesNotRestartTheTurnClock(t *testing.T) {
-	ck := newClock(model.VendorClaude)
+	ck := newClock(model.VendorClaude, "")
 	ck.launched()
 
 	begun := time.Now()
@@ -195,7 +195,7 @@ func TestGateDecisionDoesNotRestartTheTurnClock(t *testing.T) {
 // means no file, no line and no cost.
 func TestTraceIsSilentByDefault(t *testing.T) {
 	SetTrace(nil)
-	ck := newClock(model.VendorClaude)
+	ck := newClock(model.VendorClaude, "")
 	ck.launched()
 	ck.begin(time.Now())
 	ck.sawOutput(time.Now())
@@ -209,7 +209,7 @@ func TestClockEndsOnlyAnOpenTurn(t *testing.T) {
 	SetTrace(func(TurnClock) { n++ })
 	t.Cleanup(func() { SetTrace(nil) })
 
-	ck := newClock(model.VendorClaude)
+	ck := newClock(model.VendorClaude, "")
 	ck.launched()
 	ck.end(time.Now())
 	ck.end(time.Now())

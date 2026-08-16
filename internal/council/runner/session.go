@@ -104,7 +104,7 @@ func StartRPCSession(ctx context.Context, spec Spec, out chan<- Event, proto Pro
 // startSession is the shared body. handle sees every line and may return lines
 // to write back; opening is written once the child is up, before any turn.
 func startSession(ctx context.Context, spec Spec, out chan<- Event, handle handlerFunc, opening [][]byte) (*Session, error) {
-	ck := newClock(spec.Vendor)
+	ck := newClock(spec.Vendor, spec.Race)
 	cmd := exec.Command(spec.Binary, spec.Args...)
 	cmd.Dir = spec.Dir
 
