@@ -250,9 +250,14 @@ nowhere else.
   repository — it's public.
 - **`internal/theme` stays stdlib-only.** It's the shared palette both
   `internal/hud` and `internal/council` map into `lipgloss` values, specifically
-  so the `telltale statusline` binary never links the Bubble Tea/Lipgloss TUI
-  framework on its fast path (ADR-002). Don't import a TUI dependency into
-  `internal/theme` or `internal/model`.
+  so the `telltale statusline` **code path** never reaches the Bubble Tea/Lipgloss
+  TUI framework (ADR-002). Don't import a TUI dependency into `internal/theme` or
+  `internal/model` — `TestFastPathNeverReachesTUIFramework` fails the build if you
+  do, naming the package. Note the precise claim: the shipped **binary** does link
+  both modules, because it is one binary and `telltale hud` is in it
+  (`go version -m telltale.exe` shows them). What ADR-002 buys is that neither
+  module's package init runs on a path that executes on every prompt. design.md §5's
+  2026-08-16 amendment says what the gate asserts and what it deliberately does not.
 - **Council adds no hues of its own** (`internal/council/style.go`) — it maps
   `internal/theme`'s existing palette, and spends only *weight* (bold) as a new
   signal. If you're tempted to add a new color for a new council concept, that's

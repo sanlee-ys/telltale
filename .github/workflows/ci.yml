@@ -169,3 +169,61 @@ jobs:
           '{"conversation_id":"c-2","text":"no usage here"}' | ./telltale.exe hook cursor
           $cx = Get-Content "$env:USERPROFILE\.telltale\usage\cursor.json" -Raw
           if ($cx -notmatch '"turns":2') { throw "an empty payload disturbed the total: $cx" }
+
+      # ADR-002's fast path, on the clock rather than on anecdote (design.md §5,
+      # amendment 2026-08-16). This runs LAST on purpose: it drives full.json,
+      # which carries rate_limits and therefore writes the quota relay, and two
+      # earlier steps assert on that relay's absence and then on its contents.
+      #
+      # This step REPORTS and holds a ceiling; it does not pin the budget. The
+      # hard gate for ADR-002 is TestFastPathNeverReachesTUIFramework in
+      # internal/statusline, which is deterministic. A shared runner cannot pin
+      # single-digit milliseconds — its own scheduling noise is larger than the
+      # thing being measured — so the number goes in the log for a human, and
+      # only a gross regression fails the build.
+      - name: Statusline fast-path latency (reported; gross-regression ceiling)
+        shell: pwsh
+        run: |
+          # The ceiling catches a regression that changes the SHAPE of this
+          # path: a whole-corpus scan (design.md §7.18 measured cold scans at
+          # 896-1200 ms), a network round trip, or a TUI initialization with
+          # its terminal-capability queries. It deliberately does NOT catch a
+          # small constant regression — nothing on a shared runner can.
+          $ceilingMs = 400
+          $payload = Get-Content internal/statusline/testdata/full.json -Raw
+          $exe = (Resolve-Path ./telltale.exe).Path
+          $samples = @()
+          foreach ($i in 1..15) {
+            $psi = [System.Diagnostics.ProcessStartInfo]::new()
+            $psi.FileName = $exe
+            $psi.Arguments = 'statusline'
+            $psi.RedirectStandardInput = $true
+            $psi.RedirectStandardOutput = $true
+            $psi.UseShellExecute = $false
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $p = [System.Diagnostics.Process]::Start($psi)
+            $p.StandardInput.Write($payload)
+            $p.StandardInput.Close()
+            $out = $p.StandardOutput.ReadToEnd()
+            $p.WaitForExit()
+            $sw.Stop()
+            # A crash is fast. Assert the line rendered on EVERY sample, or the
+            # timing below would report a broken binary as an improvement.
+            if ($p.ExitCode -ne 0) { throw "statusline exited $($p.ExitCode) on sample ${i}" }
+            if ($out -notmatch 'Opus') { throw "sample ${i} rendered no line: $out" }
+            $samples += $sw.Elapsed.TotalMilliseconds
+          }
+          $sorted = $samples | Sort-Object
+          # Floor, not [int]: PowerShell's [int] cast rounds to even, so an odd
+          # sample count would pick the element above the median.
+          $median = $sorted[[int][math]::Floor($sorted.Count / 2)]
+          "statusline end-to-end (process start + parse + render), n=$($sorted.Count):"
+          "  min    {0:N1} ms" -f $sorted[0]
+          "  median {0:N1} ms" -f $median
+          "  max    {0:N1} ms" -f $sorted[-1]
+          # Measured by this same harness on the reference workstation
+          # (i7-7700K, Windows 11) over two runs, 2026-08-16.
+          "  (reference workstation 2026-08-16: median 26.6 and 29.0 ms over two runs; min 21.7, max 50.6)"
+          if ($median -gt $ceilingMs) {
+            throw "statusline median $([int]$median) ms exceeds the ${ceilingMs} ms ceiling; this path grew a scan, a network call or a TUI init"
+          }
