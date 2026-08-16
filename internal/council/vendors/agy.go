@@ -421,11 +421,25 @@ func agyStepEvent(al agyLine, outcome runner.ActStatus, detail string) (runner.E
 // failing the turn.
 //
 // A note the room needs, because it changes what the column should render:
-// agy's "text_delta" is not token-level. A whole agent_response arrives as ONE
-// delta when the step flips to ACTIVE, plus a trailing "\n" when it flips to
-// DONE. The measured effect is a column that sits completely empty for the full
-// generation — 73 seconds on a one-word reply — and then fills in a single
-// paint. That is a PhaseWaiting case, not a streaming one.
+// agy's "text_delta" is not token-level, and its granularity depends on the
+// SIZE of the reply. This paragraph used to say a whole agent_response always
+// arrives as ONE delta on ACTIVE plus a trailing "\n" on DONE — always a
+// PhaseWaiting case and never a streaming one. RE-MEASURED 2026-08-16 on agy
+// 1.1.13 (design.md §9.43's amendment), and both halves of that are wrong:
+//
+//   - A SHORT reply sends no ACTIVE line at all. One DONE step carries the whole
+//     text. The column does sit empty for the generation and then fill in a
+//     single paint, which is the old claim's observed effect reached by a
+//     different route.
+//   - A LONG reply (~600 words) sends true incremental deltas about 200ms apart
+//     — three ACTIVE steps, then the final chunk on DONE. Each delta continues
+//     where the previous one stopped, so accepting both states duplicates
+//     nothing.
+//
+// No branch below changes for this. The seat declares GranFinalOnly and council
+// promotes the phase to streaming on the first chunk, so the modest claim is
+// made at dispatch and upgraded by evidence — which is exactly what a vendor
+// whose granularity varies by reply length needs.
 func (Antigravity) ParseEvent(line []byte) (runner.Event, bool) {
 	if len(line) == 0 || line[0] != '{' {
 		return runner.Event{}, false
@@ -542,6 +556,38 @@ func (Antigravity) ParseEvent(line []byte) (runner.Event, bool) {
 			// lying quietly.
 		}
 	case "result":
+		// EndsTurn is deliberately NOT set here, and that is now a measured
+		// decision rather than an unexamined default.
+		//
+		// This line IS this vendor's answer-complete marker. MEASURED 2026-08-16
+		// against agy 1.1.13 on Windows 11, through this adapter's own argv, on a
+		// brief-shaped prompt in a throwaway directory outside any repo, three
+		// trials: it is the LAST line on stdout every time, stderr stays empty,
+		// and it carries the whole response plus the status. So the marker half of
+		// the question is yes.
+		//
+		// The TAIL is what fails the test. The process exits 0.314s, 0.049s and
+		// 0.135s after this line — the third trial asked for ~600 words, so a tail
+		// that scaled with the reply or with the conversation database would have
+		// shown itself. Codex's tail, measured the same day on the same box, is
+		// 4.06s and 4.25s, and that is what EndsTurn was wired for there (see
+		// codex.go). Settling this column a third of a second early would correct
+		// a clock that renders whole seconds, and would spend an `exiting` word
+		// that appears and disappears faster than a reader can see it. The settle
+		// exists to delete a false `streaming` that ran for four seconds, not to
+		// add a true `exiting` nobody can read.
+		//
+		// Nothing rides the tail either, polled rather than inferred: the
+		// conversation database, the four transcript files under
+		// brain/<id>/.system_generated/logs/, and the CLI log all take their final
+		// write within one 250ms poll of the exit.
+		//
+		// So the process exit stays this seat's end-of-turn signal. What is still
+		// UNMEASURED, and would have to be measured before this is revisited: all
+		// three trials ended status SUCCESS, so the failing turn's tail is unknown,
+		// and all three ran no tools. design.md §9.43's 2026-08-16 amendment
+		// carries the full timeline.
+		//
 		// Response is the whole final reply, carried as the fallback for a turn
 		// that streamed nothing. For this vendor that fallback is load-bearing
 		// rather than defensive, given the granularity noted above.

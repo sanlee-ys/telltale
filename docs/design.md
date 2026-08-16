@@ -9702,9 +9702,15 @@ a different outcome.
 **Retiring the column was the alternative, and it is refused for §9.33's reason rather than for a
 new one.** `turnColumnFinished` cancels the turn's context, and `runner.Start` kills the child on
 that context. Retiring here would kill a process that is still winding down. Codex's linger was
-measured before that argument was accepted; **this vendor's linger is not measured at all**, which
-makes the case stronger, not weaker. A room may not shorten a process's life on a number nobody
-has.
+measured before that argument was accepted; this vendor's linger was not measured at all when this
+block was written, which made the case stronger rather than weaker. A room may not shorten a
+process's life on a number nobody has.
+
+> **Amended 2026-08-16 (§9.43).** That number now exists, for the SUCCEEDING turn only: agy's tail
+> is 0.049s, 0.135s and 0.314s on `agy 1.1.13`, against codex's 4.06s and 4.25s. The settle above
+> stands unchanged. The measurement makes the ruling cheaper rather than wrong — there is almost
+> nothing left to cut short — and it does **not** cover this branch, because all three trials
+> succeeded. The failing turn's tail is still a number nobody has.
 
 **Moving the fact onto `State` was the second alternative, and it is refused too.** `State` cannot
 see `Model.turn`, so "a turn is live" would have to be copied onto it and reset on every path that
@@ -11550,6 +11556,80 @@ entirely successful still delivers the mismatched id to the room.
 behaviour rests on the 2026-08-09 capture, and the code rests on that capture's fixture. A
 re-measurement against a later build is what would retire `SilentResumeForkMeasuredAt`, and
 until somebody runs one, this seat's claim names 1.1.11 and no other build.
+
+#### 2026-08-16: the agy tail, measured — and why this seat still names no end of turn
+
+§9.33's amendments settled the codex seat on `turn.completed` and left this seat alone. The second
+of them said why in one sentence: **"this vendor's linger is not measured at all"**. That sentence
+is now false. This block is the measurement that replaces it, and the verdict is a measured **no**:
+the marker exists, the tail does not, and `vendors/agy.go` keeps its behaviour.
+
+**Instrument and version.** `agy 1.1.13`, read from `agy --version` at run time rather than from
+this file. agy self-updates, so a version quoted from a document is a version nobody checked;
+§3.8's re-verification records the same discipline. The probe ran this seat's own argv
+(`--output-format stream-json --disable-slash-commands --print-timeout 30m -p <prompt>`) on a
+brief-shaped prompt, in a throwaway directory outside any repository. It recorded the arrival time
+of every stdout and stderr line, then the process exit. It polled
+`%USERPROFILE%\.gemini\antigravity-cli` every 250ms for size and mtime changes. It read no file
+content, and every prompt told the model to use no tools.
+
+**Three trials, not two.** Trials 1 and 2 are one-sentence replies. Trial 3 asks for about 600
+words, because a tail that scales with the reply or with the conversation database would not show
+itself in two short turns.
+
+| | trial 1 | trial 2 | trial 3 (long reply) |
+|---|---|---|---|
+| `init` | 12.756s | 4.380s | 3.403s |
+| first `agent_response` delta | 14.181s | 6.005s | 9.487s |
+| `agent_response` DONE | 14.181s | 6.005s | 10.091s |
+| `checkpoint` | 14.603s | 6.606s | 10.694s |
+| **`result` (the answer)** | **14.603s** | **6.606s** | **10.694s** |
+| process exit | 14.917s | 6.655s | 10.829s |
+| **tail** | **0.314s** | **0.049s** | **0.135s** |
+
+**The marker half of the question is yes.** On all three trials `result` is the LAST line on
+stdout, stderr stays empty throughout, and the line carries both the full `response` text and the
+`status`. The adapter already parses it. A reliable answer-complete marker exists on this seat.
+
+**The tail half is what fails.** 0.049s, 0.135s and 0.314s, against the 4.06s and 4.25s §9.33
+measured on codex the same day. `EndsTurn` would move two things and neither survives those
+numbers. The turn clock would stop at `result` rather than at the exit, which corrects at most
+0.314s on a clock that renders whole seconds. The column would settle at `result` and read
+`exiting` until the exit, which puts a status word on screen for a third of a second at most.
+§9.33's settle exists to remove a false `streaming` that ran for four seconds. It does not exist to
+add a true `exiting` that nobody can read. So this seat keeps the process exit as its end-of-turn
+signal, and the decision is now written down rather than left as an unexamined default.
+
+**Nothing rides this tail either.** The vendor's own state writes were polled rather than diffed,
+so this is an observation of when writes stopped. On all three trials the final write to the
+conversation database, to the four transcript files under `brain/<id>/.system_generated/logs/`,
+and to the CLI log all land within one 250ms poll of the exit. There is no gap between the last
+receipt and the death, because there is no gap to hold one.
+
+**What is NOT claimed.**
+
+- **The failing turn is unmeasured.** All three trials ended `status: "SUCCESS"`. §9.33's second
+  amendment settles a *failed* agy turn on its `status: "ERROR"` line, and that path's tail is not
+  covered here. Producing a failure on purpose needs either a posture flag this adapter no longer
+  passes (ADR-008's seventeenth amendment) or a lost thread this CLI answers with success (§9.43),
+  so no probe reached one.
+- **The tool-using turn is unmeasured**, for §9.33's own reason: a probe gets no write access.
+- **The size is not a constant.** Three trials, one box, one build, one day.
+- **The boot is not the tail.** `init` lands 3.4s to 12.8s after the spawn. That is the operator's
+  wait and the seat bills it honestly. It is named here only so a later reader does not mistake a
+  slow start for a linger.
+
+**The same capture refutes a claim in the adapter, and the claim is corrected rather than left.**
+`ParseEvent`'s doc comment said a whole `agent_response` arrives as ONE delta when the step turns
+ACTIVE, plus a trailing newline on DONE — therefore a `PhaseWaiting` case and never a streaming
+one. At 1.1.13 both halves are wrong. A short reply sends no ACTIVE line at all, and one DONE step
+carries the whole text. A long reply sends true incremental deltas about 200ms apart (trial 3:
+9.487s, 9.687s, 9.889s, with the final chunk on DONE), and each delta continues where the last one
+stopped, so nothing duplicates. **No code changes for this.** The seat declares `GranFinalOnly` and
+`applyEvents` promotes the phase to `streaming` on the first chunk, which is the modest-claim rule
+working exactly as it was written. Only the comment was stale.
+
+**Spend:** three billed turns, all trivial prompts, no tools.
 
 <a id="s9-44"></a>
 

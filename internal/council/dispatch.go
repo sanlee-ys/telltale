@@ -1159,8 +1159,16 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				// argument rather than on taste: turnColumnFinished cancels the
 				// turn's context and runner.Start kills the child on it, so
 				// retiring here would kill a process that is still winding down.
-				// This vendor's linger has never been measured, which is a reason
-				// to wait for its exit rather than a licence to cut it short.
+				//
+				// This vendor's linger HAS since been measured, and only for the
+				// succeeding turn: 0.049s, 0.135s and 0.314s after the `result`
+				// line, on agy 1.1.13 (design.md §9.43's 2026-08-16 amendment).
+				// That reading makes the settle cheaper rather than wrong — there
+				// is close to nothing here to cut short — and it does not reach
+				// this branch, because all three probe turns ended SUCCESS. The
+				// failing turn's tail is still a number nobody has, which is a
+				// reason to wait for the exit rather than a licence to cut it
+				// short.
 				//
 				// NOT cancellation-aware, for the same reason the settle above is
 				// not: a ctrl+c during the linger does not un-fail the turn, and

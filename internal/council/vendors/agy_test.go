@@ -517,6 +517,39 @@ func TestAgyNonSuccessStatusIsAnError(t *testing.T) {
 	}
 }
 
+// TestAgyNamesNoEndOfTurn pins a measured decision rather than an oversight.
+//
+// `result` IS this seat's answer-complete marker: it is the last line on stdout,
+// it carries the whole response, and this adapter already parses it. Setting
+// EndsTurn on it would settle the column at the answer, the way the codex seat
+// settles on `turn.completed`. It is deliberately left unset, because the tail
+// that change exists to delete is not there. MEASURED 2026-08-16 on agy 1.1.13,
+// three trials including one ~600-word reply: the process exits 0.314s, 0.049s
+// and 0.135s after this line, against codex's 4.06s and 4.25s on the same box
+// the same day (design.md §9.43's 2026-08-16 amendment).
+//
+// The test exists so that arming the flag costs a deliberate edit with a fresh
+// measurement behind it, instead of looking like an obvious one-line fix. What
+// would justify arming it is a re-measured tail that is material — and the two
+// cases nobody has measured are named in agy.go: the failing turn and the
+// tool-using turn.
+func TestAgyNamesNoEndOfTurn(t *testing.T) {
+	lines := [][]byte{
+		[]byte(`{"event":"init","conversation_id":"2b18de13-bd04-4804-844e-0f75f2e3461e","init":{"cwd":"C:\\ws","tools":["view_file","write_to_file","run_command"],"permission_mode":"request-review"}}`),
+		[]byte(`{"event":"step_update","step_update":{"conversation_id":"2b18de13-bd04-4804-844e-0f75f2e3461e","step_index":2,"state":"ACTIVE","step_type":"agent_response","text_delta":"OK"}}`),
+		[]byte(`{"event":"step_update","step_update":{"conversation_id":"2b18de13-bd04-4804-844e-0f75f2e3461e","step_index":2,"state":"DONE","step_type":"agent_response","text_delta":"\n","duration_seconds":73.0806477}}`),
+		[]byte(`{"event":"step_update","step_update":{"conversation_id":"09716b44","step_index":6,"state":"DONE","step_type":"tool","tool_name":"write_to_file","duration_seconds":0.0604336,"tool_info":{"name":"write_to_file","parameters":{"TargetFile":"C:\\probe.txt"}}}}`),
+		[]byte(`{"event":"result","result":{"conversation_id":"2b18de13-bd04-4804-844e-0f75f2e3461e","status":"SUCCESS","response":"OK\n","duration_seconds":73.7446404,"num_turns":1}}`),
+		[]byte(`{"event":"result","result":{"conversation_id":"14f3918c-ff9e-4962-81b9-357f5a658d1e","status":"ERROR","response":"","error":"Agent execution terminated due to error.","duration_seconds":5.1746031,"num_turns":1}}`),
+	}
+	for _, l := range lines {
+		ev, ok := Antigravity{}.ParseEvent(l)
+		if ok && ev.EndsTurn {
+			t.Errorf("%s ended the turn; this seat is retired by its process exit, and the tail a marker would save measured 0.049s to 0.314s", l)
+		}
+	}
+}
+
 // TestAgyUnknownEventsAreIgnoredNotFatal. agy's discriminator is "event", not
 // Claude's "type", so a Claude-shaped line must fall through rather than being
 // half-parsed by a shared field name.
