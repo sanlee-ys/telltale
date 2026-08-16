@@ -1,0 +1,39 @@
+# Dependabot — the dependency watch for this repository.
+#
+# Two ecosystems, because the repository has exactly two dependency surfaces: the
+# Go module graph, and the actions that the two workflows pin. A release builds
+# from the module graph as committed (`.goreleaser.yaml` runs `go mod download`
+# and never `go mod tidy`), so an update that nobody sees is an update that never
+# reaches an artifact.
+#
+# This file is also the watch on the TUI line. `charm.land/bubbletea/v2` is a
+# direct dependency, and `github.com/charmbracelet/ultraviolet` is the indirect
+# renderer under it, pinned to a pseudo-version (a dated commit, not a tag). A
+# pseudo-version does not move on its own and it carries no release notes, so
+# without this file the room's renderer would sit at whichever commit it was
+# first resolved to. `gomod` raises the indirect one as well as the direct one.
+#
+# Weekly, not daily: this is a one-maintainer repository, and a daily cadence
+# produces a queue rather than a review.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      # `chore(deps)` is deliberate, and it is the ONE exception to CLAUDE.md's
+      # commit voice. `.goreleaser.yaml`'s changelog filter already excludes
+      # `^chore\(deps\)`, so this prefix is what makes that exclusion match. A
+      # squash-merge turns the PR title into the commit subject, so a dependency
+      # bump with any other subject lands in the release notes as a feature.
+      prefix: chore(deps)
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore(deps)

@@ -5221,6 +5221,35 @@ that file is the procedure, and neither restates the other.
    draft (schema 1.12.0, `zip` + nested `portable`, `windows_amd64` only) and the
    submission flow are in [packaging/winget/](../packaging/winget/).
 
+8. **Not signed, and the decision is the owner's** (recorded 2026-08-16). No
+   artifact carries a signature. `.goreleaser.yaml` declares no `signs` block and
+   `release.yml` holds no signing secret, so the claim is checkable from the two
+   files rather than asserted. This is a **gap that is stated, not a gap that is
+   closed**, and it takes the same treatment as an unverified platform: the label
+   is the whole claim, and it now appears in `SECURITY.md` and in the README
+   install section. Windows ships without an Authenticode signature, and scoop and
+   winget deliver that same binary. The macOS archives are unsigned and not
+   notarized, so Gatekeeper refuses one that a browser marked with
+   `com.apple.quarantine` — **that path is unmeasured here**, because the macOS
+   smoke ran a binary built on the Mac itself rather than a downloaded archive,
+   and the sentence says so wherever it appears. `checksums.txt` stays the
+   verification this release can honestly offer: it proves the archive is the one
+   the workflow produced, and it proves nothing about who produced it.
+   **Why it is not built:** signing needs a code-signing certificate, or an Apple
+   Developer account and a notarization credential, held by the owner and stored
+   as long-lived release secrets. The credential is the deciding cost here, the
+   same way it decided the in-repo scoop bucket in (3) — except that argument
+   cannot be won by a config choice this time, because no arrangement of the
+   workflow produces a signature without an owner-held secret. So this is an owner
+   decision about spend and about identity, not a contributor task, and no
+   contributor should build the pipeline speculatively.
+
+**Posture surface (added 2026-08-16).** `SECURITY.md` carries the private
+reporting route, the trust model in the terms of the read/write boundary, and the
+signing statement above. `.github/dependabot.yml` watches `gomod` and
+`github-actions` weekly; it is also the watch on the TUI line, because
+`ultraviolet` is pinned to a pseudo-version that never moves on its own.
+
 What this does **not** discharge: the README hero visual and the zero-config first
 frame are the other two pieces of adoption item 1 and are untouched here, and the
 positioning line still lands with the slice, not ahead of it.

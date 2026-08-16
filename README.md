@@ -107,6 +107,16 @@ suite, the build and binary-level smokes on `windows-latest`. `darwin_amd64` is
 project. That is the same flagged-limitation rule the gauges apply to a segment,
 applied to a platform ([docs/design.md §8](docs/design.md)).
 
+**No binary here is signed, on any platform.** The release workflow runs no
+signing step, so every archive is unsigned and the macOS archives are not
+notarized. Windows raises no signature to check, and `scoop` and `winget` install
+that same unsigned binary. On macOS, Gatekeeper refuses an unsigned, un-notarized
+binary that a browser downloaded and marked with `com.apple.quarantine`. Check
+the SHA-256 in `checksums.txt` before you run a download — it proves the archive
+is the one the release built, which is a weaker claim than a signature and is the
+claim this project can make today. [SECURITY.md](SECURITY.md) states the per-platform
+detail and says why signing is an owner decision rather than a to-do.
+
 `telltale version` prints the tag a binary was built from; a source build says `dev`.
 
 `telltale.exe council` opens the room, which is the mode this project is for and has its
