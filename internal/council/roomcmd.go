@@ -209,33 +209,45 @@ func parseBareCommand(draft, verb string) bool {
 	return strings.TrimSpace(draft) == verb
 }
 
-// roomCommand handles a room-addressed draft, and is the ONE place a roster
-// change is persisted. Returns false when the draft is ordinary and should
-// dispatch.
+// roomCommand handles a room-addressed draft, and is the ONE place a change to
+// the room's SHAPE is persisted. Returns false when the draft is ordinary and
+// should dispatch.
 //
 // **The save is here rather than inside the command that made the change**, and
 // that is the whole reason this wrapper exists (§9.32). The room file is what a
-// reattach reads, so a roster held only in memory is undone by quitting — `c`'s
-// argument, in `clearSeat`'s own words, applied to the other thing a user
+// reattach reads, so a shape held only in memory is undone by quitting — `c`'s
+// argument, in `clearSeat`'s own words, applied to the other things a user
 // deliberately takes out of the room. `c` could put its `saveRoom` inside
 // itself because there is exactly one way to clear a seat; the roster has `/seat`
 // and `/unseat` and will have whatever narrows it next, and a save per command
 // is a save the third one forgets.
 //
-// So it is written as an OBSERVATION rather than a call: snapshot the roster,
-// run the command, save if it moved. Any command reachable from here inherits
+// So it is written as an OBSERVATION rather than a call: snapshot the shape, run
+// the command, save if it moved. Any command reachable from here inherits
 // persistence without knowing this function exists, which is what lets a
 // `/unseat` written in parallel compose with this without either side being
 // told about the other.
 //
-// Saved only when it MOVED. `/seat` with a typo, `/seat` mid-turn and bare
-// `/seat` all report without reseating, and rewriting the file on each of them
-// would refresh SavedAt — the age a reattach shows — for a room that answered a
+// **The shape is BOTH halves — workspace and roster — and it used to be only the
+// roster** (§9.32's 2026-08-16 amendment). `/cd` wrote nothing of its own, so
+// the move reached the file at the next completed turn or at teardown: it
+// survived a clean quit and did not survive a crash, a closed terminal or a
+// machine that went down. That is the same failure the per-turn save was added
+// to prevent for the session ids, on the field beside them. A `/cd` is a
+// deliberate statement about where the room is, and it earns the same treatment
+// the roster earns for the same reason.
+//
+// Saved only when it MOVED, and each half answers that question in its own
+// terms — `sameSeats` because a slice does not compare with `==`, `sameDir`
+// because two spellings of one directory are one directory. `/seat` with a typo,
+// `/cd` to an unknown path, either of them mid-turn, and the bare reporting
+// forms all report without moving the room; rewriting the file on those would
+// refresh SavedAt — the age a reattach shows — for a room that answered a
 // question and did nothing.
 func (m *Model) roomCommand() bool {
-	before := m.st.Seats
+	beforeSeats, beforeDir := m.st.Seats, m.st.Workspace
 	handled := m.runRoomCommand()
-	if handled && !sameSeats(before, m.st.Seats) {
+	if handled && (!sameSeats(beforeSeats, m.st.Seats) || !sameDir(beforeDir, m.st.Workspace)) {
 		m.saveRoom()
 	}
 	return handled
@@ -265,6 +277,14 @@ func (m *Model) runRoomCommand() bool {
 }
 
 // cdCommand moves the room's workspace between turns.
+//
+// It does not save, for seatCommand's reason: roomCommand persists any workspace
+// this returns having moved (§9.32, amended 2026-08-16), so a command that
+// narrows or re-points the room inherits the write without remembering to make
+// it. Every refusal below returns with the workspace untouched, which is what
+// makes the observation up there the whole refusal semantics as well — a path
+// resolveCD rejects is never assigned, so it is never a value the file could
+// briefly hold.
 func (m *Model) cdCommand(arg string) bool {
 	if m.turn != nil {
 		// The turn in flight was dispatched against the old directory, and the

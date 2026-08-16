@@ -146,6 +146,106 @@ func TestCdToTheSameDirectoryIsANoOp(t *testing.T) {
 	}
 }
 
+// --- the move reaches the file when it happens ----------------------------
+
+// dispatchedCdRoom is cdRoom for the PERSISTENCE half of /cd. It adds the two
+// things a write needs and cdRoom deliberately has not got: a redirected home,
+// so the save lands in a temp directory rather than the operator's own
+// ~/.telltale/council, and one completed turn, because saveRoom writes nothing
+// at turn 0 and a room that never dispatched cannot witness a write either way.
+func dispatchedCdRoom(t *testing.T) (*Model, string, string) {
+	t.Helper()
+	tempHome(t)
+	m, a, b := cdRoom(t)
+	m.st.Turn = 1
+	m.sessions[model.VendorClaude] = "claude-sess-1"
+	return m, a, b
+}
+
+// nothingWasSaved asserts the room file does not describe a room. Used by the
+// refusal cases, where the claim is an ABSENCE of a write — a save that
+// happened would be visible here as a usable room.
+func nothingWasSaved(t *testing.T) {
+	t.Helper()
+	re, err := LoadRoom()
+	if err != nil {
+		return
+	}
+	if re.Active() {
+		t.Fatalf("a refused /cd wrote the room file anyway: workspace %q", re.Room.Workspace)
+	}
+}
+
+// TestCdIsPersistedWhenItHappens is the crash the old behaviour lost.
+//
+// A `/cd` is a deliberate statement about where the room is, and it used to
+// reach room.json only when something ELSE wrote: the next completed turn, or
+// teardown. So the move survived a clean quit and did not survive a closed
+// terminal or a machine that went down — the same failure the per-turn save
+// exists to prevent for session ids, on the other half of the room's SHAPE.
+//
+// Read off disk rather than off m.st, for roster_test.go's reason: a workspace
+// held in memory is exactly the bug.
+func TestCdIsPersistedWhenItHappens(t *testing.T) {
+	m, _, b := dispatchedCdRoom(t)
+	m.setDraft("/cd " + b)
+	if !m.roomCommand() {
+		t.Fatal("/cd was not recognised as a room command")
+	}
+	if got := savedNow(t).Workspace; !sameDir(got, b) {
+		t.Errorf("the file says %q, the room moved to %q", got, b)
+	}
+}
+
+// TestARefusedCdWritesNothing keeps the refusal semantics the write is layered
+// over. Each case below leaves the room where it was, so each must leave the
+// file where it was too — a write on a refusal would refresh SavedAt, the age a
+// reattach shows, for a room that moved nowhere.
+//
+// The unknown path is the one worth naming: it is refused by resolveCD BEFORE
+// the workspace is assigned, so there is no window in which a bad path is
+// persisted and then corrected.
+func TestARefusedCdWritesNothing(t *testing.T) {
+	t.Run("an unknown directory", func(t *testing.T) {
+		m, _, _ := dispatchedCdRoom(t)
+		m.setDraft("/cd no-such-repo")
+		m.roomCommand()
+		nothingWasSaved(t)
+	})
+	t.Run("a turn in flight", func(t *testing.T) {
+		m, _, b := dispatchedCdRoom(t)
+		m.turn = &turnState{cancel: func() {}, live: map[model.VendorID]bool{}}
+		m.setDraft("/cd " + b)
+		m.roomCommand()
+		nothingWasSaved(t)
+	})
+	t.Run("the directory the room is already in", func(t *testing.T) {
+		m, a, _ := dispatchedCdRoom(t)
+		m.setDraft("/cd " + a)
+		m.roomCommand()
+		nothingWasSaved(t)
+	})
+	t.Run("bare /cd, which only reports", func(t *testing.T) {
+		m, _, _ := dispatchedCdRoom(t)
+		m.setDraft("/cd")
+		m.roomCommand()
+		nothingWasSaved(t)
+	})
+}
+
+// TestCdBeforeTheFirstTurnWritesNothing is the roster's rule reaching /cd
+// unchanged, and it is stated as a test rather than left to be discovered:
+// saveRoom returns at turn 0, so a `/cd` typed before the first brief rides out
+// on that brief's own save. A room opened in the wrong directory and quit still
+// drops no file into ~/.telltale/council.
+func TestCdBeforeTheFirstTurnWritesNothing(t *testing.T) {
+	m, _, b := dispatchedCdRoom(t)
+	m.st.Turn = 0
+	m.setDraft("/cd " + b)
+	m.roomCommand()
+	nothingWasSaved(t)
+}
+
 // fakeSession stands in for a live vendor process. See seatSession: the /cd
 // respawn kills a RUNNING process, and this is how the branch is watched
 // without spawning one.
