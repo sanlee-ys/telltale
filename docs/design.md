@@ -165,9 +165,12 @@ marker selects (`internal/antigravity`).
 | Folder | stdin `workspace.current_dir` (fallback `cwd`), basename only | hide segment | **built** |
 
 Not rendered, deliberately: `cost` does not exist anywhere in the payload (nothing is
-priced); `email` and `plan_tier` are identity, not gauges; `transcript_path` is
-advertised but never written by agy 1.1.9 (§3.8) and displaying a path to a
-nonexistent file would be narrating.
+priced); `email` and `plan_tier` are identity, not gauges; `transcript_path` is not
+displayed because it is unverified, not because it is absent — the transcript IS
+written on disk (§3.8's 1.1.13 re-read found it in 81 of 81 conversations; the claim
+that agy "never writes that file" was false and is corrected there), but whether the
+PAYLOAD's value points at that real file needs a live capture nobody has run, and
+displaying an unverified path would be narrating.
 
 Schema verification record: documented contract (antigravity.google/docs/cli/statusline)
 cross-checked against a six-payload live capture from a real interactive session on agy
@@ -956,12 +959,12 @@ de-authenticating the operator's account — and an unmeasured network-backed pr
 `doctor` would red-cross exactly when the operator is offline, which is the dishonest
 cell that mode exists to avoid. `doctor` is left alone.
 
-**One inventory cell is now stale and is NOT fixed here.** §3.10's canary table still
-reads `agy 1.1.9` for the Antigravity row while the adapter is pinned to `agy 1.1.13`.
-That edit was out of scope for the session that wrote this block. Note that
-`TestTheCanaryInventoryMatchesThisAdapter` does **not** catch it: it substring-matches the
-pin anywhere in `design.md`, so this very block turns the guard green while the table it
-guards stays wrong. Move the row, and consider scoping the assertion to the table.
+**One inventory cell went stale with the re-verify, and is now fixed.** §3.10's canary
+table read `agy 1.1.9` for the Antigravity row after the adapter moved to `agy 1.1.13`;
+the row was corrected in the same-day ledger pass. The weakness this exposed stands
+recorded: `TestTheCanaryInventoryMatchesThisAdapter` substring-matches the pin anywhere
+in `design.md`, so a dated block quoting the new pin turns the guard green while the
+table it guards stays wrong. Scoping that assertion to the table is unowned.
 
 ### 3.9 Cursor (Composer) seam — surveyed live 2026-08-02; the store is open, and it holds credentials
 
@@ -1479,7 +1482,7 @@ has moved, and says so. `internal/adapter/drift` holds the mechanism; this is th
 | Codex CLI | `codex-cli 0.146.0` | `envelope type` — on every rollout record | model, workspace, quota, context % |
 | | | `session_meta record` — the FIRST record of every rollout | workspace |
 | Gemini CLI | `gemini-cli v0.53.1` | `metadata record` | name, subagents |
-| Antigravity | `agy 1.1.9` | `gen_metadata table` | model |
+| Antigravity | `agy 1.1.13` | `gen_metadata table` | model |
 | | | `trajectory_metadata_blob table` | workspace |
 | Cursor | `Cursor 3.14.7` | `composerHeaders timestamp columns` | last activity |
 | Grok CLI | `grok 1.0.4 (d846eb93d9)` | `summary.json info.id` — the identity envelope, on 30 of 30 sessions | name, model, workspace, last activity |
@@ -5133,6 +5136,11 @@ that file is the procedure, and neither restates the other.
 What this does **not** discharge: the README hero visual and the zero-config first
 frame are the other two pieces of adoption item 1 and are untouched here, and the
 positioning line still lands with the slice, not ahead of it.
+*(Ledger, 2026-08-16: the zero-config first frame is DELIVERED — measured on a clean
+profile first, then built narrow; §7.7's "measured 2026-08-15, then narrowed"
+subsection is the record. The positioning line landed room-led with the identity
+rewrite of 2026-08-15. Of adoption item 1, the hero visual alone remains, and the
+recording chain below is what will produce it.)*
 
 #### The recording chain: PowerSession-rs + agg (measured 2026-08-16)
 

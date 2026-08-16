@@ -66,6 +66,15 @@ go build -o telltale.exe ./cmd/telltale
 ./telltale.exe council
 ```
 
+However you installed: run `telltale` with no arguments for a short first frame — the
+three modes that need no configuration, and which one to start with. `telltale doctor`
+is that one. It reports which vendor CLIs are on this machine, where each was found and
+what version it reports, and says out loud what it never checked: it runs
+`<binary> --version` and nothing else — no turn, no login, no network, and it writes
+nothing. On a machine with no vendor store yet, the HUD is not blank either: it names
+every path it looked in, and points at `doctor` for the one thing it cannot see —
+whether the vendor binaries are installed at all.
+
 **Windows, scoop** — the bucket is live; exercised once on 2026-08-14 (above):
 
 ```
