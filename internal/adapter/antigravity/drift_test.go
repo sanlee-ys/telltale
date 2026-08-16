@@ -22,7 +22,7 @@ func driftReport(s *model.Session) string {
 // The verified corpus is silent — including the conversation whose generation
 // fails its token self-check, which is a bad READING and not a moved shape.
 func TestVerifiedCorpusReportsNoDrift(t *testing.T) {
-	for _, id := range []string{idHappy, idWAL, idBroken, idNoWorkspace, idZero} {
+	for _, id := range []string{idHappy, idWAL, idBroken, idNoWorkspace, idZero, idMultiChunk} {
 		if d := driftReport(mustRead(t, id)); d != "" {
 			t.Errorf("%s: the verified corpus reported drift: %q", id, d)
 		}

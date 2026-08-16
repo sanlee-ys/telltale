@@ -106,7 +106,13 @@
 //     matter — whether the flat file stays complete once a second chunk
 //     exists — is unobserved. Read the flat file until a multi-chunk
 //     conversation is measured; do not switch to the chunk tree on the
-//     strength of its name.
+//     strength of its name. That instruction is now a test rather than only a
+//     comment: multichunk_test.go drives a SYNTHESIZED two-chunk fixture and
+//     pins what this adapter does under each behavior the vendor might have —
+//     including a flat file frozen at the first chunk, which costs freshness
+//     precision and not the row, because the mtime fold carries it. The
+//     fixture is not evidence about agy. A live multi-chunk capture is still
+//     the missing instrument (§3.8, 2026-08-16 amendment).
 //   - Token counts are guarded by an arithmetic identity: thinking + answer
 //     must equal output (15/15 in the survey, and 1,926/1,926 over the whole
 //     corpus at 1.1.13). A generation that fails its own

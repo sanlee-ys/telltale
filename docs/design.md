@@ -968,6 +968,68 @@ de-authenticating the operator's account — and an unmeasured network-backed pr
 `doctor` would red-cross exactly when the operator is offline, which is the dishonest
 cell that mode exists to avoid. `doctor` is left alone.
 
+**Amended 2026-08-16 — the multi-chunk case is PINNED, and it is still not MEASURED.**
+The re-verification block above left a standing watch item: whether the flat
+`transcript.jsonl` stays complete once a second chunk exists. That is still unobserved.
+No live multi-chunk conversation has been captured on any machine, and this amendment
+does not claim one. What changed is that the adapter's side of the question now has
+tests instead of a comment — `internal/adapter/antigravity/multichunk_test.go`, over a
+**synthesized** two-chunk fixture built by `testdata/gen_fixtures.py`.
+
+**The distinction is the whole point of writing this down.** Every other fixture in that
+directory reproduces a shape this section MEASURED. This one reproduces a shape nobody
+has seen, extended from the measured single-chunk shape along the vendor's own naming
+(`logs/chunks/transcript/0000000N.jsonl`, `logs/chunks/transcript_full/`), with the one
+relationship the corpus did measure — the flat file is byte-identical to its chunk —
+carried forward to two chunks. So the fixture pins **the adapter's contract with
+itself**, never a vendor claim, and nothing here is admissible as evidence about what
+agy writes.
+
+**What the pin found: the adapter is correct under that contract, and no code changed.**
+Six properties now have tests, and each was mutation-checked — the guard it names was
+deliberately removed and the test failed with the intended message, because a green test
+that cannot fail pins nothing.
+
+- **The flat file is what gets read.** The chunk tree's `transcript_full` files carry a
+  poison step dated 23:59 against the flat file's newest at 09:11:39, dated in the past
+  so the future-skew guard cannot silently swallow it. An adapter that followed the
+  chunk tree moves `last_activity` by fourteen hours and the test says so by name. Note
+  the limit honestly: `chunks/transcript/` is byte-identical to the flat file, so a
+  switch to *that* is invisible to any test — which is precisely why the switch must not
+  be made on the strength of a directory name.
+- **A flat file frozen at the first chunk costs precision, not the row.** This is the
+  worst plausible form of the unobserved case: the vendor stops appending to
+  `transcript.jsonl` and writes only into chunk 1. The §6 Q8 mtime fold carries it — the
+  database is the file still being written — so `last_activity` stays correct, nothing
+  degrades, and nothing is invented. That is an honest outcome rather than a lucky one:
+  the adapter never claimed the transcript was its only clock.
+- **Damage inside the second chunk degrades the reading, not the row** (ADR-001's
+  partial-read rule). Both branches are exercised: JSON that does not parse, and JSON
+  that parses carrying a timestamp that does not. Three torn records, counted once,
+  stated once in `Diagnostics`, and the newest surviving step still dates the row.
+- **The read budget's blind middle is absence, not corruption.** A transcript big enough
+  to chunk is the first one this adapter splits into a head and a tail read at all, and
+  the ~120 records it skips must never be reported as unparseable. An adapter accusing
+  the vendor of damage that is not there is the same class of dishonesty as rendering a
+  number it did not read.
+- **The head/tail overlap guard now has a test, and it had none before.** Every other
+  fixture transcript on this vendor is under 1 KiB — swallowed whole by the tail read,
+  never reaching `jsonl.Head`. The narrowing branch executes only between the tail budget
+  and the full budget, so the test truncates a copy into that band and damages one record
+  in the contested bytes. With the guard the count is 1; with it removed the measured
+  result is **2 unparseable transcript records skipped** for one torn record. Duplication
+  is invisible to every other signal here, because the newest-timestamp fold is a maximum
+  and survives being fed a record twice; the unparseable counter is a sum, and it is the
+  one place a doubled read surfaces.
+- **The PII boundary holds over a transcript 400× the size of the others**, chunk tree
+  included.
+
+**What is still owed is the capture, and it is unchanged by any of this.** A synthetic
+fixture can prove the adapter is self-consistent across the behaviors the vendor might
+have. It cannot say which one agy has, and the four conversations that grew a chunk tree
+still hold one chunk each. The instrument this seam wants is a live multi-chunk
+conversation, and nothing above substitutes for it.
+
 **One inventory cell went stale with the re-verify, and is now fixed.** §3.10's canary
 table read `agy 1.1.9` for the Antigravity row after the adapter moved to `agy 1.1.13`;
 the row was corrected in the same-day ledger pass. The weakness this exposed stands
