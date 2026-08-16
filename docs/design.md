@@ -8566,6 +8566,26 @@ than anyone wanted. What is still owed is the other half — a "so far" block th
 then swaps for the settled block at the finish — because no live race is recorded as having
 watched a NON-empty interim stat change. One `/arena` against a brief that changes files
 pays it, and it is stated here rather than implied paid.
+**Paid, 2026-08-15/16, race t9 — the first 5-of-5, and the growing half both.** The owner
+raced a file-changing brief across all five seats. The Antigravity and Cursor columns both
+drew a non-empty `arena · so far` that CHANGED on a later refresh (one file, then two) and
+was replaced by the settled block at landing — the growing half, watched twice over. The
+race's full record: three clean finishes with ranks and receipts (claude `1st of 5 · 50s ·
+committed 2770c0c`, grok `2nd · 1m8s · 4aba168`, codex `3rd · 1m10s · 6874ff2`), and two
+seats given up with `x` after ~11 minutes (agy `4th · cancelled · committed 91fc53e`,
+cursor `5th · cancelled · committed 6b94b55`) — the give-up's second and third live
+exercises, and both cut seats kept their commit receipts exactly as the finish-line design
+promised. The cause of the two stalls was measured from OUTSIDE the room before the cuts:
+both racer processes were alive with ~zero CPU over an 8-second sample and no go toolchain
+process existed anywhere, so the work was done and the vendors' own turns had stalled —
+agy inside a `manage_task`/`schedule` poll loop that stopped polling, cursor after its
+final tool step. `/adopt claude` then exercised the dirty-room refusal live (the probe
+turn's two throwaway edits held the tree; the card named them; the operator restored and
+re-ran) before cutting `adopt/t9-claude` and landing the `--no-ff` merge cleanly — the
+refusal path's first live run. **One new gap, found by the same race:** `/trace` was armed
+before the turn and recorded NOTHING for it — the trace file holds only the preceding
+ordinary turn's line — so an arena turn produces no per-seat spawn/wait/stream split, and
+grok's timing on that axis stays unmeasured. Recorded as an unowned gap in STATE.md.
 **Amendment, 2026-08-09: the cursor seat races too, on a throwaway session.** The deferred
 follow-up the verification note filed is built, in the shape it predicted. For an arena turn —
 and only there — dispatch recognises the Conversational seat and, instead of the `FirstTurn`
@@ -8618,7 +8638,10 @@ and was cut loose mid-race with `x` on race t9 — so the spawn, the live interi
 against its tree, and the kill path are measured. **A clean completion is still owed**: no
 live race is recorded in which this seat's own `session/prompt` resolved and the racer was
 killed at its own finish line with its diff read. Until then the *finishing* half of this
-amendment stands on `arena_cursor_test.go` alone, and that is the honest split.
+amendment stands on `arena_cursor_test.go` alone, and that is the honest split. *(The
+2026-08-15/16 5-of-5 race cut this racer a second time — alive at ~zero CPU with its edits
+complete and committed on the cut, ~11 minutes in — so the debt stands and gained a second
+data point: two live races, two stalls, zero self-finishes.)*
 **Amendment, 2026-08-09: every attempt survives as a commit, and `u` takes one back.** The
 commit-per-turn deferral came off the list, and it brought the rollback it makes possible
 (mechanics stolen with attribution: Crystal's commit-per-turn checkpoint, cc-haha's turn-level
@@ -9123,6 +9146,19 @@ file records a machine BEHAVING DIFFERENTLY and this machine behaved as specifie
 of the check is still unexercised**, stated rather than rounded up: the draft was cleared
 instead of sent, so "enter sends it as one brief" has not been observed on a pasted multi-line
 draft. The property that was owed — a paste never sends — is the one that was measured.
+
+**The other half paid, 2026-08-15/16, and it found a render bug on the way.** A three-line
+brief was pasted and SENT with enter in a live 5/5 room: ONE dispatch, the turn counter
+moved by one, and the newlines reached the seat as bytes — verified in the vendor's own
+session transcript (`now.\nThen add a second one…`), not read off the wrapped column echo,
+because the echo's row breaks are ambiguous between newlines and word wrap. **What did not
+hold was the composer render: the three-line draft drew as ONE row before enter.** The
+2026-08-13 check drew three rows in a one-seat room on the same terminal build
+(1.24.11911.0), so the suspect is the composer's height behavior under a full seat strip,
+not the paste path — the wire is proven right and the drawing is proven wrong, which is
+the exact split this section exists to keep. The render defect is recorded as an unowned
+gap in STATE.md; this section's claim is amended to say the paste property holds ON THE
+WIRE, with the row rendering owned separately.
 
 **Amendment, 2026-08-09 — the ergonomic other half: ctrl+u clears the draft.** Paste changed
 the arithmetic on regret. A draft used to cost at most a typed sentence, so backspace's

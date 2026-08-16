@@ -499,13 +499,14 @@ base, confirmed against git rather than the room's own claim, and a second press
 as already undone; `.worktreeinclude` seeding — `seeded 1 file` plus the named no-match
 notice, the seed line's zero-vs-absent rule on a live column; and the fresh-branch adopt
 in the shape ruled 2026-08-11 — `adopt/t14-claude` cut behind the card, a `--no-ff` merge
-landed there, and the room's own branch never moved. **Live in part**: the
-`arena · so far` stat has been watched reading a measured nothing mid-race but never
-watched *grow* from a non-empty read; the cursor seat's throwaway racer has been spawned,
-streamed and killed live but never watched finish on its own; and no race has yet seated
-all five vendors — grok landed after the last full race, so the first 5-of-5 is still
-owed. Each of those is named in the demo path's own markers (`STATE.md`) rather than
-rounded up to settled.
+landed there, and the room's own branch never moved. **Live-verified** as of the
+5-of-5 race (2026-08-15/16): all five vendors racing one brief at once — three clean
+finishes with ranked receipts and two seats given up mid-stall, both keeping their
+commits — and the `arena · so far` stat watched growing from a non-empty read on two
+columns before the settled block replaced it. **Live in part**: the cursor seat's
+throwaway racer has been spawned, streamed and killed live — twice now — but never
+watched finish on its own; that half still stands on its offline tests, and
+[design.md §9.37](design.md) says so beside its payment blocks.
 
 ## Flags
 
