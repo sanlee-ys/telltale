@@ -493,14 +493,19 @@ The record behind all of this — the rulings, which live race verified what, an
 still owed — is [design.md §9.37](design.md). Read it before trusting the edges, because
 they are not all at the same standard. **Live-verified** as of race t9 (2026-08-09): the
 core race and its ranks, the honest zeros, every attempt surviving as a commit,
-`/adopt` and `/arena drop` end to end — adopt in the shape it had that day, a merge onto the
-room's own branch — `x` on a stuck racer, and the conduct line's one
-observed compliance. **Live in part**: the `arena · so far` stat has been watched reading a
-measured nothing mid-race but never watched *grow*; the cursor seat's throwaway racer has
-been spawned, streamed and killed live but never watched finish on its own. **Not yet
-exercised by any live race**: `u`, `.worktreeinclude` seeding, and the fresh branch adopt
-cuts (ruled 2026-08-11) — all pinned by offline
-tests against real git repositories, and named here rather than rounded up to settled.
+`/arena drop`, `x` on a stuck racer, and the conduct line's one observed compliance.
+**Live-verified** as of races t13/t14 (2026-08-14): `u` — the branch really reset to its
+base, confirmed against git rather than the room's own claim, and a second press refused
+as already undone; `.worktreeinclude` seeding — `seeded 1 file` plus the named no-match
+notice, the seed line's zero-vs-absent rule on a live column; and the fresh-branch adopt
+in the shape ruled 2026-08-11 — `adopt/t14-claude` cut behind the card, a `--no-ff` merge
+landed there, and the room's own branch never moved. **Live in part**: the
+`arena · so far` stat has been watched reading a measured nothing mid-race but never
+watched *grow* from a non-empty read; the cursor seat's throwaway racer has been spawned,
+streamed and killed live but never watched finish on its own; and no race has yet seated
+all five vendors — grok landed after the last full race, so the first 5-of-5 is still
+owed. Each of those is named in the demo path's own markers (`STATE.md`) rather than
+rounded up to settled.
 
 ## Flags
 
