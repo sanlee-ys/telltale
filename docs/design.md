@@ -4594,7 +4594,10 @@ docs contradict is worse than either option on its own.
 
 ### 9.1 What v1 seats, and what it does not
 
-Four columns: **Claude Code**, **Codex**, **Antigravity**, **Cursor**.
+Five columns: **Claude Code**, **Codex**, **Antigravity**, **Cursor**, **Grok** (the
+fifth seat arrived 2026-08-09, §9.39 — this line said "Four columns" for six days after
+it landed, which is its own small lesson about headline counts in a doc whose sections
+are the record).
 
 Cursor was originally written up here as deliberately absent, on the grounds that
 `cursor-agent` was not installed. **That was not a judgement call, it was untrue** — the
