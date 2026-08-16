@@ -2,14 +2,23 @@
   "cwd": "C:\\Users\\dev\\code\\myproject",
   "session_id": "abc123",
   "transcript_path": "C:\\Users\\dev\\.claude\\projects\\x\\t.jsonl",
-  "version": "2.1.90",
+  "prompt_id": "00000000-0000-4000-8000-00000000cafe",
+  "version": "2.1.233",
   "model": { "id": "claude-opus-5", "display_name": "Opus" },
   "workspace": { "current_dir": "C:\\Users\\dev\\code\\myproject", "project_dir": "C:\\Users\\dev\\code\\myproject" },
   "cost": { "total_cost_usd": 0.01234, "total_duration_ms": 45000 },
   "context_window": {
     "context_window_size": 200000,
     "used_percentage": 8,
-    "remaining_percentage": 92
+    "remaining_percentage": 92,
+    "total_input_tokens": 16000,
+    "total_output_tokens": 512,
+    "current_usage": {
+      "input_tokens": 1200,
+      "output_tokens": 512,
+      "cache_creation_input_tokens": 2800,
+      "cache_read_input_tokens": 12000
+    }
   },
   "rate_limits": {
     "five_hour": { "used_percentage": 23.5, "resets_at": 1754074800 },

@@ -46,6 +46,45 @@ func TestFullRender(t *testing.T) {
 	}
 }
 
+// TestTheTokenCountsAreParsedAndNeverRendered is the render half of §7.16b's
+// ruling, and it guards a temptation rather than a bug.
+//
+// full.json now carries the real 2.1.233 token block, so the fields are
+// sitting in the parsed struct one call away from the renderer. They must stay
+// off the line. Every number in that block describes ONE API call — the last
+// one — and `total_input_tokens` is the context window's occupancy, not a
+// spend; putting any of it on a statusline beside a cost figure would read as
+// "what this session has used", which is a claim the payload does not make.
+//
+// The counts are asserted individually rather than by diffing the whole line,
+// because TestFullRender already pins the line exactly. This one says WHY the
+// line may not grow, so the next person to add a segment reads the reason
+// instead of just a failing string compare.
+func TestTheTokenCountsAreParsedAndNeverRendered(t *testing.T) {
+	in := load(t, "full.json")
+	// Guard the premise: if the fixture ever loses the block, this test would
+	// pass while asserting nothing.
+	if in.ContextWindow == nil || in.ContextWindow.CurrentUsage == nil ||
+		in.ContextWindow.TotalInputTokens == nil {
+		t.Fatal("full.json no longer carries the 2.1.233 token block; this test would assert nothing")
+	}
+
+	got := renderPlain(t, "full.json")
+	for _, n := range []string{"16000", "16.0k", "12000", "2800", "1200", "512"} {
+		if strings.Contains(got, n) {
+			t.Errorf("a per-API-call token count reached the statusline (%q in %q). "+
+				"§7.16b: these are one call's numbers and total_input_tokens is an "+
+				"occupancy level, so neither a spend nor a total may be built from them", n, got)
+		}
+	}
+	// The prompt correlation id is likewise parsed and unrendered; it names a
+	// prompt, and a statusline that printed it would be leaking an internal id
+	// into a line the user reads at a glance.
+	if strings.Contains(got, "cafe") {
+		t.Errorf("prompt_id reached the statusline: %q", got)
+	}
+}
+
 // The load-bearing honest-gauge test: API-key logins have NO rate_limits.
 // The quota segments must be absent — not "5h 0%".
 func TestAPIKeyHidesQuotaSegments(t *testing.T) {
