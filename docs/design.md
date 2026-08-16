@@ -4697,6 +4697,36 @@ What this does **not** discharge: the README hero visual and the zero-config fir
 frame are the other two pieces of adoption item 1 and are untouched here, and the
 positioning line still lands with the slice, not ahead of it.
 
+#### The recording chain: PowerSession-rs + agg (measured 2026-08-16)
+
+The demo tape records with **PowerSession-rs 0.1.16 and agg 1.9.0**, both
+installed from winget at user scope with no administrator rights
+(`Watfaq.PowerSession`, `asciinema.agg`). VHS is rejected rather than deferred:
+it cannot record on this Windows build (charmbracelet/vhs #631, dead since
+2025-06) and it renders xterm.js, which is not the Windows Terminal this
+product targets under ADR-002 — a tape of the wrong terminal is the packaging
+form of a rendered guess. The chain was proven against the real binary in
+ascending difficulty, and the hard case passed: `telltale hud` recorded its
+alternate screen (`ESC[?1049h` and `ESC[?1049l` each captured once), its ANSI
+palette colour (47 cyan, 19 green, 7 bright-black foreground codes) and its
+restore. The restore was tested against real scrollback rather than an escape
+count — a marker line, the TUI, a second marker line — and the rendered final
+frame carries both markers and no TUI residue. Two limits are recorded with
+it, because both can produce a tape that looks successful and is not.
+`NO_COLOR` in the recording shell silently strips every hue, which is how the
+first capture came back monochrome. And agg's `--rows` re-runs the byte stream
+at a new size, so it recovers `telltale doctor`'s scrolled-off report (76 lines
+from a 30-row cast) but does nothing for a TUI that drew to the size it read —
+the HUD at `--rows 50` leaves twenty empty rows. The tape's geometry is
+therefore chosen before the recording starts, not after.
+[packaging/tape/README.md](../packaging/tape/README.md) is the runbook and
+carries the full measurement; this paragraph is the decision. **No cast or GIF
+enters this repository**: both captures were inspected, and they carry live
+session names, workspace paths and the absolute path of every vendor binary on
+the machine. The tape stays a personal artifact and the repository holds the
+script that makes it. What remains is not a tooling item — the owner drives the
+eight beats, because a scripted race would be an invented recording.
+
 Neither track discharges what verification already owes: §3.4's remaining passive-tail
 items stay open (§3.7's first live Gemini pass ran and passed 2026-08-03), and
 adoption work does not buy an exemption from them.
