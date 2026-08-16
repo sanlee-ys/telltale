@@ -143,6 +143,72 @@ jobs:
           if ($cc -match 'transcript|myproject') { throw "quota relay carried content, not numbers: $cc" }
           $ag = Get-Content "$env:USERPROFILE\.telltale\quota\agy.json" -Raw
           if ($ag -notmatch 'gemini-weekly') { throw "agy quota relay missing its bucket: $ag" }
+      # The snapshot document's first consumer that is not its own test
+      # (design.md §7.22, amended 2026-08-16). `docs/snapshot.schema.json` is
+      # the published contract, and this step is what keeps it honest: it
+      # validates the document the BUILT binary prints, not the struct the
+      # binary prints from.
+      #
+      # The validator is pinned Python rather than a Go module. go.mod carries
+      # zero direct dependencies outside the TUI stack, and design.md records
+      # that stance four times over (the SQLite reader, the zstd reader, the
+      # OTLP listener and the event emitter each refused a library); a
+      # test-only schema module would still land in the shipped module's
+      # graph. Hand-written Go assertions were the third option and are not a
+      # schema gate at all — they would be a second statement of the contract,
+      # and two statements drift.
+      #
+      # It runs HERE, after the quota relay smokes, on purpose. Those steps
+      # have just written quota/claude.json and quota/agy.json, so the document
+      # this runner produces carries populated `quota` arrays with a
+      # `quota_read_at` beside them. A gate whose only fixture is a bare
+      # machine checks the empty half of the schema.
+      - name: Install the JSON Schema validator (pinned)
+        run: python -m pip install --disable-pip-version-check jsonschema==4.23.0
+      - name: Gate (the snapshot document against its published schema)
+        shell: pwsh
+        run: |
+          # Each python call is checked on the spot. A native command that
+          # exits non-zero does NOT stop a pwsh step — only the LAST exit code
+          # reaches the runner — so an unchecked failure here would be hidden
+          # by the next call that happens to succeed.
+          function Tree {
+            $dir = "$env:USERPROFILE\.telltale"
+            if (-not (Test-Path $dir)) { return '<absent>' }
+            (Get-ChildItem $dir -Recurse -File | Sort-Object FullName |
+              ForEach-Object { "$($_.FullName)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join "`n"
+          }
+          $before = Tree
+          ./telltale.exe snapshot --compact > snapshot-live.json
+          if ($LASTEXITCODE -ne 0) { throw "snapshot exited $LASTEXITCODE; this mode prints a document and returns 0" }
+          if ((Tree) -ne $before) { throw "snapshot changed something under ~/.telltale; this mode writes nothing at all (§7.22)" }
+          # One line in, one line out: the compact form is what a program pipes.
+          $lines = @(Get-Content snapshot-live.json).Count
+          if ($lines -ne 1) { throw "--compact printed $lines lines; a reader that streams gets one" }
+
+          python tools/validate-snapshot.py snapshot-live.json
+          if ($LASTEXITCODE -ne 0) { throw "the built binary's document does not match docs/snapshot.schema.json" }
+
+          # The goldens carry the shapes a bare runner cannot produce: a vendor
+          # the operating system refused with its message, a drifted store, a
+          # scan error, and the zero-vs-absent pair. Validating them here ties
+          # the schema to the fixtures, so a regenerated golden that moved the
+          # document's shape reddens this gate too.
+          $goldens = @(Get-ChildItem internal/snapshot/testdata/golden/*.json | ForEach-Object { $_.FullName })
+          python tools/validate-snapshot.py $goldens
+          if ($LASTEXITCODE -ne 0) { throw "a golden document does not match docs/snapshot.schema.json" }
+
+          # A gate that has never failed is a gate nobody has measured. Each
+          # mutation breaks the real document one way the contract forbids —
+          # a dropped optional key (the omitempty regression), a sentinel
+          # string where a nullable number belongs, and a version bump nobody
+          # wrote a schema for — and the validator must reject all three.
+          foreach ($m in 'drop-key', 'retype-null', 'bump-version') {
+            python tools/validate-snapshot.py snapshot-live.json --mutate $m
+            if ($LASTEXITCODE -ne 0) { throw "mutation $m survived the schema; this gate is vacuous" }
+          }
+          Remove-Item snapshot-live.json
+
       - name: Smoke (cursor token relay through the real binary)
         shell: pwsh
         run: |
@@ -226,6 +292,65 @@ jobs:
           # was listening. That line goes to STDOUT (grokotel.Run's logf), which
           # is why the two streams are read apart rather than merged.
           if ($out -match 'listening on') { throw "a collector that failed to bind claimed it was listening: $out" }
+          if ($err -match '\x1b') { throw "the collision message emitted ANSI escapes; it is read in pipes and pastes: $err" }
+
+      - name: Smoke (a taken event-sink port through the real binary)
+        shell: pwsh
+        run: |
+          # The twin of the 4318 step above, for the event sink (design.md
+          # §7.21, message added in PR #267). It is asserted here for the same
+          # reason: the operator does not meet this as a returned error, he
+          # meets it as a process that exited, and the exit code and the stream
+          # it lands on are only true at this level.
+          #
+          # The child runs with USERPROFILE pointed at a throwaway directory.
+          # `telltale events` OPENS its store before it binds, so a refused
+          # bind still creates ~/.telltale/events — and this job has steps that
+          # compare that tree before and after a command.
+          $sinkHome = Join-Path $env:RUNNER_TEMP 'eventsink-home'
+          New-Item -ItemType Directory -Force -Path $sinkHome | Out-Null
+          $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 4519)
+          $listener.Start()
+          try {
+            $psi = [System.Diagnostics.ProcessStartInfo]::new()
+            $psi.FileName = (Resolve-Path ./telltale.exe).Path
+            $psi.Arguments = 'events'
+            $psi.UseShellExecute = $false
+            $psi.RedirectStandardOutput = $true
+            $psi.RedirectStandardError = $true
+            $psi.Environment['USERPROFILE'] = $sinkHome
+            $p = [System.Diagnostics.Process]::Start($psi)
+            # Drain both streams before the wait, and bound the wait, for the
+            # reason the OTLP step does: if the bind wrongly SUCCEEDED, this
+            # mode is a foreground server and serves forever.
+            $outTask = $p.StandardOutput.ReadToEndAsync()
+            $errTask = $p.StandardError.ReadToEndAsync()
+            if (-not $p.WaitForExit(30000)) {
+              $p.Kill($true)
+              throw "telltale events did not exit against a held 127.0.0.1:4519; it bound a port another process already holds, or it hung"
+            }
+            $out = $outTask.GetAwaiter().GetResult()
+            $err = $errTask.GetAwaiter().GetResult()
+            $code = $p.ExitCode
+          } finally {
+            $listener.Stop()
+          }
+          if ($code -ne 1) { throw "telltale events exited $code on a taken port; a sink that cannot bind must fail loudly: $err" }
+          # The way out, matched as bare values. This message wraps at a fixed
+          # column and both flags sit at the end of their own lines, so a
+          # phrase-spanning regex could never match its own passing output —
+          # the same trap the Cursor and OTLP steps call out.
+          if ($err -notmatch '--addr') { throw "the collision message never names the flag that moves the sink: $err" }
+          # Moving this side alone stores nothing, so the emitter half of the
+          # way out has to survive too. It is the sharper half here: an unmoved
+          # emitter exits 0 by design, so a half-moved sink looks exactly like
+          # a fleet where no hook ever fired.
+          if ($err -notmatch '--server-url') { throw "the collision message dropped the emitter half of the way out: $err" }
+          if ($err -notmatch '127\.0\.0\.1:4520') { throw "the collision message suggests no free port to move to: $err" }
+          if ($err -notmatch 'bind error:') { throw "the collision message dropped the verbatim bind error: $err" }
+          # A sink that never bound must not have said it was listening. That
+          # line goes to STDOUT, which is why the two streams are read apart.
+          if ($out -match 'listening on') { throw "a sink that failed to bind claimed it was listening: $out" }
           if ($err -match '\x1b') { throw "the collision message emitted ANSI escapes; it is read in pipes and pastes: $err" }
 
       # ADR-002's fast path, on the clock rather than on anecdote (design.md §5,

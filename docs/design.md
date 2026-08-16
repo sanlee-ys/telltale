@@ -5447,6 +5447,67 @@ real fleet questions from the parsed JSON: 6 vendors watching, 1,443 sessions, 1
 carried 11.9 `used_pct`. Zero-vs-absent held in the document the agent read: `cost` was
 `null` everywhere, and a `used_pct` of 0 was the number 0.
 
+**Amended 2026-08-16: the contract is published, and CI is its first measured consumer.**
+Everything above was asserted by this package's own tests. A schema that only its author
+validates against is a schema nobody has tested, so the contract now lives in a file a
+consumer can fetch, and the gate reads that file rather than a second copy of its rules.
+
+- **`docs/snapshot.schema.json`** is the document's JSON Schema, draft 2020-12. It
+  documents what the shipped binary emits, measured against the real output of a live run
+  and against the four goldens. Where the code and an intention differ, the code wins.
+- **The `test` job validates the BUILT binary's `snapshot --compact` output against it**,
+  then validates the four golden documents too. The binary's own document runs on a
+  machine with no vendor CLIs, so the goldens are what cover the shapes that machine
+  cannot produce: a vendor the operating system refused with its message, a drifted
+  store, a scan error, and the zero-vs-absent pair. The step also re-asserts the
+  "writes nothing" half, as a before/after of `~/.telltale`.
+- **The gate is proved non-vacuous on every run.** Three mutations break the real
+  document one way the contract forbids, and the validator must reject all three: a
+  dropped optional key (the `omitempty` regression), the string `"n/a"` where a nullable
+  number belongs (the sentinel regression), and a `schema_version` bump nobody wrote a
+  schema for. A gate that has never failed is a gate nobody has measured.
+- **The validator is pinned Python, not a Go module.** `go.mod` carries no direct
+  dependency outside the TUI stack, and this document records that choice four times over
+  — the SQLite reader (§3.2), the zstd reader, the OTLP listener (§7.16a) and the event
+  emitter (§7.21) each refused a library. A schema module used only by a test would still
+  enter the shipped module's graph. Hand-written Go assertions were the third option and
+  are not a schema gate: they restate the contract in a second place, and two statements
+  of one contract drift.
+
+Run the gate the way CI runs it:
+
+```
+python -m pip install jsonschema==4.23.0
+go build -o telltale.exe ./cmd/telltale
+./telltale.exe snapshot --compact | python tools/validate-snapshot.py -
+python tools/validate-snapshot.py internal/snapshot/testdata/golden/*.json
+python tools/validate-snapshot.py <document> --mutate drop-key
+```
+
+**What the schema deliberately does not promise.** Each of these is a limit of the format
+rather than an omission, and a consumer that reads the schema as a stronger claim will be
+wrong.
+
+- **It does not promise which kind of `null` you got.** The schema guarantees that a
+  measured zero is the number `0` and an absent value is `null`, because the two have
+  different JSON types. It cannot tell a reader that the `0` in front of it was measured.
+  `estimated` and `unsupported` are what carry that, and `TestZeroIsANumberAndAbsentIsNull`
+  is what keeps the emitter honest about it.
+- **It does not bound any value.** `context_pct_max` has no maximum and `cost_usd_total`
+  has no minimum, because nothing in `internal/snapshot` enforces one. A bound the code
+  does not hold is a claim the schema cannot back (§4a.1).
+- **It does not close the object.** Every object sets `additionalProperties: true`. That
+  is the schema agreeing with `SchemaVersion`'s own rule: a field added at the end is not
+  a break, because every reader parses by name. `additionalProperties: false` would make
+  the schema call a break what the emitter does not, and would redden a consumer's
+  pipeline on a release that added a field. `required` is what carries the weight instead
+  — a renamed or dropped key still fails, which is the regression that matters.
+- **It does not enumerate the vendors.** A seventh adapter adds a value, not a field.
+  `status` IS enumerated, because those four words are the whole of `hud.VendorStatus`
+  and a fifth would be a new state a reader must handle.
+- **It does not promise the order of `vendors`.** The entries arrive sorted by vendor id
+  today. Nothing asserts that, so the schema claims nothing about it.
+
 <a id="s8"></a>
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
