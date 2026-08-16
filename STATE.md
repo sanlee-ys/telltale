@@ -336,41 +336,70 @@ Nothing open. The last one here was the 44 seconds, and it was measured
      saved `~` or the restore dropped the field is undetermined — check
      `~/.telltale/council/room.json`'s history before assuming either.
 
-- **UNMEASURED, 2026-08-12. Council now adds a `PreToolUse` hook to a file the
-  operator also populates, and the two have never been run together.** This is
-  the one item left over from the gate-hook build that shipped the same day
-  ([design.md §9.8](docs/design.md), second dated block — the build itself is
-  done, and the four other open items with it). The docs rank `deny` over
-  `defer` over `ask` over `allow` when several hooks answer, which makes a
-  weakening unlikely: a `deny` from the operator's own hook beats council's
-  `ask`. "Unlikely by documentation" is the standard of evidence that section
-  exists to distrust, and the credential guard is exactly the hook that must not
-  come back weaker for council having added one beside it. What would settle it
-  is one arm of the same rig: a probe settings file carrying council's gate hook,
-  run on a machine whose own `PreToolUse` hook denies a known shape, asserting
-  the denial still holds.
+- **MEASURED and CLOSED, 2026-08-15/16. The operator's `deny` still stops the
+  call with council's `ask` beside it — and council is never asked at all.**
+  This was the last open item from the gate-hook build of 2026-08-12
+  ([design.md §9.8](docs/design.md), third dated block, which carries every arm
+  and its verdict; shipped as PR #241). Claude Code 2.1.228, Windows 11, two
+  trials per arm, throwaway directories, the filesystem as the observable. A
+  probe hook with the credential guard's own SHAPE — matcher `"*"`, a reason on
+  stderr, exit 2 — went in the throwaway workspace's own `.claude/settings.json`;
+  the operator's `~/.claude/settings.json` was never edited and no credential
+  store was copied anywhere.
 
-  **Narrowed by a live drive, 2026-08-14, and NOT closed.** The built seat was
-  driven for real with the operator's settings loaded: the postures page showed
-  the wired sentence, a `Read` drew no card, a `Write` drew one and landed on
-  `y`, and a shell command carded — **for its redirection, not for its pipe.**
-  The command was `ls -la dist/ 2>&1 | head -30`, and the reason first written
-  down here was the wrong one. `routineSegments`
-  (`internal/council/persistent.go`) has split `|` and `&&` since PR #73
-  (2026-08-05) and classifies each segment on its own; `ls` and `head` are both
-  in `readOnlyCommands`, so `ls -la dist/ | head -30` passes untouched. What
-  refused this command is that function's FIRST guard, which rejects any
-  command containing `<` or `>` before it splits anything — redirection writes
-  to a path the classifier never inspects, and `2>&1` is real redirection
-  rather than a spelling worth carving out by hand. `gate_git_test.go` already
-  pins `go test ./... 2>&1 | tail -2` as refused for that exact reason. The
-  card was right; only the sentence explaining it was not.
+  **The deciding arm answered the card `allow`, and that is the design.** A
+  denial pressed at the card leaves nothing on disk whatever the hooks do, so it
+  cannot tell a holding `deny` from a displaced one. With council's gate hook
+  and the probe `deny` in front of the same call, and `allow` at the callback,
+  no request was emitted and nothing was created, 2/2. The control changed one
+  thing — the probe hook exits 0 — and the marker landed 2/2, which proves the
+  pipeline and proves council's `ask` still fires when nothing denies.
 
-  So the two hook sets demonstrably COEXIST without
-  breaking the gate — which is worth knowing and is not what this gap asks.
-  **No operator `deny` was exercised**, so whether their credential guard still
-  holds with council's `ask` beside it is exactly as unmeasured as before. The
-  rig above is still the thing that would settle it.
+  **Both hooks run, and the `deny` ends the evaluation.** `--include-hook-events`
+  showed two `PreToolUse` hooks starting before either answered: council's
+  returned `permissionDecision: "ask"` at exit 0, the probe returned exit 2 with
+  its stderr. The model read the OPERATOR's sentence, not council's. So the
+  guard is not merely ranked above the gate; the gate is never reached. One
+  catch worth its line: on a turn where nothing was created, the CLI's own
+  `post_turn_summary` said the blocked command "executed" — a stream-reading rig
+  would have recorded the opposite of the truth.
+
+  **The 2026-08-14 narrowing stands as history**: the built seat was driven with
+  the operator's settings loaded, the two hook sets coexisted, and the carded
+  shell command was refused for its redirection, not its pipe —
+  `routineSegments`' first guard rejects `<` and `>` before it splits anything,
+  and `2>&1` is real redirection. The card was right; only the first sentence
+  explaining it was not.
+
+  **Two changelog claims were treated as hypotheses and both are confirmed at
+  2.1.228**: exit code 2 blocks (2.1.222) and a hook's `ask` is not overridden by
+  auto mode (2.1.221). The version floor for this measurement is 2.1.221, and
+  any earlier reading of it is void.
+
+  **What stays unmeasured is narrow, and named so nobody reads the finding wider
+  than it is:** an operator hook that denies by printing
+  `permissionDecision: "deny"` as JSON rather than by exit code 2, and `defer`.
+  The real guard uses exit 2, so the rig measured the shape that ships here. The
+  adopter arm stays unrun for the reason it always has: copying a credential
+  store into a probe directory is a redline.
+
+- **RESIDUES of the 2026-08-16 roadmap batch (PRs #237–#247), each small and
+  unowned.** The gate clock split (#243) is proven by unit tests and goldens
+  only — no live gated turn has rendered `you 4m48s` yet; the owner's next real
+  gated turn exercises it for free. The codex seat's **post-answer linger is
+  unowned**: `codex exec` lingers 6.5–7.9s after answering (§9.33's app-server
+  block), §9.36's "kill, never wait" was written for cursor's ~2.5s, and nothing
+  checked whether council waits on it. The **Windows `danger-full-access`
+  finding does not port to `codex app-server`** — that path has its own
+  `windowsSandbox/*` surface nobody has probed; any seat move re-measures rather
+  than inherits. The **agy statusline payload is still pinned at 1.1.9** and
+  needs an interactive re-capture — expect FOUR quota buckets now, not two
+  (§3.8); the **multi-chunk transcript** is the case that would break that
+  adapter and has never been observed (all chunked conversations hold one
+  chunk). Two captures are owed on the cursor statusline seam (§7.16's
+  amendment carries the one-minute manual step for a populated
+  `context_window`) and on the Claude payload (source-read at 2.1.233, zero
+  live payloads captured in fifteen minutes of trying).
 
 - **ATTRIBUTED, 2026-08-08. Spawning was never the cost; `wait` is, and only on
   the three seats that are not persistent.** One traced `@all` turn, all four
