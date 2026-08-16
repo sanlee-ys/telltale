@@ -234,6 +234,21 @@ func (u acpUpdate) chunkText() string {
 // completion that said nothing — which is the §9.8 argument for ActDenied
 // arriving here in a sharper form. The room records a refusal from its own
 // keystroke, and recordAct refuses to let this echo overwrite it.
+//
+// AMENDED 2026-08-15: the third shape is a hook that ERRORED, not a hook that
+// denied, and the difference decides which of the four shapes arrives.
+// Measured live on cursor-agent 2026.08.04-aaa8809 (design.md §7.16's amendment
+// of the same date): a `beforeShellExecution` hook returning
+// `permission: "deny"` cleanly, exit 0, produced NO error at all. The call ran
+// `pending` → `in_progress` → `completed` with no rawOutput, and the turn ended
+// `stopReason: end_turn`, while the command never ran — the FOURTH shape, not
+// the third. The `Hook blocked with message: …` text belongs to a hook that
+// failed to execute, which is exactly what PARITY.md records for this box's
+// Git-Bash-parented wrapper (a bash syntax error, surfaced as that string).
+// So the fourth shape covers two different refusals — the user's and a hook's —
+// and neither is legible on the wire. That widens the argument above rather
+// than changing it: the room still records a refusal from its own keystroke,
+// and a hook's refusal is one the room cannot see at all.
 type acpToolResult struct {
 	Error    json.RawMessage `json:"error"`
 	Content  json.RawMessage `json:"content"`

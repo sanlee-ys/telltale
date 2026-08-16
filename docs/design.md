@@ -3047,6 +3047,46 @@ captures a total. Worth stating plainly because it bears on the roadmap: **counc
 Cursor seat runs on ACP (§9.36), and ACP does not carry hooks** — so the seat that most
 wanted per-turn cost is, at this version, the one surface that provably cannot supply it.
 
+**AMENDED 2026-08-15: the last sentence above is too wide, and the ACP path DOES carry
+hooks.** The paragraph is kept whole because its two measurements still stand — neither
+`afterAgentResponse` nor `beforeSubmitPrompt` fired, and the ACP chunk really does hold no
+`hookExecutor` reference. What is wrong is the generalization from those two events to the
+subsystem. **The hook subsystem is live on the ACP path, per event.** Measured at the SAME
+build the paragraph above was measured at, `cursor-agent` **2026.08.04-aaa8809**, on Windows
+11, driven from a PowerShell parent (`PARITY.md`'s launch-parent trap), with the handshake
+`internal/council/vendors/cursoracp.go` builds: `initialize`, `session/new`, `session/prompt`,
+and any `session/request_permission` answered `allow-once`. The observable is the filesystem.
+
+| arm | `~/.cursor/hooks.json` | marker created | trials |
+|---|---|---|---|
+| baseline | telltale's `afterAgentResponse` only, unchanged | **yes** | 1/1 |
+| deny | plus one `beforeShellExecution` returning `permission: "deny"` | **no** | 2/2 |
+
+**The hook's own breadcrumb is the proof, and the vendor stamps its build into it.** The
+payload arrived carrying `"hook_event_name":"beforeShellExecution"`,
+`"command":"mkdir cursor-deny-marker"` and `"cursor_version":"2026.08.04-aaa8809"`. So a
+`~/.cursor/hooks.json` hook runs on a turn driven entirely over the ACP wire, and its denial
+holds: the directory was never created, on either trial.
+
+**Three records disagreed and each was right about its own event.** §7.16 measured
+`afterAgentResponse` and `beforeSubmitPrompt` and found neither firing. `cursoracp.go` and
+`PARITY.md` recorded a hook blocking an ACP tool call, which is `beforeShellExecution`. The
+research read that found a hook executor in chunk 4414 was reading a chunk the ACP path
+reaches, not the ACP chunk itself: at this build `8096.index.js` holds **zero**
+`hookExecutor` references and `4414.index.js` holds one, while `beforeShellExecution` appears
+in `190.index.js`, `3384.index.js` and `index.js`. A per-event answer reconciles all three
+without withdrawing any of them.
+
+**The token relay's own conclusion is unchanged, and it was re-checked rather than assumed.**
+Telltale's `afterAgentResponse` entry stayed wired through all three ACP turns above.
+`~/.telltale/usage/cursor.json` still reads `"turns":2` with a `written_at` of 2026-08-08, so
+that event still does not fire on ACP. The seat that most wanted per-turn cost still cannot
+supply it; what changes is only the reason, which is the event rather than the protocol.
+
+**A trap for the next hook written against this vendor.** The payload cursor writes to the
+hook's stdin begins with a UTF-8 **BOM**, so a plain JSON parse of it fails. `telltale hook
+cursor` is not exposed to this today, because it is the one event that does not fire here.
+
 #### Known limitations
 
 - **Accumulation is a read-modify-write and takes no lock.** Two hook processes finishing
@@ -5503,6 +5543,108 @@ and a missing-sibling fallback whose only honest shape is `--setting-sources ""`
 trades away the operator's settings to save milliseconds. The one-binary shape stands
 unamended. Reopen this only with a measurement that changes the arithmetic: more gated
 calls per turn than the ~3 assumed, or a vendor change that raises the per-call floor.
+
+#### The operator's deny beside council's ask, measured 2026-08-15 — the last item closes
+
+**The last unsettled item of the five is now measured, and the operator's guard does not come
+back weaker.** The item said this: council adds a `PreToolUse` hook to a file the operator also
+populates, the documentation ranks `deny` over `defer` over `ask` over `allow`, and the
+credential guard is the hook that must not be weakened. The rank held live. The deny also does
+more than win — it stops the call before council's card is drawn at all.
+
+**The environment, and the two claims it makes into hypotheses.** Claude Code **2.1.228**
+(`claude --version`, recorded before any arm), Windows 11, `--model haiku`, two trials per arm,
+throwaway directories. The floor for this measurement is 2.1.221: that release fixed auto mode
+overriding a hook's `ask`, and 2.1.222 fixed exit code 2 not blocking. Both are changelog
+claims, so both are hypotheses here, and both are confirmed by the arms below. A measurement
+taken before 2.1.221 would be void.
+
+**The rig is the shape of the two blocks above.** A probe replicates this seat's own argv
+(`baseArgs` plus `gateArgs` plus `--input-format stream-json` plus `--settings`), writes one
+turn on stdin as `Turn()` builds it, answers `can_use_tool` as `Decide()` builds it, and
+**reads each arm off the FILESYSTEM, never off the stream**. The brief asks for one command,
+`mkdir deny-probe-marker`, which the operator's own allow rules already cover. No credential
+store is copied anywhere: `CLAUDE_CONFIG_DIR` is untouched, the operator's real login is used,
+and `~/.claude/settings.json` is never edited.
+
+**The deny hook has the credential guard's SHAPE and none of its content.** It is a
+`PreToolUse` entry with matcher `"*"` that writes a reason to stderr and exits 2 — the
+mechanism the real guard uses (`Exit 0 = allow, exit 2 = block`). It is installed in the
+THROWAWAY workspace's own `.claude/settings.json`, which is a real setting source and belongs
+to nobody. It writes a breadcrumb on every run, so its execution is provable off the disk.
+
+**A wiring probe costs no model turn, and it is what makes the arms readable.** The seat was
+started and its stdin closed without a turn. A `SessionStart` breadcrumb from the workspace's
+own settings arrived while `--settings` carried council's gate file, so the two surfaces
+demonstrably compose. That is the same `SessionStart` trick that found the Git Bash trap above.
+
+| arm | hooks in front of the call | callback answer | requests | marker on disk | trials |
+|---|---|---|---|---|---|
+| **(a) control** | operator `deny` alone | allow | 0 | no | 2/2 |
+| **(b) the question** | operator `deny` + council's gate hook | **allow** | 0 | **no** | 2/2 |
+| **(b) again**, `--include-hook-events` | same | allow | 0 | no | 2/2 |
+| **(b control)** | operator hook exits 0 + council's gate hook | allow | 1 | **yes** | 2/2 |
+| **(c) anchor** | council's gate hook alone | deny | 1 | no | 1/1 |
+
+**The callback answers ALLOW in arm (b), and that is the whole design of the arm.** A denial
+pressed at the card would leave nothing on disk whatever the hooks did, so it cannot tell a
+holding deny from a broken one. Answering `allow` inverts the test: if council's `ask` had
+displaced the operator's `deny`, the marker lands. It did not land, on either trial.
+
+**The (b) control is what makes (b) a finding.** One thing changed — the operator's hook exits
+0 instead of 2 — and the marker landed on both trials. So the pipeline can create it, council's
+`ask` still fires when nothing denies, and arm (b)'s empty directory is the deny.
+
+**Both hooks ran, concurrently, and the stream says so.** `--include-hook-events` is
+observability only and is NOT part of the seat's argv; it was added to one arm to see who
+answered:
+
+```
+hook_started  PreToolUse:Bash
+hook_started  PreToolUse:Bash
+hook_response PreToolUse:Bash  exit 0  outcome success  stdout {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"telltale council gates every call in this room"}}
+hook_response PreToolUse:Bash  exit 2  outcome error    stderr BLOCKED by the operator credential-guard-shaped probe hook: this command matches a protected pattern.
+```
+
+**The card never appeared, and the model reads the operator's sentence rather than council's.**
+No `can_use_tool` request was emitted on any (a) or (b) trial. The turn received:
+
+```
+PreToolUse:Bash hook error: [python3 "…/deny_hook.py"]: BLOCKED by the operator credential-guard-shaped probe hook: this command matches a protected pattern.
+```
+
+That is stronger than the ranking predicted. The documentation says `deny` beats `ask`; what
+runs is that a `deny` ends the evaluation, so council never gets a question to draw. **The
+room's gate cannot weaken the operator's guard, because the guard answers first and the gate
+is never asked.**
+
+**Both changelog claims are confirmed at 2.1.228.** Exit code 2 blocked on every arm that used
+it, six trials in total, which is 2.1.222's fix behaving as described. The hook's `ask` reached
+the card rather than being auto-answered in arms (b control) and (c), which is 2.1.221's.
+Neither is read off the changelog now.
+
+**One stream trap re-appeared and is worth the line.** On a turn where nothing was created, the
+CLI's own `post_turn_summary` said `"status_detail":"mkdir deny-probe-marker executed"`. A rig
+that read the stream would have recorded the opposite of what happened, which is why every arm
+in this section is read off the filesystem.
+
+**What this did NOT measure, itemized so nobody reads it as wider than it is.** An operator hook
+that denies by printing `permissionDecision: "deny"` as JSON, rather than by exit code 2 — the
+real credential guard uses exit 2, so the rig measured the shape that ships on this machine.
+`defer`, which no hook here returns. And the adopter arm, which stays unrun for the reason it
+has always stayed unrun: copying a credential store into a probe directory is a redline.
+
+**The cursor seat was measured the same night and the finding is not about deny beating ask.**
+It settles whether that seat's ACP path carries hooks at all, which three records in this
+repository disagreed about. §7.16's amendment of the same date carries it.
+
+**The agy arm was SKIPPED, and a skipped arm stated is better than an unmeasured claim.** The
+proposal was to read `agy -p "/hooks"`'s registration table if that probe is zero-cost. It
+could not be confirmed zero-cost: `agy --help` lists no local hooks subcommand, `-p` is print
+mode, and `--disable-slash-commands` exists precisely because slash commands are expanded into
+the prompt. So the probe would spend a turn from a constrained pool and would return a model's
+description rather than a registration table. That arm proves wiring and order only; it could
+never speak to deny-beats-ask semantics.
 
 ### 9.9 The room remembers — a conversation, not a ticker
 
