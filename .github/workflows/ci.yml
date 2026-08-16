@@ -170,6 +170,64 @@ jobs:
           $cx = Get-Content "$env:USERPROFILE\.telltale\usage\cursor.json" -Raw
           if ($cx -notmatch '"turns":2') { throw "an empty payload disturbed the total: $cx" }
 
+      - name: Smoke (a taken OTLP port through the real binary)
+        shell: pwsh
+        run: |
+          # The 4318 collision message (design.md §7.16a) has unit tests. This
+          # asserts it on the SHIPPED binary, because the operator does not meet
+          # it as a returned error: he meets it as a process that exited, and the
+          # exit code and the stream it lands on are only true at this level
+          # (main.go prints it to STDERR and exits 1).
+          #
+          # A throwaway .NET listener holds the port rather than a second
+          # telltale. The collision this message is about is with ANOTHER OTLP
+          # receiver, and a bare listener is the cheapest honest stand-in for one
+          # — the same setup the message was measured against on 2026-08-16.
+          $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 4318)
+          $listener.Start()
+          try {
+            $psi = [System.Diagnostics.ProcessStartInfo]::new()
+            $psi.FileName = (Resolve-Path ./telltale.exe).Path
+            $psi.Arguments = 'otel grok'
+            $psi.RedirectStandardOutput = $true
+            $psi.RedirectStandardError = $true
+            $psi.UseShellExecute = $false
+            $p = [System.Diagnostics.Process]::Start($psi)
+            # Drain both streams asynchronously BEFORE the wait, and bound the
+            # wait. A synchronous ReadToEnd blocks until the process exits, which
+            # is the one thing this step must not assume: if the bind wrongly
+            # SUCCEEDED, `otel grok` is a foreground server and serves forever.
+            # The timeout is what turns that into a failure here instead of a job
+            # that hangs to the runner's own limit.
+            $outTask = $p.StandardOutput.ReadToEndAsync()
+            $errTask = $p.StandardError.ReadToEndAsync()
+            if (-not $p.WaitForExit(30000)) {
+              $p.Kill($true)
+              throw "otel grok did not exit against a held 127.0.0.1:4318; it bound a port another process already holds, or it hung"
+            }
+            $out = $outTask.GetAwaiter().GetResult()
+            $err = $errTask.GetAwaiter().GetResult()
+            $code = $p.ExitCode
+          } finally {
+            $listener.Stop()
+          }
+          if ($code -ne 1) { throw "otel grok exited $code on a taken port; a collector that cannot bind must fail loudly: $err" }
+          # The way out, matched as bare values. This message wraps at a fixed
+          # column and the flag sits at the end of its own line, so a
+          # phrase-spanning regex could never match its own passing output — the
+          # same trap the Cursor smoke calls out above.
+          if ($err -notmatch '--addr') { throw "the collision message never names the flag that moves the collector: $err" }
+          if ($err -notmatch '127\.0\.0\.1:4319') { throw "the collision message suggests no free port to move to: $err" }
+          # Moving this side alone counts nothing, so the grok-side half of the
+          # way out has to survive too.
+          if ($err -notmatch 'OTEL_EXPORTER_OTLP_ENDPOINT') { throw "the collision message dropped the exporter half of the way out: $err" }
+          if ($err -notmatch 'bind error:') { throw "the collision message dropped the verbatim bind error: $err" }
+          # The honesty half: a collector that never bound must not have said it
+          # was listening. That line goes to STDOUT (grokotel.Run's logf), which
+          # is why the two streams are read apart rather than merged.
+          if ($out -match 'listening on') { throw "a collector that failed to bind claimed it was listening: $out" }
+          if ($err -match '\x1b') { throw "the collision message emitted ANSI escapes; it is read in pipes and pastes: $err" }
+
       # ADR-002's fast path, on the clock rather than on anecdote (design.md §5,
       # amendment 2026-08-16). This runs LAST on purpose: it drives full.json,
       # which carries rate_limits and therefore writes the quota relay, and two
