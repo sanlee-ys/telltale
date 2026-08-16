@@ -392,27 +392,31 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   OWNED as of the same day's lane batch**: the column settles at the measured
   `turn.completed` marker and renders `done Ns exiting`, the process lifetime
   untouched (§9.33's dated payment block). What that lane left open, stated
-  there: the linger's CAUSE is unmeasured, the tool-using turn's tail is
-  unmeasured (probing it needs `danger-full-access`, a redline), and the other
-  spawn-per-turn vendors never set `EndsTurn`, so their tails are untouched —
-  for agy this now has a sharper edge, because a failed agy turn settles at the
-  vendor's own `status: "ERROR"` line while the turn clock keeps billing until
-  exit, and no capture of the agy process exit after a failed turn exists.
-  The two adjacent council holes that lane named are closed by the same day's
-  second wave: a failed agy turn settles its column instead of leaving the
-  room idle-but-locked, and a `/cd` persists when it happens (both carried in
-  dated design.md amendments; `gh pr list` has the numbers). Two small
-  unowned residues from that wave: `telltale events` still greets a taken
-  127.0.0.1:4519 with the raw Go bind error (`telltale otel grok` got the
-  named-error treatment; the event sink did not), and the OTLP collision has
-  no binary smoke in CI. The
+  there: the linger's CAUSE is unmeasured and the tool-using turn's tail is
+  unmeasured (probing it needs `danger-full-access`, a redline). The agy tail
+  is now MEASURED and ruled (§9.43's dated amendment): 0.049–0.314s behind a
+  reliable `result` marker, too small to justify `EndsTurn` on a whole-second
+  clock, and a test pins the refusal — what stays unknown there is the FAILED
+  agy turn's tail (all three trials ended SUCCESS), which is the path that
+  settles at the vendor's `status: "ERROR"` line while the clock bills to
+  exit. The two adjacent council holes that lane named are closed by the same
+  day's second wave: a failed agy turn settles its column instead of leaving
+  the room idle-but-locked, and a `/cd` persists when it happens (both carried
+  in dated design.md amendments; `gh pr list` has the numbers). That wave's
+  own two residues are closed by the third: both listeners now greet a taken
+  port with a named error (§7.16a, §7.21), and the OTLP collision has a binary
+  smoke in CI — the smoke's eventsink twin is the one small residue the third
+  wave produced, queued for the next ci.yml owner. The
   **Windows `danger-full-access` finding does not port to `codex app-server`**
   — that path has its own `windowsSandbox/*` surface nobody has probed; any
   seat move re-measures rather than inherits. The **agy statusline payload is still pinned at 1.1.9** and
   needs an interactive re-capture — expect FOUR quota buckets now, not two
-  (§3.8); the **multi-chunk transcript** is the case that would break that
-  adapter and has never been observed (all chunked conversations hold one
-  chunk). One capture is owed on the cursor statusline seam (§7.16's
+  (§3.8); the **multi-chunk transcript** is now PINNED synthetically (§3.8's
+  2026-08-16 amendment: the adapter reads the flat file by decision and proved
+  correct under its own contract, and the head/tail overlap guard was shown
+  load-bearing) — the live multi-chunk capture remains the missing instrument,
+  since a synthetic fixture cannot say which behavior agy actually has. One
+  capture is owed on the cursor statusline seam (§7.16's
   amendment carries the one-minute manual step for a populated
   `context_window`). The Claude payload capture landed 2026-08-16: seven live
   fires at the pinned 2.1.233 agreed with the source read on every count, and
