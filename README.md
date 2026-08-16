@@ -32,18 +32,18 @@ against the code, and no breaking change to the grammar or keymap is planned —
 development goes quiet, because it doesn't: this room is driven daily. Cutting v1 as
 gauges only — statusline and HUD, with declared vendor version pins — was the standing
 alternative and it is rejected: a release names the product, and the product is the room.
-The gates and the argument are in [docs/design.md §1](docs/design.md).
+The gates and the argument are in [docs/design.md §1](docs/design.md#s1).
 
 Every adapter here was verified against something real rather than against vendor docs — a
 live on-disk corpus, a live payload capture, or the vendor's own persistence code read at a
-pinned version — and [docs/design.md §3](docs/design.md) itemizes per vendor which of those
+pinned version — and [docs/design.md §3](docs/design.md#s3) itemizes per vendor which of those
 it was, what the verification changed about this project's guesses, and what each one still
 owes. **Cursor (Composer)** is the first IDE-resident agent here, and the first whose store
 also holds live credentials, which is why that adapter's most load-bearing property is the
-list of things it does not read ([docs/design.md §3.9](docs/design.md)). **`telltale
+list of things it does not read ([docs/design.md §3.9](docs/design.md#s3-9)). **`telltale
 council`** seats the 5-vendor fleet, and every sandbox and streaming claim in it was
 measured against a live run of that CLI rather than read off its `--help`
-([docs/design.md §9](docs/design.md)).
+([docs/design.md §9](docs/design.md#s9)).
 
 ## Install
 
@@ -105,7 +105,7 @@ suite, the build and binary-level smokes on `windows-latest`. `darwin_amd64` is
 **smoke-verified on Intel macOS**, point-in-time and SHA-bearing. `darwin_arm64` and
 `linux_amd64` are **built, not verified**: cross-compiled and never run by this
 project. That is the same flagged-limitation rule the gauges apply to a segment,
-applied to a platform ([docs/design.md §8](docs/design.md)).
+applied to a platform ([docs/design.md §8](docs/design.md#s8)).
 
 **No binary here is signed, on any platform.** The release workflow runs no
 signing step, so every archive is unsigned and the macOS archives are not
@@ -225,7 +225,7 @@ honoured through the standard mechanism.
   own section below.
 - **A documented adapter interface** — one module per vendor — so you can wire in
   anything else that leaves session data on disk. The worked example in
-  [docs/design.md §4a.7](docs/design.md) is the method the Gemini adapter was actually
+  [docs/design.md §4a.7](docs/design.md#s4a-7) is the method the Gemini adapter was actually
   built with, kept alongside what live verification changed about its guesses.
 
 One binary, three surfaces: `telltale statusline`, `telltale hud` and `telltale council` —
@@ -252,7 +252,7 @@ Cursor, Antigravity, Grok); cross-vendor monitoring; vendor-native statusline wh
 exists — and it exists twice: Claude Code and Antigravity CLI.* (Codex CLI has
 no statusline hook today. Antigravity was statusline-only until a re-survey found the
 transcript its own docs advertise, which is what made its HUD adapter buildable — the
-first verdict and the reversal are both in [docs/design.md §2.1/§3.8](docs/design.md).
+first verdict and the reversal are both in [docs/design.md §2.1](docs/design.md#s2-1)/[§3.8](docs/design.md#s3-8).
 Cursor reaches telltale both ways: a built-in HUD adapter because its seam is on disk,
 and a council seat driven through `cursor-agent`'s own bundled `node.exe` — the `cursor`
 binary on PATH is only the editor launcher and council never drives it. Grok is a council
@@ -267,11 +267,11 @@ numbers, never content: council's room file (`council/room.json` — the vendor 
 reattaching needs and the room's workspace, no transcript, output or brief content),
 the statusline's quota relay (`quota/<vendor>.json` — the rate-limit windows it
 just rendered, so the HUD can show account quota per vendor instead of only for
-vendors whose stores carry it; [docs/design.md §7.15](docs/design.md)), and the
+vendors whose stores carry it; [docs/design.md §7.15](docs/design.md#s7-15)), and the
 token relay (`usage/<vendor>.json` — a running total of per-turn token counts,
 with two writers: `telltale hook cursor` reads Cursor's `afterAgentResponse`
 payload on stdin, and `telltale otel grok` is a loopback listener grok's own
-OpenTelemetry exporter pushes to; [docs/design.md §7.16, §7.16a](docs/design.md)).
+OpenTelemetry exporter pushes to; [docs/design.md §7.16](docs/design.md#s7-16), [§7.16a](docs/design.md#s7-16a)).
 That last one is spend, not quota: there is no denominator anywhere in it, so it
 never renders as a percentage or a bar, and Cursor's and grok's account quota
 stay visibly absent.
@@ -282,7 +282,7 @@ VERBATIM under `~/.telltale/events/` — content, not keys and numbers. What con
 it is scope, not redaction: it is its own foreground mode that you start, its server
 binds loopback only, and no gauge reads or renders those files. The keys-and-numbers
 rule above still binds every store the gauges themselves write
-([docs/design.md §7.21](docs/design.md)).
+([docs/design.md §7.21](docs/design.md#s7-21)).
 
 `telltale
 council` remains the one mode that acts on the world, and it is labelled as one
@@ -292,7 +292,7 @@ subcommand, it is not reachable from the HUD, and it shares no keybinding with i
 keeps its access tokens, refresh tokens and OAuth secrets in the *same SQLite file* as
 its session state — so it is enforced there as a read allowlist with a test that plants
 credential-shaped strings in the fixtures and asserts none of them reaches anything the
-HUD can display ([docs/design.md §3.9](docs/design.md)). The Cursor *hook* is the same
+HUD can display ([docs/design.md §3.9](docs/design.md#s3-9)). The Cursor *hook* is the same
 discipline against a different hazard: its payload carries the model's reply text and
 the user's email address beside the four numbers, so the parser's struct is the
 allowlist and markers planted in a real payload shape must reach neither the parse nor
@@ -323,7 +323,7 @@ resume rather than a re-sent transcript, so no session ever holds another's hist
 
 **[docs/council.md](docs/council.md) is the room's own guide** — the frame, the badge
 vocabulary, the routing grammar, the reading keys and the turn view, taking an answer out
-of the room with `y`, and every flag. [docs/design.md §9](docs/design.md) is the record
+of the room with `y`, and every flag. [docs/design.md §9](docs/design.md#s9) is the record
 behind it: what was measured per vendor, what each seam cost, and what is still unverified.
 
 ## `telltale snapshot` — the fleet as JSON
@@ -361,7 +361,7 @@ the common question costs no arithmetic on the reader's side.
 
 It renders **numbers and keys, never content**: no session names, workspace paths,
 transcripts, briefs or reply text, and no per-session rows at all. It writes nothing, calls
-no network and reads no credential. [docs/design.md §7.22](docs/design.md) is the full
+no network and reads no credential. [docs/design.md §7.22](docs/design.md#s7-22) is the full
 schema record and the reasoning; `internal/snapshot/testdata/golden/zero-vs-absent.json`
 is the build-failing test that the two kinds of nothing stay apart.
 
@@ -382,7 +382,7 @@ where `--source-app <name>` is the one per-repo edit. Two flags: `--addr <host:p
 stream, and no telltale surface displays one. A viewer is a later call site, not a
 re-plumb. This is also the one store that holds content rather than keys and numbers,
 and the read/write boundary above names it as the fourth exception.
-[docs/design.md §7.21](docs/design.md) carries the record.
+[docs/design.md §7.21](docs/design.md#s7-21) carries the record.
 
 ## `telltale doctor` — the launch-time preflight
 

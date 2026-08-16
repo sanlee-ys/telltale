@@ -4,6 +4,56 @@ Status: v1 is cut — **v0.2.0, released 2026-08-14**, the snapshot gates held (
 rule requires every segment's data source to be named here before that segment ships; the
 tables below are the authority the eval harness tests against.
 
+<a id="citing"></a>
+
+## Citing this document
+
+Code comments, PR bodies and the other docs cite this document by section number. Every
+numbered section therefore carries a stable HTML anchor, so a citation can be a link.
+
+**The anchor comes from the section number alone.** Write `s`, then the number, and
+replace each `.` with `-`. So §9 is `#s9`, §4a.1 is `#s4a-1`, and §7.16a is `#s7-16a`.
+
+```
+[§7.16a](docs/design.md#s7-16a)   from another file
+[§7.16a](#s7-16a)                 from inside this document
+```
+
+The anchor is keyed on the number and never on the heading text. GitHub derives its own
+anchor from the heading text, and the headings here carry dated prose that gets amended,
+so a text-derived anchor breaks on every rewording. `#s7-16a` survives it. Add the
+matching anchor line when you add a numbered section.
+
+<a id="adr-index"></a>
+
+## ADR index
+
+The decision records themselves are archived outside this repository, because the
+2026-08-05 ruling stopped adding them here. The ADR numbers stay in the prose, so this
+table says what each one decided and points at the section that carries the substance.
+Each row is also an anchor target: ADR-002 is `#adr-002`.
+
+| ADR | What it decided | Where the substance is |
+|---|---|---|
+| <a id="adr-001"></a>ADR-001 | The honest-gauge rule. A displayed value must come from measured vendor output, and an inferred value is omitted or marked as an estimate. | [§4a.1](#s4a-1), [§3.4](#s3-4) |
+| <a id="adr-002"></a>ADR-002 | Go with Bubble Tea and Lipgloss, one binary, two modes. Windows is the primary target, and the statusline path initializes no TUI framework. | [§6](#s6), [§5](#s5) |
+| <a id="adr-003"></a>ADR-003 | Gemini CLI gets a built-in adapter. Its verification hold is released, and an addendum records the consumer-tier withdrawal. | [§3.7](#s3-7) |
+| <a id="adr-004"></a>ADR-004 | Antigravity CLI gets a statusline, routed on the payload's documented `product` field. | [§2.1](#s2-1) |
+| <a id="adr-005"></a>ADR-005 | External adoption is an explicit product goal, so the roadmap carries an adoption track. | [§8](#s8) |
+| <a id="adr-006"></a>ADR-006 | Antigravity also gets a HUD adapter. A re-survey found the transcript that the first verdict recorded as absent. | [§3.8](#s3-8) |
+| <a id="adr-007"></a>ADR-007 | Cursor gets a built-in HUD adapter, because its seam is on disk rather than behind a CLI. | [§3.9](#s3-9) |
+| <a id="adr-008"></a>ADR-008 | `telltale council` is the dispatch room. It spawns vendor CLIs, so it sits off the gauge data layer. | [§9](#s9) |
+
+ADR-006 is the one number above that the current text never prints; §3.8 carries its
+account under the re-survey heading instead.
+
+**ADR-010 and ADR-012 in this repository are not telltale's.** They belong to the
+`agent-ops` decision series, and the prose always names that series beside them. The two
+series number independently, so telltale's ADR-007 is the Cursor HUD adapter while
+`agent-ops` ADR-007 is a different decision.
+
+<a id="s1"></a>
+
 ## 1. Product shape
 
 **`telltale council` is the product. The gauges — `telltale statusline` and `telltale
@@ -99,6 +149,8 @@ The two gauge paths share exactly two packages: `internal/model` (the schema) an
 holds no style type, which is what lets both surfaces share the numbers while the
 statusline links no TUI framework.
 
+<a id="s2"></a>
+
 ## 2. Statusline segments (v1)
 
 | Segment | Source (exact field) | Empty/degraded state | Status |
@@ -150,6 +202,8 @@ stop reading as `100.0%`, a 7-day window would stop reading as `↻120h00m`), wh
 behaviour change to a shipped surface and is therefore a separate change with its own
 fixture updates. The thresholds are already unified; the formatters are not.
 
+<a id="s2-1"></a>
+
 ### 2.1 Antigravity CLI statusline (added 2026-08-02, ADR-004)
 
 `telltale statusline` serves a second vendor: Antigravity CLI (`agy`) hands statusline
@@ -179,6 +233,8 @@ displaying an unverified path would be narrating.
 Schema verification record: documented contract (antigravity.google/docs/cli/statusline)
 cross-checked against a six-payload live capture from a real interactive session on agy
 1.1.9, 2026-08-02 (§3.8). Fixtures are synthesized to the observed shapes.
+
+<a id="s2-2"></a>
 
 ### 2.2 Cursor CLI statusline (added 2026-08-16)
 
@@ -267,11 +323,15 @@ synthesized to the observed shapes; the populated-context fixture is synthesized
 documented one, because no captured payload ever carried a number there. **That is the one
 gap in this record** — see §7.16's amendment for the hand-back that closes it.
 
+<a id="s3"></a>
+
 ## 3. HUD (v1)
 
 One row per live session, both vendors; per-row: vendor, session identity, model,
 context/quota gauges **where the vendor provides them**, last-activity age. The rendered
 grid, its responsive tiers and every degraded state are specified in §7.
+
+<a id="s3-1"></a>
 
 ### 3.1 Claude Code adapter sources — VERIFIED LIVE 2026-08-01, Claude Code 2.1.219
 
@@ -380,6 +440,8 @@ non-synthetic model. A file smaller than the tail window is read once, not twice
 Records with `isSidechain == true` are skipped defensively — 0 of 837 top-level
 transcripts contain one on 2.1.219, but the filter is free.
 
+<a id="s3-2"></a>
+
 ### 3.2 Codex CLI adapter sources — RESEARCHED FROM SOURCE, **NOT LIVE-VERIFIED**
 
 Codex is now installed on the dev PC (2026-08-01): **Codex Desktop** (VS Code app
@@ -449,6 +511,8 @@ is the only signal); no session title, so rows fall back to the workspace basena
 dependency for metadata the JSONL already carries, and `thread-store/README.md` confirms
 JSONL stays canonical and readable without SQLite.
 
+<a id="s3-3"></a>
+
 ### 3.3 Cross-vendor capability matrix — the asymmetry is a design fact, not a bug
 
 | Field | Claude (disk) | Codex (disk) | Gemini (disk, §3.7) | Antigravity (disk, §3.8) | Cursor (disk, §3.9) | Grok (disk, §3.9a) |
@@ -493,6 +557,8 @@ input-token-based. **They are not the same statistic.** The adapter therefore do
 reproduce Codex's baseline-normalized figure: it computes a plain
 `last_token_usage.total_tokens ÷ model_context_window`, declares it `CapDerived`, and the
 HUD marks it with an estimate marker. See §6 Q7 for the resolution and its alternatives.
+
+<a id="s3-4"></a>
 
 ### 3.4 Live verification (ADR-001) — first pass run 2026-08-01; remainder itemized
 
@@ -606,6 +672,8 @@ owed items stay negative. Two of them now rest on 316 rollouts rather than the 5
   mode those four sessions ran under, so a claim that they are API-key sessions
   would be an inference, and §4a.1 forbids one dressed as a reading.
 
+<a id="s3-5"></a>
+
 ### 3.5 Framing rule — now measured, not assumed (see §4)
 
 The §4 hazards were quantified against the live Claude corpus:
@@ -630,12 +698,16 @@ The §4 hazards were quantified against the live Claude corpus:
   `FILE_SHARE_READ|WRITE|DELETE`, so no special handling is needed — recorded here so
   nobody "fixes" it later.
 
+<a id="s3-6"></a>
+
 ### 3.6 Degradation rule
 
 A vendor field the adapter cannot read renders as `—` (absent), never as a zero or a
 stale value presented as fresh. A record that parses only partially degrades the fields
 it could not source to `—` and keeps the rest. A truncated trailing line is not a record.
 The exact renders are §7.7.
+
+<a id="s3-7"></a>
 
 ### 3.7 Gemini CLI seam — source-verified 2026-08-02; first live pass itemized
 
@@ -748,6 +820,8 @@ Original itemized list (as written before the pass):
   limitation above).
 - Observe a real `$rewindTo` and confirm the truncate-or-clear replay against the
   loader's behaviour on the same file.
+
+<a id="s3-8"></a>
 
 ### 3.8 Antigravity CLI seam — surveyed live 2026-08-02; statusline is the seam
 
@@ -975,6 +1049,8 @@ recorded: `TestTheCanaryInventoryMatchesThisAdapter` substring-matches the pin a
 in `design.md`, so a dated block quoting the new pin turns the guard green while the
 table it guards stays wrong. Scoping that assertion to the table is unowned.
 
+<a id="s3-9"></a>
+
 ### 3.9 Cursor (Composer) seam — surveyed live 2026-08-02; the store is open, and it holds credentials
 
 **Environment:** Cursor 3.14.7, Windows. Closed source, and the store format is
@@ -1109,6 +1185,8 @@ does **not** cover, itemized: no in-flight session was sampled, no fan-out was o
 the derived-percentage path did not fire on live data (no real session was missing
 `contextUsagePercent` while carrying raw counts), and the corpus is one machine, one day,
 one Cursor version.
+
+<a id="s3-9a"></a>
 
 ### 3.9a Grok CLI seam — surveyed live 2026-08-09; the first vendor that writes money down
 
@@ -1474,6 +1552,8 @@ never observed mid-write, so the write is atomic by the vendor's own naming rath
 observation here. The adapter reads none of these bytes, and this measurement did not
 change that.
 
+<a id="s3-9b"></a>
+
 ### 3.9b Pi seam — source-surveyed 2026-08-16; not installed here, nothing live-verified
 
 **Environment and evidence class.** This is the §3.2 class (researched from source, NOT
@@ -1547,6 +1627,8 @@ contract rather than the sixth in-tree adapter. Which of the two paths to build 
 owner decision deferred to post-launch demand; this survey only records that both are
 open and neither is blocked by the format.
 
+<a id="s3-10"></a>
+
 ### 3.10 The canary set — what each adapter actually watches
 
 Every survey above pins an adapter to a private, unversioned on-disk format. §7 records how
@@ -1593,6 +1675,8 @@ reads is worse than none. `fields it feeds` is what degrades when that canary go
 is why a canary is the load-bearing subset of a schema fingerprint rather than the fingerprint:
 a vendor ADDING a column costs this program nothing, because every reader here addresses columns
 by name.
+
+<a id="s4"></a>
 
 ## 4. Adapter contract (v1)
 
@@ -1648,6 +1732,8 @@ first fragment after a backward seek, because a bounded tail read lands mid-reco
 parsing that fragment invents a record the vendor never wrote. Both adapters use it; no
 adapter reads bytes on its own.
 
+<a id="s4a"></a>
+
 ## 4a. The normalized session model
 
 *(Answers §6 Q2. Implementation: `internal/model/session.go`, package `model`, stdlib
@@ -1655,6 +1741,8 @@ only — the statusline path must never link a TUI framework.)*
 
 Adapters produce `model.Session`; the statusline and the HUD only read it. Nothing
 downstream of an adapter knows a vendor's field names, units, or file formats.
+
+<a id="s4a-1"></a>
 
 ### 4a.1 Absence is two different things
 
@@ -1675,6 +1763,8 @@ was measured.
 Every optional field is a pointer. There is no "unset" sentinel number anywhere in the
 package: `0` always means the vendor said zero, and the zero `time.Time` is invalid input
 (`Validate` rejects it) rather than a stand-in for "no timestamp".
+
+<a id="s4a-2"></a>
 
 ### 4a.2 Fields
 
@@ -1732,6 +1822,8 @@ count"), and it renders as a gauge-adjacent mark in the grid rather than as a la
 line in the pane. That is exactly the "if an extra deserves a gauge, it deserves a Field"
 case, taken rather than dodged.
 
+<a id="s4a-3"></a>
+
 ### 4a.3 Quota windows
 
 Windows are a slice, not named fields, because the set is vendor-defined. Emit only the
@@ -1747,6 +1839,8 @@ display string, ≤ 4 cells — the statusline is character-budgeted), `UsedPerc
 `ResetsAt`. A nil `ResetsAt` hides the countdown rather than guessing one. A window whose
 *length* the vendor did not report gets a positional label (`1st`, `2nd`) from the
 adapter: calling it "5h" on a guess would be a duration claim with no source.
+
+<a id="s4a-4"></a>
 
 ### 4a.4 Liveness: who decides
 
@@ -1787,6 +1881,8 @@ positive vendor signal the HUD cannot see:
 A hint the model cannot check is the one place an adapter can lie undetected, which is
 why the bar for emitting one is a signal that actually separates working-now from
 process-exists. **Neither v1 adapter emits one** (§3.1, §3.2).
+
+<a id="s4a-5"></a>
 
 ### 4a.5 The adapter interface
 
@@ -1841,6 +1937,8 @@ type Adapter interface {
   `Err()`**, and treat a trailing partial line as not-yet-a-record. `internal/jsonl` is
   the shared implementation; use it rather than re-deriving it.
 
+<a id="s4a-6"></a>
+
 ### 4a.6 The validation gate
 
 `(*Session).Validate(caps)` is the machine-checkable form of the honest-gauge rule. It
@@ -1856,6 +1954,8 @@ rejects a session that:
 
 The eval harness runs it over every fixture; run it in your adapter's own tests too. It is
 not on the render path.
+
+<a id="s4a-7"></a>
 
 ### 4a.7 Worked example: adding a Gemini CLI adapter
 
@@ -2001,6 +2101,8 @@ things only the source could reveal: message records are upserts (same id re-app
 and the writer deletes non-resumable sessions on exit. If you skip Step 0, those two
 become bugs; the wrong capability guess becomes a fabricated gauge.
 
+<a id="s5"></a>
+
 ## 5. Eval harness
 
 Fixture-driven, in-repo, CI-gating (`.github/workflows/ci.yml` runs `go vet ./...` and
@@ -2079,6 +2181,8 @@ it with more than it does:
 - **Not the other two gauges.** `internal/hud` and `internal/council` are TUI surfaces;
   the rule does not apply to them and the gate does not look at them.
 
+<a id="s6"></a>
+
 ## 6. Open design questions
 
 1. ~~Language/stack~~ — **ANSWERED, ADR-002:** Go + Bubble Tea/Lipgloss, one binary,
@@ -2143,6 +2247,8 @@ it with more than it does:
    `TestLastActivityUsesNewestRecordTimestampOverStaleMtime` in each adapter; no HUD
    golden changed (fixtures inject `LastActivity` directly).
 
+<a id="s7"></a>
+
 ## 7. HUD UI design
 
 Written before the HUD was built, per ADR-002. This section is binding: every render
@@ -2157,6 +2263,8 @@ and `charm.land/lipgloss/v2` **v2.0.5**. Both are v2: `AdaptiveColor` and the gl
 > from `internal/hud/testdata/golden/*.txt`, which `go test ./internal/hud -update`
 > regenerates. If a render here and the code disagree, the code is right and this section
 > is stale — fix it in the same change.
+
+<a id="s7-1"></a>
 
 ### 7.1 Principles
 
@@ -2185,6 +2293,8 @@ per-session quota, which is false. If no source can honestly supply it, that ven
 block is absent — not zeroed — so the block count is itself a measurement: the header
 shows exactly as many vendors as telltale can speak for. Where the readings come from
 and how the line fits them is §7.15.
+
+<a id="s7-2"></a>
 
 ### 7.2 Anatomy
 
@@ -2280,6 +2390,8 @@ entirely and its width returned to `SESSION`; a full column of dashes is noise, 
 information. This applies to `CONTEXT` and `COST` only (never to `MODEL` or `AGE`), is
 computed per frame from the visible rows, and is therefore deterministic. The help
 overlay lists any column hidden this way and why.
+
+<a id="s7-3"></a>
 
 ### 7.3 Target renders
 
@@ -2595,6 +2707,8 @@ a reader could not trust to be there.
  q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys                 ⚠ codex drifted
 ```
 
+<a id="s7-4"></a>
+
 ### 7.4 The gauge
 
 Glyphs: fill `█` (U+2588) with eighth-block partials `▏▎▍▌▋▊▉` (U+258F–U+2589), track
@@ -2632,6 +2746,8 @@ Verified scale at 12 cells (`TestGaugeScale` pins every row):
   window renders `↻120h00m`.
 
 The statusline still uses its own `pct` and `shortDur`; see the divergence note in §2.
+
+<a id="s7-5"></a>
 
 ### 7.5 Colour and threshold tokens
 
@@ -2707,6 +2823,8 @@ because by principle #2 colour was never the sole carrier of any distinction. No
 | `↻` | `~` | | `⌥name` | `(name)` |
 | `⚠` | `!` | | spinner | `-\|/` rotation |
 
+<a id="s7-6"></a>
+
 ### 7.6 Motion
 
 **The rule: telltale may animate its own work; it must never animate the vendor's.**
@@ -2759,6 +2877,8 @@ already does this.
   framerate cap is not the thing limiting redraws — the data is.
 - Render nothing until the first `tea.WindowSizeMsg` arrives. One blank frame beats one
   frame of wrong layout.
+
+<a id="s7-7"></a>
 
 ### 7.7 Degraded and empty states
 
@@ -2915,6 +3035,8 @@ network, which are `not checked` on every seat, always.
 | first frame | `firstFrameText` | `TestTheFirstFrameIsShortAndNamesTheModeThatMeasures` | Under 30 lines, and it names every mode it sends a reader to. |
 | doctor next step | no seat ready, and one ready | `TestTheReportSaysWhatToRunNext` | Both branches name a command that runs on the machine just described. |
 
+<a id="s7-8"></a>
+
 ### 7.8 Keyboard
 
 Minimal, and every key earns its place.
@@ -2980,6 +3102,8 @@ not weaken. `telltale council` (ADR-008, §9) is a separate subcommand that *doe
 vendor CLIs; it is a dispatch room, not a gauge, it is entered deliberately, and it says so on
 screen. Nothing in §7 may reach for it.
 
+<a id="s7-9"></a>
+
 ### 7.9 Golden tests
 
 - `Render` is pure over `State` — `(sessions, vendors, now, width, height, filter, sort,
@@ -2994,6 +3118,8 @@ screen. Nothing in §7 may reach for it.
 - Width is measured with `lipgloss.Width`, never `len()` — the label column carries
   arbitrary project names. `TestNoLineExceedsTheTerminalWidth` sweeps seven widths with
   and without the help overlay.
+
+<a id="s7-10"></a>
 
 ### 7.10 Known limitations
 
@@ -3031,6 +3157,8 @@ screen. Nothing in §7 may reach for it.
   the HUD restarts the basis at zero, and for the first five minutes of every run there
   is no forecast at all. Persisting samples would mean writing to disk, which "telltale
   never writes" forbids, so this limitation is load-bearing rather than an oversight.
+
+<a id="s7-11"></a>
 
 ### 7.11 The detail pane
 
@@ -3138,6 +3266,8 @@ column on every row forever to serve a mark that is off most of the time.
 That frame is also §7.13's: row 2 measured **zero** sub-agents and therefore draws no
 chip, and the CONTEXT and COST columns are auto-hidden because these are real Claude rows.
 
+<a id="s7-12"></a>
+
 ### 7.12 The burn-rate forecast
 
 **What makes this ours.** The incumbents in this lane project a burn line against a plan
@@ -3203,6 +3333,8 @@ only when the measurement itself moved. That is a measurement changing, not an a
 the §7.6 rule is about telltale never animating the *vendor's* state, and this is telltale
 reporting its own arithmetic on a new reading.
 
+<a id="s7-13"></a>
+
 ### 7.13 The sub-agent chip
 
 `⑂~2` after the session label on any row whose adapter counted recently-written
@@ -3224,6 +3356,8 @@ count". A sidecar the OS refuses renders `—` there, never `0`.
 Styling: the chip renders in `Text`, not `Muted`. `Muted` is this palette's "chrome or
 absent" (§7.5, `Absent() = Muted`), and rendering real measured data in it would put a
 sourced number in the same visual class as a missing one.
+
+<a id="s7-14"></a>
 
 ### 7.14 Type-to-filter
 
@@ -3275,6 +3409,8 @@ find it.
 
 `/` is a mode, and it is the product's only one — which is why it takes over the whole
 footer instead of quietly changing what an unmodified key does.
+
+<a id="s7-15"></a>
 
 ### 7.15 The quota relay — every vendor the header can honestly speak for
 
@@ -3343,6 +3479,8 @@ What the relay does **not** change: the statusline's own display (it renders fro
 stdin as before, the write happens after), the HUD's read-only posture toward *vendor*
 files, and the absence rule — a vendor whose statusline never fires simply never
 appears, and one that stops firing ages out.
+
+<a id="s7-16"></a>
 
 ### 7.16 The token relay — what Cursor cost, from a seam with no network call
 
@@ -3682,6 +3820,8 @@ thing an agent cannot drive here. Roughly a minute:
 3. Read the line above the input. `ctx N%` appearing after the reply is the confirmation;
    the segment staying hidden means `used_percentage` is null for longer than assumed.
 
+<a id="s7-16a"></a>
+
 ### 7.16a The OTLP collector — what grok spent, pushed rather than hooked (2026-08-10)
 
 §3.9a closed grok's quota question three times over and ended on a seam: the vendor's one
@@ -3837,6 +3977,8 @@ detection carries both arms and cites the measurement beside them.
 - The capture behind every claim here is one machine, one day, one grok version, one
   signed-in account. The §3.4 discipline applies: re-measure before extending any claim.
 
+<a id="s7-16b"></a>
+
 ### 7.16b The Claude statusline's token block — measured, modelled, relayed nowhere (2026-08-16)
 
 The token relay has two writers (§7.16, §7.16a) and an obvious-looking third. Claude Code's
@@ -3976,6 +4118,8 @@ is re-openable against that field and nothing else.
   emit `permission_mode`, but the statusline calls it with two arguments, so the field is
   `undefined` and never serialized. The exclusion is now a property of the call site rather
   than of the schema, and a future version that passes the argument would ship it.
+
+<a id="s7-17"></a>
 
 ### 7.17 `u`: the fleet usage view — two claims, and never one
 
@@ -4742,6 +4886,8 @@ Declined inside the ratification, and the list is closed:
   but a reader who takes the order for importance will be wrong, which is part of why it is
   alphabetical rather than ranked.
 
+<a id="s7-18"></a>
+
 ### 7.18 The scan keeps up: what a poll actually costs, measured (2026-08-09)
 
 The footer's `⚠ last scan Ns ago` (`view.go` `staleAfter = 3s`) was on permanently on the
@@ -4840,6 +4986,8 @@ Codex's 138 ms is the next-largest item and is now co-dominant with everything e
 together. It is left alone: the scan is an order of magnitude inside its budget, and the
 same cache would need its own correctness argument against its own read path.
 
+<a id="s7-19"></a>
+
 ### 7.19 `w`: the week page — the slow windows, one line per vendor (2026-08-09)
 
 The owner's question, verbatim: "one view of the weekly usage for these models — it would
@@ -4925,6 +5073,8 @@ draw sentences — zero and absent, still different states on the page built for
   registry to learn the vendor's new word, which is the same posture every verbatim-
   vocabulary surface here takes (§7.15's convert rule).
 
+<a id="s7-20"></a>
+
 ### 7.20 `--hide`: the standing hide list (2026-08-10)
 
 The owner's request, near-verbatim: hide gemini and cursor, because only the CLI vendors
@@ -4955,6 +5105,8 @@ contradiction.
 disagree about what a vendor is called. The list is deduplicated and sorted at parse time
 so the footer's wording is stable no matter how it was typed. `--hide all` is refused: a
 HUD told to hide every vendor is a request to not run it.
+
+<a id="s7-21"></a>
 
 ### 7.21 The event sink — every hook, one durable stream (2026-08-11)
 
@@ -5063,6 +5215,8 @@ silent in normal use, so the hook looks wired and stores nothing. The working sh
 direct interpreter invocation. `tools/emit-event.py` is stdlib-only and needs no `uv`.
 The `telltale events` usage text now recommends the direct form.
 
+<a id="s7-22"></a>
+
 ### 7.22 `telltale snapshot` — the read mode whose reader is a program (2026-08-11)
 
 **What it is.** `telltale snapshot` runs one scan and prints the fleet's current gauge
@@ -5160,6 +5314,8 @@ real fleet questions from the parsed JSON: 6 vendors watching, 1,443 sessions, 1
 `context_pct_max` 75.8 on codex, and `agy` quota with 4 windows of which `gemini-weekly`
 carried 11.9 `used_pct`. Zero-vs-absent held in the document the agent read: `cost` was
 `null` everywhere, and a `used_pct` of 0 was the number 0.
+
+<a id="s8"></a>
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
 
@@ -5453,6 +5609,8 @@ in the schema moved.
   this product exists to refuse.
 - On-disk cost estimation via price tables: inventing dollars from token counts.
 
+<a id="s9"></a>
+
 ## 9. Council (ADR-008)
 
 `telltale council` is the dispatch room: one brief typed once, routed to Claude's control
@@ -5472,6 +5630,8 @@ The only way in is typing the subcommand. What moved is the *scope* of the sente
 `README.md`, from "telltale never writes" to "the gauges never write", because the old
 phrasing had become false the moment ADR-008 was accepted and an accepted decision the
 docs contradict is worse than either option on its own.
+
+<a id="s9-1"></a>
 
 ### 9.1 What v1 seats, and what it does not
 
@@ -5546,6 +5706,8 @@ enforcement for four seats when one had a mechanism.
   §4a.1 that is `CapNone` rather than a plausible fill, which leaves a seat whose gauge is
   permanently blank. This is the one entry worth re-checking when a vendor payload changes;
   the rejections above do not move until the vendor does.
+
+<a id="s9-2"></a>
 
 ### 9.2 Two claims the room refuses to leave implicit
 
@@ -5642,6 +5804,8 @@ in the space a user came to read an answer. The distinction is carried by the he
 phase word and the granularity badge beside it; the body says only `working — the reply
 arrives whole.`
 
+<a id="s9-3"></a>
+
 ### 9.3 Execution: argv, never a shell
 
 Prompts are arbitrary text — quotes, ampersands, whatever was typed — so no prompt is ever
@@ -5656,6 +5820,8 @@ resolved path as `KindNative` or `KindShim`, Codex and Claude take their prompt 
 marked `AvailUnusable` and not driven at all. The refusal is the feature; the card tells the
 user which env override fixes it.
 
+<a id="s9-4"></a>
+
 ### 9.4 Multi-turn is native resume, not transcript re-send
 
 Turn 1 is blind: no vendor sees another's answer, which is what makes opinions across the 4-vendor fleet
@@ -5665,6 +5831,8 @@ would grow input quadratically against metered quotas and flatten native turn st
 quoted prose; resume sends only the new turn and makes the blind-round guarantee
 *structural*, since each session holds only its own history. Cross-agent rebuttal is an
 explicit opt-in toggle that quotes the previous turn's finals as labelled untrusted material.
+
+<a id="s9-5"></a>
 
 ### 9.5 Layout and testing
 
@@ -5694,6 +5862,8 @@ set by design, so they are blind to it. Anywhere a line is assembled from differ
 pieces — the tab bar, the help body — padding goes through `fit`, which is ANSI-aware.
 `TestFitIsANSIAware` is the regression guard.
 
+<a id="s9-6"></a>
+
 ### 9.6 Invocation traps, one per vendor
 
 Each adapter hit a failure that is silent rather than loud, which is the kind worth writing down.
@@ -5720,6 +5890,8 @@ Each adapter hit a failure that is silent rather than loud, which is the kind wo
 
 The shared shape: all four failures produce a *plausible* result rather than an error. That is
 why each one is pinned by a test asserting the argv this repo actually builds.
+
+<a id="s9-6a"></a>
 
 ### 9.6a The activity trace carries outcomes — and says when it cannot
 
@@ -5795,6 +5967,8 @@ against a real capture:
   frame, where the same reason typically survives whole — and a refusal behind it: the trace
   answers *what did this agent do and did it work*, not *show me the log*, and the turn-level
   failure still arrives in the column's note carrying the vendor's own sentence.
+
+<a id="s9-6b"></a>
 
 ### 9.6b The agy trace was showing its message-passing and hiding its work
 
@@ -5965,6 +6139,8 @@ Deliberately **not** part of this: `--dangerously-skip-permissions`. Dropping a 
 restricted nothing and adding one that approves everything are different acts, and the second
 stays refused on both seats that offer it.
 
+<a id="s9-6c"></a>
+
 ### 9.6c The Cursor stream says everything twice, and the second time does not always look alike
 
 cursor-agent under `--stream-partial-output` sends a model call's text deltas and then that
@@ -5997,6 +6173,8 @@ streamed body equals the reply the vendor itself put in its `result` event. That
 the safety net if both fields ever go: the room uses it whenever a column streamed nothing, so
 the failure mode is a column that fills at the end, never one that is wrong. ADR-008's twentieth
 amendment carries the argument.
+
+<a id="s9-7"></a>
 
 ### 9.7 Status
 
@@ -6043,6 +6221,8 @@ granularity word is `tokens`. Measured over a 250-word reply the deltas are **~8
 each, about three a second** — genuinely incremental, and not tokens. Measured identically
 under the persistent invocation and under a spawn-per-turn control, so it is a pre-existing
 overstatement rather than something §9.8 introduced.
+
+<a id="s9-8"></a>
 
 ### 9.8 One live process, and the gate it makes possible
 
@@ -6491,6 +6671,8 @@ the prompt. So the probe would spend a turn from a constrained pool and would re
 description rather than a registration table. That arm proves wiring and order only; it could
 never speak to deny-beats-ask semantics.
 
+<a id="s9-9"></a>
+
 ### 9.9 The room remembers — a conversation, not a ticker
 
 Everything above builds a very good way to **send one turn**. What it did not build is
@@ -6567,6 +6749,8 @@ screen even when it is absent, because a user who asked for it is owed the card 
 why it is not there. It parses the `@mention` vocabulary rather than a second one, so
 `--vendor agy` and `@agy` are the same word, and `Seated()` counts only seats that are both
 drivable and in the room so the header's `3/4 seated` keeps meaning what it says.
+
+<a id="s9-10"></a>
 
 ### 9.10 A mode that could not scroll, and the mouse it did not get
 
@@ -6645,6 +6829,8 @@ came back the same.
 
 Recorded rather than left as a gap, because "nobody tried" and "it was measured and
 refused" are different facts, and this repo does not let them render alike.
+
+<a id="s9-11"></a>
 
 ### 9.11 The room was correct and it was flat
 
@@ -6802,6 +6988,8 @@ invented for every case. A "role" line under each seat naming what that vendor i
 rather than something this room measured, and a room that stated it would be asserting
 something no adapter sourced.
 
+<a id="s9-12"></a>
+
 ### 9.12 The scroll keys worked; which column they moved was the thing nobody could see
 
 §9.10 fixed a room whose scroll keys were dead in the mode a finished turn drops you into.
@@ -6877,6 +7065,8 @@ reachable, and **unattributed**. The room said *something is hidden here* three 
 *here is how to see it* once, and a user reading the two-thirds of the room that named no
 key concluded, reasonably, that the feature was missing. Nothing measurable was wrong;
 what was wrong is that the honest thing and the actionable thing were on different columns.
+
+<a id="s9-13"></a>
 
 ### 9.13 The badges were honest and nobody knew what they meant
 
@@ -6979,6 +7169,8 @@ adversarial care went into making three words defensible to a reviewer, and none
 asked whether the person the words are *for* could read them. Honesty that only survives
 an expert audit is a claim made to the wrong audience.
 
+<a id="s9-14"></a>
+
 ### 9.14 the honest sentence was in the wrong room
 
 §9.2 rules that `PhaseWaiting` must never be mistaken for streaming, and it is right. The
@@ -7051,6 +7243,8 @@ the translation was correct, and it was put in the wrong room. A sentence can be
 and still wrong to print, if the place it prints is the place someone came to read something
 else. Every earlier section here asked whether the room says the truth. This one is the first to
 ask **how much of the room the truth is allowed to take up.**
+
+<a id="s9-15"></a>
 
 ### 9.15 getting an answer out of the room
 
@@ -7174,6 +7368,8 @@ what the user had actually been trying to *do* when they reached for the mouse. 
 never "scroll"; it was "take this answer with me", and that want went unnamed for two sections
 because the request arrived wearing the costume of a mechanism.
 
+<a id="s9-16"></a>
+
 ### 9.16 `/flow`: the hop holds the authority, and it has to say so out loud
 
 A `/flow` chain is `@seat verb [task] [write:<path>]`, arrows between hops, dispatched **one hop
@@ -7255,6 +7451,8 @@ invocation passes any test that asks the posture function what it thinks. The po
 witnesses `@cursor`'s argv rather than `@codex`'s for a measured reason — on Windows, codex's read
 and write sandbox flags collapse to the same value, so codex's command line cannot testify to a
 posture on this machine.
+
+<a id="s9-17"></a>
 
 ### 9.17 a control you need mid-session cannot live in a flag
 
@@ -7565,6 +7763,8 @@ underneath it. Both fixes are pinned by tests rather than comments for the same 
 room nobody typed a control into, the flag and the state agree, so the fixtures cannot tell them
 apart and neither could review.
 
+<a id="s9-18"></a>
+
 ### 9.18 a strip said four fifths of a name it could have said whole in two letters
 
 Since the default route stopped being everyone, the ordinary turn narrows the frame to one
@@ -7622,6 +7822,8 @@ claim, and the vocabulary is shared with the help panel and the transcript. Givi
 narrower vocabulary of its own — a second alphabet is exactly what §9.11's phase marks were
 built to avoid.
 
+<a id="s9-19"></a>
+
 ### 9.19 sitting a turn out cost a line a turn, and wore the wrong mark doing it
 
 Since the default route became one seat (#99), three columns sit out every ordinary turn. The
@@ -7678,6 +7880,8 @@ the skips in `[`/`]`'s path. Dropping the live skip into the coalesced run to sa
 run is history and that line is now, and a reader deciding whether to re-address a seat should
 not have to read a range to find out. And giving the skip a mark of its own — `○` already means
 this, and a second glyph for one meaning is the collision `glyphs.go` argues against.
+
+<a id="s9-20"></a>
 
 ### 9.20 the transcript is turn-wise and the only way through it was line-wise
 
@@ -7780,6 +7984,8 @@ scroll keys use. And a `[`/`]` that moved *focus* between columns when a column 
 two motions on one key, resolved by content, is the kind of binding that is only ever right for
 the person who wrote it.
 
+<a id="s9-21"></a>
+
 ### 9.21 the room knew what the turn would cost and did not say
 
 #99 restored the cheap default: silence goes to Claude alone, and the committee is
@@ -7862,6 +8068,8 @@ deriving a number and presenting it as read — the top item on this repo's reje
 (§4a.1). Billing the *route's* vendors rather than the seated ones, which would have been
 one line shorter and would have priced seats that are never spawned. And a count on the
 one-seat case, which is a number whose only reading is "yes, one".
+
+<a id="s9-22"></a>
 
 ### 9.22 four answers to one question, and no way to read them as one
 
@@ -7999,6 +8207,8 @@ facts (§4a.1).
   one thing the grid already does better. v1 lacks it deliberately, and `y`'s behaviour
   here is what falls out of that rather than a limitation worked around.
 
+<a id="s9-23"></a>
+
 ### 9.23 the frame dashed, and the outline whispered while its entries shouted
 
 §9.11 through §9.22 spent the room's typographic budget on *columns* — a seat's name, its
@@ -8072,6 +8282,8 @@ bottom-anchor pad so every frame has one unbroken edge: that pad is the void, an
 Phase 2 was written about. And a per-column rail extent, so a short column's gutter stops early:
 the gutter belongs to the boundary between two columns rather than to either of them, and one of
 the two ending sooner is not a fact about the line between them.
+
+<a id="s9-24"></a>
 
 ### 9.24 the middle of the grid breathed and its edges did not
 
@@ -8152,6 +8364,8 @@ clipping instead of shedding, which is the trade §9.11's whole footer pass exis
 And unifying every literal 2 in the package behind the new constant — `labelRule`'s air around
 its rule is the same number for an unrelated reason, and tying them together would mean a
 future change to one silently moving the other.
+
+<a id="s9-25"></a>
 
 ### 9.25 the panel that lists what the room can do was not listing it
 
@@ -8245,6 +8459,8 @@ entirely for an unavailable seat, which shears the grid for the sake of a row th
 to keep. And putting the tag on turn pages "for consistency": consistency across surfaces that are
 doing different jobs is how a room ends up with an abbreviation in the middle of a sentence.
 
+<a id="s9-26"></a>
+
 ### 9.26 one rule glyph was doing four jobs, and the header band re-textured on every dispatch
 
 §9.23 made the frame continuous and §9.24 made its margins breathe. What neither looked at is
@@ -8326,6 +8542,8 @@ the frame is the only thing it needs to *match*. Making the frame's rule brighte
 heavier: §9.23 declined to let the rails' hue mean anything on the argument that chrome competing
 with content is the wrong trade, and an outline is chrome. And keeping the idle leader off "for
 quiet": the quiet was bought by making the room's most stable row the one that changed most.
+
+<a id="s9-27"></a>
 
 ### 9.27 focus was a mark on one row, in a frame the reader had scrolled past
 
@@ -8412,6 +8630,8 @@ full body height so focus always has an unbroken edge: that is the void again. A
 `Muted` chrome a further step in unfocused columns, which would need the third intensity this
 section just declined to buy.
 
+<a id="s9-28"></a>
+
 ### 9.28 the room's one hue exception, and exactly how far it goes
 
 `internal/council` has said "adds no hues of its own" since §9.11, and the rule was right: a
@@ -8492,6 +8712,8 @@ as the name, which doubles the ink for a distinction the name already carries. T
 would override the user's scheme. And a fifth hue held in reserve for "the next vendor": a palette
 entry with no seat behind it is a decision nobody has made, recorded as if somebody had.
 
+<a id="s9-29"></a>
+
 ### 9.29 the seats had positions and no way to address one
 
 `tab` cycles focus, and at the columns tier that is fine: three seats, at most two presses. At
@@ -8561,6 +8783,8 @@ Stable per-vendor numbers that never renumber, which would leave gaps (`1`, `3`,
 and make the printed number disagree with the position it is printed at — the number would then
 be an identity, and identity is what the tag and the hue are for. And a fifth key for a fifth
 seat: `1-N` already says how many there are.
+
+<a id="s9-30"></a>
 
 ### 9.30 one question, asked once, instead of four times across the comparison surface
 
@@ -8665,6 +8889,8 @@ was spent to save, once per column, and the turn separator already marks that bo
 the band down to one row on a short terminal, covered above. And giving the band a rule glyph or a
 hue of its own — council adds no hues, and the boundary vocabulary this room already has is what a
 reader has already learned to read.
+
+<a id="s9-31"></a>
 
 ### 9.31 a word the room did not know was billed to three vendors
 
@@ -8806,6 +9032,8 @@ control named past the fold is not a demoted control, it is an absent one (§9.2
 the honest shape rather than only a saving: the two take one argument in one vocabulary and differ
 only in direction, so a reader who finds either has found both. "times" paid for the width — the row
 is a list of controls, and `/trace <file>` is unambiguous without the verb.
+
+<a id="s9-32"></a>
 
 ### 9.32 the room remembered where it was and forgot who was in it
 
@@ -9048,6 +9276,8 @@ correct for `/cd` and absent from whatever re-points the room next.
 drives `/cd` through `roomCommand` and then reads `room.json` off disk with no teardown and no
 completed turn — the simulated crash. It fails on the pre-amendment code with *nothing was
 saved*, which is the defect in one line.
+
+<a id="s9-33"></a>
 
 ### 9.33 the cursor seat's per-turn cost, split at last — and the seam that was hidden from `--help`
 
@@ -9497,6 +9727,8 @@ does so today: codex and grok have no structured error frame, so their failure I
 is written on the shape rather than on the vendor id, and a seat that adopts the same shape later
 is covered without an amendment.
 
+<a id="s9-34"></a>
+
 ### 9.34 the rebuttal stopped naming its authors
 
 A `ctrl+r` turn used to quote each seat's answer under its vendor's name: *"quoted reply from
@@ -9531,6 +9763,8 @@ What this deliberately does not add: a ranking stage, a chairman, or any synthes
 llm-council's stage 3 collapses the answers into one; §9.2's position is that independent
 answers ARE the product, and a synthesis is available today as an explicit `/flow` hop the user
 types. Blinding sharpens the comparison; it does not delegate the verdict.
+
+<a id="s9-35"></a>
 
 ### 9.35 a running chain can be told to stop after this hop
 
@@ -9605,6 +9839,8 @@ The general lesson, in this file's own terms: §9.16 built the chain's authority
 neither obeying nor gone — belonged to nobody, so nothing asserted on it. The corpse survived
 every ending, including the successful one, because the tests all stopped at "did not
 advance" and none typed the next brief. The regression tests here end by dispatching one.
+<a id="s9-36"></a>
+
 ### 9.36 the cursor seat re-founded on ACP: what the wider capture said, and what it cost
 
 §9.33 ended with a build verdict, a verified seam and three named decisions. This is the build.
@@ -9792,6 +10028,8 @@ standing beside it.
 
 **Not verified here: macOS.** Every arm ran on Windows 11, and the Mac's ACP seat is unmeasured.
 That belongs in `PARITY.md` rather than in this section.
+
+<a id="s9-37"></a>
 
 ### 9.37 /arena: the seats race in worktrees, and the human picks the winner
 
@@ -10517,6 +10755,8 @@ records are emitted, so the reported absence has some other cause, and the same 
 two candidates beside it — a room that opened on workspace `~`, and `/trace` resolving a
 relative path against it. That stays open and belongs to whoever runs the next live race.
 
+<a id="s9-38"></a>
+
 ### 9.38 paste lands whole, and never sends (2026-08-09)
 
 The ask, in the operator's words: *"how i can paste things into the area i can type in."* The
@@ -10675,6 +10915,8 @@ with it only because it describes it. Taught on the help panel's compose-keys ro
 draft" paid), deliberately not on the compose mode line, which is at its own width budget.
 Tests: `draftclear_test.go` drives `Update` with the real chord through every gate and both
 modes.
+
+<a id="s9-39"></a>
 
 ### 9.39 a fifth seat, and the first that reports money (2026-08-09)
 
@@ -10928,6 +11170,8 @@ left alone: a detail renders only on a FAILED outcome, and composing a sentence 
 **Not re-verified at 1.0.4:** the bad-`--resume`-id error shape, the `--verbatim` and
 `--prompt-json` slash channels, and anything on macOS.
 
+<a id="s9-40"></a>
+
 ### 9.40 the room said something was stopped and never said which seat (2026-08-09)
 
 The gate (§9.8) blocks a vendor until a key is pressed, and the room already announced that in
@@ -11032,6 +11276,8 @@ places a seat hue is spent stays closed; it was ratified as closed, and a fourth
 decision for whoever wants to reopen it rather than a side effect of this line. Under `--ascii`
 and `NO_COLOR` the strip reads exactly the same, which is the property every distinction this UI
 makes has to have: `NEEDS YOU` is the signal, and the mark and the weight only make it findable.
+
+<a id="s9-41"></a>
 
 ### 9.41 the gate asked about an edit and would not show it (2026-08-09)
 
@@ -11151,6 +11397,8 @@ an honest count is the trade; the whole edit is in the file the moment it is app
 more. What the seat *would* have written is not what happened, and a room that showed it
 afterwards would be displaying a file state that never existed.
 
+<a id="s9-42"></a>
+
 ### 9.42 `telltale doctor`: the one moment probing is allowed, and the three answers it may give (2026-08-09)
 
 Council's detection has never run a vendor. `detect.go` says why in its own doc — "council
@@ -11230,6 +11478,8 @@ cannot drift from the room's own badges. Worth the line at all because "installe
 stream to you" are different promises, and the seat a user is most likely to think is broken is
 the one that is working and silent until the end of the turn (§9.14).
 
+<a id="s9-43"></a>
+
 ### 9.43 the agy seat stops pretending a lost thread resumed (2026-08-09)
 
 `STATE.md` carried this as an unowned gap for as long as it took to write the entry. **The agy
@@ -11300,6 +11550,8 @@ entirely successful still delivers the mismatched id to the room.
 behaviour rests on the 2026-08-09 capture, and the code rests on that capture's fixture. A
 re-measurement against a later build is what would retire `SilentResumeForkMeasuredAt`, and
 until somebody runs one, this seat's claim names 1.1.11 and no other build.
+
+<a id="s9-44"></a>
 
 ### 9.44 the composer was a gap under a rule, and the room's state floated below it (2026-08-09)
 
@@ -11373,6 +11625,8 @@ worked and had been dropped for width since §9.29. Nothing was un-shed by hand;
 **No new hues.** The border and the sides are `Rule()`, i.e. muted chrome; the legend keeps the
 exact styles the mode word already had on the mode line, gate included. This change spends
 *shape*, which the palette does not pay for.
+
+<a id="s9-45"></a>
 
 ### 9.45 the turn clock counted the operator's reading time as the vendor's work (2026-08-15)
 

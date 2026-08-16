@@ -13,7 +13,7 @@ go build -o telltale.exe ./cmd/telltale
 ```
 
 That is the whole CI gate (`.github/workflows/ci.yml`), which runs on `windows-latest`
-— **Windows is the primary target (ADR-002)**, not an afterthought platform. CI then
+— **Windows is the primary target ([ADR-002](docs/design.md#adr-002))**, not an afterthought platform. CI then
 smoke-tests the *built binary* against two fixtures and asserts honesty properties
 directly on stdout, e.g.:
 
@@ -128,10 +128,10 @@ The title says *what a user now sees or can do*, not which function changed. A
 handful of older merged PRs slipped into `feat(council): ...` / `fix(council): ...`
 — treat those as the exception, not the model to copy.
 
-## The honesty rules this project is built on (ADR-001)
+## The honesty rules this project is built on ([ADR-001](docs/design.md#adr-001))
 
 This is the thing the whole codebase optimizes for, more than idiomatic Go. Read
-`docs/design.md` §4a.1 before touching any adapter or any render path.
+[`docs/design.md` §4a.1](docs/design.md#s4a-1) before touching any adapter or any render path.
 
 - **A displayed value must come from measured vendor/tool output.** Anything
   inferred is either omitted or visibly marked as an estimate (a leading `~`).
@@ -251,11 +251,11 @@ nowhere else.
 - **`internal/theme` stays stdlib-only.** It's the shared palette both
   `internal/hud` and `internal/council` map into `lipgloss` values, specifically
   so the `telltale statusline` **code path** never reaches the Bubble Tea/Lipgloss
-  TUI framework (ADR-002). Don't import a TUI dependency into `internal/theme` or
+  TUI framework ([ADR-002](docs/design.md#adr-002)). Don't import a TUI dependency into `internal/theme` or
   `internal/model` — `TestFastPathNeverReachesTUIFramework` fails the build if you
   do, naming the package. Note the precise claim: the shipped **binary** does link
   both modules, because it is one binary and `telltale hud` is in it
-  (`go version -m telltale.exe` shows them). What ADR-002 buys is that neither
+  (`go version -m telltale.exe` shows them). What [ADR-002](docs/design.md#adr-002) buys is that neither
   module's package init runs on a path that executes on every prompt. design.md §5's
   2026-08-16 amendment says what the gate asserts and what it deliberately does not.
 - **Council adds no hues of its own** (`internal/council/style.go`) — it maps
