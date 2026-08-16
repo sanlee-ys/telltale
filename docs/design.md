@@ -10071,6 +10071,46 @@ the exact split this section exists to keep. The render defect is recorded as an
 gap in STATE.md; this section's claim is amended to say the paste property holds ON THE
 WIRE, with the row rendering owned separately.
 
+**Amendment, 2026-08-16 — the render was measured, and the seat-count suspect is REFUTED.**
+The bullet above named a suspect: the composer's height behavior under a full seat strip. That
+suspect is wrong. `TestAMultilineDraftNeverCollapsesSilently` sweeps the drawn geometry with a
+three-line draft and asserts that every line is on screen, or that the frame says how many are
+not. The sweep covers one, three and five seats, widths from `MinWidth` to 240, heights from
+`MinHeight` to 40, both glyph sets, and the expanded projection. All 588 combinations draw all
+three rows. `composer-multirow-five-seats.txt` is the 5/5 room at 200x24 as bytes. **The seat
+count changes nothing about the compose area**, and the reason is structural: the composer is
+full-width chrome, so `composerRows` wraps against `promptWidth(st.Width)` and never against a
+column width. Five columns narrow the COLUMNS. They do not narrow the composer.
+
+Two further things were measured, because a refutation is only useful when it also closes the
+paths it rules out.
+
+- **The one-row compose area is the only silent collapse in the render, and it is unreachable.**
+  `composerLines` flattens newlines to spaces when `lay.Prompt == 1`, with no marker. Its comment
+  calls that unreachable for a real draft. The claim holds. `resolveLayoutIn` clamps `Prompt` to
+  1 only below a height of 9, and `Render` refuses to draw a room under 60x10 at all — it prints
+  `council needs 60x10 (have WxH)` and no compose area. So no drawn frame reaches the flatten.
+  The branch stays as it is, and this paragraph is the measurement that says why.
+- **The paste transport carries the newlines, on this platform's own path.** ultraviolet, pinned
+  at v0.0.0-20260703014108, buffers a bracketed paste into ONE `PasteEvent`. The win32-input-mode
+  path Windows Terminal uses converts a pasted Enter record to a literal `\n` inside that same
+  buffer (`terminal_reader.go`, the `isWin32 && event.Code == KeyEnter` case) rather than
+  emitting a key event. bubbletea v2 maps that event to `tea.PasteMsg`, which `Update` routes to
+  `paste()`. `sanitizePaste` keeps the newlines and `setDraft` stores them.
+  `TestAWindowsPasteKeepsItsLinesAndLosesItsCRs` already drives `Update` with LF, CRLF and
+  bare-CR content and pins the draft that results, so this half needed no new test.
+
+**What is left, stated rather than rounded up.** The live observation is not explained. The draft
+held newlines on the wire, the render draws newlines at every geometry it will draw, and the two
+cannot both be true of one frame. The leading remaining hypothesis is an observation error at the
+composer, and §9.38 already names the trap that produces one: the echo's row breaks are ambiguous
+between a newline and a word wrap. That warning was applied to the column echo and the wire was
+checked against the transcript because of it. The composer's own row count was still read by eye.
+**The decisive next measurement is cheap: reproduce the paste in a live 5/5 room and record the
+terminal's rows and columns with it.** A geometry at or above 60x10 makes the render correct by
+the sweep above, which moves the defect off this section entirely. A geometry below it means the
+room drew the floor refusal, and the report is about a different frame than the one assumed.
+
 **Amendment, 2026-08-09 — the ergonomic other half: ctrl+u clears the draft.** Paste changed
 the arithmetic on regret. A draft used to cost at most a typed sentence, so backspace's
 rune-at-a-time delete was proportionate to any mistake the composer could hold; one wrong
