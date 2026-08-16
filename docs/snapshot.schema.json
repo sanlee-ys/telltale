@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/sanlee-ys/telltale/main/docs/snapshot.schema.json",
+  "title": "telltale snapshot document",
+  "description": "The document `telltale snapshot` prints on stdout (docs/design.md #s7-22). This schema documents what the shipped binary emits today, measured against its real output and against internal/snapshot/testdata/golden/*.json. It promises key presence, JSON type and nullability. It does not promise value ranges, ordering, or that a number you read was measured rather than absent — see `schema_version` and the two notes on `fleet` and `vendors`.",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "scan_error", "fleet", "vendors"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "description": "The document's contract number. It rises when a field changes meaning or leaves. A field added at the end does not raise it, because every reader parses by name — which is why every object here sets additionalProperties true.",
+      "const": 1
+    },
+    "generated_at": {
+      "description": "When the scan completed. It is the scan's clock, not the render's: a reader that judges freshness must measure the reading. Always UTC, always truncated to the second.",
+      "$ref": "#/$defs/timestamp"
+    },
+    "scan_error": {
+      "description": "The scan's own failure, such as a cancelled context or a deadline. It is not a vendor's status. Null on a clean run.",
+      "type": ["string", "null"]
+    },
+    "fleet": { "$ref": "#/$defs/fleet" },
+    "vendors": {
+      "description": "One entry per adapter that ran. Never null: an empty fleet is []. The entries arrive sorted by vendor id today, and this schema does not promise that order.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/vendor" }
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "description": "An instant in UTC, truncated to the second. internal/snapshot's stamp() forces both, so the pattern is a measured claim and not a style rule.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "nullableTimestamp": {
+      "description": "A timestamp, or null when there is no reading. The pattern binds the string arm only.",
+      "type": ["string", "null"],
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "count": {
+      "description": "A count. It is an integer and it can be 0, because 0 sessions is a measurement. A count is never null: the absence of a count is not a state this document has.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "measurement": {
+      "description": "A measured number, or null when nothing measured it. The number 0 means a measured zero. Null means no reading. The two never share a spelling, and no sentinel number stands for null. This schema cannot tell you which of the two you got — it can only guarantee that the emitter keeps them apart, which internal/snapshot's TestZeroIsANumberAndAbsentIsNull asserts on the type.",
+      "type": ["number", "null"]
+    },
+    "fieldName": {
+      "description": "A field this document reports a session-sourced value for. The set is internal/snapshot's `reported` list. `quota` is deliberately not a member: the quota array comes from the account relay, not from a session, so a session-level capability cannot speak for it.",
+      "type": "string",
+      "enum": ["context_pct", "cost", "last_activity", "subagents"]
+    },
+    "fleet": {
+      "description": "The cross-vendor rollup. It exists so the common question costs one parse and no arithmetic. Every count is a count and can be 0. Every measurement is nullable. The two kinds never share a field.",
+      "type": "object",
+      "required": [
+        "sessions",
+        "live",
+        "idle",
+        "stale",
+        "unknown",
+        "vendors_watching",
+        "vendors_not_detected",
+        "vendors_unreadable",
+        "vendors_drifted",
+        "context_pct_max",
+        "cost_usd_total",
+        "last_activity"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "sessions": { "$ref": "#/$defs/count" },
+        "live": { "$ref": "#/$defs/count" },
+        "idle": { "$ref": "#/$defs/count" },
+        "stale": { "$ref": "#/$defs/count" },
+        "unknown": {
+          "description": "Sessions whose liveness has no basis at all: no hint and no last activity. It is its own count rather than part of `stale`, which is an age claim these rows cannot support. live + idle + stale + unknown equals sessions.",
+          "$ref": "#/$defs/count"
+        },
+        "vendors_watching": { "$ref": "#/$defs/count" },
+        "vendors_not_detected": { "$ref": "#/$defs/count" },
+        "vendors_unreadable": { "$ref": "#/$defs/count" },
+        "vendors_drifted": { "$ref": "#/$defs/count" },
+        "context_pct_max": {
+          "description": "The highest context percentage any session reports, and null when no session reports one. It is a max and not a mean: the fleet question is whether anything is close to its window, which an average over idle sessions hides. The emitter applies no bound to this number, so this schema states none.",
+          "$ref": "#/$defs/measurement"
+        },
+        "cost_usd_total": {
+          "description": "The sum over every session that reports a cost, and null when none does. A fleet whose sessions all cost zero totals 0, which is a measurement.",
+          "$ref": "#/$defs/measurement"
+        },
+        "last_activity": {
+          "description": "The most recent activity any session reports, and null when none reports one.",
+          "$ref": "#/$defs/nullableTimestamp"
+        }
+      }
+    },
+    "vendor": {
+      "description": "One adapter's standing.",
+      "type": "object",
+      "required": [
+        "vendor",
+        "status",
+        "error",
+        "sessions",
+        "live",
+        "drifted",
+        "context_pct_max",
+        "cost_usd_total",
+        "subagents_max",
+        "last_activity",
+        "quota",
+        "quota_read_at",
+        "estimated",
+        "unsupported"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "vendor": {
+          "description": "The adapter's id. The six the binary ships today are agy, claude, codex, cursor, gemini and grok. This schema does not enumerate them: a seventh adapter adds a value, not a field, and the emitter does not treat that as a contract break.",
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "description": "The vendor line's own word. watching: the store is readable. not detected: the vendor is not installed, which is not an error. unreadable: the store exists and the operating system refused it. drifted: the store read, and at least one session no longer matches the shape the adapter was verified against.",
+          "type": "string",
+          "enum": ["watching", "not detected", "unreadable", "drifted"]
+        },
+        "error": {
+          "description": "The operating system's own message when status is unreadable, and null otherwise.",
+          "type": ["string", "null"]
+        },
+        "sessions": { "$ref": "#/$defs/count" },
+        "live": { "$ref": "#/$defs/count" },
+        "drifted": {
+          "description": "Sessions whose read no longer found the structure the adapter was verified against. It travels beside `sessions` because one drifted row out of forty and forty out of forty are different events.",
+          "$ref": "#/$defs/count"
+        },
+        "context_pct_max": { "$ref": "#/$defs/measurement" },
+        "cost_usd_total": { "$ref": "#/$defs/measurement" },
+        "subagents_max": {
+          "description": "The highest subagent count any of this vendor's sessions reports, and null when none reports one. It is a whole number when it is present.",
+          "type": ["integer", "null"]
+        },
+        "last_activity": { "$ref": "#/$defs/nullableTimestamp" },
+        "quota": {
+          "description": "The account quota this vendor can honestly speak for: the windows the statusline relayed. Never null; a vendor with no relayed reading carries []. Quota comes from the account and never from a session, because a per-session limit is a thing no vendor publishes.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/quotaWindow" }
+        },
+        "quota_read_at": {
+          "description": "When that relay was written, and null when there is no relayed reading. A quota figure without the age of its reading is a number the reader cannot judge.",
+          "$ref": "#/$defs/nullableTimestamp"
+        },
+        "estimated": {
+          "description": "The fields in THIS document whose value an adapter computed rather than read, sorted. Never null. It is the JSON form of the render layer's ~ marker.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/fieldName" }
+        },
+        "unsupported": {
+          "description": "The fields this vendor exposes nothing for, ever, sorted. Never null. A null on a field named here is a capability statement. A null on any other field is this moment's reading.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/fieldName" }
+        }
+      }
+    },
+    "quotaWindow": {
+      "description": "One relayed usage window.",
+      "type": "object",
+      "required": ["id", "label", "used_pct", "resets_at"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "used_pct": {
+          "description": "The window's used percentage, and null when the window exists and carries no figure yet. It is never 0 for that case, which is the distinction this whole document is built on.",
+          "$ref": "#/$defs/measurement"
+        },
+        "resets_at": { "$ref": "#/$defs/nullableTimestamp" }
+      }
+    }
+  }
+}
