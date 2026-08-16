@@ -5277,6 +5277,76 @@ silent in normal use, so the hook looks wired and stores nothing. The working sh
 direct interpreter invocation. `tools/emit-event.py` is stdlib-only and needs no `uv`.
 The `telltale events` usage text now recommends the direct form.
 
+**Amended 2026-08-16 — a taken 4519, measured and then named.** §7.16a's amendment of the
+same day fixed this shape for `telltale otel grok`, and left the identical residue here.
+**Measured 2026-08-16**, Windows 11, `main` at `1995b34`, with a throwaway listener holding
+127.0.0.1:4519: `telltale events` printed one line on stderr and exited 1.
+
+```
+telltale events: listen tcp 127.0.0.1:4519: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+```
+
+The failure was already loud and already correctly coded — nothing pretended to collect and
+nothing hung. What the line did not carry is what to do next, and there are three parts to
+that: who probably holds the port, that `--addr` moves this side (the flag already existed
+and was already documented), and that moving this side ALONE stores nothing.
+
+**The likely holder is a different one than the collector's, and that is the whole reason
+this message is not a copy of §7.16a's.** 4318 is OTLP/HTTP's registered port, so a
+collision there is very probably a rival receiver — Jaeger, the OpenTelemetry Collector, a
+vendor agent. 4519 is telltale's own and nothing else in this fleet claims it, so the only
+holder telltale can defend naming is **a `telltale events` sink the operator already
+started**. The message says that, and it says the cheap thing first: check for the running
+sink before moving the port, because if one is already listening the emitters already reach
+it and a second sink buys nothing. On a port the operator chose it names no holder at all —
+telltale cannot know who took 4600, and it says so rather than guessing.
+
+**What else must move, and why dropping that half is worse here than for the collector.**
+The emitters are the other side: `tools/emit-event.py` defaults to
+`http://127.0.0.1:4519/events` and takes `--server-url`, so a moved sink needs
+`--server-url http://<addr>/events` added to the hook command in **every** repo's
+`.claude/settings.json` — a second per-repo edit beside `--source-app`. A sink moved alone
+listens forever and stores nothing. §7.16a's version of that reads like "grok spent
+nothing"; this one is quieter still, because the emitter's hook contract (measured
+2026-08-11, and hardened by Trap 3 on 2026-08-15) is a 0.25s probe, one stderr line and
+**exit 0 on every path**. A half-moved sink therefore produces no failure anywhere: the
+fleet simply looks like one where no hook ever fired. That is why the redirect is in the
+error text and in the flag help, not left to this document.
+
+**The redirect is measured here, not merely prescribed.** §7.16a had to mark its
+`OTEL_EXPORTER_OTLP_ENDPOINT` line unverified, because moving grok's own exporter needs a
+fresh instrumented capture. This side owns both halves, so there was no excuse to leave it
+at a prescription. **Measured 2026-08-16**, Windows 11, same build: `telltale events --addr
+127.0.0.1:4520` bound and logged `listening on 127.0.0.1:4520`; a synthetic PreToolUse
+payload piped into `tools/emit-event.py --source-app tt-moved-port --server-url
+http://127.0.0.1:4520/events` exited 0 with no stderr; the sink logged `stored #1
+tt-moved-port/sess-moved-live PreToolUse`; `GET /events/recent` returned the row with the
+payload verbatim; and `2026-08-16.jsonl` appeared in the store. The run used a redirected
+home directory, so it wrote to a temporary store and not to the operator's own.
+
+The suggested port is the failed port plus one, and telltale does not scan for a free one: a
+port free at the scan is not free at the bind, and a suggestion that looked verified would
+be the dishonest one (§4a.1). The loopback bind stays absolute across the flag —
+`TestAMovedPortIsStillLoopbackOnly` pins that, and it matters more here than for the
+collector, because these rows carry hook payloads verbatim rather than four token counts.
+`TestAHeldPortSaysWhoProbablyHasItAndWhatElseToMove` and
+`TestTheDefaultPortCollisionNamesASinkAlreadyRunning` pin both branches of the message, and
+`TestAMovedPortBindsAndStoresAnEvent` pins that the way out works.
+
+**`internal/bindaddr`, added by the same change.** The busy-port detection, the loopback
+test and the plus-one suggestion now live in one package that both §7.16a's collector and
+this sink call; the two messages stay in their own packages, because what a collision MEANS
+is per-mode and only the mechanism is shared. The extraction is not tidiness. The detection
+carries a measured Windows fact that the portable-looking version gets wrong —
+`errors.Is(err, syscall.EADDRINUSE)` is FALSE there for a real collision, because the bind
+returns errno 10048 (`WSAEADDRINUSE`) while Windows builds define `syscall.EADDRINUSE` as
+one of Go's synthetic `APPLICATION_ERROR` constants (536870914, measured go 1.26). Windows
+is the primary target (ADR-002), so a second copy of that check is a second place for a
+later reader to simplify it back to one arm and break the only platform CI runs.
+`TestARealCollisionIsDetectedOnThisPlatform` provokes a real collision rather than
+constructing an error value, so whichever arm a platform needs is the arm its suite
+exercises.
+
 <a id="s7-22"></a>
 
 ### 7.22 `telltale snapshot` — the read mode whose reader is a program (2026-08-11)

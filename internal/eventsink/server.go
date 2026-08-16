@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/sanlee-ys/telltale/internal/bindaddr"
 )
 
 // DefaultAddr is the sink's listen address. 4519 collides with nothing this
@@ -16,6 +18,12 @@ import (
 // grokotel binds loopback — a sink reachable off-box would be an open door
 // wearing a log's name.
 const DefaultAddr = "127.0.0.1:4519"
+
+// defaultPort is DefaultAddr's port on its own, because the collision message
+// says one thing when this mode's own default is taken and a different thing
+// when a port the operator chose is taken.
+// TestDefaultAddrCarriesTheDefaultPort keeps the two in step.
+const defaultPort = "4519"
 
 // maxBody caps one POST. A hook payload is kilobytes; the cap is generous
 // headroom, and a body past it is refused rather than half-read.
@@ -46,14 +54,7 @@ func NewServer(store *Store, logf func(string, ...any)) *Server {
 // refused unless addr is loopback. sweepEvery > 0 starts the retention
 // sweeper: once at startup, then on that interval.
 func (s *Server) Run(addr string, sweepEvery time.Duration) error {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return fmt.Errorf("bad listen address %q: %w", addr, err)
-	}
-	if !isLoopback(host) {
-		return fmt.Errorf("refusing to listen on %q: the event sink binds loopback only (127.0.0.1, ::1, localhost)", addr)
-	}
-	ln, err := net.Listen("tcp", addr)
+	ln, err := s.listen(addr)
 	if err != nil {
 		return err
 	}
@@ -83,12 +84,86 @@ func (s *Server) sweepLoop(every time.Duration) {
 	}
 }
 
-func isLoopback(host string) bool {
-	if host == "localhost" {
-		return true
+// listen holds the two ways this bind can fail, and says something the
+// operator can act on for each. The loopback refusal is a rule of this mode:
+// the sink stores hook payloads VERBATIM (§7.21), so a sink reachable off-box
+// would publish every tool call and file path this fleet makes. The busy-port
+// refusal is the measured common case (below), and it used to arrive as the
+// raw net.Listen error.
+//
+// # What a taken port looked like before, measured
+//
+// 2026-08-16, telltale built from main at 1995b34, Windows 11, a throwaway
+// listener holding 127.0.0.1:4519. `telltale events` printed one line and
+// exited 1:
+//
+//	telltale events: listen tcp 127.0.0.1:4519: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+//
+// That is the same shape `telltale otel grok` had before §7.16a's 2026-08-16
+// amendment named it, and it fails the same way: the exit code and the
+// loudness were already right, and the line carried nothing the operator could
+// act on. What it did not say is that the likely holder is a sink already
+// running, that --addr moves this side, and that moving this side ALONE stores
+// nothing because the emitters keep posting to 4519.
+func (s *Server) listen(addr string) (net.Listener, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("bad listen address %q: %w", addr, err)
 	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	if !bindaddr.IsLoopback(host) {
+		return nil, fmt.Errorf("refusing to listen on %q: the event sink binds loopback only (127.0.0.1, ::1, localhost)", addr)
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		if bindaddr.InUse(err) {
+			return nil, portTaken(addr, port, bindaddr.Next(host, port, defaultPort), err)
+		}
+		return nil, err
+	}
+	return ln, nil
+}
+
+// portTaken renders the collision. It states the cause it can defend and no
+// more, which for this mode is a different cause than the collector's: 4318 is
+// OTLP/HTTP's registered port and every local receiver wants it, while 4519 is
+// this mode's own and nothing else in the fleet claims it — so the likely
+// holder here is a sink the operator already started, not a rival product. On
+// a port the operator picked telltale knows nothing about who holds it, so it
+// does not guess.
+//
+// The redirect half is the part a shorter message would drop and the part that
+// decides whether moving the port works at all. A moved sink with unmoved
+// emitters is a server that listens forever and stores nothing, and §7.21
+// measured why that is worse here than a crash: an emitter whose sink is
+// unreachable prints one stderr line and exits 0 BY DESIGN, so the whole fleet
+// goes quiet with no failure anywhere to notice.
+func portTaken(addr, port, next string, err error) error {
+	why := fmt.Sprintf("Another process on this machine holds %s. telltale cannot say which one.", addr)
+	if port == defaultPort {
+		why = "A telltale events sink you already started probably holds it. Port " + defaultPort + " is\n" +
+			"this mode's own default and nothing else in this fleet claims it (§7.21), so the\n" +
+			"likely holder is a second copy of this mode. Check for one before you move the\n" +
+			"port: if a sink is already listening, the emitters already reach it and a second\n" +
+			"sink buys nothing."
+	}
+	return fmt.Errorf(`%s is already in use, so the sink did not start.
+
+%s
+
+Move this sink to a free loopback port:
+    telltale events --addr %s
+
+Then move every emitter to the same address. A sink moved alone stores nothing:
+the hooks go on posting to %s and never reach this one.
+    python3 <path>/tools/emit-event.py --source-app <name> --server-url http://%s/events
+
+--server-url is a second per-repo edit beside --source-app, in the same
+.claude/settings.json hook command §7.21 describes. Every repo wired to the
+sink needs it. An unmoved emitter is silent, not loud: it prints one stderr
+line and exits 0 by design, so a half-moved sink looks exactly like a fleet
+where no hook ever fired.
+
+bind error: %w`, addr, why, next, addr, next, err)
 }
 
 // Handler routes the sink's four paths. Everything else is a 404: this is

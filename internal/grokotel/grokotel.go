@@ -75,17 +75,15 @@ package grokotel
 
 import (
 	"compress/gzip"
-	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"path/filepath"
-	"strconv"
 	"sync"
-	"syscall"
 	"time"
 
+	"github.com/sanlee-ys/telltale/internal/bindaddr"
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/usagecache"
 )
@@ -210,12 +208,12 @@ func (s *Server) listen(addr string) (net.Listener, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bad listen address %q: %w", addr, err)
 	}
-	if !isLoopback(host) {
+	if !bindaddr.IsLoopback(host) {
 		return nil, fmt.Errorf("refusing to listen on %q: the collector binds loopback only (127.0.0.1, ::1, localhost)", addr)
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		if addrInUse(err) {
+		if bindaddr.InUse(err) {
 			return nil, portTaken(addr, port, nextAddr(host, port), err)
 		}
 		return nil, err
@@ -257,51 +255,15 @@ telltale has NOT measured that redirect; design.md §7.16a says so.
 bind error: %w`, addr, why, next, addr, next, err)
 }
 
-// nextAddr is the port the collision message suggests: the failed port plus
-// one, so a message about an already-moved collector never suggests the port
-// that just failed. An unparseable or last port falls back to the default plus
-// one.
-//
-// The suggestion is a starting point and the message says nothing more about
-// it. telltale does NOT scan for a free port and offer that: a port free at the
-// moment of the scan is not free at the moment of the bind, and a suggestion
-// that looked verified would be the dishonest one (§4a.1).
+// nextAddr names this package's fallback for the shared suggestion rule:
+// bindaddr.Next takes the failed port to plus-one and falls back to a default
+// when that port is unparseable or last, and 4318 is the default it falls back
+// to here. The measured busy-port detection and the loopback test moved to
+// internal/bindaddr with it when `telltale events` met the same collision
+// (§7.21's 2026-08-16 amendment) — the mechanism is shared, the message is
+// not.
 func nextAddr(host, port string) string {
-	n, err := strconv.Atoi(port)
-	if err != nil || n <= 0 || n >= 65535 {
-		n, _ = strconv.Atoi(defaultPort)
-	}
-	return net.JoinHostPort(host, strconv.Itoa(n+1))
-}
-
-// addrInUse reports whether a bind failed because something already holds the
-// address. It cannot be the one errors.Is call it looks like it should be, and
-// the reason is measured rather than assumed.
-//
-// Measured 2026-08-16, go 1.26 on Windows 11: a second net.Listen on a held
-// 127.0.0.1 port returns syscall.Errno(10048) — WSAEADDRINUSE — while Windows
-// builds define syscall.EADDRINUSE as one of Go's synthetic APPLICATION_ERROR
-// constants, 536870914 on that box. So errors.Is(err, syscall.EADDRINUSE) is
-// FALSE for the very error it names, on this repo's primary target (ADR-002).
-// The numeric arm covers that; the errors.Is arm covers the Unix builds, where
-// syscall.EADDRINUSE is the real errno. 10048 is not a valid errno on those
-// platforms, so the numeric arm cannot fire there by accident.
-const wsaeAddrInUse = 10048
-
-func addrInUse(err error) bool {
-	if errors.Is(err, syscall.EADDRINUSE) {
-		return true
-	}
-	var errno syscall.Errno
-	return errors.As(err, &errno) && uintptr(errno) == wsaeAddrInUse
-}
-
-func isLoopback(host string) bool {
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	return bindaddr.Next(host, port, defaultPort)
 }
 
 // handler routes the two OTLP paths. Everything else is a 404: this is not a

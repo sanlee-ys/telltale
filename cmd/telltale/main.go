@@ -842,7 +842,15 @@ telltale otel grok flags:
 telltale events flags:
   --addr <host:port>          listen address (default 127.0.0.1:4519).
                               Loopback only; any other host is refused at
-                              startup
+                              startup. A port something already holds fails with
+                              "already in use" and names the way out — on 4519
+                              the likely holder is a sink you already started.
+                              Moving this side is half of it: pass --server-url
+                              http://<host:port>/events to every emit-event.py
+                              hook command too, or the hooks keep posting to 4519
+                              and this sink stores nothing. That half fails
+                              QUIETLY: an emitter that cannot reach the sink
+                              prints one stderr line and exits 0 by design
   --retain <days>             days of events to keep (default 30). The sweep
                               runs at startup and then hourly; a day file is
                               deleted only when its whole day is past the

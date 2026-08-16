@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -16,6 +17,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sanlee-ys/telltale/internal/bindaddr"
 )
 
 func fixedNow(t time.Time) func() time.Time { return func() time.Time { return t } }
@@ -276,6 +279,192 @@ func TestRunRefusesANonLoopbackBind(t *testing.T) {
 	}
 	if err := NewServer(s, nil).Run("0.0.0.0:0", 0); err == nil {
 		t.Fatal("want a refusal for a non-loopback bind")
+	}
+}
+
+// --- the port a sink you already started is holding ------------------------
+
+// newServer is the pair every bind test below needs: a server over a temp
+// store, and the store directory so a test can assert nothing was written.
+func newServer(t *testing.T) (*Server, string) {
+	t.Helper()
+	dir := t.TempDir()
+	store, err := Open(dir, DefaultRetain, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return NewServer(store, nil), dir
+}
+
+// freePort returns a loopback port nothing holds right now, by binding one and
+// letting it go. It is a starting point, not a reservation — the same honesty
+// bindaddr.Next's doc states — and that is fine for a test that binds it again
+// immediately.
+func freePort(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, port, err := net.SplitHostPort(ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln.Close()
+	return port
+}
+
+func TestDefaultAddrCarriesTheDefaultPort(t *testing.T) {
+	_, port, err := net.SplitHostPort(DefaultAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if port != defaultPort {
+		t.Errorf("DefaultAddr port = %q, defaultPort = %q: the collision message reads the wrong one", port, defaultPort)
+	}
+}
+
+// A held port is a startup failure this mode meets whenever a sink is already
+// running, and before 2026-08-16 it arrived as the raw net.Listen error
+// (listen's doc has the measured line). The test pins every fact the operator
+// needs out of it, because dropping any one of them leaves a sink that listens
+// and stores nothing.
+func TestAHeldPortSaysWhoProbablyHasItAndWhatElseToMove(t *testing.T) {
+	port := freePort(t)
+	addr := net.JoinHostPort("127.0.0.1", port)
+	holder, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatalf("could not hold %s for the test: %v", addr, err)
+	}
+	defer holder.Close()
+
+	s, dir := newServer(t)
+	ln, err := s.listen(addr)
+	if err == nil {
+		ln.Close()
+		t.Fatal("listen succeeded on a held port")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		addr,                    // which address failed
+		"already in use",        // what happened
+		"--addr",                // how to move this side
+		"--server-url",          // how to move the emitters
+		"stores nothing",        // why moving only one side is not enough
+		"exits 0",               // why that failure is silent rather than loud
+		".claude/settings.json", // where the emitter edit is made
+		"tools/emit-event.py",   // which command carries it
+		"§7.21",                 // where the record is
+		"bind error:",           // the raw error is kept, not swallowed
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("the collision message never says %q:\n%s", want, msg)
+		}
+	}
+	// The way out it offers must be a different port from the one that failed.
+	suggested := bindaddr.Next("127.0.0.1", port, defaultPort)
+	if suggested == addr || !strings.Contains(msg, suggested) {
+		t.Errorf("the message suggests no port other than the failed one (%s):\n%s", addr, msg)
+	}
+	// A refused bind is not a start: nothing may reach the store behind it.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a failed bind wrote %d file(s) into the store", len(entries))
+	}
+}
+
+// On this mode's own default the message may name the likely holder, and the
+// holder it names is NOT the collector's. 4318 is OTLP/HTTP's registered port,
+// so §7.16a can blame a rival receiver; 4519 is telltale's own, so the only
+// defensible guess is a second copy of this mode. On a port the operator chose
+// it guesses nothing, because telltale knows nothing about who took it.
+func TestTheDefaultPortCollisionNamesASinkAlreadyRunning(t *testing.T) {
+	shared := portTaken(DefaultAddr, defaultPort, "127.0.0.1:4520", errors.New("bind: taken")).Error()
+	if !strings.Contains(shared, "telltale events sink you already started") {
+		t.Errorf("the default-port collision does not name the likely holder:\n%s", shared)
+	}
+	if !strings.Contains(shared, "127.0.0.1:4520") {
+		t.Errorf("the default-port collision suggests no port to move to:\n%s", shared)
+	}
+	// The advice that costs nothing to follow comes first: a sink already
+	// listening is a sink already collecting, and a second one buys nothing.
+	if !strings.Contains(shared, "Check for one before you move") {
+		t.Errorf("the default-port collision never says to look for the running sink first:\n%s", shared)
+	}
+
+	chosen := portTaken("127.0.0.1:4600", "4600", "127.0.0.1:4601", errors.New("bind: taken")).Error()
+	if strings.Contains(chosen, "already started probably holds it") {
+		t.Errorf("a chosen port's collision guesses at a holder telltale cannot know:\n%s", chosen)
+	}
+	if !strings.Contains(chosen, "cannot say which one") {
+		t.Errorf("a chosen port's collision does not admit it cannot name the holder:\n%s", chosen)
+	}
+}
+
+// The way out the message offers has to work: a moved port binds, and the sink
+// on it stores a real event.
+func TestAMovedPortBindsAndStoresAnEvent(t *testing.T) {
+	s, dir := newServer(t)
+	addr := net.JoinHostPort("127.0.0.1", freePort(t))
+	ln, err := s.listen(addr)
+	if err != nil {
+		t.Fatalf("listen(%q) = %v", addr, err)
+	}
+	defer ln.Close()
+	if ln.Addr().String() != addr {
+		t.Errorf("listening on %s, asked for %s", ln.Addr(), addr)
+	}
+	go http.Serve(ln, s.Handler())
+
+	body := `{"source_app":"telltale","session_id":"sess-moved-port","hook_event_type":"PreToolUse",` +
+		`"payload":{"tool_name":"Bash"},"tool_name":"Bash"}`
+	resp, err := http.Post("http://"+addr+"/events", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /events on the moved port: %d %s", resp.StatusCode, b)
+	}
+	var stored Event
+	if err := json.NewDecoder(resp.Body).Decode(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored.ID != 1 || stored.SessionID != "sess-moved-port" {
+		t.Errorf("an event posted to the moved port was not stored: %+v", stored)
+	}
+	// Durable, not just acknowledged — the moved sink writes its day file the
+	// same way the default one does.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("the moved sink wrote %d day file(s), want 1", len(entries))
+	}
+}
+
+// The loopback rule is absolute, and moving the port may not become a way
+// around it: a non-loopback host is refused whatever port it carries. This
+// matters more here than for the collector — these rows carry hook payloads
+// verbatim (§7.21), so an off-box bind would publish the fleet's tool calls
+// and file paths, not a token count.
+func TestAMovedPortIsStillLoopbackOnly(t *testing.T) {
+	s, _ := newServer(t)
+	for _, addr := range []string{"0.0.0.0:4520", "192.168.1.10:4600", "[::]:9999"} {
+		ln, err := s.listen(addr)
+		if err == nil {
+			ln.Close()
+			t.Errorf("listen(%q) bound off loopback", addr)
+			continue
+		}
+		if !strings.Contains(err.Error(), "loopback") {
+			t.Errorf("listen(%q) = %v, want a loopback refusal", addr, err)
+		}
 	}
 }
 
