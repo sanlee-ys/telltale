@@ -168,6 +168,21 @@ type Reattachment struct {
 	// line naming what rerunning without --fresh would have reattached is
 	// enough to make the loss a choice.
 	Offered bool
+	// WorkspaceGone names the saved workspace when it no longer exists, so the
+	// room can say WHY it opened somewhere else.
+	//
+	// Empty on every other path, including a --cd override: "you typed a
+	// different directory" and "the directory you were in is gone" are two
+	// different sentences, and the room used to print the same one for both.
+	// Set by openWorkspace, which is the only place that stats the path, so the
+	// directory the room chose and the directory it describes are one answer
+	// rather than two reads that can disagree.
+	//
+	// A field on the Reattachment rather than on SavedRoom: nothing here is
+	// written to disk. It is a fact about THIS launch, and room.json stays the
+	// keys and nothing else.
+	WorkspaceGone string
+
 	// Adopted reports that the room came from a pre-cockpit v1 per-workspace
 	// file rather than from room.json — the one-time migration. Named in the
 	// reattach notice, because state restored from a file the user has never
