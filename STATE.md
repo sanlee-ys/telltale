@@ -48,6 +48,54 @@ copies, the gates and the argument; this file does not restate any of them.
 
 ## In flight
 
+- **The 3-minute demo path is DEFINED (owner's ruling, 2026-08-15).** It is link
+  1 of the outward chain above, and both later links consume it. Eight beats, in
+  order. Every beat names a surface that exists today. Two beats carry an honest
+  marker, because they rest on a configuration nobody has run yet.
+
+  1. **`telltale doctor`, 15 seconds.** The preflight names each seat it
+     resolved, where the binary was found, and the version it reports. One
+     sentence explains `not checked`: nothing here probes a login or calls the
+     network, so auth and network never read as a pass.
+  2. **`telltale council`.** The bare command opens the one room and reattaches
+     to the standing conversations. Each seat picks up its own thread, and the
+     turn counter continues at N+1.
+  3. **One brief, addressed `@all`.** Five columns answer side by side. Before
+     enter, the composer footer states the resolved ROUTE: the seat names, plus
+     the seat count from two seats up. The footer says which seats the turn
+     reaches. It shows no money, and this beat must never promise a price.
+     **Awaiting its first live run.** The demo pastes a multi-line brief, and
+     [design.md §9.38](docs/design.md) records that a pasted draft has never
+     been sent with enter. Typing the brief is the fallback.
+  4. **One honesty beat.** A column whose vendor reported no cost renders no
+     cost cell at all. A turn that reported zero renders `$0.0000`. The two
+     states stay apart on screen. The `~` estimate marker is NOT on this
+     surface: council renders no `~`, so beat 7 carries that half.
+  5. **`y`.** The focused column's reply goes to the clipboard over OSC 52, and
+     a notice names what was copied. The sequence returns no acknowledgement,
+     so the paste is the proof.
+  6. **`/arena <brief>`, then `/adopt <seat>`.** Each seat races the same brief
+     in its own git worktree, on branch `arena/t<N>/<vendor>`. A racing column
+     shows `arena · so far` while it works. A finisher carries its rank, its
+     phase word and its own clock. An attempt that changed something shows
+     `committed <sha>.`. `/adopt` cuts `adopt/t<N>-<vendor>` behind a y/n card
+     and merges the attempt there.
+     **Awaiting its first live run, twice over.** No 5-of-5 race has ever run:
+     grok landed after the last full race, so the next race is the first with
+     five seats. No live race has watched the `arena · so far` stat grow from a
+     non-empty read either ([design.md §9.37](docs/design.md)).
+  7. **`telltale hud`.** The grid shows the fleet at a glance. `enter` opens the
+     detail pane, whose `not sourced` line names the fields that vendor can
+     never source. A `~` on a context cell marks a percentage telltale computed
+     rather than read.
+  8. **`telltale snapshot --compact`, piped to a parser, 10 seconds.** One line
+     of JSON carries the same truth as the grid, for a reader that is a program.
+     Absent is `null`, a measured zero is `0`, and no optional key is omitted.
+
+  **The path is recorded, not frozen.** Beats 3 and 6 keep their markers until
+  the owner's next drive pays them. Do not strike a marker without a live run
+  behind it, and do not write down a result neither beat has produced.
+
 - **The Grok seat is landed, was broken on its first live turn, and is fixed.**
   The fifth seat (§9.39) is built, registered, and verified end to end against
   the real binary — `go test ./internal/council/vendors -tags=live -run
@@ -155,9 +203,11 @@ copies, the gates and the argument; this file does not restate any of them.
   1. **A scripted fallback demo tape** (optional, taste work): a checked-in
      recording script (e.g. VHS) that captures the demo path end-to-end, so
      a vendor or network failure on the day cannot erase the presentation.
-     Deliberately not built with the rest: there is no defined demo path yet
-     to record, and scripting one before it exists would invent the demo
-     rather than capture it.
+     **Unblocked 2026-08-15, and now waiting on the drive rather than on a
+     decision.** The demo path is defined above, so there is a route to
+     record. Two of its beats still carry an awaiting-first-live-run marker,
+     and a tape cut before that drive would script a claim nobody has watched.
+     Record it after the drive pays those two beats.
 
   Post-demo shelf — decided, deliberately not queued: a measured-silence
   advisory ("no event for 5m", never "stalled"); rendering an explicit
