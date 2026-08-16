@@ -107,7 +107,10 @@ jobs:
           # flag lives.
           $out = Get-Content internal/statusline/testdata/cursor-full.json -Raw | ./telltale.exe statusline --vendor cursor
           if ($out -notmatch 'Composer') { throw "cursor payload did not route to the Cursor renderer: $out" }
-          if ($out -notmatch 'ctx 34\.5%') { throw "the one vendor-sourced context reading did not render: $out" }
+          # Match the number alone: the line colors the value, so an ANSI code
+          # sits between "ctx " and "34.5%" and a phrase-spanning regex can
+          # never match its own passing output.
+          if ($out -notmatch '34\.5%') { throw "the one vendor-sourced context reading did not render: $out" }
           # The refusal, asserted on stdout rather than trusted to the struct:
           # remaining_percentage (65.5) and total_input_tokens (68900) are both
           # computed by the CLI from used_percentage and must never be displayed.
