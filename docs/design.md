@@ -9251,6 +9251,68 @@ stay up, so the seat-move case gains an argument here; it is recorded, not acted
 
 **Spend:** two billed turns, both trivial prompts on `read-only`.
 
+#### 2026-08-16: the gap that block named, on the seat that fails inside its stream
+
+The block above closed the answer case and left one gap open, written into `InFlight`'s own doc
+comment: **a seat that FAILS in its stream was terminal inside a live turn.** This closes it. No
+vendor was run for this change. The whole finding is a source read, and the section says so
+rather than borrowing the authority of the measurement above it.
+
+**What the source says.** `vendors/agy.go` parses a `result` line carrying `status: "ERROR"` into
+a `KindError`. It fills `Note` from the vendor's own `error` field. It sets no exit code and no
+error, because nothing has failed at the process level and nothing has exited yet. It does not set
+`EndsTurn`; no agy event does. `applyEvents` therefore reached its `KindError` tail, wrote
+`PhaseFailed`, and retired the column only on `ev.ExitCode != 0 || ev.Err != nil`. This event
+carries neither.
+
+**One evidence boundary, because the phrase is easy to over-read.** "Exit code 0" here is the
+EVENT's field, read off the adapter. It is not a measurement of what the `agy` process exits with
+after a failed turn, and no such capture exists — `vendors/testdata/wire/README.md` records that
+the one probe that could have produced an agy error frame does not produce one, because that CLI
+answers a lost thread with success. Nothing here depends on the process's exit status. `KindDone`
+and a failing `KindError` both retire the column, so either exit ends the turn.
+
+**The room that produced.** The column read `failed`. The turn stayed live, because nothing
+retired it. So the seat was neither `Busy()` nor `Settling()`, the spinner stopped, every column
+on screen read terminal, and `q` was still refused with *"a turn is in flight"* — which was true.
+The footer offers `q` on `InFlight()`, so the room named a key that answers with a notice. That is
+§7.8's surprise, and it is the same defect the block above fixed for the seat that answers early,
+reached through the other terminal phase.
+
+**The fix is that block's split, applied to `failed`.** The column settles instead of retiring:
+phase to `failed`, the vendor's sentence kept, `Settling` set, and the vendor left in
+`m.turn.live`. The exit still arrives, still retires the column, and still clears the word. The
+seat renders `failed 5s exiting`, which is the same honest sentence `done 5s exiting` makes about
+a different outcome.
+
+**Retiring the column was the alternative, and it is refused for §9.33's reason rather than for a
+new one.** `turnColumnFinished` cancels the turn's context, and `runner.Start` kills the child on
+that context. Retiring here would kill a process that is still winding down. Codex's linger was
+measured before that argument was accepted; **this vendor's linger is not measured at all**, which
+makes the case stronger, not weaker. A room may not shorten a process's life on a number nobody
+has.
+
+**Moving the fact onto `State` was the second alternative, and it is refused too.** `State` cannot
+see `Model.turn`, so "a turn is live" would have to be copied onto it and reset on every path that
+ends a turn. `Settling`'s own doc comment already rules on that shape: a second home for a fact is
+a second thing to forget to reset. `Settling` IS the state-side fact this needed, and the failure
+path was simply not setting it.
+
+**The guard is the same one review found for the answer case.** A killed process drains its
+buffered stdout, so this line can land on a column that is already terminal, or after the turn
+boundary entirely. The settle is therefore behind a phase test AND `m.turn.live`, read before the
+phase is written. Without it a late failure line would hold `InFlight` true with nothing running —
+the room wedged the other way, where the footer never offers `q` again. `failedturn_test.go` pins
+all three states: the settle, the retirement on the exit, and the late line that must change
+nothing.
+
+**Scope, stated because the branch is vendor-neutral and the case is not.** Any spawn-per-turn
+seat whose adapter reports a turn failure in-stream reaches this branch. agy is the only seat that
+does so today: codex and grok have no structured error frame, so their failure IS the exit and the
+`ExitCode != 0` leg already retires them; Claude runs persistent; the Cursor seat is ACP. The fix
+is written on the shape rather than on the vendor id, and a seat that adopts the same shape later
+is covered without an amendment.
+
 ### 9.34 the rebuttal stopped naming its authors
 
 A `ctrl+r` turn used to quote each seat's answer under its vendor's name: *"quoted reply from

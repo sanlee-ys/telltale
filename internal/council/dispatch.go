@@ -1128,12 +1128,44 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			if c.Elapsed == 0 && !c.Started.IsZero() {
 				c.Elapsed = time.Since(c.Started)
 			}
+			// Read BEFORE the phase is written, because the phase is the test:
+			// this column was working until this line, and it is the same guard
+			// the end-of-turn branch above uses, for the same two reasons — a
+			// killed process drains its buffered stdout onto a column that is
+			// already terminal, and a line can arrive after the turn boundary
+			// entirely.
+			live := m.turn != nil && m.turn.live[ev.Vendor] &&
+				(c.Phase == PhaseStreaming || c.Phase == PhaseWaiting)
 			c.Phase = PhaseFailed
 			// A vendor-reported failure arrives BEFORE the process exits, so
 			// this is not the end of the column's life; KindDone still follows
 			// and is what retires it.
 			if ev.ExitCode != 0 || ev.Err != nil {
 				m.finishColumn(c, PhaseFailed)
+			} else if live {
+				// The failure the PROCESS has not reported: agy says a turn died
+				// in its own stream (a `result` with status ERROR), which the
+				// adapter turns into this event with exit code 0 and no error
+				// because nothing has exited yet. The column is terminal and the
+				// turn is not, which is exactly the split §9.33 named for a seat
+				// that answers ahead of its process — and the same word carries
+				// it. Without this the seat is neither Busy nor Settling while
+				// its turn is live: every column reads terminal, no spinner
+				// moves, and the footer offers a `q` that key() refuses with "a
+				// turn is in flight" (§7.8's surprise, and the gap InFlight's own
+				// doc comment named).
+				//
+				// A settle rather than a retirement, on §9.33's measurement
+				// argument rather than on taste: turnColumnFinished cancels the
+				// turn's context and runner.Start kills the child on it, so
+				// retiring here would kill a process that is still winding down.
+				// This vendor's linger has never been measured, which is a reason
+				// to wait for its exit rather than a licence to cut it short.
+				//
+				// NOT cancellation-aware, for the same reason the settle above is
+				// not: a ctrl+c during the linger does not un-fail the turn, and
+				// finishColumn clears the word when the process finally goes.
+				c.Settling = true
 			}
 		}
 	}
