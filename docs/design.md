@@ -8894,6 +8894,57 @@ saved workspace at the next completed turn. Preserving the old path would make `
 describe a room nobody is in, which this section already refuses for the roster and refuses here
 for the same reason. The notice is the answer chosen instead.
 
+#### Amendment, 2026-08-16: the save choke point observed half the shape
+
+This section opens by saying `/cd` moves the room and the file follows. That was true of the
+FIELD and not of the WRITE. `saveRoom` reads `m.st.Workspace`, so whatever save came next
+recorded the move — but `/cd` made no save of its own, and `roomCommand`'s choke point compared
+only the roster (`sameSeats`). So the move reached disk at the next completed turn, or at
+teardown, or never.
+
+**Never is the case that matters, and the per-turn save already named it.** `endTurn` writes
+rather than leaving it to the way out, in its own words, because the failure it exists to
+survive is the room not getting a clean exit: a crash, a closed terminal, a machine that went
+down. A `/cd` had exactly that hole. It survived a quit, and a room that crashed after a `/cd`
+and before its next completed turn reopened in the directory the user had moved out of. The
+workspace is the field beside the session ids in the same file, on the same half of the ruling's
+line, with none of the protection.
+
+**A `/cd` is a deliberate operator statement about where the room is.** That is the roster's
+argument — `c`'s argument in `clearSeat`'s words, a change held only in memory is undone by
+quitting — reaching the other half of SHAPE. It should write when it happens, not when something
+else happens to write.
+
+**The fix is one line at the choke point, and deliberately not a `saveRoom` inside `cdCommand`.**
+`roomCommand` now snapshots the workspace beside the roster and saves if EITHER moved. The
+wrapper exists precisely so a command inherits persistence without knowing it does, and putting
+the call inside `cdCommand` would have been the per-command save this section already rejected —
+correct for `/cd` and absent from whatever re-points the room next.
+
+- **Each half compares in its own terms.** `sameSeats` because a slice does not compare with
+  `==`; `sameDir` because two spellings of one directory are one directory, case-folded on
+  Windows. Comparing the workspace with `!=` would write on a `/cd` that changed nothing but the
+  capitalisation.
+- **The refusal semantics are unchanged, and the observation is what keeps them.** `resolveCD`
+  rejects an unknown path BEFORE the workspace is assigned, so a bad path is never a value the
+  file could briefly hold — the refusal is not layered on top of a write, it is upstream of one.
+  A `/cd` mid-turn, a `/cd` to the directory the room is already in, and bare `/cd` all return
+  with the workspace untouched, so none of them writes. That is the roster's rule verbatim:
+  rewriting the file on a command that answered a question and did nothing would refresh
+  `saved_at`, the age a reattach shows.
+- **Turn 0 still writes nothing.** `saveRoom` returns before the first dispatch, so a `/cd`
+  typed before the first brief rides out on that brief's own save, and a room opened in the wrong
+  directory and quit still drops no file into `~/.telltale/council`. Stated as a test rather than
+  left to be found.
+- **The write path is `saveRoom`'s, unchanged** — the same atomic temp-file-and-rename, the same
+  best-effort failure stated in the footer. No new writer, no second serialization of the same
+  file.
+
+**Measured against the crash rather than against the field.** `TestCdIsPersistedWhenItHappens`
+drives `/cd` through `roomCommand` and then reads `room.json` off disk with no teardown and no
+completed turn — the simulated crash. It fails on the pre-amendment code with *nothing was
+saved*, which is the defect in one line.
+
 ### 9.33 the cursor seat's per-turn cost, split at last — and the seam that was hidden from `--help`
 
 §9.8 gave the Claude seat one live process and measured what it bought. The obvious next
