@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"net"
 	"os"
 	"strings"
 	"testing"
@@ -107,6 +108,55 @@ func TestSnapshotFailsLoudOnWhatItCannotDo(t *testing.T) {
 				t.Errorf("error %q does not carry the correction %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// TestOtelRefusesATakenPortWithTheWayOut pins the collector's most likely
+// startup failure at the level the operator meets it.
+//
+// Measured 2026-08-16 on Windows 11, main at 4e0cf6b, with a throwaway listener
+// holding 127.0.0.1:4318: `telltale otel grok` printed the raw bind error
+// ("Only one usage of each socket address …") and exited 1. The exit code was
+// already right and it stays 1 — this switch turns any error from runOtel into
+// os.Exit(1) — so what the fix changes is the sentence, not the code.
+//
+// The test drives runOtel rather than the built binary because the exit is one
+// line of the switch above and a spawned process would be the slow way to
+// assert it. What it does assert is that the mode REFUSES: a runOtel that
+// returned nil here would be a collector that had bound nothing and gone on
+// running.
+func TestOtelRefusesATakenPortWithTheWayOut(t *testing.T) {
+	holder, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Close()
+
+	err = runOtel([]string{"grok", "--addr", holder.Addr().String()})
+	if err == nil {
+		t.Fatal("runOtel returned nil on a held port: the mode would run without listening")
+	}
+	for _, want := range []string{
+		holder.Addr().String(),
+		"already in use",
+		"--addr",
+		"OTEL_EXPORTER_OTLP_ENDPOINT",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal never says %q:\n%s", want, err)
+		}
+	}
+}
+
+// TestUsageNamesTheOtelPortCollision: the flag help has to carry the same two
+// halves the error does. A reader who moves only the collector gets a process
+// that listens forever and counts nothing, which reads like "grok spent
+// nothing" rather than like a misconfiguration.
+func TestUsageNamesTheOtelPortCollision(t *testing.T) {
+	for _, want := range []string{"OTEL_EXPORTER_OTLP_ENDPOINT", "counts nothing"} {
+		if !strings.Contains(usageText, want) {
+			t.Errorf("usage text never mentions %q", want)
+		}
 	}
 }
 

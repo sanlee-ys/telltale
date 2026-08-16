@@ -75,12 +75,15 @@ package grokotel
 
 import (
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -91,7 +94,20 @@ import (
 // address grok's exporter posts to when OTEL_EXPORTER_OTLP_ENDPOINT is unset,
 // so the zero-flag pairing of `telltale otel grok` and a bare grok session
 // finds itself.
+//
+// That convenience has a cost, and the cost is this package's most likely
+// startup failure: 4318 is the port EVERY local OTLP receiver defaults to, so
+// a machine already running one leaves nothing here to bind. The collision is
+// not a bug to design away — moving off the shared default would break the
+// zero-flag pairing that is the whole reason for the default — so it is a
+// failure to name well instead. See listen.
 const DefaultAddr = "127.0.0.1:4318"
+
+// defaultPort is DefaultAddr's port on its own, because the collision message
+// says one thing when the shared default is taken and a different thing when a
+// port the operator chose is taken. TestDefaultAddrCarriesTheDefaultPort keeps
+// the two in step.
+const defaultPort = "4318"
 
 // maxBody caps one POST. The largest measured batch is under 2 KB; the cap is
 // generous headroom, not a tuned figure, and a body past it is refused rather
@@ -149,19 +165,9 @@ func New(dir string, logf func(string, ...any)) *Server {
 	return &Server{dir: dir, now: time.Now, logf: logf, seen: map[string]*sessionSeen{}}
 }
 
-// Run listens on addr and serves until the process is killed. The bind is
-// refused unless addr is loopback: this mode exists to receive one local
-// process's push, and a collector reachable off-box would be an open door
-// wearing a gauge's name.
+// Run listens on addr and serves until the process is killed.
 func (s *Server) Run(addr string) error {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return fmt.Errorf("bad listen address %q: %w", addr, err)
-	}
-	if !isLoopback(host) {
-		return fmt.Errorf("refusing to listen on %q: the collector binds loopback only (127.0.0.1, ::1, localhost)", addr)
-	}
-	ln, err := net.Listen("tcp", addr)
+	ln, err := s.listen(addr)
 	if err != nil {
 		return err
 	}
@@ -176,6 +182,118 @@ func (s *Server) Run(addr string) error {
 		IdleTimeout:       2 * time.Minute,
 	}
 	return server.Serve(ln)
+}
+
+// listen holds the two ways this bind can fail, and says something the
+// operator can act on for each. The loopback refusal is a rule of this mode:
+// it exists to receive one local process's push, and a collector reachable
+// off-box would be an open door wearing a gauge's name. The busy-port refusal
+// is the measured common case (below), and it used to arrive as the raw
+// net.Listen error.
+//
+// # What a taken port looked like before, measured
+//
+// 2026-08-16, telltale built from main at 4e0cf6b, Windows 11, a throwaway
+// listener holding 127.0.0.1:4318. `telltale otel grok` printed one line and
+// exited 1:
+//
+//	telltale otel: listen tcp 127.0.0.1:4318: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+//
+// The exit code and the loudness were already right — nothing was silent, and
+// nothing pretended to collect. What the line did not carry is everything the
+// operator needs next: that the likely holder is another OTLP collector, that
+// --addr moves this one, and that moving this one alone counts nothing because
+// grok's exporter still pushes at the old address. So the message carries those
+// three facts now, and keeps the bind error verbatim underneath.
+func (s *Server) listen(addr string) (net.Listener, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("bad listen address %q: %w", addr, err)
+	}
+	if !isLoopback(host) {
+		return nil, fmt.Errorf("refusing to listen on %q: the collector binds loopback only (127.0.0.1, ::1, localhost)", addr)
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		if addrInUse(err) {
+			return nil, portTaken(addr, port, nextAddr(host, port), err)
+		}
+		return nil, err
+	}
+	return ln, nil
+}
+
+// portTaken renders the collision. It states the cause it can defend and no
+// more: on the shared default the holder is very probably another OTLP
+// receiver, and on a port the operator picked telltale knows nothing about who
+// holds it, so it does not guess. The redirect half is the part a shorter
+// message would drop and the part that decides whether moving the port works
+// at all — a moved collector with an unmoved exporter is a process that
+// listens forever and counts nothing, which reads exactly like "grok spent
+// nothing".
+func portTaken(addr, port, next string, err error) error {
+	why := fmt.Sprintf("Another process on this machine holds %s. telltale cannot say which one.", addr)
+	if port == defaultPort {
+		why = "Another OTLP collector on this machine probably holds it. Port " + defaultPort + " is\n" +
+			"OTLP/HTTP's registered port, so Jaeger, the OpenTelemetry Collector and the vendor\n" +
+			"agents all default to it. This mode defaults to it for the same reason (§7.16a):\n" +
+			"grok's exporter posts there with no configuration."
+	}
+	return fmt.Errorf(`%s is already in use, so the collector did not start.
+
+%s
+
+Move this collector to a free loopback port:
+    telltale otel grok --addr %s
+
+Then move grok's exporter to the same address. If you move only the collector,
+grok keeps pushing to %s, and this collector counts nothing:
+    OTEL_EXPORTER_OTLP_ENDPOINT=http://%s
+
+Set that variable in grok's own environment, beside the [telemetry] otel_enabled
+and otel_logs_exporter pair in ~/.grok/config.toml that turns the export on.
+telltale has NOT measured that redirect; design.md §7.16a says so.
+
+bind error: %w`, addr, why, next, addr, next, err)
+}
+
+// nextAddr is the port the collision message suggests: the failed port plus
+// one, so a message about an already-moved collector never suggests the port
+// that just failed. An unparseable or last port falls back to the default plus
+// one.
+//
+// The suggestion is a starting point and the message says nothing more about
+// it. telltale does NOT scan for a free port and offer that: a port free at the
+// moment of the scan is not free at the moment of the bind, and a suggestion
+// that looked verified would be the dishonest one (§4a.1).
+func nextAddr(host, port string) string {
+	n, err := strconv.Atoi(port)
+	if err != nil || n <= 0 || n >= 65535 {
+		n, _ = strconv.Atoi(defaultPort)
+	}
+	return net.JoinHostPort(host, strconv.Itoa(n+1))
+}
+
+// addrInUse reports whether a bind failed because something already holds the
+// address. It cannot be the one errors.Is call it looks like it should be, and
+// the reason is measured rather than assumed.
+//
+// Measured 2026-08-16, go 1.26 on Windows 11: a second net.Listen on a held
+// 127.0.0.1 port returns syscall.Errno(10048) — WSAEADDRINUSE — while Windows
+// builds define syscall.EADDRINUSE as one of Go's synthetic APPLICATION_ERROR
+// constants, 536870914 on that box. So errors.Is(err, syscall.EADDRINUSE) is
+// FALSE for the very error it names, on this repo's primary target (ADR-002).
+// The numeric arm covers that; the errors.Is arm covers the Unix builds, where
+// syscall.EADDRINUSE is the real errno. 10048 is not a valid errno on those
+// platforms, so the numeric arm cannot fire there by accident.
+const wsaeAddrInUse = 10048
+
+func addrInUse(err error) bool {
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return true
+	}
+	var errno syscall.Errno
+	return errors.As(err, &errno) && uintptr(errno) == wsaeAddrInUse
 }
 
 func isLoopback(host string) bool {
