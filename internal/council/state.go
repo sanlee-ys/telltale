@@ -1228,9 +1228,9 @@ func (s State) Settling() bool {
 	return false
 }
 
-// InFlight reports that a turn is not finished, whether or not anything is
-// still producing output. It is what the FOOTER asks before it chooses between
-// offering `ctrl+c cancel` and `q quit`.
+// InFlight reports that a seat is working OR is still winding down. It is what
+// the FOOTER asks before it chooses between offering `ctrl+c cancel` and
+// `q quit`.
 //
 // Busy alone was that test, and it was right for exactly as long as a column's
 // last phase change and its process's death were the same event. They are not
@@ -1238,6 +1238,16 @@ func (s State) Settling() bool {
 // outright while a turn is live, so the footer would name a key that answers
 // with a notice. A footer must never advertise a key that does nothing (§7.8,
 // and the same argument that dropped `f` and `tab` from a one-seat room).
+//
+// It is deliberately NOT named as "a turn is live", because it is not that and
+// cannot be: State does not see Model.turn, which is the only exact predicate.
+// One gap is known and PRE-DATES this method — agy reports a failed turn as a
+// KindError carrying exit code 0 and no error (vendors/agy.go), which sets
+// PhaseFailed without retiring the column, so that seat is neither Busy nor
+// Settling while its turn is still live and `q` is still refused. Closing it
+// means either retiring that column or moving the fact onto State; both are
+// outside a change about one vendor's linger, and naming the gap is what keeps
+// the next reader from trusting this for more than the footer asks of it.
 func (s State) InFlight() bool { return s.Busy() || s.Settling() }
 
 // Gating reports that a vendor is blocked on a decision.

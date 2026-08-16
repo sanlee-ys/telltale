@@ -212,6 +212,58 @@ func TestSettlingSurvivesUntilTheProcessDoes(t *testing.T) {
 	}
 }
 
+// TestALateEndOfTurnLineCannotSettleATerminalColumn.
+//
+// Found in review. A killed process drains its buffered stdout, so a
+// `turn.completed` can arrive AFTER the column it belongs to is already
+// terminal — giveUpSeat kills an arena racer and retires its column as
+// cancelled, and the queued line lands behind it. The phase write was guarded
+// from the start; the BODY write was not, so a cancelled seat's note-bearing
+// body was replaced with "[Turn completed with 0 text chunks streamed]" — a
+// cancelled column asserting that its turn completed.
+func TestALateEndOfTurnLineCannotSettleATerminalColumn(t *testing.T) {
+	for _, phase := range []Phase{PhaseCancelled, PhaseFailed, PhaseDone} {
+		m := turnModel(false)
+		m.st.Columns[0].Phase = phase
+		m.st.Columns[0].Body = ""
+		m.st.Columns[0].Note = "given up after 20s"
+
+		m.applyEvents([]runner.Event{{
+			Vendor: model.VendorClaude, Kind: runner.KindMeta, EndsTurn: true,
+		}})
+
+		c := m.st.Columns[0]
+		if c.Phase != phase {
+			t.Errorf("%v: a late end-of-turn line moved a terminal column to %v", phase, c.Phase)
+		}
+		if c.Body != "" {
+			t.Errorf("%v: a late end-of-turn line wrote %q over a terminal column's body", phase, c.Body)
+		}
+		if c.Settling {
+			t.Errorf("%v: a terminal column was marked as still exiting", phase)
+		}
+		if c.Note != "given up after 20s" {
+			t.Errorf("%v: the column's own reason was lost: %q", phase, c.Note)
+		}
+	}
+}
+
+// TestAnEndOfTurnLineAfterTheTurnIsIgnored. The same line arriving after the
+// turn boundary entirely — the previous turn's answer draining while a fresh
+// turn is already streaming — must not settle the NEW turn's column.
+func TestAnEndOfTurnLineAfterTheTurnIsIgnored(t *testing.T) {
+	m := turnModel(false)
+	m.turn = nil
+
+	m.applyEvents([]runner.Event{{
+		Vendor: model.VendorClaude, Kind: runner.KindMeta, EndsTurn: true,
+	}})
+
+	if c := m.st.Columns[0]; c.Phase != PhaseStreaming || c.Settling {
+		t.Errorf("a line from a dead turn settled a live column: phase=%v settling=%v", c.Phase, c.Settling)
+	}
+}
+
 // TestSettlingIsClearedByAFailedExit. A seat can settle and then have its
 // process die badly — killed by a ctrl+c during the linger, or exiting non-zero
 // after a clean answer. The word must not survive either.
@@ -220,6 +272,10 @@ func TestSettlingIsClearedByAFailedExit(t *testing.T) {
 	m.applyEvents([]runner.Event{{Vendor: model.VendorClaude, Kind: runner.KindMeta, EndsTurn: true}})
 	if !m.st.Columns[0].Settling {
 		t.Fatal("the column did not settle")
+	}
+	settled := m.st.Columns[0].Elapsed
+	if settled == 0 {
+		t.Fatal("the settle stamped no elapsed")
 	}
 	m.applyEvents([]runner.Event{{
 		Vendor: model.VendorClaude, Kind: runner.KindError,
@@ -230,6 +286,12 @@ func TestSettlingIsClearedByAFailedExit(t *testing.T) {
 	}
 	if m.st.Settling() {
 		t.Error("the room still reports a settling seat after the process is gone")
+	}
+	// The answer's own figure survives the bad exit. Restamping on the failure
+	// path would hand the column the process's whole lifetime, which is the
+	// figure the settle exists to stop billing (found in review).
+	if got := m.st.Columns[0].Elapsed; got != settled {
+		t.Errorf("elapsed = %v, want the answer's %v kept across a failed exit", got, settled)
 	}
 }
 

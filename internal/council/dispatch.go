@@ -848,7 +848,8 @@ func (m *Model) applyEvents(batch []runner.Event) {
 					c.Body = "[Turn completed with 0 text chunks streamed]"
 				}
 				m.finishColumn(c, PhaseDone)
-			} else if ev.EndsTurn {
+			} else if ev.EndsTurn && m.turn != nil && m.turn.live[ev.Vendor] &&
+				(c.Phase == PhaseStreaming || c.Phase == PhaseWaiting) {
 				// A SPAWN-PER-TURN seat that names its own end of turn, which
 				// until now nothing did: the batch CLIs ended a turn by dying and
 				// the column read the exit. Codex says it twice — `turn.completed`
@@ -881,22 +882,33 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				// column that says `done` while its placeholder is still four
 				// seconds away would be settling into a lie about a different
 				// field.
+				//
+				// EVERY write is behind the guard on this branch, and the guard is
+				// wider than a phase test for a reason found in review. A killed
+				// process drains its buffered stdout, so a `turn.completed` can
+				// arrive AFTER the column it belongs to is already terminal — the
+				// give-up path (giveUpSeat) kills an arena racer and retires its
+				// column as PhaseCancelled, and the queued line lands afterwards.
+				// An unguarded placeholder would then overwrite a cancelled
+				// column's note-bearing body with "[Turn completed …]", i.e. a
+				// cancelled seat asserting that its turn completed. The liveness
+				// half (m.turn.live) covers the same line arriving after the turn
+				// boundary entirely, where it could otherwise settle a FRESH
+				// turn's column on the strength of the previous turn's answer.
 				if strings.TrimSpace(c.Body) == "" {
 					c.Body = "[Turn completed with 0 text chunks streamed]"
 				}
 				if c.Elapsed == 0 && !c.Started.IsZero() {
 					c.Elapsed = time.Since(c.Started)
 				}
-				if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
-					c.Phase = PhaseDone
-					// Settling is the linger made visible. Without it the room
-					// goes quiet — no spinner, every column reading `done` — while
-					// the composer is still locked and the footer offers `q`,
-					// which key() then refuses. That is §7.8's surprise, created
-					// by this very change, so the fact that produced it is put on
-					// screen rather than left to be inferred.
-					c.Settling = true
-				}
+				c.Phase = PhaseDone
+				// Settling is the linger made visible. Without it the room goes
+				// quiet — no spinner, every column reading `done` — while the
+				// composer is still locked and the footer offers `q`, which key()
+				// then refuses. That is §7.8's surprise, created by this very
+				// change, so the fact that produced it is put on screen rather
+				// than left to be inferred.
+				c.Settling = true
 				// NOT cancellation-aware, unlike finishColumn. A ctrl+c during the
 				// linger cannot un-answer a turn that already answered: the reply
 				// is on screen and in the vendor's rollout. The keystroke kills the
@@ -1098,7 +1110,14 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				m.finishColumn(c, PhaseFailed)
 				continue
 			}
-			c.Elapsed = time.Since(c.Started)
+			// Only when nothing has recorded one, which is the same rule
+			// finishColumn follows. A seat that ANSWERED and then failed on its
+			// way out already stamped the time to its answer, and restamping here
+			// would hand the column the process's whole lifetime — the exact
+			// figure the settle branch above exists to stop billing.
+			if c.Elapsed == 0 && !c.Started.IsZero() {
+				c.Elapsed = time.Since(c.Started)
+			}
 			c.Phase = PhaseFailed
 			// A vendor-reported failure arrives BEFORE the process exits, so
 			// this is not the end of the column's life; KindDone still follows

@@ -9224,6 +9224,20 @@ seat renders `done 4s exiting`: a WORD, after the clock so it cannot be read as 
 figure, and a word rather than a glyph or a colour because what it prevents is a reader concluding
 the room is stuck, and that reader may be on `--ascii` or `NO_COLOR` (§7.1 rule 2).
 
+**Two defects the review caught in this change, both now guarded.** A killed process
+drains its buffered stdout, so a `turn.completed` can arrive after the column it belongs
+to is already terminal — `giveUpSeat` kills an arena racer and retires its column as
+cancelled, and the queued line lands behind it. The phase write was guarded from the
+start; the BODY write was not, so a cancelled seat's note-bearing body was replaced with
+`[Turn completed with 0 text chunks streamed]` — a cancelled column asserting that its
+turn completed. Every write on the branch now sits behind one guard, and the guard is
+wider than a phase test: it also checks `m.turn.live`, which covers the same line
+arriving after the turn boundary entirely, where it could otherwise settle a *fresh*
+turn's column on the strength of the previous turn's answer. Second, the vendor-reported
+failure path restamped `Elapsed` unconditionally, so a seat that answered and then exited
+badly recorded the process's whole lifetime — the exact figure this block exists to stop
+billing. It now fills only a zero, which is the rule `finishColumn` already followed.
+
 **What is NOT claimed.** The linger's cause is still unknown — this block measures when it starts
 and ends and what does not happen during it, and nothing about why the vendor holds the process
 open. `codex app-server` (§9.33's third arm) has no linger at all because the process is meant to
