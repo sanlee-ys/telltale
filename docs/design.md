@@ -1738,6 +1738,26 @@ is why a canary is the load-bearing subset of a schema fingerprint rather than t
 a vendor ADDING a column costs this program nothing, because every reader here addresses columns
 by name.
 
+**2026-08-16 — `telltale doctor` now carries the comparison this column would not make, and
+that changes nothing above.** The sentence before this one still holds on the read path: no
+adapter compares a version, nothing here triggers on one, and a canary is still structural. What
+changed is that the `verified against` column acquired a second reader with a different audience.
+§9.42's amendment has the full argument; in short, `agy` and `grok` self-update, so a pin in this
+table goes stale silently and CI — which installs no vendors — can never notice. The preflight
+already asks each seat its version, so it now says on the seat's own line when the installed
+build is not the pinned one, and names the § to re-measure. It is a **staleness note about this
+repository**, not a check of the operator's machine: no check fails, no tally moves, the exit
+code is unchanged, and a seat whose version could not be read gets no verdict in either
+direction.
+
+**This table is now machine-read.** `internal/adapter/pins` mirrors it, and every pin in that
+table is the adapter's own exported constant rather than a copy. `pins_doc_test.go` parses the
+rows above and compares them **cell by cell**, in both directions. That is the fix §3.8 named
+and left unowned: the six per-adapter guards match a pin anywhere in this file, so a dated
+paragraph quoting a new pin can turn them green over a stale cell — which is precisely how the
+Antigravity row survived a release reading `agy 1.1.9`. Editing a pin in this table without
+moving the adapter constant now fails the build, and so does adding a row no adapter claims.
+
 <a id="s4"></a>
 
 ## 4. Adapter contract (v1)
@@ -11683,6 +11703,98 @@ The words are read off `granularityFor` and `canGate` rather than restated, so t
 cannot drift from the room's own badges. Worth the line at all because "installed" and "will
 stream to you" are different promises, and the seat a user is most likely to think is broken is
 the one that is working and silent until the end of the turn (§9.14).
+
+#### 2026-08-16: the survey pin gets its maintainer loop, and it lives here
+
+**The gap.** Every adapter is pinned to the vendor build its field map was surveyed at, and
+§3.10 is the inventory of those pins. `internal/adapter/drift` watches the on-disk SHAPE and
+tells the USER when a row goes quiet. Nothing told the MAINTAINER that the survey behind a row
+is now older than the vendor on this disk. `agy` and `grok` self-update, so that pin goes stale
+in silence: no check fails, no row blanks, and a set of displayed fields rests on a survey of a
+build nobody runs any more.
+
+**CI can never close this.** CI installs no vendors, so every version probe there resolves to
+nothing and every comparison is vacuous. The loop has to live where the vendors live. The owner
+ruled on 2026-08-16 that the place is this mode, and it is the obvious host: `doctor` already
+resolves each seat's binary and already asks it its version. The comparison costs one string
+compare on a probe that was happening anyway.
+
+**It is a staleness fact, and it is not one of the three states.** A drifted pin says nothing is
+wrong with the reader's machine. The seat works, the binary answered, and every check that ran
+passed. So the notice renders on its own labelled line — *"telltale's field map for this vendor
+was measured at"* — beside the capability line and outside the status column, for the
+neighbouring reason: both are claims this repository measured once and wrote down, and neither
+was re-measured here. Making it `FAILED` would redden a working vendor, move the tally, drop
+`Ready`, and put a red cross in front of a user whose install is perfect. Making it `Passed`
+would claim a check ran on their machine when what actually happened is that this repository
+compared its own homework. The tally, `Ready` and the exit code are all untouched, and
+`TestDriftIsNotAFailedCheck` pins that by running the same seat with and without a pin and
+requiring the three counts to be identical.
+
+**Four outcomes, and the two silent ones are silent on purpose.**
+
+| | what the line says |
+|---|---|
+| the versions differ | the pinned build, the installed build, and the §3 section to re-measure |
+| they match | the pinned build, and that it is what is installed |
+| the version was not read | the pinned build, and that nothing is claimed in either direction |
+| the two cannot be compared | the pinned build, and why no comparison is possible |
+
+Rows three and four are the honesty of the feature. A seat whose `--version` probe failed hands
+the comparison an empty string, and an empty string gets **no verdict** — claiming a match there
+would be as invented as claiming drift, and both would rest on nothing measured. Row four is the
+Cursor seat specifically: its pin names the Cursor **application** the store was surveyed inside
+(§3.9, `Cursor 3.14.7`), and what this mode probes is **cursor-agent**, which answers a
+date-stamped build of its own (`2026.08.04-aaa8809`, §9.42's own version table). Comparing
+`3.14.7` with `2026.08.04` would manufacture a permanent drift notice out of two unrelated
+numbering schemes — a notice that fired forever on a correct install, which is exactly the
+report `internal/adapter/drift` rules out as one nobody reads.
+
+**The comparison is equality, never ordering.** It extracts the first dotted-numeric run from
+each string, because the pin and the probe agree on a number and on nothing else: the adapter
+writes `Claude Code 2.1.219` and the binary answers `2.1.226 (Claude Code)`; the adapter writes
+`grok 1.0.4 (d846eb93d9)` and the binary answers `grok 1.0.0 (3cd0d0cbce) [stable]`. A commit
+hash carries digits but no dot, so it cannot be mistaken for the version beside it. No line
+claims "newer" or "older": a direction needs per-vendor precedence rules this program has no
+business inventing, and a downgrade means the same thing an upgrade does — the survey was
+measured somewhere else. `TestTheComparisonNeverClaimsADirection` holds that.
+
+**This does not make a version comparison a canary, and nothing on the read path changed.**
+`internal/adapter/drift`'s doc rules a version out as a TRIGGER, because a report that fires on
+every release is a report nobody reads. That ruling stands untouched: no adapter degrades a
+field, writes a diagnostic, or reads anything new. The version comparison is admissible only
+because it is asked once, by hand, before the room opens, by an operator who ran a preflight —
+and it is answered to a different reader, about this repository rather than about their machine.
+The two are separated in the report itself: the closing note says a format that actually moved is
+reported on the HUD row and does not wait for this.
+
+**One source for the pins, enforced by the compiler.** `internal/adapter/pins` is the table, and
+every `VerifiedAgainst` in it **is the adapter's own constant** — which is why those six
+constants are now exported. No pin string is copied. `Section` and `DocLabel` are the only facts
+the table adds, and they have no other home: an adapter knows what it was verified against, not
+which prose section carries the evidence, and that pointer is what turns "this is stale" into an
+instruction. `internal/doctor` stays stdlib-only and holds no inventory; `council.DoctorSeats`
+attaches the pin, exactly as it already attaches the capability declaration, and for the same
+stated reason.
+
+**The doc guard reads the cell, not the document.** §3.8 records that
+`TestTheCanaryInventoryMatchesThisAdapter` substring-matches a pin *anywhere* in this file, so a
+dated paragraph quoting a new pin turns the guard green while the table it guards stays wrong —
+which is what let the Antigravity cell read `agy 1.1.9` for a release after the adapter moved to
+`1.1.13`. §3.8 named the fix, "scoping that assertion to the table", and left it unowned.
+`pins_doc_test.go` parses §3.10's table and compares it cell by cell, in both directions: a pin
+quoted in prose elsewhere cannot satisfy it, and a doc row no adapter claims fails it too. This
+was verified by mutation — restoring the stale `agy 1.1.9` cell fails the new guard while
+`internal/adapter/antigravity`'s own test stays green, reproducing the 2026-08-03 miss exactly.
+**The six adapter tests are deliberately left as they are.** They assert a different thing (that
+a pin is documented at all), nothing here weakens them, and rewriting them is a separate concern.
+
+**Measured, not assumed.** Run on this Windows box on 2026-08-16, the report drifts `claude`
+(pinned `2.1.219`, installed `2.1.233`) and `codex` (pinned `0.146.0`, installed `0.147.0`),
+matches `agy 1.1.13` and `grok 1.0.4`, and declines to compare `cursor`. That is the feature
+finding two genuinely stale surveys on its first live run. **Re-measuring those two surveys is
+not part of this change** — the loop reports staleness; a re-survey is its own work, with its own
+live corpus.
 
 <a id="s9-43"></a>
 

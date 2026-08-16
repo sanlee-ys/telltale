@@ -61,10 +61,10 @@ import (
 // Vendor is the stable id for rows this adapter produces.
 const Vendor = model.VendorCodex
 
-// verifiedAgainst names the vendor build this adapter's field map was verified
+// VerifiedAgainst names the vendor build this adapter's field map was verified
 // against on 2026-08-01 (see the package doc). It is what a drift report is
 // measured against, and the rollout's own cli_version is what it is compared to.
-const verifiedAgainst = "codex-cli 0.146.0"
+const VerifiedAgainst = "codex-cli 0.146.0"
 
 var (
 	// canaryEnvelopeType is the outer envelope's serde discriminator. Every
@@ -414,7 +414,7 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		bad, good int
 		newestTS  time.Time
 	)
-	w := drift.NewWatch(verifiedAgainst, canaryEnvelopeType, canarySessionMeta)
+	w := drift.NewWatch(VerifiedAgainst, canaryEnvelopeType, canarySessionMeta)
 	consume := func(recs [][]byte) {
 		for _, raw := range recs {
 			var line rolloutLine

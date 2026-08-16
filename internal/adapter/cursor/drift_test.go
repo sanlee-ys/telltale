@@ -84,7 +84,7 @@ func TestARenamedRowClockSaysSo(t *testing.T) {
 	if report == "" {
 		t.Fatalf("a store with no header timestamps reported no drift: %v", s.Diagnostics)
 	}
-	if !strings.Contains(report, tableHeaders) || !strings.Contains(report, verifiedAgainst) {
+	if !strings.Contains(report, tableHeaders) || !strings.Contains(report, VerifiedAgainst) {
 		t.Errorf("report = %q", report)
 	}
 	if !s.Degraded.Has(model.FieldLastActivity) {

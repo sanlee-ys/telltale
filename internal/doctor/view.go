@@ -72,20 +72,28 @@ func Render(r Report, o Options) string {
 			// capability is a claim this repo measured once against a live run
 			// and wrote down; putting it in the status column would give it a
 			// fourth state and imply it had been re-measured here.
-			for i, line := range wrap("council declares, and did not check here: "+s.Capability, cols-indent-2) {
-				b.WriteString(strings.Repeat(" ", indent))
-				if i > 0 {
-					b.WriteString("  ")
-				}
-				b.WriteString(line)
-				b.WriteByte('\n')
-			}
+			writeSeatLine(&b, "council declares, and did not check here: "+s.Capability, cols)
+		}
+		if s.Survey != "" {
+			// Also outside the check block, and for a neighbouring reason: this
+			// line is about telltale's own survey of the vendor, not about the
+			// reader's machine. Giving it a status word would make a stale
+			// survey look like a failed check on a seat that works. See pin.go.
+			writeSeatLine(&b, surveyLabel+s.Survey, cols)
 		}
 	}
 
 	// The two standing unknowns, argued once. Printed even for an empty report:
 	// they are properties of what this mode does, not of what it found.
-	for _, note := range []string{authNote, networkNote, summary(r), nextStep(r)} {
+	notes := []string{authNote, networkNote}
+	if r.AnyDrifted() {
+		// Conditional, unlike the two above, because it is a property of what
+		// this run FOUND. `nextStep` is the precedent for a note that branches on
+		// the report. See pin.go for why it is worded once here rather than
+		// repeated under every drifted seat.
+		notes = append(notes, driftNote)
+	}
+	for _, note := range append(notes, summary(r), nextStep(r)) {
 		b.WriteByte('\n')
 		for _, line := range wrap(note, cols) {
 			b.WriteString(line)
@@ -102,6 +110,22 @@ const legend = "Three states and no fourth: `ok` is a check that ran and passed,
 	"`FAILED` is a check that ran and did not, and `not checked` is a check that " +
 	"did not run at all. Every value below was measured — a path that was stat'd, " +
 	"a line a vendor printed — and nothing is inferred from anything else."
+
+// writeSeatLine draws one indented, hanging-indented paragraph under a seat, for
+// the lines that are not checks: what council declares, and how old telltale's
+// survey of this vendor is. Both sit outside the three-state block, so both are
+// laid out the same way — a reader can tell a check from a claim by shape alone,
+// before reading a word of either.
+func writeSeatLine(b *strings.Builder, text string, cols int) {
+	for i, line := range wrap(text, cols-indent-2) {
+		b.WriteString(strings.Repeat(" ", indent))
+		if i > 0 {
+			b.WriteString("  ")
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+}
 
 func writeCheck(b *strings.Builder, c Check, textCol, textWidth int) {
 	prefix := strings.Repeat(" ", indent) + pad(c.Name, nameCol) + pad(c.Status.Word(), statusCol)

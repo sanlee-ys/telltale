@@ -191,6 +191,12 @@ type Seat struct {
 	// --version` — the same install answers 2026.08.04-aaa8809. Both measured
 	// on this machine, 2026-08-09.
 	VersionArgs []string
+	// Pin is the vendor build telltale's own survey of this adapter was measured
+	// at (design.md §3.10). Like Capability it is DECLARED rather than measured
+	// here, and like Capability it is filled by council, which is where the
+	// inventory already lives. Zero for a seat with no surveyed adapter behind
+	// it, which renders no pin line at all — see pin.go.
+	Pin Pin
 }
 
 // ProbeResult is what one bounded version probe produced. Out is the vendor's
@@ -278,6 +284,16 @@ type SeatReport struct {
 	Label      string
 	Capability string
 	Checks     []Check
+	// Survey is the pin line for this seat, already worded (pin.go), or empty
+	// when no surveyed adapter stands behind it. Worded in Run rather than in
+	// Render for the reason every other measurement is: Render stays pure over
+	// its Report, and everything it prints arrives as data.
+	Survey string
+	// Drifted reports that this seat runs a version other than the one telltale
+	// surveyed it at. It is NOT a check and never wears a Status — see pin.go for
+	// why a staleness fact must not become a fourth state. Nothing in Tally or
+	// Ready reads it, so the counts and the exit code are unchanged by it.
+	Drifted bool
 }
 
 // Ready reports that every check that RAN on this seat passed. A seat with
@@ -317,6 +333,18 @@ func (r Report) Tally() (passed, failed, notChecked int) {
 		}
 	}
 	return
+}
+
+// AnyDrifted reports that at least one seat runs a version other than the one it
+// was surveyed at. It is deliberately separate from Tally: a stale survey is not
+// a check result and must not move any of those three numbers.
+func (r Report) AnyDrifted() bool {
+	for _, s := range r.Seats {
+		if s.Drifted {
+			return true
+		}
+	}
+	return false
 }
 
 // Auth and network are the two questions this preflight is asked most often and
@@ -382,7 +410,18 @@ func runSeat(s Seat, probe Probe) SeatReport {
 	// council will not drive: what is installed is worth knowing either way,
 	// and a fixed `--version` flag carries none of the prompt text that made
 	// the seat undrivable.
-	out.Checks = append(out.Checks, versionCheck(s, probe))
+	vc := versionCheck(s, probe)
+	out.Checks = append(out.Checks, vc)
+
+	// The pin comparison hangs off that probe and off nothing else. A version
+	// check that did not pass hands over the empty string, and surveyNote makes
+	// no drift claim on it — an unread version is absent, never assumed equal and
+	// never assumed drifted.
+	installed := ""
+	if vc.Status == Passed {
+		installed = vc.Value
+	}
+	out.Survey, out.Drifted = surveyNote(s.Pin, installed)
 
 	out.Checks = append(out.Checks,
 		Skip("auth", authSkip),

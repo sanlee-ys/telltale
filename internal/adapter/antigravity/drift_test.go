@@ -91,7 +91,7 @@ func TestARenamedTableSaysSo(t *testing.T) {
 	if report == "" {
 		t.Fatalf("a database with no %s table reported no drift: %v", tableGenMetadata, s.Diagnostics)
 	}
-	if !strings.Contains(report, tableGenMetadata) || !strings.Contains(report, verifiedAgainst) {
+	if !strings.Contains(report, tableGenMetadata) || !strings.Contains(report, VerifiedAgainst) {
 		t.Errorf("report = %q", report)
 	}
 	if strings.Contains(report, tableTrajectory) {

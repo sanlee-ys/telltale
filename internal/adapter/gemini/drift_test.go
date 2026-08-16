@@ -55,7 +55,7 @@ func TestARenamedMetadataRecordSaysSo(t *testing.T) {
 	if report == "" {
 		t.Fatalf("a recording with no metadata record reported no drift: %v", s.Diagnostics)
 	}
-	if !strings.Contains(report, "metadata record") || !strings.Contains(report, verifiedAgainst) {
+	if !strings.Contains(report, "metadata record") || !strings.Contains(report, VerifiedAgainst) {
 		t.Errorf("report = %q", report)
 	}
 	// Nothing on disk states the writer's version, and the report does not

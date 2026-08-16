@@ -20,7 +20,7 @@
 // re-read could not corroborate at this seam: 0 of 4,284 records failed to
 // parse, and all 23 workspace URIs present read `file:///C:/Users…` and
 // converted correctly, the same form §3.8 saw. What DID move is written into
-// the notes below; the version pin is verifiedAgainst.
+// the notes below; the version pin is VerifiedAgainst.
 //
 // # Layout
 //
@@ -201,7 +201,7 @@ const (
 	tableTrajectory  = "trajectory_metadata_blob"
 )
 
-// verifiedAgainst names the vendor build this adapter's field map was surveyed
+// VerifiedAgainst names the vendor build this adapter's field map was surveyed
 // against (see the package doc). Nothing on disk states the writer's version, so
 // a drift report here carries the pin and no observed counterpart.
 //
@@ -215,7 +215,7 @@ const (
 // corpus 128× the 15/15 §3.8 ruled on. Model sourced on 81 of 81 rows,
 // last_activity on 81 of 81, workspace on the 23 rows whose trajectory blob
 // carries a URI at all; 0 rows degraded and 0 diagnostics emitted.
-const verifiedAgainst = "agy 1.1.13"
+const VerifiedAgainst = "agy 1.1.13"
 
 // The two tables every conversation database carried in the survey. Their names
 // are the whole contract: the protobuf field numbers below are unversioned
@@ -427,7 +427,7 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 	// The watch's unit is the conversation database: one opened database is one
 	// well-formed unit examined, and a database that would not open is no
 	// evidence about the vendor's shape at all.
-	w := drift.NewWatch(verifiedAgainst, canaryGenMetadata, canaryTrajectory)
+	w := drift.NewWatch(VerifiedAgainst, canaryGenMetadata, canaryTrajectory)
 	opened := 0
 
 	db, dbErr := a.readDatabase(ref.Locator)

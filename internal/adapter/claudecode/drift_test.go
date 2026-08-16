@@ -55,7 +55,7 @@ func TestARenamedEnvelopeSaysSo(t *testing.T) {
 	}
 	// Both versions travel: the pin the field map was read at, and what the
 	// transcript itself says it was written by.
-	if !strings.Contains(report, verifiedAgainst) || !strings.Contains(report, "2.9.0") {
+	if !strings.Contains(report, VerifiedAgainst) || !strings.Contains(report, "2.9.0") {
 		t.Errorf("the report does not carry both versions: %q", report)
 	}
 
