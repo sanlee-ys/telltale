@@ -129,6 +129,15 @@ absent). Statusline updates are debounced at 300ms and in-flight scripts are can
 which is the empirical backing for the fast-exit budget. Parsing ignores unknown fields
 by design (vendor adds fields between versions).
 
+**Re-measured 2026-08-16 at CLI 2.1.233 by source read (§7.16b), and the payload had grown.**
+`context_window` now also carries `total_input_tokens`, `total_output_tokens` and a
+`current_usage` object, and the payload carries an undocumented `prompt_id`. The first three
+are modelled and **render nothing and relay nothing** — they describe one API call, and
+`total_input_tokens` is the window's occupancy rather than a spend, so no total may be built
+from them. That is the whole of §7.16b, and the tolerance of unknown fields above is why
+every release between 2.1.90 and 2.1.233 was unaffected by the growth. The segment table
+above is unchanged: no new segment was added.
+
 **Known divergence from `theme`, deliberate and unresolved:** the statusline's local
 `pct` uses `%.1f`, which rounds, and its local `shortDur` has no days branch. The shared
 helpers `theme.Percent` and `theme.Countdown` floor and carry days respectively, and the
@@ -3492,6 +3501,131 @@ default batch intervals) against the running collector produced
   against.
 - The capture behind every claim here is one machine, one day, one grok version, one
   signed-in account. The §3.4 discipline applies: re-measure before extending any claim.
+
+### 7.16b The Claude statusline's token block — measured, modelled, relayed nowhere (2026-08-16)
+
+The token relay has two writers (§7.16, §7.16a) and an obvious-looking third. Claude Code's
+statusline payload grew token fields, and the Claude statusline is **already a relay writer**
+— it writes the quota it just rendered (§7.15). A writer fed from a payload the gauge is
+holding anyway would cost one function and no new seam.
+
+**It was measured first, and the measurement refused it.** This section is the record of a
+seam that was NOT spent, which is worth as much as one that was: the fields are modelled and
+parsed, nothing renders them, and `~/.telltale/usage/claude.json` is never written.
+
+#### What was measured, and how
+
+Pinned at Claude Code **2.1.233** — `GIT_SHA f8d57569aaf350fe25dc4dfa10cad59db8ea4d45`,
+`BUILD_TIME 2026-08-14T17:21:48Z`, `DD_SOURCEMAP_GROUP win32`, the build installed at
+`~/.local/share/claude/versions/2.1.233` and the one `claude --version` reports.
+
+**The method was a source read of the shipped bundle, not a live capture, and that is a
+weaker instrument in one specific way.** A capture shim was installed at the dispatcher
+(`~/.claude/statusline.sh`, backed up and restored byte-identically) and it produced **zero
+real payloads** in a fifteen-minute window: the harness session that installed it renders no
+statusline, and an idle session does not re-fire one. Rather than leave a modified dispatcher
+on the owner's machine, the shim came out and the bundle was read instead. `CLAUDE.md` admits
+both instruments ("a live run, a source read at a pinned version") and §7.16's own Cursor
+payload rests on exactly this one. What a source read buys here that a capture could not is
+the **arithmetic** — a capture shows numbers, and the numbers are not the problem.
+
+The whole block comes from one function:
+
+```js
+function TAw(e,t){let r=wMo(e,t);return{
+  total_input_tokens: e ? e.input_tokens + e.cache_creation_input_tokens
+                          + e.cache_read_input_tokens : 0,
+  total_output_tokens: e?.output_tokens ?? 0,
+  context_window_size: t, current_usage: e,
+  used_percentage: r.used, remaining_percentage: r.remaining}}
+```
+
+and `e` is `TDr(messages)`, which walks the message list **backwards and returns on the first
+usage it finds** — the single most recent assistant message:
+
+```js
+function TDr(e){for(let t=e.length-1;t>=0;t--){let r=e[t],n=r?QUe(r):void 0;
+  if(n)return{input_tokens:n.input_tokens,output_tokens:n.output_tokens,
+    cache_creation_input_tokens:n.cache_creation_input_tokens??0,
+    cache_read_input_tokens:n.cache_read_input_tokens??0}}return null}
+```
+
+The vendor's own doc comments in the same bundle say it in words, and they agree with the
+code: `current_usage` is "Token usage from last API call (null if no messages yet)",
+`total_input_tokens` is "Input tokens currently in the context window (incl. cache
+reads/writes)", `total_output_tokens` is "Output tokens from the most recent API response".
+
+#### What `current_usage` actually is — and why the write half dies
+
+**It is one API call, and the two totals are a LEVEL rather than a counter.**
+`total_input_tokens` is not a session spend; it is what is sitting in the context window
+right now, which is why it includes cache reads. It is also **derived** — the vendor sums
+three fields of the same single call — so it is `§7.16`'s derived-`inputTokens` trap wearing
+a different label, and a plausible-looking number is the quiet kind of wrong.
+
+`internal/usagecache` accumulates **per-turn counts taken as-is**. Nothing in this payload is
+one. Three routes to a spend figure exist and all three are refused:
+
+- **sum `current_usage` across fires.** Every fire reports the same last call, and the
+  statusline is debounced at 300ms and re-renders on state changes, so this counts one call
+  an unbounded number of times.
+- **difference successive renders.** This is deriving a number and presenting it as a
+  reading — the ADR-001 refusal this project exists for — and `usagecache.Delta`'s contract
+  says the vendor must report the count, not telltale reconstruct it.
+- **treat `total_input_tokens` as a total.** It is an occupancy level. It goes **down** after
+  a `/compact`, and a "total" that decreases is not one.
+
+So the write half is dead on the measurement, not on taste. **The one thing that would revive
+it is the vendor reporting a per-turn count** — and the bundle shows it already computes
+something close (`U5d` sums input + cache_creation + output across messages, de-duplicated by
+id) and does **not** put it in the statusline payload. If a future version does, this ruling
+is re-openable against that field and nothing else.
+
+#### What was built
+
+- **`internal/claude`**: `context_window` gains `total_input_tokens`, `total_output_tokens`
+  and a `current_usage` object (four counts); `StatuslineInput` gains `prompt_id`. All are
+  pointers or omitempty, because a pre-2.1.233 CLI sends no such key and "this CLI does not
+  report it" must stay distinguishable from the measured zero `TAw` emits before the first
+  message (§4a.1). `CurrentUsage` is the allowlist for its block, the `internal/cursorhook`
+  technique reused.
+- **nothing else.** No renderer, no relay, no `usagecache` converter, no HUD field.
+- **pinned three ways**: `TestTheTokenCountsParseAtTheMeasuredVersion` asserts the fields land
+  *and* that the fixture still models `TAw`'s arithmetic — the moment those numbers stop
+  agreeing, the fixture has begun claiming a cumulative total nobody measured;
+  `TestAnOlderPayloadLeavesTheTokenCountsAbsent` is zero-vs-absent on a schema that grew;
+  `TestTheTokenCountsAreParsedAndNeverRendered` guards the render, and CI asserts on the
+  **built binary** that no count reaches stdout and that `usage/claude.json` does not exist.
+
+#### Two claims from the research brief that the measurement corrected
+
+- **`prompt_id` is real, and it is not on the documentation page.** It arrives via the
+  vendor's shared session-basics helper (`py`), as `pr.requestJournal.promptId()`, not via the
+  statusline's own assembly. `internal/claude`'s package doc now says which of its fields are
+  documented and which are measured-only.
+- **`aborted` and `api_retry` appear in NEITHER payload.** Every `aborted` in the bundle is
+  `AbortSignal`/undici machinery or a telemetry reason string. `api_retry` is a **stream event
+  type** — "Emitted when an API request fails with a retryable error and will be retried after
+  a delay" — alongside `assistant`, `result` and `compact_boundary`. Neither is a statusline
+  field at this version. Nothing shelved was reopened to establish this; it is this session's
+  own read.
+
+#### Known limitations
+
+- **No live capture backs the field list.** The shape rests on a source read of one build on
+  one machine. §3.4's discipline applies: re-measure before extending any claim, and a capture
+  is still the instrument that would prove what the *host* actually sends versus what the
+  bundle can assemble.
+- **The payload has grown fields this struct still ignores** — measured present at 2.1.233 and
+  deliberately unmodelled, because nothing needs them: `exceeds_200k_tokens`, `fast_mode`,
+  `output_style`, `thinking`, `vim`, `pr`, `remote`, `agent_type`, `workspace.added_dirs`,
+  `workspace.repo`, an expanded `worktree`, and three more `cost` fields
+  (`total_api_duration_ms`, `total_lines_added`, `total_lines_removed`). Unknown fields are
+  ignored by design (§2), which is why that growth was a non-event.
+- **§2's "permission mode is not in the payload" survives, for a changed reason.** `py` CAN
+  emit `permission_mode`, but the statusline calls it with two arguments, so the field is
+  `undefined` and never serialized. The exclusion is now a property of the call site rather
+  than of the schema, and a future version that passes the argument would ship it.
 
 ### 7.17 `u`: the fleet usage view — two claims, and never one
 
