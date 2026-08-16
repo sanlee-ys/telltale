@@ -127,6 +127,27 @@ field):
 }
 ```
 
+…and/or into Cursor CLI (`~/.cursor/cli-config.json`, a top-level key). **This one needs
+`--vendor cursor`**: unlike the other two, Cursor's payload carries no vendor name to
+detect, so the flag is the only way to route it.
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "C:\\path\\to\\telltale.exe statusline --vendor cursor"
+  }
+}
+```
+
+Cursor's statusline is **interactive-only** — it does not fire in `-p` print mode or over
+ACP (measured; `docs/design.md` §7.16). To see it, start an interactive session in a
+folder you have opened with `cursor-agent` before:
+
+```
+cursor-agent
+```
+
 …and run the HUD:
 
 ```

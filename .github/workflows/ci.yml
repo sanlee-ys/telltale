@@ -91,6 +91,31 @@ jobs:
           if ($out -match '\$') { throw "honest-gauge violation: cost rendered for a vendor with no cost field: $out" }
           $claude = Get-Content internal/statusline/testdata/full.json -Raw | ./telltale.exe statusline
           if ($claude -notmatch 'Opus') { throw "Claude payload misrouted after the product probe: $claude" }
+      - name: Smoke (Cursor routing through the real binary)
+        shell: pwsh
+        run: |
+          # This vendor stamps NO marker, so the flag is the whole of the routing
+          # (design.md §2.2). Driven through the binary because that is where the
+          # flag lives.
+          $out = Get-Content internal/statusline/testdata/cursor-full.json -Raw | ./telltale.exe statusline --vendor cursor
+          if ($out -notmatch 'Composer') { throw "cursor payload did not route to the Cursor renderer: $out" }
+          if ($out -notmatch 'ctx 34\.5%') { throw "the one vendor-sourced context reading did not render: $out" }
+          # The refusal, asserted on stdout rather than trusted to the struct:
+          # remaining_percentage (65.5) and total_input_tokens (68900) are both
+          # computed by the CLI from used_percentage and must never be displayed.
+          if ($out -match '65\.5|68900|68\.9k') { throw "honest-gauge violation: a CLI-computed value reached the line: $out" }
+          if ($out -match '\$') { throw "honest-gauge violation: cost rendered for a vendor with no cost field: $out" }
+          # A session before its first API call sends every context_window key as
+          # null. That is unread, not zero.
+          $nullCtx = Get-Content internal/statusline/testdata/cursor-nocontext.json -Raw | ./telltale.exe statusline --vendor cursor
+          if ($nullCtx -match 'ctx') { throw "honest-gauge violation: an unread context rendered: $nullCtx" }
+          # Without the flag the same payload has no marker to route on, so it
+          # must NOT come out looking like a Cursor line.
+          $unflagged = Get-Content internal/statusline/testdata/cursor-full.json -Raw | ./telltale.exe statusline
+          if ($unflagged -match 'autorun') { throw "an unflagged cursor payload reached the Cursor renderer: $unflagged" }
+          # This payload has no quota, no rate limit and no cost, so the relay
+          # must stay silent for it — an empty reading is still a reading.
+          if (Test-Path "$env:USERPROFILE\.telltale\quota\cursor.json") { throw "quota relay wrote for a vendor whose payload carries no quota" }
       - name: Smoke (quota relay through the real binary)
         shell: pwsh
         run: |
