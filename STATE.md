@@ -313,28 +313,30 @@ Nothing open. The last one here was the 44 seconds, and it was measured
 
 ## Known gaps, not yet owned
 
-- **OBSERVED 2026-08-15/16, the drive that paid the demo path found three.**
-  Each was measured once, in a live 5/5 room on Windows Terminal 1.24.11911.0;
-  none is owned.
-  1. **The composer draws a multi-line draft as one row.** The pasted
-     three-line brief reached the seat with its newlines intact — verified as
-     bytes in the vendor's session transcript — while the composer rendered
-     the draft as a single row before enter. The 2026-08-13 check drew three
-     rows in a ONE-seat room on the same terminal build, so the suspect is the
-     composer's height behavior under a full seat strip, not the paste path.
-     The wire is right and the drawing is wrong (design.md §9.38's dated
-     amendment carries both halves).
-  2. **`/trace` records nothing for an arena turn.** The trace was armed
-     before the race and the file holds only the preceding ordinary turn's
-     line. An arena turn therefore produces no per-seat spawn/wait/stream
-     split — which is exactly the split the ATTRIBUTED bullet below still
-     lacks for grok, and why it stays lacking.
-  3. **The room opened with workspace `~` instead of restoring the saved
-     repo.** The reattach restored the roster (5/5 came back) but the
-     workspace cell read `~`, and `/trace dist/…` resolved against the home
-     directory until a hand `/cd`. Whether an intervening session legitimately
-     saved `~` or the restore dropped the field is undetermined — check
-     `~/.telltale/council/room.json`'s history before assuming either.
+- **OBSERVED 2026-08-15/16, the drive that paid the demo path found three.
+  The 2026-08-16 lane batch measured all three, and what is left is smaller.**
+  1. **The composer one-row report is unexplained, and its recorded suspect
+     is refuted.** The render is measured correct at every geometry the room
+     draws (the 588-combination sweep in §9.38's second dated amendment): the
+     compose area wraps against the terminal width, so the seat count has no
+     path to the composer's row count, and the one silent-collapse branch is
+     unreachable above the 60x10 floor. The wire half was already paid. What
+     remains is one decisive live measurement: reproduce the paste in a live
+     5/5 room and record the terminal's rows and columns with it.
+  2. **Arena turns were always traced; the record could not name the race.**
+     The "records nothing" premise did not survive measurement — racers'
+     records were emitted all along, and a racer's line now ends
+     `race=arena/t<N>` on both spawn paths. The t9 empty trace file therefore
+     has another cause, still open; the leading candidate was gap 3's
+     workspace-`~` reattach resolving `/trace dist/…` against the home
+     directory, and gap 3 is now fixed. The live half is owed: no race has
+     run against this build.
+  3. **The workspace restore was measured correct; the silent fallback beside
+     it was the bug, and it is fixed.** A saved workspace that no longer
+     exists was replaced with the current directory without a word, and the
+     next turn persisted the substitute. The reattach notice now names the
+     vanished path (§9.32's dated amendment). The next-turn overwrite itself
+     stays, by design: `room.json` never describes a room nobody is in.
 
 - **MEASURED and CLOSED, 2026-08-15/16. The operator's `deny` still stops the
   call with council's `ask` beside it — and council is never asked at all.**
@@ -387,12 +389,19 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   unowned.** The gate clock split (#243) is proven by unit tests and goldens
   only — no live gated turn has rendered `you 4m48s` yet; the owner's next real
   gated turn exercises it for free. The codex seat's **post-answer linger is
-  unowned**: `codex exec` lingers 6.5–7.9s after answering (§9.33's app-server
-  block), §9.36's "kill, never wait" was written for cursor's ~2.5s, and nothing
-  checked whether council waits on it. The **Windows `danger-full-access`
-  finding does not port to `codex app-server`** — that path has its own
-  `windowsSandbox/*` surface nobody has probed; any seat move re-measures rather
-  than inherits. The **agy statusline payload is still pinned at 1.1.9** and
+  OWNED as of the same day's lane batch**: the column settles at the measured
+  `turn.completed` marker and renders `done Ns exiting`, the process lifetime
+  untouched (§9.33's dated payment block). What that lane left open, stated
+  there: the linger's CAUSE is unmeasured, the tool-using turn's tail is
+  unmeasured (probing it needs `danger-full-access`, a redline), and the other
+  spawn-per-turn vendors never set `EndsTurn`, so their tails are untouched.
+  Two adjacent council holes it named: `InFlight()` misses a failed agy turn
+  (`KindError` with exit 0 retires nothing, so the seat is neither busy nor
+  settling while `q` is refused), and a `/cd` alone persists only at the next
+  completed turn or teardown, so it survives a quit but not a crash. The
+  **Windows `danger-full-access` finding does not port to `codex app-server`**
+  — that path has its own `windowsSandbox/*` surface nobody has probed; any
+  seat move re-measures rather than inherits. The **agy statusline payload is still pinned at 1.1.9** and
   needs an interactive re-capture — expect FOUR quota buckets now, not two
   (§3.8); the **multi-chunk transcript** is the case that would break that
   adapter and has never been observed (all chunked conversations hold one
