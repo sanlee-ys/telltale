@@ -764,6 +764,114 @@ has never existed on this machine); `model.id` equals the display
 string ("Gemini 3.6 Flash (High)"), not a machine id; the payload carries the signed-in
 email and plan tier, so real captures are PII and never enter `testdata/`.
 
+**Re-verification, 2026-08-15 — the pin moves to `agy 1.1.13` and the field map does
+not.** agy self-updates, so the version below was read from `agy --version` at read
+time, never from a release note. The corpus is 20× the one §3.8 ruled on: **81
+conversations, 4,284 transcript records, 1,926 decoded generations.** The adapter was
+run over the live tree unmodified and every field it declares still sources.
+
+| field | §3.8 (agy 1.1.9) | re-read (agy 1.1.13) | verdict |
+|---|---|---|---|
+| model | 5/5, one id string | **81/81** | sources; id string DRIFTED, see below |
+| workspace | 3 of 5, 2 absent | **23 of 81**, 58 absent | sources; absence confirmed genuine |
+| last_activity | measured | **81/81** | sources, no drift |
+| tokens (extras + §7.17 sum) | identity 15/15 | **identity 1,926/1,926** | sources, no drift |
+| liveness | `CapNone` — all 38 rows DONE | `CapNone` — **164 RUNNING now seen** | stays `CapNone`, for a NEW reason |
+| subagents | `CapNone` — never observed | `CapNone` — **3 `INVOKE_SUBAGENT` steps** | stays `CapNone` |
+
+**0 rows degraded, 0 diagnostics, 0 unparseable transcript records** across the whole
+corpus — including conversations whose `-wal` sidecar is 25× the `.db` it belongs to,
+which is the sidecar contract still holding at scale.
+
+- **The two vendor release-note claims are NOT corroborated at this seam, and stay
+  vendor claims.** 1.1.13 claimed a transcript-corruption fix during compaction: 0 of
+  4,284 records failed to parse, so there is no corruption here to have been fixed and
+  nothing measurable changed. 1.1.12 claimed a Windows drive-letter fix in a transcript
+  path converter: all 23 workspace URIs present read `file:///C:/Users…` — the same form
+  §3.8 recorded — and `pathFromFileURI` converted 23 of 23 to `C:\Users\sanle`. Whatever
+  the vendor fixed, it was not the shape this adapter reads.
+- **Workspace absence is absence, not a broken converter.** This is the check that
+  separates the two, and it was run rather than assumed: of 81 trajectory blobs, **23
+  contain a `file:` substring anywhere in their bytes and 58 contain none.** The 58
+  carry no URI to convert, so the field is correctly absent (§4a.1's zero-vs-absent
+  distinction), and the converter has no silent failure hiding behind them.
+- **`status` gained `RUNNING`, and it is still not liveness — the new evidence makes the
+  refusal stronger.** §3.8 declined the field because every one of 38 rows read `DONE`.
+  The re-read found the missing state: **164 `RUNNING` rows in 27 of 81 transcripts**,
+  158 of them on `RUN_COMMAND`. But the oldest is dated **2026-08-03, thirteen days
+  before the read**, in a conversation nothing has touched since. `RUNNING` therefore
+  means "no terminal status was ever written for this step", which is equally true of a
+  live command and of one whose process was killed. Wiring it would have reported dozens
+  of long-dead sessions as working — the exact dishonest-gauge failure ADR-001 exists to
+  prevent. The field stays `CapNone` and the HUD keeps classifying age from
+  `last_activity`.
+- **`INVOKE_SUBAGENT` is now observed (3 steps) and still buys no count.** It is the
+  first evidence the feature is used at all. A step recording that a subagent was invoked
+  at some past moment is not a number of subagents running now, which is what the field
+  means, so the `CapNone` stands.
+- **The model id gained a second spelling.** `gemini-flash-3.6-high-control` (37 rows)
+  now appears beside `gemini-3.6-flash` (41 rows) for the one display string "Gemini 3.6
+  Flash (High)", and **3 rows carry the display name at `#1.#21` with nothing at
+  `#1.#19`** — the first corpus to exercise the adapter's either-half-will-do fallback.
+  Both strings are read verbatim; normalizing them would be inventing a vocabulary.
+- **New transcript keys, none of them read:** `error` (23), `error_code` (9), alongside
+  the `truncated_fields` (345) §3.8 already described. The `step` struct is an allowlist,
+  so added keys cost nothing — and no key the adapter *does* read has gone missing.
+- **A `logs/chunks/` tree appeared (first seen 2026-08-14, on the 4 newest
+  conversations)**: `chunks/transcript/00000000.jsonl` plus a `chunks/transcript_full/`.
+  This is the likeliest mechanism behind the compaction claim. It changes nothing today —
+  the flat `transcript.jsonl` is still written and was **byte-identical (md5) to its
+  single chunk on all 4**. All four hold exactly one chunk, so the case that would matter
+  — whether the flat file stays complete once a second chunk exists — is **unobserved**,
+  and is the standing watch item this block leaves behind.
+- **The docs' `antigravity/` tree now EXISTS and is still not the data.** §3.8 recorded
+  that it had never existed. At 1.1.13 `~/.gemini/antigravity/` holds a `bin/`, a
+  `builtin/skills/` tree and crash logs, while its `brain/` and `conversations/` are
+  **empty** and all 81 conversations remain under `antigravity-cli/`. An adapter that
+  picked its root by probing which path exists would now pick the empty one; this one
+  roots by name.
+
+**`/quota` cross-check: MEASURED, and deliberately NOT built.** The probe was gated on
+proving it is free before anything could be wired to it, because a probe that quietly
+started a turn would plant phantom rows in telltale's own gauge. Two `agy -p "/quota"`
+invocations (PowerShell — Git Bash mangles the leading slash) against a quiescent store,
+each bracketed by a full snapshot:
+
+- **No residue in the store the HUD scans.** 81 conversations / 81 brain dirs / 81 HUD
+  rows / 1,926 generations / identical token totals, before and after both runs. The
+  probe writes only `cli.log`, `log/`, `last_check.timestamp`, `updater/update_status.json`
+  and a **0-byte** `crashes/crash_<pid>_<uuid>.log` sink — none of them in the adapter's
+  scan path.
+- **No token cost.** Both runs returned identical remaining figures (87% / 98% / 100% /
+  100%) and neither added a generation. A spent turn writes a conversation and a
+  `gen_metadata` row, as every other agy turn in this corpus did.
+
+**So the gate passes and the feature is still wrong to build**, on evidence the
+measurement itself produced: the probe takes **2.9–3.8 s** and its numbers come from the
+server. Wiring it into a gauge would break two rules that are not about cost at all — the
+statusline path "reads nothing beyond stdin" (§2, revisitable "only with a measured
+budget", and 3 seconds is not one), and the gauges make no network calls
+(`CLAUDE.md`'s read/write boundary). It would also spend that round trip cross-checking a
+number the vendor already hands us free on stdin, which is where the quota buckets come
+from today. Nothing is wired; this paragraph is the record of why.
+
+**`/config` in `doctor`: NOT built, and the measurement that would license it was not
+made.** `doctor`'s charter is a cheap local `--version` parse that "never starts a turn,
+spends quota, reads a credential, writes under `~/.telltale`, or calls the network"
+(`cmd/telltale/main.go`). The `/quota` timings above show an agy slash command is a
+different animal: seconds, not milliseconds, and server-backed. Its behavior with the
+network or auth absent was **not measured** — doing so means disabling networking or
+de-authenticating the operator's account — and an unmeasured network-backed probe in
+`doctor` would red-cross exactly when the operator is offline, which is the dishonest
+cell that mode exists to avoid. `doctor` is left alone.
+
+**One inventory cell is now stale and is NOT fixed here.** §3.10's canary table still
+reads `agy 1.1.9` for the Antigravity row while the adapter is pinned to `agy 1.1.13`.
+That edit was out of scope for the session that wrote this block. Note that
+`TestTheCanaryInventoryMatchesThisAdapter` does **not** catch it: it substring-matches the
+pin anywhere in `design.md`, so this very block turns the guard green while the table it
+guards stays wrong. Move the row, and consider scoping the assertion to the table.
+
 ### 3.9 Cursor (Composer) seam — surveyed live 2026-08-02; the store is open, and it holds credentials
 
 **Environment:** Cursor 3.14.7, Windows. Closed source, and the store format is

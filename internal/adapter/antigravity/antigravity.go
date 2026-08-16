@@ -9,6 +9,19 @@
 // block, agy 1.1.9, 2026-08-02); the decision is decisions/006. Nothing is
 // claimed here that §3.8 did not observe.
 //
+// # Re-verified against agy 1.1.13, 2026-08-15 (§3.8 re-verification block)
+//
+// The field map was re-read against the live corpus at the installed build:
+// 81 conversations, 4,284 transcript records, 1,926 decoded generations. Every
+// field this adapter declares still sources, and no field number moved. Two
+// vendor release notes named this seam — 1.1.13 claimed a transcript-corruption
+// fix during compaction and 1.1.12 claimed a Windows drive-letter fix in a
+// transcript path converter — and both are recorded as vendor claims that the
+// re-read could not corroborate at this seam: 0 of 4,284 records failed to
+// parse, and all 23 workspace URIs present read `file:///C:/Users…` and
+// converted correctly, the same form §3.8 saw. What DID move is written into
+// the notes below; the version pin is verifiedAgainst.
+//
 // # Layout
 //
 //	~/.gemini/antigravity-cli/
@@ -23,7 +36,13 @@
 // the token counts.
 //
 // Note the tree is `antigravity-cli/`, not the `antigravity/` the vendor's own
-// docs advertise; the documented path has never existed on the survey machine.
+// docs advertise. §3.8 recorded that the documented path had never existed on
+// the survey machine; at 1.1.13 it DOES exist and it is still not the data —
+// `~/.gemini/antigravity/` holds a bin/, a builtin/ skills tree and crash logs,
+// and its `brain/` and `conversations/` are EMPTY while all 81 conversations
+// live under `antigravity-cli/`. The distinction matters because the empty tree
+// is exactly what a path-existence check would accept: this adapter roots on
+// `antigravity-cli/` by name, never by probing which of the two is there.
 //
 // # What this adapter cannot know, and why
 //
@@ -48,12 +67,24 @@
 //     conversation surveyed, with `has_subtrajectory` zero throughout. The
 //     structure exists; the observation does not. Declaring the field and
 //     emitting zero would assert "this session is running no sub-agents", which
-//     is a claim the corpus cannot support yet (decisions/006).
-//   - liveness — `steps.status` looks like a liveness signal and is not one
-//     yet: all 38 rows in the survey read DONE and no in-flight session was
-//     ever sampled, so the mapping from a status code to "working now" is
-//     untested. The HUD classifies age from last_activity, same as every other
-//     vendor.
+//     is a claim the corpus cannot support yet (decisions/006). The 1.1.13
+//     re-read found 3 transcript steps typed `INVOKE_SUBAGENT`, which is the
+//     first observation of the feature being USED — and it still does not give
+//     a count: a step recording that a subagent was invoked at some past moment
+//     is not a number of subagents running now, which is what the field means.
+//   - liveness — `steps.status` looks like a liveness signal and is not one.
+//     §3.8 declined it because all 38 surveyed rows read DONE and no in-flight
+//     session was ever sampled. The 1.1.13 re-read sampled 4,284 rows and found
+//     the missing state — 164 `RUNNING` rows across 27 of the 81 transcripts —
+//     and it makes the refusal STRONGER rather than weaker. The oldest RUNNING
+//     step is dated 2026-08-03, thirteen days before the read, in a
+//     conversation nothing has touched since; RUNNING rows are carried almost
+//     entirely by `RUN_COMMAND` (158 of 164). So the state does not mean
+//     "working now", it means "no terminal status was ever written for this
+//     step" — which is equally true of a live command and of one whose process
+//     was killed. Rendering it as liveness would report dozens of long-dead
+//     sessions as working. The HUD classifies age from last_activity, same as
+//     every other vendor.
 //
 // # Traps encoded here
 //
@@ -65,8 +96,20 @@
 //   - `conversation_summaries.db` is a stale index — one row for four
 //     conversations at survey time. Discovery enumerates the directory and
 //     never consults it.
+//   - A `logs/chunks/` tree appeared at 1.1.13 (first seen 2026-08-14, on the
+//     4 newest conversations): `chunks/transcript/00000000.jsonl` and a
+//     `chunks/transcript_full/` beside it. This is the likeliest mechanism
+//     behind the vendor's compaction-corruption claim, and it does NOT change
+//     what this adapter reads — the flat `transcript.jsonl` is still written
+//     and was byte-identical (md5) to its single chunk on all 4. Every one of
+//     those conversations holds exactly one chunk, so the case that would
+//     matter — whether the flat file stays complete once a second chunk
+//     exists — is unobserved. Read the flat file until a multi-chunk
+//     conversation is measured; do not switch to the chunk tree on the
+//     strength of its name.
 //   - Token counts are guarded by an arithmetic identity: thinking + answer
-//     must equal output (15/15 in the survey). A generation that fails its own
+//     must equal output (15/15 in the survey, and 1,926/1,926 over the whole
+//     corpus at 1.1.13). A generation that fails its own
 //     self-check contributes nothing and says so; the numbers are
 //     reverse-engineered from an unversioned wire format and this is what turns
 //     that from a guess into a checked reading.
@@ -155,7 +198,18 @@ const (
 // verifiedAgainst names the vendor build this adapter's field map was surveyed
 // against (see the package doc). Nothing on disk states the writer's version, so
 // a drift report here carries the pin and no observed counterpart.
-const verifiedAgainst = "agy 1.1.9"
+//
+// Moved 1.1.9 → 1.1.13 on 2026-08-15. agy SELF-UPDATES, so this pin is read
+// from `agy --version` at re-verification time and never copied from a release
+// note. What backs the move is a live-corpus re-read at that build, not the
+// version bump: 81 conversations under ~/.gemini/antigravity-cli, 4,284
+// transcript records with 0 unparseable, and 1,926 decoded generations of which
+// 1,926 satisfied the `thinking + answer == output` identity — the same
+// self-check that promoted these field numbers to a schema, now held over a
+// corpus 128× the 15/15 §3.8 ruled on. Model sourced on 81 of 81 rows,
+// last_activity on 81 of 81, workspace on the 23 rows whose trajectory blob
+// carries a URI at all; 0 rows degraded and 0 diagnostics emitted.
+const verifiedAgainst = "agy 1.1.13"
 
 // The two tables every conversation database carried in the survey. Their names
 // are the whole contract: the protobuf field numbers below are unversioned
@@ -569,6 +623,15 @@ func (a *Adapter) applyGenerations(s *model.Session, db *sqlite.File, w *drift.W
 
 	// The newest generation's model is the session's model: a conversation can
 	// switch models mid-run and the last call is the one in force.
+	//
+	// Either half alone is enough, and the 1.1.13 re-read is the first corpus to
+	// exercise that: 3 of 81 rows carried a display name at `#1.#21` with NOTHING
+	// at `#1.#19`, and the id itself gained a second spelling
+	// (`gemini-flash-3.6-high-control` on 37 rows beside `gemini-3.6-flash` on
+	// 41) for the one display string "Gemini 3.6 Flash (High)". Both are read
+	// verbatim and neither is normalized — a vendor that renames its own model
+	// ids is reporting something, and rewriting it here would be this adapter
+	// inventing a vocabulary (§4a.1).
 	for i := len(gens) - 1; i >= 0; i-- {
 		id, name := gens[i].modelID, gens[i].modelStr
 		if id == "" && name == "" {
