@@ -9883,3 +9883,103 @@ worked and had been dropped for width since §9.29. Nothing was un-shed by hand;
 **No new hues.** The border and the sides are `Rule()`, i.e. muted chrome; the legend keeps the
 exact styles the mode word already had on the mode line, gate included. This change spends
 *shape*, which the palette does not pay for.
+
+### 9.45 the turn clock counted the operator's reading time as the vendor's work (2026-08-15)
+
+**A gated column said `⋮ streaming 5m` while nothing was streaming.** The room was stopped on an
+approval card, the vendor was blocked waiting to be told yes or no, and the five minutes on the
+header were five minutes of a person reading a diff. The number was real wall clock and it was
+still a false reading, because of the word it sat under: `streaming` is a claim that output is
+arriving, and this column had a stopped process behind it.
+
+That is the same failure `TestWaitingIsNotStreaming` was written for, arriving by a different
+route. That test guards the WORD — a seat with nothing to show must not render like a seat that is
+showing something. Nothing guarded the FIGURE under the word. A stopped seat wearing a moving
+seat's clock is the honest-gauge rule broken in the one place §4a.1 cares about most: the
+displayed value no longer describes the thing it is labelled with.
+
+**So the turn clock splits in two, and both halves are measured.** The column header states the
+VENDOR's own time — wall clock minus whatever of it the operator held — and the turn's separator
+states the operator's share beside the number it came out of:
+
+```
+▸ 1 CC Claude Code ⠋ streaming 12s
+  ro:tools  tokens
+⚠ waiting on you: Write:
+  internal/council/clock.go
+  y approve   n deny   a stop asking
+  …
+turn 1  ─────────────────  you 4m48s
+```
+
+Twelve seconds of vendor, four minutes and forty-eight seconds of operator, five minutes of wall
+clock — and the two figures add up to it, which is the property that makes the split worth
+drawing rather than merely correct.
+
+**The stopwatch runs over the SEAT, never over the card.** One assistant message can raise a
+parallel batch of requests and each one blocks separately, so a seat can have three cards up at
+once — and it is stopped ONCE. Summing the cards would bill one person's one wait three times. So
+`PendingGate.StoppedAt` is when the seat stopped, not when the card was raised: the first card of
+a stretch carries its own moment, every later card in the same stretch inherits that stamp, and
+the stretch closes when the LAST card goes. Stamping each card with its own moment was the first
+cut and it was wrong twice — the figure on screen jumped backwards when the first of two cards was
+answered, and the charge lost every second before the newest card, because the stretch's start
+left the queue with the card that owned it.
+
+**Stretches accumulate across one turn, and reset with it.** `Column.GateWait` is the operator's
+share of the turn in flight, `TurnRecord.GateWait` is the same fact for a turn in the transcript,
+and `startTurn` files one and clears the other. A turn that asked three times reports all three
+waits as one figure, because what it claims is the operator's share of THAT turn.
+
+**Auto-approved calls contribute nothing.** `queueGate` answers three ways without ever drawing a
+card — `autoApproveRoutine` (this shell command is routine), `isReadOnlyTool` (this tool changes
+nothing), and `!Asking` (the user said stop asking) — and all three return before the stamp. Nobody
+was asked, so nobody waited, and charging the operator for a decision they never saw would be the
+room inventing a measurement.
+
+**Zero and absent stay different, as they must.** The figure is a `runner.Span` rather than a
+duration, for the argument already written on that type: a turn that raised no card is UNMEASURED
+and renders nothing at all, while a card answered inside a second is a measured zero and renders
+`you 0s`. `gate-clock.txt` pins the three states side by side — an open card counting, an absent
+one, a measured zero — because each is only legible against the others.
+
+**Two spellings, one fact, and the surface picks.** `waiting on you 4m48s` is the room's own
+phrase, already on the approval card and on §9.40's `NEEDS YOU` strip, and it is twenty cells. A
+three-up room at 120 columns gives each column thirty-six, where the long form is more than half
+the width and pushes the separator's own clock and cost off the line. So the grid sheds the LABEL
+and keeps the fact — `you 4m48s` — which is §9.18's order applied to a phrase instead of a name,
+and the by-turn page, which is the full frame wide, says it whole. It is a width TIER rather than a
+per-line measurement, the same way `stripHeader` and `stripBadges` choose a form: one rule a reader
+can learn, instead of a cell that rewords itself when a neighbouring number grows a digit.
+
+**Why the separator and not the chrome.** The live turn's separator carried its number and nothing
+else, on the rule that a turn's clock and cost are in the header and the badge line and repeating
+them a row later would say one thing twice. The operator's share is the exception, and it is there
+because the chrome has no room for it: `▸ 1 CC Claude Code` and `⠋ streaming 12s` already spend
+thirty-three of thirty-six cells, and the badge line's right edge belongs to the cost. The
+separator is also where the figure lives for every turn already in the transcript (`historyMeta`),
+so the live turn and the filed one state it in one place and one spelling. What it costs is that
+the figure scrolls with the transcript — and what stays pinned in the chrome is the card itself,
+which says the room is stopped on you for as long as that is true.
+
+**Render stays pure.** The room stamps and the renderer subtracts, exactly as `Reattach.SavedAt`
+does: `queueGate` stamps when the card goes up, `decideGate` and `dropGates` charge when it comes
+down, and Render turns a stamp into an age against `State.Now`. An open card with no stamp — every
+State a test types out by hand — adds nothing and does not make the span measured, because a
+duration arrived at by arithmetic over an absence is the invented figure §4a.1 puts at the top of
+the rejected list. `TestGateClockIsPureOverState` pins it, and no existing golden moved.
+
+**The `--trace` line is deliberately unchanged.** `runner.TurnClock` already says a seat blocked on
+an approval card is inside its `Stream` span, "because from the process's side that is exactly what
+it is". That stays true: the runner cannot see the decision. A gate decision reaches a live seat
+through `Session.SendAside`, which is documented as carrying "an interrupt, a gate decision, a
+protocol reply" — undifferentiated bytes — so a gate span in the trace would need the runner to be
+told what it was writing, which is a change to that package's shape rather than to this figure.
+The room knows, and the room is where the split is drawn. Adding the span to the trace is a
+separate measurement with a separate seam to build.
+
+**Wall clock is still reported where wall clock is the claim.** `turnElapsed` — the by-turn page's
+figure for how long the whole turn took — is unchanged and still selects the longest seat's raw
+elapsed. That number is labelled as the turn's duration rather than as any vendor's, and the
+operator's own reading time really is part of how long the turn took. The per-seat rule under it
+carries the split, so the page states both without either one contradicting the other.

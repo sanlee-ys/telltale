@@ -269,6 +269,11 @@ type TurnRecord struct {
 	NoteCalm   bool
 
 	Elapsed time.Duration
+	// GateWait is the operator's own share of this turn, on the same terms as
+	// Column's: wall clock over the seat, unmeasured when no card was ever
+	// raised. A record that dropped it would show the turn's whole wall time
+	// under a word that means the vendor was working (§9.45).
+	GateWait runner.Span
 	// CostUSD and CostSession are the vendor's own figure and what it meant, on
 	// the same terms as Column's. A running total that lost its "session" word
 	// on the way into history would read as that turn's spend.
@@ -383,7 +388,38 @@ type Column struct {
 	Started time.Time
 	// Elapsed is how long the LAST completed turn took, kept after the turn
 	// ends so a finished column can still say how long it made you wait.
+	//
+	// WALL CLOCK, and the operator's own share is still inside it. What the
+	// room draws is that share taken back out (vendorElapsed), because a figure
+	// labelled `streaming` has to be time the vendor spent streaming — see
+	// GateWait.
 	Elapsed time.Duration
+
+	// GateWait is how long the OPERATOR held this seat during the current turn,
+	// counting only the stretches that have already ended (§9.45).
+	//
+	// A seat behind an approval card is stopped: the vendor is not thinking and
+	// not writing, it is waiting to be told yes or no. Folding that into Elapsed
+	// made a column read `⋮ streaming 5m` while the whole five minutes was a
+	// person deciding — a stopped seat rendered as a moving one, which is the
+	// failure TestWaitingIsNotStreaming's family exists to catch.
+	//
+	// WALL CLOCK OVER THE SEAT, never a sum over cards. One assistant message can
+	// raise a parallel batch of requests, and a seat held by three cards at once
+	// is stopped once; adding the three would charge the operator three times for
+	// one stretch. The stopwatch therefore runs from the FIRST card this seat had
+	// up to the moment its LAST one is answered — see gateOpenedAt.
+	//
+	// A runner.Span rather than a duration, for the field's own zero-vs-absent
+	// rule (§4a.1): a turn with no card at all is UNMEASURED and renders no
+	// operator figure, while a card answered inside a second is a measured zero
+	// and renders `0s`. Those are different facts and this room does not draw
+	// them alike. The type is runner's because the argument is already written
+	// there, and one vocabulary for one distinction is the point.
+	//
+	// Reset by startTurn like every other per-turn fact, after the record it
+	// belongs to is filed.
+	GateWait runner.Span
 
 	// Scroll is the first visible body line. Only consulted when Follow is
 	// false — a column that is tailing derives its offset from the content, so
@@ -486,6 +522,7 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 			NoteDetail:  c.NoteDetail,
 			NoteCalm:    c.NoteCalm,
 			Elapsed:     c.Elapsed,
+			GateWait:    c.GateWait,
 			CostUSD:     c.CostUSD,
 			CostSession: c.CostSession,
 			Phase:       c.Phase,
@@ -533,6 +570,10 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	c.CostSession = false
 	c.Started = time.Time{}
 	c.Elapsed = 0
+	// Back to UNMEASURED, not to zero. The record above owns the old turn's
+	// figure, and a new turn that has raised no card has not made the operator
+	// wait for nothing — it has not measured a wait at all (§9.45).
+	c.GateWait = runner.Span{}
 	// Re-arm the tail for the new turn. The history is still scrollable, but
 	// what arrives now is what the user is waiting for.
 	c.Follow = true
@@ -818,6 +859,32 @@ type PendingGate struct {
 	// entry: "Write: ~/ws/ping.txt".
 	Text string
 
+	// StoppedAt is when this SEAT stopped — not when this card was raised
+	// (§9.45).
+	//
+	// The two differ, and the difference is the whole reason the field is named
+	// for the seat. One assistant message can ask for a parallel batch, each
+	// call blocks separately, and a vendor already stopped does not stop again
+	// when its second card goes up. So the FIRST card of a stretch is stamped
+	// with the moment it was raised and every later card in the same stretch
+	// INHERITS that stamp — which is what keeps the figure on screen from
+	// jumping backwards when the first of two cards is answered, and what keeps
+	// the room from charging one wait twice.
+	//
+	// Stamped by queueGate, which is the one place a card is raised, and NEVER
+	// by Render: the renderer reads it against State.Now, exactly as it reads
+	// Reattach.SavedAt, so two renders of one State stay identical.
+	//
+	// A gate that is auto-approved never reaches this field. autoApproveRoutine,
+	// isReadOnlyTool and an ungated room all answer inside queueGate without a
+	// card, and no human read anything — charging that to the operator would be
+	// the room inventing a wait (§4a.1).
+	//
+	// Zero is legal and means "not stamped": every State a test types out by
+	// hand carries no timestamp, and the operator's figure is then absent rather
+	// than zero, which is the same distinction Column.CostUSD draws.
+	StoppedAt time.Time
+
 	// Old and New are the before and after of a structured file edit, measured
 	// off the vendor's own permission payload and already redacted (§9.41).
 	//
@@ -847,6 +914,35 @@ type PendingGate struct {
 // method rather than a field so there is no second copy of the rule to drift —
 // the card, the layout budget and the tests all ask this one question.
 func (p PendingGate) HasPreview() bool { return p.Old != p.New }
+
+// gateStoppedAt is when this seat's CURRENT stopped stretch began: the oldest
+// stamp among the cards it still has up (§9.45).
+//
+// It is a query over the queue rather than a field on the seat, and the queue
+// can answer it because PendingGate.StoppedAt is a fact about the seat that
+// later cards inherit — so the answer does not move when one card of several is
+// taken away. The oldest is taken anyway: it costs nothing, and it is right by
+// construction rather than by trusting every writer to have inherited correctly.
+//
+// A card with no stamp is skipped rather than treated as the epoch. Every State
+// a test types out by hand is unstamped, and an unstamped card that counted as
+// "stopped in 1970" would put a fifty-year wait on the screen — the invented
+// figure §4a.1 forbids, arrived at by arithmetic on an absence.
+//
+// Reports false when this seat has nothing up, which is what makes the caller's
+// "has the LAST card gone" test a single call rather than a bookkeeping flag.
+func (s State) gateStoppedAt(v model.VendorID) (time.Time, bool) {
+	var first time.Time
+	for _, p := range s.Gates {
+		if p.Vendor != v || p.StoppedAt.IsZero() {
+			continue
+		}
+		if first.IsZero() || p.StoppedAt.Before(first) {
+			first = p.StoppedAt
+		}
+	}
+	return first, !first.IsZero()
+}
 
 // Reattach is what a resumed room says about where it came from.
 //
