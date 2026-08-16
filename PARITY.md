@@ -152,7 +152,9 @@ Adapter path resolution is portable by construction — `os.UserHomeDir()` and
 gap is **verification, not portability**: every adapter's live-corpus pass was
 run on Windows. No macOS or Linux corpus pass is recorded for any of the six —
 grok joined the list on 2026-08-09 (design.md §3.9a), surveyed against 30
-sessions on the Windows box and nowhere else. Its root honours `GROK_HOME`,
+sessions on the Windows box and nowhere else. Pi joined on 2026-08-16
+(design.md §3.9b live pass): four probe sessions on this Windows box,
+pi 0.84.1. No macOS or Linux corpus pass. Its root honours `GROK_HOME`,
 which the vendor's own startup log names, so the override is portable too and is
 likewise unexercised off Windows.
 

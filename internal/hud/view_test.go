@@ -1128,7 +1128,7 @@ func goldenCases() []goldenCase {
 		{name: "empty-nothing-detected", state: func() State {
 			st := NewState()
 			st.Now = pinned
-			st.Width, st.Height = 120, 14
+			st.Width, st.Height = 120, 15
 			st.Snap = Snapshot{
 				At: pinned,
 				Vendors: []VendorView{
@@ -1140,6 +1140,7 @@ func goldenCases() []goldenCase {
 					{Vendor: model.VendorCursor, Root: `%APPDATA%\Cursor\User`, Status: StatusNotDetected},
 					{Vendor: model.VendorGemini, Root: `%USERPROFILE%\.gemini\tmp`, Status: StatusNotDetected},
 					{Vendor: model.VendorGrok, Root: `%USERPROFILE%\.grok\sessions`, Status: StatusNotDetected},
+					{Vendor: model.VendorPi, Root: `%USERPROFILE%\.pi\agent\sessions`, Status: StatusNotDetected},
 				},
 			}
 			return st

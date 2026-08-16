@@ -376,6 +376,7 @@ func headerIdentity(st State, sty Styles, g Glyphs) string {
 var fleetOrder = []model.VendorID{
 	model.VendorClaude, model.VendorCodex, model.VendorGemini,
 	model.VendorAntigravity, model.VendorCursor, model.VendorGrok,
+	model.VendorPi,
 }
 
 func vendorCounts(st State, sty Styles) string {
@@ -825,6 +826,8 @@ func vendorTag(v model.VendorID) string {
 		// vocabulary. The fallback below would answer "GR" anyway; saying it out
 		// loud is what keeps the two maps comparable by eye.
 		return "GR"
+	case model.VendorPi:
+		return "PI"
 	default:
 		s := strings.ToUpper(string(v))
 		if len(s) > 2 {

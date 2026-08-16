@@ -45,6 +45,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/adapter/cursor"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
 	"github.com/sanlee-ys/telltale/internal/adapter/grok"
+	"github.com/sanlee-ys/telltale/internal/adapter/pi"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -125,6 +126,14 @@ var all = []Pin{
 		VerifiedAgainst: grok.VerifiedAgainst,
 		Section:         "§3.9a",
 		DocLabel:        "Grok CLI",
+	},
+	{
+		Vendor:          pi.Vendor,
+		VerifiedAgainst: pi.VerifiedAgainst,
+		Section:         "§3.9b",
+		DocLabel:        "Pi",
+		// Not a council seat (§9.1). doctor never probes it. Carried so the
+		// inventory cannot drop a HUD-only pin the way Gemini's row is carried.
 	},
 }
 

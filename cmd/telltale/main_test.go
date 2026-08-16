@@ -242,6 +242,9 @@ func TestUsageDescribesCouncilSeatsNotHudFilter(t *testing.T) {
 	if _, err := parseFilter("grok"); err != nil {
 		t.Errorf("the HUD filter no longer accepts grok (%v) — internal/adapter/grok reports rows under that id", err)
 	}
+	if _, err := parseFilter("pi"); err != nil {
+		t.Errorf("the HUD filter does not accept pi (%v) — internal/adapter/pi reports rows under that id", err)
+	}
 	if _, err := parseFilter("gemini"); err != nil {
 		t.Errorf("the HUD filter no longer accepts gemini: %v", err)
 	}

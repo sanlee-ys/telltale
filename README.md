@@ -217,7 +217,7 @@ honoured through the standard mechanism.
 - **A watch-mode HUD (TUI)** for parallel sessions — the cross-vendor surface, and a
   first-class UI investment (Go + Bubble Tea/Lipgloss; Windows Terminal is the reference
   environment). Ships with adapters for **Claude Code**, **Codex CLI**, **Gemini CLI**,
-  **Antigravity CLI**, **Cursor (Composer)** and **Grok CLI**, each reading that vendor's
+  **Antigravity CLI**, **Cursor (Composer)**, **Grok CLI**, and **Pi**, each reading that vendor's
   own native on-disk data — for Antigravity and Cursor that means a read-only SQLite
   reader written into this repo rather than a 9 MB dependency added to it.
 - **A machine-readable read mode** — `telltale snapshot` prints the fleet's current state

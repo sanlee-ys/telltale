@@ -8,6 +8,7 @@
                              cursor   not detected   %APPDATA%\Cursor\User
                              gemini   not detected   %USERPROFILE%\.gemini\tmp
                              grok     not detected   %USERPROFILE%\.grok\sessions
+                             pi       not detected   %USERPROFILE%\.pi\agent\sessions
 
                        telltale doctor checks the vendor binaries; this screen reads their stores
  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

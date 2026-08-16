@@ -1,0 +1,9 @@
+{"type":"session","version":3,"id":"00000000-aaaa-4bbb-8ccc-000000000001","timestamp":"2026-08-11T15:02:43.599Z","cwd":"C:\\src\\code\\example-app"}
+{"type":"model_change","id":"f80400ec","parentId":null,"timestamp":"2026-08-11T15:02:43.665Z","provider":"xai","modelId":"grok-4.5"}
+{"type":"thinking_level_change","id":"d3ae6915","parentId":"f80400ec","timestamp":"2026-08-11T15:02:43.665Z","thinkingLevel":"medium"}
+{"type":"session_info","id":"a1b2c3d4","parentId":"d3ae6915","timestamp":"2026-08-11T15:02:44.000Z","name":"Example App Session"}
+{"type":"message","id":"fb85ee54","parentId":"a1b2c3d4","timestamp":"2026-08-11T15:02:44.100Z","message":{"role":"user","content":[{"type":"text","text":"FIXTURE user turn one"}],"timestamp":1786460563671}}
+{"type":"message","id":"029a4cf7","parentId":"fb85ee54","timestamp":"2026-08-11T15:02:45.134Z","message":{"role":"assistant","model":"grok-4.5","provider":"xai","content":[{"type":"text","text":"FIXTURE first assistant"}],"usage":{"input":100,"output":10,"cacheRead":4,"cacheWrite":0,"reasoning":2,"totalTokens":116,"cost":{"input":0.001,"output":0.0001,"cacheRead":0.0,"cacheWrite":0.0,"total":0.0011}}}}
+{"type":"message","id":"c0ffee01","parentId":"029a4cf7","timestamp":"2026-08-11T15:03:00.000Z","message":{"role":"user","content":[{"type":"text","text":"FIXTURE user turn two"}],"timestamp":1786460580000}}
+{"type":"message","id":"c0ffee02","parentId":"c0ffee01","timestamp":"2026-08-11T15:04:10.000Z","message":{"role":"assistant","model":"grok-4.5","provider":"xai","content":[{"type":"text","text":"FIXTURE last assistant"}],"usage":{"input":6818,"output":24,"cacheRead":384,"cacheWrite":0,"reasoning":22,"totalTokens":7226,"cost":{"input":0.0136,"output":0.0001,"cacheRead":0.0001,"cacheWrite":0.0,"total":0.0138}}}}
+{"type":"message","id":"torn
