@@ -1,0 +1,78 @@
+name: Bug report
+description: Something telltale rendered was wrong, or it broke.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        telltale's whole point is that what it shows you is measured, not guessed.
+        The most useful bug report is the one that lets us tell which side broke:
+        the measurement, or the render. The two required outputs below do that —
+        `telltale doctor` and `telltale version` cost nothing to run and reveal no
+        secrets.
+  - type: textarea
+    id: doctor-output
+    attributes:
+      label: "`telltale doctor` output"
+      description: >-
+        Run `telltale doctor` and paste the full output. It probes no logins and
+        makes no network calls — it is safe to paste as-is.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: "`telltale version` output"
+      description: Run `telltale version` and paste it here.
+      placeholder: e.g. telltale 0.2.0 (8b7491d)
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal program and version
+      description: >-
+        e.g. Windows Terminal 1.21, iTerm2 3.5, Terminal.app, WezTerm. Some
+        claims (bracketed paste, clipboard via OSC 52) depend on the terminal,
+        not on telltale — see PARITY.md.
+      placeholder: Windows Terminal 1.21.x
+    validations:
+      required: true
+  - type: checkboxes
+    id: vendors
+    attributes:
+      label: Which vendors were involved?
+      description: Select every seat that was open when this happened.
+      options:
+        - label: Claude Code
+        - label: Codex
+        - label: Cursor
+        - label: Antigravity (agy)
+        - label: Grok
+        - label: None of these, or not sure
+    validations:
+      required: true
+  - type: textarea
+    id: rendered-claim
+    attributes:
+      label: What happened, versus what the column or gauge claimed
+      description: >-
+        Tell us the actual state, then what telltale rendered — quote the line
+        if you can. A wrong rendered claim is the bug this project exists to
+        catch.
+      placeholder: |
+        Actual: codex still had context left.
+        Rendered: the gauge showed context as absent (—).
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: What you were doing
+      description: >-
+        The command you ran, what you expected, and any steps to reproduce it.
+      placeholder: telltale council, then...
+    validations:
+      required: false
