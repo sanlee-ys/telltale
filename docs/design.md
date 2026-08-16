@@ -53,9 +53,13 @@ is the third, and it does not sit on the pipeline above:
 
 - **`telltale statusline`** (Claude Code and, since ADR-004, Antigravity CLI — routed
   on the payload's documented `product` field, §2.1): reads the vendor's JSON on
-  stdin, prints one line, exits. Latency budget: single-digit milliseconds; Bubble
-  Tea is never initialized on this path. Budget-conscious output (every character
-  renders on every prompt).
+  stdin, prints one line, exits. **Bubble Tea is never initialized on this path** —
+  a convention until 2026-08-16, gated since by `TestFastPathNeverReachesTUIFramework`
+  (§5). Latency budget: single-digit milliseconds of telltale's OWN work, and that
+  much is measured — parse+render is 14 µs (`BenchmarkRender`). The end-to-end cost
+  the operator actually pays is larger and is process start, not this code: ~25 ms
+  median per invocation on the reference workstation. Budget-conscious output (every
+  character renders on every prompt).
 - **`telltale hud`** (cross-vendor): a Bubble Tea/Lipgloss watch-mode TUI listing live
   sessions across vendors with per-session gauges. **First-class UI surface** — a UI
   design section (layout grid, color/threshold system, motion rules, empty/degraded
@@ -248,7 +252,12 @@ it is the state where the agent may run a command without asking.
 **Budget.** The vendor's `timeoutMs` defaults to 2000 with a floor of 50, and
 `updateIntervalMs` is clamped to >= 300. The 2000ms is its kill deadline, not an
 allowance: the binary is respawned on every debounced update, so ADR-002's
-single-digit-millisecond target is unchanged and `BenchmarkRenderCursor` pins it.
+single-digit-millisecond target for telltale's own work is unchanged, and
+`BenchmarkRenderCursor` measures it at 14 µs against that 300 ms floor. Two honest
+limits on that sentence, added 2026-08-16: a benchmark is not a gate — CI runs no
+`-bench`, so `BenchmarkRenderCursor` fails nothing — and parse+render is not what the
+respawn costs. The respawn's end-to-end price is ~25 ms median, essentially all of it
+process start. §5's amendment says which half CI now holds.
 
 Schema verification record: two live payloads captured 2026-08-16 from a real interactive
 session (the shape with every `context_window` key null — that session had made no API
@@ -2020,6 +2029,7 @@ statusline fixture). What it asserts today:
 | Doc/code sync | `internal/hud` | every render pasted into `docs/design.md` §7.3/§7.11–§7.14 still matches its golden, and every golden is either embedded or explicitly exempted |
 | Picture/code sync | `internal/hud` | `README.md`'s hero picture is re-emitted from the `readme` golden and byte-equal to the committed file, with the characters read back out of the emitted markup and diffed against the render — plus no dollar sign anywhere, and the estimate marker surviving into the picture |
 | Picture/code sync | `internal/council` | the hero picture `README.md` and `docs/council.md` both show is re-emitted from the `activity` golden with its all-blank rows dropped, byte-equal and read back the same way, with exactly one seat wearing the focus mark |
+| Fast path (ADR-002) | `internal/statusline` | the statusline's transitive import graph reaches no `charm.land/bubbletea` or `charm.land/lipgloss` package — the framework cannot be initialized on a path it does not import |
 
 Rules that outrank convenience:
 
@@ -2028,6 +2038,46 @@ Rules that outrank convenience:
   they never depend on the CI terminal.
 - A failing render assertion fails the build.
 - No number appears in README/launch material unless this harness generated it.
+
+**Amendment, 2026-08-16: the fast path is gated structurally and reported numerically.**
+ADR-002's fast-path rule — the statusline never initializes Bubble Tea — was the oldest
+load-bearing claim in this document with nothing checking it. Any `import` added to
+`internal/theme` or `internal/model` for one convenient helper would have compiled,
+passed every golden and every smoke, and put the TUI framework's package init on a path
+that runs on every prompt. Two things now exist, and they are deliberately unequal.
+
+**The hard gate is structural.** `TestFastPathNeverReachesTUIFramework`
+(`internal/statusline/fastpath_test.go`) asks the toolchain — `go list -deps` — for the
+statusline's transitive imports and fails if any is under `charm.land/bubbletea` or
+`charm.land/lipgloss`. It runs inside `go test ./...`, so it gates on both CI jobs. It
+was verified against an injected violation before it was trusted: a bare
+`import _ "charm.land/lipgloss/v2"` in `internal/theme` turns it red, naming the
+package. A gate nobody has seen fail is a gate nobody has tested.
+
+**The timing is reported, and holds only a gross-regression ceiling.** A `ci.yml` step
+spawns the built binary 15 times against `full.json`, asserts the line rendered on every
+sample, prints min/median/max, and fails only if the median exceeds **400 ms**. That
+ceiling is not the budget and does not pretend to be. A shared runner's scheduling noise
+is larger than the quantity ADR-002 cares about, so pinning single-digit — or even
+double-digit — milliseconds there would buy a flaky build, not a guarantee.
+
+**What the gate deliberately does NOT assert**, stated so a later reader does not credit
+it with more than it does:
+
+- **Not the single-digit-millisecond budget.** Nothing in CI measures that. The
+  measurement lives on the reference workstation (i7-7700K, Windows 11, 2026-08-16):
+  parse+render 14 µs, end-to-end median 26.6 and 29.0 ms over two runs of the CI
+  harness. The end-to-end figure is process start, not telltale's work.
+- **Not "the binary does not link the framework".** It does — see §7.5's 2026-08-16
+  correction. One binary carries the HUD, so the module is linked and the structural
+  claim can only ever be about the statusline's own import graph.
+- **Not a small constant regression.** The 400 ms ceiling catches a change in the SHAPE
+  of the path — a whole-corpus scan (§7.18 measured cold scans at 896–1200 ms), a
+  network round trip, a TUI init and its terminal-capability queries. A path that got
+  three times slower and stayed under the ceiling passes, and the printed median is the
+  only thing that would show it. That is a human's job, on purpose.
+- **Not the other two gauges.** `internal/hud` and `internal/council` are TUI surfaces;
+  the rule does not apply to them and the gate does not look at them.
 
 ## 6. Open design questions
 
@@ -2617,8 +2667,18 @@ statusline to stay stdlib-only and never initialize Bubble Tea. So `internal/the
 holds only numbers and names — `WarnPct`, `CritPct`, the ANSI indices, and the shared
 format helpers — and no `Style` type at all. `internal/statusline` maps those indices to
 escape codes as it does today; `internal/hud/style.go` maps them to `lipgloss.Style`
-values. One source of truth for the thresholds, zero coupling of the statusline binary to
-the TUI stack.
+values. One source of truth for the thresholds, zero coupling of the statusline's
+**import graph** to the TUI stack.
+
+**"Import graph", not "binary" — corrected 2026-08-16.** This paragraph used to claim
+zero coupling of the statusline *binary*, and the shipped artifact refutes it:
+`go version -m telltale.exe` lists `charm.land/bubbletea/v2 v2.0.8` and
+`charm.land/lipgloss/v2 v2.0.5`, because §1 ships ONE binary and `telltale hud` is in
+it. §9.8 had already measured the consequence (the 14 MB binary costs ~54 ms per gated
+call, against 36.2 ms for a small one) without this sentence being brought into line. What ADR-002 actually buys,
+and all it buys, is that the code `telltale statusline` reaches never touches the
+framework: no renderer is constructed, no program is started, neither module's package
+init runs. That is now gated rather than asserted — see §5's 2026-08-16 amendment.
 
 **Light and dark backgrounds.** Lipgloss v2 removed `AdaptiveColor` and the global
 renderer, so adaptation is explicit: `Init()` lifts `tea.RequestBackgroundColor()` into a
