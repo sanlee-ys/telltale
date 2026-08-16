@@ -160,6 +160,58 @@ func TestUsageNamesTheOtelPortCollision(t *testing.T) {
 	}
 }
 
+// TestEventsRefusesATakenPortWithTheWayOut is the sink's version of the
+// collector test above, and it exists because the sink had the same residue.
+//
+// Measured 2026-08-16 on Windows 11, main at 1995b34, with a throwaway listener
+// holding 127.0.0.1:4519: `telltale events` printed the raw bind error ("Only
+// one usage of each socket address …") and exited 1. The exit code was already
+// right and it stays 1, so what changed is the sentence.
+//
+// The home directory is redirected because runEvents opens the real store
+// before it binds: without this the test would read the operator's own event
+// log, and this repo's fixtures are synthesized (CLAUDE.md). USERPROFILE is
+// what os.UserHomeDir reads on Windows — the primary target — and HOME is what
+// it reads elsewhere, so both are set rather than one guessed.
+func TestEventsRefusesATakenPortWithTheWayOut(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HOME", home)
+
+	holder, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Close()
+
+	err = runEvents([]string{"--addr", holder.Addr().String()})
+	if err == nil {
+		t.Fatal("runEvents returned nil on a held port: the mode would run without listening")
+	}
+	for _, want := range []string{
+		holder.Addr().String(),
+		"already in use",
+		"--addr",
+		"--server-url",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal never says %q:\n%s", want, err)
+		}
+	}
+}
+
+// TestUsageNamesTheEventSinkPortCollision: same contract as the collector's
+// help. A reader who moves only the sink gets a server that listens forever
+// and stores nothing, and the emitters report that by exiting 0 — so the help
+// has to carry the emitter half, not just the flag.
+func TestUsageNamesTheEventSinkPortCollision(t *testing.T) {
+	for _, want := range []string{"--server-url", "stores nothing"} {
+		if !strings.Contains(usageText, want) {
+			t.Errorf("usage text never mentions %q", want)
+		}
+	}
+}
+
 // TestUsageNamesTheSnapshotMode: the mode exists, so the help has to say so.
 // Same failure shape as TestUsageNamesEverySeat above — a reader who does not
 // see it in the help never runs it.
