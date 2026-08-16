@@ -1,0 +1,24 @@
+  council READ  │  ~/code/telltale                                                                                                                             no turn yet  │  5/5 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▌ ▸ 1 CC Claude Code  ────────  ○ idle  │    2 CX Codex  ─────────────  ○ idle  │    3 AG Antigravity  ───────  ○ idle  │    4 CU Cursor  ────────────  ○ idle  │    5 GR grok  ──────────────  ○ idle  
+▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            │    unsandboxed  tokens                │    unsandboxed  final only            
+                                                                                                                                                                                                        
+                                                                                                                                                                                                        
+                                                                                                                                                                                                        
+                                                                                                                                                                                                        
+                                                                                                                                                                                                        
+                                                                                                                                                                                                        
+                                                                                                                                                                                                        
+                                                                                                                                                                                                        
+                                                                                                                                                                                                        
+                                                                                                                                                                                                        
+                                                                                                                                                                                                        
+                                                                                                                                                                                                        
+                                                                                                                                                                                                        
+▌ no turn dispatched yet.               │  no turn dispatched yet.              │  no turn dispatched yet.              │  no turn dispatched yet.              │  no turn dispatched yet.              
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  › first line                                                                                                                                                                                    │  
+  │    second line                                                                                                                                                                                   │  
+  │    third line_                                                                                                                                                                                   │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────  COMPOSE  ─╯  
+                                                                                                                   → claude  │  enter dispatch  │  ↑↓ scroll  │  tab focus  │  ^j newline  │  ^r rebut  

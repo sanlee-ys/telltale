@@ -547,6 +547,115 @@ func TestTheComposerGrowsWithTheDraft(t *testing.T) {
 	golden(t, "composer-multirow", got)
 }
 
+// fiveSeats is the full room. It adds the Cursor seat and §9.39's grok seat to
+// the three seats room() draws.
+//
+// Five is what a machine with every vendor installed seats. It is also the room
+// the 2026-08-15/16 demo drive ran in. The sweep below needs a fixture that
+// matches the report it answers, not a three-seat approximation of it.
+func fiveSeats() State {
+	st := room()
+	st.Columns = append(st.Columns,
+		Column{
+			Vendor: model.VendorCursor, Label: "Cursor",
+			Avail:   AvailInstalled,
+			Sandbox: SandboxClaim{Level: SandboxNone, Detail: "measured not to restrict writes"},
+			Gran:    GranTokens, Phase: PhaseIdle,
+		},
+		Column{
+			Vendor: model.VendorGrok, Label: "grok",
+			Avail:   AvailInstalled,
+			Sandbox: SandboxClaim{Level: SandboxNone, Detail: "unsandboxed"},
+			Gran:    GranFinalOnly, Phase: PhaseIdle,
+		},
+	)
+	return st
+}
+
+// TestAMultilineDraftNeverCollapsesSilently sweeps the drawn geometry. It pins
+// the property the composer owes a multi-line draft: every line is on screen, or
+// the frame SAYS how many are not.
+//
+// The field report of 2026-08-15/16 (§9.38) blamed the seat count. A three-line
+// brief drew as one row in a live 5/5 room. The same check drew three rows in a
+// one-seat room two days before. The seat count is a hypothesis this package can
+// settle by measurement, so the sweep varies it: one, three and five seats. It
+// also varies every width from the floor up, every height from the floor up,
+// both glyph sets, and the expanded projection. The composer is full-width
+// chrome, so no row count here should move with the columns. This test makes
+// that expectation a fact CI re-checks. It measured the hypothesis as FALSE —
+// see §9.38's 2026-08-16 amendment.
+//
+// The assertion is the honest-clipping rule (§4a.1), not a row count. A draft
+// taller than the compose area may show only its tail. The ceiling is six rows
+// and the cursor sits at the bottom. Such a draft must carry the "N more above"
+// marker, in the same words the column overflow uses. It must never drop lines
+// with nothing on screen to say so. A reader cannot tell a brief that ended from
+// a brief that was cut, and at the composer that ambiguity is one keystroke away
+// from a dispatch of the wrong text.
+func TestAMultilineDraftNeverCollapsesSilently(t *testing.T) {
+	const draft = "first line\nsecond line\nthird line"
+	lines := []string{"first line", "second line", "third line"}
+
+	for _, seats := range []int{1, 3, 5} {
+		for _, w := range []int{MinWidth, 80, columnsBreak, 120, 160, 200, 240} {
+			for _, h := range []int{MinHeight, 12, 16, 20, 24, 30, 40} {
+				for _, ascii := range []bool{false, true} {
+					for _, expanded := range []bool{false, true} {
+						st := fiveSeats()
+						st.Columns = st.Columns[:seats]
+						st.Width, st.Height = w, h
+						st.Mode = ModeComposing
+						st.Expanded = expanded
+						st.Draft = draft
+
+						g := GlyphsFor(ascii)
+						out := Render(st, PlainStyles(), g)
+
+						shown := 0
+						for _, l := range lines {
+							if strings.Contains(out, l) {
+								shown++
+							}
+						}
+						if shown == len(lines) {
+							continue
+						}
+						// Fewer rows than the draft has. That is only legal with
+						// the marker, and the tail must be the part that stayed.
+						if !strings.Contains(out, "more above") {
+							t.Errorf("seats=%d w=%d h=%d ascii=%v expanded=%v: "+
+								"the composer dropped %d of %d draft lines and said nothing",
+								seats, w, h, ascii, expanded, len(lines)-shown, len(lines))
+							continue
+						}
+						if !strings.Contains(out, lines[len(lines)-1]) {
+							t.Errorf("seats=%d w=%d h=%d ascii=%v expanded=%v: "+
+								"the composer clipped the tail, where the cursor is",
+								seats, w, h, ascii, expanded)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestTheFiveSeatRoomDrawsEveryDraftRow is the sweep above at the geometry the
+// field report named. It is a golden, so the claim is bytes and not a predicate:
+// the full room, a three-line brief, and the frame a demo viewer sees.
+//
+// The sweep proves the property across the matrix. This golden shows what the
+// room LOOKS like while it holds the property. A reader of §9.38 wants that
+// half, and a boolean cannot carry it.
+func TestTheFiveSeatRoomDrawsEveryDraftRow(t *testing.T) {
+	st := fiveSeats()
+	st.Width, st.Height = 200, 24
+	st.Mode = ModeComposing
+	st.Draft = "first line\nsecond line\nthird line"
+	golden(t, "composer-multirow-five-seats", render(st))
+}
+
 // TestTheComposerYieldsToTheFloor. At the minimum height a six-row draft would
 // leave the columns nothing, and a room you can type in but not read is not the
 // trade anyone asked for.
