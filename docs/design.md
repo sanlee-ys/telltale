@@ -5535,6 +5535,53 @@ wrong.
 - **It does not promise the order of `vendors`.** The entries arrive sorted by vendor id
   today. Nothing asserts that, so the schema claims nothing about it.
 
+**Amended 2026-08-16: a human-visible consumer ships beside the machine one.** CI validating
+the document proves the shape holds. It does not show anyone what the document is for, and a
+contract whose only consumer is its own gate is a contract nobody has used. `tools/fleet-prompt.ps1`
+is that second consumer: one PowerShell function, one `snapshot --compact` call, one parse,
+one line of prompt text.
+
+- **What it renders.** The vendor count that is watching, the session and live counts, any
+  vendor whose status is not `watching` named with that status, the highest context
+  percentage with the vendor holding it, the busiest relayed quota window, and the words
+  `scan degraded` when `scan_error` is not null.
+- **What it demonstrates, which is the reason it exists.** The two rules the schema states
+  survive the trip into a caller. A null drops its whole segment rather than printing 0 or a
+  dash, which in PowerShell means `if ($null -eq $v)` and never `if (-not $v)` — `-not 0` is
+  true, so the idiomatic spelling is exactly the one that erases a measured zero. A figure
+  whose vendor lists `context_pct` in `estimated` keeps the render layer's `~`. An unknown
+  `schema_version` returns an empty string, because a prompt segment that guesses at a
+  contract it does not know is worse than one that is absent for a release.
+- **Windows PowerShell 5.1, not 7.** That is what a Windows 11 box has before anyone installs
+  anything, and this is the primary platform (ADR-002). No ternary, no null-coalescing, no
+  `ConvertFrom-Json -Depth` and no `-AsHashtable`. Output is ASCII and holds no ANSI escapes;
+  colour is the caller's, and the line has to read on a console that has none.
+- **`scan_error` renders as two words and never as its own text.** The message can be long
+  enough to break a prompt, and it can name a path. A prompt segment is the wrong surface for
+  a diagnostic string.
+
+**Driven 2026-08-16, Windows 11, PowerShell 5.1.26100.9168**, against the real stores at branch
+`snapshot-example` off main `08c300f`. The live document (1554 sessions, six vendors watching,
+`context_pct_max` 75.8 on codex whose `estimated` holds `context_pct`, and agy's four relayed
+windows) rendered:
+
+```
+tt 6 watching | 1554 sessions, 3 live | ctx ~75.8% codex | quota 12.2% agy/gemini-weekly
+```
+
+The four goldens drove the shapes a healthy fleet cannot produce, through the same `-FromFile`
+path. `watching.json` produced `attn 1: codex unreadable` beside `ctx ~61.3% claude`;
+`drifted.json` produced `attn 1: claude drifted` and `scan degraded`; `empty-fleet.json`
+produced counts and nothing else, no `ctx` segment at all, because every reading in it is null.
+`zero-vs-absent.json` is the pair that matters and it held: its `context_pct_max` of 0 rendered
+`ctx ~0%`, a printed zero, against empty-fleet's null rendering as no segment whatsoever. A
+`schema_version` of 2 returned the empty string.
+
+The live document is quoted in the pull request unredacted, and no redaction was needed: the
+surface renders numbers and keys, so the real output carries vendor ids, counts, percentages and
+timestamps and no session name or workspace path. That is the "never content" claim above,
+observed rather than asserted.
+
 <a id="s8"></a>
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
