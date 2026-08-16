@@ -1465,6 +1465,79 @@ never observed mid-write, so the write is atomic by the vendor's own naming rath
 observation here. The adapter reads none of these bytes, and this measurement did not
 change that.
 
+### 3.9b Pi seam — source-surveyed 2026-08-16; not installed here, nothing live-verified
+
+**Environment and evidence class.** This is the §3.2 class (researched from source, NOT
+live-verified), and it is the weaker half of that class: Pi is not installed on this
+machine, so no live corpus exists here and no claim below has met real bytes. The read
+was the writer's own code — `packages/coding-agent/src/core/session-manager.ts`,
+`src/config.ts`, and `packages/ai/src/types.ts` — in **`earendil-works/pi`**, default
+branch on 2026-08-16, newest release `v0.84.2` (2026-08-14). Both former names
+(`badlogic/pi-mono`, `earendil-works/pi-mono`) redirect there. The npm package
+`@mariozechner/pi-coding-agent` stopped at 0.73.1 in May 2026; current distribution is
+the `@earendil-works` scope and compiled Bun binaries. The §3.7 lesson stands: the first
+live pass will falsify something in this section. That is what it is for.
+
+**Why the survey ran now.** Pi is the largest coding agent with zero HUD coverage in the
+lane (≈91k stars at survey time), and §9.1 already rejects it as a council *seat* under
+the harness-re-host class. This section is the adapter half: "we looked", so a future
+session does not start from "nobody looked".
+
+**Store inventory (from source, not from a listing).**
+
+```
+~/.pi/agent/
+  sessions/
+    --<cwd-slug>--/            one directory per workspace: the cwd with leading
+                               separator dropped and / \ : each replaced by "-"
+      <ts>_<session-id>.jsonl  one session; ts = ISO timestamp with : and . -> "-"
+  auth.json                    provider API keys / OAuth tokens — NEVER read
+  settings.json  models.json  themes/  tools/  prompts/  bin/
+```
+
+Two relocation facts an adapter must pin: `PI_CODING_AGENT_DIR` and
+`PI_CODING_AGENT_SESSION_DIR` override the paths, and the package's `piConfig`
+(`name`, `configDir`) can rebrand the whole product — a rebranded build stores under a
+different dot-directory entirely. The adapter would pin the default `.pi` and say so.
+
+**Format.** JSONL, session `version` 3 (`CURRENT_SESSION_VERSION`). The first record is
+a header: `{type:"session", version, id, timestamp, cwd, parentSession?}`. Every other
+record carries `{type, id, parentId, timestamp}` — **entries form a tree, not a list**.
+Pi branches within a session, so conversation order is a `parentId` walk from the leaf,
+not file order. Entry types: `message`, `thinking_level_change`, `model_change`,
+`compaction`, `branch_summary`, `custom`, `custom_message`, `label`, `session_info`.
+One write-path quirk: a session is not flushed to disk until it holds an assistant
+message, so an abandoned prompt may never produce a file.
+
+**Field prospects** — prospects, not verdicts; the verdict column exists only after a
+live pass:
+
+| Field | Prospect | Source in the format |
+|---|---|---|
+| name | plausible | `session_info` entry's optional `name` (user-set). Absent is a state; the workspace-basename fallback (§3.7 precedent) applies. |
+| model | plausible | `model_change` entries carry `provider` + `modelId`; assistant messages also carry `model` and `responseModel`. |
+| workspace | plausible | header `cwd`, verbatim. The directory slug is the fallback, as in §3.7. |
+| last_activity | plausible | newest entry `timestamp` (ISO), folded with mtime per §6 Q8; assistant and toolResult messages also carry unix-ms timestamps. |
+| tokens | plausible | **every assistant message writes `usage`**: `input`, `output`, `cacheRead`, `cacheWrite`, optional `reasoning`, `totalTokens`. |
+| cost | plausible, with the §3.9a ruling attached | the second vendor that writes money down, and it writes **dollars, per message**: `usage.cost {input, output, cacheRead, cacheWrite, total}`. No session total exists on disk — the TUI sums in memory (`usage-totals.ts`). A summed total is a derived number wearing a read one's clothes (§3.9a), and the tree sharpens it: all-entries and active-path totals differ. The honest carry is the last message's `cost.total` as a labeled Extra, grok-style. |
+| context % | **CapNone until measured** | a numerator prospect exists (last assistant `usage` occupancy) but the denominator is nowhere in the session file — it lives in Pi's shipped model catalog, which is the §3.8 1048576 trap again. |
+| quota | **unknown, not "measured absent"** | Pi is bring-your-own-key, so structural absence is expected — but the grep that made §3.9a's absence a measurement needs a live corpus this box does not have. |
+| sub-agents | weak prospect | header `parentSession` is a child→parent link (the inverse of agy's structural nesting) — countable only by scanning siblings for parents. |
+| liveness | unknown | nothing seen in the source read. |
+
+**The credential boundary is cleaner than Cursor's.** `auth.json` is a sibling of
+`sessions/`, not inside the session files — an adapter that reads only `sessions/**`
+never opens a credential-bearing file. The planted-marker test is still owed, because
+session content itself is untrusted.
+
+**The extension seam is the part no other vendor has.** Pi's product thesis is an
+in-process TypeScript extension system. That means a *Pi extension* could write
+telltale's relay files (§7.15/§7.16 shapes) directly, with vendor-computed numbers, no
+adapter parse at all — which would make Pi the first external writer of the relay
+contract rather than the sixth in-tree adapter. Which of the two paths to build is an
+owner decision deferred to post-launch demand; this survey only records that both are
+open and neither is blocked by the format.
+
 ### 3.10 The canary set — what each adapter actually watches
 
 Every survey above pins an adapter to a private, unversioned on-disk format. §7 records how
@@ -5316,6 +5389,10 @@ enforcement for four seats when one had a mechanism.
   resume nothing on this machine to resume from.
 - **Goose** — **REJECTED on platform.** No Windows path at all. The same ADR-002 reason as
   Amp, without the second problem.
+- **Pi** (`earendil-works/pi`) — **the named instance of the re-host class below**, recorded
+  by name because its size makes it the one people ask about. A Pi seat re-hosts model
+  families already seated here. The HUD adapter is a different question with a different
+  answer: the format is surveyed and open (§3.9b), and the build waits on demand.
 - **Every BYO-harness re-host** — **REJECTED as a class**, rather than one vendor at a time.
   Each of them re-hosts a model family that already has a seat here. §9.4's whole argument for
   turn 1 being blind is that the answers are *independent*; a harness wrapped around a model
