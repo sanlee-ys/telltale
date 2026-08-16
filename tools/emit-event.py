@@ -13,21 +13,35 @@ omit the flag; a wrapper for a vendor with no such field passes it.
 Hard rules, in priority order:
   1. Exit 0 on EVERY path. A hook that exits non-zero can colour the agent's
      turn with an error the user did not cause; the sink is never worth that.
-  2. Never block the agent. One POST, a 5 second timeout, no retry. A sink
-     that is down costs at most those 5 seconds and one stderr line.
+  2. Never block the agent. A quarter-second connect probe asks "is the sink
+     listening" before the POST; only the POST itself gets the 5 second
+     budget, and there is no retry. A sink that is down costs the probe and
+     one stderr line. The probe exists because "5 second timeout" did not
+     bound the down path in practice: a refused connect never times out, and
+     Winsock retries it internally for ~2 seconds per address family
+     (measured 2026-08-15, Windows 11) — a plain POST to a down sink cost
+     ~4.4s on every hook event, which is a blocked agent, not a bounded one.
   3. Send the payload verbatim. No summarization, no redaction here — scope
      control belongs to the sink (loopback only) and to what you wire.
+
+The default URL names 127.0.0.1, never localhost: the sink binds 127.0.0.1
+only, and on Windows `localhost` resolves ::1 first — so the old default
+paid the full Winsock retry cycle against ::1 before reaching the sink,
+even when the sink was up.
 """
 
 import argparse
 import json
+import socket
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
-DEFAULT_URL = "http://localhost:4519/events"
+DEFAULT_URL = "http://127.0.0.1:4519/events"
 TIMEOUT_SECONDS = 5
+PROBE_TIMEOUT_SECONDS = 0.25
 
 # Fields promoted from the payload's top level to the event's top level, so a
 # reader can filter without parsing every payload. Promotion is copy, not
@@ -70,6 +84,28 @@ def build_event(payload, source_app, event_type):
     return event
 
 
+def sink_is_listening(url):
+    """One bounded connect against the sink's address. True means POST now.
+
+    A False answer drops the event — rule 2 ranks the agent's time above the
+    event. An address the URL parser cannot name answers True, so the POST
+    path (and its own error handling) stays the single authority on failure.
+    """
+    try:
+        parts = urllib.parse.urlsplit(url)
+        host = parts.hostname
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    except ValueError:
+        return True
+    if not host:
+        return True
+    try:
+        with socket.create_connection((host, port), timeout=PROBE_TIMEOUT_SECONDS):
+            return True
+    except OSError:
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="POST one hook event from stdin to the telltale event sink"
@@ -101,6 +137,11 @@ def main():
         payload = {"unparsed_stdin": raw, "parse_error": str(err)}
     if not isinstance(payload, dict):
         payload = {"non_object_payload": payload}
+
+    if not sink_is_listening(args.server_url):
+        # Fail open, fast: the sink being down must never block the agent.
+        print("emit-event: sink not listening, event dropped", file=sys.stderr)
+        return
 
     event = build_event(payload, args.source_app, args.event_type)
     body = json.dumps(event).encode("utf-8")
