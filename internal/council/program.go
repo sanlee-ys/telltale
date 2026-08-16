@@ -424,9 +424,24 @@ func (m *Model) reattach(re Reattachment) {
 		m.st.Notice += ", saved " + age(time.Since(re.Room.SavedAt))
 	}
 	m.st.Notice += ", " + itoa(seats) + "/" + itoa(m.st.Seated()) + " seats restored"
-	if !sameDir(re.Room.Workspace, m.st.Workspace) {
-		// The room reopened somewhere other than where it was saved — a --cd
-		// override, or a saved directory that no longer exists. The seats'
+	switch {
+	case re.WorkspaceGone != "":
+		// The saved directory is not there any more — renamed, unmounted, or a
+		// git worktree someone removed. Its OWN sentence, because the one below
+		// reads identically to a --cd override and this is not one: the user
+		// changed nothing, and what they are looking at is a room that lost the
+		// place it was working in.
+		//
+		// Said loudly for a reason beyond accuracy. The room opens in the
+		// current directory and the next completed turn writes THAT over the
+		// saved workspace, so this notice is the only moment the old path is
+		// ever shown again — the same argument Reattachment.Offered is built on.
+		m.st.Notice += " (the room was in " + abbreviate(re.WorkspaceGone, m.st.Home) +
+			", which no longer exists — it opened in " +
+			abbreviate(m.st.Workspace, m.st.Home) + " instead)"
+	case !sameDir(re.Room.Workspace, m.st.Workspace):
+		// The room reopened somewhere other than where it was saved, and the
+		// saved directory is still there: a --cd override. The seats'
 		// conversations came back either way; only where they act moved, and
 		// the mechanics are the same as an in-room /cd.
 		m.st.Notice += " (the room was in " + abbreviate(re.Room.Workspace, m.st.Home) +
@@ -539,6 +554,63 @@ func resolveWorkspace(dir string) string {
 		dir = abs
 	}
 	return dir
+}
+
+// openWorkspace decides which directory a launching room is pointed at: --cd if
+// typed, else where the saved room was, else here.
+//
+// A FUNCTION rather than the block it used to be inside Run, and that is the
+// finding of 2026-08-16 as much as the fallback below it. The decision lived
+// inline in Run, Run enters the alternate screen, and so no test could reach it:
+// when a live room reopened showing `~` instead of the repo it was saved in,
+// nothing in the suite could say whether the restore had dropped the field or
+// the file had honestly recorded a home-directory room. An untestable decision
+// is one whose failures are all reported by the operator.
+//
+// Returns the directory, and separately the saved path it REFUSED, so the caller
+// can say so. Both non-cwd sources are verified to be directories before the
+// room is pointed at them, and the two failures are answered differently:
+//
+//   - A typed --cd that is not a directory is the LoadBrief discipline — a plain
+//     error before the alternate screen, because the user named this path and a
+//     silent substitution would act somewhere they did not ask for.
+//   - A SAVED directory that is gone (a renamed repo, a removed git worktree, an
+//     unmounted drive) is not the user being wrong, so it opens anyway in the
+//     current directory. It is named rather than swallowed: the room falls back
+//     AND the next completed turn writes that fallback over the saved workspace,
+//     so a silent one costs the user the only record of where the room was, in
+//     the same way and for the same reason --fresh's Offered notice exists.
+func openWorkspace(opts Options, re Reattachment) (ws, gone string, err error) {
+	switch {
+	case opts.Dir != "":
+		ws = resolveWorkspace(opts.Dir)
+		if !isDir(ws) {
+			return "", "", errors.New("--cd " + opts.Dir + ": not a directory")
+		}
+		return ws, "", nil
+	case re.Active() && !re.Offered:
+		// The restored room's own directory. Resolved rather than trusted as
+		// written: the file holds whatever the saving room had, and every other
+		// consumer of a workspace in this package gets an absolute path.
+		ws = resolveWorkspace(re.Room.Workspace)
+		if !isDir(ws) {
+			return resolveWorkspace(""), re.Room.Workspace, nil
+		}
+		return ws, "", nil
+	default:
+		return resolveWorkspace(""), "", nil
+	}
+}
+
+// isDir reports whether a path is a directory that exists right now.
+//
+// The error is deliberately collapsed into false. A path council cannot stat is
+// a path it cannot dispatch four agents against, and telling a permission error
+// apart from a missing directory would buy the room a distinction it has no
+// different answer for.
+func isDir(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.IsDir()
 }
 
 type spinMsg time.Time
@@ -2031,28 +2103,15 @@ func Run(opts Options) error {
 		}
 	}
 
-	// The workspace: --cd if typed, else where the room was, else here. Both
-	// non-cwd sources are verified to be directories before the room is
-	// pointed at them: a typed --cd that is not one is the LoadBrief
-	// discipline — a plain error before the alternate screen — and a saved
-	// directory that is gone (a renamed repo) surfaces as one honest sentence
-	// in the notice, not as four seats failing their first turn against a
-	// path that no longer exists.
-	ws := ""
-	switch {
-	case opts.Dir != "":
-		ws = resolveWorkspace(opts.Dir)
-		if fi, serr := os.Stat(ws); serr != nil || !fi.IsDir() {
-			return errors.New("--cd " + opts.Dir + ": not a directory")
-		}
-	case re.Active() && !re.Offered:
-		ws = re.Room.Workspace
-		if fi, serr := os.Stat(ws); serr != nil || !fi.IsDir() {
-			ws = resolveWorkspace("")
-		}
-	default:
-		ws = resolveWorkspace("")
+	ws, gone, err := openWorkspace(opts, re)
+	if err != nil {
+		return err
 	}
+	// Carried on the Reattachment because the notice is written by reattach(),
+	// which must not stat the path a second time: two reads of the same
+	// directory a moment apart can disagree, and the room would then choose its
+	// workspace on one answer and describe it with the other.
+	re.WorkspaceGone = gone
 	// Threaded through Options so stateWith and the model see the one answer.
 	opts.Dir = ws
 

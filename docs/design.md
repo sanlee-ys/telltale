@@ -8730,6 +8730,64 @@ thing in this file that would be prose.
 **Bumping `roomVersion`.** A bump costs every user their reattach, and it is reserved for a
 field that changes meaning. Nothing here changes what an existing key means.
 
+#### Amendment, 2026-08-16: the restore was correct, the fallback was silent, and neither had a seam
+
+A live 5/5 room reopened with the workspace cell reading `~` instead of the repo it was saved
+in (`STATE.md`, the 2026-08-15/16 drive). The roster came back and the workspace did not.
+`STATE.md` recorded the cause as undetermined: either an earlier session saved `~` honestly, or
+the restore dropped the field. This amendment answers that question with a measurement.
+
+**The restore does not drop the field.** `TestASavedWorkspaceIsRestored` plants a `room.json`
+whose saved workspace exists, opens the room, and asserts the workspace comes back. It passes
+against the *untouched* decision logic. The ordinary reopen was always correct, so the file
+itself held `~`.
+
+**The mechanism is the fallback that put it there.** `Run` verified the saved directory with
+`os.Stat` and replaced it with the current directory when that failed. It said nothing specific
+about the replacement. The reattach notice printed one sentence for two different events: *the
+room was in A; it is now in B* is what a `--cd` override prints, and a vanished workspace
+printed the same words. Nothing distinguished a directory the user moved to from a directory
+that no longer exists.
+
+**The fallback then persisted itself, and that is the real cost.** The room opens in the current
+directory. The next completed turn calls `saveRoom`, which writes `m.st.Workspace`. So one
+launch against a missing path overwrites the only record of where the room was. A renamed repo,
+an unmounted drive or a removed git worktree costs the saved workspace permanently, and the room
+never names the path it lost. That is `Reattachment.Offered`'s argument applied to the
+workspace: the destruction is silent and total, so the room must state it once.
+
+**Nobody could measure any of this, which is the other half of the finding.** The decision was a
+`switch` inside `Run`, and `Run` enters the alternate screen. No test could reach it. An
+untestable decision is one whose failures are all reported by the operator, which is exactly how
+this one arrived.
+
+**The fix.** `openWorkspace(opts, re)` is that decision as a function. It returns the directory
+AND the saved path it refused. `Run` carries the refused path on `Reattachment.WorkspaceGone`,
+and `reattach` gives it its own sentence: *the room was in ~/code/x, which no longer exists — it
+opened in ~/code/y instead*. The `--cd` sentence stays for the case it actually describes.
+
+- **One stat, one answer.** `openWorkspace` is the only place that stats the path. `reattach`
+  reads the carried fact instead of statting again. Two reads a moment apart can disagree, and
+  the room would then choose its workspace on one answer and describe it with the other.
+- **`WorkspaceGone` is never written to disk.** It is a fact about this launch, not about the
+  room. `room.json` stays the keys and nothing else, per ADR-008's ninth amendment.
+- **A file sitting where the directory was is gone too.** `isDir` asks whether the path is a
+  directory, not whether it exists. `os.Stat` succeeds on a file, and a room pointed at a file
+  would dispatch four agents against it.
+- **A saved workspace is resolved rather than trusted as written.** `resolveWorkspace` makes it
+  absolute. Every other consumer of a workspace in this package is handed an absolute path.
+- **The `--cd` refusal is unchanged.** A typed path that is not a directory stays a plain error
+  before the alternate screen. The user named that path, so a silent substitution would act
+  somewhere they did not ask for.
+
+`seatsFor` still mirrors this decision on `re.Active() && !re.Offered`. The mirror moved from a
+`switch` in `Run` into `openWorkspace`, and the shared condition is unchanged.
+
+**Declined, and named rather than left implicit.** The room still writes the fallback over the
+saved workspace at the next completed turn. Preserving the old path would make `room.json`
+describe a room nobody is in, which this section already refuses for the roster and refuses here
+for the same reason. The notice is the answer chosen instead.
+
 ### 9.33 the cursor seat's per-turn cost, split at last — and the seam that was hidden from `--help`
 
 §9.8 gave the Claude seat one live process and measured what it bought. The obvious next
