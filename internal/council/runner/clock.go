@@ -49,6 +49,16 @@ type TurnClock struct {
 	// seat and the moment, both of which are facts this package holds.
 	At time.Time
 
+	// Race is the room's name for a race this turn was an attempt in, copied
+	// off the Spec and otherwise untouched. Empty on an ordinary turn.
+	//
+	// It is the one thing on this record the runner did not measure, and it is
+	// carried rather than measured on purpose: the seat and the moment cannot
+	// distinguish a racer from the room's own turn on the same vendor, so
+	// without it the split a race was run to read is unattributable to that
+	// race. See Spec.Race for the measurement that forced it.
+	Race string
+
 	// Spawn is process launch: Start's own entry to exec.Start returning. It
 	// includes the pipes and the job object, because those are work the turn
 	// pays for before the vendor exists.
@@ -82,10 +92,25 @@ func (c TurnClock) Total() time.Duration {
 }
 
 // String is the trace line: one turn, one seat, one row.
+//
+// A race is APPENDED rather than given a column, so every line an existing
+// reader already knows how to parse keeps its shape and its field order — the
+// trace is a log a person greps, and moving the timings would break every eye
+// and every script that has read one.
+//
+// Omitted entirely when there is no race, and that is the §4a.1 rule rather
+// than terseness. An unmeasured Span prints "-" because the stretch existed and
+// was not measured; an ordinary turn is not a race whose id went missing, it is
+// not a race at all, so there is no field to mark absent. Printing "race=-" on
+// every ordinary line would invent a category for the room's normal case.
 func (c TurnClock) String() string {
-	return fmt.Sprintf("%s %-6s spawn=%s wait=%s stream=%s total=%s",
+	s := fmt.Sprintf("%s %-6s spawn=%s wait=%s stream=%s total=%s",
 		c.At.UTC().Format("2006-01-02T15:04:05.000Z"), c.Vendor,
 		c.Spawn, c.Wait, c.Stream, c.Total().Round(time.Millisecond))
+	if c.Race != "" {
+		s += " race=" + c.Race
+	}
+	return s
 }
 
 // Trace receives one record per finished turn per seat.
@@ -128,7 +153,12 @@ func emitTurnClock(c TurnClock) {
 // visible.
 type clock struct {
 	vendor model.VendorID
-	birth  time.Time
+	// race is fixed for the life of the process, because a racer's process
+	// races exactly once: an attempt is a FRESH one-shot session by §9.37's
+	// founding ruling, so there is no second turn on it that could belong to a
+	// different race, or to no race.
+	race  string
+	birth time.Time
 
 	mu sync.Mutex
 	// pending holds the launch until a turn claims it. A session's spawn belongs
@@ -145,8 +175,8 @@ type clock struct {
 
 // newClock starts the stopwatch. It runs from here rather than from exec.Start
 // so the pipes and the job object land in the spawn figure with the launch.
-func newClock(v model.VendorID) *clock {
-	return &clock{vendor: v, birth: time.Now()}
+func newClock(v model.VendorID, race string) *clock {
+	return &clock{vendor: v, race: race, birth: time.Now()}
 }
 
 // launched closes the spawn stretch. Called once, after the child is running.
@@ -202,7 +232,7 @@ func (c *clock) end(at time.Time) {
 		c.mu.Unlock()
 		return
 	}
-	rec := TurnClock{Vendor: c.vendor, At: at, Spawn: c.spawn}
+	rec := TurnClock{Vendor: c.vendor, At: at, Race: c.race, Spawn: c.spawn}
 	if c.first.IsZero() {
 		// Nothing ever arrived, so there is no boundary to split on and the
 		// whole turn was wait. Stream stays unmeasured rather than zero: a turn

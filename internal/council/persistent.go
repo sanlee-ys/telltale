@@ -426,7 +426,7 @@ func (m *Model) spawnSeat(v vendors.Vendor, c *Column, resumeID string, want ven
 // scopes what this attempt touches. That is the caveat the seat's posture
 // detail already carries (detect.go's Cursor branch); a worktree gives it more
 // force, not less, and nothing here claims a confinement nothing measured.
-func (m *Model) startEphemeralRacer(ctx context.Context, cv vendors.Conversational, c *Column, tree, prompt string) (seatSession, error) {
+func (m *Model) startEphemeralRacer(ctx context.Context, cv vendors.Conversational, c *Column, tree, prompt, race string) (seatSession, error) {
 	spec, proto, err := cv.Open(tree, c.Binary, "", vendors.PostureWrite)
 	if err != nil {
 		return nil, err
@@ -434,6 +434,13 @@ func (m *Model) startEphemeralRacer(ctx context.Context, cv vendors.Conversation
 	if proto == nil {
 		return nil, errNotALiveSeat
 	}
+	// The fourth thing the call shape carries, and the only one that is not a
+	// refusal: this seat's attempt is labelled with its race like every other
+	// racer's (runner.Spec.Race). Stamped here rather than in dispatch because
+	// this arm builds its own spec — cv.Open, not FirstTurn — so a label
+	// applied only at the obvious call site would leave the merged seat as the
+	// one racer nobody could find in the trace.
+	spec.Race = race
 	sess, err := startRPCSession(ctx, spec, m.events, proto)
 	if err != nil {
 		return nil, err
