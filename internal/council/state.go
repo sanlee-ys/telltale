@@ -1241,13 +1241,21 @@ func (s State) Settling() bool {
 //
 // It is deliberately NOT named as "a turn is live", because it is not that and
 // cannot be: State does not see Model.turn, which is the only exact predicate.
-// One gap is known and PRE-DATES this method — agy reports a failed turn as a
-// KindError carrying exit code 0 and no error (vendors/agy.go), which sets
-// PhaseFailed without retiring the column, so that seat is neither Busy nor
-// Settling while its turn is still live and `q` is still refused. Closing it
-// means either retiring that column or moving the fact onto State; both are
-// outside a change about one vendor's linger, and naming the gap is what keeps
-// the next reader from trusting this for more than the footer asks of it.
+// The one gap this method shipped with is CLOSED (§9.33's 2026-08-16 amendment):
+// agy reports a failed turn as a KindError carrying exit code 0 and no error
+// (vendors/agy.go), which set PhaseFailed without retiring the column, so that
+// seat was neither Busy nor Settling while its turn was still live and `q` was
+// still refused. dispatch.go now settles that column instead — the failure is
+// the same split as an answer that lands ahead of its process, so it wears the
+// same word. Retiring it was the alternative and is refused on §9.33's own
+// argument: turnColumnFinished cancels the turn's context and that kills a
+// process which is still winding down.
+//
+// What the method is still not, and what the closure does not change: a seat
+// whose column is terminal and whose Settling nobody set is invisible here. The
+// predicate is only ever as good as the retirement paths that feed it, so a NEW
+// path that leaves a column terminal inside a live turn re-opens this — which is
+// why the argument above is written out rather than left at "fixed".
 func (s State) InFlight() bool { return s.Busy() || s.Settling() }
 
 // Gating reports that a vendor is blocked on a decision.
