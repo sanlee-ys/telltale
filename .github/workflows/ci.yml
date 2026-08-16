@@ -159,10 +159,20 @@ jobs:
       # and two statements drift.
       #
       # It runs HERE, after the quota relay smokes, on purpose. Those steps
-      # have just written quota/claude.json and quota/agy.json, so the document
-      # this runner produces carries populated `quota` arrays with a
-      # `quota_read_at` beside them. A gate whose only fixture is a bare
-      # machine checks the empty half of the schema.
+      # have just written quota/claude.json and quota/agy.json, so this
+      # runner's document carries relayed quota rather than the empty arrays a
+      # bare machine would emit. A gate whose only fixture is a bare machine
+      # checks the empty half of the schema.
+      #
+      # Measured 2026-08-16 by reproducing this exact sequence with a
+      # redirected home: `agy` reaches the document with TWO windows and a
+      # quota_read_at, one of them a used_pct of 0 — a measured zero on the
+      # runner, unstaged — while `claude` reaches it with `[]` and a null read
+      # time. Both fixtures relay; agy's reset times are relative
+      # (reset_in_seconds) and survive, and full.json's are absolute unix
+      # stamps now in the past, which quotacache drops because a window whose
+      # reset has passed describes a window that no longer exists. So this one
+      # document happens to carry both halves of the quota shape.
       - name: Install the JSON Schema validator (pinned)
         run: python -m pip install --disable-pip-version-check jsonschema==4.23.0
       - name: Gate (the snapshot document against its published schema)
@@ -185,6 +195,13 @@ jobs:
           # One line in, one line out: the compact form is what a program pipes.
           $lines = @(Get-Content snapshot-live.json).Count
           if ($lines -ne 1) { throw "--compact printed $lines lines; a reader that streams gets one" }
+
+          # The ordering claim above, asserted rather than trusted. If agy's
+          # window ever stops surviving the relay, this gate quietly loses its
+          # only populated `quota` array and goes on passing.
+          if ((Get-Content snapshot-live.json -Raw) -notmatch '"quota_read_at":"') {
+            throw "no vendor carried a relayed quota window; this gate now checks only the empty half of the schema"
+          }
 
           python tools/validate-snapshot.py snapshot-live.json
           if ($LASTEXITCODE -ne 0) { throw "the built binary's document does not match docs/snapshot.schema.json" }

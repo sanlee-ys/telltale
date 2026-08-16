@@ -5461,6 +5461,13 @@ consumer can fetch, and the gate reads that file rather than a second copy of it
   cannot produce: a vendor the operating system refused with its message, a drifted
   store, a scan error, and the zero-vs-absent pair. The step also re-asserts the
   "writes nothing" half, as a before/after of `~/.telltale`.
+  It runs after the quota relay smokes, so the runner's document carries relayed quota.
+  Measured 2026-08-16 against that exact sequence: `agy` arrives with two windows and a
+  `quota_read_at`, one of them a `used_pct` of 0 — a measured zero on a bare runner,
+  unstaged — while `claude` arrives with `[]` and a null read time, because full.json's
+  reset stamps are absolute and now in the past. The step asserts that at least one
+  vendor still carries a relayed window, so the day that stops being true is a red build
+  and not a quietly narrower gate.
 - **The gate is proved non-vacuous on every run.** Three mutations break the real
   document one way the contract forbids, and the validator must reject all three: a
   dropped optional key (the `omitempty` regression), the string `"n/a"` where a nullable
