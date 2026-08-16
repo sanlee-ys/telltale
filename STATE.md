@@ -396,10 +396,11 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   needs an interactive re-capture — expect FOUR quota buckets now, not two
   (§3.8); the **multi-chunk transcript** is the case that would break that
   adapter and has never been observed (all chunked conversations hold one
-  chunk). Two captures are owed on the cursor statusline seam (§7.16's
+  chunk). One capture is owed on the cursor statusline seam (§7.16's
   amendment carries the one-minute manual step for a populated
-  `context_window`) and on the Claude payload (source-read at 2.1.233, zero
-  live payloads captured in fifteen minutes of trying).
+  `context_window`). The Claude payload capture landed 2026-08-16: seven live
+  fires at the pinned 2.1.233 agreed with the source read on every count, and
+  §7.16b's amended limitation carries the record.
 
 - **ATTRIBUTED, 2026-08-08. Spawning was never the cost; `wait` is, and only on
   the three seats that are not persistent.** One traced `@all` turn, all four

@@ -16,6 +16,11 @@
 //     not the whole payload. A field measured in the bundle but absent from the
 //     docs is still a measured field; this package now says which is which.
 //
+// A live capture (2026-08-16, seven fires from one interactive session at the
+// same 2.1.233 build) later confirmed both bullets on the wire and added one
+// more measured-but-unmodelled field: `effort`. Design.md §7.16b's
+// known-limitations record carries the numbers.
+//
 // The parser's tolerance of unknown fields (see Parse) is what made that growth
 // a non-event for every telltale release in between.
 package claude
