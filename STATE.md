@@ -405,8 +405,14 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   in dated design.md amendments; `gh pr list` has the numbers). That wave's
   own two residues are closed by the third: both listeners now greet a taken
   port with a named error (§7.16a, §7.21), and the OTLP collision has a binary
-  smoke in CI — the smoke's eventsink twin is the one small residue the third
-  wave produced, queued for the next ci.yml owner. The
+  smoke in CI, and the smoke's eventsink twin landed with the fourth wave's
+  schema gate — that queue is empty. The fourth wave also retired two
+  completeness misses by ruling: the drift loop lives in `doctor` (which found
+  the claude and codex field-map surveys genuinely stale on its first run, and
+  re-reports them every run until someone re-measures §3.1/§3.2 — that notice
+  is the durable record, so no entry here duplicates it), and snapshot's first
+  measured consumers exist (CI's schema gate, and a driven example in
+  `tools/fleet-prompt.ps1`). The
   **Windows `danger-full-access` finding does not port to `codex app-server`**
   — that path has its own `windowsSandbox/*` surface nobody has probed; any
   seat move re-measures rather than inherits. The **agy statusline payload is still pinned at 1.1.9** and
