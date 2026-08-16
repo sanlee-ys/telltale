@@ -751,6 +751,11 @@ func usageQuotaAbsence(v model.VendorID, g Glyphs) []string {
 			"no quota anywhere" + mid + "its store holds experiment values, not usage",
 			"no quota anywhere",
 		}
+	case model.VendorPi:
+		return []string{
+			"no quota anywhere" + mid + "no account window on its session files",
+			"no quota anywhere",
+		}
 	case model.VendorGrok:
 		// The measured sentence, from §3.9a's survey rather than from the
 		// vendor's docs: a regex for rate/limit/quota across the whole store

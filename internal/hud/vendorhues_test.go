@@ -38,6 +38,7 @@ func hueOpen(t *testing.T, st lipgloss.Style) string {
 var ownHueVendors = []model.VendorID{
 	model.VendorClaude, model.VendorCodex,
 	model.VendorAntigravity, model.VendorCursor, model.VendorGrok,
+	model.VendorPi,
 }
 
 // TestEveryVendorWearsItsOwnHueOnTheUsagePage. Six blocks stack in one column
@@ -49,6 +50,12 @@ func TestEveryVendorWearsItsOwnHueOnTheUsagePage(t *testing.T) {
 	frame := Render(usageFleetState(120, 28), sty, g)
 
 	for _, v := range fleetOrder {
+		if v == model.VendorPi {
+			// usageFleetState has no Pi session and Pi has no quota, so
+			// usageBlocks omits the heading. vendorHue(pi) is asserted
+			// in TestVendorHuesMatchCouncilsSeats.
+			continue
+		}
 		name := string(v)
 		if !strings.Contains(frame, sty.VendorIdentity(v).Render(name)) {
 			t.Errorf("%s's usage heading does not render its name in its own hue:\n%s",
@@ -138,6 +145,9 @@ func TestVendorHuesMatchCouncilsSeats(t *testing.T) {
 		model.VendorAntigravity: "4",  // blue
 		model.VendorCursor:      "12", // bright blue
 		model.VendorGrok:        "14", // bright cyan
+	}
+	if got := vendorHue(model.VendorPi); got != "13" {
+		t.Errorf("vendorHue(pi) = %q, want 13 — Pi is HUD-only and has no council seat hue to match", got)
 	}
 	for v, hue := range want {
 		if got := vendorHue(v); got != hue {

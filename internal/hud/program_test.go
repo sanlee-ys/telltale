@@ -69,7 +69,7 @@ func TestKeysCycleFilterAndSortAndToggleHelp(t *testing.T) {
 
 	for _, want := range []Filter{
 		FilterClaude, FilterCodex, FilterGemini, FilterAntigravity, FilterCursor,
-		FilterGrok, FilterAll,
+		FilterGrok, FilterPi, FilterAll,
 	} {
 		m = send(t, m, key("v"))
 		if m.st.Filter != want {

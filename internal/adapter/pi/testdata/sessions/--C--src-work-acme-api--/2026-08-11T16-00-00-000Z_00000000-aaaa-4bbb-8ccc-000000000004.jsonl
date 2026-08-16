@@ -1,0 +1,2 @@
+{"type":"session","version":3,"id":"00000000-aaaa-4bbb-8ccc-000000000004","timestamp":"2026-08-11T16:00:00.000Z","cwd":"C:\\src\\work\\acme-api"}
+{"type":"model_change","id":"bb000001","parentId":null,"timestamp":"2026-08-11T16:00:00.100Z","provider":"xai","modelId":"grok-4.5"}

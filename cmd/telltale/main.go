@@ -66,6 +66,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/adapter/cursor"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
 	grokadapter "github.com/sanlee-ys/telltale/internal/adapter/grok"
+	piadapter "github.com/sanlee-ys/telltale/internal/adapter/pi"
 	"github.com/sanlee-ys/telltale/internal/antigravity"
 	"github.com/sanlee-ys/telltale/internal/claude"
 	"github.com/sanlee-ys/telltale/internal/council"
@@ -454,6 +455,7 @@ func allAdapters() []model.Adapter {
 	return []model.Adapter{
 		claudecode.New(), codex.New(), gemini.New(),
 		agyadapter.New(), cursor.New(), grokadapter.New(),
+		piadapter.New(),
 	}
 }
 
@@ -471,7 +473,7 @@ func allAdapters() []model.Adapter {
 // mode renders no quota of its own to relay.
 func runSnapshot(args []string) error {
 	fs := flag.NewFlagSet("telltale snapshot", flag.ContinueOnError)
-	vendor := fs.String("vendor", "all", "report one vendor only: all, claude, codex, gemini, agy, cursor, grok")
+	vendor := fs.String("vendor", "all", "report one vendor only: all, claude, codex, gemini, agy, cursor, grok, pi")
 	compact := fs.Bool("compact", false, "print the document on one line instead of indented")
 	// One deadline for the run rather than per vendor, because there is no
 	// frame to keep drawing: a scan that cannot finish reports what it has and
@@ -660,8 +662,10 @@ func parseFilter(s string) (hud.Filter, error) {
 		// One spelling, because grok's binary name and its product name are the
 		// same word (model.VendorGrok). There is no second thing to accept.
 		return hud.FilterGrok, nil
+	case "pi":
+		return hud.FilterPi, nil
 	default:
-		return hud.FilterAll, errors.New("unknown --vendor " + s + " (want all, claude, codex, gemini, agy, cursor or grok)")
+		return hud.FilterAll, errors.New("unknown --vendor " + s + " (want all, claude, codex, gemini, agy, cursor, grok or pi)")
 	}
 }
 
@@ -684,7 +688,7 @@ func parseHide(s string) ([]model.VendorID, error) {
 		}
 		f, err := parseFilter(part)
 		if err != nil {
-			return nil, errors.New("unknown --hide vendor " + part + " (want claude, codex, gemini, agy, cursor or grok)")
+			return nil, errors.New("unknown --hide vendor " + part + " (want claude, codex, gemini, agy, cursor, grok or pi)")
 		}
 		v, ok := f.VendorID()
 		if !ok {

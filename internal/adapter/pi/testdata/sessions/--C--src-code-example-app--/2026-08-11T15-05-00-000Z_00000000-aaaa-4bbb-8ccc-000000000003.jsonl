@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"00000000-aaaa-4bbb-8ccc-000000000003","timestamp":"2026-08-11T15:05:00.000Z","cwd":"C:\\src\\code\\example-app"}
+{"type":"model_change","id":"aa000001","parentId":null,"timestamp":"2026-08-11T15:05:00.100Z","provider":"xai","modelId":"grok-4.5"}
+{"type":"session_info","id":"aa000002","parentId":"aa000001","timestamp":"2026-08-11T15:05:00.200Z","name":"Secret Fixture Session"}
+{"type":"message","id":"aa000003","parentId":"aa000002","timestamp":"2026-08-11T15:05:01.000Z","message":{"role":"user","content":[{"type":"text","text":"FIXTURE user text contains AKIAIOSFODNN7EXAMPLE and must not leak"}],"timestamp":1786460700000}}
+{"type":"message","id":"aa000004","parentId":"aa000003","timestamp":"2026-08-11T15:05:02.000Z","message":{"role":"assistant","model":"grok-4.5","content":[{"type":"text","text":"FIXTURE assistant does not repeat the key"}],"usage":{"input":12,"output":4,"cacheRead":0,"cacheWrite":0,"totalTokens":16,"cost":{"input":0.001,"output":0.0002,"cacheRead":0.0,"cacheWrite":0.0,"total":0.0012}}}}

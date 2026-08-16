@@ -145,6 +145,8 @@ func vendorHue(v model.VendorID) string {
 		return "12" // bright blue
 	case model.VendorGrok:
 		return "14" // bright cyan
+	case model.VendorPi:
+		return "13" // bright magenta
 	default:
 		// Gemini and anything added since.
 		return theme.ColorIdentity

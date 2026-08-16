@@ -69,6 +69,11 @@ const (
 	// be driven", the adapters answer "can a session be observed", and the two
 	// have never had to arrive together.
 	VendorGrok VendorID = "grok"
+	// VendorPi is the earendil-works/pi coding agent. The id is the product's
+	// short name. This constant names a HUD observer only. design.md §9.1
+	// rejects Pi as a council seat (re-host class). The adapter reads
+	// ~/.pi/agent/sessions and never spawns the binary.
+	VendorPi VendorID = "pi"
 )
 
 // Field enumerates the optional fields of a Session: exactly those a vendor may
