@@ -163,13 +163,25 @@ func (m *Model) dispatch() tea.Cmd {
 		m.st.Notice = "a turn is already in flight — ctrl+c cancels it"
 		return nil
 	}
+	if m.arenaPrep != nil {
+		// A race is between the enter and the spawn: its worktrees are being
+		// cut off the loop, which is exactly why the room is still reading this
+		// keystroke at all. Refused with the same shape as the guard above,
+		// because a second dispatch here would race two setups against one
+		// repository and both would be cutting names from the same scan.
+		//
+		// Short on purpose: this notice shares the footer with the step line
+		// rather than replacing it (modeLine), and a longer sentence would shed
+		// the step to fit at 120 columns.
+		m.st.Notice = "a race is already being prepared — ctrl+c stops it"
+		return nil
+	}
 	activeFlow := m.flowChain != nil && m.flowChain.Current() != nil && m.flowDraft != ""
 	if m.st.Draft == "" && !activeFlow {
 		m.st.Notice = "nothing to dispatch: the brief is empty"
 		return nil
 	}
 
-	reg := vendors.Registry()
 	arenaMode := false
 
 	// Flows start only when the draft IS the /flow command. Bare "->" in prose
@@ -329,6 +341,32 @@ func (m *Model) dispatch() tea.Cmd {
 		return nil
 	}
 
+	if arenaMode {
+		// A race cuts one worktree per seat before anything spawns, and that
+		// work runs OFF this loop (arenasetup.go, §9.37 amended 2026-08-17):
+		// dispatch stops here, the room keeps drawing and reading keys while
+		// git works, and applyArenaSetup calls sendTurn below with whatever the
+		// setup measured. Every refusal above ran first, so nothing is prepared
+		// for a race the room was going to turn down anyway.
+		return m.beginArenaSetup(route, prompt)
+	}
+	return m.sendTurn(route, prompt, nil)
+}
+
+// sendTurn is the half of a dispatch that actually spawns: the turn's geometry
+// and clock, one process — or one write to a stdin already open — per addressed
+// seat, and the wait on their events.
+//
+// It is reached two ways, and the split is what took the arena's worktree setup
+// off the render loop. An ordinary turn comes straight from dispatch with race
+// nil. A race arrives here later, from applyArenaSetup, carrying the finished
+// setup — so everything stamped below (the turn's start time, the snapshot of
+// the previous replies, the turn's context) is stamped when the SEATS start
+// rather than when the operator pressed enter, which is the honest reading of
+// every clock this turn will render.
+func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea.Cmd {
+	reg := vendors.Registry()
+
 	// Geometry for this turn is decided here, from the route, and stays until
 	// the next dispatch. Empty FrameOwners = equal columns (@all / everyone).
 	m.st.FrameOwners = frameOwnersFor(route, m.st)
@@ -361,28 +399,19 @@ func (m *Model) dispatch() tea.Cmd {
 	echo := sanitize(prompt)
 	next := m.st.Turn + 1
 
-	// Worktrees are added BEFORE any seat spawns, and the base SHA is read once
-	// so all attempts race from the same commit. A workspace that is not a git
-	// repo fails here, wholesale, with git's own sentence; a single seat whose
-	// worktree could not be added is skipped and told why, because a partial
-	// race still answers the brief (§4a.1's degrade-the-field rule, one level
-	// up).
+	// Worktrees were added BEFORE any seat spawns, and the base SHA read once so
+	// all attempts race from the same commit — all of it already done by the
+	// time this runs, off the loop (arenasetup.go). A workspace that is not a
+	// git repo, or a setup that met the deadline, never reaches here at all: it
+	// lands on the notice and the room goes back to composing. What can still
+	// arrive is a PARTIAL race — a single seat whose worktree could not be added
+	// is skipped and told why, because a partial race still answers the brief
+	// (§4a.1's degrade-the-field rule, one level up).
 	var arenaSeatErr map[model.VendorID]string
-	if arenaMode {
-		var racers []model.VendorID
-		for i := range m.st.Columns {
-			c := m.st.Columns[i]
-			if _, ok := reg[c.Vendor]; ok && m.st.seats(c) {
-				racers = append(racers, c.Vendor)
-			}
-		}
-		raceN, base, trees, seeds, seatErrs, aerr := arenaSetup(m.st.Workspace, next, racers)
-		if aerr != nil {
-			cancel()
-			m.st.Notice = "arena: " + aerr.Error()
-			return nil
-		}
-		ts.arena, ts.arenaRaceN, ts.arenaBase, ts.arenaTrees, ts.arenaSeeds, arenaSeatErr = true, raceN, base, trees, seeds, seatErrs
+	if race != nil {
+		trees := race.trees
+		ts.arena, ts.arenaRaceN, ts.arenaBase, ts.arenaTrees, ts.arenaSeeds, arenaSeatErr =
+			true, race.raceN, race.base, trees, race.seeds, race.seatErr
 		// One live-stat slot per seat that actually has a tree to read. Seats
 		// skipped above (worktree add failed) are absent here too, which is the
 		// never-refresh-a-failed-setup rule enforced by construction rather
@@ -402,7 +431,10 @@ func (m *Model) dispatch() tea.Cmd {
 		for v, tr := range trees {
 			raceTrees[v] = tr
 		}
-		m.lastRace = &arenaRace{workspace: m.st.Workspace, raceN: raceN, base: base, trees: raceTrees}
+		// The setup's OWN workspace, not the room's. The room stayed usable
+		// while the trees were being cut, so `/cd` could have moved it since —
+		// and the trees are siblings of where the setup ran (arenaSetupResult).
+		m.lastRace = &arenaRace{workspace: race.workspace, raceN: race.raceN, base: race.base, trees: raceTrees}
 	}
 
 	for i := range m.st.Columns {
@@ -464,7 +496,7 @@ func (m *Model) dispatch() tea.Cmd {
 		// note is carried past the column reset below, because that reset is
 		// what clears the PREVIOUS turn's note and this one is about THIS turn.
 		note := ""
-		if arenaMode {
+		if ts.arena {
 			// Every racing seat — the persistent one included — is a fresh
 			// one-shot session in its worktree, through the same FirstTurn every
 			// vendor already implements. The room's live process and saved
@@ -661,7 +693,13 @@ func (m *Model) dispatch() tea.Cmd {
 		m.openPage(m.st.Turn)
 	}
 	m.st.Mode = ModeViewing
-	m.setDraft("")
+	if race == nil {
+		// A race cleared the composer when the operator pressed enter, several
+		// seconds and one worktree setup ago (beginArenaSetup) — and may have
+		// been typed into since, because the room stayed usable throughout.
+		// Clearing again here would delete a draft this turn was never about.
+		m.setDraft("")
+	}
 	m.st.Notice = ""
 	return m.waitEvents()
 }
@@ -1994,6 +2032,16 @@ func (m *Model) teardown() {
 	// other order would leave a live seat holding a path to a deleted hooks
 	// file, which is the shape of a seat that quietly stops being screened.
 	m.hooks.Cleanup()
+	// A setup still cutting worktrees is a git process this room started, so it
+	// dies with the room for the same reason every vendor child does — quitting
+	// must never leave one running with nothing on screen to say so. The trees
+	// it already added are KEPT (stopArenaSetup's ruling); it is the running
+	// command that is ended here, not the receipts.
+	if m.arenaPrep != nil {
+		m.arenaPrep.cancel()
+		m.arenaPrep = nil
+		m.st.ArenaSetup = ""
+	}
 	if m.roomCancel != nil {
 		m.roomCancel()
 	}

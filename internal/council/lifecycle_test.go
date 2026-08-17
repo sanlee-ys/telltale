@@ -1,6 +1,7 @@
 package council
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +25,7 @@ func racedModel(t *testing.T, seats ...model.VendorID) (*Model, string) {
 	if _, err := gitOut(ws, "config", "commit.gpgsign", "false"); err != nil {
 		t.Fatal(err)
 	}
-	raceN, base, trees, _, seatErr, err := arenaSetup(ws, 4, seats)
+	raceN, base, trees, _, seatErr, err := arenaSetup(context.Background(), ws, 4, seats, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -589,7 +590,7 @@ func TestAdoptAndDropReachARaceThatOutranItsTurn(t *testing.T) {
 	if _, err := gitOut(ws, "branch", "arena/t4/codex"); err != nil {
 		t.Fatal(err)
 	}
-	raceN, base, trees, _, seatErr, err := arenaSetup(ws, 4, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, seatErr, err := arenaSetup(context.Background(), ws, 4, []model.VendorID{model.VendorCodex}, nil)
 	if err != nil || len(seatErr) != 0 {
 		t.Fatalf("setup: %v %v", err, seatErr)
 	}

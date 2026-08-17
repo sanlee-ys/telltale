@@ -44,7 +44,9 @@ func arenaCursorRace(t *testing.T) (*Model, *spawnLog, *killSession) {
 	m.st.Workspace = gitRepo(t)
 	m.sessions[model.VendorCursor] = "cursor-room-thread"
 	m.st.Draft = "/arena add a marker file"
-	m.dispatch()
+	// raceNow rather than dispatch: the worktree setup runs off the loop now, so
+	// the turn is born after its messages land (arenasetup_test.go).
+	raceNow(t, m)
 	if m.turn == nil {
 		t.Fatal("the race did not dispatch")
 	}

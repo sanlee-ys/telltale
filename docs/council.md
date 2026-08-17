@@ -417,6 +417,16 @@ brief you dispatch to that seat clears it from the screen. The worktree, the bra
 the commit are the record that outlives it — which is exactly what the two lifecycle verbs
 below act on.
 
+**Cutting those worktrees takes a moment, and the room stays a room while it does.** The
+footer names the step it is on — `arena: preparing worktree for codex…` — with a spinner
+beside it and nothing else: no percentage and no count, because how long a checkout takes is
+not something council can measure. The seats are prepared one at a time, on purpose. Keys
+keep working throughout, and **ctrl+c stops the setup** rather than the room — which is what
+you want when another session is holding the repository's lock. The whole setup is bounded at
+90 seconds; a deadline or a git refusal names the step it stopped on, quotes git, and puts
+your brief back in the composer so the same enter tries again. Any worktree already added is
+kept, and `git worktree remove` clears one.
+
 **While the race runs, each racing column shows the diff growing.** Stream activity on a
 seat arms a re-read of its worktree (at most one every two seconds), and the block is
 labelled **`arena · so far`** — the "so far" is the honesty marker, because a mid-race read
