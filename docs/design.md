@@ -1616,23 +1616,29 @@ change that.
 
 <a id="s3-9b"></a>
 
-### 3.9b Pi seam — source-surveyed 2026-08-16; not installed here, nothing live-verified
+### 3.9b Pi seam — source-surveyed then live-verified 2026-08-16, `pi 0.84.1`
 
-**Environment and evidence class.** This is the §3.2 class (researched from source, NOT
-live-verified), and it is the weaker half of that class: Pi is not installed on this
-machine, so no live corpus exists here and no claim below has met real bytes. The read
-was the writer's own code — `packages/coding-agent/src/core/session-manager.ts`,
+**Environment and evidence class.** This section started in the §3.2 class (researched
+from source, NOT live-verified) and has since been measured against a live corpus on the
+Windows reference box. The heading and this paragraph said "not installed here, nothing
+live-verified" until 2026-08-16; that is no longer true, and the verdict table below
+carries what the bytes actually said. The source read came first, and it is still the
+reason the shape was known before any file was opened. That read was the writer's own
+code — `packages/coding-agent/src/core/session-manager.ts`,
 `src/config.ts`, and `packages/ai/src/types.ts` — in **`earendil-works/pi`**, default
 branch on 2026-08-16, newest release `v0.84.2` (2026-08-14). Both former names
 (`badlogic/pi-mono`, `earendil-works/pi-mono`) redirect there. The npm package
 `@mariozechner/pi-coding-agent` stopped at 0.73.1 in May 2026; current distribution is
-the `@earendil-works` scope and compiled Bun binaries. The §3.7 lesson stands: the first
-live pass will falsify something in this section. That is what it is for.
+the `@earendil-works` scope and compiled Bun binaries. The §3.7 lesson predicted that the
+first live pass would falsify something here. It did: `responseModel` (see the verdict
+table) does not exist on any assistant message in the live corpus. That is what the
+prediction was for, and the falsified claim is corrected in place rather than deleted.
 
-**Why the survey ran now.** Pi is the largest coding agent with zero HUD coverage in the
-lane (≈91k stars at survey time), and §9.1 already rejects it as a council *seat* under
-the harness-re-host class. This section is the adapter half: "we looked", so a future
-session does not start from "nobody looked".
+**Why the survey ran when it did.** Pi had no HUD coverage at the time, and §9.1 already
+rejected it as a council *seat* under the harness-re-host class. This section is the
+adapter half: "we looked", so a future session does not start from "nobody looked". The
+coverage gap it names is closed; the section is kept as the evidence the adapter stands
+on, not as an open question.
 
 **Store inventory (from source, not from a listing).**
 
@@ -1660,26 +1666,44 @@ not file order. Entry types: `message`, `thinking_level_change`, `model_change`,
 One write-path quirk: a session is not flushed to disk until it holds an assistant
 message, so an abandoned prompt may never produce a file.
 
-**Field prospects** — prospects, not verdicts; the verdict column exists only after a
-live pass:
+**Field verdicts.** The prospect column this table shipped with is now a verdict column,
+because the live pass ran. The corpus is small and its size is part of every verdict:
+**4 sessions, 689 records, 197 assistant messages, `pi 0.84.1`.** A verdict of "present"
+means the field was found on every record that should carry it; a verdict of "absent"
+means a grep over that corpus returned zero matches, which is the §3.9a standard and not
+the same as "the source did not mention it".
 
-| Field | Prospect | Source in the format |
+| Field | Verdict (live, `pi 0.84.1`) | Source in the format |
 |---|---|---|
-| name | plausible | `session_info` entry's optional `name` (user-set). Absent is a state; the workspace-basename fallback (§3.7 precedent) applies. |
-| model | plausible | `model_change` entries carry `provider` + `modelId`; assistant messages also carry `model` and `responseModel`. |
-| workspace | plausible | header `cwd`, verbatim. The directory slug is the fallback, as in §3.7. |
-| last_activity | plausible | newest entry `timestamp` (ISO), folded with mtime per §6 Q8; assistant and toolResult messages also carry unix-ms timestamps. |
-| tokens | plausible | **every assistant message writes `usage`**: `input`, `output`, `cacheRead`, `cacheWrite`, optional `reasoning`, `totalTokens`. |
-| cost | plausible, with the §3.9a ruling attached | the second vendor that writes money down, and it writes **dollars, per message**: `usage.cost {input, output, cacheRead, cacheWrite, total}`. No session total exists on disk — the TUI sums in memory (`usage-totals.ts`). A summed total is a derived number wearing a read one's clothes (§3.9a), and the tree sharpens it: all-entries and active-path totals differ. The honest carry is the last message's `cost.total` as a labeled Extra, grok-style. |
-| context % | **CapNone until measured** | a numerator prospect exists (last assistant `usage` occupancy) but the denominator is nowhere in the session file — it lives in Pi's shipped model catalog, which is the §3.8 1048576 trap again. |
-| quota | **unknown, not "measured absent"** | Pi is bring-your-own-key, so structural absence is expected — but the grep that made §3.9a's absence a measurement needs a live corpus this box does not have. |
-| sub-agents | weak prospect | header `parentSession` is a child→parent link (the inverse of agy's structural nesting) — countable only by scanning siblings for parents. |
-| liveness | unknown | nothing seen in the source read. |
+| name | **absent in this corpus** — no `session_info` entry appears in any of the 4 sessions, so the fallback is the operative path, not the exception | `session_info` entry's optional `name` (user-set). Absent is a state; the workspace-basename fallback (§3.7 precedent) applies. |
+| model | **present** — 5 `model_change` entries; `model` on 197/197 assistant messages. `responseModel` is on **0/197**: the source read claimed it and the corpus falsifies it | `model_change` entries carry `provider` + `modelId`; assistant messages also carry `model`. |
+| workspace | **present** — `cwd` on 4/4 headers | header `cwd`, verbatim. The directory slug is the fallback, as in §3.7. |
+| last_activity | **present** — `timestamp` on 685/685 non-header records | newest entry `timestamp` (ISO), folded with mtime per §6 Q8; assistant and toolResult messages also carry unix-ms timestamps. |
+| tokens | **present** — `usage` on 197/197 assistant messages, with all six documented keys | **every assistant message writes `usage`**: `input`, `output`, `cacheRead`, `cacheWrite`, optional `reasoning`, `totalTokens`. |
+| cost | **present per message, absent per session**, with the §3.9a ruling attached — `usage.cost` on 197/197, and no session total anywhere | the second vendor that writes money down, and it writes **dollars, per message**: `usage.cost {input, output, cacheRead, cacheWrite, total}`. No session total exists on disk — the TUI sums in memory (`usage-totals.ts`). A summed total is a derived number wearing a read one's clothes (§3.9a), and the tree sharpens it: all-entries and active-path totals differ. The honest carry is the last message's `cost.total` as a labeled Extra, grok-style. |
+| context % | **CapNone, now measured** — a grep for `contextWindow`/`maxTokens`/`context_window` over the corpus returns zero, and this box's `~/.pi/agent/models-store.json` is an empty object, so the denominator is in neither place | a numerator prospect exists (last assistant `usage` occupancy) but the denominator is nowhere in the session file — it lives in Pi's shipped model catalog, which is the §3.8 1048576 trap again. |
+| quota | **CapNone, measured absent** — the §3.9a grep now has its corpus: `quota`/`rateLimit`/`resetsAt`/`plan`/`subscription` return zero matches | Pi is bring-your-own-key, so structural absence is expected, and the corpus confirms it rather than assuming it. |
+| sub-agents | **absent in this corpus** — `parentSession` on 0/4 headers, so the link was never exercised here; the field's existence is still a source claim only | header `parentSession` is a child→parent link (the inverse of agy's structural nesting) — countable only by scanning siblings for parents. |
+| liveness | **CapNone, measured absent** — a grep for `pid`/`lock`/`heartbeat`/`isActive` returns zero | nothing in the session files, matching the source read. |
 
-**The credential boundary is cleaner than Cursor's.** `auth.json` is a sibling of
-`sessions/`, not inside the session files — an adapter that reads only `sessions/**`
-never opens a credential-bearing file. The planted-marker test is still owed, because
-session content itself is untrusted.
+**What this corpus does not cover.** Four sessions from one box, one operator, one day
+(2026-08-11), all on the default `.pi` directory. Five of the nine documented entry types
+(`compaction`, `branch_summary`, `custom`, `custom_message`, `label`) never appear, so
+their shapes remain source claims. No session was observed mid-write, and no two Pi
+sessions ran at once, so the tree's branching behavior is documented but not watched. A
+`session_info` entry and a `parentSession` header are the two things a wider corpus would
+most likely add.
+
+**The credential boundary is cleaner than Cursor's, and the live pass confirms it.**
+`auth.json` is a sibling of `sessions/`, not inside the session files — an adapter that
+reads only `sessions/**` never opens a credential-bearing file. The directory listing on
+the reference box matches: `~/.pi/agent/` holds `auth.json`, `settings.json`,
+`models-store.json`, `AGENTS.md`, `extensions/` and `sessions/` side by side, so the
+allowlist is a path prefix rather than Cursor's row-by-row filtering of one shared SQLite
+file. A grep for `apiKey`/`accessToken`/`refreshToken`/`authorization` over the session
+corpus returns zero matches. That lowers the read-allowlist burden; it does not remove
+the planted-marker test, because session *content* is still untrusted and a zero today is
+a measurement of this corpus, not a guarantee about the format.
 
 **The extension seam is the part no other vendor has.** Pi's product thesis is an
 in-process TypeScript extension system. That means a *Pi extension* could write
@@ -1689,15 +1713,15 @@ contract rather than the sixth in-tree adapter. Which of the two paths to build 
 owner decision deferred to post-launch demand; this survey only records that both are
 open and neither is blocked by the format.
 
-**Live pass, 2026-08-16, Windows PC, pi 0.84.1.** Four probe sessions under
-`~/.pi/agent/sessions` matched the surveyed shape (version 3, `type=session`
-header with `id` and `cwd`, `model_change`, assistant `usage` including
-`cost.total`). `internal/adapter/pi` is the in-tree HUD observer. Council
-remains rejected (§9.1). The relay-extension path is still open and is not
-this adapter. Quota stays CapNone: the four files have no account window.
-Context % stays CapNone: the denominator is not in the session file. Session
-cost stays CapNone: `usage.cost.total` is per message and is carried as an
-Extra.
+**Where this leaves the two Pi questions.** They are separate questions with separate
+answers, and this section is the reason they can be answered separately. The **HUD**
+question is settled: `internal/adapter/pi` is the in-tree observer, and the verdict table
+above is what it rests on — `Session.Cost` stays CapNone because `usage.cost.total` is
+per message, and it is carried as a labeled Extra instead. The **council seat** question
+is unchanged and still refused under §9.1's re-host class; a measured format was never an
+argument for a seat. The **relay-extension** path — a Pi extension writing §7.15/§7.16
+files directly — remains open, is not what the adapter does, and stays gated on demand
+rather than on anything this survey found.
 
 <a id="s3-10"></a>
 
