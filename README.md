@@ -84,12 +84,8 @@ telltale council
 ```
 
 **Windows, winget** — pending submission to `microsoft/winget-pkgs`; the manifest
-draft and the flow are in [packaging/](packaging/):
-
-```
-winget install sanlee-ys.telltale
-telltale council
-```
+draft and the flow are in [packaging/](packaging/). `winget install sanlee-ys.telltale`
+does not work yet — use scoop or a source build until the submission lands.
 
 **Direct download** — each release attaches archives for `windows_amd64`,
 `darwin_amd64`, `darwin_arm64` and `linux_amd64` with a `checksums.txt`. Unpack one,
@@ -98,6 +94,51 @@ put `telltale` on your PATH, and:
 ```
 telltale council
 ```
+
+**macOS, the whole arrival, measured on 2026-08-17.** This sequence ran on an
+Intel MBP on macOS 26.5.2, against the published `v0.2.0` archive. Substitute
+the tag and the architecture you want:
+
+```
+curl -fLO https://github.com/sanlee-ys/telltale/releases/download/v0.2.0/telltale_0.2.0_darwin_amd64.tar.gz
+curl -fLO https://github.com/sanlee-ys/telltale/releases/download/v0.2.0/checksums.txt
+shasum -a 256 -c checksums.txt --ignore-missing
+tar -xzf telltale_0.2.0_darwin_amd64.tar.gz
+./telltale doctor
+```
+
+`shasum` printed `telltale_0.2.0_darwin_amd64.tar.gz: OK` on that run. A
+mismatch prints `FAILED` instead, and you stop there.
+
+**A browser download needs one more command, and without it macOS kills the
+binary.** `curl` does not mark a file with `com.apple.quarantine`, but a browser
+does, and `tar` copies that mark onto the binary it extracts. Gatekeeper then
+refuses the binary, because no archive here is signed or notarized. The refusal
+was measured on 2026-08-17 on the same machine, with the quarantine mark applied
+by hand to reproduce a browser download. macOS killed the process and showed a
+dialog:
+
+> **"telltale" Not Opened**
+>
+> Apple could not verify "telltale" is free of malware that may harm your Mac or
+> compromise your privacy.
+>
+> \[Move to Trash]  \[Done]
+
+The terminal reported `Killed: 9` and exit status 137. The binary printed
+nothing and stayed on disk. Right-click-open does not apply here, because
+`telltale` is a command-line binary and not an app bundle. Clear the mark, then
+run it:
+
+```
+xattr -d com.apple.quarantine telltale
+./telltale doctor
+```
+
+That was the measured remedy: `doctor` then ran to completion at exit 0. Run
+`xattr -d` only after `shasum` says `OK`, because clearing the mark is the step
+that lets an unverified download run. The command reports `No such xattr` and
+exits 1 on a `curl` download, which has no mark to clear.
 
 **The binaries do not all claim the same thing, and each release says so per
 download.** Windows is the **continuously verified target** — every commit runs the

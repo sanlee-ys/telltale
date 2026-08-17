@@ -875,7 +875,7 @@ func parseHide(s string) ([]model.VendorID, error) {
 // next, and `doctor`, which is that mode, was entry eight of eight, sixty lines
 // down, under the word "preflight". So the frame names three modes and says
 // which to start with, and `telltale help` keeps the manual one word away.
-const firstFrameText = `telltale — an honest gauge for your coding agents
+const firstFrameText = `telltale — a dispatch room for your coding agents, with an honest gauge underneath
 
 Three modes need no configuration at all. Run one of them:
 
@@ -908,7 +908,7 @@ to route on. The README's Install section carries the settings block to paste.
 // test pins them against SeatNames instead. This block is exactly where that
 // drift happened: grok became the fifth seat (§9.39) and the help went on
 // naming four, telling a reader a supported vendor did not exist.
-const usageText = `telltale — an honest gauge for your coding agents
+const usageText = `telltale — a dispatch room for your coding agents, with an honest gauge underneath
 
 usage:
   telltale statusline    (wire into Claude Code settings.json statusLine command)
