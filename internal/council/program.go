@@ -1568,6 +1568,44 @@ func (m *Model) toggleTurnView() {
 		m.st.Notice = "no turn has been taken yet — t reads the room one turn at a time"
 		return
 	}
+	// `t` means the READING face, always. The face a reader last chose is not
+	// carried back across a close: this key's own documentation is that it gives
+	// one turn the whole room, and a `t` that sometimes opened onto the ledger
+	// instead would be two keys wearing one name (§9.22, amended 2026-08-17).
+	m.st.Page.Ledger = false
+	m.openPage(turns[len(turns)-1])
+}
+
+// toggleActLedger swaps the open turn between its two faces — what the seats
+// SAID and what they DID — and opens the projection on the newest turn when it is
+// closed.
+//
+// One key doing both is toggleArenaDiff's shape rather than a shortcut, and the
+// two are the same act at two scales: `d` flips one seat's arena block between
+// the stat and the whole patch, and this flips one turn between its replies and
+// its acts. Neither navigates — the subject is untouched — so a reader who has
+// walked back to turn 7 stays on turn 7 in either face.
+//
+// The POSITION is re-resolved through openPage rather than kept, because the two
+// faces are different lengths: a scroll offset that meant "halfway down the
+// replies" would mean something arbitrary in the acts, and the live turn's tail is
+// the one place a reader expects to land.
+//
+// A room with no turn is told so rather than handed an empty ledger, which is
+// toggleTurnView's own refusal and askClearSeat's reason: a control that opens
+// onto nothing teaches that the key is unreliable, not that the room is empty.
+func (m *Model) toggleActLedger() {
+	if m.st.Page.Open {
+		m.st.Page.Ledger = !m.st.Page.Ledger
+		m.openPage(m.st.Page.Turn)
+		return
+	}
+	turns := m.st.PageTurns()
+	if len(turns) == 0 {
+		m.st.Notice = "no turn has been taken yet — T reads what the seats did, one turn at a time"
+		return
+	}
+	m.st.Page.Ledger = true
 	m.openPage(turns[len(turns)-1])
 }
 
@@ -1817,6 +1855,30 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// one transcript read two ways (§9.22). View mode only: in compose `t` is
 		// the letter t, which is the same contract `q`, `f` and `c` already keep.
 		m.toggleTurnView()
+	case "T":
+		// The act ledger: the same turn, read for what the seats DID (§9.22,
+		// amended 2026-08-17).
+		//
+		// SHIFT on the key whose subject it shares, which is the only spelling
+		// that puts a third reading of one transcript beside the two it belongs
+		// with. Every free lowercase letter left in this keymap is free because it
+		// means nothing here, and a projection under an unrelated letter is a
+		// projection a reader finds by accident. The capital is unclaimed — `Y`
+		// and `G` are the only two this room binds — and it costs the panel no
+		// row, because it is taught on the row that already teaches `t`.
+		//
+		// In compose it is the letter T, which needs no second list: composeKey
+		// routes any key carrying text into the draft, the contract `q`, `f`, `c`
+		// and `t` already keep.
+		//
+		// That a shifted letter arrives here as `"T"` rather than as `"shift+t"`
+		// was READ off the pinned module, not assumed: ultraviolet's Key.String
+		// (v0.0.0-20260811164956) returns Key.Text whenever it is non-empty and
+		// not a space, and falls through to Keystroke — where the modifiers get
+		// spelled — only otherwise. A printable keypress carries its character,
+		// so the Mod bits never reach this switch. `Y` has depended on the same
+		// line since §9.15.
+		m.toggleActLedger()
 	case "d":
 		// The focused seat's arena block flips stat ↔ full patch. A key rather
 		// than a second yank, because reading and taking are different acts, and
@@ -1882,7 +1944,13 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			// a per-seat focus, and a projection whose whole point is that the
 			// turn is the unit deliberately has none — so the narrower key takes
 			// the wider document rather than guessing which seat was meant.
-			return m, m.yank(m.st.YankTurnN(m.st.Page.Turn))
+			//
+			// YankPage rather than YankTurnN, so the key follows the FACE as well
+			// as the turn: on the act ledger the document in front of the reader
+			// is the acts, and a copy key that took the replies instead would break
+			// the one claim that earned it a footer cell here (§9.22, amended
+			// 2026-08-17).
+			return m, m.yank(m.st.YankPage())
 		}
 		return m, m.yank(m.st.YankColumn(m.st.Focus))
 	case "Y":
@@ -1891,7 +1959,7 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// shift is what this room already uses for the wider version of a
 		// motion (`G` against `g`).
 		if m.pageOpen() {
-			return m, m.yank(m.st.YankTurnN(m.st.Page.Turn))
+			return m, m.yank(m.st.YankPage())
 		}
 		return m, m.yank(m.st.YankTurn())
 	case "k":

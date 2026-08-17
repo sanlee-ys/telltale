@@ -2287,6 +2287,19 @@ func pastTurn(h TurnRecord, w int, sty Styles, g Glyphs) []string {
 // harder to read than the thing it replaced.
 func actLines(a Act, w int, sty Styles, g Glyphs) []string {
 	mark, style := actMark(a.Status, sty, g)
+	return actLinesMarked(a, mark, style, w, sty, g)
+}
+
+// actLinesMarked is actLines with the outcome mark supplied by the caller, so the
+// act ledger can spend WORDS where a column can only afford a glyph (§9.22,
+// amended 2026-08-17) without a second copy of the wrapping.
+//
+// The wrapping is the reason this is one function rather than two. Three things
+// here are subtle and none of them is about the mark: text is wrapped as PLAIN
+// and styled afterwards, the mark is matched by SUFFIX rather than searched for,
+// and a failure's detail is bounded. A ledger that re-implemented them would
+// re-implement the ANSI trap (§9.5) at a width where the goldens are blind to it.
+func actLinesMarked(a Act, mark string, style lipgloss.Style, w int, sty Styles, g Glyphs) []string {
 	text := a.Text
 	if mark != "" {
 		text += " " + mark
@@ -4186,7 +4199,17 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// made of y/Y and §9.20 made of g/G and [ ] — a category, not a saving.
 		// "expand"/"the focused column" paid for it: the words above already say
 		// column, and a key documented below the fold is a key nobody finds.
-		"  f / t        f gives one column the full width; t gives one turn the whole room (in compose, text)",
+		//
+		// `T` joins the same row on the same argument, one key later (§9.22,
+		// amended 2026-08-17). It is a third answer to the row's own question —
+		// what is the reading area showing — and it is the ONLY row it could join:
+		// the budget is hard, a row of its own would push the `?` line off a
+		// 24-row terminal, and the ledger is the one surface in this room whose
+		// whole content is what a reader cannot get from the grid. "gives" paid
+		// for it, twice: the verb is established by the first clause and the two
+		// after it read as the same sentence without repeating it.
+		"  f / t / T    f gives one column the full width; t one turn the whole room; " +
+			"T that turn's acts (in compose, text)",
 		"  ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted",
 		// Two keys on one line, because this panel has to fit a 24-row terminal
 		// and the line they were competing with is "? this help" — which toggles,

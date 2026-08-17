@@ -165,16 +165,16 @@ func (s State) turnEntries(n int) []turnEntry {
 // from a column is what the strongest boundary is ABOUT — a turn in the grid,
 // a seat here — which is exactly what swapping the projection means.
 func pageLines(st State, n, w int, sty Styles, g Glyphs) []string {
+	if st.Page.Ledger {
+		// The other face of the same turn (§9.22, amended 2026-08-17). Resolved
+		// HERE rather than in the renderer, so the scroll window, the overflow
+		// markers, the clamp and pageViewport's line count all point at whichever
+		// document is on screen without a second copy of any of them.
+		return ledgerLines(st, n, w, sty, g)
+	}
 	entries := st.turnEntries(n)
 	if len(entries) == 0 {
-		// Reachable in a long room: the fifty-turn cap can evict the last record
-		// of the open page while it is on screen. It says the record is gone
-		// rather than drawing an empty turn, because "nobody answered" and "the
-		// room no longer remembers" are different facts and this product does
-		// not render them alike (§4a.1).
-		return styleAll(wrap("turn "+strconv.Itoa(n)+
-			" is no longer in memory — the room keeps the last "+
-			strconv.Itoa(maxHistory)+" turns per seat.", w), sty.Muted)
+		return evictedLines(n, w, sty)
 	}
 
 	// The page's own outline, and the only heading on it that owns every seat
@@ -211,6 +211,23 @@ func pageLines(st State, n, w int, sty Styles, g Glyphs) []string {
 		out = append(out, pageSeat(st, e, w, sty, g)...)
 	}
 	return out
+}
+
+// evictedLines is what a page draws when the turn it is open on is gone.
+//
+// Reachable in a long room: the fifty-turn cap can evict the last record of the
+// open page while it is on screen. It says the record is gone rather than drawing
+// an empty turn, because "nobody answered" and "the room no longer remembers" are
+// different facts and this product does not render them alike (§4a.1).
+//
+// Both faces call it. The eviction is a fact about the RECORD rather than about
+// which of its two readings is open, so a second sentence for the ledger would be
+// two spellings of one fact — and the one that drifted would be the one nobody
+// reads until a room is fifty turns deep.
+func evictedLines(n, w int, sty Styles) []string {
+	return styleAll(wrap("turn "+strconv.Itoa(n)+
+		" is no longer in memory — the room keeps the last "+
+		strconv.Itoa(maxHistory)+" turns per seat.", w), sty.Muted)
 }
 
 // pageSeat is one seat's block on a turn page: its name and how its turn ended
@@ -645,8 +662,19 @@ func PageMaxScroll(st State) int {
 // mode label answering which of two projections is live and which turn it is
 // showing, which is precisely what §7.8 requires a mode line to state and what
 // the body has been ruled out of stating.
+//
+// The WORD changes with the face, and it has to: `t` and `T` open the same
+// coordinate onto two different documents, so a mode line that said TURN over
+// both would leave the room's one always-on statement of what is on screen
+// unable to tell them apart. ACTS against TURN is that distinction in the cell
+// §7.8 reserves for exactly it, and the numbers behind it are unchanged because
+// the coordinate is unchanged.
 func pageLabel(st State) string {
-	s := "TURN " + strconv.Itoa(st.Page.Turn)
+	word := "TURN "
+	if st.Page.Ledger {
+		word = "ACTS "
+	}
+	s := word + strconv.Itoa(st.Page.Turn)
 	if st.Turn > 0 {
 		s += "/" + strconv.Itoa(st.Turn)
 	}
