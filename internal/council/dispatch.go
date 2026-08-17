@@ -1979,7 +1979,22 @@ func (m *Model) cancelTurn() {
 // state this product exists to refuse. The persistent seats are included, and
 // they are the reason this matters more than it did: a process that survives a
 // turn by design is exactly the process that would survive the room by accident.
+//
+// ONE-SHOT, and safe to call from two goroutines at once. Two callers reach it
+// now: the q and ctrl+c keys, on the update loop, and the exit-signal watcher on
+// its own goroutine (signals_unix.go). Those two can arrive together — a `kill`
+// landing on a room the user is already quitting — and the loop below deletes
+// from the map it ranges over, which two goroutines cannot do at the same time
+// without a runtime panic. The second caller returns at the flag instead; see
+// Model.teardownDone for why one shot is the right shape rather than a lock the
+// act can re-enter.
 func (m *Model) teardown() {
+	m.teardownMu.Lock()
+	defer m.teardownMu.Unlock()
+	if m.teardownDone {
+		return
+	}
+	m.teardownDone = true
 	// Written before anything is killed, so the last thing the room does with
 	// its state is preserve it. Redundant with the per-turn save in the common
 	// case and deliberately kept: it refreshes saved-at, which is what the
