@@ -519,6 +519,24 @@ type Column struct {
 	// number, and subtracting to recover the turn would be council inventing a
 	// figure — so the badge names which one it is and neither happens.
 	CostSession bool
+
+	// Quota is this seat's relayed ACCOUNT quota reading (quota.go), or nil
+	// when the relay has nothing to say about this vendor.
+	//
+	// A pointer, on CostUSD's own argument one field up: a vendor at 0% of its
+	// window and a vendor with no reading at all are different facts, and a
+	// value field could not tell them apart. Nil renders nothing anywhere — no
+	// dash, no placeholder — which is what Cursor and grok render forever,
+	// because neither writes quota to disk in any form telltale can read
+	// (§7.17).
+	//
+	// NOT a per-turn fact, so startTurn deliberately does not file it into a
+	// TurnRecord and resetForTurn does not clear it. Everything else on this
+	// struct that startTurn moves describes a turn; this describes the account
+	// behind the seat, and it is replaced only by the next read of the relay.
+	// Its age is measured from SeatQuota.WrittenAt against State.Now, so Render
+	// stays pure over State — the read itself runs as a Cmd.
+	Quota *SeatQuota
 }
 
 // startTurn moves a column onto a new turn.

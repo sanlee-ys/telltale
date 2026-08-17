@@ -361,7 +361,7 @@ func TestTheBadgeRowRightAnchorsTheCostWithoutDroppingTheClaim(t *testing.T) {
 	c := room().Columns[2] // unsandboxed, final only
 	c.CostUSD = &cost
 
-	wide := badgeRow(c, 60, PlainStyles(), UnicodeGlyphs())
+	wide := badgeRow(room(), c, 60, PlainStyles(), UnicodeGlyphs())
 	if !strings.HasPrefix(wide, "  unsandboxed  final only") {
 		t.Errorf("the badge row does not lead with the posture claim: %q", wide)
 	}
@@ -371,7 +371,7 @@ func TestTheBadgeRowRightAnchorsTheCostWithoutDroppingTheClaim(t *testing.T) {
 
 	// Too narrow to anchor: the claim stays and the number tucks in behind it.
 	// The cell's own fit is what clips — never this function dropping a badge.
-	if tight := badgeRow(c, 28, PlainStyles(), UnicodeGlyphs()); !strings.Contains(tight, "unsandboxed") {
+	if tight := badgeRow(room(), c, 28, PlainStyles(), UnicodeGlyphs()); !strings.Contains(tight, "unsandboxed") {
 		t.Errorf("a narrow badge row dropped the posture claim: %q", tight)
 	}
 }
