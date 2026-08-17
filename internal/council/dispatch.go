@@ -48,6 +48,33 @@ type turnState struct {
 	// persistent names the columns driven by a long-lived process, whose child
 	// must survive this turn's teardown.
 	persistent map[model.VendorID]bool
+	// seatHandles keys THIS ORDINARY turn's one-shot processes by vendor — the
+	// non-arena mirror of arenaHandles below, and NEW plumbing rather than a
+	// widening of it. Two fields rather than one because arenaHandles answers a
+	// second question this one must not: arenaRacing reads it to decide whose
+	// exit a KindDone is while two processes wear one vendor id, and an ordinary
+	// turn's handle landing in that map would send every ordinary exit down the
+	// racer's branch.
+	//
+	// Added 2026-08-17, when the owner reversed §9.37's "an ordinary turn's seats
+	// share one fate by design" line: that line was written for the four-seat
+	// room, and in the five-seat room the most probable live failure is one
+	// stalled vendor on an @all turn. The flat handles list still stays: its two
+	// consumers, cancelTurn and teardown, are all-or-nothing acts that never
+	// address a single process.
+	seatHandles map[model.VendorID]racerHandle
+	// givenUp names the seats the operator cut with `x` this turn (giveUpSeat).
+	//
+	// A cut seat's column is already terminal, and its process keeps talking for
+	// a moment either way: a killed child drains its buffered stdout, and an
+	// INTERRUPTED persistent seat answers the interrupt with its own failed
+	// `result` line. Both arrive as events addressed to a column whose fate the
+	// operator has already decided, and applyEvents would otherwise let them
+	// overwrite the give-up's own note with the vendor's abort error, or stamp
+	// "[Turn completed with 0 text chunks streamed]" onto a seat that never
+	// answered — a cut seat claiming a measured zero. Membership is the whole
+	// guard; it dies with the turn, so nothing has to remember to clear it.
+	givenUp map[model.VendorID]bool
 
 	// arena marks a /arena turn: every racing seat is a FRESH one-shot session
 	// in its own worktree (arena.go). The flag gates two things — the session-id
@@ -111,10 +138,11 @@ type turnState struct {
 // racerHandle is the one-method slice of runner.Handle the give-up key drives.
 //
 // An interface for exactly seatSession's reason: the property under test is
-// "the RIGHT racer's process was killed and the other racers' survived", and a
-// test that needed four real children just to watch one be killed would be
-// spawning processes to check a map lookup. runner.Handle is the only
-// production implementation, and only dispatch's arena branch ever stores one.
+// "the RIGHT seat's process was killed and the others' survived", and a test
+// that needed four real children just to watch one be killed would be spawning
+// processes to check a map lookup. runner.Handle is the only production
+// implementation, and dispatch's two spawn-per-turn branches — the arena's and
+// the ordinary turn's — are the only places that store one.
 type racerHandle interface{ Kill() }
 
 type eventBatchMsg struct{ events []runner.Event }
@@ -529,6 +557,15 @@ func (m *Model) dispatch() tea.Cmd {
 				continue
 			}
 			ts.handles = append(ts.handles, h)
+			// The same handle, keyed by vendor, so `x` can cut THIS seat and no
+			// other on an ordinary turn (turnState.seatHandles). Kept beside the
+			// flat append for arenaHandles' reason: the list is what cancelTurn
+			// and teardown sweep, and a give-up's Kill on an already-killed
+			// handle is a no-op by Handle's own contract.
+			if ts.seatHandles == nil {
+				ts.seatHandles = map[model.VendorID]racerHandle{}
+			}
+			ts.seatHandles[c.Vendor] = h
 			// The id half of §9.43's comparison, recorded at the one moment it is
 			// known and ONLY for a seat whose vendor has been measured to fork a
 			// lost thread in silence. Gating here rather than at the comparison is
@@ -927,6 +964,20 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			}
 
 		case runner.KindDone:
+			// The seat the operator cut with `x` this turn. Its column is already
+			// terminal and carries the give-up's own note, so the only thing left
+			// for this exit to do is the PROCESS bookkeeping — which is why this
+			// is a branch and not a bare `continue`: a persistent seat that was
+			// INTERRUPTED keeps its process, and if that process later dies for
+			// real, forgetting it here is what stops the next brief writing into
+			// a closed pipe. The liveness test is the same one the stale-exit
+			// guards below trust: a process that exited cannot be Alive.
+			if m.wasGivenUp(ev.Vendor) {
+				if p, ok := m.procs[ev.Vendor]; ok && (p.sess == nil || !p.sess.Alive()) {
+					m.dropProcess(ev.Vendor)
+				}
+				continue
+			}
 			// A terminal event names a VENDOR, not a process. When this seat's
 			// CURRENT process is alive, this exit belongs to a predecessor — the
 			// one a /cd respawn killed, or one that died while the room was idle
@@ -1035,12 +1086,40 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				m.finishColumn(c, PhaseFailed)
 				continue
 			}
-			if strings.TrimSpace(c.Body) == "" {
+			// The placeholder is a claim about THIS turn — it completed and
+			// produced no text — so only a column that was still live may
+			// acquire it. This is the same defect the end-of-turn branch above
+			// was fixed for and the same argument
+			// (TestALateEndOfTurnLineCannotSettleATerminalColumn): the phase
+			// write has always been guarded, the BODY write was not, so an exit
+			// arriving on a column that had already ended wrote "[Turn completed
+			// …]" over it. The give-up made that reachable on an exit rather
+			// than only on a queued end-of-turn line — a seat cut with `x`
+			// whose child exits after the turn boundary is past
+			// turnState.givenUp's lifetime, and a cut seat claiming a measured
+			// zero is §4a.1's false zero.
+			if strings.TrimSpace(c.Body) == "" && (c.Phase == PhaseStreaming || c.Phase == PhaseWaiting) {
 				c.Body = "[Turn completed with 0 text chunks streamed]"
 			}
 			m.finishColumn(c, PhaseDone)
 
 		case runner.KindError:
+			// The cut seat again, and this is the branch that made the guard
+			// necessary rather than merely tidy. interruptSeat cancels a
+			// persistent turn by ASKING the vendor to abandon it, and the vendor
+			// answers with a failed `result` — measured as is_error true with
+			// terminal_reason "aborted_tools". Without this the tail below would
+			// write that error over "given up after 1m2s …", so a seat the
+			// operator stopped would read as a seat that fell over, and
+			// m.failure would record a vendor failure for a keystroke.
+			if m.wasGivenUp(ev.Vendor) {
+				if !ev.EndsTurn {
+					if p, ok := m.procs[ev.Vendor]; ok && (p.sess == nil || !p.sess.Alive()) {
+						m.dropProcess(ev.Vendor)
+					}
+				}
+				continue
+			}
 			// The same predecessor guard as KindDone, for the process-level
 			// half only: a vendor-REPORTED failure (EndsTurn) rides the current
 			// process's own stdout and is never stale, but a process exit can
@@ -1843,6 +1922,19 @@ func (m *Model) arenaRacing(v model.VendorID) bool {
 	}
 	_, racing := m.turn.arenaHandles[v]
 	return racing
+}
+
+// wasGivenUp reports whether the operator cut this seat with `x` during the
+// turn that is in flight now (turnState.givenUp).
+//
+// Read from the turn, like every other per-turn attribution here, and that is
+// also what bounds the guard: the fact is true only until the turn ends, so a
+// seat cut in turn 4 is an ordinary seat again in turn 5 with nothing to reset.
+func (m *Model) wasGivenUp(v model.VendorID) bool {
+	if m.turn == nil {
+		return false
+	}
+	return m.turn.givenUp[v]
 }
 
 // cancelTurn stops everything in flight. The columns keep whatever they already

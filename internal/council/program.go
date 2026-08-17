@@ -1030,32 +1030,41 @@ func (m *Model) undoSeat(v model.VendorID) {
 	m.st.Notice = c.Label + "'s attempt undone — " + r.Branch + " and its worktree are back at " + shortSHA(r.Base)
 }
 
-// askGiveUpSeat arms the confirmation for giving up on the focused RACING seat
-// mid-turn (§9.37, amended 2026-08-09) — the one per-seat act that runs while
-// a turn is in flight, because mid-flight is the only time it means anything.
-// The measurement that forced it: the second live /arena raced four seats,
-// three landed in 5–27 minutes, and the fourth streamed for 26m40s with its
-// live stat honestly reading "no changes yet against <base>" the whole time —
-// so the operator sat ~20 minutes after the race was decided, because ctrl+c
-// is the only exit and it cancels EVERYTHING. One stuck racer held the whole
-// turn hostage while the room displayed the truth and offered no act on it.
+// askGiveUpSeat arms the confirmation for giving up on the focused LIVE seat
+// mid-turn (§9.37, amended 2026-08-09 and again 2026-08-17) — the one per-seat
+// act that runs while a turn is in flight, because mid-flight is the only time
+// it means anything. The measurement that forced it: the second live /arena
+// raced four seats, three landed in 5–27 minutes, and the fourth streamed for
+// 26m40s with its live stat honestly reading "no changes yet against <base>"
+// the whole time — so the operator sat ~20 minutes after the race was decided,
+// because ctrl+c is the only exit and it cancels EVERYTHING. One stuck racer
+// held the whole turn hostage while the room displayed the truth and offered
+// no act on it.
+//
+// ORDINARY TURNS TOO, ruled 2026-08-17. The key shipped arena-only, and its
+// refusal said an ordinary turn's seats share one fate by design. The owner
+// reversed that: the one-fate line was a four-seat-era position, and the room
+// now seats five (§9.39), which makes one stalled vendor on an @all turn the
+// most probable live failure the room has. The hostage argument does not
+// change when the brief is prose instead of a race — only what the cut costs
+// changes, and that is what the card and the note say per seat kind.
 //
 // The refusals are each their own sentence because they are different facts
 // with different remedies (askUndoSeat's rule): no turn in flight (there is
-// nothing running to give up on), an ordinary turn (its seats share one fate
-// by design — this key is arena-only, and ctrl+c remains the whole-turn act),
-// and a seat that already landed (its result is settled; killing a corpse is
-// not a way to make it more finished). The help panel's room-controls row is
-// at its exact 114-cell budget and does not name this key: it is taught by
-// these refusals and by §9.37's amendment, the same way /adopt and
-// /arena drop are taught by theirs.
+// nothing running to give up on), a turn ctrl+c is already stopping (every
+// seat is going, so a per-seat act would only re-label one of them), and a
+// seat that already landed (its result is settled; killing a corpse is not a
+// way to make it more finished). The help panel's room-controls row is at its
+// exact 114-cell budget and does not name this key: it is taught by these
+// refusals and by §9.37's amendments, the same way /adopt and /arena drop are
+// taught by theirs. ctrl+c is untouched and stays the whole-turn act.
 func (m *Model) askGiveUpSeat() {
 	if m.turn == nil {
-		m.st.Notice = "no turn is in flight — x gives up on one racing seat mid-race"
+		m.st.Notice = "no turn is in flight — x gives up on one live seat mid-turn"
 		return
 	}
-	if !m.turn.arena {
-		m.st.Notice = "this turn is not a race — an ordinary seat has nothing to give up on; ctrl+c cancels the whole turn"
+	if m.cancelling {
+		m.st.Notice = "ctrl+c is already cancelling this turn — every seat is stopping"
 		return
 	}
 	c := m.focused()
@@ -1064,17 +1073,39 @@ func (m *Model) askGiveUpSeat() {
 		return
 	}
 	if !m.turn.live[c.Vendor] {
-		m.st.Notice = c.Label + " already landed — there is nothing racing to give up on"
+		m.st.Notice = c.Label + " already landed — there is nothing running to give up on"
 		return
 	}
 	m.giveUpPending = c.Vendor
-	m.st.Notice = "give up on " + c.Label + "? y kills its racer and lands the column cancelled — anything it wrote stays in the diff · n lets it race"
+	m.st.Notice = "give up on " + c.Label + "? " + giveUpCost(m.turn, c.Vendor)
+}
+
+// giveUpCost is the second half of the y/n card: what pressing y actually costs
+// THIS seat. Three sentences for three seat kinds, because the cost genuinely
+// differs and a card that named only the common part would be asking the user
+// to authorize an act it had not described.
+//
+// A racer is a throwaway one-shot in a worktree, so its work survives as the
+// diff. An ordinary batch seat is a one-shot with no worktree, so what it
+// streamed is all there is. The persistent seat is INTERRUPTED rather than
+// killed, so the sentence has to say the conversation lives — the whole reason
+// the interrupt exists is that killing it would throw away the session-init
+// cost and make the next brief expensive (cancelTurn's own argument).
+func giveUpCost(ts *turnState, v model.VendorID) string {
+	switch {
+	case ts.arena:
+		return "y kills its racer and lands the column cancelled — anything it wrote stays in the diff · n lets it race"
+	case ts.persistent[v]:
+		return "y interrupts it and lands the column cancelled — its conversation survives, so the next brief resumes it · n lets it work"
+	default:
+		return "y kills its process and lands the column cancelled — what it streamed stays on the column · n lets it work"
+	}
 }
 
 // giveUpGateKey answers the confirmation armed by `x`. Anything that is not y
 // or n cancels rather than falling through to viewKey — clearGateKey's rule,
 // for clearGateKey's reason: this gate interrupts nothing, so the safe reading
-// of a key nobody meant to press is to leave the racer running.
+// of a key nobody meant to press is to leave the seat running.
 func (m *Model) giveUpGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	v := m.giveUpPending
 	m.giveUpPending = ""
@@ -1082,60 +1113,131 @@ func (m *Model) giveUpGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "y":
 		m.giveUpSeat(v)
 	case "n":
-		m.st.Notice = "kept — the seat races on"
+		m.st.Notice = "kept — the seat works on"
 	default:
 		m.st.Notice = "give-up cancelled — y confirms, n declines"
 	}
 	return m, nil
 }
 
-// giveUpSeat kills ONE racing seat's process and lands its column cancelled,
-// leaving the rest of the race running — which is the entire point: the turn's
-// live set drains through finishColumn exactly as it does for a seat that
-// landed on its own, so the turn can end when the others do.
+// giveUpSeat stops ONE live seat and lands its column cancelled, leaving the
+// rest of the turn running — which is the entire point: the turn's live set
+// drains through finishColumn exactly as it does for a seat that landed on its
+// own, so the turn can end when the others do.
 //
-// The kill lands on the RACER's side of the two-processes-one-vendor-id split
-// (applyEvents' KindDone attribution rule): the ephemeral session or the
-// keyed one-shot handle, both minted by dispatch's arena branch and both on
-// the TURN — never m.procs, so a room seat idling behind the same vendor id
-// survives its racer being given up on. The ephemeral kill is repeated by
-// finishColumn moments later (it kills before reading the diff, so the
-// receipt is a snapshot of a stopped attempt); both Kill implementations are
-// idempotent by contract, and the double call is cheaper than a second code
-// path finishColumn's ordering comment would have to carry.
+// HOW a seat is stopped is per seat kind, and the three arms are not
+// interchangeable:
 //
-// The events the dead process already queued arrive later and land inert:
-// its exit is a KindDone whose column is already terminal, eaten by the
-// stale-exit guard when a room process wears the id and a no-op through
-// finishColumn (once-only collection, idempotent live-set delete) when none
-// does. A kill this function performs is never re-labelled a vendor failure —
-// runner.Handle reports a killed child as a clean exit for exactly this case.
+//   - The ephemeral ACP racer and the keyed one-shot racer are killed. Both are
+//     minted by dispatch's arena branch and both live on the TURN — never
+//     m.procs — so a room seat idling behind the same vendor id survives its
+//     racer being given up on (applyEvents' KindDone attribution rule). The
+//     ephemeral kill is repeated by finishColumn moments later (it kills before
+//     reading the diff, so the receipt is a snapshot of a stopped attempt); both
+//     Kill implementations are idempotent by contract, and the double call is
+//     cheaper than a second code path finishColumn's ordering comment would have
+//     to carry.
+//   - An ordinary turn's batch seat is killed through turnState.seatHandles, the
+//     same act on the same kind of process, keyed the same way.
+//   - The PERSISTENT seat is INTERRUPTED, never killed. Killing it would work,
+//     and it would also throw away the conversation and the session-init cost
+//     that bought it, so cutting one turn would silently make the next one
+//     expensive — cancelTurn's argument, unchanged, applied per seat. The next
+//     brief resumes the seat, and the column's note says so.
+//
+// The events the stopped seat already queued arrive later and land inert, and
+// from 2026-08-17 that is a guard rather than a coincidence: turnState.givenUp
+// is set BEFORE anything is stopped, so the buffered stdout of a killed child
+// and the interrupted vendor's own failed `result` both meet it. A kill this
+// function performs is never re-labelled a vendor failure — runner.Handle
+// reports a killed child as a clean exit for exactly this case.
 func (m *Model) giveUpSeat(v model.VendorID) {
 	c := m.column(v)
 	// Re-checked, not trusted: events drain between the card arming and the y,
 	// so the seat can land — or the whole turn end — while the question is up.
 	// A give-up that ran anyway would re-finish a settled column.
-	if m.turn == nil || !m.turn.arena || c == nil || !m.turn.live[v] {
-		m.st.Notice = "the seat landed while the question was up — nothing was killed"
+	if m.turn == nil || c == nil || !m.turn.live[v] {
+		m.st.Notice = "the seat landed while the question was up — nothing was stopped"
 		return
 	}
-	if es, ok := m.turn.arenaEphemeral[v]; ok {
-		es.Kill()
-	} else if h, ok := m.turn.arenaHandles[v]; ok {
-		h.Kill()
+	// Recorded first, so that nothing the stop itself provokes can arrive at
+	// applyEvents ahead of the fact that explains it.
+	if m.turn.givenUp == nil {
+		m.turn.givenUp = map[model.VendorID]bool{}
+	}
+	m.turn.givenUp[v] = true
+
+	persistent := m.turn.persistent[v]
+	switch {
+	case persistent:
+		m.interruptSeat(v)
+	default:
+		if es, ok := m.turn.arenaEphemeral[v]; ok {
+			es.Kill()
+		} else if h, ok := m.turn.arenaHandles[v]; ok {
+			h.Kill()
+		} else if h, ok := m.turn.seatHandles[v]; ok {
+			h.Kill()
+		}
 	}
 	// The KindDone exit path's own retirement steps, in its order: flush the
-	// redactor's held tail (a give-up must not eat the racer's last word),
+	// redactor's held tail (a give-up must not eat the seat's last word),
 	// stamp the clock, name what happened, then finishColumn does everything
-	// already built — kill-before-diff, collect, commit-per-turn, rank (a DNF
-	// finished too, and the render welds the rank to the phase word so
-	// "4th · cancelled" cannot read as a result), clear the interim stat, and
-	// drain this seat from the turn's live set.
+	// already built — on a race that is kill-before-diff, collect,
+	// commit-per-turn, rank (a DNF finished too, and the render welds the rank
+	// to the phase word so "4th · cancelled" cannot read as a result) and clear
+	// the interim stat; on every turn it is the drain of this seat from the
+	// turn's live set.
 	c.Body += m.flush(v)
 	c.Elapsed = time.Since(c.Started)
-	c.Note = "given up after " + dur(c.Elapsed) + " — anything it wrote is in the diff"
+	c.Note = giveUpNote(m.turn, v, c)
 	m.finishColumn(c, PhaseCancelled)
-	m.st.Notice = "gave up on " + c.Label + " — its racer is dead and its column landed cancelled"
+	m.st.Notice = "gave up on " + c.Label + " — " + giveUpOutcome(m.turn, v)
+}
+
+// giveUpNote is the sentence the cut column keeps, and it exists to keep FOUR
+// column states apart on screen (§4a.1, applied to the ways a column can end
+// without an answer):
+//
+//   - given up — this note, naming the elapsed and what became of the seat;
+//   - not addressed — "not addressed in turn N", with Column.Skipped set;
+//   - ctrl+c — "cancelled — the output above is partial", the whole-turn act;
+//   - a measured empty answer — a body reading "[Turn completed with 0 text
+//     chunks streamed]" under PhaseDone, which a cut seat must never acquire.
+//
+// The empty case says itself rather than leaning on the absent body alone: a
+// seat that never spoke and a seat that answered nothing are different facts,
+// and only one of them was stopped by the operator. Past tense on purpose —
+// "when it was cut" stays true if a killed child's last buffered chunk lands
+// after the column has retired, which is the one thing this note cannot
+// prevent and must not contradict.
+func giveUpNote(ts *turnState, v model.VendorID, c *Column) string {
+	if ts.arena {
+		return "given up after " + dur(c.Elapsed) + " — anything it wrote is in the diff"
+	}
+	arrived := "nothing had arrived when it was cut"
+	if strings.TrimSpace(c.Body) != "" {
+		arrived = "what arrived before the cut is above"
+	}
+	fate := "its process is dead"
+	if ts.persistent[v] {
+		fate = "its conversation survives, so the next brief resumes it"
+	}
+	return "given up after " + dur(c.Elapsed) + " — " + arrived + "; " + fate
+}
+
+// giveUpOutcome is the footer's half of the same fact. It names the MECHANISM
+// because that is the part the user cannot see: a killed seat and an
+// interrupted one both land a cancelled column, and only one of them still has
+// a conversation behind it.
+func giveUpOutcome(ts *turnState, v model.VendorID) string {
+	if ts.persistent[v] {
+		return "it was interrupted, its column landed cancelled, and its conversation is intact"
+	}
+	if ts.arena {
+		return "its racer is dead and its column landed cancelled"
+	}
+	return "its process is dead and its column landed cancelled"
 }
 
 // flowWriteGateKey authorizes or cancels a /flow write hop before any seat is spawned.
@@ -1654,15 +1756,16 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// q, f and c already keep.
 		m.askUndoSeat()
 	case "x":
-		// Give up on the focused RACING seat, mid-turn (§9.37, amended
-		// 2026-08-09): kill that racer only, land its column cancelled, let
-		// the race run on — the per-seat exit the second live /arena measured
-		// the room lacking, when one stuck racer held a decided race hostage
-		// for ~20 minutes because ctrl+c cancels everything. `x` because it
-		// is free in view mode and unclaimed by any gate or nav key, and the
-		// act is a cross-out, not an undo — `u` takes back what a FINISHED
-		// attempt wrote; `x` stops an attempt still running. y/n-confirmed
-		// like `c` and `u`: y kills a process nothing can restart. View mode
+		// Give up on the focused LIVE seat, mid-turn (§9.37, amended
+		// 2026-08-09 for a race and 2026-08-17 for every turn): stop that one
+		// seat, land its column cancelled, let the rest of the turn run on —
+		// the per-seat exit the second live /arena measured the room lacking,
+		// when one stuck racer held a decided race hostage for ~20 minutes
+		// because ctrl+c cancels everything. `x` because it is free in view
+		// mode and unclaimed by any gate or nav key, and the act is a
+		// cross-out, not an undo — `u` takes back what a FINISHED attempt
+		// wrote; `x` stops one still running. y/n-confirmed like `c` and `u`:
+		// on a batch seat y kills a process nothing can restart. View mode
 		// only: in compose `x` is the letter x, the contract q, f and c
 		// already keep.
 		m.askGiveUpSeat()

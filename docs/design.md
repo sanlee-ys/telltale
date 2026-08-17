@@ -11636,9 +11636,12 @@ room displayed the truth and offered no per-seat act on it. The act built:
   phase word so "4th · cancelled" cannot read as a result — and the interim stat clears. The
   seat leaves the turn's live set through the same drain every landing uses, so **the turn
   ends when the remaining seats land** — which is the whole point.
-- **Three refusals, three sentences** (the undo key's rule): no turn in flight; an ordinary
+- **Three refusals, three sentences** (the undo key's rule): no turn in flight; ~~an ordinary
   turn — its seats share one fate by design, this key is arena-only and **ctrl+c remains the
-  whole-turn act**, said in the refusal; and a seat that already landed (its result is
+  whole-turn act**, said in the refusal~~ **(REVERSED 2026-08-17 — the block below; the key
+  now runs on an ordinary turn, and the refusal that took this one's place is a turn ctrl+c
+  is already cancelling. ctrl+c is unchanged and is still the whole-turn act)**; and a seat
+  that already landed (its result is
   settled — a y arriving after the seat lands under the question refuses the same way,
   killing nothing and re-ranking nothing). The help panel's room-controls row is at its
   exact 114-cell budget and does not name the key; it is taught by these refusals and by
@@ -11654,6 +11657,79 @@ when the remaining seats land, all three refusals, the y/n/stray gate, and compo
 turn ended when the remaining seats landed — which is the whole claim, measured. The three
 refusals and the y/n/stray gate stay offline-pinned, and always will be: a live race has no
 way to exercise a refusal it never trips.
+
+**Amendment, 2026-08-17: `x` gives up on one seat of an ORDINARY turn too — the one-fate
+line is reversed.** The amendment above refused the key outside a race on a stated design
+position: *an ordinary turn's seats share one fate by design*. The owner reversed that
+position on 2026-08-17, and the reason is that the position was **written for the four-seat
+room**. It said, in effect, that a brief and its answers are one act, so a seat that is
+still working is the turn still working. The five-seat room (§9.39) supersedes it: with
+five vendors on an `@all` turn, **one stalled vendor while the other four have answered is
+the most probable live failure this room has** — it is the failure two live races already
+produced inside `/arena`, and nothing about it is a property of worktrees. The hostage
+argument that built the key does not change when the brief is prose instead of a race. Only
+the cost of the cut changes, and that is what the room now says per seat kind.
+
+- **How a seat is stopped is per seat kind, and the three arms are not interchangeable.** A
+  batch seat (codex, agy, grok) is KILLED, through `turnState.seatHandles` — new plumbing
+  that mirrors `arenaHandles`, not a widening of it, because `arenaHandles` also answers
+  `arenaRacing`'s question about whose exit a `KindDone` is while two processes wear one
+  vendor id, and an ordinary handle in that map would send every ordinary exit down the
+  racer's branch. The persistent claude seat is **INTERRUPTED** (`interruptSeat`), never
+  killed: killing it would work and would also throw away the conversation and the
+  session-init cost that bought it, so cutting one turn would silently make the next one
+  expensive — `cancelTurn`'s own argument, applied per seat. The next brief resumes it. The
+  ACP cursor seat needs no third arm: on an ordinary turn it IS a persistent seat and takes
+  the interrupt, and the throwaway racer the arena kills only exists during a race. The
+  flat `handles` list is untouched, for its own reason: cancel and teardown are
+  all-or-nothing acts that never address a single process.
+- **Four endings, four sentences.** The cut column lands CANCELLED through `finishColumn`,
+  keeping everything it streamed, and its note has to stay distinguishable from the three
+  other ways a column ends with no answer: *not addressed* ("not addressed in turn N", with
+  `Column.Skipped` set), *ctrl+c* ("cancelled — the output above is partial", still the
+  whole-turn act), and *a measured empty answer* (a body reading "[Turn completed with 0
+  text chunks streamed]" under `done`). The give-up's own note names the elapsed, whether
+  anything had arrived **when it was cut**, and what became of the seat — past tense on
+  purpose, so a killed child's last buffered chunk landing after the column retires cannot
+  make the sentence false. **A seat that streamed nothing must never acquire the
+  placeholder**: that would be §4a.1's false zero in its sharpest form, a seat the operator
+  stopped claiming to have measured nothing. `testdata/golden/given-up-vs-zero.txt` pins the
+  two side by side. Holding that took one fix outside the give-up itself, and it is the same
+  defect the eleventh amendment's end-of-turn branch was already fixed for: the placeholder
+  is a claim that THIS turn completed, so only a column still in a live phase may acquire
+  it. The phase write on the `KindDone` exit path had always been guarded and the BODY write
+  had not, so an exit landing on a column that had already ended overwrote it. The give-up
+  makes that reachable — a cut seat's child can exit after the turn boundary, past
+  `turnState.givenUp`'s lifetime — and the guard is now on the body write too.
+- **The cut seat's own late events land inert, by guard rather than by luck.**
+  `turnState.givenUp` is recorded BEFORE anything is stopped, because both stops provoke
+  one more event: a killed child drains its buffered stdout, and an interrupted persistent
+  seat answers with its own failed `result` (measured is_error true, terminal_reason
+  "aborted_tools"). Unguarded, that error would overwrite "given up after 4m12s …" with the
+  vendor's abort text and record a vendor failure against a seat the user stopped. The
+  guard still does the PROCESS bookkeeping — an interrupted seat whose process later dies
+  for real is forgotten, so the next brief does not write into a closed pipe.
+- **The refusal set changed by one.** "This turn is not a race" is gone. Its place is taken
+  by a turn ctrl+c is already cancelling: every seat is going anyway, so a per-seat act
+  would only re-label one of them. The other two are unchanged — no turn in flight, and a
+  seat that already landed — and the re-check on `y` is unchanged too, because events drain
+  between the card arming and the answer and the seat can land while the question is up.
+
+Verification, stated honestly and in two halves. **Offline**: `giveup_test.go` pins both
+seat kinds on a real `@all` turn — the batch kill reaching exactly one process with every
+other seat still working, the persistent seat interrupted rather than killed and still
+registered, the interrupted seat's own abort error not overwriting the give-up, the cut
+seat that streamed nothing never acquiring the placeholder, the turn ending when the
+remaining seats land, the four endings reading as four different sentences, the new refusal,
+and `--ascii`/`NO_COLOR` parity on the cut column. No test here spawns a vendor
+(`countSpawns`, per the council-test rule). **Live: a LIVE ordinary-turn give-up on the
+Windows reference box is OWED**, as a dated payment before 2026-09-30. Offline tests cannot
+exercise it: what is unmeasured is whether a real vendor's interrupt lands on a real
+persistent seat mid-turn and whether that seat's NEXT brief actually resumes the
+conversation, which is the whole claim the persistent arm makes and the one thing a fake
+session cannot witness. Until that date and that run, the interrupt arm stands on
+`giveup_test.go` and on `cancelTurn`'s already-measured interrupt, and this paragraph is the
+record that it does.
 
 **Amendment, 2026-08-09: the brief carries the conduct line — the one place the room adds
 words.** A write-posture racer's confinement is its worktree, but the machine's git and gh

@@ -1,0 +1,24 @@
+  council READ  │  ~/code/telltale                                                  turn 2  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▌ ▸ 1 CC Claude Code ⚠ cancelled 4m12s  │    2 CX Codex  ──  ⚠ cancelled 11m3s  │    3 AG Antigravity  ────  ✓ done 9s  
+▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▌ The resume path is the one to take,   │                                       │                                       
+▌ because re-sending the                │                                       │                                       
+▌                                       │                                       │                                       
+▌ ⚠ given up after 4m12s — what         │                                       │                                       
+▌   arrived before the cut is above;    │  ⚠ given up after 11m3s — nothing     │                                       
+▌   its conversation survives, so the   │    had arrived when it was cut; its   │  [Turn completed with 0 text chunks   
+▌   next brief resumes it               │    process is dead                    │  streamed]                            
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+                    ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-3 seat  │  i compose  │  ? help  │  q quit  

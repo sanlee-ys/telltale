@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -237,9 +238,12 @@ func TestARacerGiveUpLeavesTheRoomProcessAlive(t *testing.T) {
 }
 
 // TestGiveUpRefusalsEachNameTheirReason: three different facts, three
-// different sentences (askUndoSeat's rule) — and the ordinary-turn refusal
-// says out loud that ctrl+c remains the whole-turn act, because a key that is
-// arena-only must name the act that is not.
+// different sentences (askUndoSeat's rule).
+//
+// The set changed on 2026-08-17. "This turn is not a race" is gone, because
+// the key is no longer arena-only, and the refusal it left behind is the one
+// that took its place: a turn ctrl+c is already cancelling has no per-seat act
+// left to offer, since every seat is going anyway.
 func TestGiveUpRefusalsEachNameTheirReason(t *testing.T) {
 	t.Run("no turn in flight", func(t *testing.T) {
 		m := flowRoom(t, true)
@@ -252,20 +256,16 @@ func TestGiveUpRefusalsEachNameTheirReason(t *testing.T) {
 			t.Errorf("refusal: %q", m.st.Notice)
 		}
 	})
-	t.Run("an ordinary turn is not a race", func(t *testing.T) {
-		log := countSpawns(t)
-		m := flowRoom(t, true)
-		m.st.Draft = "an ordinary brief"
-		m.dispatch()
-		if m.turn == nil || m.turn.arena {
-			t.Fatalf("fixture: want an ordinary turn in flight (%d spawns)", log.n())
-		}
+	t.Run("ctrl+c is already stopping every seat", func(t *testing.T) {
+		m, _, _ := giveUpRace(t)
+		focusSeatOn(t, m, model.VendorCursor)
+		m.cancelling = true
 		m.key(key("x"))
 		if m.giveUpPending != "" {
-			t.Fatal("x armed on an ordinary turn's seat")
+			t.Fatal("x armed a per-seat act over a whole-turn cancel already in progress")
 		}
-		if !strings.Contains(m.st.Notice, "not a race") || !strings.Contains(m.st.Notice, "ctrl+c") {
-			t.Errorf("the refusal does not say the key is arena-only and name the whole-turn act: %q", m.st.Notice)
+		if !strings.Contains(m.st.Notice, "ctrl+c") || !strings.Contains(m.st.Notice, "every seat") {
+			t.Errorf("the refusal does not name the act already running: %q", m.st.Notice)
 		}
 	})
 	t.Run("the seat already landed", func(t *testing.T) {
@@ -342,6 +342,396 @@ func TestGiveUpRefusesWhenTheSeatLandsUnderTheQuestion(t *testing.T) {
 	}
 	if !strings.Contains(m.st.Notice, "landed while the question was up") {
 		t.Errorf("the refusal does not name what happened: %q", m.st.Notice)
+	}
+}
+
+// ── the ordinary turn (§9.37, amended 2026-08-17) ─────────────────────────
+//
+// The owner reversed the "an ordinary turn's seats share one fate by design"
+// line on 2026-08-17: it was a four-seat-era position, and the five-seat room's
+// most probable live failure is one stalled vendor on an @all turn. Everything
+// below witnesses the same properties the race tests above do — which process
+// was stopped, what landed on the column, what the OTHER seats kept — with the
+// one new axis the ordinary turn adds: a batch seat is killed and a persistent
+// seat is interrupted, and the two must not be confused for each other.
+//
+// No test here spawns a vendor. countSpawns stubs all three spawn vars and the
+// handles are planted fakes, per CLAUDE.md's council-test rule.
+
+// ordinaryTurn is a four-seat room with an ORDINARY brief in flight, every
+// one-shot handle replaced by an observable fake, and the persistent seats'
+// sessions replaced by killSession so an interrupt can be told from a kill.
+//
+// `@all`, because that is the turn the reversal was ruled for: the room's
+// default route is Claude alone, and a one-seat turn has no seat to leave
+// running — the whole property under test. It also produces both seat kinds at
+// once, which is what makes "the wrong one was not stopped" assertable.
+//
+// HOME is redirected because a turn that ends writes room.json, and a test
+// must never touch the operator's own.
+func ordinaryTurn(t *testing.T) (*Model, map[model.VendorID]*recordedKill, map[model.VendorID]*killSession) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	log := countSpawns(t)
+	m := flowRoom(t, true)
+	m.st.Draft = "@all an ordinary brief"
+	m.dispatch()
+	if m.turn == nil {
+		t.Fatalf("fixture: no turn in flight (%d spawns)", log.n())
+	}
+	if m.turn.arena {
+		t.Fatal("fixture: the brief raced — this file's ordinary half needs an ordinary turn")
+	}
+	oneShots := map[model.VendorID]*recordedKill{}
+	for v := range m.turn.seatHandles {
+		k := &recordedKill{}
+		oneShots[v] = k
+		m.turn.seatHandles[v] = k
+	}
+	if len(oneShots) == 0 {
+		t.Fatal("fixture: no seat handle was keyed — x has nothing to address on an ordinary turn")
+	}
+	live := map[model.VendorID]*killSession{}
+	for v := range m.turn.persistent {
+		s := &killSession{}
+		live[v] = s
+		m.procs[v].sess = s
+	}
+	if len(live) == 0 {
+		t.Fatal("fixture: no persistent seat took the turn — the interrupt arm is untested")
+	}
+	return m, oneShots, live
+}
+
+// oneOf returns a vendor from a fixture map, so a test can name "a batch seat"
+// without hard-coding which vendors the registry currently drives that way.
+func oneOf[T any](t *testing.T, m map[model.VendorID]T, what string) model.VendorID {
+	t.Helper()
+	best := model.VendorID("")
+	for v := range m {
+		if best == "" || v < best {
+			best = v
+		}
+	}
+	if best == "" {
+		t.Fatalf("no %s in this room", what)
+	}
+	return best
+}
+
+// TestGiveUpOnAnOrdinaryBatchSeatKillsItAndLeavesTheTurnRunning is the reversal
+// itself: `x` on an ordinary turn's spawn-per-turn seat kills exactly that
+// seat's process, lands its column cancelled, and the brief's other seats go
+// on answering. Before 2026-08-17 this refused with "this turn is not a race".
+func TestGiveUpOnAnOrdinaryBatchSeatKillsItAndLeavesTheTurnRunning(t *testing.T) {
+	m, oneShots, live := ordinaryTurn(t)
+	cut := oneOf(t, oneShots, "batch seat")
+	c := m.column(cut)
+	c.Body = "half a thought"
+	focusSeatOn(t, m, cut)
+
+	m.key(key("x"))
+	if m.giveUpPending != cut {
+		t.Fatalf("x did not arm the focused ordinary seat: %q", m.st.Notice)
+	}
+	if !strings.Contains(m.st.Notice, "kills its process") {
+		t.Errorf("the card does not say what y costs a batch seat: %q", m.st.Notice)
+	}
+	m.key(key("y"))
+
+	if !oneShots[cut].killed {
+		t.Fatal("y did not kill the seat's process")
+	}
+	if c.Phase != PhaseCancelled {
+		t.Fatalf("phase = %v, want cancelled", c.Phase)
+	}
+	if !strings.Contains(c.Note, "given up after") || !strings.Contains(c.Note, "its process is dead") {
+		t.Errorf("the note does not name the give-up and the seat's fate: %q", c.Note)
+	}
+	if c.Body != "half a thought" {
+		t.Errorf("the cut column lost what it had streamed: %q", c.Body)
+	}
+	if c.Arena != nil {
+		t.Error("an ordinary give-up produced an arena receipt")
+	}
+	if m.turn == nil {
+		t.Fatal("giving up on one seat ended a turn the others are still taking")
+	}
+	if m.turn.live[cut] {
+		t.Error("the cut seat never left the turn's live set — the turn cannot end")
+	}
+	for v, k := range oneShots {
+		if v != cut && k.killed {
+			t.Errorf("%s's give-up killed %s's process too", cut, v)
+		}
+	}
+	for v, s := range live {
+		if s.killed {
+			t.Errorf("%s's give-up killed the persistent seat %s", cut, v)
+		}
+		if c := m.column(v); c.Phase != PhaseStreaming && c.Phase != PhaseWaiting {
+			t.Errorf("%s stopped working: %v", v, c.Phase)
+		}
+	}
+}
+
+// TestGiveUpOnThePersistentSeatInterruptsItAndKeepsTheConversation.
+//
+// The seat kinds are not interchangeable here, and this is the difference:
+// killing the persistent seat would work and would also throw away the
+// conversation and the session-init cost that bought it, so cutting one turn
+// would silently make the next one expensive (cancelTurn's argument, applied
+// per seat). The process stays, the interrupt goes down its own channel, and
+// the column's note says the next brief resumes it.
+func TestGiveUpOnThePersistentSeatInterruptsItAndKeepsTheConversation(t *testing.T) {
+	m, _, live := ordinaryTurn(t)
+	cut := oneOf(t, live, "persistent seat")
+	focusSeatOn(t, m, cut)
+
+	m.key(key("x"))
+	if !strings.Contains(m.st.Notice, "interrupts it") || !strings.Contains(m.st.Notice, "conversation survives") {
+		t.Errorf("the card does not say what y costs a persistent seat: %q", m.st.Notice)
+	}
+	m.key(key("y"))
+
+	sess := live[cut]
+	if sess.killed {
+		t.Fatal("the persistent seat was KILLED — the conversation and its session-init cost went with it")
+	}
+	if len(sess.sent) == 0 {
+		t.Fatal("nothing was sent to the seat — the vendor was never told to abandon the turn")
+	}
+	if _, ok := m.procs[cut]; !ok {
+		t.Error("the seat's process was forgotten; the next brief would start a new session")
+	}
+	c := m.column(cut)
+	if c.Phase != PhaseCancelled {
+		t.Fatalf("phase = %v, want cancelled", c.Phase)
+	}
+	if !strings.Contains(c.Note, "the next brief resumes it") {
+		t.Errorf("the note does not say the conversation survived: %q", c.Note)
+	}
+	if !strings.Contains(m.st.Notice, "interrupted") || !strings.Contains(m.st.Notice, "conversation is intact") {
+		t.Errorf("the footer does not name the mechanism, which is the part the user cannot see: %q", m.st.Notice)
+	}
+}
+
+// TestAnInterruptedSeatsOwnErrorDoesNotOverwriteTheGiveUp.
+//
+// Measured behaviour this guards: interrupting a persistent turn comes back as
+// a result with is_error true and terminal_reason "aborted_tools" — the vendor
+// really does report a failure. The user's keystroke is not the vendor falling
+// over, so that event must not replace "given up after …" with the vendor's
+// error, must not re-label the column, and must not record a failure class
+// against the seat.
+func TestAnInterruptedSeatsOwnErrorDoesNotOverwriteTheGiveUp(t *testing.T) {
+	m, _, live := ordinaryTurn(t)
+	cut := oneOf(t, live, "persistent seat")
+	focusSeatOn(t, m, cut)
+	m.key(key("x"))
+	m.key(key("y"))
+	note := m.column(cut).Note
+
+	m.applyEvents([]runner.Event{{
+		Vendor: cut, Kind: runner.KindError, EndsTurn: true,
+		Note: "the vendor reported the turn failed", Failure: runner.FailureUnclassified,
+	}})
+
+	c := m.column(cut)
+	if c.Note != note {
+		t.Errorf("the vendor's abort error replaced the give-up's own sentence: %q", c.Note)
+	}
+	if c.Phase != PhaseCancelled {
+		t.Errorf("phase = %v — the abort re-labelled a seat the operator stopped", c.Phase)
+	}
+	if _, blamed := m.failure[cut]; blamed {
+		t.Error("a keystroke was recorded as a vendor failure")
+	}
+}
+
+// TestACutSeatThatStreamedNothingIsNotAMeasuredZero.
+//
+// The §4a.1 case, in the shape this feature makes possible. A killed child
+// drains its buffered stdout, so its exit lands on a column that is already
+// terminal — and the ordinary KindDone path stamps "[Turn completed with 0
+// text chunks streamed]" onto an empty body. On a cut seat that sentence is a
+// lie twice over: the turn did not complete, and a seat that never spoke is
+// not a seat that measured nothing.
+func TestACutSeatThatStreamedNothingIsNotAMeasuredZero(t *testing.T) {
+	m, oneShots, _ := ordinaryTurn(t)
+	cut := oneOf(t, oneShots, "batch seat")
+	focusSeatOn(t, m, cut)
+
+	m.key(key("x"))
+	m.key(key("y"))
+	c := m.column(cut)
+	if !strings.Contains(c.Note, "nothing had arrived when it was cut") {
+		t.Errorf("the note does not say the seat never spoke: %q", c.Note)
+	}
+
+	m.applyEvents([]runner.Event{{Vendor: cut, Kind: runner.KindDone}})
+
+	if c.Body != "" {
+		t.Errorf("the cut seat's exit claimed a measured zero: body = %q", c.Body)
+	}
+	if c.Phase != PhaseCancelled {
+		t.Errorf("phase = %v — the exit echo re-labelled a cut column", c.Phase)
+	}
+	if !strings.Contains(c.Note, "given up after") {
+		t.Errorf("the exit echo took the give-up's own sentence: %q", c.Note)
+	}
+
+	// The same exit arriving AFTER the turn boundary, which is the case
+	// turnState.givenUp cannot cover — the turn is gone, and with it the fact
+	// that this seat was cut. The placeholder's own guard is what holds here:
+	// it is a claim about a turn that completed, so only a column still in a
+	// live phase may acquire it.
+	m.turn = nil
+	m.applyEvents([]runner.Event{{Vendor: cut, Kind: runner.KindDone}})
+	if c.Body != "" {
+		t.Errorf("an exit past the turn boundary claimed a measured zero on a cut column: body = %q", c.Body)
+	}
+	if c.Phase != PhaseCancelled {
+		t.Errorf("phase = %v — an exit past the turn boundary re-labelled a cut column", c.Phase)
+	}
+}
+
+// TestTheOrdinaryTurnEndsWhenTheRemainingSeatsLand is the whole point of the
+// reversal, in the same shape the race version of it takes: the cut seat drains
+// through the same finish every other landing uses, so nobody waits on a seat
+// they have already given up on.
+func TestTheOrdinaryTurnEndsWhenTheRemainingSeatsLand(t *testing.T) {
+	m, oneShots, _ := ordinaryTurn(t)
+	cut := oneOf(t, oneShots, "batch seat")
+	focusSeatOn(t, m, cut)
+
+	m.key(key("x"))
+	m.key(key("y"))
+	if m.turn == nil {
+		t.Fatal("the give-up itself ended the turn")
+	}
+	var rest []model.VendorID
+	for v := range m.turn.live {
+		rest = append(rest, v)
+	}
+	for _, v := range rest {
+		m.applyEvents([]runner.Event{{Vendor: v, Kind: runner.KindMeta, EndsTurn: true}})
+		m.applyEvents([]runner.Event{{Vendor: v, Kind: runner.KindDone}})
+	}
+
+	if m.turn != nil {
+		t.Fatal("every remaining seat has landed and the turn is still in flight — the hostage the key exists to free")
+	}
+	if m.st.Mode != ModeComposing {
+		t.Error("the ended turn did not hand the composer back")
+	}
+}
+
+// TestTheCutColumnStaysDistinctFromEveryOtherWayAColumnEnds.
+//
+// Four endings, four sentences, and the property is that no two of them read
+// alike: given up, not addressed, cancelled by ctrl+c, and a turn that
+// completed having said nothing. A note that collapsed any pair would make the
+// room's own transcript unreadable at exactly the moment the reader is trying
+// to work out who answered.
+func TestTheCutColumnStaysDistinctFromEveryOtherWayAColumnEnds(t *testing.T) {
+	m, oneShots, live := ordinaryTurn(t)
+	batch := oneOf(t, oneShots, "batch seat")
+	seat := oneOf(t, live, "persistent seat")
+	focusSeatOn(t, m, batch)
+	m.key(key("x"))
+	m.key(key("y"))
+	focusSeatOn(t, m, seat)
+	m.key(key("x"))
+	m.key(key("y"))
+
+	notes := map[string]string{
+		"given up (batch)":      m.column(batch).Note,
+		"given up (persistent)": m.column(seat).Note,
+		"not addressed":         "not addressed in turn 2",
+		"ctrl+c":                "cancelled — the output above is partial",
+	}
+	seen := map[string]string{}
+	for name, note := range notes {
+		if note == "" {
+			t.Fatalf("%s has no note at all", name)
+		}
+		if prior, dup := seen[note]; dup {
+			t.Errorf("%s and %s both read %q", prior, name, note)
+		}
+		seen[note] = name
+	}
+	for _, name := range []string{"given up (batch)", "given up (persistent)"} {
+		if !strings.Contains(notes[name], "given up") {
+			t.Errorf("%s does not say it was given up: %q", name, notes[name])
+		}
+		if strings.Contains(notes[name], "not addressed") || strings.Contains(notes[name], "partial") {
+			t.Errorf("%s borrowed another ending's words: %q", name, notes[name])
+		}
+	}
+}
+
+// givenUpRoom is the rendered form of the reversal: one seat cut while it was
+// mid-sentence, one cut before it said anything, and one that finished having
+// measured nothing. The third column is the control — it is the render a cut
+// seat must never be mistaken for.
+func givenUpRoom() State {
+	st := room()
+	st.Turn = 2
+	st.Columns[0].Phase = PhaseCancelled
+	st.Columns[0].Body = "The resume path is the one to take, because re-sending the"
+	st.Columns[0].Note = "given up after 4m12s — what arrived before the cut is above; its conversation survives, so the next brief resumes it"
+	st.Columns[0].Elapsed = 4*time.Minute + 12*time.Second
+	st.Columns[1].Phase = PhaseCancelled
+	st.Columns[1].Body = ""
+	st.Columns[1].Note = "given up after 11m3s — nothing had arrived when it was cut; its process is dead"
+	st.Columns[1].Elapsed = 11*time.Minute + 3*time.Second
+	st.Columns[2].Phase = PhaseDone
+	st.Columns[2].Body = "[Turn completed with 0 text chunks streamed]"
+	st.Columns[2].Elapsed = 9 * time.Second
+	return st
+}
+
+// TestGivenUpColumnsAgainstAMeasuredZero pins the frame the amendment claims:
+// three endings, three renders, and in particular the cut seat that never
+// spoke drawing NOTHING where the seat that answered nothing draws the
+// placeholder sentence. Collapsing those two is §4a.1's own regression.
+func TestGivenUpColumnsAgainstAMeasuredZero(t *testing.T) {
+	golden(t, "given-up-vs-zero", render(givenUpRoom()))
+}
+
+// TestTheGiveUpReadsTheSameInASCIIAndWithoutColour. Every distinction this room
+// makes is carried by a word first (§9.11), so the cut seat's whole signal —
+// the phase word and the note that says which kind of cut it was — has to
+// survive --ascii and NO_COLOR. The colour is only ever the second signal, and
+// PlainStyles is the identity set that stands in for a monochrome terminal.
+func TestTheGiveUpReadsTheSameInASCIIAndWithoutColour(t *testing.T) {
+	st := givenUpRoom()
+	st.ASCII = true
+	got := Render(st, PlainStyles(), GlyphsFor(true))
+
+	// Fragments, not whole sentences: a body wraps to the column width, so a
+	// check on the full string would be testing the wrap rather than the words.
+	// Each fragment below is short enough to land on one line at 120 cells.
+	for _, want := range []string{
+		"cancelled",
+		"given up after 4m12s",
+		"given up after 11m3s",
+		"had arrived when it was cut",
+		"process is dead",
+		"its conversation survives",
+		"[Turn completed with 0 text chunks",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("--ascii dropped %q\n%s", want, got)
+		}
+	}
+	// The one that would pass every substring check above and still be the bug:
+	// a cut seat and a measured zero rendering the same body.
+	if strings.Count(got, "[Turn completed with 0 text chunks") != 1 {
+		t.Error("more than one column claims a measured zero — a cut seat borrowed the placeholder")
 	}
 }
 
