@@ -155,7 +155,7 @@ release:
   # have arrived labelled as a full release.
   prerelease: auto
   header: |
-    **An honest gauge for your coding agents.**
+    **A dispatch room for your coding agents, with an honest gauge underneath.**
 
     ## What each binary is verified to be
 
@@ -215,7 +215,7 @@ scoops:
       token: "{{ .Env.GITHUB_TOKEN }}"
     directory: bucket
     homepage: https://github.com/sanlee-ys/telltale
-    description: An honest gauge for your coding agents — a dispatch room for several vendor CLIs, on a statusline and a cross-vendor HUD where every number is traceable to measured tool output.
+    description: A dispatch room for several vendor CLIs, with an honest gauge underneath — a statusline and a cross-vendor HUD where every number is traceable to measured tool output.
     license: MIT
     commit_msg_template: "dist: scoop manifest for {{ .ProjectName }} {{ .Tag }}"
     commit_author:

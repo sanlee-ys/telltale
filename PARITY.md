@@ -232,6 +232,80 @@ That is the reason `auth` and `network` stay `not checked`.
 Treat a wrong-looking doctor row on the Mac as unverified rather than broken, and
 record what you find here.
 
+## The macOS arrival of a released archive
+
+**Measured 2026-08-17.** Every macOS run recorded above used a binary built on
+the Mac itself. This entry is the first one that starts at a published release
+asset, which is what a stranger actually gets.
+
+| field | value |
+|---|---|
+| machine | Intel x86_64 MBP |
+| OS | macOS 26.5.2, build 25F84 (`sw_vers`) |
+| tag walked | `v0.2.0`, asset `telltale_0.2.0_darwin_amd64.tar.gz`, no re-tag |
+| transport | `curl -fsSL` over HTTPS, HTTP 200, 3,912,801 bytes |
+| checksum | `shasum -a 256 -c checksums.txt --ignore-missing` printed `telltale_0.2.0_darwin_amd64.tar.gz: OK` |
+| signature | `codesign -dvv` printed `code object is not signed at all`; `spctl -a -vv` printed `rejected` and `source=no usable signature` |
+| binary identity | `telltale version` printed `telltale 0.2.0` |
+
+**The method reproduces the browser download; it is not a browser download.**
+`curl` writes `com.apple.provenance` and does **not** write
+`com.apple.quarantine`, which was confirmed with `xattr -l` on the fetched
+archive. Quarantine is the attribute Gatekeeper acts on, so the operator wrote it
+by hand with `xattr -w com.apple.quarantine "0083;00000000;Chrome;"` before
+unpacking. The system `tar` then propagated it: the extracted binary carried
+`com.apple.quarantine: 0283;6a832c78;;`. Read every result below as measured over
+a reproduced mark rather than over a real browser download.
+
+**The gate, verbatim.** `./telltale doctor` under the mark was killed every time.
+The terminal reported:
+
+```
+/bin/bash: line 1: 45341 Killed: 9               ./telltale doctor
+```
+
+The exit status was 137, and the binary wrote nothing to stdout or stderr. macOS
+also raised a dialog on the operator's screen, which read:
+
+```
+"telltale" Not Opened
+
+Apple could not verify "telltale" is free of malware that may harm your Mac or
+compromise your privacy.
+
+[Move to Trash]  [Done]
+```
+
+The operator clicked neither button. The binary was **not** deleted by the kill;
+it stayed on disk with the attribute intact.
+
+**The remedy exercised.** `xattr -d com.apple.quarantine telltale` removed the
+attribute, which `xattr -l` confirmed. `./telltale doctor` then ran to completion
+at exit 0 and reported `15 checks passed, 0 failed, 10 not checked, over 5
+seats`. Right-click-open was never a candidate here: `telltale` is a command-line
+binary and not an app bundle, so the Finder path does not apply to it.
+
+One shape worth carrying into the docs: `xattr -d com.apple.quarantine` prints
+`xattr: telltale: No such xattr: com.apple.quarantine` and exits 1 when the
+attribute is absent, so it is not a harmless no-op line in a `curl` sequence.
+That is why `README.md` keeps `xattr -d` out of its main block and offers it as
+the browser-path remedy. The block it does show was then run line by line in a
+clean directory on the same day, and every line exited 0.
+
+**Owed, and unrun at any date:**
+
+- **A real browser walk.** Nobody has downloaded a release archive with a browser
+  on this machine and run the result. Until somebody does, the quarantine mark in
+  this entry is reproduced and the flags a real browser writes are unmeasured.
+- **The System Settings > Privacy & Security "Open Anyway" path.** Only the
+  `xattr -d` remedy was exercised. Whether that pane offers an entry for a
+  killed command-line binary, and whether the entry works, is unmeasured.
+- **The `darwin_arm64` archive.** It was not walked at all, which leaves its
+  "built, not verified" label exactly where it was.
+
+Windows and SmartScreen belong to the other machine. `SECURITY.md` still records
+that prompt as unmeasured, and nothing here changes it.
+
 ## Terminal profile
 
 The same frame reads better on macOS than on Windows, and the reason is not a
