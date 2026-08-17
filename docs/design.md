@@ -12205,6 +12205,105 @@ working exactly as it was written. Only the comment was stale.
 
 **Spend:** three billed turns, all trivial prompts, no tools.
 
+#### 2026-08-16: what agy reports when a turn needs the operator, and why that is `CapNone`
+
+§9.40's needs-you strip reads council's own gate queue and nothing else. The 2026-08-15 research
+asked whether agy's vendor-REPORTED `agent_state` (§2.1) could become a second source for it. This
+block is the measurement. The verdict is a `CapNone` refusal with **two independent reasons**, and
+each reason is sufficient on its own.
+
+**Instrument and version.** `agy 1.1.13`, read from `agy --version` at run time. agy self-updates,
+so a version quoted from a document is a version nobody checked; §3.8's re-verification records the
+same discipline. Windows 11. Six billed turns ran through this seat's own argv (`--output-format
+stream-json --disable-slash-commands --print-timeout <t> -p <prompt>`), from a throwaway directory
+outside any repository. The probe timestamped every stdout and stderr line, then the process exit.
+It then read the resulting transcripts for structural fields only: `type`, `status`, `step_index`
+and `created_at`. It copied no credential, and no prompt content from this machine enters this
+document.
+
+**Three shapes, two trials each.** Shape A is a normal completing turn and sets the baseline. Shape
+B drives agy to its `ask_question` tool. That is the pure needs-input case: the agent asks the
+operator a question and writes nothing. Shape C asks for a file write, which is the permission case.
+
+**The first reason: the waiting state never occurs in print mode.** agy answers on the operator's
+behalf, and it says so in its own words on both paths.
+
+- **A question is skipped.** In both shape B trials the agent asked, received no answer, and
+  continued inside the same turn. Its own next message reads: "I've presented the prompt to select
+  a file to rename, but it looks like you skipped it." Both turns ended `status: "SUCCESS"`, at
+  6.9s and 5.2s. Neither one waited.
+- **A tool permission is auto-approved.** Shape C trial 2 recorded a `SYSTEM_MESSAGE` step carrying
+  this text verbatim: `stop hook blocked termination due to reason: The user has automatically
+  approved the artifact through their review policy. Proceed to execution.` The write landed.
+  `init.permission_mode` reads `request-review` on all six turns, so that value does not mean the
+  operator is asked.
+- **`ask_permission` has never been reached.** It is one of the 56 tools in the `init` tools array.
+  Across 90 conversations and 4,344 transcript records there are **zero** `ASK_PERMISSION` records.
+  `ASK_QUESTION` has five.
+
+A gauge fed from this seam would therefore have nothing to report. `--print-timeout` is not the
+ceiling `agy.go`'s comment describes either. No probe turn reached it, because no probe turn waited.
+
+**The second reason: the print-mode stream cannot name the state it does emit.** The disk keeps the
+record type. The stream discards it. The two surfaces cross-walk by `step_index` exactly:
+
+| shape | idx | stream `step_type` / `state` | `tool_name` | `duration_seconds` | disk `type` / `status` |
+|---|---|---|---|---|---|
+| A (baseline) | 1 | `unknown` / DONE | absent | 0.0015, 0.0011 | `CONVERSATION_HISTORY` / DONE |
+| B (needs input) | 1 | `unknown` / DONE | absent | 0.0010, 0.0010 | `CONVERSATION_HISTORY` / DONE |
+| B (needs input) | 3 | `unknown` / DONE | absent | 0.5977, 0.5945 | **`ASK_QUESTION`** / DONE |
+| C (write) | 3 | `tool` / ACTIVE then DONE | `write_to_file` | 13.5304, 0.5917 | `CODE_ACTION` / DONE |
+
+**The needs-input step and the every-turn preamble step are byte-identical in every field this
+adapter reads.** Both arrive as `step_type: "unknown"`, state DONE, with no `tool_name` and no
+`tool_info`. Only `duration_seconds` separates them, and that is a continuous measurement rather
+than a marker. A threshold over it would be the invented vocabulary §4a.1 forbids. This is the
+`grok` problem the research named, in its worst form: waiting and working do not merely share
+bytes, because the vendor resolved the wait before it wrote the line.
+
+**No liveness signal pairs with it.** The status vocabulary across the whole corpus is exactly two
+values, `DONE` (4,180) and `RUNNING` (164). §3.8's re-verification already refused `RUNNING` as
+liveness, because its oldest rows sit in conversations nothing has touched for days. All five
+`ASK_QUESTION` records carry `DONE`. Three of those five predate this probe and come from real
+interactive sessions on 2026-08-09 and 2026-08-15. No record has ever been observed in a state that
+means an ask is outstanding. The `RUNNING` count is also unchanged from the 2026-08-15 re-read,
+which is the independent check that six completed probe turns leave no `RUNNING` residue.
+
+**`agent_state` is not on this surface at all.** It is a statusline-payload field (§2.1), and that
+payload exists only inside an interactive agy session. Council drives this vendor in print mode and
+never sees it. The candidate seam and the strip that would consume it sit on different surfaces,
+which is the structural half of the refusal.
+
+**One vendor flag behaves differently than assumed, and it changes nothing today.** Shape C trial 1
+passed `--mode plan` beside the seat's `--disable-slash-commands`, and agy answered on stderr:
+`warning: --mode plan has no effect while slash command expansion is disabled.` The seat does not
+pass `--mode` (ADR-008's seventeenth amendment), so no behaviour moves. It does sharpen that
+amendment: the read-posture flag it dropped was inert twice over on this argv. Trial 2 re-ran with
+plan mode live and the write still landed, which corroborates `PARITY.md`'s Antigravity row at
+1.1.13.
+
+**A claim in `agyPlumbing` is refuted by this capture, and the code was deliberately not touched.**
+That comment argues `unknown` is a fixed preamble slot agy declines to name, on the evidence that
+every observed one sits at `step_index` 1, carries no tool name, and lasts under 5ms. Shape B
+produced a second `unknown`, at index 3, carrying a real act. The suppression still reaches the
+right outcome today, because agy skipped the question before the line arrived and there is nothing
+actionable to draw. The stated reason is now wrong. This lane measures rather than changes code, so
+the correction is recorded here and is owed in `internal/council/vendors/agy.go`.
+
+**What is NOT claimed.**
+
+- **The interactive seam is unmeasured.** §3.8 observed `agent_state` transitioning, and
+  `tool_confirmation_pending: true`, on agy 1.1.9 statusline payloads. A re-capture at 1.1.13 needs
+  a TUI session and a statusline capture command, and this probe changed no agy configuration.
+  Whether an interactive `ASK_QUESTION` sits `RUNNING` while it waits is the open question this
+  block leaves behind. It is the one measurement that could reopen the seam.
+- **Six turns, one box, one build, one day.**
+- **The model picked its own write path in shape C trial 1.** It ignored the process cwd and wrote
+  under `~/.gemini/antigravity-cli/`. Both files were removed after the run. That is model
+  behaviour rather than a seam property, and it is named so a later probe expects it.
+
+**Spend:** six billed turns, all short prompts.
+
 <a id="s9-44"></a>
 
 ### 9.44 the composer was a gap under a rule, and the room's state floated below it (2026-08-09)
