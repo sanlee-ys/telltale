@@ -23,6 +23,22 @@ type Rooted interface {
 	Root() string
 }
 
+// SelfReporting is the optional interface an adapter implements to declare
+// that its rows are claims a writer made rather than readings telltale took
+// (design.md §7.23, internal/adapter/dropfile).
+//
+// It is optional and it defaults to false, which is the honest default: an
+// adapter that has never heard of this question reads a vendor's own store,
+// and saying so for it costs nothing. An adapter that DOES self-report has to
+// say so explicitly, so the marking can never be lost by omission.
+//
+// It is adapter-level rather than per-session for the same reason
+// model.Capabilities is: it is a static promise about the source, true of
+// every row that adapter will ever produce.
+type SelfReporting interface {
+	SelfReported() bool
+}
+
 // Scan runs every adapter and assembles one Snapshot.
 //
 // Errors are handled by showing LESS, never by showing a banner:
@@ -56,6 +72,9 @@ func Scan(ctx context.Context, adapters []model.Adapter, now time.Time) Snapshot
 			view := VendorView{Vendor: a.Vendor(), Caps: a.Capabilities()}
 			if r, ok := a.(Rooted); ok {
 				view.Root = r.Root()
+			}
+			if sr, ok := a.(SelfReporting); ok {
+				view.SelfReported = sr.SelfReported()
 			}
 
 			refs, err := a.Discover(ctx)

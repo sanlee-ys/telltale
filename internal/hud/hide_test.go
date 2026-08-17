@@ -75,7 +75,8 @@ func TestVendorCycleSkipsHiddenVendors(t *testing.T) {
 	m = send(t, m, tea.WindowSizeMsg{Width: 120, Height: 10})
 
 	for _, want := range []Filter{
-		FilterClaude, FilterCodex, FilterAntigravity, FilterGrok, FilterPi, FilterAll,
+		FilterClaude, FilterCodex, FilterAntigravity, FilterGrok, FilterPi,
+		FilterSelfReported, FilterAll,
 	} {
 		m = send(t, m, key("v"))
 		if m.st.Filter != want {

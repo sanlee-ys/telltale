@@ -777,6 +777,17 @@ func usageQuotaAbsence(v model.VendorID, g Glyphs) []string {
 			"no quota anywhere" + mid + "no window, no ordinal, no reset time on its disk",
 			"no quota anywhere",
 		}
+	case model.VendorSelfReported:
+		// Not "telltale cannot read it" — telltale reads these rows fine. The
+		// absence is a rule rather than a gap: quota is an account property
+		// (§7.1), a drop file describes a session, and the format has no field
+		// for a quota window precisely so a writer cannot assert one (§7.23).
+		// Every other sentence here reports a seam that came up empty; this
+		// one reports a door that was never cut.
+		return []string{
+			"no quota by design" + mid + "these rows are claims, and quota is an account fact",
+			"no quota by design",
+		}
 	default:
 		return []string{"no quota telltale can read"}
 	}

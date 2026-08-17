@@ -49,6 +49,14 @@ func withCost(c float64) sessOpt {
 	return func(s *model.Session) { s.Cost = model.USDPtr(c) }
 }
 
+// withReadCtx is withCtx WITHOUT the derived marking: a percentage the adapter
+// read rather than computed. internal/adapter/dropfile produces exactly this
+// shape, and it is what makes `self_reported` and `estimated` separable in
+// TestSelfReportedIsItsOwnStatementAndNotAnEstimate.
+func withReadCtx(p float64) sessOpt {
+	return func(s *model.Session) { s.ContextPercent = model.PercentPtr(p) }
+}
+
 func withSubagents(n int) sessOpt {
 	return func(s *model.Session) {
 		s.Subagents = model.Ptr(n)
@@ -264,6 +272,55 @@ func TestZeroIsANumberAndAbsentIsNull(t *testing.T) {
 	}
 	if fz, fa := zero["fleet"].(map[string]any), absent["fleet"].(map[string]any); fz["cost_usd_total"] == fa["cost_usd_total"] {
 		t.Error("the fleet rollup collapsed zero and absent into the same value")
+	}
+}
+
+// TestSelfReportedIsItsOwnStatementAndNotAnEstimate is §7.23's honesty crux on
+// the surface a program reads.
+//
+// The two provenances have to stay separable in the document, because a reader
+// that could not tell them apart would have no way to discount a claimed
+// number. "telltale computed this" is `estimated`; "somebody asserted this" is
+// `self_reported`; a measured value is neither. So the test walks all three
+// and asserts each says only its own thing.
+func TestSelfReportedIsItsOwnStatementAndNotAnEstimate(t *testing.T) {
+	// The drop-file adapter reads verbatim, so its capabilities declare
+	// context_pct REPORTED rather than derived.
+	dropCaps := model.Capabilities{
+		Reported: model.NewFieldSet(model.FieldName, model.FieldModel, model.FieldWorkspace,
+			model.FieldContextPercent, model.FieldCost, model.FieldLastActivity,
+			model.FieldSubagents),
+	}
+	claimed := view(model.VendorSelfReported, hud.StatusWatching, dropCaps, 1, 0)
+	claimed.SelfReported = true
+
+	doc := decode(t, hud.Snapshot{
+		At:      at,
+		Vendors: []hud.VendorView{claimed, view(model.VendorClaude, hud.StatusWatching, claudeCaps, 1, 0)},
+		Sessions: []*model.Session{
+			sess(model.VendorSelfReported, "a", time.Second, withReadCtx(40)),
+			// The measured vendor's row IS derived, so this fixture holds one
+			// of each and the two markers cannot be passing by both being
+			// empty.
+			sess(model.VendorClaude, "b", time.Second, withCtx(20)),
+		},
+	})
+
+	sr := vendorBlock(t, doc, string(model.VendorSelfReported))
+	if sr["self_reported"] != true {
+		t.Errorf("self_reported = %#v, want true", sr["self_reported"])
+	}
+	if est, _ := sr["estimated"].([]any); len(est) != 0 {
+		t.Errorf("estimated = %v on a self-reported vendor; it reads verbatim and computes nothing", est)
+	}
+
+	measured := vendorBlock(t, doc, "claude")
+	if measured["self_reported"] != false {
+		t.Errorf("a vendor that reads its own store carries self_reported = %#v, want false",
+			measured["self_reported"])
+	}
+	if est, _ := measured["estimated"].([]any); len(est) != 1 {
+		t.Fatalf("estimated = %v, want the one derived field — otherwise this test proves nothing", est)
 	}
 }
 

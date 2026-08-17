@@ -38,6 +38,11 @@ var embedded = []string{
 	// because the claim it proves is about that VENDOR, not about the grid: a
 	// store that holds real money renders with the COST column dropped.
 	"grok-row",
+	// the drop-file relay — §7.23, pasted beside its reasoning for grok-row's
+	// reason: the claim it proves is about PROVENANCE, not about the grid. It
+	// is the whole assertion that a claimed row cannot be read as a measured
+	// one, so the doc has to carry the render rather than describe it.
+	"self-reported-row",
 }
 
 // notEmbedded lists goldens deliberately kept out of the design doc, with the

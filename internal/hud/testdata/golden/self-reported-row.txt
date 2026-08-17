@@ -1,0 +1,10 @@
+ telltale  │  3 sessions  │  claude 1  self-reported 2
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                      MODEL          CONTEXT                 COST    AGE
+ ● CC │ telltale  C:\src\code                                        Opus 5         ███▊────────    34%    $1.20 │  12s
+ ● SR │ windsurf: refactor the parser  C:\src\code                   gpt-5-codex    ────────────     0%    $0.00 │  40s
+ ◐ SR │ aider  C:\src\work                                                                            —        — │   9m
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys

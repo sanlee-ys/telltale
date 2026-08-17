@@ -115,7 +115,8 @@
         "quota",
         "quota_read_at",
         "estimated",
-        "unsupported"
+        "unsupported",
+        "self_reported"
       ],
       "additionalProperties": true,
       "properties": {
@@ -166,6 +167,10 @@
           "type": "array",
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/fieldName" }
+        },
+        "self_reported": {
+          "description": "True when every number in this entry is a claim its writer made rather than a reading telltale took from a vendor's own store — the drop-file relay, docs/dropfile.md and docs/design.md #s7-23. False for every adapter that reads a vendor store. It is NOT `estimated`: that field names values an adapter computed from something that is not the value, while these were read verbatim from a document telltale did not author. A reader that treats the two as one has lost the distinction between 'telltale inferred this' and 'someone asserted this'. It is a whole-entry flag because it is true of every value in the entry without exception.",
+          "type": "boolean"
         }
       }
     },

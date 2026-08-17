@@ -5713,6 +5713,195 @@ surface renders numbers and keys, so the real output carries vendor ids, counts,
 timestamps and no session name or workspace path. That is the "never content" claim above,
 observed rather than asserted.
 
+<a id="s7-23"></a>
+
+### 7.23 The drop-file relay — a row telltale did not measure, and says so (2026-08-16)
+
+§4 promises a documented adapter interface, and §4a.7 works one example through. That
+promise answers a contributor who will write Go. It does not answer the other question
+the launch post raised: what happens to a tool telltale ships no adapter for, and is not
+going to?
+
+The owner ruled out a plugin runtime and lifted this feature's demand gate on 2026-08-16.
+A runtime would execute a stranger's code inside a process whose entire contract is
+"reads, never writes, no network, no credentials" — every guarantee in this document
+would become a guarantee about someone else's plugin. The middle path is a **drop file**:
+the vendor, or a script the user writes, puts one small JSON document under
+`~/.telltale/dropfile/<name>.json`, and telltale renders it as a fleet row. The reader
+opens one file and can do nothing else. `docs/dropfile.md` is the spec; this section is
+the reasoning.
+
+**It adds no write exception.** The three sanctioned writes (§7.15, §7.16, and council's
+`room.json`) are untouched. `internal/adapter/dropfile` creates nothing, writes nothing
+and removes nothing; the directory is the operator's to fill, and a missing one reports
+the vendor absent. The read/write boundary in `CLAUDE.md` needed no fourth bullet, which
+is the strongest evidence this was the right shape.
+
+#### The problem this format has and no other adapter has
+
+Every other adapter reads a store its vendor wrote while doing its own work. Nobody had a
+motive to write a flattering number into it, and each adapter's package doc names the live
+corpus every field was grepped out of. A drop file is written FOR telltale, by whoever,
+and every value in it is that writer's claim. **telltale measured that a file exists, when
+it was last written, and what it says. It did not measure the session.**
+
+So §4a.1's rule bites in a new place. The rule has always been about a *value* — measured,
+inferred, or absent. Here the whole ROW has a provenance, and a drop-file row must never
+be readable as a measured one.
+
+#### Why the `~` estimate marker is the wrong mark
+
+The obvious move is to mark every claimed value with the estimate marker and be done. It
+is wrong twice over, and the second reason is the one that settles it.
+
+It states a falsehood about mechanism. `~` means `CapDerived`: the adapter computed the
+value from something that is not the value, and the snapshot's `estimated` array says so
+in exactly those words. This adapter computes nothing — it reads the number the writer
+wrote, verbatim. Marking these rows `~` would claim telltale did arithmetic it did not do.
+
+And it collapses two provenances into one spelling. "telltale inferred this" and "somebody
+asserted this" are different claims that a reader would discount differently, and after the
+collapse no reader could tell which one they had. That is the failure §4a.1 exists to
+prevent, imported through a new door — the same shape as the zero-versus-absent collapse,
+one level up.
+
+The rejected alternative is recorded rather than merely dismissed: a per-cell mark of any
+kind, `~` or a dedicated glyph. Beyond the two objections above it repeats one fact in
+every cell of a row where the fact is uniform, and §4a.2 already refused a per-field glyph
+for degradation on the narrower ground that "we failed to read it" starts to read as data.
+**Provenance is a property of the row, so it is marked once, on the row.**
+
+#### The three marks, and none of them is a colour
+
+1. **The vendor id is `self-reported` for every drop file.** The grid's identity column
+   reads `SR` and the header census reads `self-reported 2` in full. `SR` is the only tag
+   in `vendorTag` that is not a vendor abbreviation, deliberately: every other tag answers
+   "which tool did this row come from" because telltale measured that tool's store, and
+   here the only answer telltale can give is where the numbers came from.
+2. **The claimed tool leads the row's label** — `windsurf: refactor the parser`. `SR` is
+   shared by every drop file and cannot separate windsurf from aider, so the row itself
+   names its claimant rather than hiding it in a pane nobody opens.
+3. **`telltale snapshot` emits `"self_reported": true`** on the vendor entry, beside and
+   never inside `estimated`.
+
+Both HUD marks are plain ASCII words, so `--ascii` and `NO_COLOR` change neither, and
+`testdata/golden/self-reported-row.txt` — which renders through `PlainStyles` — is the
+whole assertion rather than half of it. The drop-file vendor gets **no hue of its own**:
+a hue is a vendor identity (§9.28) and these rows have none to give, so it takes the
+identity-hue fallback as Gemini does.
+
+#### Impersonation is unrepresentable, not merely rejected
+
+The format has **no field for a vendor id**. A drop file cannot claim to be Claude Code,
+because there is nowhere in the document to make the claim — the id is a constant the
+adapter owns. Nor can it choose its own row: the session id comes from the FILE NAME, so
+the operator's filesystem decides what a row is called and a document cannot rename itself
+onto another one's row.
+
+That is the same "the allowlist is the struct" mechanism `internal/cursorhook` uses against
+a payload carrying reply text and an email address, and it is why the planted-credential
+test can assert absence rather than sanitization: a key with no destination is dropped by
+`encoding/json` before this package sees it.
+
+#### One vendor id, not one per tool
+
+Per-tool ids were considered and rejected. They would put a writer-chosen string in the
+column that says what telltale measured — a file naming itself `claude` would draw a row
+indistinguishable from a measured one — and `Capabilities()` is per-adapter, so a set of
+tools sharing one adapter could not honestly declare different capability sets anyway.
+
+With one id, `Capabilities` describes the FORMAT, which for this adapter is the only source
+there is: `unsupported` names the fields the format cannot express, and a file that omits
+`cost_usd` yields "absent now" rather than "can't know". Both statements are true, which is
+what the merge costs and what it buys.
+
+#### The one claim telltale can check, it checks
+
+A writer that stops writing leaves a file that keeps asserting whatever it last said. A
+file claiming `last_activity` of "now" would render live forever over a dead session, and
+`--vendor self-reported` would become the way to pin a row to the top of the grid.
+
+telltale cannot check a cost or a context percentage against anything. It CAN check
+`last_activity`, because **a file cannot have activity newer than its own last write**, and
+the mtime is telltale's own measurement rather than the writer's claim. So a claim ahead of
+the mtime is replaced by the mtime, and the substitution goes in `Diagnostics`. The value
+stays present and is NOT marked `Degraded` — a measured mtime is a better answer than
+absence, and §4a.2 requires degraded fields to be absent.
+
+Staleness proper reuses `internal/quotacache`'s rule and its constants rather than inventing
+a boundary: 24 hours to expire, five minutes of future-skew tolerance, and the reading's age
+travelling with it past five minutes. A file outside those bounds draws no row at all, which
+is that package's own ruling that the honest display for "no reading" is absence.
+
+#### Absence has two spellings on input and one on output
+
+§7.22 emits every key with an explicit `null`, because a reader parsing a document must not
+have to tell a missing key from a changed schema. An INPUT cannot hold its writer to that:
+a key omitted and a key written `null` both have to mean absence, or the format fails
+documents over fields the writer simply had no value for — which is §4a.5's partial-read
+rule broken at the door.
+
+So the semantic convention is snapshot's, exactly: **zero is a number, absence is nil, and
+no sentinel number stands for either.** Only the syntax differs, two accepted spellings in
+rather than one guaranteed spelling out. `TestZeroIsAMeasurementAndAbsentIsNil` walks all
+three cases, and `testdata/golden/self-reported-row.txt` pins the render: a claimed 0%
+draws a full empty track beside a claimed `$0.00`, and a row claiming neither draws the
+absent marker in both cells.
+
+#### The render, generated
+
+```
+ telltale  │  3 sessions  │  claude 1  self-reported 2
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                      MODEL          CONTEXT                 COST    AGE
+ ● CC │ telltale  C:\src\code                                        Opus 5         ███▊────────    34%    $1.20 │  12s
+ ● SR │ windsurf: refactor the parser  C:\src\code                   gpt-5-codex    ────────────     0%    $0.00 │  40s
+ ◐ SR │ aider  C:\src\work                                                                            —        — │   9m
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
+```
+
+The header census says the word in full and the identity column echoes it per row. The
+last two rows are the zero-versus-absent pair carried inside the claimed rows: windsurf
+claims a measured 0% and $0.00 and draws a full empty track beside a printed zero, and
+aider claims neither and draws the absent marker in both cells. This golden renders through
+`PlainStyles`, so every mark visible here survives `--ascii` and `NO_COLOR`.
+
+#### What the format cannot express, and why each door was never cut
+
+- **Quota.** An account property (§7.1), sourced from the statusline relay (§7.15). A
+  session-shaped document has no account to speak for. The usage page says "no quota by
+  design" for this vendor rather than borrowing one of the six sentences that report a seam
+  which came up empty — this is a door never cut, not a seam that returned nothing.
+- **Liveness.** §4a.4 allows a hint only from a positive vendor signal the HUD cannot see.
+  This is the field where a false claim is most tempting and least checkable, so there is no
+  field for it. Liveness is classified by the HUD from `last_activity`, bounded by the mtime
+  clamp above.
+- **Token counts.** They feed §7.17's fleet spend sum. A claimed count summed beside
+  measured ones would yield a total carrying no mark at all.
+
+#### No canary, no pin, no drift watch
+
+`internal/adapter/pins` gets no row, and `internal/adapter/drift` is not wired in. Both
+exist because an adapter reads a private, undocumented format that a vendor may move without
+saying so, and the pin names the build the field map was surveyed at. **This format is
+telltale's own and it is published**, so there is no vendor build to pin and no shape to
+watch drift away from. `schema_version` does the job a canary does elsewhere, and it does it
+better: a document whose contract number this adapter does not speak is skipped whole rather
+than read leniently, because guessing that the field names still mean what they meant is
+inventing every value at once.
+
+#### Schema version
+
+`self_reported` is a field ADDED to §7.22's vendor object, so `SchemaVersion` stays 1 under
+that document's own rule: a field added is not a break, because every reader parses by name,
+and every object sets `additionalProperties: true`. Nothing already in the document changed
+meaning and no key left. `docs/snapshot.schema.json` carries the key in `properties` and in
+`required` — the emitter always emits it — and `tools/validate-snapshot.py` passed against
+the four goldens and against the built binary's live output.
+
 <a id="s8"></a>
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
@@ -6006,6 +6195,10 @@ in the schema moved.
 - Plan-budget "% of plan" spend meters: the budget is a guess — the exact fabrication
   this product exists to refuse.
 - On-disk cost estimation via price tables: inventing dollars from token counts.
+- A plugin runtime for third-party adapters: it would run a stranger's code inside the
+  process whose whole contract is "reads, never writes, no network, no credentials", so
+  every guarantee here would become a guarantee about someone else's plugin. The
+  drop-file relay ([§7.23](#s7-23)) is the middle path taken instead.
 
 <a id="s9"></a>
 

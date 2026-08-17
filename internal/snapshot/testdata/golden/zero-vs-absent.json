@@ -34,7 +34,8 @@
         "context_pct",
         "subagents"
       ],
-      "unsupported": []
+      "unsupported": [],
+      "self_reported": false
     },
     {
       "vendor": "codex",
@@ -54,7 +55,8 @@
         "context_pct",
         "cost",
         "subagents"
-      ]
+      ],
+      "self_reported": false
     }
   ]
 }

@@ -23,10 +23,11 @@ const (
 	FilterCursor
 	FilterGrok
 	FilterPi
+	FilterSelfReported
 )
 
 func (f Filter) Next() Filter {
-	if f >= FilterPi {
+	if f >= FilterSelfReported {
 		return FilterAll
 	}
 	return f + 1
@@ -48,6 +49,8 @@ func (f Filter) String() string {
 		return string(model.VendorGrok)
 	case FilterPi:
 		return string(model.VendorPi)
+	case FilterSelfReported:
+		return string(model.VendorSelfReported)
 	default:
 		return "all"
 	}
@@ -72,6 +75,8 @@ func (f Filter) VendorID() (model.VendorID, bool) {
 		return model.VendorGrok, true
 	case FilterPi:
 		return model.VendorPi, true
+	case FilterSelfReported:
+		return model.VendorSelfReported, true
 	default:
 		return "", false
 	}
@@ -93,6 +98,8 @@ func (f Filter) Accepts(v model.VendorID) bool {
 		return v == model.VendorGrok
 	case FilterPi:
 		return v == model.VendorPi
+	case FilterSelfReported:
+		return v == model.VendorSelfReported
 	default:
 		return true
 	}
@@ -215,6 +222,18 @@ type VendorView struct {
 	// produced it attached.
 	Drifted  int
 	Sessions int
+
+	// SelfReported says this vendor's rows are claims its writer made, not
+	// readings telltale took (design.md §7.23). It is set from the adapter's
+	// own declaration, never inferred.
+	//
+	// It is a separate axis from Status on purpose. Status answers "could the
+	// store be read" — and a self-reporting vendor can be watching, not
+	// detected or unreadable exactly like any other. Folding the two into one
+	// word would give the vocabulary a fifth member that is not comparable
+	// with the other four, which is the collapse VendorStatus's own doc exists
+	// to refuse.
+	SelfReported bool
 }
 
 // Snapshot is one completed scan.
