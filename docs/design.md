@@ -9175,6 +9175,138 @@ deriving a number and presenting it as read — the top item on this repo's reje
 one line shorter and would have priced seats that are never spawned. And a count on the
 one-seat case, which is a number whose only reading is "yes, one".
 
+#### Amendment, 2026-08-17: the room shipped the quota relay and never read it
+
+The cell above prices a turn in SEATS, which is the half of the bill council could count.
+The other half was already on disk and nobody was looking at it. `telltale statusline` has
+relayed every quota window it renders to `~/.telltale/quota/<vendor>.json` since 2026-08-07
+(§7.15) and the HUD has read it ever since — while the one surface that actually *spends*
+those windows, four or five accounts at a time on one keystroke, said nothing about any of
+them. The room could tell you a turn would reach three seats and not that one of them had
+nothing left to answer with.
+
+**Council reads the relay. It writes nothing.** `internal/council/quota.go` reads
+`quotacache` at room open and again when a turn tears down, as a `tea.Cmd` returning a
+`quotaMsg` — never inside `Render`, which stays pure over `State` (`TestRenderIsPure`), and
+never on the tick, because the file only changes when the user's own statusline fires. The
+read/write boundary is untouched: council's one sanctioned write is still `room.json`, and
+a second one would have to be argued from scratch rather than inherited from a read.
+
+**§7.17's declined "per-row quota" does not bind here, and the reason is arithmetic.** That
+ruling refuses a quota cell on a HUD *row* because a row is one session: five Claude
+sessions would each draw the same 42% and read as five separate budgets, asserting a
+per-session limit that does not exist (§7.1 rule 6). A council **seat** is not a row. There
+is exactly one seat per vendor in a room, so a seat reading is an account reading printed
+once against the account it describes. Nothing here is ever drawn per session, per turn, or
+twice for one vendor.
+
+##### What renders on a seat
+
+A text reading on the badge row: the window's own label, the vendor's own percentage, the
+reset countdown while it fits, and the reading's age.
+
+```
+   ro:tools  tokens  5h 12% resets 1h04m  7d 6% resets 5d00h  2h ago
+   ro:tools  tokens  5h 12%  7d 6%  2h ago
+   ro:tools  tokens  5h 100%  ⚠ stale 19h ago
+```
+
+The word `resets` rather than the HUD's `↻`: council's `Glyphs` has no slot for that mark,
+and minting one would grow a set §9.26 keeps deliberately small. The cells between parts are
+this room's own two spaces (`historyMeta`, the badge row itself), not the HUD's middle dot,
+for the same reason — one surface, one joiner, and nothing new to give an ASCII partner.
+
+- **No gauge track, and that is a ruling rather than a shortcut.** The HUD spends a bar on
+  this because it has a header line to spend it on. Council would need a fill colour to draw
+  one, which re-opens both the closed `isDark` question and `style.go`'s standing rule that
+  council adds no hues of its own — a large purchase for a signal the percentage beside it
+  already carries. The label and the digits are words and numbers, so `--ascii` and
+  `NO_COLOR` lose nothing at all.
+- **The reading takes the space the row has LEFT.** A new claim does not evict an older one:
+  the posture badge is the safety claim §9.2 refuses to let yield, the granularity word is
+  what keeps `waiting` from reading as a slow `streaming`, and the cost is the one figure on
+  this line the transcript also records. All three keep their cells; the reading takes what
+  remains, sheds its countdowns, and drops **whole** rather than clipping (`stripBadges`'
+  ruling — a clipped percentage is a different number). At the reference 120 columns a
+  three-seat grid gives a column thirty-eight cells and only the roomiest badge row has
+  space for a figure; the footer cell below is what a narrow room keeps instead.
+- **The age is the HUD's, verbatim.** `2h ago` from five minutes, escalating past five hours
+  to `⚠ stale 19h ago` — same threshold, same word, same order (word, then glyph, then
+  hue). `quotaAgeShown`, `quotaAgeWarn` and `quotaAgeWord` are **copied** rather than
+  imported, on `vendorTag`'s precedent: internal/council and internal/hud share the
+  normalized session model and internal/theme's numbers and nothing else, and
+  `TestSeatQuotaAgeMatchesTheHUDsThresholds` pins all three by literal so the copy cannot
+  drift in silence. A reader who learned `stale 19h ago` on the statusline must not meet a
+  second spelling of it in the room.
+- **A window relayed for its reset time alone renders nothing.** It says when something will
+  change and not what is left, which is the only question this line exists to answer.
+
+##### What renders on the route cell
+
+One seat's name and one of that seat's own readings, when the reading says the turn may not
+land the way the reader expects: `⚠ claude 5h 100%`, `⚠ agy stale 19h ago`. It sits against
+the route it qualifies, in compose mode only — the header's live-turn route is already too
+late to act on.
+
+- **It computes nothing.** The refusal above declined a dollar figure beside the seat count
+  because multiplying a count by anything is council deriving a number and presenting it as
+  read. The same refusal binds here and is wider: no total across seats, no average, no
+  count of how many seats are affected, no percentage arithmetic of any kind. Every
+  character after the vendor id is copied off one window.
+- **Seated ∩ addressed**, the same intersection `State.SeatsIn` counts and `dispatch` loops
+  over. Warning about a seat this turn will not reach is a warning about a turn that does
+  not happen. **The count cell is untouched** — it keeps its present grammar and its present
+  arithmetic.
+- **A hundred per cent is the only threshold, and it is the vendor's.** Ninety, or "nearly
+  full", would be council picking a severity boundary no vendor published — the same class
+  of guess as filling a `CapNone` field with a plausible value (§4a.1).
+- **Staleness outranks fullness for one seat**, which is `quotaAgeWarn`'s own argument: a
+  reading past it may no longer be assumed to describe now, so a stale 100% is not evidence
+  the window is full, it is evidence the room does not know. Reporting it as `100%` would be
+  the nineteen-hour incident reproduced in a new room.
+- **The word "spent" is refused.** §7.17 owns it for token counts, and quota and spend are
+  the two claims that view exists to keep apart. The reading needs no verb: `5h 100%` says
+  it.
+
+##### Zero, absent, and the three vendors that are absent forever
+
+`Column.Quota` is a **pointer**, the same mechanism `Column.CostUSD` and `State.TurnRoute`
+use and for the same reason. A vendor at 0% of its window has been measured and draws
+`5h 0%`. A vendor with no relayed reading draws **nothing at all** — no dash, no
+placeholder, and not one cell of width, which `seat-quota-absent.txt` pins by rendering the
+two states side by side in one frame. Collapsing them is the more dangerous direction of the
+zero-vs-absent bug here: an unrelayed seat would read as a fresh account and invite a
+dispatch the room has no evidence will land.
+
+Cursor and grok are in the absent class permanently, and so is Gemini: none of them writes
+quota to disk in any form a passive reader can see (§7.17's structurally-absent row), so no
+relay entry can ever exist for them. Codex is absent from this surface for a different
+reason — its quota lives in its own store, and this room reads the relay and nothing else.
+The room does not distinguish the three, and it does not have to: on this surface they are
+one fact, *this room has no reading*, and each vendor's own sentence explaining why is
+§7.17's job on the surface built to hold a paragraph per vendor.
+
+**Expiry is the read's, not the room's.** `quotacache` drops a window whose reset has passed
+and any entry over 24h old before council ever sees it (§7.15), and a read that no longer
+speaks for a vendor **clears** that seat. A room that kept its previous reading would be
+displaying a percentage §7.15 calls not stale but FALSE.
+
+##### Limitations, recorded rather than left to be found
+
+- **Exactly one seat is named on the route cell, and a second is not counted.** Column order
+  decides. Ranking two seats would mean ranking a stale reading against a full window, and
+  there is no measurement behind such an order; a count would be the aggregate this cell may
+  not compute. What carries the rest is each seat's own badge row — and at a width where the
+  badge row shed its figure, a second affected seat is not on screen.
+- **The reading is as old as the last statusline render in that vendor.** Council writes no
+  relay of its own, so the post-turn read sees a turn's cost only after that vendor's
+  statusline fires again. This is exactly what the age suffix exists to say, and it is why
+  the age never sheds.
+- **A room open past `quotaAgeWarn` with no statusline activity escalates every reading it
+  holds.** That is correct rather than noisy — the readings really have outlived the fleet's
+  shortest window — but it means a long idle room ends up with a warning on its footer that
+  only the vendor's own statusline can clear.
+
 <a id="s9-22"></a>
 
 ### 9.22 four answers to one question, and no way to read them as one

@@ -1,0 +1,24 @@
+  council READ  │  ~/code/telltale                                                                                     no turn yet  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▌ ▸ 1 CC Claude Code  ──────────────────────  ○ idle  │    2 CX Codex  ──────────────────────────  ○ idle  │    3 AG Antigravity  ────────────────────  ○ idle  
+▌   ro:tools  tokens  5h 100%  7d 6%  2h ago          │    ro:requested  final only                        │    unsandboxed  final only  gemini-weekly 38%      
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+▌ no turn dispatched yet.                             │  no turn dispatched yet.                           │  no turn dispatched yet.                           
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  › type a brief_                                                                                                                                         │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────  COMPOSE  ─╯  
+                                                                                  → claude  │  ⚠ claude 5h 100%  │  enter dispatch  │  ↑↓ scroll  │  tab focus  

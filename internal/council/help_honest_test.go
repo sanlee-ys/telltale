@@ -341,7 +341,7 @@ func TestAnUnavailableSeatMakesNoClaims(t *testing.T) {
 		Gran:    GranFinalOnly,
 		Sandbox: SandboxClaim{Level: SandboxRequested},
 	}
-	if got := strings.TrimSpace(badgeRow(c, 37, sty, g)); got != "" {
+	if got := strings.TrimSpace(badgeRow(room(), c, 37, sty, g)); got != "" {
 		t.Errorf("a seat that is not installed states %q — a claim about a vendor that is not there", got)
 	}
 

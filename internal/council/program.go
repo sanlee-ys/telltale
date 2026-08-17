@@ -622,6 +622,12 @@ func (m *Model) Init() tea.Cmd {
 		// rather than handed to Batch directly.
 		func() tea.Msg { return tea.RequestBackgroundColor() },
 		spin(),
+		// The relay is read once at room open, so the first draft is composed
+		// against a reading rather than against nothing (§9.21's 2026-08-17
+		// amendment). A Cmd because it touches the filesystem, and batched
+		// rather than sequenced because it is independent of everything else
+		// here.
+		readQuotaCmd(),
 	)
 }
 
@@ -661,7 +667,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The turn is over. Stop waiting on the channel: re-arming would
 			// park a goroutine on a channel nothing will write to until the
 			// next dispatch.
-			return m, nil
+			//
+			// It is also the moment the relay is worth re-reading: a turn just
+			// consumed some of every addressed account, and the next draft is
+			// composed against whatever this returns. The read lands late by
+			// construction — council does not write the relay, so a vendor's
+			// new figure appears only after its own statusline renders again —
+			// which is what the age suffix on the reading is for.
+			return m, readQuotaCmd()
 		}
 		// A racing seat's stream activity may have armed a live stat read
 		// (arenalive.go); launch what is due alongside the next wait. Batched
@@ -678,6 +691,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// is launched by the tick or the next event batch, through the same
 		// due check everything else goes through.
 		m.applyArenaStat(msg)
+		return m, nil
+
+	case quotaMsg:
+		// One read of the quota relay landing. No follow-up command: the next
+		// read is launched when a turn ends, because the file only changes when
+		// the user's own statusline fires and a poll would re-read unmoved
+		// bytes on every frame (quota.go).
+		m.applyQuota(msg)
 		return m, nil
 
 	case spinMsg:
