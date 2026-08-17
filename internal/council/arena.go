@@ -1,6 +1,7 @@
 package council
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -164,12 +165,47 @@ type SeedReport struct {
 // applies to every process council starts, not only vendors) — and returns
 // trimmed stdout. Errors carry the stderr line git itself marked as the
 // problem (gitErrLine), which is the sentence the notice shows.
+//
+// context.Background() is the whole of what separates this from gitOutCtx
+// below, and it is a decision rather than a default: a background context has a
+// nil Done channel, so os/exec starts no watchdog and NOTHING here can be
+// killed by a clock. Every git call council makes outside the /arena setup path
+// stays that way. A diff read, a config probe or a commit that ran longer than
+// somebody's guess at a timeout would be killed mid-work, and a git killed
+// halfway through writing a ref is a worse room than a slow one.
 func gitOut(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	return gitOutCtx(context.Background(), dir, args...)
+}
+
+// gitOutCtx is gitOut under a caller's context, and it has exactly one caller:
+// the /arena worktree setup (§9.37, amended 2026-08-17).
+//
+// The context does two things no other git call in this package needs. It
+// carries the setup's DEADLINE, so a `git worktree add` that blocks — on a lock
+// another session is holding, or on a checkout large enough to take minutes —
+// ends in a sentence rather than holding the room. And it carries the
+// operator's cancel, so ctrl+c reaches a setup that is already running. Both
+// arrive as one ctx because both are the same fact from the room's side: this
+// setup is over and nothing may still be spawning for it.
+//
+// The failure sentence is gitOut's, with one exception stated in code below: a
+// process the context killed did not fail the way git fails.
+func gitOutCtx(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	var out, errb strings.Builder
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			// The context killed this process, so cmd.Run's error describes the
+			// SIGNAL ("signal: killed") and not a git refusal. Dressing that up
+			// as git's own sentence would put words in git's mouth — the
+			// §4a.1 rule that a displayed value comes from measured output,
+			// applied to a failure. What git managed to write before the signal
+			// is carried when there is any; when there is none the caller says
+			// the deadline expired and quotes nobody (arenaSetupStop).
+			return "", gitError(gitErrLine(errb.String()))
+		}
 		msg := gitErrLine(errb.String())
 		if msg == "" {
 			msg = err.Error()
@@ -275,9 +311,9 @@ func arenaRaceTag(raceN int) string { return "arena/t" + itoa(raceN) }
 // of the floor is the collision itself, which the caller now reports with
 // git's own fatal line (gitErrLine) instead of progress chatter: degraded
 // numbering costs a named per-seat failure, never a silent one.
-func arenaRaceNumber(workspace string, turn int) int {
+func arenaRaceNumber(ctx context.Context, workspace string, turn int) int {
 	n := turn
-	out, err := gitOut(workspace, "for-each-ref", "--format=%(refname:short)", "refs/heads/arena/")
+	out, err := gitOutCtx(ctx, workspace, "for-each-ref", "--format=%(refname:short)", "refs/heads/arena/")
 	if err != nil {
 		return n
 	}
@@ -311,19 +347,63 @@ func arenaRaceNumber(workspace string, turn int) int {
 // that failed) skip that seat (reported on its column) rather than aborting
 // the race — a partial read degrades a field, not the row, and the same rule
 // holds one level up.
-func arenaSetup(workspace string, turn int, seats []model.VendorID) (raceN int, base string, trees map[model.VendorID]string, seeds map[model.VendorID]*SeedReport, seatErr map[model.VendorID]string, err error) {
-	base, err = gitOut(workspace, "rev-parse", "HEAD")
-	if err != nil {
-		return 0, "", nil, nil, nil, err
+//
+// It runs OFF the render loop (§9.37, amended 2026-08-17), which is what the
+// two extra parameters are for. ctx carries the setup's deadline and the
+// operator's cancel — every git call below is gitOutCtx, and they are the only
+// deadlined git calls council makes. step is called with the words for the
+// stage about to run, so the room can name what it is doing while it waits; it
+// may be nil, and every caller that is not the room passes nil.
+//
+// The worktrees are added SERIALLY, and that is a ruling rather than an
+// unfinished optimisation. `git worktree add` writes the repo's own refs and
+// administrative files, so N of them at once contend for exactly the lock this
+// change exists to survive — the parallel version would turn one slow setup
+// into N racing ones, each able to fail the others.
+//
+// A context that ends stops the WHOLE setup, never one seat. A deadline is a
+// fact about the room's patience, not about a vendor, so recording it as a
+// per-seat skip would blame four seats for one clock and then race whatever was
+// left as if the operator had chosen a 1-of-4 race.
+func arenaSetup(ctx context.Context, workspace string, turn int, seats []model.VendorID, step func(string)) (raceN int, base string, trees map[model.VendorID]string, seeds map[model.VendorID]*SeedReport, seatErr map[model.VendorID]string, err error) {
+	if step == nil {
+		step = func(string) {}
 	}
-	raceN = arenaRaceNumber(workspace, turn)
-	plan := loadSeedPlan(workspace, seedBudgetBytes)
+	step(arenaStepBase)
+	base, err = gitOutCtx(ctx, workspace, "rev-parse", "HEAD")
+	if err != nil {
+		return 0, "", nil, nil, nil, arenaSetupStop(ctx, arenaStepBase, err)
+	}
+	step(arenaStepNumber)
+	raceN = arenaRaceNumber(ctx, workspace, turn)
+	// arenaRaceNumber degrades to the turn-number floor rather than failing, so
+	// a context that ended during its scan would otherwise be discovered a step
+	// later and reported against the wrong stage. Each step owns its own check
+	// for that reason: the sentence names where the clock actually ran out.
+	if ctx.Err() != nil {
+		return 0, "", nil, nil, nil, arenaSetupStop(ctx, arenaStepNumber, nil)
+	}
+	step(arenaStepPlan)
+	plan := loadSeedPlan(ctx, workspace, seedBudgetBytes)
+	if ctx.Err() != nil {
+		return 0, "", nil, nil, nil, arenaSetupStop(ctx, arenaStepPlan, nil)
+	}
 	trees = map[model.VendorID]string{}
 	seeds = map[model.VendorID]*SeedReport{}
 	seatErr = map[model.VendorID]string{}
 	for _, v := range seats {
+		if ctx.Err() != nil {
+			return 0, "", nil, nil, nil, arenaSetupStop(ctx, arenaStepTree(v), nil)
+		}
 		tree := arenaTree(workspace, raceN, v)
-		if _, werr := gitOut(workspace, "worktree", "add", "-b", arenaBranch(raceN, v), tree, base); werr != nil {
+		step(arenaStepTree(v))
+		if _, werr := gitOutCtx(ctx, workspace, "worktree", "add", "-b", arenaBranch(raceN, v), tree, base); werr != nil {
+			if ctx.Err() != nil {
+				// Not this seat's failure: the context killed the process, so
+				// the add would have been refused whatever the repo held. It
+				// ends the setup with the stage named, per the ruling above.
+				return 0, "", nil, nil, nil, arenaSetupStop(ctx, arenaStepTree(v), werr)
+			}
 			why := werr.Error()
 			if strings.Contains(why, "already exists") {
 				// Something still claimed this name despite the ref scan — a
@@ -338,6 +418,7 @@ func arenaSetup(workspace string, turn int, seats []model.VendorID) (raceN int, 
 			continue
 		}
 		if plan != nil {
+			step(arenaStepSeed(v))
 			n, cerr := plan.copyInto(workspace, tree)
 			if cerr != nil {
 				// A copy error degrades THIS seat only, with the failed path
@@ -581,7 +662,7 @@ type seedPlan struct {
 // budget is a parameter rather than a read of seedBudgetBytes so the refusal
 // path is testable without a 64 MiB fixture; every non-test caller passes the
 // constant.
-func loadSeedPlan(workspace string, budget int64) *seedPlan {
+func loadSeedPlan(ctx context.Context, workspace string, budget int64) *seedPlan {
 	raw, err := os.ReadFile(filepath.Join(workspace, seedFileName))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -609,7 +690,7 @@ func loadSeedPlan(workspace string, budget int64) *seedPlan {
 	// The candidate set: every untracked file, ignored ones included — which
 	// is exactly the set a fresh worktree lacks. git does the walking, so the
 	// enumeration cannot leave the repo root and never descends into .git.
-	others, err := gitOut(workspace, "ls-files", "--others", "-z")
+	others, err := gitOutCtx(ctx, workspace, "ls-files", "--others", "-z")
 	if err != nil {
 		plan.notices = append(plan.notices, "seeding unavailable: "+err.Error())
 		return plan

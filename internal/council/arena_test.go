@@ -1,6 +1,7 @@
 package council
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,7 +62,7 @@ func TestArenaSetupRacesFromOneBase(t *testing.T) {
 	ws := gitRepo(t)
 	seats := []model.VendorID{model.VendorCodex, model.VendorAntigravity}
 
-	_, base, trees, _, seatErr, err := arenaSetup(ws, 7, seats)
+	_, base, trees, _, seatErr, err := arenaSetup(context.Background(), ws, 7, seats, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +94,7 @@ func TestArenaSetupRefusesOutsideARepo(t *testing.T) {
 	if _, err := gitOut(".", "--version"); err != nil {
 		t.Skip("git not available")
 	}
-	_, _, _, _, _, err := arenaSetup(t.TempDir(), 1, []model.VendorID{model.VendorCodex})
+	_, _, _, _, _, err := arenaSetup(context.Background(), t.TempDir(), 1, []model.VendorID{model.VendorCodex}, nil)
 	if err == nil {
 		t.Fatal("a non-repo workspace was accepted — the race would have nowhere to diff against")
 	}
@@ -158,7 +159,7 @@ func TestArenaRaceNumbersItselfPastLeftovers(t *testing.T) {
 	}
 	seats := []model.VendorID{model.VendorClaude, model.VendorCodex}
 
-	raceN, base, trees, _, seatErr, err := arenaSetup(ws, 3, seats)
+	raceN, base, trees, _, seatErr, err := arenaSetup(context.Background(), ws, 3, seats, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,10 +192,10 @@ func TestArenaRaceNumbersItselfPastLeftovers(t *testing.T) {
 // degrades to the same floor rather than bricking /arena.
 func TestArenaRaceNumberFloorsAtTheTurn(t *testing.T) {
 	ws := gitRepo(t)
-	if got := arenaRaceNumber(ws, 3); got != 3 {
+	if got := arenaRaceNumber(context.Background(), ws, 3); got != 3 {
 		t.Errorf("a repo with no arena refs numbered the race %d, want the turn 3", got)
 	}
-	if got := arenaRaceNumber(t.TempDir(), 3); got != 3 {
+	if got := arenaRaceNumber(context.Background(), t.TempDir(), 3); got != 3 {
 		t.Errorf("a failed scan numbered the race %d, want the turn-number floor", got)
 	}
 }
@@ -216,7 +217,7 @@ func TestArenaResidualCollisionNamesTheFatalLineAndTheRemedy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, trees, _, seatErr, err := arenaSetup(ws, 1, []model.VendorID{model.VendorCodex})
+	_, _, trees, _, seatErr, err := arenaSetup(context.Background(), ws, 1, []model.VendorID{model.VendorCodex}, nil)
 	if err != nil {
 		t.Fatalf("a per-seat collision escaped to the race channel: %v", err)
 	}
@@ -240,7 +241,7 @@ func TestArenaResidualCollisionNamesTheFatalLineAndTheRemedy(t *testing.T) {
 // read "no changes" — a false zero, the exact class §4a.1 exists to prevent.
 func TestCollectArenaSeesNewFiles(t *testing.T) {
 	ws := gitRepo(t)
-	_, base, trees, _, _, err := arenaSetup(ws, 1, []model.VendorID{model.VendorCodex})
+	_, base, trees, _, _, err := arenaSetup(context.Background(), ws, 1, []model.VendorID{model.VendorCodex}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +266,7 @@ func TestCollectArenaSeesNewFiles(t *testing.T) {
 // nothing; an unreadable one is a failure. The two must not meet in the middle.
 func TestCollectArenaZeroAndErrorAreDifferent(t *testing.T) {
 	ws := gitRepo(t)
-	_, base, trees, _, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
+	_, base, trees, _, _, err := arenaSetup(context.Background(), ws, 2, []model.VendorID{model.VendorCodex}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -395,7 +396,7 @@ func TestArenaCommandRefusals(t *testing.T) {
 func TestArenaRanksAreHostObserved(t *testing.T) {
 	ws := gitRepo(t)
 	seats := []model.VendorID{model.VendorClaude, model.VendorCodex}
-	raceN, base, trees, _, _, err := arenaSetup(ws, 4, seats)
+	raceN, base, trees, _, _, err := arenaSetup(context.Background(), ws, 4, seats, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -540,7 +541,7 @@ func TestArenaCommitMsgIsATurnLabel(t *testing.T) {
 // what rev-parse reported, and the room's own repo has not moved an inch.
 func TestArenaCommitMakesTheAttemptDurable(t *testing.T) {
 	ws := gitRepo(t)
-	raceN, base, trees, _, _, err := arenaSetup(ws, 5, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, _, err := arenaSetup(context.Background(), ws, 5, []model.VendorID{model.VendorCodex}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -646,7 +647,7 @@ func TestArenaCommitFallsBackToALocalIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, base, trees, _, _, err := arenaSetup(ws, 1, []model.VendorID{model.VendorClaude})
+	_, base, trees, _, _, err := arenaSetup(context.Background(), ws, 1, []model.VendorID{model.VendorClaude}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -678,7 +679,7 @@ func TestArenaCommitFallsBackToALocalIdentity(t *testing.T) {
 func TestArenaCommitFailureDegradesTheSeatAlone(t *testing.T) {
 	ws := gitRepo(t)
 	seats := []model.VendorID{model.VendorClaude, model.VendorCodex}
-	raceN, base, trees, _, _, err := arenaSetup(ws, 3, seats)
+	raceN, base, trees, _, _, err := arenaSetup(context.Background(), ws, 3, seats, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -745,7 +746,7 @@ func TestArenaCommitFailureDegradesTheSeatAlone(t *testing.T) {
 // branch stays at base and the "no changes" sentence stays the whole story.
 func TestArenaZeroDiffCommitsNothing(t *testing.T) {
 	ws := gitRepo(t)
-	raceN, base, trees, _, _, err := arenaSetup(ws, 2, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, _, err := arenaSetup(context.Background(), ws, 2, []model.VendorID{model.VendorCodex}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -784,7 +785,7 @@ func TestArenaZeroDiffCommitsNothing(t *testing.T) {
 // commit on top.
 func TestArenaSelfCommittedAttemptKeepsItsOwnTip(t *testing.T) {
 	ws := gitRepo(t)
-	raceN, base, trees, _, _, err := arenaSetup(ws, 6, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, _, err := arenaSetup(context.Background(), ws, 6, []model.VendorID{model.VendorCodex}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -835,7 +836,7 @@ func TestArenaSelfCommittedAttemptKeepsItsOwnTip(t *testing.T) {
 // never moves.
 func TestUndoTakesTheWholeTurnBack(t *testing.T) {
 	ws := gitRepo(t)
-	raceN, base, trees, _, _, err := arenaSetup(ws, 7, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, _, err := arenaSetup(context.Background(), ws, 7, []model.VendorID{model.VendorCodex}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -958,7 +959,7 @@ func TestUndoRefusalsEachNameTheirReason(t *testing.T) {
 // not measure happening.
 func TestUndoResetFailureSurfacesGitsOwnSentence(t *testing.T) {
 	ws := gitRepo(t)
-	raceN, base, trees, _, _, err := arenaSetup(ws, 8, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, _, err := arenaSetup(context.Background(), ws, 8, []model.VendorID{model.VendorCodex}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1099,7 +1100,7 @@ func TestARaceThatOutranItsTurnStillCommitsAndUndoes(t *testing.T) {
 	if _, err := gitOut(ws, "branch", "arena/t3/codex"); err != nil {
 		t.Fatal(err)
 	}
-	raceN, base, trees, _, seatErr, err := arenaSetup(ws, 3, []model.VendorID{model.VendorCodex})
+	raceN, base, trees, _, seatErr, err := arenaSetup(context.Background(), ws, 3, []model.VendorID{model.VendorCodex}, nil)
 	if err != nil || len(seatErr) != 0 {
 		t.Fatalf("setup: %v %v", err, seatErr)
 	}
@@ -1186,7 +1187,7 @@ func (h *oneShotRacer) Kill() { h.killed = true }
 // ordinary brief always landed and this one could not.
 func TestAWarmSeatsRacerRetiresOnItsOwnExit(t *testing.T) {
 	ws := gitRepo(t)
-	raceN, base, trees, _, _, err := arenaSetup(ws, 4, []model.VendorID{model.VendorClaude})
+	raceN, base, trees, _, _, err := arenaSetup(context.Background(), ws, 4, []model.VendorID{model.VendorClaude}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1194,6 +1194,21 @@ type State struct {
 	// (§9.21).
 	TurnRoute *Route
 
+	// ArenaSetup is the step of a race's worktree setup that is running right
+	// now, in WORDS — "preparing worktree for codex" — and empty when no setup
+	// is running (§9.37, amended 2026-08-17).
+	//
+	// Words and nothing else, deliberately. There is no percentage here, no
+	// count of seats finished and no elapsed figure, because council cannot
+	// measure how long a checkout will take and §4a.1 forbids drawing a number
+	// it did not measure. The honest claim is what is happening, not how far
+	// along it is — and it is a string rather than a (stage, seat) pair for the
+	// same reason: the room draws this sentence, so the sentence is the state.
+	//
+	// It sits on State because Render draws it and Render is pure over State.
+	// The setup itself is Model.arenaPrep, which the renderer cannot reach.
+	ArenaSetup string
+
 	// Spinner advances only while something is genuinely in flight.
 	Spinner int
 

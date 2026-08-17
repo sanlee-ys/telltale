@@ -282,6 +282,21 @@ type Model struct {
 	// on-screen arena block is Column.Arena, a per-turn fact; this outlives the
 	// turn the way the worktrees themselves do (§9.37: kept until deleted).
 	lastRace *arenaRace
+	// arenaPrep is the race whose worktrees are being cut right now, off the
+	// render loop (arenasetup.go, §9.37 amended 2026-08-17), and nil the rest of
+	// the time.
+	//
+	// It sits beside turn rather than inside it because it is what stands
+	// BEFORE a turn: no seat has spawned, no column has moved, and the dispatch
+	// it is preparing does not exist yet. Every guard that asks "is a turn in
+	// flight" would answer no while this is set, which is correct for all of
+	// them except dispatch itself — a second race started here would cut names
+	// from the same ref scan as the first.
+	arenaPrep *arenaPrep
+	// arenaPrepN numbers preps, so a message from a setup the room has already
+	// stopped can be dropped by comparison. Never reset: an id has to be unique
+	// over the room's whole life, not over the current setup.
+	arenaPrepN int
 	// writePending is true while /write awaits y/n before the room's posture is
 	// loosened, and is the only one of the three room controls that asks.
 	//
@@ -705,6 +720,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.waitEvents()
 
+	case arenaSetupMsg:
+		// One step of a race's worktree setup beginning, or the whole setup
+		// landing. Everything it can do next — read the following step, spawn
+		// the turn it was preparing, or report why it stopped — is decided by
+		// the handler and returned as the next command (arenasetup.go).
+		return m, m.applyArenaSetup(msg)
+
 	case arenaStatMsg:
 		// One interim read landing (or being dropped as stale — the drop
 		// rules live with the handler). No follow-up command: the next read
@@ -725,10 +747,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Now is stamped here, on the tick, so Render never reads a clock and
 		// the elapsed counters advance on the same schedule as the spinner.
 		m.st.Now = time.Time(msg)
-		// The spinner only advances while a column is genuinely working. A
-		// motionless room is the honest render of a room where nothing is
-		// happening, and it keeps §7.1's budget of one moving cell.
-		if m.st.Busy() {
+		// The spinner only advances while a column is genuinely working — or
+		// while a race's worktrees are being cut, which is the same claim about
+		// a different worker: git is running off the loop and the moving cell is
+		// how the room says so. A motionless room is the honest render of a room
+		// where nothing is happening, and that was the exact lie a frozen setup
+		// used to tell. §7.1's budget of one moving cell is untouched: no column
+		// can be spinning during a setup, because nothing has been dispatched.
+		if m.st.Busy() || m.st.ArenaSetup != "" {
 			m.st.Spinner++
 		}
 		// The tick is the throttle's second leg: arming happens on activity,
@@ -751,6 +777,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // exception to it: something is blocked on a keystroke, the footer says which
 // keystroke, and the keymap is read from the same queue the footer is.
 func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// ctrl+c during a race's worktree setup stops the SETUP, in every mode, and
+	// it is checked before anything else for the reason the setup moved off the
+	// loop at all: this keystroke is the operator's only way to end a git
+	// command that will not finish, and it was the one the frozen room ate.
+	// Nothing below can answer it — no turn exists to cancel, so view mode would
+	// quit the room and compose mode would quit it faster. Once stopped, a
+	// second ctrl+c means what it always means.
+	if m.arenaPrep != nil && msg.String() == "ctrl+c" {
+		m.stopArenaSetup()
+		return m, nil
+	}
 	if m.st.Gating() {
 		return m.gateKey(msg)
 	}

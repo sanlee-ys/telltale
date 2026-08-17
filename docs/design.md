@@ -12145,6 +12145,82 @@ records are emitted, so the reported absence has some other cause, and the same 
 two candidates beside it — a room that opened on workspace `~`, and `/trace` resolving a
 relative path against it. That stays open and belongs to whoever runs the next live race.
 
+**Amendment, 2026-08-17: the worktrees are cut off the render loop, and the room stays a room
+while they are.** Until now `arenaSetup` ran inline in `dispatch`, which runs inside `Update` —
+so for as long as git took, council drew no frame, read no key and answered nothing. The
+operator measured the failure the way these things are always measured, by living in it:
+parallel sessions against one repository, a `index.lock` held by another of them, and a room
+frozen with **ctrl+c unread** — the one act that could have ended the wait, sitting in a queue
+whose only drainer was blocked inside `git worktree add`. A room that cannot be stopped is
+worse than a slow one, and this is the same class of defect as §9.37's own give-up amendment:
+the room displayed a true thing and offered no act on it.
+
+**The setup is a command now, and the seat order is unchanged.** `arenaSetup` runs on a
+goroutine and reports back through a channel (`internal/council/arenasetup.go`); `dispatch`
+stops at the point of preparing and returns, and the turn is born later in `applyArenaSetup`,
+which calls the extracted `sendTurn` with what the setup measured. **The per-seat
+`git worktree add` calls stay SERIAL, and that is a ruling rather than an unfinished
+optimisation** — those adds write the repository's own refs and administrative files, so N at
+once contend for exactly the lock this change exists to survive, and the parallel version would
+turn one slow setup into N racing ones each able to fail the others. Everything stamped when
+the turn starts — its clock, its context, the snapshot of the previous replies — is stamped at
+the SPAWN rather than at the keypress, which is the honest reading of every duration the turn
+then renders.
+
+**The frame names the step and refuses to name the progress.** Each stage reports the words for
+what it is about to do — `reading the base commit`, `numbering the race`, `reading
+.worktreeinclude`, then `preparing worktree for codex` and `seeding worktree for codex` per
+seat — and the footer draws that sentence with the spinner beside it. There is no percentage,
+no "2 of 4" and no elapsed figure, because council cannot measure how long a checkout takes and
+a number it did not measure is a number it may not draw (§4a.1). The spinner is the second
+signal and is liveness, not progress: a step that takes a minute prints the same sentence
+throughout, so without a moving cell a working room and a dead one render identically — which
+was precisely the old lie. `TestSetupStepsNameTheWorkAndNeverTheProgress` fails on any step
+carrying a digit or a `%`, which is the rule stated as a test rather than as an intention.
+
+**The deadline, and the measurement behind it.** The setup carries one context with a **90
+second** deadline over the WHOLE of it, enforced through `gitOutCtx` — a context-carrying
+sibling of `gitOut` used by the setup path and nowhere else. Every other git call council makes
+stays un-deadlined by construction, because `gitOut` takes no context to hand one: a diff read,
+a config probe or a commit killed by somebody's guess at a timeout is a worse outcome than a
+slow one everywhere the room is not blocking on it. One deadline over the whole setup rather
+than one per call, because the number an operator experiences is how long the room was
+unusable, and a per-call bound times five seats is a total nobody chose.
+
+The 90 is measured against, not guessed. On the reference Intel Mac (macOS 26.5.2, 2026-08-17),
+a five-seat setup against a synthetic repository built to this repo's own shape — 540 files in
+60 directories, ~8 MB of content, against telltale's 526 tracked files and 8 MB — ran end to
+end in **2.3s cold and 1.3s / 1.4s warm**, worktree adds included. The deadline is therefore
+~40x the measured case, and the margin is the decision rather than the number: the failure it
+exists for is a lock another session holds, which is unbounded by nature and says nothing about
+how large the repository is. What the deadline must never be is tight enough to kill a setup
+that would have finished, since a `git worktree add` killed mid-checkout leaves a half-created
+tree the operator clears by hand.
+
+**Every ending hands the room back.** A deadline hit or a git refusal ends the setup
+WHOLESALE — a clock is a fact about the room's patience, not about a seat, so recording it as
+four per-seat skips would blame four vendors for one timer and then race whatever survived as
+if the operator had asked for a 1-of-4 race. It lands on the room's existing arena notice,
+opened the way a refused race always was, and the sentence leads with the STEP before quoting
+git verbatim (`arena: preparing worktree for codex: fatal: …`): the git line names a lock and
+not which of eight calls met it, and the step is the half the operator cannot reconstruct. A
+process the context killed is never quoted as if git had refused — `cmd.Run` reports the signal
+there, and dressing "signal: killed" up as git's own sentence would be §4a.1's bug pointed at a
+failure. The brief returns to the composer and the room composes again, so the same enter
+retries it. ctrl+c stops the setup in every mode and does NOT quit, which is the keystroke the
+freeze ate; the trees already added are **kept and named** rather than swept up, per this
+section's founding ruling that worktrees live until the user deletes them, and the next race
+numbers itself past them anyway (`arenaRaceNumber`).
+
+Verification note: the mechanics are pinned offline against real temp repositories — the room
+drawing and reading keys mid-setup, the step vocabulary, the serial adds (measured, not
+assumed: when seat N's add is announced, seat N-1's tree already exists on disk), the
+deadline's wholesale stop, the failure handing the room back, ctrl+c, a stopped setup's
+messages being dropped by comparison, and the rendered frame. **The live half is owed**: no
+race has been run against this build, so the claim that a real held `index.lock` now ends in a
+notice instead of a freeze rests on the tests and on an expired-deadline fixture, not on the
+lock that started this.
+
 <a id="s9-38"></a>
 
 ### 9.38 paste lands whole, and never sends (2026-08-09)

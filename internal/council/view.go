@@ -3672,6 +3672,49 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 			lay, sty, g)
 	}
 
+	if st.ArenaSetup != "" {
+		// A race's worktrees are being cut, off the loop (§9.37, amended
+		// 2026-08-17). This line is the whole of what the room says about it,
+		// and every part of it is chosen against the same rule.
+		//
+		// The WORDS name the step and stop there — "arena: preparing worktree
+		// for codex…" — with no percentage, no "2 of 4" and no elapsed figure.
+		// council cannot measure how long a checkout takes, so any of those
+		// would be a number it invented (§4a.1), and the operator's actual
+		// question during a stall is which command is stuck, which the words
+		// answer exactly.
+		//
+		// The MARK is the spinner, borrowed from a waiting column, and it is the
+		// second signal a step name cannot carry on its own: a frozen room and a
+		// working one print the same sentence, and the moving cell is the
+		// difference between them. It is liveness, never progress.
+		//
+		// A NOTICE joins this line rather than replacing it, and that is the one
+		// place this branch bends. Every notice reachable during a setup is the
+		// room answering a key the operator just pressed — a second race
+		// refused, a `/cd` refused — and swallowing it would be the same silence
+		// this whole change exists to end. It leads, and the step is marked
+		// sheddable only while it is there: an answer to a keystroke outranks a
+		// description of work in progress, because the operator is waiting on
+		// the first and can wait for the second.
+		//
+		// The branch as a whole outranks the notice case below because it
+		// describes something happening NOW, while a notice on its own is about
+		// something that already did — a stale line about the last turn must not
+		// sit where the room is saying what it is doing. It does not outrank the
+		// gate above, which is the one state where something is stopped until a
+		// key is pressed, and a setup cannot be running under a gate anyway:
+		// nothing has been dispatched.
+		var hs []hint
+		if st.Notice != "" {
+			hs = append(hs, hint{key: g.Warn, label: st.Notice, alarm: true})
+		}
+		hs = append(hs,
+			hint{key: phaseMark(PhaseWaiting, st, g), label: "arena: " + st.ArenaSetup + g.Ellipsis, shed: st.Notice != ""},
+			hint{key: "ctrl+c", label: "stop"})
+		return statusLine(left, hs, lay, sty, g)
+	}
+
 	if st.Notice != "" {
 		// A notice replaces the keys rather than joining them, and keeps the
 		// warning mark at severity while its words stay plain — the same split
