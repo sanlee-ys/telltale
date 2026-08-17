@@ -387,6 +387,49 @@ whose mtime is ahead of the local clock is not counted at all — the same rule 
 session's own mtime gets, for the same reason: a timestamp ahead of the clock is not a
 readable time, so it cannot be evidence of recency.
 
+**Amended 2026-08-17 — `subagentStatusLine` was evaluated as a replacement for that inference,
+and refused.** The estimate marker exists because of the 15-minute boundary, so a vendor surface
+that *reports* which sub-agents run would retire `CapDerived` honestly. Claude Code 2.1.233 ships
+one. It is a settings key with the same `{type:"command", command}` shape as `statusLine`, and the
+bundle's own schema describes it as a "Custom per-subagent status line shown in the agent panel;
+receives row context as JSON on stdin".
+
+Measured by a source read of the shipped bundle at **Claude Code 2.1.233** — the instrument
+§7.16b used, labelled here for the same reason. The payload is the shared session-basics block
+(the `py` helper §7.16b identified) plus `columns` and a `tasks` array. Each `tasks` entry carries
+`id`, `name`, `type`, `status`, `description`, `label`, `startTime`, `model` and `effort`. The
+command runs with a 5 s timeout, and its stdout is parsed as JSON lines of `{id, content}`. A
+React effect drives it: a 300 ms debounce on change, then a repeating 5 s tick while any row is
+live, with an overlap guard.
+
+**The count it carries is not the count this adapter defines, and that is the refusal.** Three
+measured reasons, in order of weight:
+
+- **The population is wider.** `tasks` holds panel rows, and the observed `type` values include
+  `local_agent`, `remote_agent`, `in_process_teammate` and `local_workflow`. §3.1 counts
+  transcripts in a session's `subagents/` sidecar. `len(tasks)` answers a different question
+  under this field's name.
+- **The list keeps rows that finished.** The tick filters on `evictAfter !== 0`, so a row
+  survives its own completion until eviction. A length taken from it overstates a fan-out in
+  progress. The 15-minute boundary makes the same error, but it declares itself an estimate.
+- **It is the interactive UI's path, and the HUD reads disk.** The effect is a React hook over
+  the agent panel and the terminal's column count, and print mode mounts no panel. To source it,
+  telltale needs a new relay mode plus operator wiring in `settings.json`. It would then cover
+  only the sessions where both are true, while `countSubagents` covers every session on disk
+  today.
+
+So `FieldSubagents` stays `CapDerived` and `countSubagents` is unchanged. The payload's `status`
+field is the one genuinely stronger signal here, because a reported status beats an inferred
+recency window. It is reachable only through that relay, so this ruling is re-openable against
+that build rather than closed.
+
+**One arm is owed, and it is named rather than dropped.** A live payload capture was attempted
+and blocked. To exercise `subagentStatusLine`, the key must sit in a `settings.json`, and this
+machine's credential guard default-denies writes to that path — including the throwaway,
+project-local copy the probe wanted. The block was accepted rather than worked around, so the
+shape above rests on a source read with no live capture behind it. That is weaker than §7.16b
+ended up: it closed its own source read with a capture on the same day.
+
 Only `assistant` and `user` records carry `message`. `custom-title`, `last-prompt`,
 `mode` and `ai-title` carry `{type, sessionId, <one key>}` and have **no `timestamp`
 and no `cwd`** — a parser that assumes those fields exist will nil-deref. Full observed
@@ -6711,6 +6754,41 @@ cannot cover a tool that does not exist yet. The claim is *these named tools are
 verified*, not *this session cannot write*. The general rule this leaves behind: **a flag's name
 is not evidence of its effect**, and the check that matters is what the session reports about
 itself afterwards.
+
+**Amended 2026-08-17 — the seat's own `capabilities` array, measured and deliberately not
+read.** The rule above ends on *what the session reports about itself afterwards*, and Claude
+Code's `system/init` carries a field that looks like exactly that: a `capabilities` array. It is
+not the same thing. A tool list reports what the session **holds**, which is a fact about the
+session. A capability token reports what the vendor **can do**, which is a claim about behavior.
+`claude.go`'s Interrupt precedent already refused to rest on one, and this is the case that
+precedent was written for.
+
+Measured at **Claude Code 2.1.233** on Windows, from two live headless runs in a throwaway
+directory: a plain `-p --output-format stream-json --verbose` invocation, and the read posture's
+exact argv. Both init frames carried the same array, in the same order:
+
+```
+["interrupt_receipt_v1","interrupt_cancel_queued_v1","msg_lifecycle_v1"]
+```
+
+Three findings, and none of them supports a gate. The array does not move with our flags, so it
+says nothing about the posture council asked for. The tokens do not date a build —
+`interrupt_cancel_queued_v1` is already in the 2.1.226 bundle, so a version check resting on
+their presence passes on three installed versions at once. And the one token council might
+plausibly want, `interrupt_receipt_v1`, guards a capability a live run already verified, so
+reading it can only weaken a claim that already stands.
+
+`streamLine.Capabilities` therefore parses the field, and nothing branches on it.
+`TestInitCapabilitiesAreParsedAndGateNothing` pins the three states apart — absent, `[]`, and the
+measured array — and pins that every one of them still produces the same `KindSession` event.
+Modelling a field nothing reads needs a reason (§7.16b). The reason here is that a modelled field
+is a checkable record of a measurement, and a comment is not.
+
+**`telltale doctor` cannot carry this line, and its charter is the reason.** The package doc is
+explicit that doctor does not start a turn, because a turn costs real quota (ADR-008 §6).
+`capabilities` arrives only on a `system/init`, and a `system/init` arrives only when a turn
+starts. So no cheap local read of this field exists, and the check doctor could offer must spend
+exactly what doctor exists not to spend. Recorded here instead of built.
 
 Granularity is the same discipline applied to streaming, and the spike made the answer worse
 than the guess. Claude streams token-level deltas, verified live. The other two were

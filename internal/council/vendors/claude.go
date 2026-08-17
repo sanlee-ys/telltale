@@ -219,6 +219,10 @@ type controlRequest struct {
 //
 // The capability is advertised too — every system/init in the spike listed
 // "interrupt_receipt_v1" — but the advertisement is not what this rests on.
+// Re-measured 2026-08-17 at 2.1.233: the token is still advertised, and two
+// more sit beside it. That changed nothing here, which is the point — see
+// streamLine.Capabilities for what the array holds and why council reads it
+// for the record rather than for a decision.
 func (Claude) Interrupt(id string) ([]byte, error) {
 	return json.Marshal(controlRequest{
 		Type:      "control_request",
@@ -662,6 +666,39 @@ type streamLine struct {
 
 	// system/init
 	Model string `json:"model"`
+
+	// Capabilities is the seat's self-advertisement. Council never branches on
+	// it, and this comment is the record of why.
+	//
+	// MEASURED 2026-08-17 at Claude Code 2.1.233 on Windows, from two live
+	// headless runs in a throwaway directory: a plain
+	// `-p --output-format stream-json --verbose` invocation, and the read
+	// posture's exact argv from baseArgs above. Both init frames carried the
+	// same array, in the same order:
+	//
+	//	["interrupt_receipt_v1","interrupt_cancel_queued_v1","msg_lifecycle_v1"]
+	//
+	// Two things follow. Our own flags do not change what the seat advertises,
+	// so the array says nothing about the posture council asked for. And the
+	// tokens do not date a build: `interrupt_cancel_queued_v1` is already in the
+	// 2.1.226 bundle, so a version test built on their presence would pass on
+	// three installed versions at once.
+	//
+	// WHY NOTHING READS IT. Interrupt below is the precedent, and this field is
+	// the case that precedent was written for: the advertisement is not what a
+	// behavior claim rests on. Interrupt is safe to send because a live run was
+	// watched doing it, not because init listed `interrupt_receipt_v1`. Any
+	// other capability needs the same evidence, so a branch on this array could
+	// only weaken a claim that already stands on a measurement. §9.2 states the
+	// rule one level down — a flag's name is not evidence of its effect — and a
+	// self-report about behavior is a name, not an effect.
+	//
+	// It is parsed because a modelled field is a checkable record of the
+	// measurement, which a comment alone is not; `Model` above is unread for the
+	// same reason. Absent and empty stay different states (§4a.1): a CLI that
+	// sends no key leaves this nil, and one that sends `[]` advertises an empty
+	// set. TestInitCapabilitiesAreParsedAndGateNothing pins all three states.
+	Capabilities []string `json:"capabilities"`
 
 	// stream_event: the token-level delta, and the tool-call announcement.
 	Event struct {
