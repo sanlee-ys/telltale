@@ -12,6 +12,13 @@ go test ./...
 go build -o telltale.exe ./cmd/telltale
 ```
 
+**A local `go test ./...` can time out in `internal/council`.** That package
+spawns processes and runs ~455s on a reference workstation, close to Go's 600s
+default, so a loaded machine overruns it — a machine-speed condition, not a
+regression (CI runs the whole suite in ~4m22s). Two fan-out lanes hit it
+independently on 2026-08-16. Run `go test ./internal/council -timeout 20m`, or
+test the package you touched, when the full run overruns locally.
+
 That is the whole CI gate (`.github/workflows/ci.yml`), which runs on `windows-latest`
 — **Windows is the primary target ([ADR-002](docs/design.md#adr-002))**, not an afterthought platform. CI then
 smoke-tests the *built binary* against two fixtures and asserts honesty properties

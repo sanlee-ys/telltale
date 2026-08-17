@@ -288,6 +288,7 @@ func relayQuota(vendor string, windows []quotacache.Window) {
 // non-zero is a hook that can colour a vendor's turn with an error the user
 // did not cause, and telltale's cache is never worth that; the reason goes to
 // stderr for `--debug`-style inspection and the turn continues.
+
 // runOtel starts the vendor telemetry collector (design.md §7.16a). Unlike
 // the hook relay it is a foreground server: it holds a loopback socket open
 // and the VENDOR's exporter pushes to it, so the gauges' no-network-calls
