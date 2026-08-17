@@ -5647,6 +5647,106 @@ snapshot. `/events` additionally requires `Content-Type: application/json`, whic
 as three facts plus a fourth: no gauge reads these files, the operator starts the mode, the
 bind is loopback, **and a web page is not a sender.**
 
+**Amended 2026-08-17 — the sink gets its first reader, and it is its own mode.** "Dark by
+design" above named a viewer as a later call site. This is that call site.
+`telltale events view` lists what the sink stored, filters it by the three tag axes or by
+day, and follows the store live. `internal/eventview` holds it.
+
+**It is its own foreground mode, and that is the whole reason it may exist.** The four
+facts the paragraph above just finished restating are what contains a verbatim content
+store, and the fourth of them is that no gauge reads these files. A reader wired into the
+HUD would have spent that one: hook payloads would land on a surface that redraws on every
+tick, in a process the operator did not start for this. A separate mode spends none of the
+four. `telltale snapshot` (§7.22) and `telltale otel grok` (§7.16a) set the precedent, and
+`TestNoGaugeReadsTheEventStore` asserts it over the transitive import graphs of
+`internal/hud`, `internal/statusline` and `internal/snapshot` rather than leaving it to a
+reviewer's memory.
+
+**It reads the day FILES, not the sink's own endpoints, on three grounds.** The sink serves
+`GET /events/recent`, `GET /events/filter-options` and `/stream`, and this reader uses none
+of them.
+
+- **Trust: §7.24 already settled it, and it settled it the other way round from the
+  intuition.** That section measured a plain file write planting the same row a POST plants
+  with MORE control over it, and stated the boundary once: a program running as a principal
+  the store's ACL admits is trusted by these listeners exactly as far as the filesystem
+  trusts it. So the HTTP path grants this reader nothing the file path does not. The
+  endpoints are not closed to it either — `internal/localonly` refuses a request carrying
+  `Origin`, and a local program sends none — which is the point: a viewer that connected
+  would be served, and would gain nothing by it.
+- **Availability, which is what actually decides it.** The sink is a foreground mode the
+  operator starts. Its endpoints answer only while that process is alive, and only over the
+  window that process loaded at startup. The day files outlive it. A reader that needed a
+  running sink would be dark in exactly the case it is reached for: after the fact.
+- **A checkable boundary rather than a promised one.** With no network call in the mode at
+  all, "it makes no network call" is an import-graph fact. `TestTheViewerOpensNoSocket`
+  asserts it against `go list`, and says in its own comment what it does not cover.
+
+**What it costs, and what the cost buys back.** Follow mode POLLS the day files on an
+interval instead of receiving a push, so the interval is the honest latency bound and
+`--interval` names it rather than the banner claiming "live". The trade is not one-sided:
+the sink's `broadcast` drops a subscriber whose buffer fills, by design, while a file tail
+cannot miss an event that way, because the file is the durable record and the tail only
+moves forward through it. One `Tailer` serves both the startup listing and the follow loop,
+so an event stored between the two can neither be missed nor printed twice — the seam a
+separate priming read would have had to choose a failure mode for.
+
+**Keys on the row, content behind a flag.** A row carries the arrival id, the stamp the
+emitter sent, the three tag axes, and the promoted fields (`tool_name`, `tool_use_id`,
+`agent_type`, `agent_id`, `stop_hook_active`). The payload prints only under `--payload`.
+So does the promoted `error`, and that split is the one judgement call worth recording: the
+other promoted fields are keys, while an error message is free text the hook was handed,
+which makes it content in the same sense the payload is. The row still prints the WORD
+`error`, because whether a row has one is what decides if the reader asks for the body.
+Note that `session_id` is a key HERE and content in §7.22: the snapshot renders no session
+id at all, because a gauge rollup has no use for one, while the three tag axes are this
+subsystem's whole filter surface and the sink already serves them at
+`/events/filter-options`. Two different contracts, each stated where it binds.
+
+**Plain text and no colour, following `doctor` rather than the TUI.** This output is read
+piped into a file and pasted into an issue by someone asking why a hook stored nothing, so
+every distinction it makes is carried by a word — which satisfies the colour rule by having
+no first signal that is not one. `--ascii` and `NO_COLOR` are therefore not flags on this
+mode. Nothing is truncated either: the widest column is a 36-character session id, and that
+is the field a reader carries into `--session`, into a vendor's own log, into an issue. A
+clipped one is a session nobody can correlate.
+
+**Zero and absent stay different here too** (§4a.1). A row with no timestamp renders the
+word `absent`, never `1970-01-01` — epoch zero through a date formatter produces a date
+that reads like a measurement. A `stop_hook_active` of `false` renders as a value and a
+missing one renders as nothing at all. Both are pinned:
+`TestAnAbsentTimestampIsNotNineteenSeventy` and `TestAMeasuredFalseIsNotAnAbsentField`. The
+partial-read rule holds as well: an unparseable line costs that line, is counted, and is
+reported on screen, so a store that is 40% unreadable cannot look like a quiet fleet. A
+half-written line is not unreadable and is not counted as such — `internal/jsonl` holds it
+back until its newline arrives, which matters because the sink appends while this reader is
+reading.
+
+`--day` selects a FILE, which is the day the SINK recorded the row, not the stamp the
+emitter sent. The two differ across UTC midnight and whenever a sender's clock is off. The
+file name is the fact this reader can check; the stamp is the sender's claim, and it is in
+its own column to be compared against.
+
+**What it deliberately does not do.** It writes nothing, and does not create the store
+directory — a reader that created it would make "the sink has never run here" unanswerable
+on the next run. `TestTheViewerWritesNothing` hashes the store before and after. It renders
+no gauge, adds no seat, and touches no council code, so it stays clear of the v1 gate (§1)
+for the same reason the sink itself did. And it does not summarize, group or count anything
+about the payloads: the sink stores them verbatim and this prints them verbatim or not at
+all.
+
+**Verified live, 2026-08-17, Windows 11**, built from the branch, with a redirected
+`USERPROFILE` so nothing touched the operator's own store. `telltale events` bound
+127.0.0.1:4530; a synthesized PostToolUse payload piped into
+`tools/emit-event.py --source-app tt-live-probe --server-url http://127.0.0.1:4530/events`
+was logged as `stored #1 tt-live-probe/11111111-cccc-4ddd-8eee-000000000009 PostToolUse`.
+The sink process was then **stopped**, and `telltale events view --payload` still listed
+that row with its payload byte-identical to what the emitter sent. That last step is the
+availability argument, measured rather than asserted: with the sink gone, every endpoint
+this reader could have used was gone with it. Follow mode was driven the same day against a
+synthesized store: it printed the retained tail oldest-first, and a row appended to the day
+file appeared within one 500ms interval.
+
 <a id="s7-22"></a>
 
 ### 7.22 `telltale snapshot` — the read mode whose reader is a program (2026-08-11)

@@ -248,9 +248,10 @@ five that draw no surface stand behind these three: the
 **relays** (`telltale hook <vendor>`, `telltale otel <vendor>`) read one turn's token
 counts and print nothing; the **preflight** (`telltale doctor`) reports which vendor
 binaries this machine has; and the **observation modes** (`telltale events`, `telltale
-snapshot`) answer a program rather than a person. `telltale snapshot`, `telltale events`
-and `telltale doctor` get their own sections below; the two relays are described under
-the read/write boundary, because a relay is a write.
+snapshot`) answer a program rather than a person, except for `telltale events view`,
+which reads the sink's own store back for a person. `telltale snapshot`, `telltale
+events` and `telltale doctor` get their own sections below; the two relays are described
+under the read/write boundary, because a relay is a write.
 
 Honest claim, stated precisely: *dispatch across the 5-vendor fleet (Claude Code, Codex,
 Cursor, Antigravity, Grok); cross-vendor monitoring; vendor-native statusline where the seam
@@ -285,8 +286,10 @@ stay visibly absent.
 counted with the three.** The event sink (`telltale events`, below) stores each hook payload
 VERBATIM under `~/.telltale/events/` — content, not keys and numbers. What contains
 it is scope, not redaction: it is its own foreground mode that you start, its server
-binds loopback only, and no gauge reads or renders those files. The keys-and-numbers
-rule above still binds every store the gauges themselves write
+binds loopback only, a web page is not a sender, and no gauge reads or renders those
+files. Its reader (`telltale events view`) is its own foreground mode for that last
+reason: a gauge that read this store would have spent the containment. The
+keys-and-numbers rule above still binds every store the gauges themselves write
 ([docs/design.md §7.21](docs/design.md#s7-21)).
 
 `telltale
@@ -397,10 +400,11 @@ reads a document instead of running the binary, which is how the refused store, 
 drifted store and the scan error were driven: those are shapes a healthy machine does not
 produce, and `internal/snapshot/testdata/golden/` carries all four.
 
-## `telltale events` — the fleet event sink, and it runs dark
+## `telltale events` — the fleet event sink, and `telltale events view` reads it
 
 ```
 telltale.exe events
+telltale.exe events view
 ```
 
 One hook event per POST on loopback, appended to a durable log under
@@ -410,11 +414,20 @@ where `--source-app <name>` is the one per-repo edit. Two flags: `--addr <host:p
 (default `127.0.0.1:4519`; any other host is refused at startup) and `--retain <days>`
 (default 30).
 
-**Nothing renders these events.** The sink runs dark by design — events accrue and
-stream, and no telltale surface displays one. A viewer is a later call site, not a
-re-plumb. This is also the one store that holds content rather than keys and numbers,
-and the read/write boundary above names it as the fourth exception.
-[docs/design.md §7.21](docs/design.md#s7-21) carries the record.
+`telltale events view` is the sink's reader, and it is its own foreground mode rather
+than a line on a gauge. It lists the newest events, filters by `--source`, `--session`,
+`--type` or `--day`, and follows the store with `--follow`. It reads the day files
+directly and opens no socket, so it answers with no sink running and after the sink has
+exited; `--interval` is therefore the honest latency bound in follow mode, not a push.
+Each row shows the keys. The payload is stored VERBATIM and prints only under
+`--payload`.
+
+**This is the one store that holds content rather than keys and numbers**, and the
+read/write boundary above names it as the fourth exception. What contains it is scope:
+the operator starts the mode, the server binds loopback, a web page is not a sender, and
+no gauge reads these files — which is exactly why the reader is a separate mode.
+[docs/design.md §7.21](docs/design.md#s7-21) carries the record and the 2026-08-17
+amendment that added the viewer.
 
 ## `telltale doctor` — the launch-time preflight
 

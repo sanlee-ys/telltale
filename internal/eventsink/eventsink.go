@@ -146,7 +146,7 @@ func Open(dir string, retain time.Duration, now func() time.Time) (*Store, error
 	s := &Store{dir: dir, retain: retain, now: now, nextID: 1}
 	cutoff := now().Add(-retain).UnixMilli()
 
-	names, err := dayFiles(dir)
+	names, err := DayFiles(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -184,10 +184,23 @@ func Open(dir string, retain time.Duration, now func() time.Time) (*Store, error
 	return s, nil
 }
 
-// dayFiles lists the store's own files, sorted by name. The name pattern is
+// DayLayout is the date layout of a day file's name, and of the --day value
+// the viewer accepts. It is one constant because two spellings of the same
+// date format is how a reader ends up filtering on a day the store never
+// names.
+const DayLayout = "2006-01-02"
+
+// DayFiles lists the store's own files, sorted by name. The name pattern is
 // affirmative — anything else in the directory is not touched, so a stray
 // file can never be swept by retention.
-func dayFiles(dir string) ([]string, error) {
+//
+// It is exported for the viewer (internal/eventview, design.md §7.21's
+// 2026-08-17 amendment), which reads these same files and must agree with the
+// sink about which ones are the store's. A second copy of this pattern would
+// be a second place to change it, and the two copies would disagree silently:
+// a viewer with a looser pattern reads a file the sweep will never delete, and
+// one with a tighter pattern goes quietly blind to a day the sink wrote.
+func DayFiles(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -199,7 +212,7 @@ func dayFiles(dir string) ([]string, error) {
 		}
 		name := ent.Name()
 		if len(name) == len("2026-08-11.jsonl") && strings.HasSuffix(name, ".jsonl") {
-			if _, err := time.Parse("2006-01-02", strings.TrimSuffix(name, ".jsonl")); err == nil {
+			if _, err := time.Parse(DayLayout, strings.TrimSuffix(name, ".jsonl")); err == nil {
 				names = append(names, name)
 			}
 		}
@@ -225,7 +238,7 @@ func (s *Store) Add(e Event) (Event, error) {
 	if err != nil {
 		return Event{}, err
 	}
-	name := s.now().UTC().Format("2006-01-02") + ".jsonl"
+	name := s.now().UTC().Format(DayLayout) + ".jsonl"
 	f, err := os.OpenFile(filepath.Join(s.dir, name), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return Event{}, err
@@ -311,13 +324,13 @@ func (s *Store) Sweep() (int, error) {
 	}
 	s.events = kept
 
-	names, err := dayFiles(s.dir)
+	names, err := DayFiles(s.dir)
 	if err != nil {
 		return 0, err
 	}
 	deleted := 0
 	for _, name := range names {
-		day, err := time.Parse("2006-01-02", strings.TrimSuffix(name, ".jsonl"))
+		day, err := time.Parse(DayLayout, strings.TrimSuffix(name, ".jsonl"))
 		if err != nil {
 			continue
 		}
