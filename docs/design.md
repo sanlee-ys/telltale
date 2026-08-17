@@ -333,7 +333,7 @@ grid, its responsive tiers and every degraded state are specified in §7.
 
 <a id="s3-1"></a>
 
-### 3.1 Claude Code adapter sources — VERIFIED LIVE 2026-08-01, Claude Code 2.1.219
+### 3.1 Claude Code adapter sources — VERIFIED LIVE 2026-08-01, Claude Code 2.1.219; RE-MEASURED 2026-08-16, Claude Code 2.1.233
 
 Read-only survey of `%USERPROFILE%\.claude\` on the dev PC: 33 project dirs, 837
 sessions, 13,211 records walked. Nothing from that survey is reproduced here or in the
@@ -439,6 +439,88 @@ as partial), scanning for the newest `assistant` record with `message.usage` and
 non-synthetic model. A file smaller than the tail window is read once, not twice.
 Records with `isSidechain == true` are skipped defensively — 0 of 837 top-level
 transcripts contain one on 2.1.219, but the filter is free.
+
+**RE-MEASURED 2026-08-16 — Claude Code 2.1.233.** `telltale doctor`'s drift notice (§9.42)
+reported this survey stale on its first live run, and this is the re-survey it asked for. Same
+machine, same read-only method: **119 project directories, 1,045 top-level transcripts, 179,614
+records walked**, up from 33 / 837 / 13,211. The pin moves to `Claude Code 2.1.233`; §3.10's cell
+inherits it from the adapter's own constant.
+
+*The corpus is mixed-version, and that is a method change, not a footnote.* **16 CLI builds wrote
+these records**, and 2.1.233 wrote only 1,704 of them. So "surveyed at 2.1.233" cannot mean "this
+is what 2.1.233 writes" — every claim below about *when* a field arrived is attributed by the
+record's own `version` field, not by the version of the binary installed. Two records types carry
+no `version` at all and cannot be attributed either way; the block says so where that bites.
+
+*A raw grep is no longer a safe method here, and the first survey's headline finding was wrong
+because of it.* This corpus now contains telltale's own development sessions, which **discuss
+these field names in their own text** — so a grep for `context_window_size` matches prose about
+the absence of `context_window_size`. The re-measure therefore parsed every record and looked for
+each token as a **JSON key at any nesting depth**. Raw-token hits: `rate_limits` 420 records,
+`total_cost_usd` 288, `context_window_size` 87. Hits as an actual key: **one**.
+
+**What held.**
+
+| claim | 2026-08-01, 2.1.219 | 2026-08-16, 2.1.233 |
+|---|---|---|
+| first record carries `sessionId` | 60 of 60 sampled | **1,045 of 1,045** |
+| `isSidechain` in top-level transcripts | 0 of 837 | **0 of 1,045** |
+| recursive glob inflates the session list | 2021 vs 837 (2.4x) | **2,001 vs 1,045 (1.9x)** |
+| `message.model` can be `"<synthetic>"` | observed | **34 records** — the trap holds |
+| `custom-title` payload key | `customTitle` | **`customTitle`, 6,327 records** |
+| sessions with a `subagents/` sidecar | present | **107 of 1,045** |
+
+The `ai-title` payload key is no longer unverified. §3.1 above says the survey established the
+record's *shape* but not its key name, and that the adapter therefore matches on structure. The
+re-measure names it: **`aiTitle`**, exactly one key beyond `type` and `sessionId`, on 2,331
+records. **The structural matcher stays as it is** — it was correct, it is now confirmed correct,
+and hard-coding the name buys nothing a measured structure does not already give.
+
+**What changed, and what it costs.** Every capability gap stays `CapNone`. One of them keeps the
+ruling and loses its stated reason:
+
+- **`quota` — the reason was wrong, the ruling was right.** The 2026-08-01 pass grepped the
+  snake_case `rate_limits` and recorded zero matches. **The on-disk key is camelCase
+  `rateLimits`**, it hangs off `error` on API-error records, and **2.1.219 itself wrote it** — the
+  original grep missed a key that was already there, and this survey's own spelling hid it for two
+  weeks. It is still not a quota source, for a better reason than absence: it was **`null` in 32
+  of 32 records**, and it only appears where a request FAILED, never on a normal turn. A key that
+  is present and null is not a reading (§4a.1).
+- **`context_pct` — unchanged and re-confirmed.** No `context_window_size`, `context_window` or
+  `contextWindow` key occurs at any depth. `message.context_management` exists (36 records) and is
+  `null` in 34 of them; the other two carry an empty `applied_edits` array. No denominator.
+- **`cost` — unchanged.** No `cost` or `total_cost_usd` key at any depth. Still stdin-only.
+- **`liveness` — unchanged, and the registry was re-opened on purpose.** §3.1 recorded
+  `~/.claude/sessions/<PID>.json` explicitly so a later build could be checked for a turn-start or
+  turn-end signal. 2.1.233 adds two keys, **`peerProtocol` and `procStart`**. Neither is that
+  signal. `procStart` hardens process *identity* — a pid plus its start time survives PID reuse,
+  which a bare pid does not — but it still answers only that a process exists, which §4a.4 rules
+  out. `CapNone` stands.
+
+**Fields that appeared, and are deliberately modelled by nothing.** Recording an arrival is not
+the same as reading it; per §7.16b, model-and-render-nothing needs a reason, and absence of need
+is itself a finding.
+
+- **`message.usage.output_tokens_details.thinking_tokens`** — the one genuinely new field.
+  Written only by 2.1.228, 2.1.229 and 2.1.233 (3,462 records), zero at 2.1.219. It breaks down
+  **output** tokens, and this adapter's token figure counts what entered **context**, so it feeds
+  no cell. Not modelled.
+- **`message.usage.speed`, `.inference_geo`, `.server_tool_use`, `.iterations`** — all present at
+  2.1.219 as well, so not drift at all. None carries a window size.
+- **a top-level snake_case `session_id`** on some `assistant`, `user` and `attachment` records
+  (680), beside the camelCase `sessionId`. Those records carry both. The adapter reads `sessionId`.
+- **a `file-history-delta` record type** (9 records), which the observed type set above does not
+  list.
+
+**One claim above is narrowed, and it is the canary's.** §3.10 called `sessionId` the field on
+every JSONL record. At 2.1.233 it is not: **`file-history-snapshot` (37) and `file-history-delta`
+(9) carry no `sessionId` at all** — 46 of 179,614 records. Neither type carries a `version` field
+either, so *when* this changed cannot be attributed, and this block does not guess. The canary is
+unaffected and the reason is worth writing down so nobody re-widens the claim: those two types
+carry no `message`, no `cwd` and no title, so they feed nothing the adapter reads; `Saw()` fires
+on the first record carrying the field rather than requiring all of them to; and the first record
+of 1,045 of 1,045 transcripts still carries it, which is what the head read actually depends on.
+§3.10's cell is reworded to *"on every JSONL record that feeds a field"*.
 
 <a id="s3-2"></a>
 
@@ -1833,7 +1915,7 @@ has moved, and says so. `internal/adapter/drift` holds the mechanism; this is th
 
 | adapter | verified against | canary | fields it feeds |
 |---|---|---|---|
-| Claude Code | `Claude Code 2.1.219` | `sessionId` — on every JSONL record | name, model, workspace |
+| Claude Code | `Claude Code 2.1.233` | `sessionId` — on every JSONL record that feeds a field | name, model, workspace |
 | Codex CLI | `codex-cli 0.147.0` | `envelope type` — on every rollout record | model, workspace, quota, context % |
 | | | `session_meta record` — the FIRST record of every rollout | workspace |
 | Gemini CLI | `gemini-cli v0.53.1` | `metadata record` | name, subagents |
@@ -12051,7 +12133,8 @@ report `internal/adapter/drift` rules out as one nobody reads.
 
 **The comparison is equality, never ordering.** It extracts the first dotted-numeric run from
 each string, because the pin and the probe agree on a number and on nothing else: the adapter
-writes `Claude Code 2.1.219` and the binary answers `2.1.226 (Claude Code)`; the adapter writes
+wrote `Claude Code 2.1.219` and the binary answered `2.1.226 (Claude Code)` when this was
+measured (that pin has since moved to `2.1.233`, §3.1's re-measure); the adapter writes
 `grok 1.0.4 (d846eb93d9)` and the binary answers `grok 1.0.0 (3cd0d0cbce) [stable]`. A commit
 hash carries digits but no dot, so it cannot be mistaken for the version beside it. No line
 claims "newer" or "older": a direction needs per-vendor precedence rules this program has no
