@@ -72,10 +72,16 @@ should hold.
 
 ## Release artifact signing
 
-**No release artifact is signed.** The release workflow builds and stages the
-artifacts, and it runs no signing step. You can check this: `.goreleaser.yaml`
-declares no `signs` block, and `.github/workflows/release.yml` has no signing
-step and holds no signing secret.
+**No release artifact carries a signature of its own.** No archive and no binary
+holds an Authenticode signature, a codesign signature, or a notarization ticket.
+The release workflow builds and stages the artifacts, and it adds none of these.
+You can check this: `.goreleaser.yaml` declares no `signs` block, and
+`.github/workflows/release.yml` holds no signing secret.
+
+Read this together with the provenance section below. A release from the next
+tag forward carries a signed provenance attestation, which is a separate signed
+document *about* an archive. It is not a signature *on* an archive, and it does
+not change any statement in this section.
 
 The consequences, per platform:
 
@@ -93,12 +99,56 @@ The consequences, per platform:
 - **Linux.** The archive is unsigned. Linux applies no equivalent gate, so the
   archive runs after you unpack it.
 
-**Verify the checksum instead.** Every release attaches `checksums.txt` with a
-SHA-256 for each archive. That file tells you the archive is the one the release
-workflow produced. It does not tell you who produced it, which is the property a
-signature adds and this project does not yet provide. `scoop` verifies the
-SHA-256 itself from the manifest.
+**Verify the checksum.** Every release attaches `checksums.txt` with a SHA-256
+for each archive. That file tells you the archive is the one the release workflow
+produced. It does not tell you who produced it. `scoop` verifies the SHA-256
+itself from the manifest.
 
 Signing is not planned work with a date. It needs a certificate or an Apple
 Developer account that the owner holds, plus release secrets, so it is an owner
 decision rather than a contributor task. `docs/design.md` §8 records it as one.
+
+## Build provenance and the SBOM
+
+**This section applies from the next tag forward.** The releases published today
+carry neither of these. Nothing adds them to a release that already exists.
+
+**Each archive gets a signed provenance attestation.** The release workflow uses
+`actions/attest-build-provenance`. Verify one with the GitHub CLI:
+
+```
+gh attestation verify telltale_<version>_windows_amd64.zip --repo sanlee-ys/telltale
+```
+
+**What that proves, and what it does not.** A verified attestation proves that
+the release workflow of this repository built that exact archive, from a named
+commit, on a runner that GitHub hosts. It closes the gap that `checksums.txt`
+leaves open, because a checksum proves only that two files match. It does not
+prove the identity of the owner, and it does not prove that the owner vouches for
+the content. A code-signing certificate proves that, and the section above says
+why this project does not hold one.
+
+The attestation needs no secret from the owner. GitHub mints a short-lived token
+for each run, and that token is the identity. This is the reason provenance
+exists here while signing does not: signing is blocked on a long-lived credential
+and provenance needs none.
+
+**Each archive also gets an SBOM.** syft writes one SPDX-JSON document per
+archive, and the release attaches it. It lists the Go modules that the build
+used. It does not describe the vendor CLI programs that `telltale council`
+starts, because the operator installs those and this project ships none of them.
+
+## Vulnerability scanning
+
+Two scans run on this repository, and both also run on a weekly schedule. The
+schedule is the part that matters: it catches a vulnerability that becomes public
+after the code merged.
+
+- **`govulncheck`** reads the Go vulnerability database and reports the known
+  vulnerabilities that this code can actually reach. It fails on a finding.
+- **CodeQL** runs GitHub's static analysis with the default query suite. Findings
+  appear in this repository's Security tab.
+
+A scan that fails does not mean a release is withheld. It means the maintainer
+has to answer it. `docs/design.md` §8 records what each scan covers, and it
+records the one file that each scan cannot see.

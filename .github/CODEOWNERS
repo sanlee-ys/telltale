@@ -1,0 +1,5 @@
+# One maintainer owns every path. SECURITY.md already tells a reporter that one
+# person maintains this project, and that the response is best effort. This file
+# states the same fact where GitHub can act on it. A pull request therefore
+# requests a review from the owner, and not from nobody.
+*       @sanlee-ys

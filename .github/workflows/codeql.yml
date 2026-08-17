@@ -1,0 +1,76 @@
+name: codeql
+
+# CodeQL runs GitHub's static analysis on the Go source, with the default query
+# suite.
+#
+# This workflow is a second opinion. It replaces nothing in `ci.yml`. The gate
+# asserts behavior on the built binary through vet, the suite and the
+# binary-level smokes. This workflow asserts properties of the source that a
+# test which passes cannot exclude. The two use different evidence, and that
+# difference is the reason to keep both.
+#
+# The results go to the Security tab of this repository, and not to a build log.
+# That destination is correct for a public repository. A log line disappears
+# with the run. An alert stays until a person answers it.
+#
+# This workflow runs on a schedule for the same reason `govulncheck.yml` does,
+# but a different mechanism causes it. The CodeQL bundle adds new queries over
+# time. An unchanged tree can therefore show a finding that it did not show last
+# month. The push and pull_request triggers cover a change to the tree. The
+# schedule covers a change to the analysis.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Monday, 07:30 UTC. This is 30 minutes after `govulncheck.yml`, so the two
+    # scheduled scans do not compete for a runner in the same minute.
+    - cron: '30 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    # This job runs on ubuntu-latest. The argument is the `race` job in
+    # `ci.yml`, and not the `test` job. Most findings from the CodeQL Go suite
+    # are properties of the Go source, and not of the operating system that
+    # compiled it. The same reasoning put the race detector on Linux while the
+    # gate stayed on Windows.
+    #
+    # The excluded file is the mirror of the file `govulncheck.yml` excludes,
+    # and this comment states it for the same reason. Go excludes
+    # `internal/council/runner/proc_windows.go`, which holds 109 lines. Those
+    # two files are the complete platform-split source in this repository.
+    # Between the two workflows, one scanner reads each file. Neither scanner
+    # reads both files.
+    runs-on: ubuntu-latest
+    permissions:
+      # This permission writes the analysis results to the Security tab. It is
+      # the only raised permission in this file, and this job holds it. The top
+      # of the file does not grant it.
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          # This step runs before `init`. The autobuild then compiles with the
+          # toolchain this module declares, and not with the Go version that the
+          # runner image holds. CodeQL analyzes the result of the build, so the
+          # build must be the build of this repository.
+          go-version-file: go.mod
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: go
+          build-mode: autobuild
+          # This file does not set `queries`. That absence selects the DEFAULT
+          # suite. A change to `security-extended` adds a false-positive cost. A
+          # project with one maintainer must accept that cost deliberately. It
+          # must not acquire the cost because a template carried it.
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:go

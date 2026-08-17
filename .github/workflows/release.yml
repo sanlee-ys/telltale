@@ -13,6 +13,19 @@ permissions:
   # this repo's own bucket/ directory. Nothing needs a cross-repo token —
   # that was the deciding argument for the in-repo bucket (design.md §8).
   contents: write
+  # Build provenance (design.md §8, amended 2026-08-16). These two permissions
+  # let the attestation step below make a signed statement about the artifacts.
+  # A project that holds no signing secret can still do this. GitHub mints a
+  # short-lived OIDC token for each run, and that token is the identity. The
+  # owner stores no long-lived credential.
+  #
+  # §8 item 8 draws the distinction that this permission set respects.
+  # Provenance answers one question: which workflow built this artifact, at
+  # which commit? A signature answers a different question: who vouches for the
+  # artifact? The second answer still needs a certificate that the owner holds.
+  # This workflow does not produce it.
+  id-token: write
+  attestations: write
 
 jobs:
   # The repo's own gate, called rather than copied. `.github/workflows/ci.yml`
@@ -42,6 +55,25 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      # This step installs syft. The `sboms` block in `.goreleaser.yaml` needs
+      # it. goreleaser calls the `syft` command and does not install it.
+      #
+      # Measured 2026-08-16 on the reference workstation, with
+      # `goreleaser release --snapshot --clean` and no syft on PATH. goreleaser
+      # built all four targets, wrote all four archives, and then stopped at the
+      # SBOM stage with `exec: "syft": executable file not found`. The stage
+      # fails loudly. It does not pass silently. This step is therefore the only
+      # part that the rehearsal could not prove.
+      #
+      # The tool version is exact, for the reason the goreleaser version below
+      # is exact. An SBOM is a claim about the content of an artifact. A claim
+      # from whichever scanner exists on tag day is a claim that nobody
+      # measured. The action tag stays a major version (`v0`), because every
+      # other action in this repository uses a major version. The pin applies to
+      # the tool under the action.
+      - uses: anchore/sbom-action/download-syft@v0
+        with:
+          syft-version: v1.51.0
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
@@ -56,3 +88,31 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # This step records build provenance for the archives that a user
+      # downloads.
+      #
+      # It runs after goreleaser, and not inside it. goreleaser has written
+      # dist/ at this point, and the attestation is a statement about those
+      # exact bytes. An earlier step would describe different bytes.
+      #
+      # The subjects are the archives. They are not the SBOM documents, and they
+      # are not `checksums.txt`. A user downloads an archive and runs it, so a
+      # verification command must be able to name an archive:
+      #
+      #   gh attestation verify telltale_X.Y.Z_windows_amd64.zip --repo sanlee-ys/telltale
+      #
+      # SECURITY.md points at this step, so this comment states what the
+      # attestation proves. The release workflow of this repository built this
+      # archive, from a named commit, on a runner that GitHub hosts. The
+      # attestation does not prove the identity of the owner. It does not prove
+      # that the owner vouches for the content. A signature proves that, and §8
+      # item 8 still refuses to build one without a certificate that the owner
+      # holds.
+      #
+      # This step takes effect at the NEXT tag. The published releases carry no
+      # SBOM and no attestation. Nothing here adds them to a past release.
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/*.zip
+            dist/*.tar.gz

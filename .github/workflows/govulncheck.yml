@@ -1,0 +1,89 @@
+name: govulncheck
+
+# This workflow is a monitor. It is not a build gate. That difference is the
+# reason it is a separate workflow, and not a step in `ci.yml`.
+#
+# Each check in `ci.yml` answers one question: does this change work? That
+# answer is a property of the tree. This workflow answers a different question:
+# is the code that this project ships vulnerable today? That answer changes when
+# the Go vulnerability database changes. No commit is necessary.
+#
+# Two results follow from that difference.
+#
+#   - This workflow uses the network, and the gate does not. `ci.yml` makes no
+#     network call except the module download. govulncheck reads vuln.go.dev on
+#     each run. In the test job, an outage at that host would show as a failed
+#     build on a pull request that did not cause it.
+#   - This workflow can fail without a commit. A new standard-library CVE makes
+#     an unchanged tree fail. It makes every open pull request fail at the same
+#     time, and no author can correct it inside their own change. Contributors
+#     learn to ignore a gate that fails for a reason outside the change, and the
+#     real gate loses authority with it.
+#
+# The scheduled run is the primary value. A scan that runs only on a pull
+# request cannot find the case this workflow exists for: a vulnerability that
+# becomes public AFTER the merge. The `pull_request` trigger has two smaller
+# uses. It scans a dependency that a pull request adds, before that dependency
+# lands. It also proves this job in the pull request that adds the job.
+#
+# This workflow fails on a finding. It does not report a finding as a pass. A
+# monitor that stays green while the shipped binary is vulnerable is a false
+# green, and ADR-001 refuses that result.
+#
+# Measured 2026-08-16, on the day this file landed. The scan found three
+# reachable standard-library vulnerabilities. The toolchain patch level caused
+# all three. No module that this repository requires caused any of them. The
+# `go 1.26.6` directive in go.mod clears all three. design.md §8 holds the
+# record.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Monday, 07:00 UTC. Any fixed hour is arbitrary. This hour is neither tag
+    # day nor a workday morning in the owner's timezone. A new vulnerability
+    # therefore waits for the owner to read it. It does not interrupt a release.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    # This job runs on windows-latest. `ci.yml` uses the same platform, and
+    # ADR-002 makes Windows the primary target. The reason is technical. A
+    # govulncheck finding is a reachability claim, and govulncheck computes
+    # reachability against one build. The correct scan is the scan of the code
+    # that runs on the platform this project verifies.
+    #
+    # This choice has a cost, and the cost is stated rather than hidden. Go
+    # excludes `internal/council/runner/proc_unix.go` from this build. That file
+    # holds 40 lines of process-group control, and it is the only file this scan
+    # cannot read. Findings at module level and at standard-library level do not
+    # depend on the platform, so this choice does not change them.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          # Every job reads this same single source. The version matters more
+          # here than elsewhere. govulncheck reports standard-library
+          # vulnerabilities against the toolchain that built the code. A scan on
+          # a different Go version than the release uses is a scan of a binary
+          # that nobody ships.
+          go-version-file: go.mod
+      - name: Install govulncheck (pinned)
+        # The version is exact. `release.yml` pins goreleaser for the same
+        # reason. A version range resolves to the release that exists on the run
+        # day, so the tool that gives the result is not the tool that a person
+        # measured.
+        #
+        # An exact scanner version does not pin the data, and that is correct.
+        # govulncheck reads the vulnerability database from vuln.go.dev on each
+        # run. The analysis stays constant, and the answer can change. A monitor
+        # needs that behavior.
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+      - name: Scan
+        run: govulncheck ./...
