@@ -13081,6 +13081,83 @@ finding two genuinely stale surveys on its first live run. **Re-measuring those 
 not part of this change** — the loop reports staleness; a re-survey is its own work, with its own
 live corpus.
 
+#### 2026-08-17: the preflight states each seat's posture, from the room's own claim
+
+**The gap.** Every council column carries a sandbox badge, and the help panel's posture page
+carries the measured argument under each one (§9.13, §9.2's ruling that a claim you cannot see
+is not a claim). Both of those are read **inside the room**, which is after the decision they
+inform. A user picks a workspace and a posture *before* the room opens, and the only surface
+that runs before the room opens said nothing about either. §9.17 settles that the fact belongs
+here: what a vendor's own flags buy on this machine is true at launch and stays true, and it is
+a property of the vendor and the OS rather than of a turn.
+
+**One source, two surfaces.** Nothing in the block is written in `internal/doctor`.
+`council.DoctorSeats` builds it from `postureClaim` — the same function the room's own columns
+are built from — and hands over the badge word off `SandboxClaim.Badge()` and an evidence class
+off the claim's `Level`. That routing is the whole design: a preflight with a per-vendor posture
+table of its own would agree with the badges on the day it was written and diverge the day a
+level moved, and a reader looking at two disagreeing surfaces has no way to tell which is
+lying. The capability declaration and the survey pin are attached at the same seam, for the same
+stated reason. `TestThePreflightPostureIsTheRoomsOwnBadge` pins it through *different*
+construction paths on each side — `DoctorSeats` against the columns `stateWith` builds — because
+comparing `doctorPosture` with `postureClaim` would be comparing a call with itself.
+
+**The badge says what the posture IS; the evidence class says what it RESTS ON.** They are
+different questions, and `unsandboxed` is the case that proves it: two seats reach that badge
+because a live run **refuted** the flags and because **no flag was ever passed**, and a reader
+deciding whether to point council at a worktree needs the second sentence. §4a.1's rule that two
+kinds of nothing must not render alike is the same rule one level up.
+
+| badge | evidence class |
+|---|---|
+| `ro:tools` | enforced by **construction** — the write and shell tools are absent from the session |
+| `ro:enforced` | enforced by an **operating system** — the vendor's own sandbox |
+| `ro:requested` | **asked for**, and never observed on this machine |
+| `unsandboxed` | **measured** not to restrict — refuted by a live run, not merely unestablished |
+| `WRITES` | nothing was asked for at all |
+| `gated` | **your keystroke** — the seat asks before every tool call that changes anything |
+
+`evidenceClass` is a table keyed by level, so `TestEveryPostureLevelHasAnEvidenceClass` can walk
+the type and fail the build the day a sixth level renders a badge with nothing to classify it —
+the guard `helpBadgeGloss` already carries inside the room. `TestNoEvidenceClassSoftensItsBadge`
+holds the other half on `TestThePostureLegendDoesNotSoftenAnyClaim`'s terms exactly: these
+sentences classify evidence and never weaken it, and none of them may call a posture read-only,
+safe or unable to write.
+
+**The rows are the `--read` room, and the argv is on the block.** The room **WRITES by default**
+and `--read` is the opt-out (`cmd/telltale`, and the legend inside the room was already corrected
+once for crediting the retired `--write` flag). The rows report the `--read` posture because that
+is the only one that is a fact about the *machine* — the default room's badge is a property of an
+argv the reader has not typed yet, and five cells all reading `WRITES` would carry nothing per
+seat. So the header names `telltale council --read` in its first clause, and **one closing
+declaration** states the default: the room writes, *n* of *m* seats can be asked to ask first,
+and what contains a writing room is the workspace, not any of these words. The gating half is
+**counted off `canGate`**, never written down — that measurement has already moved once, when the
+Cursor seat became a live process that can be asked and still does not ask about edits.
+
+**It is a claim, and it is not one of the three states.** A posture was measured once against a
+live run and written into this repository; nothing re-measures it on the reader's machine. So it
+renders outside the status column, beside the capability line and the survey pin, and it is wrong
+in *both* directions as a check: a `FAILED` would redden a working install over a vendor's own
+design decision, and an `ok` would claim this preflight established a containment property it
+never probed and could not probe without spending a turn. `TestAPostureIsNotACheck` pins that the
+way `TestDriftIsNotAFailedCheck` does — the same seat with and without the data, the three counts
+required to be identical — and `TestThePostureBlockCostsNoProbe` pins the other half: the block
+adds **no probe, no network call and no login check**, because every string in it arrives with
+the seat. The exit code is untouched.
+
+**A seat council states no posture for gets `no claim`, not a missing row.** A seat absent from a
+posture table reads as a seat with nothing to declare; this one has an unanswered question. The
+word deliberately is not shaped like `not checked` — the three state words are spoken for, and a
+fourth column borrowing one would put this block back inside the block it is outside of.
+
+**Measured on the reference Mac, 2026-08-17.** The five rows read `claude ro:tools`,
+`codex ro:enforced`, `agy unsandboxed`, `cursor ro:requested`, `grok unsandboxed`, and the
+declaration reads *1 of the 5 seats above can be asked to ask first: claude*. The `codex` row is
+the platform branch working: the same block on Windows reads `unsandboxed` there, because council
+passes `-s danger-full-access` on that OS (ADR-008's twelfth amendment) — and it reads it from
+`postureClaim`, not from a second platform test in the preflight.
+
 <a id="s9-43"></a>
 
 ### 9.43 the agy seat stops pretending a lost thread resumed (2026-08-09)
