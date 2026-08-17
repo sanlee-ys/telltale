@@ -12298,3 +12298,194 @@ figure for how long the whole turn took — is unchanged and still selects the l
 elapsed. That number is labelled as the turn's duration rather than as any vendor's, and the
 operator's own reading time really is part of how long the turn took. The per-seat rule under it
 carries the split, so the page states both without either one contradicting the other.
+
+<a id="s9-46"></a>
+
+### 9.46 cursor hooks report a blocked action, but never report a request to a human (2026-08-16)
+
+**Environment and evidence class.** The survey drove `cursor-agent` **2026.08.11-e8db854** on
+Windows 11, from a PowerShell parent. This build is NEWER than the build every other cursor record
+in this document pins (`2026.08.04-aaa8809`), so read the tables below as the current build and the
+older records as the older build. The event catalogue and the configuration paths come from a
+source read of the installed bundle. Every claim about what fires comes from a live run. The rig
+put a recorder on each event. The recorder appended the raw stdin payload, a UTC timestamp and the
+leading bytes to a per-event log.
+
+**Why the survey ran now.** §1 recorded the needs-input seam as a watch item and named Hooks as the
+supported surface for it. §8's roadmap items 3 and 5 carry the same item. Nobody had asked the
+narrower question: does any hook event mark NEEDS INPUT, as opposed to marking the absence of
+completion? The answer decides whether the future needs-you strip can source this vendor.
+
+**The catalogue, from the installed build.** `index.js` holds the event registry as a single map.
+It carries **21** events:
+
+```
+beforeShellExecution   beforeMCPExecution   afterShellExecution   afterMCPExecution
+beforeReadFile         afterFileEdit        beforeTabFileRead     afterTabFileEdit
+stop                   beforeSubmitPrompt   afterAgentResponse    afterAgentThought
+sessionStart           sessionEnd           preCompact            subagentStart
+subagentStop           preToolUse           postToolUse           postToolUseFailure
+workspaceOpen
+```
+
+Before this survey the repository knew three of these names, plus `preCompact` named but never
+used.
+
+**The Claude compatibility map has exactly two holes, and they are the two that matter.** The same
+file maps Claude Code's hook events onto cursor's own, for the imported-configuration path. Eight
+map across. Two map to `null`, and the bundle lists them together as the unsupported pair:
+
+| Claude Code event | cursor event |
+|---|---|
+| `PreToolUse` | `preToolUse` |
+| `PostToolUse` | `postToolUse` |
+| `UserPromptSubmit` | `beforeSubmitPrompt` |
+| `Stop` | `stop` |
+| `SubagentStop` | `subagentStop` |
+| `SessionStart` | `sessionStart` |
+| `SessionEnd` | `sessionEnd` |
+| `PreCompact` | `preCompact` |
+| **`PermissionRequest`** | **`null`** |
+| **`Notification`** | **`null`** |
+
+`Notification` is the Claude event that fires when the agent waits for a person. `PermissionRequest`
+is the other one. Cursor's own catalogue has no equivalent of either, which is why the import drops
+them rather than renaming them. This is the verdict in one line, read off the vendor's own table.
+
+**Where cursor-agent reads hook configuration.** The loader reads seven paths. Four are cursor's
+own and three are Claude's:
+
+| scope | path on Windows |
+|---|---|
+| enterprise | `C:\ProgramData\Cursor\hooks.json` |
+| team | `<workspace>\.cursor\managed\active-team-hooks\hooks.json` |
+| user | `~\.cursor\hooks.json` |
+| project | `<workspace>\.cursor\hooks.json` |
+| claude user | `~\.claude\settings.json` |
+| claude project | `<workspace>\.claude\settings.json` |
+| claude project local | `<workspace>\.claude\settings.local.json` |
+
+The three project-scoped entries sit behind a boolean in the loader. The loader also refuses any
+config path that contains a symlink. The project scope is what let this survey run without changing
+the operator's own configuration for most of its arms.
+
+**What fires on which path.** Two trials per arm unless the table says otherwise. A dash means the
+event did not fire on any trial.
+
+| event | print mode (`-p --trust`) | ACP, project scope | ACP, user scope |
+|---|---|---|---|
+| `workspaceOpen` | fires | — | — |
+| `sessionStart` | fires | — | — |
+| `preToolUse` | fires | — | fires |
+| `beforeShellExecution` | fires | — | fires |
+| `afterShellExecution` | fires | — | fires |
+| `postToolUse` | fires | — | fires |
+| `postToolUseFailure` | fires, on a hook denial only | — | not observed |
+| `sessionEnd` | fires | — | — |
+| `afterAgentThought` | fires, and kills the turn | — | not tested |
+| `beforeSubmitPrompt` | — | — | — |
+| `afterAgentResponse` | — | — | — |
+| `stop` | — | — | — |
+| the other nine | — | — | — |
+
+**Two results in that table are new, and one confirms an older record.** First, **ACP honours the
+user scope and ignores the project scope.** A project-scoped config fired nothing at all on ACP,
+over two trials, not even `sessionStart`. The same file fired eight events in print mode. This
+agrees with the loader's gate and with `PARITY.md`'s row that the ACP protocol has no
+workspace-trust step. Second, **ACP fires no lifecycle event.** `sessionStart`, `workspaceOpen` and
+`sessionEnd` are print-mode only, so a needs-input consumer on ACP gets tool events and nothing
+that brackets the session. Third, `afterAgentResponse` still does not fire on ACP, which confirms
+§7.16's 2026-08-15 amendment at this newer build.
+
+**What a blocked moment looks like in bytes.** A hook that returns `permission: "deny"` replaces
+`afterShellExecution` and `postToolUse` with one `postToolUseFailure`. That payload is the only
+affirmative block marker on the whole seam:
+
+```json
+{"tool_name":"Shell","error_message":"Command execution was blocked by a hook: telltale-seam-deny
+…","failure_type":"permission_denied","duration":0,"tool_use_id":"…","is_interrupt":false,
+"hook_event_name":"postToolUseFailure","cursor_version":"2026.08.11-e8db854"}
+```
+
+`failure_type` is a free string, not an enum, and the hook path writes only two values into it:
+`permission_denied` when a hook denies, and `error` when a fail-closed hook errors. Both describe a
+refusal that already happened. Neither describes a wait.
+
+**The awaiting-human moment is where the seam collapses.** Two arms produced a real human decision
+point. In print mode a hook returned `permission: "ask"` with no person present. On ACP the client
+answered `session/request_permission` with `reject-once`. **Both produced the success-shaped event
+sequence** — `preToolUse`, `beforeShellExecution`, `afterShellExecution`, `postToolUse` — with no
+`postToolUseFailure` anywhere. The only difference from an allowed command is one field:
+
+| arm | `afterShellExecution.output` |
+|---|---|
+| allowed | `"[ERROR] - (starship::print): Under a 'dumb' terminal (TERM=dumb).\n\r\nseam-probe\r\n"` |
+| `ask`, nobody to ask | `""` |
+| human rejected over ACP | `""` |
+
+An empty `output` is also what a silent successful command writes. So the seam encodes "a person was
+asked and said no" and "the command printed nothing" with the same bytes. That is §4a.1's
+zero-versus-absent collapse, arriving from the vendor rather than from a render path, and it is the
+reason a needs-you strip cannot be built on these events.
+
+**The affirmative signal exists, on the other seam.** The ACP wire carries it plainly. It is a
+blocking JSON-RPC request from the agent to the client, and the turn stops until the client answers:
+
+```json
+{"jsonrpc":"2.0","id":0,"method":"session/request_permission","params":{"sessionId":"…",
+"toolCall":{"toolCallId":"…","title":"`echo seam-probe`","kind":"execute","status":"pending",
+"content":[{"type":"content","content":{"type":"text","text":"Not in allowlist: echo"}}]},
+"options":[{"optionId":"allow-once","name":"Allow once","kind":"allow_once"},
+{"optionId":"allow-always","name":"Allow always","kind":"allow_always"},
+{"optionId":"reject-once","name":"Reject","kind":"reject_once"}]}}
+```
+
+This names the pending tool call, gives the reason, and lists the choices. It is everything a
+needs-you strip wants. It is **not a hook**, and only the process that drives the ACP session
+receives it. The council seat already reads it (`acpPermission` in `cursoracp.go`). A passive gauge
+cannot, because there is no file and no second reader.
+
+After the client rejects, the wire reports `tool_call_update` with `"status": "completed"` and no
+`rawOutput`. That is the fourth shape §7.16's amendment predicted and could not attribute; this
+survey attributes it, because the rejection here was the client's own and was known in advance.
+
+**The verdict.** **No cursor hook event marks NEEDS INPUT.** The seam reports a completed refusal
+(`postToolUseFailure`, `failure_type: permission_denied`) and it reports completion. It never
+reports a wait. The vendor's own Claude-compatibility table says the same thing by mapping
+`Notification` and `PermissionRequest` to nothing. For this vendor the needs-input signal lives on
+the ACP wire, in `session/request_permission`, and it is available only to a seat that drives the
+session. §8's roadmap item 3 should be read against that: cursor's entry belongs under the council
+seat, not under the hook relay.
+
+**Two traps for whoever builds on this seam.**
+
+- **The BOM is on every event.** Every payload captured here began `EF BB BF 7B` — a UTF-8 BOM,
+  then `{`. `cursorhook.Parse` does not strip it, and does not need to today, because
+  `afterAgentResponse` is the one event that does not fire on the paths telltale drives. Any new
+  event routed into that parser fails on the first byte. `internal/cursorstatus/stdin.go` holds the
+  working strip.
+- **A command hook on `afterAgentThought` kills the turn.** Three turns registered it and all three
+  died with `RetriableError: WritableIterable is closed` after the tool call. Six turns without it
+  completed. A compiled recorder in place of a PowerShell one changed nothing, so this is not hook
+  latency; the event fires inside the response stream and registering it breaks that stream.
+
+**What is NOT claimed.**
+
+- **The interactive TUI is unmeasured here.** This survey drove print mode and ACP only. §7.16's
+  per-surface table already records that the interactive console behaves differently, so the dashes
+  above are measured absences on two paths, not a claim about a third.
+- **`stop` never fired on either path, and its interactive behaviour is unknown.** It is the natural
+  turn-complete event and it stayed silent, which is worth knowing before anyone designs against it.
+- **The ACP rejection arm has one clean trial, not two.** The second trial lost its connection
+  mid-turn, a vendor-side failure this survey saw on other arms too. The wire shape matched on both;
+  the full event set was captured once.
+- **No subagent, MCP, compaction or tab event was exercised.** They are listed above because the
+  build declares them, not because anything drove them.
+
+**The operator's own configuration was restored.** Most arms used a project-scoped
+`<workspace>\.cursor\hooks.json` in a throwaway directory. The two ACP user-scope arms needed
+`~\.cursor\hooks.json`, because ACP ignores the project scope. That file was copied first, the copy
+was verified at SHA256 `3A9F05582D99DFEEB95E705559789F3B41D01DF1292F811D1A94834A54DFCB3C`
+(146 bytes), the test configuration preserved telltale's own `afterAgentResponse` entry, and the
+original was restored and re-verified at the same hash and length. No credential store was read or
+copied at any point.
