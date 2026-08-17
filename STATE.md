@@ -100,6 +100,13 @@ copies, the gates and the argument; this file does not restate any of them.
   drive on 2026-08-15/16 (race t9), each with a live run behind it. The one
   residue is beat 3's render caveat, owned in the gaps below.
 
+  **Amended 2026-08-17: the beat ORDER is reopened, by the owner's ruling.**
+  A re-cut is planned for the final two weeks before the demo: open on the
+  room, fold `doctor` into a later credibility moment, and add `t` and `Y` as
+  the payoff after the `@all` beat. The eight surfaces stay; only the order
+  moves. The re-cut lands as its own edit to this entry before the final
+  rehearsal, and until it lands the order above is the one to rehearse.
+
 - **The Grok seat is landed, was broken on its first live turn, and is fixed.**
   The fifth seat (§9.39) is built, registered, and verified end to end against
   the real binary — `go test ./internal/council/vendors -tags=live -run
@@ -216,6 +223,11 @@ copies, the gates and the argument; this file does not restate any of them.
      roadmap names PowerSession-rs + agg and the reasons VHS cannot record on
      this machine); nothing here picks it.
 
+     **Ruled 2026-08-17:** a committed capture is a publication, and the owner
+     approved its control — every frame gets a review for workspace paths,
+     session names and seat identity before any capture (the README hero GIF
+     included) is committed to the repo.
+
   Post-demo shelf — decided, deliberately not queued: a measured-silence
   advisory ("no event for 5m", never "stalled"); rendering an explicit
   zero-output turn distinct from absent; one visible, editable queued room
@@ -312,6 +324,12 @@ Nothing open. The last one here was the 44 seconds, and it was measured
 2026-08-08; the finding and the unowned work left over from it are below.
 
 ## Known gaps, not yet owned
+
+- **A live ordinary-turn give-up is owed on the reference box before
+  2026-09-30.** `x` on an ordinary turn shipped 2026-08-17 with offline tests
+  only. Whether a real vendor's interrupt lands mid-turn, and whether the
+  persistent seat's next brief resumes the interrupted conversation, has no
+  live payment yet. design.md §9.37's dated amendment carries the debt.
 
 - **OBSERVED 2026-08-15/16, the drive that paid the demo path found three.
   The 2026-08-16 lane batch measured all three, and what is left is smaller.**
