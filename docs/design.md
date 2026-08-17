@@ -12260,6 +12260,9 @@ paths it rules out.
   1 only below a height of 9, and `Render` refuses to draw a room under 60x10 at all — it prints
   `council needs 60x10 (have WxH)` and no compose area. So no drawn frame reaches the flatten.
   The branch stays as it is, and this paragraph is the measurement that says why.
+  **This bullet is WRONG and the 2026-08-17 amendment below replaces it.** It is kept as
+  written because the amendment is about how a sweep can prove the wrong thing, and the
+  sentence that did it is the evidence.
 - **The paste transport carries the newlines, on this platform's own path.** ultraviolet, pinned
   at v0.0.0-20260703014108, buffers a bracketed paste into ONE `PasteEvent`. The win32-input-mode
   path Windows Terminal uses converts a pasted Enter record to a literal `\n` inside that same
@@ -12279,6 +12282,59 @@ checked against the transcript because of it. The composer's own row count was s
 terminal's rows and columns with it.** A geometry at or above 60x10 makes the render correct by
 the sweep above, which moves the defect off this section entirely. A geometry below it means the
 room drew the floor refusal, and the report is about a different frame than the one assumed.
+
+**Amendment, 2026-08-17 — "correct at 60x10 by the sweep" was not true, and the sweep is why.**
+The sentence above says a geometry at or above 60x10 makes the render correct. It does not, and
+neither does the bullet two paragraphs up that calls the one-row flatten unreachable. Both rest
+on the same sweep, and the sweep could not see the cell they were claiming.
+
+**What the sweep pinned false.** `TestAMultilineDraftNeverCollapsesSilently` built every one of
+its 588 cells from `fiveSeats()`, and that fixture carries no pending gate and no collapsed seat.
+Those are the room's two chrome rows, and `resolveLayoutIn` spends both out of the SAME budget
+the compose area is measured from — the needs-you strip (§9.40) first, because it does not yield,
+then the collapsed-seat notice. Pinning both absent held the compose area two rows taller than a
+real room's, in all 588 cells at once. The sweep was not measuring a geometry the frame reaches.
+It was measuring a fixture, and the fixture was generous in exactly the dimension under test.
+
+**The cell it could not see, and it is an ordinary room.** At the 60x10 floor with a tab bar, both
+chrome rows on screen, `resolveLayoutIn` leaves the compose area one row: `Prompt` is clamped to
+`Height - rows - 1`, which is 1, while the draft still holds three. Nothing exotic builds that
+room — a five-seat machine with one vendor not installed, at the smallest terminal council agrees
+to draw, the moment a gate goes up. **Forty cells of the widened sweep land there**: heights at
+`MinHeight`, three and five seats, every width from 60 to 240 once `Expanded` forces the tabs
+tier, both glyph sets. In every one of them the old code flattened the three typed rows into one
+row of prose joined by spaces, with no marker and, at that width, nothing even elided.
+
+**And a flatten is worse than a clip, which is why no count could have fixed it alone.** Clipping
+drops text and the marker vocabulary describes exactly that. Flattening dropped nothing — it
+RESTATED the draft, and §7.14's promise is that the string on screen is the string sent. Three
+typed lines and one long line are different briefs; the room drew the second and the wire sent the
+first. So the widened sweep asserts two things now, not one: no draft line is dropped without the
+frame saying how many, and **no two typed rows are ever drawn welded into one**. The weld check is
+what fails on the old code; the drop check passes there, because at 60 cells the flattened draft
+still fit.
+
+**What the marker shows.** `composerLines` no longer flattens. When the compose area is one row and
+the draft wants more, the row carries the marker and the TAIL, in that order and at two
+intensities: `↑ 2 more above   third line_`. The words and the count are `moreAbove`, which is the
+column overflow marker's own spelling (`overflowMarker`, §9.10) and the one the multi-row composer
+already spent a whole row on — a reader who learned `↑ 36 more above` on a column is not taught a
+second vocabulary here. The count is rows not drawn, so it agrees with the multi-row path's own
+arithmetic. The tail stays because that is where the cursor is, elided from the left when the
+remaining width will not hold it, which is the rule this branch was already built on. The
+separator is three cells rather than the room's `│`: the composer is a box and its sides are that
+same glyph (§9.44), so a bar inside it would read as a column rail through the frame's own edge.
+Three cells is `needsYouGap`'s answer to the same question.
+
+Nothing about the frame's HEIGHT changed, deliberately. A floor of two rows on the compose area
+would have closed the same gap, and it would have moved every golden in the package and taken a
+body row from a room already at its floor — a room you can type in but not read is the trade
+§9.44's budget refuses. The marker costs nothing but the row it was already drawing.
+
+The goldens are `composer-clipped-to-one-row.txt` and its `-ascii` partner, at 60x10, so the claim
+is bytes in both glyph sets; they render `PlainStyles`, which is the NO_COLOR half. No existing
+golden moved — a draft that fits its compose area reaches none of this, and that is every room
+above the floor.
 
 **Amendment, 2026-08-09 — the ergonomic other half: ctrl+u clears the draft.** Paste changed
 the arithmetic on regret. A draft used to cost at most a typed sentence, so backspace's
