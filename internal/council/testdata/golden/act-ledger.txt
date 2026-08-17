@@ -1,0 +1,24 @@
+  council READ  │  ~/code/telltale                                                  turn 3  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                                                                                                                        
+  acts in turn 3  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  → everyone  5 acts  
+    the room keeps the last 50 turns per seat — an act from an older turn is gone.                                      
+                                                                                                                        
+  › what does resume cost by turn five?                                                                                 
+                                                                                                                        
+  Claude Code  ─────────────────────────────────────────────────────────────────────────────────  ✓ done  41s  $0.0123  
+  ⚙ Bash: go test ./internal/council ✓ ok                                                                               
+  ⚙ Write: internal/council/ledger.go ✗ failed                                                                          
+      permission denied                                                                                                 
+  ⚙ Bash: git commit -m the room writes down what it did ✗ denied by you                                                
+                                                                                                                        
+  Codex  ─────────────────────────────────────────────────────────────────────────────────────────────────  ✓ done  9s  
+  ⚙ Read: docs/design.md ? outcome unknown                                                                              
+  ⚙ Bash: go vet ./... — no outcome reported                                                                            
+                                                                                                                        
+  Antigravity  ───────────────────────────────────────────────────────────────────────────────────────────  ✓ done  6s  
+  (no acts recorded)                                                                                                    
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────  ACTS 3/3  ─╯  
+                                                    ↑↓ scroll  │  [ ] turn  │  t grid  │  y yank  │  ? help  │  q quit  

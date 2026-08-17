@@ -11,7 +11,7 @@
     ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too                                      
     pgup/pgdn    scroll by a screenful, in compose too (space = pgdn in view mode);                                     
                  g / G first turn or newest; [ ] step one turn at a time                                                
-    f / t        f gives one column the full width; t gives one turn the whole room (in compose, text)                  
+    f / t / T    f gives one column the full width; t one turn the whole room; T that turn's acts (in compose, text)    
     ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted                                     
     ctrl+c / q   ctrl+c cancels the turn, or quits when idle; q quits (in compose it is text)                           
                                                                                                                         

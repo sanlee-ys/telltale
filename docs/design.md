@@ -9445,6 +9445,107 @@ facts (§4a.1).
   one thing the grid already does better. v1 lacks it deliberately, and `y`'s behaviour
   here is what falls out of that rather than a limitation worked around.
 
+#### Amendment, 2026-08-17: the act ledger — the same turn, read for what the seats DID
+
+**The gap.** The page above answers *what did the seats say about turn 10*. The other half of
+a turn is what they **ran** — the tool calls, the commands, the edits, the one that was
+refused at the gate — and the room has been parsing, redacting, retaining and rendering
+every one of those since §9.6a. What it renders them in is a 37-cell column, where the
+outcome is a single mark and a wrapped command is most of the width. So the record existed,
+in full, with nowhere to read it: to answer *did anything fail in turn 10, and where*, you
+scrolled a column at a time and read outcomes off four glyph shapes.
+
+**`T` opens the same turn's acts.** Not a third projection — a second FACE of the one the
+page already resolved. `TurnView` keeps deciding which turn is on screen; `TurnView.Ledger`
+decides which of that turn's two records is drawn. Everything else is untouched: `[`, `]`,
+`g` and `G` move the same coordinate, the scroll window and the overflow markers are the
+same code pointed at a different list, and the page's own geometry (one column at the full
+frame) is unchanged. A second `TurnView` would have been a second answer to "which turn is
+open" and a second scroll model to keep in step with it.
+
+**The key is SHIFT on `t`, and that is the only spelling that puts the third reading beside
+the two it belongs with.** `t` gives one turn the whole room; `T` gives that turn's acts the
+whole room. Every free lowercase letter left in this keymap is free *because it means
+nothing here*, and a projection filed under an unrelated letter is a projection a reader
+finds by accident. The capital is unclaimed — `Y` and `G` are the only two this room binds —
+and in compose it is the letter T, which needs no second list: `composeKey` routes any key
+carrying text into the draft, the contract `q`, `f`, `c` and `t` already keep. It **flips**
+rather than navigates (`toggleArenaDiff`'s shape, one scale up: `d` flips one seat's arena
+block between the stat and the whole patch), so a reader who walked back to turn 7 is still
+on turn 7 in either face. `t` keeps meaning the reading face from anywhere, including a
+re-open after a close — a `t` that sometimes landed on the ledger would be two keys wearing
+one name.
+
+**The outcome is a WORD, and that is what the width buys.** `⚙ Bash: go test ./... ✓ ok`,
+`✗ failed` with the vendor's own first line under it, `? outcome unknown`, `✗ denied by
+you`. The mark is `actMark`'s, unchanged; the word beside it is the signal it seconds, so
+`--ascii` and `NO_COLOR` lose the mark and lose nothing else. **An act with no reported
+outcome never renders as one that worked** — that is `runner.ActStatus`' whole reason for
+existing (antigravity's steps flip ACTIVE then DONE and no captured line has ever carried a
+success signal), and a surface that states an outcome on every line is exactly the shape
+that invites a default. An unresolved call splits once more: while the seat is waiting or
+streaming it is `running`, and once that seat has landed it is `no outcome reported`,
+because the vendor never said the step ended at all. The predicate is
+`turnEntry.working()`, not `turnEntry.Live` — the newest turn stays the column's *current*
+one long after every seat has finished, and reading `Live` alone would report a dead call
+as running for the rest of the session.
+
+**The header states the retention window, from the live constant.** `maxHistory` drops the
+oldest turn per seat, so "the acts" is a claim with a hard floor under it, and an
+unqualified one would be the room offering a record while silently forgetting the far end of
+it. It is a LINE hanging under the rule rather than meta on it, because `labelRuleIn` drops
+its meta whole when the width will not take it — correct for a route and a count, wrong for
+the sentence that bounds the claim, which would then vanish exactly where the room has least
+room to make it. The clipboard document carries it too, and there it matters more: on screen
+a reader re-checks the bound by pressing `[`; in a file pasted into an issue a week later
+that sentence is the only thing saying the record was ever bounded.
+
+**A seat that recorded nothing says `(no acts recorded)`, not that it did nothing.** A trace
+is a reading of what a vendor chose to report, so "this seat did nothing" is a claim no
+adapter here can source — the §4a.1 distinction between "we could not read this" and "there
+is nothing there", on the one surface a reader would take as the record of it. The same
+words carry the turn-level zero on the rule, so there is one spelling rather than two. A
+seat that SAT THE TURN OUT is absent entirely, which is §9.15's rule and binds harder here:
+an older turn's `git commit` filed under this turn's heading would be a history the room
+invented, in a document somebody pastes into a review.
+
+**`y` and `Y` follow the face.** Both keys already produce the page's own document, and
+`YankPage` is what keeps that promise true once there are two of them — a copy key that took
+the replies while the acts were on screen would break the one claim that earned it a footer
+cell here. The document is built from **the same `turnEntries` call** the screen renders
+from, and there is **no second sanitizer**: everything on `State` has already been through
+the one redact-and-sanitize choke point, so a cleaning step of the ledger's own would be a
+second answer to what is safe to put on a clipboard, and the two would differ the day one
+was updated.
+
+**The help panel merged, not grown.** `f / t / T` on the row that already holds both, inside
+the hard budget: a row of its own would push the `?` line off a 24-row terminal, which buys
+discoverability for one key by taking away the way out of the panel. "gives" paid for it
+twice — the verb is established by the first clause and the two after it read as the same
+sentence. The row lands at its 114-cell budget exactly. The **mode word** is `ACTS 10/11`
+against `TURN 10/11`: two documents at one coordinate would otherwise leave §7.8's always-on
+statement of what is on screen unable to tell them apart. The mode line's cells are
+unchanged, `t grid` included — it is still true from either face, and it is the way out this
+line may never shed.
+
+**What it deliberately does not get.** No note cards: how a seat's turn ENDED is already on
+that seat's own rule in `seatMeta`'s words, and a card under it would spend rows restating an
+outcome the reader has just read. No replies: that is the other face, one keystroke away in a
+mode line that names it, and a ledger carrying the prose too would be the page with extra
+rows. No new record of any kind — this section adds no content model, exactly as §9.22 added
+none. And **per-seat focus is still declined**, on the ruling above: a projection whose whole
+claim is that the turn is the unit does not grow a focus one face later.
+
+Verified offline. `ledger_test.go` pins the five outcome words staying five and an
+unrecognised status rendering none, the unresolved call splitting on `working()`, the
+retention sentence read off `maxHistory` rather than typed, the recorded-nothing wording, the
+sat-out seat's absence from both the screen and the paste, the face flip not moving the turn,
+`T` staying the letter T in compose, the gate still outranking `y`, and the help row's width
+and prose column. `act-ledger.txt` and its `--ascii` twin are the frame. No test here spawns a
+vendor. Nothing in this section is a claim about vendor behaviour, so no live run is owed:
+the acts it draws are the ones §9.6a already measured, at a width that can afford to name
+them.
+
 <a id="s9-23"></a>
 
 ### 9.23 the frame dashed, and the outline whispered while its entries shouted

@@ -663,6 +663,22 @@ type TurnView struct {
 	// restores it, which is the grid's rule unchanged.
 	Scroll int
 	Follow bool
+
+	// Ledger selects the page's OTHER FACE: what the seats did in this turn
+	// rather than what they said (design.md §9.22, amended 2026-08-17).
+	//
+	// A face on the existing projection rather than a third projection beside it,
+	// and the argument is the one §9.22 made for the page itself: the turn, its
+	// participants and its brief are already decided by turnEntries, so a second
+	// TurnView would be a second answer to "which turn is on screen" and a second
+	// scroll model to keep in step with it. What changes is which of one turn's
+	// two records is drawn — the acts or the replies — so the coordinate stays
+	// exactly where it was and `[`, `]`, `g` and `G` move it unchanged.
+	//
+	// It is never persisted, for TurnView's own reason, and it is never moved by
+	// anything but the two keys: openPage leaves it alone, so a dispatch and a
+	// turn hop keep the face the reader chose.
+	Ledger bool
 }
 
 // PageTurns is every turn a page can be opened on, oldest first.

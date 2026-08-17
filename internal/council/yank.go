@@ -1,6 +1,10 @@
 package council
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/sanlee-ys/telltale/internal/council/runner"
+)
 
 // Yank is what a copy keystroke produced: the text that goes on the clipboard,
 // and one line saying what was taken.
@@ -141,5 +145,102 @@ func (s State) YankTurnN(n int) Yank {
 	return Yank{
 		Text:   head + "\n\n" + b.String() + "\n",
 		Notice: "copied turn " + itoa(n) + " — " + itoa(len(entries)) + noun,
+	}
+}
+
+// YankPage copies whatever the open page is SHOWING.
+//
+// One call for both faces, and it is what keeps the key honest rather than a
+// convenience: §9.22 gave the page's `y` a footer cell on the argument that here
+// the key takes the thing in front of the reader, which is a claim a reader can
+// check against the screen. A face flip that left the copy key on the other
+// document would break exactly that claim, silently, into a file.
+func (s State) YankPage() Yank {
+	if s.Page.Ledger {
+		return s.YankActsN(s.Page.Turn)
+	}
+	return s.YankTurnN(s.Page.Turn)
+}
+
+// YankActsN copies one turn's ACTS: every seat that took part, labelled, with
+// each call and the outcome the vendor reported for it.
+//
+// YankTurnN's own document with the other half of the turn in it, assembled from
+// the SAME turnEntries call — which is the point rather than a saving. There is
+// no second sanitizer here and there must never be one: everything on State has
+// already been through the single redact-and-sanitize choke point on the way in,
+// so a cleaning step of this file's own would be a second answer to "what is safe
+// to put on a clipboard", and the two answers would differ on the day one of them
+// was updated. The brief, the participants and the sat-out rule are all the same
+// for the same reasons (§9.15) — a seat that sat this turn out is absent, because
+// filing its older acts under this turn's heading would be the room inventing a
+// history into a file that outlives every chance to notice.
+//
+// The retention sentence is carried into the document because the document
+// outlives the room. On screen it qualifies a claim the reader can re-check by
+// pressing `[`; in a file pasted into an issue a week later it is the only thing
+// saying that "the acts" was ever bounded.
+func (s State) YankActsN(n int) Yank {
+	entries := s.turnEntries(n)
+	if len(entries) == 0 {
+		return Yank{Notice: "nothing to copy — no seat has taken this turn yet"}
+	}
+
+	var b strings.Builder
+	brief, acts := "", 0
+	for i, e := range entries {
+		if brief == "" {
+			brief = strings.TrimSpace(e.Prompt)
+		}
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString("## " + e.Label + "\n\n")
+		if len(e.Acts) == 0 {
+			// The screen's own words, so a paste and the surface it was taken
+			// from make the same claim: no act was RECORDED, which is not the
+			// same as the seat having done nothing.
+			b.WriteString(noActs)
+			continue
+		}
+		for j, a := range e.Acts {
+			acts++
+			if j > 0 {
+				b.WriteString("\n")
+			}
+			// The word alone, with no mark: a mark is a screen affordance and
+			// actWord is the signal it seconds, so the document loses nothing by
+			// dropping it (§9.11's rule, one surface over).
+			b.WriteString("- " + a.Text)
+			if w := actWord(a.Status, e.working()); w != "" {
+				b.WriteString(" — " + w)
+			}
+			// A failure's own first line, on the trace's rule: only a failure has
+			// one, and it is the vendor's words rather than a diagnosis council
+			// wrote.
+			if a.Status == runner.ActFailed && a.Detail != "" {
+				b.WriteString("\n  " + a.Detail)
+			}
+		}
+	}
+
+	head := "# turn " + itoa(n) + " — acts"
+	if brief != "" {
+		head += "\n\n> " + strings.ReplaceAll(brief, "\n", "\n> ")
+	}
+	head += "\n\n" + retentionNotice()
+
+	noun := " seats"
+	if len(entries) == 1 {
+		noun = " seat"
+	}
+	tally := noActs
+	if acts > 0 {
+		tally = itoa(acts) + " " + plural(acts, "act")
+	}
+	return Yank{
+		Text: head + "\n\n" + b.String() + "\n",
+		Notice: "copied turn " + itoa(n) + "'s acts — " +
+			itoa(len(entries)) + noun + ", " + tally,
 	}
 }
