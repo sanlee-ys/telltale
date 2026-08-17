@@ -1,6 +1,6 @@
 // Package codex adapts Codex CLI's rollout files to model.Session.
 //
-// # Verification status: FIRST LIVE PASS DISCHARGED 2026-08-01
+// # Verification status: FIRST LIVE PASS DISCHARGED 2026-08-01; RE-MEASURED 2026-08-16
 //
 // Originally written from github.com/openai/codex source at commit 1e85ca09
 // (codex-rs/utils/home-dir/src/lib.rs, codex-rs/rollout/src/{lib,recorder,
@@ -8,8 +8,28 @@
 // verified against a live corpus on 2026-08-01: Codex Desktop bundling
 // codex-cli 0.146.0-alpha.9.2, plus the npm CLI at 0.146.0. docs/design.md
 // §3.4 carries the itemized results. Still owed there: the null-means-cleared
-// judgement below (no mid-stream nulls occurred in the live corpus), and a
-// rollout written by the standalone CLI rather than the Desktop app.
+// judgement below (no mid-stream nulls occurred in the live corpus).
+//
+// Re-measured 2026-08-16 against codex-cli 0.147.0 over 330 native rollouts,
+// 171 of them written by 0.147.0 itself (design.md §3.2's re-measure block).
+// Every field this adapter reads still resolves, at the same or a better rate
+// than at 0.146.0, and both canaries hold. 0.147.0 ADDS fields and renames
+// none — which is the case §3.10 says costs this program nothing, because
+// every reader here addresses keys by name.
+//
+// Two of the added fields are traps and are deliberately NOT read:
+//
+//   - session_meta.context_window is an object {window_id: string}, an
+//     IDENTIFIER and not a size. Reading it as the context denominator would
+//     invent a number; the denominator stays info.model_context_window.
+//   - turn_context.multi_agent_version is the literal "v2" on every turn
+//     context, so it is a format version and not a sub-agent marker. The
+//     sub-agent filter still keys on agent_nickname / agent_role only.
+//
+// What the re-measure could NOT exercise: no sub-agent thread and no imported
+// transcript written by 0.147.0 appeared in the corpus, so ErrSubAgentThread
+// and ErrImportedTranscript rest on the 2026-08-01 observation still. Absent
+// is not falsified — those markers are unobserved at this version, not gone.
 //
 // The live pass added one hard requirement this adapter now implements:
 // Desktop onboarding can IMPORT other agents' transcripts (observed: 35
@@ -62,9 +82,10 @@ import (
 const Vendor = model.VendorCodex
 
 // VerifiedAgainst names the vendor build this adapter's field map was verified
-// against on 2026-08-01 (see the package doc). It is what a drift report is
-// measured against, and the rollout's own cli_version is what it is compared to.
-const VerifiedAgainst = "codex-cli 0.146.0"
+// against, re-measured 2026-08-16 (see the package doc). It is what a drift
+// report is measured against, and the rollout's own cli_version is what it is
+// compared to.
+const VerifiedAgainst = "codex-cli 0.147.0"
 
 var (
 	// canaryEnvelopeType is the outer envelope's serde discriminator. Every
@@ -486,9 +507,11 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 // a sparse-update recovery", which reads as: null means we do not have it,
 // rather than reuse the previous value. That is also the conservative side of
 // the honest-gauge rule — never show a number the vendor's most recent
-// statement did not contain. The 2026-08-01 live pass could not settle this:
-// no session in the corpus emitted a mid-stream null after a populated event,
-// so the conservative reading stands unfalsified rather than confirmed.
+// statement did not contain. No live pass has settled this: no session in the
+// corpus has ever emitted a mid-stream null after a populated event — zero
+// across 330 rollouts and 1,313 token_count records at the 2026-08-16
+// re-measure, up from 5 rollouts on 2026-08-02 — so the conservative reading
+// stands unfalsified rather than confirmed.
 type state struct {
 	subAgent     bool
 	imported     bool
