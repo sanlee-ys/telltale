@@ -93,9 +93,18 @@ The consequences, per platform:
 - **macOS.** The `darwin_amd64` and `darwin_arm64` archives are unsigned and not
   notarized. macOS applies the `com.apple.quarantine` attribute to a file that a
   browser downloads, and Gatekeeper then refuses to run an unsigned, un-notarized
-  binary that carries that attribute. This project has not run that path: the
-  macOS smoke test ran a binary built on the Mac itself, not a downloaded release
-  archive.
+  binary that carries that attribute. **This project has now walked that path, on
+  2026-08-17**, on an Intel MBP on macOS 26.5.2, against the published
+  `v0.2.0` `darwin_amd64` archive. macOS killed the binary. The terminal reported
+  `Killed: 9` and exit status 137, the binary printed nothing, and a dialog read
+  `"telltale" Not Opened` over `Apple could not verify "telltale" is free of
+  malware that may harm your Mac or compromise your privacy.`, with the buttons
+  `Move to Trash` and `Done`. `xattr -d com.apple.quarantine` cleared the
+  attribute, and the binary then ran to completion at exit 0. **That walk used no
+  browser.** `curl` fetched the archive, and the operator wrote the
+  `com.apple.quarantine` attribute by hand to reproduce what a browser marks, so
+  the gate and the remedy are measured and the download itself is reproduced. A
+  real browser download is still owed, and `PARITY.md` records it as owed.
 - **Linux.** The archive is unsigned. Linux applies no equivalent gate, so the
   archive runs after you unpack it.
 
