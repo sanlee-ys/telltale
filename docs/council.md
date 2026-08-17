@@ -353,6 +353,17 @@ and command authority to every seat. Both refuse while a turn is in flight, and 
 kills anything: seats move on their next turn. Only the bare word is a command, so
 `/write a test for this` never changes the posture.
 
+**`/retry` sends the last brief again, to the seats that owe an answer.** A turn where four
+seats replied and one failed, was cut with `x`, or fell over leaves you retyping the brief and
+the mentions to finish it. Type `/retry` instead: the brief comes back into the composer
+addressed to exactly the seats that did not answer — `@codex @agy <brief>` — and **enter is
+still what sends it**, so the footer prices the re-send before you pay for it and you can edit
+the draft first. A seat that answered is never re-sent to, and neither is one that sat the turn
+out, so the bill never grows past the turn you are finishing. A seat that finished and streamed
+nothing counts as having answered: that is a measured zero, not a missing reply. It refuses
+while a turn is in flight, when nothing has been dispatched yet, and when every seat answered.
+The text goes out unchanged — `/retry` re-sends, it does not re-brief.
+
 **A slash the room does not know is refused, not sent.** A draft that opens with `/` and
 names no room command used to go to the vendors as a brief, so a mistyped verb cost every
 seated seat a turn. Now nothing spawns, the draft stays in the composer, and the notice names

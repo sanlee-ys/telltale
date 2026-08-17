@@ -399,6 +399,279 @@ func TestRunRejectsAMissingCdDirectory(t *testing.T) {
 	}
 }
 
+// --- /retry: the last brief, sent again to the seats that owe an answer -----
+//
+// Every assertion below is about a COST: what the composer is about to bill,
+// and what actually spawned. The verb's whole shape is that it arms and does
+// not dispatch, so "nothing spawned" is the claim on the arming half and "only
+// these seats spawned" is the claim on the sending half.
+
+// retryRoom is a four-seat room whose last turn is OVER, carrying one column
+// for each of the four ways a seat ends a turn (§9.37's 2026-08-17 amendment):
+// answered, failed, given up, and sat out.
+//
+// The sat-out seat keeps the turn number of the last turn it TOOK, because that
+// is what dispatch leaves behind for a seat it never started — startTurn is not
+// called on it. A fixture that stamped turn 3 on it would be testing a state
+// the room cannot produce.
+func retryRoom(t *testing.T) *Model {
+	t.Helper()
+	m := flowRoom(t, true)
+	m.st.Turn = 3
+	const brief = "the brief that half landed"
+	for i := range m.st.Columns {
+		c := &m.st.Columns[i]
+		switch c.Vendor {
+		case model.VendorClaude:
+			c.TurnN, c.Phase, c.Prompt, c.Body = 3, PhaseDone, brief, "an answer"
+		case model.VendorCodex:
+			c.TurnN, c.Phase, c.Prompt = 3, PhaseFailed, brief
+			c.Note = "exit status 1"
+		case model.VendorAntigravity:
+			c.TurnN, c.Phase, c.Prompt = 3, PhaseCancelled, brief
+			c.Note = "given up after 4m12s — nothing had arrived, and its process is dead"
+		case model.VendorCursor:
+			c.TurnN, c.Phase, c.Prompt, c.Skipped = 2, PhaseDone, "an earlier brief", true
+			c.Note = "not addressed in turn 3"
+		}
+	}
+	return m
+}
+
+// TestRetryAddressesOnlyTheSeatsThatDidNotAnswer is the verb's contract in one
+// test: the brief comes back unchanged, the mentions name the failed and the
+// given-up seat, and the two that have nothing to re-send — the one that
+// answered and the one that sat the turn out — are not billed.
+func TestRetryAddressesOnlyTheSeatsThatDidNotAnswer(t *testing.T) {
+	log := countSpawns(t)
+	m := retryRoom(t)
+	m.setDraft("/retry")
+
+	if !m.roomCommand() {
+		t.Fatal("/retry was not recognised as a room command")
+	}
+	if log.n() != 0 {
+		t.Fatalf("/retry spawned %d process(es) — it arms the composer, it does not dispatch", log.n())
+	}
+	if m.st.Turn != 3 {
+		t.Errorf("/retry counted itself as a turn: %d", m.st.Turn)
+	}
+	if want := "@codex @agy the brief that half landed"; m.st.Draft != want {
+		t.Errorf("draft = %q, want %q", m.st.Draft, want)
+	}
+	// The bill the footer is about to print, read through the arithmetic
+	// dispatch itself gates on rather than by counting the words in the draft.
+	if n := m.st.SeatsIn(m.st.Route); n != 2 {
+		t.Errorf("the route prices %d seats, want the 2 that did not answer", n)
+	}
+	for _, v := range []model.VendorID{model.VendorClaude, model.VendorCursor} {
+		if m.st.Route.addresses(v) {
+			t.Errorf("%s has no answer owing and the re-send addresses it anyway", v)
+		}
+	}
+	if !strings.Contains(m.st.Notice, "codex, agy") || !strings.Contains(m.st.Notice, "turn 3") {
+		t.Errorf("the notice does not say who owes an answer, and for which turn: %q", m.st.Notice)
+	}
+}
+
+// TestAMeasuredZeroCountsAsAnAnswer. A seat that finished and streamed nothing
+// says so — "[Turn completed with 0 text chunks streamed]" under `done` — and
+// that is a MEASURED zero, not a missing reply (§4a.1). Re-sending on it would
+// be the room overruling a vendor's honest empty answer, and it would bill a
+// seat that already did the work.
+func TestAMeasuredZeroCountsAsAnAnswer(t *testing.T) {
+	m := retryRoom(t)
+	for i := range m.st.Columns {
+		if m.st.Columns[i].Vendor == model.VendorClaude {
+			m.st.Columns[i].Body = "[Turn completed with 0 text chunks streamed]"
+		}
+	}
+	m.setDraft("/retry")
+	m.roomCommand()
+
+	if m.st.Route.addresses(model.VendorClaude) {
+		t.Errorf("a measured empty answer was re-sent as though the seat had not answered: %q", m.st.Draft)
+	}
+}
+
+// TestRetryRefusesWithNoBriefOnRecord: turn 0. Nothing has been dispatched, so
+// there is nothing to send again, and the refusal says which of the two it is
+// rather than arming an empty composer.
+func TestRetryRefusesWithNoBriefOnRecord(t *testing.T) {
+	m := flowRoom(t, true)
+	m.setDraft("/retry")
+	m.roomCommand()
+
+	if !strings.Contains(m.st.Notice, "no brief to re-send") {
+		t.Errorf("the refusal does not say what is missing: %q", m.st.Notice)
+	}
+	if m.st.Draft != "" {
+		t.Errorf("a refusal that only reports left the verb in the composer: %q", m.st.Draft)
+	}
+	if m.st.Route.addresses(model.VendorCodex) {
+		t.Error("a refused /retry routed a draft anyway")
+	}
+}
+
+// TestRetryRefusesWhenEverySeatAnswered. The other end of the same question:
+// the turn is on record and every seat in it replied, so a re-send would bill
+// the room for answers it already has.
+func TestRetryRefusesWhenEverySeatAnswered(t *testing.T) {
+	m := retryRoom(t)
+	for i := range m.st.Columns {
+		if m.st.Columns[i].TurnN == 3 {
+			m.st.Columns[i].Phase = PhaseDone
+		}
+	}
+	m.setDraft("/retry")
+	m.roomCommand()
+
+	if !strings.Contains(m.st.Notice, "every seat answered turn 3") {
+		t.Errorf("the refusal does not say why there is nothing to send: %q", m.st.Notice)
+	}
+	if m.st.Draft != "" {
+		t.Errorf("a refusal that only reports left the verb in the composer: %q", m.st.Draft)
+	}
+}
+
+// TestRetryRefusedMidTurnKeepsTheDraft. The phases this verb reads are not
+// settled while a turn runs, so it refuses — and it KEEPS the draft, which is
+// postureCommand's rule: the command is still what the operator wants, one turn
+// later.
+func TestRetryRefusedMidTurnKeepsTheDraft(t *testing.T) {
+	m := retryRoom(t)
+	m.turn = &turnState{cancel: func() {}, live: map[model.VendorID]bool{}}
+	m.setDraft("/retry")
+	m.roomCommand()
+
+	if !strings.Contains(m.st.Notice, "in flight") {
+		t.Errorf("the refusal does not say why: %q", m.st.Notice)
+	}
+	if m.st.Draft != "/retry" {
+		t.Errorf("the draft was thrown away on a refusal the next turn undoes: %q", m.st.Draft)
+	}
+}
+
+// TestRetryIsOnlyABareCommand is §9.17's bare-word rule reaching this verb:
+// "/retry the failing test" is a brief, and a verb that took it as an argument
+// would run a re-send and discard the sentence the operator typed. It is
+// refused instead, which costs nothing and names the escape.
+func TestRetryIsOnlyABareCommand(t *testing.T) {
+	log := countSpawns(t)
+	m := retryRoom(t)
+	m.setDraft("/retry the failing test")
+
+	if !m.roomCommand() {
+		t.Fatal("a slash-leading draft was neither run nor refused")
+	}
+	if !strings.Contains(m.st.Notice, "no room command") {
+		t.Errorf("/retry took an argument it does not have: %q", m.st.Notice)
+	}
+	if m.st.Draft != "/retry the failing test" {
+		t.Errorf("the refused draft was rewritten: %q", m.st.Draft)
+	}
+	if log.n() != 0 {
+		t.Errorf("a refused draft spawned %d process(es)", log.n())
+	}
+}
+
+// TestRetryIsNamedInTheWalkedCommandTable. The refusal reads roomVerbs and
+// §9.31's rule is that the table is walked rather than copied into a string —
+// so the claim here is registration: a verb missing from that table is a verb
+// the room refuses, and one present in it is taught by the refusal for free.
+func TestRetryIsNamedInTheWalkedCommandTable(t *testing.T) {
+	registered := false
+	for _, rc := range roomVerbs() {
+		if rc.verb == "/retry" {
+			registered = true
+		}
+	}
+	if !registered {
+		t.Fatal("/retry is not in roomVerbs, so the room refuses its own word")
+	}
+
+	m := flowRoom(t, true)
+	m.setDraft("/nosuchverb")
+	m.roomCommand()
+	if !strings.Contains(m.st.Notice, "/retry") {
+		t.Errorf("the refusal does not teach /retry: %q", m.st.Notice)
+	}
+}
+
+// TestTheReSendSpawnsOnlyForTheSeatsThatOweAnAnswer is the dispatch-level half,
+// asserted on what SPAWNED rather than on the draft the verb built.
+//
+// The fixture derives the two sets rather than naming vendors: which seats the
+// registry drives as one-shot processes and which as long-lived ones is not this
+// test's claim, and hardcoding it would make a registry change look like a
+// /retry bug. One batch seat is cut with `x`, the rest fail, and every
+// persistent seat answers — so the seats owing an answer are exactly the batch
+// seats, and exactly they should spawn.
+//
+// No vendor is started: countSpawns stubs all three spawn vars, per CLAUDE.md's
+// council-test rule.
+func TestTheReSendSpawnsOnlyForTheSeatsThatOweAnAnswer(t *testing.T) {
+	m, oneShots, live := ordinaryTurn(t)
+
+	cut := oneOf(t, oneShots, "batch seat")
+	focusSeatOn(t, m, cut)
+	m.key(key("x"))
+	m.key(key("y"))
+	for v := range oneShots {
+		if v == cut {
+			continue
+		}
+		m.applyEvents([]runner.Event{{
+			Vendor: v, Kind: runner.KindError, Note: "exit status 1", ExitCode: 1,
+		}})
+	}
+	for v := range live {
+		m.applyEvents([]runner.Event{{
+			Vendor: v, Kind: runner.KindMeta, EndsTurn: true, Text: "an answer",
+		}})
+	}
+	if m.turn != nil {
+		t.Fatal("fixture: the turn never ended, so there is no finished turn to re-send")
+	}
+
+	// Counted from here, so the first turn's own spawns are not in the number.
+	log := countSpawns(t)
+	m.setDraft("/retry")
+	enter(m)
+	if log.n() != 0 {
+		t.Fatalf("/retry spawned %d process(es) before enter was pressed", log.n())
+	}
+	enter(m)
+
+	if log.n() != len(oneShots) {
+		t.Fatalf("the re-send spawned %d process(es), want %d — one per seat owing an answer: %+v",
+			log.n(), len(oneShots), log.specs)
+	}
+	for _, spec := range log.specs {
+		if _, owed := oneShots[spec.Vendor]; !owed {
+			t.Errorf("the re-send spawned %s, which already answered turn 1", spec.Vendor)
+		}
+	}
+	for v := range live {
+		c := m.column(v)
+		if c.TurnN != 1 || !c.Skipped {
+			t.Errorf("%s answered turn 1 and was billed again: turn %d, skipped %v", v, c.TurnN, c.Skipped)
+		}
+	}
+	for v := range oneShots {
+		if c := m.column(v); c.TurnN != 2 {
+			t.Errorf("%s owed an answer and the re-send missed it: turn %d", v, c.TurnN)
+		}
+	}
+	// The text is the same brief, unchanged — the property that keeps this verb
+	// clear of §9.17's unfiled re-briefing question.
+	for v := range oneShots {
+		if got := m.column(v).Prompt; got != "an ordinary brief" {
+			t.Errorf("%s was re-sent %q, not the brief it was given", v, got)
+		}
+	}
+}
+
 // TestAnUnmovedRoomKeepsItsProcess is the other side: seatProcess must not
 // respawn a seat whose directory still matches — that would pay a session
 // init per turn and undo the sixth amendment.
