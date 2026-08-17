@@ -593,6 +593,84 @@ is the only signal); no session title, so rows fall back to the workspace basena
 dependency for metadata the JSONL already carries, and `thread-store/README.md` confirms
 JSONL stays canonical and readable without SQLite.
 
+#### Re-measure 2026-08-16 — `codex-cli 0.147.0`; the map holds, and two new fields are traps
+
+`telltale doctor` reported this pin drifted (0.146.0 surveyed, 0.147.0 installed), so the
+survey above was re-run against the live corpus rather than re-read from source. **The pin
+now reads `codex-cli 0.147.0` and nothing in the field map changed.**
+
+**Corpus scanned.** `~/.codex/sessions/`, walked exactly as the adapter walks it
+(`archived_sessions/` not visited): **330 native rollouts**, 35 imported transcripts
+filtered on the `external-import-turn` marker, 8,408 `event_msg` records of which **1,313
+are `token_count`**. By writer version: 169 rollouts at `0.147.0` and 2 at
+`0.147.0-alpha.6.5` — so **171 rollouts written by the installed build**, beside 144 at
+`0.146.0` and 9 at `0.146.0-alpha.9.2`. The re-measure rests on rollouts 0.147.0 wrote,
+not on old files re-read.
+
+**What held.** Every path in the field-map table above still resolves on 0.147.0-written
+rollouts, at the same rate or better than on 0.146.0 ones:
+
+| path | 0.147.0 | 0.146.0 |
+|---|---|---|
+| `session_meta.id` / `.session_id` / `.cwd` | 169/169 | 144/144 |
+| `session_meta.git.branch` | 149/169 | 120/144 |
+| `session_meta.history_mode` | 169/169 | 144/144 |
+| `turn_context.model` / `.cwd` | 163/169 | 31/144 |
+| `info.model_context_window` + `.last_token_usage` | 57/57 rollouts that carry a `token_count` | 25/29 |
+
+The sub-100% cells are **session shape, not drift**: a rollout that never reached a user
+turn has no `turn_context`, and one that never reached a model call has no `token_count`
+(112 of the 169 at 0.147.0 are `codex_exec` runs of that kind). `git.branch` is absent
+exactly when the `cwd` is not a repository — `session_meta.git` itself is present, carrying
+`commit_hash` and `repository_url`. Also holding: both canaries (`envelope type`,
+`session_meta record`) on all 324 rollouts that carry any parseable record; `secondary`
+still **null in all 1,278** populated `rate_limits`; `used_percent` / `window_minutes` /
+`resets_at` unchanged as the only window keys; and `plan_type: "plus"` on 1,257 of them.
+
+**What changed — additions only, no rename.** 0.147.0 adds fields and moves none, which is
+the case §3.10 says costs this program nothing because every reader here addresses keys by
+name. New on `session_meta`: `model_provider` (`"openai"`, 324/324), `base_instructions`
+(now an object `{text}`), `context_window`, `dynamic_tools`, and `git.commit_hash` /
+`git.repository_url`. New on `turn_context`: `turn_id`, `workspace_roots`, `current_date`,
+`timezone`, `approvals_reviewer`, `permission_profile`, `comp_hash`, `personality`,
+`collaboration_mode`, `multi_agent_version`, `realtime_active`, `file_system_sandbox_policy`.
+`effort` gained `ultra` and `xhigh` beside the previously-observed `low`/`medium`/`high`.
+
+**Two of the additions are traps, and are deliberately NOT read:**
+
+- **`session_meta.context_window` is `{window_id: <string>}` — an IDENTIFIER, not a size.**
+  The name invites reading it as the context denominator, and 324 of 324 carry it while
+  only 93 rollouts carry an `info.model_context_window`, so wiring it up would look like it
+  *widened* coverage. It cannot: a window id is not a token count, and dividing by one
+  would be an invented number of exactly the kind §4a.1 forbids. The denominator stays
+  `info.model_context_window`.
+- **`turn_context.multi_agent_version` is the literal `"v2"` on all 288 turn contexts**, so
+  it is a format version, not a sub-agent marker. Treating it as one would reject every
+  session as a sub-agent thread. The sub-agent filter still keys on `agent_nickname` /
+  `agent_role` alone.
+
+A third addition was checked and left alone: `collaboration_mode.settings.model` carries a
+model id, and it **equals `turn_context.model` on all 288** turn contexts. The model source
+is unchanged rather than merely still-working.
+
+**What stays `CapNone`, now cited at 0.147.0.** Cost in USD, session title, sub-agent count
+and process liveness are all still absent — a `rate`/`limit`/`cost`/`title`/`pid` sweep over
+the 0.147.0 rollouts matches nothing beyond the `rate_limits` block already modelled. The
+§3.3 matrix row is unchanged.
+
+**What this pass could NOT exercise, stated rather than glossed.** No sub-agent thread and
+no imported transcript written by 0.147.0 appeared in the corpus — `agent_nickname`,
+`agent_role` and `external-import-turn` are all unobserved at this version. `ErrSubAgentThread`
+and `ErrImportedTranscript` therefore still rest on the 2026-08-01 observation, and this
+block does not claim otherwise: those markers are **unobserved here, not measured gone**.
+Two further observations that are new and cost nothing: `history_mode: "paginated"` finally
+appeared (one rollout, 0.147.0) and it carries `turn_context.model` and a populated
+`token_count` exactly as `legacy` does — so §3.2's "the adapter does not branch on
+`history_mode`" is now confirmed against a real paginated rollout instead of a source read.
+And 6 rollouts on disk contain **zero parseable records**, which exercises for real the
+`sampled <= 0` branch `internal/adapter/drift` calls its load-bearing case: they produce no
+drift report, correctly.
+
 <a id="s3-3"></a>
 
 ### 3.3 Cross-vendor capability matrix — the asymmetry is a design fact, not a bug
@@ -753,6 +831,23 @@ owed items stay negative. Two of them now rest on 316 rollouts rather than the 5
   null. **The cause is deliberately not stated here** — nobody recorded which auth
   mode those four sessions ran under, so a claim that they are API-key sessions
   would be an inference, and §4a.1 forbids one dressed as a reading.
+
+*Re-scan 2026-08-16* (during the §3.2 re-measure to `codex-cli 0.147.0`; that block carries
+the field-map results, this line carries only the owed items). 330 native rollouts, 1,313
+`token_count` records, 1,278 populated `rate_limits`. **All three owed items stay negative**,
+and the newer corpus does not move any of them:
+
+- **Mid-stream nulls: still zero**, now across 330 rollouts and 1,313 `token_count` records.
+  The conservative "clearing" reading stays unfalsified rather than confirmed.
+- **`secondary`: still null** in all 1,278 populated `rate_limits`. A plus plan still does
+  not populate it.
+- **`.zst`: still zero files** under `sessions/`, with the oldest native rollout now 15 days
+  old. Measured absent on this box, as the 2026-08-11 entry already ruled.
+- **API-key capture: still not taken**, and this pass checked **both** signatures the entry
+  above demands. Signature A (`rate_limits` absent on every `token_count`): **zero sessions**.
+  Signature B (a `rate_limits` object whose windows are all null): **4 sessions** — the same
+  four from 2026-08-07/08 at `cli_version` 0.146.0, and **no new ones at 0.147.0**. So the
+  shape has not spread, and the auth mode behind it stays unrecorded and unclaimed.
 
 <a id="s3-5"></a>
 
@@ -1797,7 +1892,7 @@ has moved, and says so. `internal/adapter/drift` holds the mechanism; this is th
 | adapter | verified against | canary | fields it feeds |
 |---|---|---|---|
 | Claude Code | `Claude Code 2.1.233` | `sessionId` — on every JSONL record that feeds a field | name, model, workspace |
-| Codex CLI | `codex-cli 0.146.0` | `envelope type` — on every rollout record | model, workspace, quota, context % |
+| Codex CLI | `codex-cli 0.147.0` | `envelope type` — on every rollout record | model, workspace, quota, context % |
 | | | `session_meta record` — the FIRST record of every rollout | workspace |
 | Gemini CLI | `gemini-cli v0.53.1` | `metadata record` | name, subagents |
 | Antigravity | `agy 1.1.13` | `gen_metadata table` | model |
