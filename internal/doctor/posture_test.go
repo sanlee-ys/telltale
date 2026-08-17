@@ -240,7 +240,8 @@ func TestNoPostureLineRunsPastTheWrapColumn(t *testing.T) {
 	seats := []Seat{
 		postured("antigravity", "ro:requested",
 			"ASKED FOR, and never observed — the flag was accepted and what it enforces on "+
-				"this machine is not established. Weaker than the two above, and says so", false),
+				"this machine is not established. Weaker than a construction or an OS "+
+				"sandbox, and says so", false),
 		postured("claude", "ro:tools", "enforced by construction", true),
 	}
 	bare := make([]Seat, len(seats))

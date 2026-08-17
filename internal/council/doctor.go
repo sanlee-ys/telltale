@@ -197,10 +197,10 @@ func doctorPosture(v model.VendorID, windows bool) doctor.Posture {
 // first. §4a.1's rule that two kinds of nothing must not render alike is the same
 // rule one level up.
 //
-// A table keyed by level rather than prose, so TestEveryPostureLevelHasAnEvidence
-// Class can walk the type and fail the build the day a sixth level renders a
-// badge with nothing here to classify it — the guard helpBadgeGloss already
-// carries for the room's own legend, for the reason that gap comes back.
+// A table keyed by level rather than prose, so a test can walk the type and fail
+// the build the day a sixth level renders a badge with nothing here to classify
+// it — see TestEveryPostureLevelHasAnEvidenceClass, which is the guard
+// helpBadgeGloss already carries for the room's own legend, one surface out.
 //
 // NOTHING HERE MAY WEAKEN A CLAIM, on helpBadgeGloss's terms exactly. These are
 // classifications of evidence, not softenings of it: `unsandboxed` still says
@@ -217,8 +217,13 @@ func evidenceClass(l SandboxLevel) string {
 		return "enforced by an OPERATING SYSTEM — the vendor's own sandbox, and the one posture " +
 			"in this table that a flag is not the last thing standing behind"
 	case SandboxRequested:
+		// It does NOT say "weaker than the two above", which is how the room's own
+		// legend words it. That legend is ordered by level; these rows are ordered
+		// by seat, so "above" points at whatever vendor happens to sort first. The
+		// comparison is named instead of pointed at.
 		return "ASKED FOR, and never observed — the flag was accepted and what it enforces on " +
-			"this machine is not established. Weaker than the two above, and says so"
+			"this machine is not established. Weaker than a construction or an OS sandbox, " +
+			"and says so"
 	case SandboxNone:
 		return "MEASURED not to restrict — a live run refuted the flags rather than leaving " +
 			"them unestablished, so treat this seat as able to change your files"

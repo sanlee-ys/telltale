@@ -13112,7 +13112,7 @@ kinds of nothing must not render alike is the same rule one level up.
 |---|---|
 | `ro:tools` | enforced by **construction** — the write and shell tools are absent from the session |
 | `ro:enforced` | enforced by an **operating system** — the vendor's own sandbox |
-| `ro:requested` | **asked for**, and never observed on this machine |
+| `ro:requested` | **asked for**, and never observed on this machine — weaker than either above, and says so |
 | `unsandboxed` | **measured** not to restrict — refuted by a live run, not merely unestablished |
 | `WRITES` | nothing was asked for at all |
 | `gated` | **your keystroke** — the seat asks before every tool call that changes anything |
