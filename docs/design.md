@@ -11857,6 +11857,126 @@ decision for whoever wants to reopen it rather than a side effect of this line. 
 and `NO_COLOR` the strip reads exactly the same, which is the property every distinction this UI
 makes has to have: `NEEDS YOU` is the signal, and the mark and the weight only make it findable.
 
+#### 2026-08-16: the Notification hook, measured on three runtime surfaces
+
+The strip above reads council's own gate queue and nothing else. A 2026-08-15 research candidate
+proposed a second source for it: Claude Code's `Notification` hook, with the matcher names
+`agent_needs_input`, `permission_prompt` and `agent_completed`. Those three names were a vendor
+claim. No measurement in this repository supported them. §7.21's trap 1 measured that hook firing
+changes with the runtime surface, so a claim about one surface says nothing about another. This
+subsection records the survey. It builds nothing.
+
+**The rig.** A throwaway workspace holds a `.claude/settings.json` that registers one recorder
+command against every hook event the survey can name, including three `Notification` entries: one
+with no matcher, one with `matcher: "permission_prompt"`, and one with
+`matcher: "agent_needs_input"`. The recorder appends its raw stdin plus an arrival timestamp to a file named
+for its entry, and exits 0 on every path. **The filesystem is the observable, never the stream**,
+which is §9.8's rule. A file that does not exist means the hook did not run. The operator's own
+`~/.claude/settings.json` was never written to, and no credential store was copied anywhere.
+Claude Code **2.1.233**, Windows 11, `claude-haiku-4-5` on every turn, two trials per arm. The
+turn asks for one shell command, `install -d probe-marker`, which is the shape §9.8 already
+measured that no allow rule on this box covers.
+
+**The rig lied once, and the record says so.** The recorder took an output directory argument and
+ignored it, so the first four arms reported "no hook files" when the files were landing in the
+workspace directory instead. That reading survived three arms and produced a false conclusion,
+that project settings were not loaded at all. It was caught by running the recorder by hand. The
+zero a probe reports is a claim about the probe until the probe itself is checked, and this one
+was wrong.
+
+**The source read, at the pinned version.** CLAUDE.md permits a source read at a pinned version as
+evidence, and the shipped 2.1.233 binary carries four facts the live arms then tested. First,
+`notification_type` is an enum of eleven values, not three: `permission_prompt`, `idle_prompt`,
+`auth_success`, `elicitation_dialog`, `agent_needs_input`, `agent_completed`,
+`elicitation_url_dialog`, `worker_permission_prompt`, `push_notification`, `computer_use_enter`
+and `computer_use_exit`. Second, the payload builder sets `hook_event_name` to `"Notification"`,
+copies the type into a `notification_type` field, and passes that same type as the hook's match
+query. The matcher therefore does select on the notification type, and the three claimed names are
+real matcher values. Third, the permission notification is armed by a `setTimeout` of **6000 ms**
+that returns a cancel function, and it is armed immediately before the `can_use_tool` control
+request is sent. The environment variable `CLAUDE_CODE_DISABLE_PERMISSION_PROMPT_NOTIFY_HOOKS`
+turns it off. Fourth, `agent_needs_input` and `agent_completed` are emitted from a React effect
+that watches **background agent** sessions, beside a telemetry event carrying a `jobSessionId`.
+Their subject is a background job, not the session the hook is installed in.
+
+**What fired, per surface.** Every arm denied the tool call, so the `PostToolUse` column is
+uninformative and is left out: a call that never ran has nothing to report, and this rig therefore
+neither confirms nor contradicts §7.21's trap 1.
+
+| surface | `Notification` (no matcher) | `permission_prompt` | `agent_needs_input` | controls that did fire | trials |
+|---|---|---|---|---|---|
+| `claude -p` | no | no | no | `PreToolUse`, `SessionStart`, `Stop`, `UserPromptSubmit` | 2/2 |
+| `claude -p --output-format stream-json --verbose` | no | no | no | the same four | 2/2 |
+| control protocol, request answered after 12 s | **yes** | **yes** | no | the same four | 2/2 |
+| control protocol, request answered at once | no | no | no | the same four | 2/2 |
+
+The control-protocol rows replicate council's own gated seat: `baseArgs` plus `gateArgs` plus
+`--input-format stream-json`, with the recorder supplied through `--settings`. The last two rows
+are the same rig, and they change one thing, which is how long the probe waits before it answers
+the `can_use_tool` request.
+
+**The six seconds are the finding, and the fast arm is what makes it one.** A request held for
+12 s produced the hook on both trials. The notification arrived 6931 ms and 9727 ms after the
+request appeared on stdout, which is the 6000 ms timer plus the cost of starting the hook process.
+The same rig answering the same request immediately produced **no `Notification` at all**, on both
+trials, while all four control hooks ran in every arm and prove the settings file was loaded. So
+the hook does not report that a vendor is blocked. It reports that a vendor **stayed** blocked for
+six seconds. Every prompt an operator answers faster than that is invisible to it.
+
+**The payload, re-typed with synthesized identifiers.** This is the whole record. The session id,
+the prompt id and the paths are fake, per the fixtures rule.
+
+```json
+{
+  "session_id": "11111111-2222-3333-4444-555555555555",
+  "transcript_path": "C:\\Users\\example\\.claude\\projects\\C--probe-ws\\11111111-2222-3333-4444-555555555555.jsonl",
+  "cwd": "C:\\probe-ws",
+  "prompt_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "hook_event_name": "Notification",
+  "message": "Claude needs your permission to use Bash",
+  "notification_type": "permission_prompt"
+}
+```
+
+**There is no correlation handle in it.** The payload carries no `tool_use_id`, no control-request
+id, and no tool-name field. The `title` key the builder allows was absent on every trial. The only
+statement of *what* is blocked is an English sentence, so a reader that wanted the tool name would
+have to parse `message`. §4a.1 does not permit that to become a displayed value.
+
+**The verdict for this strip: refuse the seam, and the refusal is `CapNone`-shaped.** For a seat
+council spawned, the gate queue already holds the fact, holds it immediately, and holds it
+structurally, with the vendor, the tool and the request id all present. The `Notification` hook
+offers the same fact six seconds later, without the tool identity, and only when the operator was
+slow. It is strictly worse on every axis the strip cares about, and adding it would break the
+safety property §9.40 is built on, which is that every name on the line comes from a measured
+pending gate. A second source that is late and lossy would put a seat on the line after the
+operator already answered it, or leave one off entirely.
+
+**Two of the three claimed names never appeared, and the source read says why.** `permission_prompt`
+exists and fires. `agent_needs_input` and `agent_completed` exist in the enum and fired on no
+headless surface in any of the ten runs. Their emitter watches background agent sessions from a
+render effect, so their subject is a background job rather than the current session, and the
+effect has no render tree to run in outside the interactive terminal. A reader that took the three
+names as equivalent would have wired two signals that cannot arrive and one that arrives late.
+
+**What this does not close.** The interactive surface is **OWED**, and only an operator can drive
+it. The prepared steps are: start `claude` in a throwaway directory whose `.claude/settings.json`
+carries the recorder, ask for `install -d probe-marker`, leave the approval prompt untouched for
+more than ten seconds, then answer it; repeat and answer within two seconds. The open question
+there is whether the interactive surface adds `idle_prompt`, and whether a real background agent
+makes `agent_needs_input` fire at all. Three smaller gaps stay open beside it. The operator's own
+`~/.claude/settings.json` could not be read, because the credential guard refused it and the
+refusal was not worked around, so the number of user-level hooks in the control column is unknown.
+`worker_permission_prompt` was never registered and never seen. And the six-second timer was
+measured only from the request appearing on stdout, which is a few milliseconds after the CLI arms
+it, so 6931 ms is an upper bound on the delay rather than the delay itself.
+
+**A different question this survey does not answer.** Everything above concerns seats council
+spawns, where the gate queue is the better source. Claude Code sessions telltale merely observes,
+through the HUD and the statusline, have no gate queue behind them. Whether the `Notification`
+hook could carry a needs-input signal for **those** is untested here, and it inherits the same six
+second delay and the same missing tool identity, so it would start from a weak position.
+
 <a id="s9-41"></a>
 
 ### 9.41 the gate asked about an edit and would not show it (2026-08-09)
