@@ -733,7 +733,7 @@ func columnChrome(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 		// on one column would start its body a line above every other column's,
 		// and a grid whose rows do not line up is a worse trade than one empty
 		// claim slot.
-		fit(badgeRow(c, w, sty, g), w),
+		fit(badgeRow(st, c, w, sty, g), w),
 	}
 	for _, l := range gateCard(st, c, w, sty, g) {
 		lines = append(lines, fit(l, w))
@@ -2618,7 +2618,12 @@ func gatePreviewHalf(content, mark, word string, w int, sty Styles, g Glyphs) []
 // are different facts, and deriving a figure from token counts is on this
 // repo's deliberately-rejected list (design.md §8) — council does not get to
 // invent dollars either.
-func badgeRow(c Column, w int, sty Styles, g Glyphs) string {
+//
+// It takes the State for one reason: the seat's relayed quota reading states
+// its own age, and an age is State.Now minus a stamp — the same way every clock
+// in this room is derived, and the reason Render can stay pure while the
+// reading visibly gets older.
+func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 	// A seat that is not there makes no claims, and the row stays RESERVED but
 	// empty rather than being dropped (see columnChrome: the grid's rows have to
 	// line up).
@@ -2658,6 +2663,29 @@ func badgeRow(c Column, w int, sty Styles, g Glyphs) string {
 	}
 
 	cost := costCell(c)
+
+	// The seat's relayed account quota (§9.21, amended 2026-08-17), and it takes
+	// only the space the row has LEFT after everything already on it.
+	//
+	// That ordering is the ruling rather than an implementation detail: a new
+	// claim does not evict an older one. The posture badge is the safety claim
+	// §9.2 refuses to let yield to anything; the granularity word is what keeps
+	// `waiting` from reading as a slow `streaming`; the cost is the one figure
+	// on this line the transcript also records. The reading is worth a row when
+	// there is a row's worth of space, and worth nothing at the price of any of
+	// them — and the footer's own cell keeps naming a full or stale seat at
+	// every width (quotaAlarm), so what a narrow column loses is the standing
+	// figure, never the alarm.
+	//
+	// One cell of clearance is kept before the cost so the two can never touch.
+	avail := w - lipgloss.Width(left) - lipgloss.Width(cost) - 3
+	if cost == "" {
+		avail = w - lipgloss.Width(left) - 2
+	}
+	if qs, qp := seatQuotaCell(c.Quota, st.Now, avail, sty, g); qp != "" {
+		left, leftS = left+"  "+qp, leftS+"  "+qs
+	}
+
 	if cost == "" {
 		return leftS
 	}
@@ -3346,6 +3374,19 @@ func modeHints(st State, g Glyphs) []hint {
 		// the route it prices. It still answers the same question — what is
 		// actually about to be sent — one separator further along.
 		hs := []hint{{key: "→ " + routeLabel(st), label: seatBill(st)}}
+		// The quota alarm sits immediately against the route, in front of the
+		// rebuttal tag, because it qualifies the route rather than the content:
+		// the route says where this goes, the count says how many that is, and
+		// this says that one of them may not answer the way the reader expects.
+		//
+		// It NAMES a seat and computes nothing — §9.21's refusal of a dollar
+		// figure beside the seat count, applied wider (quotaAlarm). Compose mode
+		// only: this cell exists to be read while there is still time to change
+		// the line, and the header's live-turn route is already too late to act
+		// on.
+		if a := quotaAlarm(st); a != "" {
+			hs = append(hs, hint{key: g.Warn + " " + a, alarm: true})
+		}
 		if q := quoteTag(st); q != "" {
 			hs = append(hs, hint{key: q})
 		}

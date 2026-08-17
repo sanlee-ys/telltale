@@ -95,7 +95,7 @@ func TestStripsNeverEllipse(t *testing.T) {
 					st := room()
 					st.ASCII = ascii
 					head := columnHeader(st, c, seatFocused, stripWidth, PlainStyles(), g)
-					badges := badgeRow(c, stripWidth, PlainStyles(), g)
+					badges := badgeRow(room(), c, stripWidth, PlainStyles(), g)
 					for _, l := range []string{head, badges} {
 						if strings.Contains(l, g.Ellipsis) {
 							t.Errorf("ascii=%v vendor=%s phase=%s avail=%v: strip clipped rather than shed: %q",
@@ -185,7 +185,7 @@ func TestStripBadgeKeepsThePostureOrDropsIt(t *testing.T) {
 			Sandbox: SandboxClaim{Level: sb}, Gran: GranFinalOnly,
 			CostUSD: &cost, CostSession: true,
 		}
-		got := badgeRow(c, stripWidth, PlainStyles(), GlyphsFor(false))
+		got := badgeRow(room(), c, stripWidth, PlainStyles(), GlyphsFor(false))
 		badge := c.Sandbox.Badge()
 		if badge != "" && lipgloss.Width(badge) <= stripWidth && !hasToken(got, badge) {
 			t.Errorf("sandbox=%v: posture %q left the strip: %q", sb, badge, got)
@@ -272,7 +272,7 @@ func stripCell(t *testing.T, c Column) []string {
 	sty, g := PlainStyles(), GlyphsFor(false)
 	return []string{
 		columnHeader(st, c, seatFocused, stripWidth, sty, g),
-		badgeRow(c, stripWidth, sty, g),
+		badgeRow(room(), c, stripWidth, sty, g),
 	}
 }
 

@@ -406,7 +406,7 @@ func TestPersistentCostIsLabelledAsASessionTotal(t *testing.T) {
 	// so the word cannot be lost between the two: the badges are left-anchored
 	// and the figure is right-anchored, and this is the fact that has to survive
 	// that gap.
-	row := badgeRow(c, 48, PlainStyles(), UnicodeGlyphs())
+	row := badgeRow(room(), c, 48, PlainStyles(), UnicodeGlyphs())
 	if !strings.HasPrefix(row, "  WRITES  tokens") {
 		t.Errorf("badge row = %q, want the posture claim first", row)
 	}
@@ -415,7 +415,7 @@ func TestPersistentCostIsLabelledAsASessionTotal(t *testing.T) {
 	}
 
 	c.CostSession = false
-	if got := badgeRow(c, 48, PlainStyles(), UnicodeGlyphs()); !strings.HasSuffix(got, "$0.1177") {
+	if got := badgeRow(room(), c, 48, PlainStyles(), UnicodeGlyphs()); !strings.HasSuffix(got, "$0.1177") {
 		t.Errorf("badge row = %q, want a bare per-turn cost", got)
 	}
 }
