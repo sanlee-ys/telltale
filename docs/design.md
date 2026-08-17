@@ -4272,6 +4272,16 @@ detection carries both arms and cites the measurement beside them.
 - The capture behind every claim here is one machine, one day, one grok version, one
   signed-in account. The §3.4 discipline applies: re-measure before extending any claim.
 
+**Amended 2026-08-16 — who may push here.** The listener above took any loopback POST, and
+"loopback" was carrying more weight than it could hold: measured the same day, a web page on
+another origin planted a forged `api_request` in `usage/grok.json` from a real headless
+Chrome, with no local code running at all. §7.24 is the measurement and the fix. Two things
+changed here: `/v1/logs` and `/v1/metrics` now refuse a request carrying `Origin`, and both
+require `Content-Type: application/x-protobuf` — the media type this section's own capture
+pinned on grok's exporter, so a correctly configured grok is unaffected. A local *program*
+is still trusted completely and deliberately, because it can write the cache file directly;
+§7.24 states that boundary rather than pretending a token would move it.
+
 <a id="s7-16b"></a>
 
 ### 7.16b The Claude statusline's token block — measured, modelled, relayed nowhere (2026-08-16)
@@ -5580,6 +5590,20 @@ later reader to simplify it back to one arm and break the only platform CI runs.
 constructing an error value, so whichever arm a platform needs is the arm its suite
 exercises.
 
+**Amended 2026-08-16 — "it binds loopback only" was not containment.** Three facts were
+offered above as what keeps a verbatim content store inside the read/write contract, and the
+second of them was the load-bearing one. It did not hold against a browser. Measured the same
+day (§7.24): a page on another origin posted a forged event into this sink, and — the worse
+half — opened `ws://127.0.0.1:4519/stream` and was handed the `initial` snapshot, every
+retained hook payload verbatim. A WebSocket handshake is exempt from CORS, so no content-type
+rule or preflight was ever going to reach that path; the refusal had to move into the
+handler. Every endpoint now refuses a request carrying `Origin`, the stream included and
+**before** the upgrade, because a page that reaches `onopen` has already been handed the
+snapshot. `/events` additionally requires `Content-Type: application/json`, which is what
+`tools/emit-event.py` was measured sending. The containment sentence above should now be read
+as three facts plus a fourth: no gauge reads these files, the operator starts the mode, the
+bind is loopback, **and a web page is not a sender.**
+
 <a id="s7-22"></a>
 
 ### 7.22 `telltale snapshot` — the read mode whose reader is a program (2026-08-11)
@@ -5983,6 +6007,143 @@ and every object sets `additionalProperties: true`. Nothing already in the docum
 meaning and no key left. `docs/snapshot.schema.json` carries the key in `properties` and in
 `required` — the emitter always emits it — and `tools/validate-snapshot.py` passed against
 the four goldens and against the built binary's live output.
+<a id="s7-24"></a>
+
+### 7.24 Who may push to a loopback listener (2026-08-16)
+
+**The question.** §7.16a and §7.21 each open a listening socket, and each treats the
+loopback bind as the thing that contains it. Both write a store the product treats as
+measured: `telltale otel grok` folds a push into `usage/grok.json`, which is the file the
+HUD reads as grok's measured spend, and `telltale events` stores hook payloads verbatim.
+Neither listener asked who was pushing. In a product whose whole claim is that a displayed
+value came from measured vendor output, an unauthenticated input to that value is a real
+seam, so it was measured rather than argued about.
+
+**The measurement.** Windows 11, telltale built from `main` at `65a113c`, go 1.26, Chrome
+151.0.0.0 headless. Every run used a redirected `USERPROFILE`, so nothing touched the
+operator's own stores. The collector ran on 127.0.0.1:41318 and the sink on 127.0.0.1:41519;
+the browser probe page was served from a separate origin, `http://127.0.0.1:41999`.
+
+*A local program forges a measured total.* A stdlib Python script built an
+`ExportLogsServiceRequest` carrying one `grok_code.api_request` record and POSTed it to
+`/v1/logs`. The collector answered 200, logged `counted api request`, and wrote:
+
+```
+{"vendor":"grok","since":"2026-08-16T20:21:11.601084-04:00","written_at":"…",
+ "requests":1,"input_tokens":999000,"output_tokens":888000,
+ "cache_read_tokens":777000,"reasoning_tokens":666000}
+```
+
+Nothing distinguishes that from a real export. **The forger needs no secret**: the port, the
+path and the record shape are all published here and in the package docs, and this repo is
+public.
+
+*A plain file write forges the same total, and more of it.* A hand-written `grok.json`
+claiming 4242 requests and 111111111 input tokens, with a `since` six hours back, was
+accepted whole by `readEntry` — the same function the gauge read path `ReadAll` uses. The
+proof is that a later relayed request accumulated **onto** it (`requests` 4242 → 4243) and
+kept the hand-written `since`. So the file write is not merely equal to the POST, it is
+**stronger**: a POST may only add four non-negative counts to whatever window is open, while
+the file writer picks the window's start, its request count and every total outright. The
+sink's store measured the same way — a line appended straight to `<day>.jsonl` was served by
+`GET /events/recent` after the sink reloaded.
+
+*A web page forges into both stores, with no local code at all.* This is the result that
+decided the design. A page on `http://127.0.0.1:41999`, driven by a real headless Chrome,
+posted a forged OTLP record into `usage/grok.json` and a forged hook event into the sink. It
+works because neither handler read `Content-Type`: a `text/plain` body is one of the three
+CORS-safelisted media types, so the request is a *simple* one the browser sends outright,
+with no preflight to refuse. The response is unreadable to the page and that changes nothing
+— the write has already happened.
+
+*A web page reads the verbatim store.* Worse than the write, and it is the sink's, not the
+collector's. A WebSocket handshake is exempt from CORS entirely, and `upgrade` never looked
+at the request. The same page opened `ws://127.0.0.1:41519/stream` and was handed the
+`initial` snapshot — the last hundred stored events, hook payloads and all. §7.21's
+containment claim was "it binds loopback only"; against a browser that claim was doing no
+work.
+
+**The refuted argument, and the part of it worth keeping.** The tempting reading of the
+first two results is that the seam does not matter: any local program can write
+`usage/grok.json` directly, so a secret on the HTTP path buys nothing, and the honest fix is
+a documented boundary. **The measurement refutes that as stated, and confirms half of it.**
+The two paths do not have the same senders. A web page reaches the socket and cannot reach
+the file — it is not a program on this machine at all. The file's reach is bounded by an ACL
+(on the reference box `C:\Users\sanle\.telltale\usage` grants Full to the owner, SYSTEM and
+Administrators, and Modify to two further profile-inherited principals); the socket's reach,
+before this change, included every page the operator visited. So the boundary was not a
+boundary yet. The half that survives is the local half: a program running as a principal the
+ACL admits is trusted completely, and no HTTP-path secret would change that by one byte.
+
+**What was built: make the socket's senders equal to the file's.** The fix is not
+authentication and does not pretend to be. It removes the one class of sender the filesystem
+already excludes, and then states the rest of the boundary plainly. `internal/localonly`
+carries the check, extracted the way `internal/bindaddr` was for the same two modes.
+
+- **Refuse any request carrying `Origin`.** This is the arm that generalizes and the only
+  arm that can cover the WebSocket handshake. Measured: every browser request carried
+  `Origin`, including the handshake — which carried **no** `Sec-Fetch-*` header at all,
+  which is exactly why the check reads `Origin` and not `Sec-Fetch-Site`. Neither real
+  sender carried it: `tools/emit-event.py` arrived as `Python-urllib/3.14`,
+  `Content-Type: application/json`, no `Origin`; the exporter-shaped request the same way
+  with `application/x-protobuf`. A page cannot suppress the header, because the user agent
+  attaches it rather than the script.
+- **Require the media type the measured sender sends** — `application/x-protobuf` for the
+  collector (§7.16a's capture pins grok's own exporter to it), `application/json` for the
+  sink (`tools/emit-event.py`). Parameters are ignored, so `; charset=utf-8` passes.
+  Measured from the other side: with a non-simple `Content-Type` Chrome sent only an
+  `OPTIONS` preflight to each endpoint and **no POST followed**, because neither server
+  answers a preflight with CORS headers.
+- **Both arms, because they fail in different directions.** `Origin` names the sender class
+  but rests on a header a future browser could stop sending on some path nobody has measured;
+  the media type rests on nothing about browsers at all, and turns any such page into one
+  that must preflight. Neither is load-bearing alone.
+
+The sink applies the `Origin` arm to its **read** paths and its stream as well, not only the
+POST: a page that cannot plant a row can still ask for the rows already there, and those rows
+are content. A refusal is `403` — not `401`, because no credential would help, and a 4xx
+rather than a 5xx so an OTLP exporter stops retrying instead of looping against a door that
+will not open.
+
+**No token, and the reason is the measurement, not the effort.** A shared secret was the
+obvious shape and it was refused three times over. It closes nothing against the principal
+that matters, because a program that can read a token file beside the store can write the
+store directly — measured above, and pinned by
+`TestTheFileWriterSetsWhatTheRelayCannot`. It would put a secret on disk next to the thing it
+protects, for a reader that already has the disk. And it would gate the collector's only
+working path on an **unmeasured** knob: §7.16a already had to mark
+`OTEL_EXPORTER_OTLP_ENDPOINT` unverified because moving grok's Rust exporter needs a fresh
+instrumented capture, and `OTEL_EXPORTER_OTLP_HEADERS` is the same instrument problem. A
+wrong guess there makes the collector count nothing while looking healthy, which is §7.7's
+worst failure. **OS-level peer verification was refused too**: loopback TCP peer identity on
+Windows needs `GetExtendedTcpTable`, which is not stdlib (decisions/001, the same rule that
+hand-rolled the OTLP and SQLite readers), and it does not even answer the browser case — the
+peer there is `chrome.exe`, a perfectly legitimate local program. An executable allowlist is a
+different and worse contract.
+
+**The trust statement, stated once so it can be quoted.** A program running on this machine
+as a principal `~/.telltale/`'s ACL admits is trusted by these listeners exactly as far as it
+is trusted by the filesystem, because it can plant the same row either way and the file write
+is the stronger of the two. That is a deliberate boundary, not an oversight, and
+`internal/usagecache/trust_test.go` pins it so a later session adding a bearer token walks
+past the reason it buys nothing. What is **not** trusted, as of this change, is a web page.
+
+**Verified after the change, same box, same probes.** The measurement is only worth what the
+re-run says, so the identical pages were driven at the rebuilt binary. The collector logged
+`refusing a request from a web page (Origin: http://127.0.0.1:41999)` and counted nothing;
+the sink logged the same refusal twice, once for the POST and once for the stream handshake;
+and the WebSocket probe, which had reported `EXFILTRATED: {"type":"initial",…}` before the
+change, now reports `BLOCKED (error)` and `CLOSED code=1006` with no snapshot delivered. The
+other half held too: an exporter-shaped push was still counted
+(`counted api request — in 42 · out 42 · reasoning 42 · cache read 42`) and
+`tools/emit-event.py` still stored a row and exited 0.
+
+**What this does not claim.** The capture is one machine, one day, one browser engine
+(Chromium 151). Firefox and Safari were not driven; the `Origin` behaviour they rest on is
+the Fetch and RFC 6455 requirement rather than a measurement here, and §3.4's discipline
+applies before extending the claim. Nothing here defends against a local program, and it is
+not meant to. The gauges' no-network rule and the loopback-only bind are untouched and remain
+absolute: this change only narrows who may talk to a socket that was already loopback.
 
 <a id="s8"></a>
 
