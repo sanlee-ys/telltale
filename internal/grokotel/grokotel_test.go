@@ -279,6 +279,7 @@ func TestAGzipBodyIsAccepted(t *testing.T) {
 	gz.Close()
 	req := httptest.NewRequest(http.MethodPost, "/v1/logs", &buf)
 	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("Content-Type", contentType)
 	w := httptest.NewRecorder()
 	s.handler().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -302,6 +303,7 @@ func TestAGzipBombIsRefused(t *testing.T) {
 	gz.Close()
 	req := httptest.NewRequest(http.MethodPost, "/v1/logs", &buf)
 	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("Content-Type", contentType)
 	w := httptest.NewRecorder()
 	s.handler().ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
