@@ -166,6 +166,66 @@ PATH of the shell running the detection. A seat that folds out as "not
 installed" here is usually this. The `cursor` binary on PATH is only the editor
 launcher and council never drives it.
 
+## Killing the seats when the room dies abnormally
+
+**Measured 2026-08-17**, on the Mac (Intel x86_64, macOS 26.5.2), against
+bubbletea v2.0.8. This is the sharpest platform difference council has, because
+the platform that behaves worse is the one that fails SILENTLY: five agents keep
+running, holding sessions and spending quota, with no room attached and nothing
+on screen to say so.
+
+The two platforms bound a seat's lifetime by different mechanisms, and only one
+of them is a lifetime:
+
+| platform | mechanism | does the seat die when telltale dies? |
+|---|---|---|
+| Windows | Job Object, `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | **yes, always** — the handle closes with the process and Windows reaps the tree, on every way out including the ones no handler can catch |
+| macOS, Linux | process group, `Setpgid` | **no** — a group is a name for a set of processes, not a lifetime. It dies when something signals it and at no other moment |
+
+So on unix the kill has to be MADE on the way out, and until this was measured
+nothing made it on any signal. `runner/proc_unix.go` claimed the "same guarantee
+the Windows job object gives"; it gives half of it, and the corrected comment
+there now says which half.
+
+### Method, so the numbers can be re-taken
+
+A throwaway Go program: a Bubble Tea v2.0.8 model, plus one `sleep 600` child
+started with `SysProcAttr{Setpgid: true}` — the shape `runner/proc_unix.go`
+gives every seat. Teardown was reachable only from a key handler, which is how
+the shipped room was written. Each run signalled the program, waited two
+seconds, and asked whether the child's pid was still alive.
+
+| signal | what Bubble Tea did to the program | did the model's `Update` run? | the child |
+|---|---|---|---|
+| `SIGINT` | `p.Run()` returned `program was killed: program was interrupted` | **no** | **orphaned** |
+| `SIGTERM` | `p.Run()` returned `nil` | **no** | **orphaned** |
+| `SIGHUP` | nothing — the default disposition killed the process outright | **no** | **orphaned** |
+| `SIGKILL` | nothing, and nothing can | **no** | **orphaned** |
+
+Bubble Tea does end the program on two of those four, and ending the program is
+the whole of what it does. Its handler answers above the model's head — `tea.go`'s
+event loop returns on `QuitMsg` and `InterruptMsg` *before* it calls
+`model.Update` — so a model can never be handed the message, and council's
+teardown never ran.
+
+`internal/council/signals_unix.go` now runs teardown on the three catchable
+signals before the room goes out. The same probe with that handler installed
+reaped the child on all three.
+
+### What is still true after the fix
+
+- **`kill -9` still orphans every seat on macOS and Linux.** SIGKILL is
+  uncatchable, so no handler can cover it, and this is a real difference from
+  Windows rather than a bug worth filing. If a room is ever `kill -9`'d, check
+  for surviving vendor processes by hand.
+- **A Windows console close is a different mechanism** — `CTRL_CLOSE_EVENT`
+  through `SetConsoleCtrlHandler`, not a POSIX signal — and it is unmeasured.
+  It does not need a handler for the seats' sake: the job object covers them
+  through it too.
+- **The unix behaviour is measured on macOS only.** Linux shares the
+  `Setpgid` code path and the same Bubble Tea build, so it is expected to match
+  and has not been shown to. Record a Linux run here.
+
 ## HUD adapters
 
 Adapter path resolution is portable by construction — `os.UserHomeDir()` and

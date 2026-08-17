@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -183,6 +184,25 @@ type Model struct {
 	// saveErr is the last state-file write's outcome, kept so the save on the
 	// way out can be reported after the TUI is gone.
 	saveErr error
+
+	// teardownMu and teardownDone make teardown a ONE-SHOT, and they are the
+	// only concurrency control on this type.
+	//
+	// Everything else on Model is touched from the Bubble Tea update loop and
+	// from nowhere else, which is what lets the rest of this file be written
+	// without locks. teardown broke that the moment a signal could reach it
+	// (signals_unix.go): a `kill` landing while the user presses q gives two
+	// goroutines the same act, and the act ranges over m.procs while deleting
+	// from it — two of those at once is a concurrent map write, which is a
+	// runtime panic rather than a bad frame.
+	//
+	// A one-shot rather than a re-entrant lock because teardown has no second
+	// meaning. It is what the room does on the way out, the room goes out once,
+	// and every step of it — kill, cleanup, cancel — is already idempotent on
+	// its own. The flag is what makes the WHOLE of it idempotent, so the second
+	// caller returns instead of re-walking maps the first one emptied.
+	teardownMu   sync.Mutex
+	teardownDone bool
 
 	// brief is the shared operating context. Held on Model, never on State:
 	// its content is the user's private file and the renderer has no business
@@ -2149,6 +2169,15 @@ func (m *Model) View() tea.View {
 // room that will not read it.
 func wantsGateHook(opts Options) bool { return opts.Write && !opts.Auto }
 
+// roomProgram is the one method of *tea.Program the exit-signal watcher drives.
+//
+// An interface for seatSession's reason and no other: the property under test is
+// "the seats were killed before the room went out", and a test that needed a
+// real Bubble Tea program — an alternate screen, a terminal, an event loop —
+// just to watch a signal land would be measuring the framework rather than the
+// watcher. *tea.Program is the only production implementation.
+type roomProgram interface{ Kill() }
+
 // Run starts the room.
 //
 // Council is the one telltale mode that dispatches to vendor CLIs. The
@@ -2261,6 +2290,13 @@ func Run(opts Options) error {
 	// still has one and /trace never dereferences nil.
 	mdl.trace = trace
 	p := tea.NewProgram(mdl)
+	// Installed before the program runs, and it is the ONLY thing standing
+	// between an abnormal exit and five orphaned agents on macOS and Linux. The
+	// q and ctrl+c keys reach teardown through the update loop; a signal does
+	// not reach the update loop at all (signals_unix.go states the measurement).
+	// A no-op on Windows, where the job object already covers it.
+	stopSignals := watchExitSignals(mdl, p)
+	defer stopSignals()
 	_, err = p.Run()
 	if err != nil {
 		return err
