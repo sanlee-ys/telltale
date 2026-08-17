@@ -116,6 +116,10 @@ func TestASignalKillsTheSeatsBeforeTheRoomGoesOut(t *testing.T) {
 func TestTheWatcherStopsWhenTheRoomEndsAnyOtherWay(t *testing.T) {
 	m, seats, _, _ := teardownRoom(t)
 	stop := watchExitSignals(m, &fakeProgram{})
+	// Twice, because the closure sits beside a context.CancelFunc and will be
+	// read as idempotent whether or not it is. The second call closing an
+	// already-closed channel would panic here.
+	stop()
 	stop()
 
 	time.Sleep(signalSettle)

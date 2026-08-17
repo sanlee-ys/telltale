@@ -5,6 +5,7 @@ package council
 import (
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 )
 
@@ -59,11 +60,15 @@ import (
 // equivalent — see runner/proc_unix.go and PARITY.md.
 //
 // The returned stop deregisters the watcher. Run defers it, so a room that ends
-// any other way does not leave a goroutine parked on a channel.
+// any other way does not leave a goroutine parked on a channel. It is safe to
+// call more than once: it sits beside roomCancel, which is a context.CancelFunc
+// and idempotent by contract, and a neighbour that panicked on a second call
+// would be a trap rather than a difference anyone would look for.
 func watchExitSignals(m *Model, p roomProgram) (stop func()) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	done := make(chan struct{})
+	var once sync.Once
 
 	go func() {
 		select {
@@ -89,7 +94,9 @@ func watchExitSignals(m *Model, p roomProgram) (stop func()) {
 	}()
 
 	return func() {
-		signal.Stop(sig)
-		close(done)
+		once.Do(func() {
+			signal.Stop(sig)
+			close(done)
+		})
 	}
 }
