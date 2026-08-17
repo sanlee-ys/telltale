@@ -74,6 +74,23 @@ const (
 	// rejects Pi as a council seat (re-host class). The adapter reads
 	// ~/.pi/agent/sessions and never spawns the binary.
 	VendorPi VendorID = "pi"
+	// VendorSelfReported is the drop-file relay (design.md §7.23): rows a tool
+	// telltale ships no adapter for wrote down about itself.
+	//
+	// It is the one id in this list that does not name a vendor, and that is
+	// the point of it. Every other id answers "which tool did this row come
+	// from", because telltale measured that tool's own store and knows. Here
+	// telltale measured a file and knows only who CLAIMED it, so the id answers
+	// the question it can actually answer — where the numbers came from — and
+	// the claimed tool name travels in the row's label instead.
+	//
+	// One id serves every drop file on purpose. A per-tool id would put a
+	// writer-chosen string in the column that says what telltale measured, and
+	// a file naming itself "claude" would then draw a row indistinguishable
+	// from a measured one. There is no field in the format for a vendor id, so
+	// that forgery is unrepresentable rather than merely rejected — the same
+	// "the allowlist is the struct" move internal/cursorhook makes.
+	VendorSelfReported VendorID = "self-reported"
 )
 
 // Field enumerates the optional fields of a Session: exactly those a vendor may

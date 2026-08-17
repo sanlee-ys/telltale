@@ -76,6 +76,27 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
+# syft writes one SBOM for each archive, in SPDX-JSON format (design.md §8,
+# amended 2026-08-16). `.github/workflows/release.yml` installs a pinned syft
+# before this file runs. goreleaser only calls the command.
+#
+# The unit is the archive, and not the binary. A user downloads an archive, and
+# the provenance attestation names an archive. Two documents that describe the
+# same release from different angles help no reader.
+#
+# This comment states what the SBOM contains. Every target is CGO-free and
+# statically linked. The module graph holds 14 entries, and only
+# `golang.org/x/sys` sits outside the TUI stack. The document is therefore
+# short. It is an accurate list, and it is not an impressive one. It names the
+# Go modules that the build used. It does not describe the vendor CLI programs
+# that `telltale council` starts. The operator installs those programs, and
+# telltale ships none of them.
+#
+# This block takes effect at the NEXT tag. No published release carries an SBOM.
+sboms:
+  - id: archives
+    artifacts: archive
+
 snapshot:
   # `goreleaser release --snapshot --clean` is how this file is verified
   # without tagging anything. The version it stamps says so out loud, so a

@@ -203,6 +203,20 @@ server binds loopback only, and no gauge reads or renders its files. The
 numbers-and-keys rule above still binds everything the gauges themselves
 write.
 
+**Who may push to the two listening modes** (`telltale otel grok`, `telltale
+events`) is its own contract, added 2026-08-16 (design.md §7.24). A loopback
+bind is not containment on its own: a web page the operator merely visits
+reaches 127.0.0.1 too, and a measured headless Chrome planted a forged row in
+`usage/grok.json`, planted an event in the sink, and read the sink's whole
+verbatim store over `/stream`. Both modes now refuse any request carrying an
+`Origin` header — the stream included, before the upgrade — and require the
+media type the measured sender sends. `internal/localonly` holds the check;
+don't add a per-endpoint copy of it, and don't add an origin allowlist, because
+nothing telltale ships runs in a browser. A local **program** is still trusted
+completely and on purpose: it can write `usage/<vendor>.json` directly, which
+`internal/usagecache/trust_test.go` pins, so a bearer token on the HTTP path
+would buy nothing against it.
+
 Each of the three relay exceptions carries a test pinning the serialized form
 to keys and numbers. If you're
 adding a feature to `internal/hud` or `internal/statusline` that would write

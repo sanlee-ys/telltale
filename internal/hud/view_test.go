@@ -217,6 +217,27 @@ func watching(v model.VendorID, root string, caps model.Capabilities) VendorView
 	return VendorView{Vendor: v, Root: root, Status: StatusWatching, Caps: caps}
 }
 
+// selfReportedWatching is the drop-file vendor's view as Scan leaves it: the
+// directory is readable, and the adapter has declared that its rows are claims
+// (§7.23).
+//
+// The capability set is the one internal/adapter/dropfile declares, written out
+// here rather than imported: internal/hud must not depend on an adapter, and a
+// fixture that borrowed the real set would stop pinning the SHAPE the HUD is
+// asked to draw and start restating whatever the adapter currently says.
+func selfReportedWatching() VendorView {
+	view := watching(model.VendorSelfReported, `%USERPROFILE%\.telltale\dropfile`,
+		model.Capabilities{
+			Reported: model.NewFieldSet(
+				model.FieldName, model.FieldModel, model.FieldWorkspace,
+				model.FieldContextPercent, model.FieldCost,
+				model.FieldLastActivity, model.FieldSubagents,
+			),
+		})
+	view.SelfReported = true
+	return view
+}
+
 // drifted is a vendor view as Scan leaves one whose read reported shape drift.
 //
 // It runs the SAME roll-up the scan does rather than setting the status and the
@@ -739,6 +760,39 @@ func goldenCases() []goldenCase {
 				sess(model.VendorClaude, "00000000-aaaa-4bbb-8ccc-000000000002",
 					`C:\src\code\no-source`, "claude-opus-5", 6*time.Second,
 					withName("no-source")),
+			}
+			return st
+		}},
+
+		// A claimed row must never be readable as a measured one (§7.23). Two
+		// things are pinned here and both are load-bearing.
+		//
+		// The MARK: the drop-file rows wear the tag "SR" and the header census
+		// says "self-reported 2" in full. Neither is a colour and neither is a
+		// glyph outside the ASCII set, so this golden — which renders through
+		// PlainStyles — is the whole assertion rather than half of it. The
+		// claimed TOOL leads each label, because "SR" is shared by every drop
+		// file and cannot tell windsurf from aider.
+		//
+		// And zero-vs-absent again, INSIDE the claimed rows, because that
+		// distinction has to survive a format whose writer telltale does not
+		// control: windsurf claims a measured 0% and $0.00 and draws a full
+		// empty track, aider claims neither and draws the absent marker. A
+		// format that let a writer's omission arrive as a zero would be the
+		// one regression this repo exists to prevent, imported through a new
+		// door.
+		{name: "self-reported-row", state: func() State {
+			st := healthyState(120, 10)
+			st.Snap.Vendors = append(st.Snap.Vendors, selfReportedWatching())
+			st.Snap.Sessions = []*model.Session{
+				sess(model.VendorClaude, "00000000-aaaa-4bbb-8ccc-000000000001",
+					`C:\src\code\telltale`, "claude-opus-5", 12*time.Second,
+					withName("telltale"), withCtx(34), withCost(1.2)),
+				sess(model.VendorSelfReported, "windsurf-app", `C:\src\code\example-app`,
+					"gpt-5-codex", 40*time.Second,
+					withName("windsurf: refactor the parser"), withCtx(0), withCost(0)),
+				sess(model.VendorSelfReported, "aider-api", `C:\src\work\acme-api`,
+					"", 9*time.Minute, withName("aider")),
 			}
 			return st
 		}},

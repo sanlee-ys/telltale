@@ -227,6 +227,11 @@ honoured through the standard mechanism.
   anything else that leaves session data on disk. The worked example in
   [docs/design.md §4a.7](docs/design.md#s4a-7) is the method the Gemini adapter was actually
   built with, kept alongside what live verification changed about its guesses.
+- **A drop-file relay for everything else** — a tool telltale ships no adapter for can write
+  one small JSON file under `~/.telltale/dropfile/` and get a fleet row, with no plugin and
+  no code of yours running inside telltale. Those rows are marked self-reported everywhere
+  they appear, because telltale measured the file and not the session.
+  [docs/dropfile.md](docs/dropfile.md) is the format spec.
 
 One binary, three surfaces: `telltale statusline`, `telltale hud` and `telltale council` —
 and they are not three co-equal products. **The room is the product; the gauges are the

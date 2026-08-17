@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/bindaddr"
+	"github.com/sanlee-ys/telltale/internal/localonly"
 )
 
 // DefaultAddr is the sink's listen address. 4519 collides with nothing this
@@ -178,9 +179,38 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+// contentType is the media type the reference emitter sends
+// (tools/emit-event.py, measured: `Content-Type: application/json`, no Origin,
+// User-Agent Python-urllib). Requiring it costs a legitimate emitter nothing
+// and costs a web page everything — see internal/localonly.
+const contentType = "application/json"
+
+// fromALocalProgram is the gate every endpoint runs first, and it matters more
+// here than at the collector, because this store holds hook payloads VERBATIM
+// (§7.21) rather than four token counts. It is applied to the READ paths and
+// to the stream, not only to the POST: a browser that cannot plant a row can
+// still ask for the rows already there, and §7.24 measured a page doing exactly
+// that over /stream. On refusal the response is already written.
+func (s *Server) fromALocalProgram(w http.ResponseWriter, r *http.Request) bool {
+	if err := localonly.RefuseBrowser(r); err != nil {
+		s.logf("telltale events: %v", err)
+		localonly.Refuse(w, err)
+		return false
+	}
+	return true
+}
+
 func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.fromALocalProgram(w, r) {
+		return
+	}
+	if err := localonly.RequireContentType(r, contentType); err != nil {
+		s.logf("telltale events: %v", err)
+		localonly.Refuse(w, err)
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
@@ -214,6 +244,9 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	if !s.fromALocalProgram(w, r) {
+		return
+	}
 	limit := 100
 	if v := r.URL.Query().Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -229,6 +262,9 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.fromALocalProgram(w, r) {
 		return
 	}
 	writeJSON(w, s.store.Options())
@@ -253,7 +289,20 @@ type streamMsg struct {
 
 // handleStream upgrades to WebSocket, sends the initial snapshot, then
 // relays broadcasts until the client goes away.
+//
+// The sender gate runs BEFORE the upgrade, and this is the endpoint that
+// forced internal/localonly to exist. A WebSocket handshake is exempt from
+// CORS, so no content-type rule and no preflight was ever going to reach it: a
+// page could simply open ws://127.0.0.1:4519/stream and be handed the
+// `initial` snapshot — the last hundred hook payloads, verbatim. §7.24
+// measured a headless Chrome doing precisely that against this handler, which
+// is why the fix is a check on the request rather than anything about
+// transports. The handshake carries Origin (measured, and it carries no
+// Sec-Fetch-* header, which is why Origin is the header the check reads).
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
+	if !s.fromALocalProgram(w, r) {
+		return
+	}
 	conn, err := upgrade(w, r)
 	if err != nil {
 		// upgrade has already written the HTTP error where it could.

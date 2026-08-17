@@ -33,7 +33,8 @@
       "estimated": [
         "context_pct"
       ],
-      "unsupported": []
+      "unsupported": [],
+      "self_reported": false
     }
   ]
 }

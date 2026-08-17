@@ -84,6 +84,7 @@ import (
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/bindaddr"
+	"github.com/sanlee-ys/telltale/internal/localonly"
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/usagecache"
 )
@@ -276,6 +277,35 @@ func (s *Server) handler() http.Handler {
 	return mux
 }
 
+// contentType is the media type grok's exporter was MEASURED sending
+// (§7.16a's capture: OTLP http/protobuf POSTs, Content-Type
+// application/x-protobuf, from OTel-OTLP-Exporter-Rust/0.32.0). Requiring it
+// costs a legitimate exporter nothing and costs a web page everything: it is
+// not one of the three CORS-safelisted types, so no page can reach this
+// endpoint without a preflight this server does not answer. See
+// internal/localonly.
+const contentType = "application/x-protobuf"
+
+// fromALocalProgram is the gate every endpoint runs first: this push came from
+// a program on this machine, not from a page the operator visited. The loopback
+// bind was doing less work than it read like — a browser reaches 127.0.0.1 too,
+// and unlike a local program it cannot write the cache file this collector
+// writes. §7.24 carries the measurement and internal/localonly carries the
+// check; on refusal the response is already written.
+func (s *Server) fromALocalProgram(w http.ResponseWriter, r *http.Request) bool {
+	if err := localonly.RefuseBrowser(r); err != nil {
+		s.logf("telltale otel grok: %v", err)
+		localonly.Refuse(w, err)
+		return false
+	}
+	if err := localonly.RequireContentType(r, contentType); err != nil {
+		s.logf("telltale otel grok: %v", err)
+		localonly.Refuse(w, err)
+		return false
+	}
+	return true
+}
+
 // handleMetrics acknowledges and discards. The token.usage metric restates
 // the api_request counts value-for-value (measured — package doc), so
 // reading both would be two chances to count one number. The 200 matters:
@@ -287,6 +317,13 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	// This path stores nothing, so a forged metric costs no total. It runs the
+	// same gate anyway: an endpoint that answers a sender the sibling endpoint
+	// refuses is a door left ajar for whoever reads this file next and copies
+	// the shorter handler.
+	if !s.fromALocalProgram(w, r) {
+		return
+	}
 	io.Copy(io.Discard, io.LimitReader(r.Body, maxBody))
 	respondOK(w)
 }
@@ -294,6 +331,9 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.fromALocalProgram(w, r) {
 		return
 	}
 	body, err := readBody(r)

@@ -56,6 +56,15 @@ func TestEveryVendorWearsItsOwnHueOnTheUsagePage(t *testing.T) {
 			// in TestVendorHuesMatchCouncilsSeats.
 			continue
 		}
+		if v == model.VendorSelfReported {
+			// Same omission as Pi — usageFleetState has no drop-file row — and
+			// on top of it this id gets no hue of its own, deliberately. A hue
+			// is a vendor IDENTITY (§9.28), and these rows have none to give:
+			// what they share is a provenance, which the word "self-reported"
+			// and the "SR" tag already carry without spending a colour. It
+			// takes the identity-hue fallback exactly as Gemini does.
+			continue
+		}
 		name := string(v)
 		if !strings.Contains(frame, sty.VendorIdentity(v).Render(name)) {
 			t.Errorf("%s's usage heading does not render its name in its own hue:\n%s",

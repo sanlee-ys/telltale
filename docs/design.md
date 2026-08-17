@@ -333,7 +333,7 @@ grid, its responsive tiers and every degraded state are specified in §7.
 
 <a id="s3-1"></a>
 
-### 3.1 Claude Code adapter sources — VERIFIED LIVE 2026-08-01, Claude Code 2.1.219
+### 3.1 Claude Code adapter sources — VERIFIED LIVE 2026-08-01, Claude Code 2.1.219; RE-MEASURED 2026-08-16, Claude Code 2.1.233
 
 Read-only survey of `%USERPROFILE%\.claude\` on the dev PC: 33 project dirs, 837
 sessions, 13,211 records walked. Nothing from that survey is reproduced here or in the
@@ -439,6 +439,88 @@ as partial), scanning for the newest `assistant` record with `message.usage` and
 non-synthetic model. A file smaller than the tail window is read once, not twice.
 Records with `isSidechain == true` are skipped defensively — 0 of 837 top-level
 transcripts contain one on 2.1.219, but the filter is free.
+
+**RE-MEASURED 2026-08-16 — Claude Code 2.1.233.** `telltale doctor`'s drift notice (§9.42)
+reported this survey stale on its first live run, and this is the re-survey it asked for. Same
+machine, same read-only method: **119 project directories, 1,045 top-level transcripts, 179,614
+records walked**, up from 33 / 837 / 13,211. The pin moves to `Claude Code 2.1.233`; §3.10's cell
+inherits it from the adapter's own constant.
+
+*The corpus is mixed-version, and that is a method change, not a footnote.* **16 CLI builds wrote
+these records**, and 2.1.233 wrote only 1,704 of them. So "surveyed at 2.1.233" cannot mean "this
+is what 2.1.233 writes" — every claim below about *when* a field arrived is attributed by the
+record's own `version` field, not by the version of the binary installed. Two records types carry
+no `version` at all and cannot be attributed either way; the block says so where that bites.
+
+*A raw grep is no longer a safe method here, and the first survey's headline finding was wrong
+because of it.* This corpus now contains telltale's own development sessions, which **discuss
+these field names in their own text** — so a grep for `context_window_size` matches prose about
+the absence of `context_window_size`. The re-measure therefore parsed every record and looked for
+each token as a **JSON key at any nesting depth**. Raw-token hits: `rate_limits` 420 records,
+`total_cost_usd` 288, `context_window_size` 87. Hits as an actual key: **one**.
+
+**What held.**
+
+| claim | 2026-08-01, 2.1.219 | 2026-08-16, 2.1.233 |
+|---|---|---|
+| first record carries `sessionId` | 60 of 60 sampled | **1,045 of 1,045** |
+| `isSidechain` in top-level transcripts | 0 of 837 | **0 of 1,045** |
+| recursive glob inflates the session list | 2021 vs 837 (2.4x) | **2,001 vs 1,045 (1.9x)** |
+| `message.model` can be `"<synthetic>"` | observed | **34 records** — the trap holds |
+| `custom-title` payload key | `customTitle` | **`customTitle`, 6,327 records** |
+| sessions with a `subagents/` sidecar | present | **107 of 1,045** |
+
+The `ai-title` payload key is no longer unverified. §3.1 above says the survey established the
+record's *shape* but not its key name, and that the adapter therefore matches on structure. The
+re-measure names it: **`aiTitle`**, exactly one key beyond `type` and `sessionId`, on 2,331
+records. **The structural matcher stays as it is** — it was correct, it is now confirmed correct,
+and hard-coding the name buys nothing a measured structure does not already give.
+
+**What changed, and what it costs.** Every capability gap stays `CapNone`. One of them keeps the
+ruling and loses its stated reason:
+
+- **`quota` — the reason was wrong, the ruling was right.** The 2026-08-01 pass grepped the
+  snake_case `rate_limits` and recorded zero matches. **The on-disk key is camelCase
+  `rateLimits`**, it hangs off `error` on API-error records, and **2.1.219 itself wrote it** — the
+  original grep missed a key that was already there, and this survey's own spelling hid it for two
+  weeks. It is still not a quota source, for a better reason than absence: it was **`null` in 32
+  of 32 records**, and it only appears where a request FAILED, never on a normal turn. A key that
+  is present and null is not a reading (§4a.1).
+- **`context_pct` — unchanged and re-confirmed.** No `context_window_size`, `context_window` or
+  `contextWindow` key occurs at any depth. `message.context_management` exists (36 records) and is
+  `null` in 34 of them; the other two carry an empty `applied_edits` array. No denominator.
+- **`cost` — unchanged.** No `cost` or `total_cost_usd` key at any depth. Still stdin-only.
+- **`liveness` — unchanged, and the registry was re-opened on purpose.** §3.1 recorded
+  `~/.claude/sessions/<PID>.json` explicitly so a later build could be checked for a turn-start or
+  turn-end signal. 2.1.233 adds two keys, **`peerProtocol` and `procStart`**. Neither is that
+  signal. `procStart` hardens process *identity* — a pid plus its start time survives PID reuse,
+  which a bare pid does not — but it still answers only that a process exists, which §4a.4 rules
+  out. `CapNone` stands.
+
+**Fields that appeared, and are deliberately modelled by nothing.** Recording an arrival is not
+the same as reading it; per §7.16b, model-and-render-nothing needs a reason, and absence of need
+is itself a finding.
+
+- **`message.usage.output_tokens_details.thinking_tokens`** — the one genuinely new field.
+  Written only by 2.1.228, 2.1.229 and 2.1.233 (3,462 records), zero at 2.1.219. It breaks down
+  **output** tokens, and this adapter's token figure counts what entered **context**, so it feeds
+  no cell. Not modelled.
+- **`message.usage.speed`, `.inference_geo`, `.server_tool_use`, `.iterations`** — all present at
+  2.1.219 as well, so not drift at all. None carries a window size.
+- **a top-level snake_case `session_id`** on some `assistant`, `user` and `attachment` records
+  (680), beside the camelCase `sessionId`. Those records carry both. The adapter reads `sessionId`.
+- **a `file-history-delta` record type** (9 records), which the observed type set above does not
+  list.
+
+**One claim above is narrowed, and it is the canary's.** §3.10 called `sessionId` the field on
+every JSONL record. At 2.1.233 it is not: **`file-history-snapshot` (37) and `file-history-delta`
+(9) carry no `sessionId` at all** — 46 of 179,614 records. Neither type carries a `version` field
+either, so *when* this changed cannot be attributed, and this block does not guess. The canary is
+unaffected and the reason is worth writing down so nobody re-widens the claim: those two types
+carry no `message`, no `cwd` and no title, so they feed nothing the adapter reads; `Saw()` fires
+on the first record carrying the field rather than requiring all of them to; and the first record
+of 1,045 of 1,045 transcripts still carries it, which is what the head read actually depends on.
+§3.10's cell is reworded to *"on every JSONL record that feeds a field"*.
 
 <a id="s3-2"></a>
 
@@ -1833,7 +1915,7 @@ has moved, and says so. `internal/adapter/drift` holds the mechanism; this is th
 
 | adapter | verified against | canary | fields it feeds |
 |---|---|---|---|
-| Claude Code | `Claude Code 2.1.219` | `sessionId` — on every JSONL record | name, model, workspace |
+| Claude Code | `Claude Code 2.1.233` | `sessionId` — on every JSONL record that feeds a field | name, model, workspace |
 | Codex CLI | `codex-cli 0.147.0` | `envelope type` — on every rollout record | model, workspace, quota, context % |
 | | | `session_meta record` — the FIRST record of every rollout | workspace |
 | Gemini CLI | `gemini-cli v0.53.1` | `metadata record` | name, subagents |
@@ -4190,6 +4272,16 @@ detection carries both arms and cites the measurement beside them.
 - The capture behind every claim here is one machine, one day, one grok version, one
   signed-in account. The §3.4 discipline applies: re-measure before extending any claim.
 
+**Amended 2026-08-16 — who may push here.** The listener above took any loopback POST, and
+"loopback" was carrying more weight than it could hold: measured the same day, a web page on
+another origin planted a forged `api_request` in `usage/grok.json` from a real headless
+Chrome, with no local code running at all. §7.24 is the measurement and the fix. Two things
+changed here: `/v1/logs` and `/v1/metrics` now refuse a request carrying `Origin`, and both
+require `Content-Type: application/x-protobuf` — the media type this section's own capture
+pinned on grok's exporter, so a correctly configured grok is unaffected. A local *program*
+is still trusted completely and deliberately, because it can write the cache file directly;
+§7.24 states that boundary rather than pretending a token would move it.
+
 <a id="s7-16b"></a>
 
 ### 7.16b The Claude statusline's token block — measured, modelled, relayed nowhere (2026-08-16)
@@ -5498,6 +5590,20 @@ later reader to simplify it back to one arm and break the only platform CI runs.
 constructing an error value, so whichever arm a platform needs is the arm its suite
 exercises.
 
+**Amended 2026-08-16 — "it binds loopback only" was not containment.** Three facts were
+offered above as what keeps a verbatim content store inside the read/write contract, and the
+second of them was the load-bearing one. It did not hold against a browser. Measured the same
+day (§7.24): a page on another origin posted a forged event into this sink, and — the worse
+half — opened `ws://127.0.0.1:4519/stream` and was handed the `initial` snapshot, every
+retained hook payload verbatim. A WebSocket handshake is exempt from CORS, so no content-type
+rule or preflight was ever going to reach that path; the refusal had to move into the
+handler. Every endpoint now refuses a request carrying `Origin`, the stream included and
+**before** the upgrade, because a page that reaches `onopen` has already been handed the
+snapshot. `/events` additionally requires `Content-Type: application/json`, which is what
+`tools/emit-event.py` was measured sending. The containment sentence above should now be read
+as three facts plus a fourth: no gauge reads these files, the operator starts the mode, the
+bind is loopback, **and a web page is not a sender.**
+
 <a id="s7-22"></a>
 
 ### 7.22 `telltale snapshot` — the read mode whose reader is a program (2026-08-11)
@@ -5713,6 +5819,332 @@ surface renders numbers and keys, so the real output carries vendor ids, counts,
 timestamps and no session name or workspace path. That is the "never content" claim above,
 observed rather than asserted.
 
+<a id="s7-23"></a>
+
+### 7.23 The drop-file relay — a row telltale did not measure, and says so (2026-08-16)
+
+§4 promises a documented adapter interface, and §4a.7 works one example through. That
+promise answers a contributor who will write Go. It does not answer the other question
+the launch post raised: what happens to a tool telltale ships no adapter for, and is not
+going to?
+
+The owner ruled out a plugin runtime and lifted this feature's demand gate on 2026-08-16.
+A runtime would execute a stranger's code inside a process whose entire contract is
+"reads, never writes, no network, no credentials" — every guarantee in this document
+would become a guarantee about someone else's plugin. The middle path is a **drop file**:
+the vendor, or a script the user writes, puts one small JSON document under
+`~/.telltale/dropfile/<name>.json`, and telltale renders it as a fleet row. The reader
+opens one file and can do nothing else. `docs/dropfile.md` is the spec; this section is
+the reasoning.
+
+**It adds no write exception.** The three sanctioned writes (§7.15, §7.16, and council's
+`room.json`) are untouched. `internal/adapter/dropfile` creates nothing, writes nothing
+and removes nothing; the directory is the operator's to fill, and a missing one reports
+the vendor absent. The read/write boundary in `CLAUDE.md` needed no fourth bullet, which
+is the strongest evidence this was the right shape.
+
+#### The problem this format has and no other adapter has
+
+Every other adapter reads a store its vendor wrote while doing its own work. Nobody had a
+motive to write a flattering number into it, and each adapter's package doc names the live
+corpus every field was grepped out of. A drop file is written FOR telltale, by whoever,
+and every value in it is that writer's claim. **telltale measured that a file exists, when
+it was last written, and what it says. It did not measure the session.**
+
+So §4a.1's rule bites in a new place. The rule has always been about a *value* — measured,
+inferred, or absent. Here the whole ROW has a provenance, and a drop-file row must never
+be readable as a measured one.
+
+#### Why the `~` estimate marker is the wrong mark
+
+The obvious move is to mark every claimed value with the estimate marker and be done. It
+is wrong twice over, and the second reason is the one that settles it.
+
+It states a falsehood about mechanism. `~` means `CapDerived`: the adapter computed the
+value from something that is not the value, and the snapshot's `estimated` array says so
+in exactly those words. This adapter computes nothing — it reads the number the writer
+wrote, verbatim. Marking these rows `~` would claim telltale did arithmetic it did not do.
+
+And it collapses two provenances into one spelling. "telltale inferred this" and "somebody
+asserted this" are different claims that a reader would discount differently, and after the
+collapse no reader could tell which one they had. That is the failure §4a.1 exists to
+prevent, imported through a new door — the same shape as the zero-versus-absent collapse,
+one level up.
+
+The rejected alternative is recorded rather than merely dismissed: a per-cell mark of any
+kind, `~` or a dedicated glyph. Beyond the two objections above it repeats one fact in
+every cell of a row where the fact is uniform, and §4a.2 already refused a per-field glyph
+for degradation on the narrower ground that "we failed to read it" starts to read as data.
+**Provenance is a property of the row, so it is marked once, on the row.**
+
+#### The three marks, and none of them is a colour
+
+1. **The vendor id is `self-reported` for every drop file.** The grid's identity column
+   reads `SR` and the header census reads `self-reported 2` in full. `SR` is the only tag
+   in `vendorTag` that is not a vendor abbreviation, deliberately: every other tag answers
+   "which tool did this row come from" because telltale measured that tool's store, and
+   here the only answer telltale can give is where the numbers came from.
+2. **The claimed tool leads the row's label** — `windsurf: refactor the parser`. `SR` is
+   shared by every drop file and cannot separate windsurf from aider, so the row itself
+   names its claimant rather than hiding it in a pane nobody opens.
+3. **`telltale snapshot` emits `"self_reported": true`** on the vendor entry, beside and
+   never inside `estimated`.
+
+Both HUD marks are plain ASCII words, so `--ascii` and `NO_COLOR` change neither, and
+`testdata/golden/self-reported-row.txt` — which renders through `PlainStyles` — is the
+whole assertion rather than half of it. The drop-file vendor gets **no hue of its own**:
+a hue is a vendor identity (§9.28) and these rows have none to give, so it takes the
+identity-hue fallback as Gemini does.
+
+#### Impersonation is unrepresentable, not merely rejected
+
+The format has **no field for a vendor id**. A drop file cannot claim to be Claude Code,
+because there is nowhere in the document to make the claim — the id is a constant the
+adapter owns. Nor can it choose its own row: the session id comes from the FILE NAME, so
+the operator's filesystem decides what a row is called and a document cannot rename itself
+onto another one's row.
+
+That is the same "the allowlist is the struct" mechanism `internal/cursorhook` uses against
+a payload carrying reply text and an email address, and it is why the planted-credential
+test can assert absence rather than sanitization: a key with no destination is dropped by
+`encoding/json` before this package sees it.
+
+#### One vendor id, not one per tool
+
+Per-tool ids were considered and rejected. They would put a writer-chosen string in the
+column that says what telltale measured — a file naming itself `claude` would draw a row
+indistinguishable from a measured one — and `Capabilities()` is per-adapter, so a set of
+tools sharing one adapter could not honestly declare different capability sets anyway.
+
+With one id, `Capabilities` describes the FORMAT, which for this adapter is the only source
+there is: `unsupported` names the fields the format cannot express, and a file that omits
+`cost_usd` yields "absent now" rather than "can't know". Both statements are true, which is
+what the merge costs and what it buys.
+
+#### The one claim telltale can check, it checks
+
+A writer that stops writing leaves a file that keeps asserting whatever it last said. A
+file claiming `last_activity` of "now" would render live forever over a dead session, and
+`--vendor self-reported` would become the way to pin a row to the top of the grid.
+
+telltale cannot check a cost or a context percentage against anything. It CAN check
+`last_activity`, because **a file cannot have activity newer than its own last write**, and
+the mtime is telltale's own measurement rather than the writer's claim. So a claim ahead of
+the mtime is replaced by the mtime, and the substitution goes in `Diagnostics`. The value
+stays present and is NOT marked `Degraded` — a measured mtime is a better answer than
+absence, and §4a.2 requires degraded fields to be absent.
+
+Staleness proper reuses `internal/quotacache`'s rule and its constants rather than inventing
+a boundary: 24 hours to expire, five minutes of future-skew tolerance, and the reading's age
+travelling with it past five minutes. A file outside those bounds draws no row at all, which
+is that package's own ruling that the honest display for "no reading" is absence.
+
+#### Absence has two spellings on input and one on output
+
+§7.22 emits every key with an explicit `null`, because a reader parsing a document must not
+have to tell a missing key from a changed schema. An INPUT cannot hold its writer to that:
+a key omitted and a key written `null` both have to mean absence, or the format fails
+documents over fields the writer simply had no value for — which is §4a.5's partial-read
+rule broken at the door.
+
+So the semantic convention is snapshot's, exactly: **zero is a number, absence is nil, and
+no sentinel number stands for either.** Only the syntax differs, two accepted spellings in
+rather than one guaranteed spelling out. `TestZeroIsAMeasurementAndAbsentIsNil` walks all
+three cases, and `testdata/golden/self-reported-row.txt` pins the render: a claimed 0%
+draws a full empty track beside a claimed `$0.00`, and a row claiming neither draws the
+absent marker in both cells.
+
+#### The render, generated
+
+```
+ telltale  │  3 sessions  │  claude 1  self-reported 2
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        SESSION                                                      MODEL          CONTEXT                 COST    AGE
+ ● CC │ telltale  C:\src\code                                        Opus 5         ███▊────────    34%    $1.20 │  12s
+ ● SR │ windsurf: refactor the parser  C:\src\code                   gpt-5-codex    ────────────     0%    $0.00 │  40s
+ ◐ SR │ aider  C:\src\work                                                                            —        — │   9m
+
+
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ q quit   / find   enter detail   u usage   w week   v vendor   s sort   a all   ? keys
+```
+
+The header census says the word in full and the identity column echoes it per row. The
+last two rows are the zero-versus-absent pair carried inside the claimed rows: windsurf
+claims a measured 0% and $0.00 and draws a full empty track beside a printed zero, and
+aider claims neither and draws the absent marker in both cells. This golden renders through
+`PlainStyles`, so every mark visible here survives `--ascii` and `NO_COLOR`.
+
+#### What the format cannot express, and why each door was never cut
+
+- **Quota.** An account property (§7.1), sourced from the statusline relay (§7.15). A
+  session-shaped document has no account to speak for. The usage page says "no quota by
+  design" for this vendor rather than borrowing one of the six sentences that report a seam
+  which came up empty — this is a door never cut, not a seam that returned nothing.
+- **Liveness.** §4a.4 allows a hint only from a positive vendor signal the HUD cannot see.
+  This is the field where a false claim is most tempting and least checkable, so there is no
+  field for it. Liveness is classified by the HUD from `last_activity`, bounded by the mtime
+  clamp above.
+- **Token counts.** They feed §7.17's fleet spend sum. A claimed count summed beside
+  measured ones would yield a total carrying no mark at all.
+
+#### No canary, no pin, no drift watch
+
+`internal/adapter/pins` gets no row, and `internal/adapter/drift` is not wired in. Both
+exist because an adapter reads a private, undocumented format that a vendor may move without
+saying so, and the pin names the build the field map was surveyed at. **This format is
+telltale's own and it is published**, so there is no vendor build to pin and no shape to
+watch drift away from. `schema_version` does the job a canary does elsewhere, and it does it
+better: a document whose contract number this adapter does not speak is skipped whole rather
+than read leniently, because guessing that the field names still mean what they meant is
+inventing every value at once.
+
+#### Schema version
+
+`self_reported` is a field ADDED to §7.22's vendor object, so `SchemaVersion` stays 1 under
+that document's own rule: a field added is not a break, because every reader parses by name,
+and every object sets `additionalProperties: true`. Nothing already in the document changed
+meaning and no key left. `docs/snapshot.schema.json` carries the key in `properties` and in
+`required` — the emitter always emits it — and `tools/validate-snapshot.py` passed against
+the four goldens and against the built binary's live output.
+<a id="s7-24"></a>
+
+### 7.24 Who may push to a loopback listener (2026-08-16)
+
+**The question.** §7.16a and §7.21 each open a listening socket, and each treats the
+loopback bind as the thing that contains it. Both write a store the product treats as
+measured: `telltale otel grok` folds a push into `usage/grok.json`, which is the file the
+HUD reads as grok's measured spend, and `telltale events` stores hook payloads verbatim.
+Neither listener asked who was pushing. In a product whose whole claim is that a displayed
+value came from measured vendor output, an unauthenticated input to that value is a real
+seam, so it was measured rather than argued about.
+
+**The measurement.** Windows 11, telltale built from `main` at `65a113c`, go 1.26, Chrome
+151.0.0.0 headless. Every run used a redirected `USERPROFILE`, so nothing touched the
+operator's own stores. The collector ran on 127.0.0.1:41318 and the sink on 127.0.0.1:41519;
+the browser probe page was served from a separate origin, `http://127.0.0.1:41999`.
+
+*A local program forges a measured total.* A stdlib Python script built an
+`ExportLogsServiceRequest` carrying one `grok_code.api_request` record and POSTed it to
+`/v1/logs`. The collector answered 200, logged `counted api request`, and wrote:
+
+```
+{"vendor":"grok","since":"2026-08-16T20:21:11.601084-04:00","written_at":"…",
+ "requests":1,"input_tokens":999000,"output_tokens":888000,
+ "cache_read_tokens":777000,"reasoning_tokens":666000}
+```
+
+Nothing distinguishes that from a real export. **The forger needs no secret**: the port, the
+path and the record shape are all published here and in the package docs, and this repo is
+public.
+
+*A plain file write forges the same total, and more of it.* A hand-written `grok.json`
+claiming 4242 requests and 111111111 input tokens, with a `since` six hours back, was
+accepted whole by `readEntry` — the same function the gauge read path `ReadAll` uses. The
+proof is that a later relayed request accumulated **onto** it (`requests` 4242 → 4243) and
+kept the hand-written `since`. So the file write is not merely equal to the POST, it is
+**stronger**: a POST may only add four non-negative counts to whatever window is open, while
+the file writer picks the window's start, its request count and every total outright. The
+sink's store measured the same way — a line appended straight to `<day>.jsonl` was served by
+`GET /events/recent` after the sink reloaded.
+
+*A web page forges into both stores, with no local code at all.* This is the result that
+decided the design. A page on `http://127.0.0.1:41999`, driven by a real headless Chrome,
+posted a forged OTLP record into `usage/grok.json` and a forged hook event into the sink. It
+works because neither handler read `Content-Type`: a `text/plain` body is one of the three
+CORS-safelisted media types, so the request is a *simple* one the browser sends outright,
+with no preflight to refuse. The response is unreadable to the page and that changes nothing
+— the write has already happened.
+
+*A web page reads the verbatim store.* Worse than the write, and it is the sink's, not the
+collector's. A WebSocket handshake is exempt from CORS entirely, and `upgrade` never looked
+at the request. The same page opened `ws://127.0.0.1:41519/stream` and was handed the
+`initial` snapshot — the last hundred stored events, hook payloads and all. §7.21's
+containment claim was "it binds loopback only"; against a browser that claim was doing no
+work.
+
+**The refuted argument, and the part of it worth keeping.** The tempting reading of the
+first two results is that the seam does not matter: any local program can write
+`usage/grok.json` directly, so a secret on the HTTP path buys nothing, and the honest fix is
+a documented boundary. **The measurement refutes that as stated, and confirms half of it.**
+The two paths do not have the same senders. A web page reaches the socket and cannot reach
+the file — it is not a program on this machine at all. The file's reach is bounded by an ACL
+(on the reference box `C:\Users\sanle\.telltale\usage` grants Full to the owner, SYSTEM and
+Administrators, and Modify to two further profile-inherited principals); the socket's reach,
+before this change, included every page the operator visited. So the boundary was not a
+boundary yet. The half that survives is the local half: a program running as a principal the
+ACL admits is trusted completely, and no HTTP-path secret would change that by one byte.
+
+**What was built: make the socket's senders equal to the file's.** The fix is not
+authentication and does not pretend to be. It removes the one class of sender the filesystem
+already excludes, and then states the rest of the boundary plainly. `internal/localonly`
+carries the check, extracted the way `internal/bindaddr` was for the same two modes.
+
+- **Refuse any request carrying `Origin`.** This is the arm that generalizes and the only
+  arm that can cover the WebSocket handshake. Measured: every browser request carried
+  `Origin`, including the handshake — which carried **no** `Sec-Fetch-*` header at all,
+  which is exactly why the check reads `Origin` and not `Sec-Fetch-Site`. Neither real
+  sender carried it: `tools/emit-event.py` arrived as `Python-urllib/3.14`,
+  `Content-Type: application/json`, no `Origin`; the exporter-shaped request the same way
+  with `application/x-protobuf`. A page cannot suppress the header, because the user agent
+  attaches it rather than the script.
+- **Require the media type the measured sender sends** — `application/x-protobuf` for the
+  collector (§7.16a's capture pins grok's own exporter to it), `application/json` for the
+  sink (`tools/emit-event.py`). Parameters are ignored, so `; charset=utf-8` passes.
+  Measured from the other side: with a non-simple `Content-Type` Chrome sent only an
+  `OPTIONS` preflight to each endpoint and **no POST followed**, because neither server
+  answers a preflight with CORS headers.
+- **Both arms, because they fail in different directions.** `Origin` names the sender class
+  but rests on a header a future browser could stop sending on some path nobody has measured;
+  the media type rests on nothing about browsers at all, and turns any such page into one
+  that must preflight. Neither is load-bearing alone.
+
+The sink applies the `Origin` arm to its **read** paths and its stream as well, not only the
+POST: a page that cannot plant a row can still ask for the rows already there, and those rows
+are content. A refusal is `403` — not `401`, because no credential would help, and a 4xx
+rather than a 5xx so an OTLP exporter stops retrying instead of looping against a door that
+will not open.
+
+**No token, and the reason is the measurement, not the effort.** A shared secret was the
+obvious shape and it was refused three times over. It closes nothing against the principal
+that matters, because a program that can read a token file beside the store can write the
+store directly — measured above, and pinned by
+`TestTheFileWriterSetsWhatTheRelayCannot`. It would put a secret on disk next to the thing it
+protects, for a reader that already has the disk. And it would gate the collector's only
+working path on an **unmeasured** knob: §7.16a already had to mark
+`OTEL_EXPORTER_OTLP_ENDPOINT` unverified because moving grok's Rust exporter needs a fresh
+instrumented capture, and `OTEL_EXPORTER_OTLP_HEADERS` is the same instrument problem. A
+wrong guess there makes the collector count nothing while looking healthy, which is §7.7's
+worst failure. **OS-level peer verification was refused too**: loopback TCP peer identity on
+Windows needs `GetExtendedTcpTable`, which is not stdlib (decisions/001, the same rule that
+hand-rolled the OTLP and SQLite readers), and it does not even answer the browser case — the
+peer there is `chrome.exe`, a perfectly legitimate local program. An executable allowlist is a
+different and worse contract.
+
+**The trust statement, stated once so it can be quoted.** A program running on this machine
+as a principal `~/.telltale/`'s ACL admits is trusted by these listeners exactly as far as it
+is trusted by the filesystem, because it can plant the same row either way and the file write
+is the stronger of the two. That is a deliberate boundary, not an oversight, and
+`internal/usagecache/trust_test.go` pins it so a later session adding a bearer token walks
+past the reason it buys nothing. What is **not** trusted, as of this change, is a web page.
+
+**Verified after the change, same box, same probes.** The measurement is only worth what the
+re-run says, so the identical pages were driven at the rebuilt binary. The collector logged
+`refusing a request from a web page (Origin: http://127.0.0.1:41999)` and counted nothing;
+the sink logged the same refusal twice, once for the POST and once for the stream handshake;
+and the WebSocket probe, which had reported `EXFILTRATED: {"type":"initial",…}` before the
+change, now reports `BLOCKED (error)` and `CLOSED code=1006` with no snapshot delivered. The
+other half held too: an exporter-shaped push was still counted
+(`counted api request — in 42 · out 42 · reasoning 42 · cache read 42`) and
+`tools/emit-event.py` still stored a row and exited 0.
+
+**What this does not claim.** The capture is one machine, one day, one browser engine
+(Chromium 151). Firefox and Safari were not driven; the `Origin` behaviour they rest on is
+the Fetch and RFC 6455 requirement rather than a measurement here, and §3.4's discipline
+applies before extending the claim. Nothing here defends against a local program, and it is
+not meant to. The gauges' no-network rule and the loopback-only bind are untouched and remain
+absolute: this change only narrows who may talk to a socket that was already loopback.
+
 <a id="s8"></a>
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
@@ -5908,6 +6340,99 @@ signing statement above. `.github/dependabot.yml` watches `gomod` and
 `github-actions` weekly; it is also the watch on the TUI line, because
 `ultraviolet` is pinned to a pseudo-version that never moves on its own.
 
+#### The automatable remainder (added 2026-08-16)
+
+The posture paragraph above shipped the two pieces that need no automation. This
+subsection records the rest. It changes nothing in item 8: signing and
+notarization stay owner decisions, and no contributor builds that pipeline.
+
+**What now runs, and when.**
+
+| Check | Fires on | Runner | Fails on |
+|---|---|---|---|
+| `ci.yml` | push to main, pull request, release | windows-latest, ubuntu-latest | vet, the suite, the build, the binary smokes, the schema gate |
+| `govulncheck.yml` | push to main, pull request, Monday 07:00 UTC | windows-latest | a reachable known vulnerability |
+| `codeql.yml` | push to main, pull request, Monday 07:30 UTC | ubuntu-latest | a default-suite alert |
+| `dependabot.yml` | weekly | none | nothing. It opens a pull request |
+| SBOM, through syft | a `v*` tag only | ubuntu-latest | a syft failure |
+| Provenance attestation | a `v*` tag only | ubuntu-latest | an attestation failure |
+
+**govulncheck is a monitor, and it is deliberately not a step in the gate.** The
+gate answers whether a change works, and the tree decides that answer. This scan
+answers whether the shipped code is vulnerable today, and the Go vulnerability
+database decides that answer. Two costs follow. The scan reads vuln.go.dev on
+each run, and the gate makes no network call except the module download, so an
+outage at that host inside the test job would fail a build that nothing broke. A
+new standard-library CVE also fails an unchanged tree, and it fails every open
+pull request at the same time, and no author can correct it inside their own
+change. A gate that fails for a reason outside the change teaches contributors
+to ignore it. The scan therefore runs beside the gate under its own name. It
+still fails on a finding, because a monitor that reports green over a vulnerable
+binary is the false green ADR-001 refuses.
+
+**The scheduled run is the reason this exists.** A scan on a pull request cannot
+find a vulnerability that becomes public after the merge. The pull request
+trigger scans a new dependency before it lands, and it also proves the job in
+the pull request that adds the job.
+
+**What the first scan measured, 2026-08-16.** govulncheck v1.7.0, against a
+database updated 2026-08-14, reported three reachable standard-library
+vulnerabilities: GO-2026-6090 in `crypto/tls`, GO-2026-6089 in `net/http`, and
+GO-2026-5972 in `encoding/asn1`. It reported five more that this code does not
+call. The traces reach `internal/grokotel` and `internal/eventsink`, which are
+the two packages that run a server. **No module that this repository requires
+caused any finding.** All eight findings had one cause: the toolchain. go.mod
+declared `go 1.26`, `actions/setup-go` resolved that to the 1.26.5 in the runner
+image, and every fix version is go1.26.6. Run 31981243687 on main confirms that
+CI built with go1.26.5, so this was a property of the shipped binary and not of
+one workstation.
+
+**The fix is a version bump, and go.mod is where the version lives.** The `go`
+directive now reads `go 1.26.6`. That clears all eight findings, measured both
+ways: the same scan under a 1.26.6 toolchain reports `No vulnerabilities found`,
+and the local build then reports `go1.26.6` under `go version -m`. The directive
+is the single source every job reads, so one line moved the race job, the gate,
+the release and both new scans together. `check-latest: true` on setup-go was
+the rejected alternative. It would float the toolchain to whatever patch exists
+on run day, which is the same objection this document already made to a
+goreleaser version range. A committed directive moves when a person moves it,
+and the monitor is what asks for the move.
+
+**The SBOM and the attestation take effect at the next tag, and at no earlier
+point.** `release.yml` triggers on a `v*` tag only, so no merge to main produces
+either one, and neither is added to a release that already exists. syft writes
+one SPDX-JSON document for each archive. `actions/attest-build-provenance` then
+attests the four archives, and a user verifies one with `gh attestation verify
+<archive> --repo sanlee-ys/telltale`.
+
+**Provenance is not a signature, and the difference is item 8's difference.** The
+attestation proves that this repository's release workflow built this archive,
+from a named commit, on a runner GitHub hosts. It does not prove who the owner
+is, and it does not prove that the owner vouches for the content. It needs no
+owner secret, because GitHub mints a short-lived OIDC token for each run. That
+is exactly why it is buildable here while signing is not: item 8's blocker is a
+long-lived credential, and this mechanism needs none. **Signing and notarization
+stay owner-held and unbuilt**, on item 8's terms and for item 8's reasons.
+
+**What this subsection did not verify.** The pull request that added these files
+proved the two scans by running them, and the run log names each job. It could
+not prove the release path, because a tag is that workflow's only trigger. The
+evidence for the release path is a `goreleaser release --snapshot --clean`
+rehearsal on the reference workstation, 2026-08-16, against the pinned
+goreleaser v2.17.1. It built all four targets, wrote all four archives, reached
+the SBOM stage, named the document
+`telltale_<version>_windows_amd64.zip.sbom.json`, called `syft`, and stopped
+with `exec: "syft": executable file not found`. That failure is the wanted one:
+the stage is reached and configured, it fails loudly rather than passing in
+silence, and the missing tool is the one thing `release.yml` installs and the
+rehearsal could not. `goreleaser check` also passes against v2.17.1. The
+attestation step ran nowhere. **The next tag is the first real proof of both**,
+and item 8's existing advice applies: rehearse it with an `-rc` tag.
+
+`.github/CODEOWNERS` names the owner for every path. SECURITY.md already tells a
+reporter that one person maintains this project; that file states the same fact
+where GitHub can act on it.
+
 What this does **not** discharge: the README hero visual and the zero-config first
 frame are the other two pieces of adoption item 1 and are untouched here, and the
 positioning line still lands with the slice, not ahead of it.
@@ -6006,6 +6531,10 @@ in the schema moved.
 - Plan-budget "% of plan" spend meters: the budget is a guess — the exact fabrication
   this product exists to refuse.
 - On-disk cost estimation via price tables: inventing dollars from token counts.
+- A plugin runtime for third-party adapters: it would run a stranger's code inside the
+  process whose whole contract is "reads, never writes, no network, no credentials", so
+  every guarantee here would become a guarantee about someone else's plugin. The
+  drop-file relay ([§7.23](#s7-23)) is the middle path taken instead.
 
 <a id="s9"></a>
 
@@ -11682,6 +12211,126 @@ decision for whoever wants to reopen it rather than a side effect of this line. 
 and `NO_COLOR` the strip reads exactly the same, which is the property every distinction this UI
 makes has to have: `NEEDS YOU` is the signal, and the mark and the weight only make it findable.
 
+#### 2026-08-16: the Notification hook, measured on three runtime surfaces
+
+The strip above reads council's own gate queue and nothing else. A 2026-08-15 research candidate
+proposed a second source for it: Claude Code's `Notification` hook, with the matcher names
+`agent_needs_input`, `permission_prompt` and `agent_completed`. Those three names were a vendor
+claim. No measurement in this repository supported them. §7.21's trap 1 measured that hook firing
+changes with the runtime surface, so a claim about one surface says nothing about another. This
+subsection records the survey. It builds nothing.
+
+**The rig.** A throwaway workspace holds a `.claude/settings.json` that registers one recorder
+command against every hook event the survey can name, including three `Notification` entries: one
+with no matcher, one with `matcher: "permission_prompt"`, and one with
+`matcher: "agent_needs_input"`. The recorder appends its raw stdin plus an arrival timestamp to a file named
+for its entry, and exits 0 on every path. **The filesystem is the observable, never the stream**,
+which is §9.8's rule. A file that does not exist means the hook did not run. The operator's own
+`~/.claude/settings.json` was never written to, and no credential store was copied anywhere.
+Claude Code **2.1.233**, Windows 11, `claude-haiku-4-5` on every turn, two trials per arm. The
+turn asks for one shell command, `install -d probe-marker`, which is the shape §9.8 already
+measured that no allow rule on this box covers.
+
+**The rig lied once, and the record says so.** The recorder took an output directory argument and
+ignored it, so the first four arms reported "no hook files" when the files were landing in the
+workspace directory instead. That reading survived three arms and produced a false conclusion,
+that project settings were not loaded at all. It was caught by running the recorder by hand. The
+zero a probe reports is a claim about the probe until the probe itself is checked, and this one
+was wrong.
+
+**The source read, at the pinned version.** CLAUDE.md permits a source read at a pinned version as
+evidence, and the shipped 2.1.233 binary carries four facts the live arms then tested. First,
+`notification_type` is an enum of eleven values, not three: `permission_prompt`, `idle_prompt`,
+`auth_success`, `elicitation_dialog`, `agent_needs_input`, `agent_completed`,
+`elicitation_url_dialog`, `worker_permission_prompt`, `push_notification`, `computer_use_enter`
+and `computer_use_exit`. Second, the payload builder sets `hook_event_name` to `"Notification"`,
+copies the type into a `notification_type` field, and passes that same type as the hook's match
+query. The matcher therefore does select on the notification type, and the three claimed names are
+real matcher values. Third, the permission notification is armed by a `setTimeout` of **6000 ms**
+that returns a cancel function, and it is armed immediately before the `can_use_tool` control
+request is sent. The environment variable `CLAUDE_CODE_DISABLE_PERMISSION_PROMPT_NOTIFY_HOOKS`
+turns it off. Fourth, `agent_needs_input` and `agent_completed` are emitted from a React effect
+that watches **background agent** sessions, beside a telemetry event carrying a `jobSessionId`.
+Their subject is a background job, not the session the hook is installed in.
+
+**What fired, per surface.** Every arm denied the tool call, so the `PostToolUse` column is
+uninformative and is left out: a call that never ran has nothing to report, and this rig therefore
+neither confirms nor contradicts §7.21's trap 1.
+
+| surface | `Notification` (no matcher) | `permission_prompt` | `agent_needs_input` | controls that did fire | trials |
+|---|---|---|---|---|---|
+| `claude -p` | no | no | no | `PreToolUse`, `SessionStart`, `Stop`, `UserPromptSubmit` | 2/2 |
+| `claude -p --output-format stream-json --verbose` | no | no | no | the same four | 2/2 |
+| control protocol, request answered after 12 s | **yes** | **yes** | no | the same four | 2/2 |
+| control protocol, request answered at once | no | no | no | the same four | 2/2 |
+
+The control-protocol rows replicate council's own gated seat: `baseArgs` plus `gateArgs` plus
+`--input-format stream-json`, with the recorder supplied through `--settings`. The last two rows
+are the same rig, and they change one thing, which is how long the probe waits before it answers
+the `can_use_tool` request.
+
+**The six seconds are the finding, and the fast arm is what makes it one.** A request held for
+12 s produced the hook on both trials. The notification arrived 6931 ms and 9727 ms after the
+request appeared on stdout, which is the 6000 ms timer plus the cost of starting the hook process.
+The same rig answering the same request immediately produced **no `Notification` at all**, on both
+trials, while all four control hooks ran in every arm and prove the settings file was loaded. So
+the hook does not report that a vendor is blocked. It reports that a vendor **stayed** blocked for
+six seconds. Every prompt an operator answers faster than that is invisible to it.
+
+**The payload, re-typed with synthesized identifiers.** This is the whole record. The session id,
+the prompt id and the paths are fake, per the fixtures rule.
+
+```json
+{
+  "session_id": "11111111-2222-3333-4444-555555555555",
+  "transcript_path": "C:\\Users\\example\\.claude\\projects\\C--probe-ws\\11111111-2222-3333-4444-555555555555.jsonl",
+  "cwd": "C:\\probe-ws",
+  "prompt_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "hook_event_name": "Notification",
+  "message": "Claude needs your permission to use Bash",
+  "notification_type": "permission_prompt"
+}
+```
+
+**There is no correlation handle in it.** The payload carries no `tool_use_id`, no control-request
+id, and no tool-name field. The `title` key the builder allows was absent on every trial. The only
+statement of *what* is blocked is an English sentence, so a reader that wanted the tool name would
+have to parse `message`. §4a.1 does not permit that to become a displayed value.
+
+**The verdict for this strip: refuse the seam, and the refusal is `CapNone`-shaped.** For a seat
+council spawned, the gate queue already holds the fact, holds it immediately, and holds it
+structurally, with the vendor, the tool and the request id all present. The `Notification` hook
+offers the same fact six seconds later, without the tool identity, and only when the operator was
+slow. It is strictly worse on every axis the strip cares about, and adding it would break the
+safety property §9.40 is built on, which is that every name on the line comes from a measured
+pending gate. A second source that is late and lossy would put a seat on the line after the
+operator already answered it, or leave one off entirely.
+
+**Two of the three claimed names never appeared, and the source read says why.** `permission_prompt`
+exists and fires. `agent_needs_input` and `agent_completed` exist in the enum and fired on no
+headless surface in any of the ten runs. Their emitter watches background agent sessions from a
+render effect, so their subject is a background job rather than the current session, and the
+effect has no render tree to run in outside the interactive terminal. A reader that took the three
+names as equivalent would have wired two signals that cannot arrive and one that arrives late.
+
+**What this does not close.** The interactive surface is **OWED**, and only an operator can drive
+it. The prepared steps are: start `claude` in a throwaway directory whose `.claude/settings.json`
+carries the recorder, ask for `install -d probe-marker`, leave the approval prompt untouched for
+more than ten seconds, then answer it; repeat and answer within two seconds. The open question
+there is whether the interactive surface adds `idle_prompt`, and whether a real background agent
+makes `agent_needs_input` fire at all. Three smaller gaps stay open beside it. The operator's own
+`~/.claude/settings.json` could not be read, because the credential guard refused it and the
+refusal was not worked around, so the number of user-level hooks in the control column is unknown.
+`worker_permission_prompt` was never registered and never seen. And the six-second timer was
+measured only from the request appearing on stdout, which is a few milliseconds after the CLI arms
+it, so 6931 ms is an upper bound on the delay rather than the delay itself.
+
+**A different question this survey does not answer.** Everything above concerns seats council
+spawns, where the gate queue is the better source. Claude Code sessions telltale merely observes,
+through the HUD and the statusline, have no gate queue behind them. Whether the `Notification`
+hook could carry a needs-input signal for **those** is untested here, and it inherits the same six
+second delay and the same missing tool identity, so it would start from a weak position.
+
 <a id="s9-41"></a>
 
 ### 9.41 the gate asked about an edit and would not show it (2026-08-09)
@@ -11931,7 +12580,8 @@ report `internal/adapter/drift` rules out as one nobody reads.
 
 **The comparison is equality, never ordering.** It extracts the first dotted-numeric run from
 each string, because the pin and the probe agree on a number and on nothing else: the adapter
-writes `Claude Code 2.1.219` and the binary answers `2.1.226 (Claude Code)`; the adapter writes
+wrote `Claude Code 2.1.219` and the binary answered `2.1.226 (Claude Code)` when this was
+measured (that pin has since moved to `2.1.233`, §3.1's re-measure); the adapter writes
 `grok 1.0.4 (d846eb93d9)` and the binary answers `grok 1.0.0 (3cd0d0cbce) [stable]`. A commit
 hash carries digits but no dot, so it cannot be mistaken for the version beside it. No line
 claims "newer" or "older": a direction needs per-vendor precedence rules this program has no
@@ -12121,6 +12771,105 @@ stopped, so nothing duplicates. **No code changes for this.** The seat declares 
 working exactly as it was written. Only the comment was stale.
 
 **Spend:** three billed turns, all trivial prompts, no tools.
+
+#### 2026-08-16: what agy reports when a turn needs the operator, and why that is `CapNone`
+
+§9.40's needs-you strip reads council's own gate queue and nothing else. The 2026-08-15 research
+asked whether agy's vendor-REPORTED `agent_state` (§2.1) could become a second source for it. This
+block is the measurement. The verdict is a `CapNone` refusal with **two independent reasons**, and
+each reason is sufficient on its own.
+
+**Instrument and version.** `agy 1.1.13`, read from `agy --version` at run time. agy self-updates,
+so a version quoted from a document is a version nobody checked; §3.8's re-verification records the
+same discipline. Windows 11. Six billed turns ran through this seat's own argv (`--output-format
+stream-json --disable-slash-commands --print-timeout <t> -p <prompt>`), from a throwaway directory
+outside any repository. The probe timestamped every stdout and stderr line, then the process exit.
+It then read the resulting transcripts for structural fields only: `type`, `status`, `step_index`
+and `created_at`. It copied no credential, and no prompt content from this machine enters this
+document.
+
+**Three shapes, two trials each.** Shape A is a normal completing turn and sets the baseline. Shape
+B drives agy to its `ask_question` tool. That is the pure needs-input case: the agent asks the
+operator a question and writes nothing. Shape C asks for a file write, which is the permission case.
+
+**The first reason: the waiting state never occurs in print mode.** agy answers on the operator's
+behalf, and it says so in its own words on both paths.
+
+- **A question is skipped.** In both shape B trials the agent asked, received no answer, and
+  continued inside the same turn. Its own next message reads: "I've presented the prompt to select
+  a file to rename, but it looks like you skipped it." Both turns ended `status: "SUCCESS"`, at
+  6.9s and 5.2s. Neither one waited.
+- **A tool permission is auto-approved.** Shape C trial 2 recorded a `SYSTEM_MESSAGE` step carrying
+  this text verbatim: `stop hook blocked termination due to reason: The user has automatically
+  approved the artifact through their review policy. Proceed to execution.` The write landed.
+  `init.permission_mode` reads `request-review` on all six turns, so that value does not mean the
+  operator is asked.
+- **`ask_permission` has never been reached.** It is one of the 56 tools in the `init` tools array.
+  Across 90 conversations and 4,344 transcript records there are **zero** `ASK_PERMISSION` records.
+  `ASK_QUESTION` has five.
+
+A gauge fed from this seam would therefore have nothing to report. `--print-timeout` is not the
+ceiling `agy.go`'s comment describes either. No probe turn reached it, because no probe turn waited.
+
+**The second reason: the print-mode stream cannot name the state it does emit.** The disk keeps the
+record type. The stream discards it. The two surfaces cross-walk by `step_index` exactly:
+
+| shape | idx | stream `step_type` / `state` | `tool_name` | `duration_seconds` | disk `type` / `status` |
+|---|---|---|---|---|---|
+| A (baseline) | 1 | `unknown` / DONE | absent | 0.0015, 0.0011 | `CONVERSATION_HISTORY` / DONE |
+| B (needs input) | 1 | `unknown` / DONE | absent | 0.0010, 0.0010 | `CONVERSATION_HISTORY` / DONE |
+| B (needs input) | 3 | `unknown` / DONE | absent | 0.5977, 0.5945 | **`ASK_QUESTION`** / DONE |
+| C (write) | 3 | `tool` / ACTIVE then DONE | `write_to_file` | 13.5304, 0.5917 | `CODE_ACTION` / DONE |
+
+**The needs-input step and the every-turn preamble step are byte-identical in every field this
+adapter reads.** Both arrive as `step_type: "unknown"`, state DONE, with no `tool_name` and no
+`tool_info`. Only `duration_seconds` separates them, and that is a continuous measurement rather
+than a marker. A threshold over it would be the invented vocabulary §4a.1 forbids. This is the
+`grok` problem the research named, in its worst form: waiting and working do not merely share
+bytes, because the vendor resolved the wait before it wrote the line.
+
+**No liveness signal pairs with it.** The status vocabulary across the whole corpus is exactly two
+values, `DONE` (4,180) and `RUNNING` (164). §3.8's re-verification already refused `RUNNING` as
+liveness, because its oldest rows sit in conversations nothing has touched for days. All five
+`ASK_QUESTION` records carry `DONE`. Three of those five predate this probe and come from real
+interactive sessions on 2026-08-09 and 2026-08-15. No record has ever been observed in a state that
+means an ask is outstanding. The `RUNNING` count is also unchanged from the 2026-08-15 re-read,
+which is the independent check that six completed probe turns leave no `RUNNING` residue.
+
+**`agent_state` is not on this surface at all.** It is a statusline-payload field (§2.1), and that
+payload exists only inside an interactive agy session. Council drives this vendor in print mode and
+never sees it. The candidate seam and the strip that would consume it sit on different surfaces,
+which is the structural half of the refusal.
+
+**One vendor flag behaves differently than assumed, and it changes nothing today.** Shape C trial 1
+passed `--mode plan` beside the seat's `--disable-slash-commands`, and agy answered on stderr:
+`warning: --mode plan has no effect while slash command expansion is disabled.` The seat does not
+pass `--mode` (ADR-008's seventeenth amendment), so no behaviour moves. It does sharpen that
+amendment: the read-posture flag it dropped was inert twice over on this argv. Trial 2 re-ran with
+plan mode live and the write still landed, which corroborates `PARITY.md`'s Antigravity row at
+1.1.13.
+
+**A claim in `agyPlumbing` is refuted by this capture, and the code was deliberately not touched.**
+That comment argues `unknown` is a fixed preamble slot agy declines to name, on the evidence that
+every observed one sits at `step_index` 1, carries no tool name, and lasts under 5ms. Shape B
+produced a second `unknown`, at index 3, carrying a real act. The suppression still reaches the
+right outcome today, because agy skipped the question before the line arrived and there is nothing
+actionable to draw. The stated reason is now wrong. This lane measures rather than changes code, so
+the correction is recorded here and is owed in `internal/council/vendors/agy.go`.
+
+**What is NOT claimed.**
+
+- **The interactive seam is unmeasured.** §3.8 observed `agent_state` transitioning, and
+  `tool_confirmation_pending: true`, on agy 1.1.9 statusline payloads. A re-capture at 1.1.13 needs
+  a TUI session and a statusline capture command, and this probe changed no agy configuration.
+  Whether an interactive `ASK_QUESTION` sits `RUNNING` while it waits is the open question this
+  block leaves behind. It is the one measurement that could reopen the seam.
+- **Six turns, one box, one build, one day.**
+- **The model picked its own write path in shape C trial 1.** It ignored the process cwd and wrote
+  under `~/.gemini/antigravity-cli/`. Both files were removed after the run. That is model
+  behaviour rather than a seam property, and it is named so a later probe expects it.
+
+**Spend:** six billed turns, all short prompts.
 
 <a id="s9-44"></a>
 

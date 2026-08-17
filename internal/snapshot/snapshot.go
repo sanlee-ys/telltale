@@ -8,7 +8,7 @@
 // wants to know what the fleet is doing runs one command and parses one
 // document; it does not read ~/.telltale/, and it does not drive a TUI.
 //
-// Four rules govern the schema, and each one is a rule this repo already lives
+// Five rules govern the schema, and each one is a rule this repo already lives
 // by:
 //
 //   - **Zero and absent stay different** (ADR-001, design.md §4a.1). A measured
@@ -23,6 +23,10 @@
 //     vendor exposes nothing for, ever. A `null` on a field in that list is a
 //     capability statement; a `null` on any other field is this moment's
 //     reading.
+//   - **A claimed value says so.** `self_reported` marks an entry whose
+//     numbers a writer asserted rather than one telltale measured (§7.23). It
+//     is a different statement from `estimated`, which is about an adapter's
+//     arithmetic, and the two never share a spelling.
 //   - **Numbers and keys, never content.** The read/write boundary (CLAUDE.md)
 //     holds here as it holds everywhere else: no transcript, no brief, no reply
 //     text, no session name, no workspace path. A snapshot names vendors,
@@ -154,6 +158,27 @@ type Vendor struct {
 	// here means "this vendor cannot know"; a null on any other field means
 	// "not right now".
 	Unsupported []string `json:"unsupported"`
+
+	// SelfReported says every number in this entry is a claim its writer made,
+	// rather than a reading telltale took from a vendor's own store
+	// (design.md §7.23). False for every adapter that reads a vendor store.
+	//
+	// It is NOT `estimated` and must never be folded into it. `estimated`
+	// names fields an adapter COMPUTED from something that is not the value,
+	// and a drop-file adapter computes nothing — it reads verbatim what the
+	// writer wrote. The two are different provenances, and a reader that could
+	// not tell them apart would be back to the collapse §4a.1 forbids: one
+	// spelling for "telltale inferred this" and "someone asserted this".
+	//
+	// It is a whole-entry flag rather than a per-field list because it is true
+	// of every value in the entry without exception. A list would invite the
+	// reading that the unlisted fields were measured.
+	//
+	// Adding this key does not raise SchemaVersion: it is a new field, and
+	// this document's own rule is that a field ADDED is not a break because
+	// every reader parses by name. Nothing already in the document changed
+	// meaning, and no key left.
+	SelfReported bool `json:"self_reported"`
 }
 
 // QuotaWindow is one relayed usage window.
@@ -214,13 +239,14 @@ func Build(snap hud.Snapshot, th model.LivenessThresholds) Document {
 	for _, view := range snap.Vendors {
 		sessions := byVendor[view.Vendor]
 		v := Vendor{
-			Vendor:      view.Vendor,
-			Status:      view.Status.String(),
-			Sessions:    len(sessions),
-			Drifted:     view.Drifted,
-			Quota:       []QuotaWindow{},
-			Estimated:   []string{},
-			Unsupported: []string{},
+			Vendor:       view.Vendor,
+			Status:       view.Status.String(),
+			Sessions:     len(sessions),
+			Drifted:      view.Drifted,
+			Quota:        []QuotaWindow{},
+			Estimated:    []string{},
+			Unsupported:  []string{},
+			SelfReported: view.SelfReported,
 		}
 		if view.Err != "" {
 			e := view.Err

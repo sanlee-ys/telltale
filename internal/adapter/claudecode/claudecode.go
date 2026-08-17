@@ -3,23 +3,60 @@
 //
 // Source verified live on 2026-08-01 against Claude Code 2.1.219 on the dev
 // machine: 33 project directories, 837 top-level transcripts, 13,211 records
-// walked read-only. The survey is written up in docs/design.md §3.1; nothing
-// from it is reproduced here or in testdata, which is synthesized to shape.
+// walked read-only. RE-MEASURED 2026-08-16 against Claude Code 2.1.233 on the
+// same machine: 119 project directories, 1,045 top-level transcripts, 179,614
+// records walked read-only. The survey is written up in docs/design.md §3.1;
+// nothing from either pass is reproduced here or in testdata, which is
+// synthesized to shape.
+//
+// The corpus is MIXED-VERSION, which the first survey did not have to say. 16
+// CLI builds wrote these records and 2.1.233 wrote 1,704 of them, so a field is
+// attributed to a build by the record's own version field, never by the version
+// of the binary that happens to be installed.
 //
 // # What this adapter cannot know, and why
 //
-// These are declared CapNone rather than filled with a plausible number. Each
-// was grepped for across the live corpus and returned zero matches:
+// These stay CapNone rather than filled with a plausible number. The 2026-08-16
+// pass re-checked each one as a JSON KEY at every nesting depth, rather than as
+// a token in the bytes, because this corpus now contains sessions that DISCUSS
+// these field names in their own text — a raw grep matches that prose and reads
+// as a capability the vendor never wrote.
 //
-//   - context_pct — there is no context_window_size on disk. Token counts are
-//     sourced, but the denominator varies by model and by the [1m] variant, so
-//     any percentage would need an assumed window. An assumed denominator is
-//     an invented gauge (decisions/001).
-//   - cost — cost.total_cost_usd exists only on the statusline stdin payload,
-//     which the HUD does not consume.
-//   - quota — rate_limits likewise stdin-only. Claude's quota lives on the
-//     statusline seam; Codex's lives on the disk seam (design.md §3.3).
+//   - context_pct — there is still no context window size on disk. No key named
+//     context_window_size, context_window or contextWindow occurs at any depth
+//     at 2.1.233. Token counts are sourced, but the denominator varies by model
+//     and by the [1m] variant, so any percentage would need an assumed window.
+//     An assumed denominator is an invented gauge (decisions/001).
+//   - cost — no cost or total_cost_usd key occurs at any depth.
+//     cost.total_cost_usd remains a statusline stdin field, which the HUD does
+//     not consume.
+//   - quota — still CapNone, and the re-measure CORRECTED the stated reason.
+//     The 2026-08-01 pass grepped the snake_case spelling rate_limits and
+//     recorded zero matches. The on-disk key is camelCase rateLimits, it hangs
+//     off error on API-error records, and 2.1.219 itself wrote it — so the
+//     original grep missed a key that was already there, and the ruling was
+//     right for a reason that was not. It is still no quota source: it was null
+//     in 32 of 32 records, and it appears only where a request FAILED, never on
+//     a normal turn. A key that is present and null is not a reading.
 //   - liveness — see the LivenessHint note below.
+//
+// # What appeared since the pin, and why nothing models it
+//
+// A field that arrived is a finding whether or not anything reads it, and
+// modelling one needs a reason of its own — absence of need is a result, not an
+// omission (design.md §7.16b).
+//
+//   - message.usage.output_tokens_details.thinking_tokens — genuinely new since
+//     the pin. Only 2.1.228, 2.1.229 and 2.1.233 wrote it. It breaks down
+//     OUTPUT tokens, and this adapter's token field counts what entered
+//     CONTEXT, so it feeds no cell here.
+//   - message.usage.speed, .inference_geo, .server_tool_use and .iterations —
+//     present at 2.1.219 too, so not drift. None carries a window size.
+//   - a top-level snake_case session_id on some assistant, user and attachment
+//     records, beside the camelCase sessionId. Those records carry both, and
+//     this adapter reads sessionId.
+//   - a file-history-delta record type, which §3.1's 2026-08-01 type set does
+//     not list. Like file-history-snapshot it carries no message and no cwd.
 //
 // # What it derives
 //
@@ -41,6 +78,14 @@
 // evidence the session is doing anything — the one case where an adapter can
 // lie to the HUD undetectably. It is recorded in the design doc as a verified
 // observation and left unused in v1.
+//
+// The 2026-08-16 pass re-opened that registry, because §3.1 recorded it exactly
+// so a later build could be checked for a turn-start or turn-end signal worth
+// reading. 2.1.233 added two keys, peerProtocol and procStart, and neither is
+// that signal. procStart hardens process IDENTITY — a pid plus its start time
+// survives PID reuse, which a bare pid does not — but it still answers only
+// that a process exists. Nothing in the registry separates a session that is
+// working now from one sitting at a prompt, so liveness stays CapNone.
 package claudecode
 
 import (
@@ -64,16 +109,26 @@ const Vendor = model.VendorClaude
 
 // VerifiedAgainst names the vendor build this adapter's field map was read from
 // (see the package doc). It is what a drift report is measured against.
-const VerifiedAgainst = "Claude Code 2.1.219"
+const VerifiedAgainst = "Claude Code 2.1.233"
 
 // canarySessionID is the record envelope's identity field. The survey found it
 // on the first record of 60 of 60 transcripts sampled, and on the housekeeping
-// records besides — it is the one field every record type here shares.
+// records besides.
 //
 // A transcript whose records PARSE and carry no sessionId is not the shape this
 // adapter's field map describes: cwd, the title records and the assistant
 // message block all hang off that envelope, so their absence would otherwise
 // read as "the vendor had nothing to say".
+//
+// The 2026-08-16 re-measure NARROWED the claim above, which used to read "the
+// one field every record type here shares". That is no longer true at 2.1.233:
+// file-history-snapshot and file-history-delta records carry no sessionId at
+// all — 46 of 179,614 records. The canary is unaffected, and the reason is
+// worth stating so nobody re-widens it. Those two types carry no message, no
+// cwd and no title either, so they feed nothing this adapter reads; Saw() fires
+// on the first record that carries the field rather than demanding every record
+// carry it; and the first record of 1,045 of 1,045 transcripts still carries
+// it, which is the fact the head read actually depends on.
 var canarySessionID = drift.Canary{
 	Name: "sessionId",
 	Feeds: model.NewFieldSet(
@@ -639,8 +694,9 @@ func (a *Adapter) parse(locator string, info fs.FileInfo) (*parsed, error) {
 			}
 			if r.IsSidechain {
 				// Free insurance: 0 of 837 top-level transcripts carried one
-				// on 2.1.219 (they live in the subagents/ sidecar tree), but a
-				// vendor change that moves them inline must not inflate rows.
+				// on 2.1.219, and 0 of 1,045 on 2.1.233 (they live in the
+				// subagents/ sidecar tree), but a vendor change that moves
+				// them inline must not inflate rows.
 				continue
 			}
 			a.applyRecord(scratch, &r)
