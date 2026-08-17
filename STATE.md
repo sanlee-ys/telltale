@@ -407,12 +407,24 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   port with a named error (§7.16a, §7.21), and the OTLP collision has a binary
   smoke in CI, and the smoke's eventsink twin landed with the fourth wave's
   schema gate — that queue is empty. The fourth wave also retired two
-  completeness misses by ruling: the drift loop lives in `doctor` (which found
-  the claude and codex field-map surveys genuinely stale on its first run, and
-  re-reports them every run until someone re-measures §3.1/§3.2 — that notice
-  is the durable record, so no entry here duplicates it), and snapshot's first
-  measured consumers exist (CI's schema gate, and a driven example in
-  `tools/fleet-prompt.ps1`). The
+  completeness misses by ruling: the drift loop lives in `doctor`, and snapshot's
+  first measured consumers exist (CI's schema gate, and a driven example in
+  `tools/fleet-prompt.ps1`). The drift loop found the claude and codex field-map
+  surveys stale on its first run and both were RE-MEASURED the same day — claude
+  at 2.1.233 over 179,614 live records, codex at 0.147.0 over 330 rollouts, every
+  CapNone gap re-confirmed and all four comparable pins now match (§3.1/§3.2
+  re-measure blocks). The **demand gate is LIFTED** (owner, 2026-08-16): a
+  measurement wave then surveyed the three needs-input hook seams and all three
+  REFUSED — claude's Notification fires on a cancellable 6s timer with no tool id
+  (§9.40), agy never waits in print mode (§9.43), cursor maps Claude's
+  needs-input events to null and an awaiting-human moment is byte-identical to a
+  silent success (§9.46); the affirmative signal is ACP's `session/request_permission`,
+  which only the driving seat sees, so council's gate cards stay the strip's
+  source by measurement rather than default. The same wave shipped the drop-file
+  relay (a self-reported row that cannot impersonate a measured one, §7.23),
+  govulncheck/CodeQL/SBOM/provenance (a `go 1.26.6` bump cleared 3 reachable
+  stdlib CVEs), and closed a measured browser exfiltration of both listeners
+  (§7.24). The
   **Windows `danger-full-access` finding does not port to `codex app-server`**
   — that path has its own `windowsSandbox/*` surface nobody has probed; any
   seat move re-measures rather than inherits. The **agy statusline payload is still pinned at 1.1.9** and
