@@ -377,6 +377,10 @@ var fleetOrder = []model.VendorID{
 	model.VendorClaude, model.VendorCodex, model.VendorGemini,
 	model.VendorAntigravity, model.VendorCursor, model.VendorGrok,
 	model.VendorPi,
+	// Last, and last on purpose: the measured vendors hold the positions a
+	// reader has learned, and the claimed rows arrive after them rather than
+	// sorting into the middle of a fleet they were not measured alongside.
+	model.VendorSelfReported,
 }
 
 func vendorCounts(st State, sty Styles) string {
@@ -828,6 +832,16 @@ func vendorTag(v model.VendorID) string {
 		return "GR"
 	case model.VendorPi:
 		return "PI"
+	case model.VendorSelfReported:
+		// "SR" is not a vendor abbreviation, and it is the only tag here that
+		// is not. It names the PROVENANCE, because that is the only thing
+		// telltale measured about this row (design.md §7.23). Every drop file
+		// shares it, so no drop file can wear a measured vendor's tag.
+		//
+		// The full word carries the distinction first: the header count reads
+		// "self-reported 2" at any width the grid draws counts at, and both
+		// forms are plain ASCII, so --ascii and NO_COLOR change neither.
+		return "SR"
 	default:
 		s := strings.ToUpper(string(v))
 		if len(s) > 2 {

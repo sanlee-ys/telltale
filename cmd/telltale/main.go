@@ -64,6 +64,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/adapter/claudecode"
 	"github.com/sanlee-ys/telltale/internal/adapter/codex"
 	"github.com/sanlee-ys/telltale/internal/adapter/cursor"
+	"github.com/sanlee-ys/telltale/internal/adapter/dropfile"
 	"github.com/sanlee-ys/telltale/internal/adapter/gemini"
 	grokadapter "github.com/sanlee-ys/telltale/internal/adapter/grok"
 	piadapter "github.com/sanlee-ys/telltale/internal/adapter/pi"
@@ -456,6 +457,10 @@ func allAdapters() []model.Adapter {
 		claudecode.New(), codex.New(), gemini.New(),
 		agyadapter.New(), cursor.New(), grokadapter.New(),
 		piadapter.New(),
+		// Last, and not a vendor: it reads ~/.telltale/dropfile, where a tool
+		// telltale ships no adapter for can write its own row (§7.23). Its
+		// rows are marked self-reported on every surface.
+		dropfile.New(),
 	}
 }
 
@@ -473,7 +478,7 @@ func allAdapters() []model.Adapter {
 // mode renders no quota of its own to relay.
 func runSnapshot(args []string) error {
 	fs := flag.NewFlagSet("telltale snapshot", flag.ContinueOnError)
-	vendor := fs.String("vendor", "all", "report one vendor only: all, claude, codex, gemini, agy, cursor, grok, pi")
+	vendor := fs.String("vendor", "all", "report one vendor only: all, claude, codex, gemini, agy, cursor, grok, pi, self-reported")
 	compact := fs.Bool("compact", false, "print the document on one line instead of indented")
 	// One deadline for the run rather than per vendor, because there is no
 	// frame to keep drawing: a scan that cannot finish reports what it has and
@@ -532,7 +537,7 @@ func runSnapshot(args []string) error {
 
 func runHUD(args []string) error {
 	fs := flag.NewFlagSet("telltale hud", flag.ContinueOnError)
-	vendor := fs.String("vendor", "all", "vendor filter at startup: all, claude, codex, gemini, agy, cursor, grok")
+	vendor := fs.String("vendor", "all", "vendor filter at startup: all, claude, codex, gemini, agy, cursor, grok, pi, self-reported")
 	// The env var is the flag's DEFAULT, not a second mechanism: a typed
 	// --hide always wins, including --hide "" to see everything for one launch
 	// without unsetting the variable. TELLTALE_ASCII set the precedent for a
@@ -664,8 +669,15 @@ func parseFilter(s string) (hud.Filter, error) {
 		return hud.FilterGrok, nil
 	case "pi":
 		return hud.FilterPi, nil
+	case "self-reported", "dropfile":
+		// Two spellings, for the two names this one thing has. `self-reported`
+		// is the vendor id the header count and the footer print, and it is
+		// what the rows ARE. `dropfile` is the mechanism — the directory, the
+		// spec file, the package — and it is what an operator wiring one up
+		// has just been reading about (docs/dropfile.md).
+		return hud.FilterSelfReported, nil
 	default:
-		return hud.FilterAll, errors.New("unknown --vendor " + s + " (want all, claude, codex, gemini, agy, cursor, grok or pi)")
+		return hud.FilterAll, errors.New("unknown --vendor " + s + " (want all, claude, codex, gemini, agy, cursor, grok, pi or self-reported)")
 	}
 }
 
@@ -688,7 +700,7 @@ func parseHide(s string) ([]model.VendorID, error) {
 		}
 		f, err := parseFilter(part)
 		if err != nil {
-			return nil, errors.New("unknown --hide vendor " + part + " (want claude, codex, gemini, agy, cursor, grok or pi)")
+			return nil, errors.New("unknown --hide vendor " + part + " (want claude, codex, gemini, agy, cursor, grok, pi or self-reported)")
 		}
 		v, ok := f.VendorID()
 		if !ok {
@@ -790,8 +802,10 @@ usage:
                          and one parse. Absent is null and a measured zero is
                          0; a derived value is named in "estimated" and a
                          field the vendor can never source is named in
-                         "unsupported". Numbers and keys only — no session
-                         name, workspace, transcript or reply text
+                         "unsupported". A vendor whose numbers its writer
+                         claimed rather than telltale measured carries
+                         "self_reported": true. Numbers and keys only — no
+                         session name, workspace, transcript or reply text
   telltale doctor        launch-time preflight: which vendor binaries are on
                          this machine, where each was found, what version it
                          reports — and, said out loud rather than left blank,
@@ -805,7 +819,7 @@ usage:
   telltale version
 
 telltale hud flags:
-  --vendor all|claude|codex|gemini|agy|cursor|grok
+  --vendor all|claude|codex|gemini|agy|cursor|grok|pi|self-reported
                               start with a vendor filter applied
   --hide <list>               comma list of vendors the HUD leaves out entirely
                               (default $TELLTALE_HUD_HIDE; --hide "" overrides
