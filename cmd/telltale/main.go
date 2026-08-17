@@ -20,6 +20,9 @@
 //	telltale events       fleet event sink: a loopback server hook emitters POST
 //	                      to, a durable log under ~/.telltale/events/, and a
 //	                      WebSocket stream per insert (design.md §7.21)
+//	telltale events view  the sink's reader: list, filter and follow what it
+//	                      stored, by reading the day files rather than the
+//	                      sink's own socket (design.md §7.21, 2026-08-17)
 //	telltale snapshot     the fleet's current gauge state as one JSON document,
 //	                      for a reader that is a program (design.md §7.22)
 //	telltale doctor       launch-time preflight: which vendor binaries are here,
@@ -75,6 +78,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/cursorstatus"
 	"github.com/sanlee-ys/telltale/internal/doctor"
 	"github.com/sanlee-ys/telltale/internal/eventsink"
+	"github.com/sanlee-ys/telltale/internal/eventview"
 	"github.com/sanlee-ys/telltale/internal/gatehook"
 	"github.com/sanlee-ys/telltale/internal/grokotel"
 	"github.com/sanlee-ys/telltale/internal/hud"
@@ -321,6 +325,9 @@ func runOtel(args []string) error {
 // Like `otel`, it is a foreground server the operator runs on purpose; the
 // gauges never read or write its files.
 func runEvents(args []string) error {
+	if len(args) > 0 && args[0] == eventsViewVerb {
+		return runEventsView(args[1:])
+	}
 	fs := flag.NewFlagSet("telltale events", flag.ContinueOnError)
 	addr := fs.String("addr", eventsink.DefaultAddr, "listen address (loopback only)")
 	retain := fs.Int("retain", 30, "days of events to keep; the sweep runs at startup and then hourly")
@@ -342,6 +349,141 @@ func runEvents(args []string) error {
 		fmt.Printf(format+"\n", a...)
 	})
 	return srv.Run(*addr, time.Hour)
+}
+
+// eventsViewVerb is the sink's reader, spelled as a word under the mode that
+// owns the store rather than as a ninth top-level mode. `telltale hook cursor`
+// and `telltale otel grok` set that shape: a verb groups with the subsystem it
+// belongs to, and the binary's top-level mode list stays the eight a first
+// frame can hold.
+const eventsViewVerb = "view"
+
+// runEventsView lists, filters and follows what the sink stored (design.md
+// §7.21's 2026-08-17 amendment).
+//
+// It is its own foreground mode and NOT a flag on a gauge, which is the whole
+// reason it may exist at all. The event store is the one store under
+// ~/.telltale/ holding hook payloads verbatim, and CLAUDE.md's read/write
+// boundary contains it by scope: the operator starts the mode, the sink binds
+// loopback, a web page is not a sender, and no gauge reads these files. A
+// reader wired into the HUD would have spent the fourth of those; a separate
+// mode spends none of them. `telltale snapshot` (§7.22) is the precedent.
+//
+// It reads the day files and opens no socket. internal/eventview's package
+// doc carries that argument in full; the short of it is that §7.24 already
+// ruled a local program's file read and its loopback request equally trusted,
+// and only the file read still answers after the sink process exits.
+func runEventsView(args []string) error {
+	fs := flag.NewFlagSet("telltale events view", flag.ContinueOnError)
+	limit := fs.Int("limit", eventview.DefaultLimit, "how many of the newest matching events to list")
+	source := fs.String("source", "", "comma list of source apps to show (default every one)")
+	session := fs.String("session", "", "comma list of session ids to show (default every one)")
+	typ := fs.String("type", "", "comma list of hook event types to show (default every one)")
+	day := fs.String("day", "", "read one UTC day file only, as YYYY-MM-DD (default every retained day)")
+	payload := fs.Bool("payload", false, "print each row's stored payload and error text, verbatim")
+	follow := fs.Bool("follow", false, "keep reading, and print events as they land")
+	interval := fs.Duration("interval", eventview.DefaultInterval, "how often --follow re-reads the day files")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *limit <= 0 {
+		return errors.New("--limit wants a positive number of events")
+	}
+	if *interval <= 0 {
+		return errors.New("--interval wants a positive duration, for example 1s")
+	}
+
+	dir, err := eventsink.Dir()
+	if err != nil {
+		return err
+	}
+	filter := eventview.Filter{
+		Sources:  splitList(*source),
+		Sessions: splitList(*session),
+		Types:    splitList(*typ),
+		Day:      *day,
+		Limit:    *limit,
+	}
+	if err := filter.Validate(); err != nil {
+		return err
+	}
+	opts := eventview.Options{Dir: dir, ShowPayload: *payload}
+	if !*follow {
+		listing, err := eventview.Read(dir, filter)
+		if err != nil {
+			return err
+		}
+		fmt.Print(eventview.Render(listing, opts))
+		return nil
+	}
+	return followEvents(dir, filter, opts, *interval)
+}
+
+// followEvents prints the retained tail once and then every event that lands.
+//
+// One Tailer does both halves, and that is what makes the seam safe. Its first
+// Poll returns everything retained and leaves the read offsets exactly where
+// it stopped, so an event stored between the listing and the first tick can
+// neither be missed nor printed twice. A separate priming read would have to
+// choose which of those two to risk.
+func followEvents(dir string, filter eventview.Filter, opts eventview.Options, every time.Duration) error {
+	tailer := eventview.NewTailer(dir, filter)
+	first, err := tailer.Poll()
+	if err != nil {
+		return err
+	}
+
+	// The tail is trimmed to --limit like a listing is, but printed OLDEST
+	// first: everything below it arrives in that order, and a screen that
+	// changed direction halfway down would read as two different logs.
+	shown := first.Events
+	if len(shown) > filter.Limit {
+		shown = shown[len(shown)-filter.Limit:]
+	}
+	fmt.Print(eventview.FollowBanner(dir, every, first.Diag.StoreMissing))
+	widths := eventview.WidthsFor(shown)
+	if len(shown) > 0 {
+		fmt.Print(eventview.Header(widths))
+		for _, e := range shown {
+			fmt.Print(eventview.Row(e, widths, opts.ShowPayload))
+		}
+	}
+
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for range ticker.C {
+		next, err := tailer.Poll()
+		if err != nil {
+			return err
+		}
+		if len(next.Events) == 0 {
+			continue
+		}
+		if len(shown) == 0 {
+			// The header was withheld above because there was nothing to head.
+			// The first arrivals size the columns and get it now.
+			widths = eventview.WidthsFor(next.Events)
+			fmt.Print(eventview.Header(widths))
+			shown = next.Events
+		}
+		for _, e := range next.Events {
+			fmt.Print(eventview.Row(e, widths, opts.ShowPayload))
+		}
+	}
+	return nil
+}
+
+// splitList turns a comma flag into the values a filter matches on. Empty
+// entries are dropped so `--source a,,b` and a stray trailing comma mean what
+// they look like, rather than adding a value no row can carry.
+func splitList(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func runHook(args []string) {
@@ -794,9 +936,18 @@ usage:
                          per-repo edit. The script is stdlib-only: avoid
                          "uv run" in a hook command, because a globally set
                          UV_ENV_FILE makes it exit before the script runs and
-                         a hook failure is silent. Nothing renders these events
-                         yet; the sink runs dark until something connects to
-                         /stream
+                         a hook failure is silent. No gauge reads or renders
+                         these files; "telltale events view" does, and it is
+                         its own mode
+  telltale events view   list, filter and follow what the sink stored. It reads
+                         the day files under ~/.telltale/events/ directly and
+                         opens no socket, so it answers with no sink running
+                         and after the sink has exited. Each row shows the
+                         keys — arrival id, the stamp the emitter sent, source
+                         app, session, hook type, and the promoted fields the
+                         emitter lifted out. The payload is stored VERBATIM and
+                         prints only under --payload, which is the one flag
+                         that shows hook content
   telltale snapshot      read the fleet once and print its state as JSON on
                          stdout: a per-vendor block and a pre-computed fleet
                          rollup, so an agent gets its answer from one command
@@ -874,6 +1025,33 @@ telltale events flags:
                               runs at startup and then hourly; a day file is
                               deleted only when its whole day is past the
                               window
+
+telltale events view flags:
+  --limit <n>                 how many of the newest matching events to list
+                              (default 50). Under --follow it trims the tail
+                              printed at startup and nothing after it: what
+                              lands, prints
+  --source <list>             comma list of source apps to show
+  --session <list>            comma list of session ids to show
+  --type <list>               comma list of hook event types to show. All three
+                              match without regard to letter case, and an
+                              empty result names the values the store does hold
+  --day <YYYY-MM-DD>          read one UTC day file only. That is the day the
+                              SINK recorded the row, not the stamp the emitter
+                              sent; the two differ across UTC midnight and when
+                              a sender's clock is off, and each row's own stamp
+                              is in the listing to compare against
+  --payload                   print each row's stored payload and error text,
+                              exactly as stored. Off by default: those are the
+                              two fields carrying hook content verbatim, and
+                              the row already says they are there
+  --follow                    print the retained tail, then each event as it
+                              lands. It re-reads the day files rather than
+                              subscribing to /stream, so --interval is the
+                              honest latency bound
+  --interval <dur>            how often --follow re-reads (default 1s)
+It prints words and no colour, like doctor, so it reads the same in a terminal,
+in a pipe and in a pasted issue; --ascii and NO_COLOR have nothing to switch off.
 
 telltale council is ONE persistent room. Run it with no arguments: it reopens
 the saved room, reattaches every vendor's own session, and continues the
@@ -984,9 +1162,12 @@ A fourth store carries content, and it is named as an exception rather than
 counted with the three. The event sink (telltale events) keeps each hook
 payload VERBATIM under ~/.telltale/events/ — content, not keys and numbers.
 What contains it is scope, not redaction: the sink is its own foreground mode
-that you start, its server binds loopback only, and no gauge reads or renders
-those files. The keys-and-numbers rule above still binds every store the
-gauges themselves write.
+that you start, its server binds loopback only, a web page is not a sender,
+and no gauge reads or renders those files. Its reader is its own foreground
+mode for the same reason: telltale events view reads those files, and a gauge
+that read them would have spent the fourth of those four facts. The
+keys-and-numbers rule above still binds every store the gauges themselves
+write.
 
 Tokens spent are NOT quota. Cursor exposes no account limit without a network
 call, so the hud shows what was consumed and never a percentage of anything.`

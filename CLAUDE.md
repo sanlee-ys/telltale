@@ -208,7 +208,13 @@ A fourth exception is different in kind and says so: the **event sink**
 scope, not redaction: it is its own foreground mode the operator starts, the
 server binds loopback only, and no gauge reads or renders its files. The
 numbers-and-keys rule above still binds everything the gauges themselves
-write.
+write. Its reader (`telltale events view`, `internal/eventview`, added
+2026-08-17) is a separate foreground mode for that last reason, and it reads
+the day FILES rather than the sink's endpoints, because §7.24 already ruled a
+local program's file read and its loopback request equally trusted and only
+the file read answers after the sink exits.
+`TestNoGaugeReadsTheEventStore` fails the build if a gauge ever imports either
+package.
 
 **Who may push to the two listening modes** (`telltale otel grok`, `telltale
 events`) is its own contract, added 2026-08-16 (design.md §7.24). A loopback
