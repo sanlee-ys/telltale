@@ -38,6 +38,14 @@ const (
 	// "not checked"), plus a space. Fixed rather than computed from the data:
 	// the columns must not move when a vendor is missing, or two runs of this
 	// report stop being diffable against each other.
+	//
+	// The posture block shares them rather than measuring its own, and its two
+	// vocabularies fit: the longest vendor id is `antigravity` at 11 and the
+	// longest badge is `ro:requested` at 12. Sharing is the point — a reader has
+	// just scanned the check rows on this grid, and a second table on a grid of
+	// its own reads as a statement about a different set of things. `pad` never
+	// truncates, so a longer word in either vocabulary would push its row out
+	// rather than clip a claim (§9.11's ruling on what must not happen).
 	nameCol   = 12
 	statusCol = 13
 	indent    = 2
@@ -83,6 +91,14 @@ func Render(r Report, o Options) string {
 		}
 	}
 
+	// The posture block, between the seats and the notes, and that position is
+	// the argument for it being a block at all. It is per-seat data, so it
+	// cannot live down among the notes; it is one vocabulary compared across
+	// five seats, so scattering a line of it under each seat would destroy the
+	// only reading that makes it useful — five badges in one column, where the
+	// odd one out is visible without holding four screens in your head.
+	writePostureBlock(&b, r, cols)
+
 	// The two standing unknowns, argued once. Printed even for an empty report:
 	// they are properties of what this mode does, not of what it found.
 	notes := []string{authNote, networkNote}
@@ -123,6 +139,76 @@ func writeSeatLine(b *strings.Builder, text string, cols int) {
 			b.WriteString("  ")
 		}
 		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+}
+
+// writePostureBlock draws the POSTURE block: one row per seat, then the single
+// declaration that is true of the room rather than of a seat (posture.go).
+//
+// It is laid out on the CHECK block's columns — same indent, same two fixed
+// widths — and that is deliberate rather than lazy. A reader has just scanned
+// five seats' worth of rows in that shape, and a second table on its own grid
+// would read as a different kind of statement about a different set of things.
+// What separates the two is the absence of a state word, which is the same
+// signal the capability and survey lines use: no `ok`, no `FAILED`, no `not
+// checked`, anywhere in here.
+//
+// It renders nothing at all when no seat carries a posture — a report built by a
+// caller that never filled the field. Silence is right there for pin.go's
+// reason: a header over five `no claim` rows invents a block about nothing.
+func writePostureBlock(b *strings.Builder, r Report, cols int) {
+	stated := false
+	for _, s := range r.Seats {
+		if s.Posture.stated() {
+			stated = true
+			break
+		}
+	}
+	if !stated {
+		return
+	}
+
+	textCol := indent + nameCol + statusCol
+	textWidth := max(cols-textCol, 20)
+
+	b.WriteByte('\n')
+	for _, line := range wrap(postureHeader, cols) {
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	for _, s := range r.Seats {
+		badge, evidence := s.Posture.Badge, s.Posture.Evidence
+		if !s.Posture.stated() {
+			badge, evidence = postureNoClaimBadge, postureNoClaim
+		}
+		writeRow(b, strings.Repeat(" ", indent)+pad(s.Vendor, nameCol)+pad(badge, statusCol),
+			strings.Repeat(" ", textCol), evidence, textWidth)
+	}
+	b.WriteByte('\n')
+	for _, line := range wrap(postureDeclaration(r), cols) {
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+}
+
+// writeRow draws one hanging-indented row: prefix, then text wrapped at width
+// with every continuation line under cont. A row whose text is empty still gets
+// its line, for writeCheck's reason — a missing line silently drops a seat.
+func writeRow(b *strings.Builder, prefix, cont, text string, width int) {
+	first := true
+	for _, line := range wrap(text, width) {
+		if first {
+			b.WriteString(prefix)
+			first = false
+		} else {
+			b.WriteString(cont)
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	if first {
+		b.WriteString(strings.TrimRight(prefix, " "))
 		b.WriteByte('\n')
 	}
 }

@@ -197,6 +197,12 @@ type Seat struct {
 	// inventory already lives. Zero for a seat with no surveyed adapter behind
 	// it, which renders no pin line at all — see pin.go.
 	Pin Pin
+	// Posture is this seat's sandbox claim, and it is the third DECLARED field
+	// on this struct for the third time the same reason: council measured it
+	// once against a live run, council renders it on the column badges, and a
+	// second copy here would be a table that agrees today and drifts later. See
+	// posture.go.
+	Posture Posture
 }
 
 // ProbeResult is what one bounded version probe produced. Out is the vendor's
@@ -294,6 +300,10 @@ type SeatReport struct {
 	// why a staleness fact must not become a fourth state. Nothing in Tally or
 	// Ready reads it, so the counts and the exit code are unchanged by it.
 	Drifted bool
+	// Posture is the seat's sandbox claim, carried through unchanged from the
+	// Seat. Nothing in Tally or Ready reads it either, for posture.go's reason:
+	// a claim about what a vendor's flags buy is not a check on this machine.
+	Posture Posture
 }
 
 // Ready reports that every check that RAN on this seat passed. A seat with
@@ -385,7 +395,14 @@ func Run(seats []Seat, probe Probe) Report {
 }
 
 func runSeat(s Seat, probe Probe) SeatReport {
-	out := SeatReport{Vendor: s.Vendor, Label: s.Label, Capability: s.Capability}
+	out := SeatReport{
+		Vendor: s.Vendor, Label: s.Label,
+		Capability: s.Capability,
+		// Copied, never derived. runSeat is where a probe could be reached, and a
+		// posture that was computed here would be a posture this package invented
+		// — the one thing posture.go rules out.
+		Posture: s.Posture,
+	}
 
 	// binary — always runs. Detection is a stat, so there is no branch in which
 	// this question goes unasked.

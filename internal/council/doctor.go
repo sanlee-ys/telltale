@@ -2,6 +2,7 @@ package council
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/sanlee-ys/telltale/internal/adapter/pins"
@@ -28,6 +29,7 @@ import (
 func DoctorSeats() []doctor.Seat {
 	reg := vendors.Registry()
 	infos := Detect()
+	windows := runtime.GOOS == "windows"
 	out := make([]doctor.Seat, 0, len(infos))
 	for _, info := range infos {
 		v := info.Vendor
@@ -40,6 +42,7 @@ func DoctorSeats() []doctor.Seat {
 			Note:        info.Note,
 			Drivable:    info.Avail == AvailInstalled,
 			Capability:  declaredCapability(v, reg),
+			Posture:     doctorPosture(v, windows),
 			VersionArgs: versionArgs(info),
 		}
 		if s.Drivable {
@@ -150,4 +153,90 @@ func declaredCapability(v model.VendorID, reg map[model.VendorID]vendors.Vendor)
 		parts = append(parts, "can be asked to ask first, before every tool call that changes anything")
 	}
 	return strings.Join(parts, "; ")
+}
+
+// doctorPosture is one seat's sandbox claim, flattened for the preflight's
+// posture block (design.md §9.42, amended 2026-08-17).
+//
+// It goes THROUGH postureClaim rather than beside it, and that is the whole
+// design. `postureClaim(v, windows, false, false, false)` is literally what
+// `telltale council --read` builds for this column — same function, same
+// arguments, same platform branch — so the badge the preflight prints and the
+// badge the column wears are one value read twice. A preflight that grew its own
+// per-vendor table would agree on the day it was written and diverge the day a
+// level moved, and a reader looking at two disagreeing surfaces has no way to
+// tell which one is lying. The capability declaration above is attached at this
+// seam for the same stated reason.
+//
+// The `--read` room is the posture reported because it is the only one that is a
+// fact about the MACHINE. The default room writes, and what it writes with is a
+// property of the argv the reader has not typed yet — so it is stated once, in
+// the block's closing declaration, rather than five times in a column where
+// every cell would read the same word.
+func doctorPosture(v model.VendorID, windows bool) doctor.Posture {
+	claim := postureClaim(v, windows, false, false, false)
+	return doctor.Posture{
+		Badge:    claim.Badge(),
+		Evidence: evidenceClass(claim.Level),
+		// Off canGate, not off a list of vendor names. That measurement has
+		// already moved once — the Cursor seat became a live process that can be
+		// asked and still does not ask about edits — and a copy here would have
+		// gone on saying the old thing.
+		CanGate: canGate(v),
+	}
+}
+
+// evidenceClass is what KIND of evidence stands behind a badge, keyed by the
+// level that renders it.
+//
+// The badge word says what the posture IS; this says what it RESTS ON, and the
+// two are different questions with different answers. `unsandboxed` is the case
+// that proves it: two seats can both fail to be read-only because a live run
+// refuted the flags and because no flag was ever passed, and a reader deciding
+// whether to point council at a worktree needs the second sentence, not the
+// first. §4a.1's rule that two kinds of nothing must not render alike is the same
+// rule one level up.
+//
+// A table keyed by level rather than prose, so a test can walk the type and fail
+// the build the day a sixth level renders a badge with nothing here to classify
+// it — see TestEveryPostureLevelHasAnEvidenceClass, which is the guard
+// helpBadgeGloss already carries for the room's own legend, one surface out.
+//
+// NOTHING HERE MAY WEAKEN A CLAIM, on helpBadgeGloss's terms exactly. These are
+// classifications of evidence, not softenings of it: `unsandboxed` still says
+// nothing restricts the vendor, `ro:requested` still admits nobody observed what
+// it enforces, and no line here may call any posture read-only, safe, or unable
+// to write.
+func evidenceClass(l SandboxLevel) string {
+	switch l {
+	case SandboxTools:
+		return "enforced by CONSTRUCTION — the write and shell tools are absent from that " +
+			"session, read off what the session reported about itself rather than off a flag. " +
+			"The residual is that a deny list cannot cover a tool a future release adds"
+	case SandboxEnforced:
+		return "enforced by an OPERATING SYSTEM — the vendor's own sandbox, and the one posture " +
+			"in this table that a flag is not the last thing standing behind"
+	case SandboxRequested:
+		// It does NOT say "weaker than the two above", which is how the room's own
+		// legend words it. That legend is ordered by level; these rows are ordered
+		// by seat, so "above" points at whatever vendor happens to sort first. The
+		// comparison is named instead of pointed at.
+		return "ASKED FOR, and never observed — the flag was accepted and what it enforces on " +
+			"this machine is not established. Weaker than a construction or an OS sandbox, " +
+			"and says so"
+	case SandboxNone:
+		return "MEASURED not to restrict — a live run refuted the flags rather than leaving " +
+			"them unestablished, so treat this seat as able to change your files"
+	case SandboxWrite:
+		return "nothing was asked for — this seat may edit and run, and no restriction was " +
+			"requested of it at all"
+	case SandboxGated:
+		return "YOUR KEYSTROKE — this seat asks before every tool call that changes anything, " +
+			"and nothing runs until you answer"
+	default:
+		// SandboxUnknown renders no badge, so there is nothing to classify. An
+		// invented sentence here would be a claim about a seat council makes none
+		// about; doctor prints its own honest blank instead.
+		return ""
+	}
 }
