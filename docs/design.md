@@ -5908,6 +5908,99 @@ signing statement above. `.github/dependabot.yml` watches `gomod` and
 `github-actions` weekly; it is also the watch on the TUI line, because
 `ultraviolet` is pinned to a pseudo-version that never moves on its own.
 
+#### The automatable remainder (added 2026-08-16)
+
+The posture paragraph above shipped the two pieces that need no automation. This
+subsection records the rest. It changes nothing in item 8: signing and
+notarization stay owner decisions, and no contributor builds that pipeline.
+
+**What now runs, and when.**
+
+| Check | Fires on | Runner | Fails on |
+|---|---|---|---|
+| `ci.yml` | push to main, pull request, release | windows-latest, ubuntu-latest | vet, the suite, the build, the binary smokes, the schema gate |
+| `govulncheck.yml` | push to main, pull request, Monday 07:00 UTC | windows-latest | a reachable known vulnerability |
+| `codeql.yml` | push to main, pull request, Monday 07:30 UTC | ubuntu-latest | a default-suite alert |
+| `dependabot.yml` | weekly | none | nothing. It opens a pull request |
+| SBOM, through syft | a `v*` tag only | ubuntu-latest | a syft failure |
+| Provenance attestation | a `v*` tag only | ubuntu-latest | an attestation failure |
+
+**govulncheck is a monitor, and it is deliberately not a step in the gate.** The
+gate answers whether a change works, and the tree decides that answer. This scan
+answers whether the shipped code is vulnerable today, and the Go vulnerability
+database decides that answer. Two costs follow. The scan reads vuln.go.dev on
+each run, and the gate makes no network call except the module download, so an
+outage at that host inside the test job would fail a build that nothing broke. A
+new standard-library CVE also fails an unchanged tree, and it fails every open
+pull request at the same time, and no author can correct it inside their own
+change. A gate that fails for a reason outside the change teaches contributors
+to ignore it. The scan therefore runs beside the gate under its own name. It
+still fails on a finding, because a monitor that reports green over a vulnerable
+binary is the false green ADR-001 refuses.
+
+**The scheduled run is the reason this exists.** A scan on a pull request cannot
+find a vulnerability that becomes public after the merge. The pull request
+trigger scans a new dependency before it lands, and it also proves the job in
+the pull request that adds the job.
+
+**What the first scan measured, 2026-08-16.** govulncheck v1.7.0, against a
+database updated 2026-08-14, reported three reachable standard-library
+vulnerabilities: GO-2026-6090 in `crypto/tls`, GO-2026-6089 in `net/http`, and
+GO-2026-5972 in `encoding/asn1`. It reported five more that this code does not
+call. The traces reach `internal/grokotel` and `internal/eventsink`, which are
+the two packages that run a server. **No module that this repository requires
+caused any finding.** All eight findings had one cause: the toolchain. go.mod
+declared `go 1.26`, `actions/setup-go` resolved that to the 1.26.5 in the runner
+image, and every fix version is go1.26.6. Run 31981243687 on main confirms that
+CI built with go1.26.5, so this was a property of the shipped binary and not of
+one workstation.
+
+**The fix is a version bump, and go.mod is where the version lives.** The `go`
+directive now reads `go 1.26.6`. That clears all eight findings, measured both
+ways: the same scan under a 1.26.6 toolchain reports `No vulnerabilities found`,
+and the local build then reports `go1.26.6` under `go version -m`. The directive
+is the single source every job reads, so one line moved the race job, the gate,
+the release and both new scans together. `check-latest: true` on setup-go was
+the rejected alternative. It would float the toolchain to whatever patch exists
+on run day, which is the same objection this document already made to a
+goreleaser version range. A committed directive moves when a person moves it,
+and the monitor is what asks for the move.
+
+**The SBOM and the attestation take effect at the next tag, and at no earlier
+point.** `release.yml` triggers on a `v*` tag only, so no merge to main produces
+either one, and neither is added to a release that already exists. syft writes
+one SPDX-JSON document for each archive. `actions/attest-build-provenance` then
+attests the four archives, and a user verifies one with `gh attestation verify
+<archive> --repo sanlee-ys/telltale`.
+
+**Provenance is not a signature, and the difference is item 8's difference.** The
+attestation proves that this repository's release workflow built this archive,
+from a named commit, on a runner GitHub hosts. It does not prove who the owner
+is, and it does not prove that the owner vouches for the content. It needs no
+owner secret, because GitHub mints a short-lived OIDC token for each run. That
+is exactly why it is buildable here while signing is not: item 8's blocker is a
+long-lived credential, and this mechanism needs none. **Signing and notarization
+stay owner-held and unbuilt**, on item 8's terms and for item 8's reasons.
+
+**What this subsection did not verify.** The pull request that added these files
+proved the two scans by running them, and the run log names each job. It could
+not prove the release path, because a tag is that workflow's only trigger. The
+evidence for the release path is a `goreleaser release --snapshot --clean`
+rehearsal on the reference workstation, 2026-08-16, against the pinned
+goreleaser v2.17.1. It built all four targets, wrote all four archives, reached
+the SBOM stage, named the document
+`telltale_<version>_windows_amd64.zip.sbom.json`, called `syft`, and stopped
+with `exec: "syft": executable file not found`. That failure is the wanted one:
+the stage is reached and configured, it fails loudly rather than passing in
+silence, and the missing tool is the one thing `release.yml` installs and the
+rehearsal could not. `goreleaser check` also passes against v2.17.1. The
+attestation step ran nowhere. **The next tag is the first real proof of both**,
+and item 8's existing advice applies: rehearse it with an `-rc` tag.
+
+`.github/CODEOWNERS` names the owner for every path. SECURITY.md already tells a
+reporter that one person maintains this project; that file states the same fact
+where GitHub can act on it.
+
 What this does **not** discharge: the README hero visual and the zero-config first
 frame are the other two pieces of adoption item 1 and are untouched here, and the
 positioning line still lands with the slice, not ahead of it.

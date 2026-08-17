@@ -1,6 +1,6 @@
 module github.com/sanlee-ys/telltale
 
-go 1.26
+go 1.26.6
 
 require (
 	charm.land/bubbletea/v2 v2.0.8
