@@ -283,8 +283,9 @@ type agyLine struct {
 // would show a quiet column for an agent that was busy editing the workspace.
 // Hiding its PLUMBING is noise reduction. So this is an allowlist of kinds each
 // defended on its own captured evidence, never a blanket "drop what looks
-// noisy". Every line cited below is from the live captures of 2026-08-04
-// (agy 1.1.10, Windows).
+// noisy". The bullet list below cites the live captures of 2026-08-04
+// (agy 1.1.10, Windows). The `unknown` paragraph that follows the list adds the
+// 2026-08-16 re-capture (agy 1.1.13) that corrected it.
 //
 //   - user_input — step_index 0 of every turn, DONE, and nothing else on the
 //     line: no tool name, no parameters, no duration. It is the brief council
@@ -308,22 +309,42 @@ type agyLine struct {
 //     rendered `error_message ?` is strictly less informative than that note —
 //     an ominous name with an Unknown outcome attached.
 //
-// unknown is the one that had to be argued rather than listed, because
-// suppressing a step whose type this adapter merely does not RECOGNISE would be
-// the same class of mistake as inventing an outcome for it. The captured
-// evidence says it is agy's own label, not our ignorance: both non-resume turns
-// carry exactly one, at step_index 1, immediately after user_input and before
-// any model output, with no tool_name, no tool_info, no parameters, and a
-// duration of 0.0005s (turn 1) and 0.0045s (control turn). Half a millisecond
-// is not enough to do anything, and every step in every capture that DID do
-// something carried a tool_name. So it is a fixed preamble slot agy declines to
-// name.
+// unknown is the one kind this list must argue rather than list. To suppress a
+// step whose type this adapter does not RECOGNISE is the same class of mistake as
+// to invent an outcome for it. So the reason must be measured. A later capture
+// refuted the reason this comment first gave, and the correction is written here
+// rather than left, on PR #265's precedent for a refuted ParseEvent claim.
 //
-// What would reverse that is written as code rather than left in this comment:
-// an `unknown` step carrying a tool name — top level or nested — is NOT
-// suppressed and renders under that name. If agy ever starts acting through
-// this label, the trace shows it the same turn, without anyone re-reading this
-// paragraph.
+// The original reason is now WRONG. The 2026-08-04 capture (agy 1.1.10) saw
+// exactly one `unknown` per non-resume turn, at step_index 1, right after
+// user_input, with no tool_name, no tool_info, and a duration of 0.0005s (turn 1)
+// and 0.0045s (control turn). This comment read that as a fixed preamble slot agy
+// declines to name.
+//
+// A re-capture refuted it. At agy 1.1.13 (design.md §9.43's 2026-08-16 subsection)
+// the probe drove agy to ask the operator a question. It produced a SECOND
+// `unknown`, at step_index 3, that lasted 0.5977s and 0.5945s across two trials.
+// The on-disk transcript names that record `ASK_QUESTION`. The step_index-1 record
+// is `CONVERSATION_HISTORY`. So `unknown` is not a preamble marker. The print-mode
+// stream flattens at least two on-disk types onto the one label, and it carries
+// nothing that separates them: both arrive state DONE, with no tool_name and no
+// tool_info. Only duration_seconds differs, and that is a continuous measurement,
+// not a marker.
+//
+// The suppression still reaches the right outcome, and this is the corrected
+// reason. agy answers the question on the operator's behalf and continues the turn
+// before this line arrives. Its own next message says the operator skipped the
+// prompt. So no ask is outstanding for the trace to draw. To render the step would
+// show an Unknown outcome under a name the stream does not even carry. The
+// suppression rests on the resolved ask, not on the step as plumbing.
+//
+// The reversal keys on a tool NAME, not on activity, and it is written as code
+// rather than left in this comment. An `unknown` step that carries a tool name
+// (top level or nested) is NOT suppressed and renders under that name. The
+// `ASK_QUESTION` case is the limit of that rule: it is agy that acts through this
+// label with no tool name, and it stays suppressed. If agy ever routes a NAMED
+// tool through `unknown`, the trace shows it the same turn, and no one needs to
+// re-read this paragraph.
 func agyPlumbing(su agyStep) bool {
 	switch su.StepType {
 	case "user_input", "system_message", "checkpoint", "error_message":

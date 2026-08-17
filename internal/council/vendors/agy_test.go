@@ -207,13 +207,14 @@ func TestAgyPlumbingStepsNeverReachTheTrace(t *testing.T) {
 // TestAgyUnknownStepCarryingAToolIsNotSuppressed is the reversal condition for
 // the one suppressed kind that had to be argued rather than listed.
 //
-// `unknown` is agy's own label, and suppressing a step merely because THIS
-// adapter does not recognise its type would be the same class of mistake as
-// inventing an outcome for it. The captured `unknown` steps are plumbing on the
-// evidence — fixed preamble slot, half a millisecond, no tool name, no
-// parameters — so they are dropped. But the decision is gated on that shape
-// rather than on the label, so if agy ever starts ACTING through this type the
-// trace shows it the same turn.
+// `unknown` is agy's own label, and to suppress a step merely because THIS
+// adapter does not recognise its type would be the same class of mistake as to
+// invent an outcome for it. So the suppression is gated on the SHAPE, no tool
+// name (top level or nested), not on the label. A capture at agy 1.1.13 refuted
+// the earlier "fixed preamble slot" reason (see agyPlumbing and design.md
+// §9.43's 2026-08-16 subsection): `unknown` also covers agy's `ASK_QUESTION`
+// step, which carries no tool name and stays suppressed. This test pins the
+// escape hatch the gate leaves open: a NAMED tool on an `unknown` step renders.
 //
 // This line is the one fixture in this file that is NOT a capture: no observed
 // `unknown` step carries a tool. It is written to pin the reversal, and it is
