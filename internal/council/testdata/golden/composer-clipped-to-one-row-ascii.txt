@@ -1,0 +1,10 @@
+  council READ     no turn yet  |  5/6 seated  |  no brief  
+============================================================
+  ! NEEDS YOU   5 grok                                      
+  ! 1 seat is not on screen: Gemini (not installed)  |  ->  
+  ] 1 CC Claude Code    2 CX Codex    3 AG Antigravity      
+    1 CC Claude Code  ----------------------------  . idle  
+  +------------------------------------------------------+  
+  |  ^ 2 more above   third line_                        |  
+  +---------------------------------------------  GATE  -+  
+   Write: internal/council/gate.go  |  y approve  |  n de>  

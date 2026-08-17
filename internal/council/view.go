@@ -3177,17 +3177,36 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 		}, lay, w, sty, g)
 	}
 
-	// One row is the old behaviour exactly: elide from the LEFT, because the
-	// tail is where the cursor is and a prompt that hides the characters just
-	// typed would be unusable. It is also what every room that is not mid-
-	// paragraph gets, which is why this frame is byte-identical to the one
-	// before the composer could grow.
+	// One row, and it splits on whether the draft FITS in it.
+	//
+	// A draft that fits is the old behaviour exactly: elide from the LEFT,
+	// because the tail is where the cursor is and a prompt that hides the
+	// characters just typed would be unusable. It is also what every room that is
+	// not mid-paragraph gets, which is why that frame stays byte-identical to the
+	// one before the composer could grow — `composerRows` returns 1 for exactly
+	// the drafts that reach it, so no golden in this package moves.
 	if lay.Prompt == 1 {
-		// A paragraph cannot go in one row, so it is flattened rather than left
-		// to put a raw newline into a fixed grid. Unreachable for a real draft —
-		// any newline wraps to at least two rows, and the height floor always
-		// leaves room for two — and kept as the cheap half of that argument.
-		text = strings.ReplaceAll(text, "\n", " ")
+		// A draft that wants more than this row is CLIPPED here, and it says so.
+		// The comment this branch used to carry called that unreachable: any
+		// newline wraps to at least two rows, and the height floor was said to
+		// always leave room for two. It does not. The compose area is budgeted
+		// out of the same rows the needs-you strip and the collapsed-seat notice
+		// come out of (resolveLayoutIn), so a room at the 60x10 floor that is
+		// BOTH gated and short a seat spends both — and the draft is clamped to
+		// one row while it still holds three. That room is ordinary rather than
+		// exotic: a five-seat machine with one vendor missing draws it the moment
+		// a gate goes up. §9.38's 2026-08-17 amendment records the measurement.
+		//
+		// So the flatten is gone. Flattening did not clip the draft, which is why
+		// it read as safe — it RESTATED it, joining the typed rows with spaces,
+		// and §7.14's promise is that the string on screen is the string sent. A
+		// reader cannot tell three typed lines from one long one, and the marker
+		// vocabulary has no count that describes it.
+		if rows := wrap(text, w); len(rows) > 1 {
+			return padRows([]string{
+				lgut + composerClipped(rows, w+lipgloss.Width(prefix), sty, g) + rgut,
+			}, lay, w, sty, g)
+		}
 		if lipgloss.Width(text) > w {
 			text = elideLeft(text, w, g.Ellipsis)
 		}
@@ -3213,7 +3232,7 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 		// The same words the column overflow marker uses, deliberately: one
 		// vocabulary for "there is content you cannot see", wherever it appears.
 		out = append(out, lgut+sty.Muted.Render(padRight(
-			g.Up+" "+strconv.Itoa(elided)+" more above", w+lipgloss.Width(prefix), g))+rgut)
+			moreAbove(elided, g), w+lipgloss.Width(prefix), g))+rgut)
 	}
 	for i, r := range rows {
 		// Continuation rows are indented to the prefix, so a wrapped brief reads
@@ -3225,6 +3244,71 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 		out = append(out, lgut+sty.Muted.Render(p)+sty.Text.Render(padRight(r, w, g))+rgut)
 	}
 	return padRows(out, lay, w, sty, g)
+}
+
+// moreAbove is the room's one spelling of "there is content you cannot see, and
+// this much of it".
+//
+// Named rather than spelled at each site because the composer now says it in two
+// shapes — a whole row when the compose area has rows to spend, and a lead-in
+// when it has one — and two shapes of one statement is already one more than this
+// room wants. The WORDS have to be identical across them, and across the column
+// overflow marker they were borrowed from: a reader who learned `↑ 36 more above`
+// on a column must read the composer's without being taught a second time. The
+// count is the only thing that varies.
+func moreAbove(n int, g Glyphs) string {
+	return g.Up + " " + strconv.Itoa(n) + " more above"
+}
+
+// composerClipGap separates the clip marker from the draft row it shares.
+//
+// Three cells, and deliberately NOT the room's `  ` + Sep + `  ` separator, which
+// is what every other composite line in this room uses. The composer is a BOX and
+// its sides are drawn with that same glyph (§9.44, boxSideL): a third one inside
+// the box would read as a column rail through the one element on screen the eye
+// is meant to take as the frame's edge. Three cells is the needs-you strip's own
+// answer to the same question (needsYouGap), and it is separating two things of
+// different KINDS here — chrome and typed text, at two different intensities —
+// which needs less ink than two seats on one strip did.
+const composerClipGap = "   "
+
+// composerClipped is the whole compose area when the layout leaves it ONE row and
+// the draft wants more than one.
+//
+// Both facts have to fit on that row, and neither may be dropped. The TAIL is
+// where the cursor is, so a composer that hid it would be one nobody can type in
+// — the same argument the elide-from-the-left rule above is built on. The marker
+// is the room saying how much of the draft is not on screen, which is §4a.1's
+// honest-clipping rule at the one place in the product where being wrong about it
+// is one keystroke from dispatching a brief the user never read.
+//
+// So the row is the marker, a gap, and as much of the last drawn row as the rest
+// of the width holds, elided from the left. The general path above spends a WHOLE
+// row on the marker and the arithmetic degenerates here: one row minus one marker
+// row leaves nothing for the draft. This is that path's last rung rather than a
+// second design — same words, same count (rows not drawn), same left elision.
+func composerClipped(rows []string, w int, sty Styles, g Glyphs) string {
+	mark := moreAbove(len(rows)-1, g)
+	rest := w - lipgloss.Width(mark) - lipgloss.Width(composerClipGap)
+	if rest < 1 {
+		// Narrower than the marker itself. The marker stays and the draft goes:
+		// a row of typed text with no way to know it is a third of what was
+		// typed is the ambiguity this whole branch exists to remove, while a
+		// marker alone is still true. Unreachable in a drawn frame — Render
+		// refuses below MinWidth, which leaves 50 cells here, against a marker
+		// and gap that cost 20 at the widest count a capped draft can produce —
+		// and kept because the alternative to a floor is a negative width
+		// reaching padRight.
+		return sty.Muted.Render(padRight(mark, w, g))
+	}
+	tail := rows[len(rows)-1]
+	if lipgloss.Width(tail) > rest {
+		tail = elideLeft(tail, rest, g.Ellipsis)
+	}
+	// Two intensities, and they carry the split: the marker is chrome and recedes,
+	// the draft is content and does not. Styled after the widths are measured,
+	// never before (§9.5's ANSI trap) — padRight only ever sees plain text.
+	return sty.Muted.Render(mark+composerClipGap) + sty.Text.Render(padRight(tail, rest, g))
 }
 
 // padRows makes the compose area exactly the height the layout budgeted, so the

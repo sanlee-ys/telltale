@@ -586,6 +586,23 @@ func fiveSeats() State {
 // that expectation a fact CI re-checks. It measured the hypothesis as FALSE —
 // see §9.38's 2026-08-16 amendment.
 //
+// **It also varies the two chrome rows that BUY the compose area's height**, and
+// that is the 2026-08-17 widening. fiveSeats() pins a pending gate and a
+// collapsed seat as absent, so every cell of the original sweep drew a room with
+// no needs-you strip and no collapsed-seat notice. Those two rows come out of the
+// same budget the composer does (resolveLayoutIn), so pinning them false pinned
+// the compose area two rows TALLER than a real room can be — and the one branch
+// that clips without a marker sits exactly under them. A sweep that cannot reach
+// the branch it is asserting over is a sweep that proves the frame correct where
+// the frame was never in doubt.
+//
+// The gate rides on the LAST column rather than the first because the strip
+// deliberately omits a gate on the seat the reader is already looking at
+// (needsYou), and Focus is seat 0 in every State this fixture builds. The
+// collapsed seat is an extra column rather than one of the five turned off, so
+// the notice costs its row without changing how many seats are ON screen — the
+// seat count stays the independent dimension it was.
+//
 // The assertion is the honest-clipping rule (§4a.1), not a row count. A draft
 // taller than the compose area may show only its tail. The ceiling is six rows
 // and the cursor sits at the bottom. Such a draft must carry the "N more above"
@@ -593,46 +610,79 @@ func fiveSeats() State {
 // with nothing on screen to say so. A reader cannot tell a brief that ended from
 // a brief that was cut, and at the composer that ambiguity is one keystroke away
 // from a dispatch of the wrong text.
+//
+// The weld check is the second half of the same rule, and it is what the widened
+// cells needed. A row break the user typed is content: §7.14's promise is that
+// the string on screen is the string sent. Two typed lines drawn as one row
+// joined by a space are neither dropped nor marked — they are RESTATED as a
+// different brief, which no "N more above" count can describe.
 func TestAMultilineDraftNeverCollapsesSilently(t *testing.T) {
 	const draft = "first line\nsecond line\nthird line"
 	lines := []string{"first line", "second line", "third line"}
 
 	for _, seats := range []int{1, 3, 5} {
-		for _, w := range []int{MinWidth, 80, columnsBreak, 120, 160, 200, 240} {
-			for _, h := range []int{MinHeight, 12, 16, 20, 24, 30, 40} {
-				for _, ascii := range []bool{false, true} {
-					for _, expanded := range []bool{false, true} {
-						st := fiveSeats()
-						st.Columns = st.Columns[:seats]
-						st.Width, st.Height = w, h
-						st.Mode = ModeComposing
-						st.Expanded = expanded
-						st.Draft = draft
+		for _, gate := range []bool{false, true} {
+			for _, notice := range []bool{false, true} {
+				for _, w := range []int{MinWidth, 80, columnsBreak, 120, 160, 200, 240} {
+					for _, h := range []int{MinHeight, 12, 16, 20, 24, 30, 40} {
+						for _, ascii := range []bool{false, true} {
+							for _, expanded := range []bool{false, true} {
+								st := fiveSeats()
+								st.Columns = st.Columns[:seats]
+								if notice {
+									st.Columns = append(st.Columns, Column{
+										Vendor: model.VendorGemini, Label: "Gemini",
+										Avail: AvailNotInstalled,
+										Note:  "not found on PATH (looked for gemini)",
+									})
+								}
+								if gate {
+									st.Gates = []PendingGate{{
+										Vendor:    st.Columns[len(st.Columns)-1].Vendor,
+										RequestID: "req-1",
+										Text:      "Write: internal/council/gate.go",
+									}}
+								}
+								st.Width, st.Height = w, h
+								st.Mode = ModeComposing
+								st.Expanded = expanded
+								st.Draft = draft
 
-						g := GlyphsFor(ascii)
-						out := Render(st, PlainStyles(), g)
+								g := GlyphsFor(ascii)
+								out := Render(st, PlainStyles(), g)
 
-						shown := 0
-						for _, l := range lines {
-							if strings.Contains(out, l) {
-								shown++
+								for i := 0; i+1 < len(lines); i++ {
+									if strings.Contains(out, lines[i]+" "+lines[i+1]) {
+										t.Errorf("seats=%d gate=%v notice=%v w=%d h=%d ascii=%v expanded=%v: "+
+											"the composer welded two typed rows into one",
+											seats, gate, notice, w, h, ascii, expanded)
+										break
+									}
+								}
+
+								shown := 0
+								for _, l := range lines {
+									if strings.Contains(out, l) {
+										shown++
+									}
+								}
+								if shown == len(lines) {
+									continue
+								}
+								// Fewer rows than the draft has. That is only legal with
+								// the marker, and the tail must be the part that stayed.
+								if !strings.Contains(out, "more above") {
+									t.Errorf("seats=%d gate=%v notice=%v w=%d h=%d ascii=%v expanded=%v: "+
+										"the composer dropped %d of %d draft lines and said nothing",
+										seats, gate, notice, w, h, ascii, expanded, len(lines)-shown, len(lines))
+									continue
+								}
+								if !strings.Contains(out, lines[len(lines)-1]) {
+									t.Errorf("seats=%d gate=%v notice=%v w=%d h=%d ascii=%v expanded=%v: "+
+										"the composer clipped the tail, where the cursor is",
+										seats, gate, notice, w, h, ascii, expanded)
+								}
 							}
-						}
-						if shown == len(lines) {
-							continue
-						}
-						// Fewer rows than the draft has. That is only legal with
-						// the marker, and the tail must be the part that stayed.
-						if !strings.Contains(out, "more above") {
-							t.Errorf("seats=%d w=%d h=%d ascii=%v expanded=%v: "+
-								"the composer dropped %d of %d draft lines and said nothing",
-								seats, w, h, ascii, expanded, len(lines)-shown, len(lines))
-							continue
-						}
-						if !strings.Contains(out, lines[len(lines)-1]) {
-							t.Errorf("seats=%d w=%d h=%d ascii=%v expanded=%v: "+
-								"the composer clipped the tail, where the cursor is",
-								seats, w, h, ascii, expanded)
 						}
 					}
 				}
@@ -654,6 +704,75 @@ func TestTheFiveSeatRoomDrawsEveryDraftRow(t *testing.T) {
 	st.Mode = ModeComposing
 	st.Draft = "first line\nsecond line\nthird line"
 	golden(t, "composer-multirow-five-seats", render(st))
+}
+
+// clippedComposer is the room that leaves the compose area exactly ONE row while
+// the draft still holds three.
+//
+// Every part of it is ordinary. It is a machine with five seats where one vendor
+// is missing, at the 60x10 floor, with one gate up. The notice and the needs-you
+// strip each take a row out of the same budget the composer draws from, and at
+// the floor that is the whole of what was left — so the draft is clamped to one
+// row by the layout rather than by anything the user typed.
+func clippedComposer() State {
+	st := fiveSeats()
+	st.Columns = append(st.Columns, Column{
+		Vendor: model.VendorGemini, Label: "Gemini",
+		Avail: AvailNotInstalled,
+		Note:  "not found on PATH (looked for gemini)",
+	})
+	st.Gates = []PendingGate{{
+		Vendor:    model.VendorGrok,
+		RequestID: "req-1",
+		Text:      "Write: internal/council/gate.go",
+	}}
+	st.Width, st.Height = MinWidth, MinHeight
+	st.Mode = ModeComposing
+	st.Draft = "first line\nsecond line\nthird line"
+	return st
+}
+
+// TestAOneRowComposerSaysHowMuchOfTheDraftIsAbove is the clipped frame as bytes.
+//
+// The sweep proves the property over the matrix; this shows what the room LOOKS
+// like while it holds it at the one geometry where the compose area cannot draw
+// the draft at all. The row carries the marker and the TAIL, in that order: the
+// count is the room's statement that the brief is longer than what is drawn, and
+// the tail is where the cursor is.
+func TestAOneRowComposerSaysHowMuchOfTheDraftIsAbove(t *testing.T) {
+	st := clippedComposer()
+	if p := layoutFor(st, GlyphsFor(false)).Prompt; p != 1 {
+		t.Fatalf("the fixture no longer clips: the compose area is %d rows", p)
+	}
+	got := render(st)
+	if !strings.Contains(got, "↑ 2 more above") {
+		t.Error("a one-row compose area does not say how much of the draft is above it")
+	}
+	if !strings.Contains(got, "third line") {
+		t.Error("the tail of the draft, where the cursor is, is not on screen")
+	}
+	if strings.Contains(got, "first line second line") {
+		t.Error("the composer welded two typed rows into one")
+	}
+	golden(t, "composer-clipped-to-one-row", got)
+}
+
+// TestAClippedComposerSurvivesASCII. The marker is words and a glyph that both
+// have ASCII partners, and the goldens render PlainStyles — the identity set — so
+// this pins the --ascii and NO_COLOR halves of §9.11 at once: the count and the
+// tail read the same with neither colour nor the Unicode set.
+func TestAClippedComposerSurvivesASCII(t *testing.T) {
+	st := clippedComposer()
+	st.ASCII = true
+	g := GlyphsFor(true)
+	got := Render(st, PlainStyles(), g)
+	if !strings.Contains(got, g.Up+" 2 more above") {
+		t.Errorf("--ascii dropped the clip marker\n%s", got)
+	}
+	if !strings.Contains(got, "third line") {
+		t.Errorf("--ascii dropped the tail of the draft\n%s", got)
+	}
+	golden(t, "composer-clipped-to-one-row-ascii", got)
 }
 
 // TestTheComposerYieldsToTheFloor. At the minimum height a six-row draft would
