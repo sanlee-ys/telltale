@@ -78,6 +78,30 @@ func TestTheFirstFrameClaimsNothingAboutThisMachine(t *testing.T) {
 	}
 }
 
+// TestFirstFrameAndUsageLeadWithTheRoom pins the identity line's word order on
+// the two surfaces a stranger meets first — the bare `telltale` frame and
+// `telltale help`. README.md leads with the room ("A dispatch room for your
+// coding agents") and states the gauge second, underneath it; this test holds
+// `firstFrameText` and `usageText` to the same order rather than letting a
+// later edit slide the gauge back to the front, one clause at a time.
+func TestFirstFrameAndUsageLeadWithTheRoom(t *testing.T) {
+	for name, text := range map[string]string{"firstFrameText": firstFrameText, "usageText": usageText} {
+		room := strings.Index(text, "dispatch room")
+		if room == -1 {
+			t.Errorf("%s never says \"dispatch room\" — the identity line no longer leads with the room", name)
+			continue
+		}
+		gauge := strings.Index(text, "honest gauge")
+		if gauge == -1 {
+			t.Errorf("%s never says \"honest gauge\" — the gauge clause was dropped, not just reordered", name)
+			continue
+		}
+		if gauge < room {
+			t.Errorf("%s says \"honest gauge\" before \"dispatch room\" — the room must lead, the gauge is the second clause", name)
+		}
+	}
+}
+
 // TestSnapshotFailsLoudOnWhatItCannotDo pins the flag contract of the one mode
 // whose reader is a program.
 //

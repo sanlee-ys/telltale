@@ -12,7 +12,7 @@ PackageName: telltale
 PackageUrl: https://github.com/sanlee-ys/telltale
 License: MIT
 LicenseUrl: https://github.com/sanlee-ys/telltale/blob/HEAD/LICENSE
-ShortDescription: An honest gauge for your coding agents.
+ShortDescription: A dispatch room for your coding agents, with an honest gauge underneath.
 Description: |-
   telltale is a dispatch room where several coding-agent CLIs answer one brief
   side by side, standing on a statusline and a cross-vendor HUD where every

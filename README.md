@@ -84,12 +84,8 @@ telltale council
 ```
 
 **Windows, winget** — pending submission to `microsoft/winget-pkgs`; the manifest
-draft and the flow are in [packaging/](packaging/):
-
-```
-winget install sanlee-ys.telltale
-telltale council
-```
+draft and the flow are in [packaging/](packaging/). `winget install sanlee-ys.telltale`
+does not work yet — use scoop or a source build until the submission lands.
 
 **Direct download** — each release attaches archives for `windows_amd64`,
 `darwin_amd64`, `darwin_arm64` and `linux_amd64` with a `checksums.txt`. Unpack one,

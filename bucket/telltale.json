@@ -11,5 +11,5 @@
     },
     "homepage": "https://github.com/sanlee-ys/telltale",
     "license": "MIT",
-    "description": "An honest gauge for your coding agents — a dispatch room for several vendor CLIs, on a statusline and a cross-vendor HUD where every number is traceable to measured tool output."
+    "description": "A dispatch room for several vendor CLIs, with an honest gauge underneath — a statusline and a cross-vendor HUD where every number is traceable to measured tool output."
 }
