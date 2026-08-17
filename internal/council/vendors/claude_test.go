@@ -1,6 +1,7 @@
 package vendors
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -128,6 +129,72 @@ func TestParseSessionID(t *testing.T) {
 	ev, ok := Claude{}.ParseEvent(line)
 	if !ok || ev.Kind != runner.KindSession || ev.SessionID != "abc-123" {
 		t.Fatalf("got (%v, %v), want a KindSession carrying abc-123", ev, ok)
+	}
+}
+
+// TestInitCapabilitiesAreParsedAndGateNothing pins the seat's self-advertisement
+// in all three states, and pins that none of them reaches a decision.
+//
+// The fixture is the array measured at 2.1.233 (streamLine.Capabilities carries
+// the run). The zero-vs-absent rule applies to a slice as much as to a gauge: a
+// CLI that sends no `capabilities` key told us nothing, and a CLI that sends
+// `[]` told us it advertises nothing. Collapsing those would invent a claim
+// about an older build.
+//
+// The last subtest is the one with teeth. Every arm must produce the same
+// KindSession event, because the moment an advertisement changes what council
+// emits, the Interrupt precedent has been broken by a field that only ever
+// existed to record it.
+func TestInitCapabilitiesAreParsedAndGateNothing(t *testing.T) {
+	measured := []string{"interrupt_receipt_v1", "interrupt_cancel_queued_v1", "msg_lifecycle_v1"}
+
+	cases := []struct {
+		name string
+		line string
+		want []string
+		nil_ bool
+	}{
+		{
+			name: "advertised at 2.1.233",
+			line: `{"type":"system","subtype":"init","session_id":"abc-123","model":"claude-opus-5","capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1","msg_lifecycle_v1"]}`,
+			want: measured,
+		},
+		{
+			name: "an empty array advertises nothing",
+			line: `{"type":"system","subtype":"init","session_id":"abc-123","model":"claude-opus-5","capabilities":[]}`,
+			want: []string{},
+		},
+		{
+			name: "no key at all is absent, not empty",
+			line: `{"type":"system","subtype":"init","session_id":"abc-123","model":"claude-opus-5"}`,
+			nil_: true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var sl streamLine
+			if err := json.Unmarshal([]byte(c.line), &sl); err != nil {
+				t.Fatalf("the init frame did not parse: %v", err)
+			}
+			if c.nil_ {
+				if sl.Capabilities != nil {
+					t.Fatalf("got %v, want nil — an absent key is not an empty advertisement", sl.Capabilities)
+				}
+			} else {
+				if sl.Capabilities == nil {
+					t.Fatal("got nil, want a non-nil slice — an empty advertisement is a reading")
+				}
+				if !slices.Equal(sl.Capabilities, c.want) {
+					t.Fatalf("got %v, want %v", sl.Capabilities, c.want)
+				}
+			}
+
+			ev, ok := Claude{}.ParseEvent([]byte(c.line))
+			if !ok || ev.Kind != runner.KindSession || ev.SessionID != "abc-123" {
+				t.Fatalf("got (%v, %v), want the same KindSession every arm produces", ev, ok)
+			}
+		})
 	}
 }
 
