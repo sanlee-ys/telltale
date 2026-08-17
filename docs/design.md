@@ -10271,6 +10271,76 @@ the honest shape rather than only a saving: the two take one argument in one voc
 only in direction, so a reader who finds either has found both. "times" paid for the width — the row
 is a list of controls, and `/trace <file>` is unambiguous without the verb.
 
+#### Amendment, 2026-08-17: `/retry` sends the last brief again, to the seats that owe an answer
+
+**The gap.** §9.37's 2026-08-17 amendment gave the operator a way to stop ONE seat of an ordinary
+turn, and it argued from the room's most probable live failure: five seats on an `@all` turn, four
+answers, one vendor that fails or stalls. The room can now end that turn. It has no way to finish
+the brief. The only act left is to retype the brief and retype the mentions — arithmetic at the
+keyboard, on the one line where getting it wrong bills seats that already answered. That is the
+same complaint `-@` and `/unseat` were built for, one turn later.
+
+**`/retry` puts the last dispatched brief back in the composer, addressed to the seats that did not
+answer it.** The brief comes from the columns' own per-turn record (`Column.Prompt`), unchanged. The
+mentions are the seats that owe an answer, so the draft reads `@codex @agy <brief>` — a draft the
+operator could have typed, in the grammar that already exists.
+
+**It arms; it does not dispatch, and enter is still what spends the money.** The verb writes a
+draft, `setDraft` re-derives the route from it, and the footer prices that route through the same
+`State.SeatsIn` intersection dispatch gates on (§9.21). So the operator reads the bill before paying
+it, and can edit the draft — drop a seat off the front, fix a word — because it is an ordinary
+draft. A verb that spawned on the spot would spend up to five quotas on a keystroke that named none
+of them, and the room would have no surface left on which to say which ones.
+
+**What counts as an ANSWER is defined against the four endings**, and it is narrower than "the
+column looks empty":
+
+- **`PhaseDone` answered**, including the seat whose body reads `[Turn completed with 0 text chunks
+  streamed]`. That is a measured zero, not a missing reply (§4a.1), and re-sending on it would be
+  the room overruling a vendor's honest empty answer — and billing a seat that did the work.
+- **`PhaseFailed` and `PhaseCancelled` did not.** Cancelled covers `ctrl+c` and the per-seat
+  give-up together, deliberately: a seat the operator cut is the case this verb exists for, and
+  after the turn the room holds one cancelled phase for both.
+- **A seat that SAT THE TURN OUT is not a candidate at all.** `dispatch` never calls `startTurn` on
+  it, so its `Column.TurnN` still names the last turn it took and the scan skips it. That is
+  load-bearing rather than incidental: without it, a `/retry` after an `@codex` turn would widen the
+  bill to four seats the operator deliberately did not address.
+
+**Bare-only, on `/read` and `/write`'s rule.** The verb takes no argument, and "/retry the failing
+test" is a sentence someone types. A verb that swallowed that argument would run a re-send and
+discard the brief — §9.17's vanishing-brief failure. The bare draft is the command; anything longer
+is refused with the space escape named, which costs nothing.
+
+**Three refusals, three sentences, and only the first keeps the draft.** *A turn in flight*: the
+phases this verb reads are not settled, so any list it produced would be a claim about a turn that
+has not ended — and the operator still wants the verb one turn later, which is `postureCommand`'s
+own reason for holding the draft. *No brief on record*: turn 0 and the degenerate turn whose brief
+sanitized away to nothing are one sentence, because they are one fact. *Every seat answered*: there
+is nothing to re-send, and saying so beats a composer the operator has to clear by hand. The verb
+sits in `roomVerbs` like every other, so §9.31's walked refusal teaches it for free — no second copy
+of the vocabulary was added, and the notice fits the reference width with one cell to spare.
+
+**`--brief` stays unfiled, and this verb is careful not to file it.** It re-sends the brief
+UNCHANGED: no re-briefing, no edit, no automatic second attempt, and it never reads `Model.brief`.
+§9.17's sweep left `--brief` out on the ruling that first-turn context is a different feature from
+re-briefing; that question is still open and still to be decided on its own.
+
+**After a race it re-sends the race's brief as an ORDINARY turn.** `Column.Prompt` holds the brief
+the racers were given and never the `/arena` draft that wrapped it, and this verb invents no grammar
+to put the wrapper back. The composer shows exactly what will be sent before enter, which is where
+the operator reads that the worktrees are not part of it; `/arena <brief>` races again.
+
+**The help panel does not name it**, on `/adopt` and `/arena drop`'s precedent: the room-controls
+row is at its budget (§9.20), and the verb is taught by the slash refusal and by this block.
+
+Verified offline only. `roomcmd_test.go` pins the four endings producing the right seat list, the
+measured zero counting as an answer, the three refusals, the bare-word rule, the verb's appearance
+in the walked refusal table, and — at the dispatch level, with `countSpawns` — that the re-send
+spawns one process per seat owing an answer and none for a seat that already replied. The
+`slash-refusal` goldens and their `--ascii` twins carry the new word. No test here spawns a vendor.
+A live `/retry` on the Windows reference box is not owed as a separate payment: nothing here is a
+claim about vendor behaviour, and every process the verb can cause is an ordinary turn's spawn.
+
 <a id="s9-32"></a>
 
 ### 9.32 the room remembered where it was and forgot who was in it

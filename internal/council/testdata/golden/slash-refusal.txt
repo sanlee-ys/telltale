@@ -21,4 +21,4 @@
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  › /unseet codex_                                                                                                │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────  COMPOSE  ─╯  
-          ⚠ no room command /unseet, a leading space sends · /adopt /arena /cd /flow /read /seat /trace /unseat /write  
+   ⚠ no room command /unseet, a leading space sends · /adopt /arena /cd /flow /read /retry /seat /trace /unseat /write  

@@ -86,6 +86,13 @@ func roomVerbs() []roomVerb {
 		{verb: "/cd", run: (*Model).cdCommand},
 		{verb: "/flow"},
 		{verb: "/read", bare: true, run: func(m *Model, _ string) bool { return m.postureCommand(false) }},
+		// Bare-only, for /read and /write's reason rather than for symmetry: it
+		// takes no argument, and "/retry the failing test" is a sentence someone
+		// types. A verb that swallowed that argument would run a re-send and
+		// discard the brief the user meant — §9.17's vanishing-brief failure. The
+		// bare form is the command; anything after it is refused with the space
+		// escape named, which costs nothing.
+		{verb: "/retry", bare: true, run: (*Model).retryCommand},
 		{verb: "/seat", run: (*Model).seatCommand},
 		{verb: "/trace", run: (*Model).traceCommand},
 		{verb: "/unseat", run: (*Model).unseatCommand},
@@ -878,6 +885,135 @@ func (m *Model) applyPosture(write bool) {
 		c := &m.st.Columns[i]
 		c.Sandbox = postureClaim(c.Vendor, windows, write, m.st.Asking(), m.hooks.Wired())
 	}
+}
+
+// retryCommand puts the last dispatched brief back in the composer, addressed
+// to the seats that did not answer it.
+//
+// IT DOES NOT DISPATCH, and that is the shape of the control rather than a
+// caution. The seats a re-send would bill are read off a turn that is already
+// over, so the operator can see the bill before paying it: setDraft re-derives
+// the route from the draft this builds, and the footer prices it through the
+// same State.SeatsIn arithmetic dispatch itself gates on (§9.21). Enter sends
+// it, the way enter sends any other brief. A verb that spawned on the spot
+// would spend up to five quotas on a keystroke that named none of them, and the
+// room would have no surface on which to say which ones.
+//
+// THE DRAFT IS A MENTION LIST AND A BRIEF, which is why this adds no grammar.
+// "@codex @agy <brief>" is what a user types by hand, so ParseRoute reads it,
+// the footer renders it, and dispatch intersects it with the roster exactly as
+// it does for typed text. The draft is also editable, because it is an ordinary
+// draft — the operator can drop a seat off the front before pressing enter.
+//
+// WHAT COUNTS AS AN ANSWER is defined against the four endings §9.37's
+// 2026-08-17 amendment names, and it is narrower than "the column looks empty":
+//
+//   - PhaseDone ANSWERED. That includes the seat whose body reads "[Turn
+//     completed with 0 text chunks streamed]": it is a measured zero, not a
+//     missing reply (§4a.1), and re-sending on it would be the room overruling a
+//     vendor's honest empty answer.
+//   - PhaseFailed and PhaseCancelled did not answer. Cancelled covers ctrl+c and
+//     the per-seat give-up (`x`) together, deliberately: a seat the operator cut
+//     is the case a re-send exists for, and after the turn the room holds one
+//     cancelled phase for both.
+//   - A seat that SAT THE TURN OUT is not a candidate at all. dispatch never
+//     calls startTurn on it, so its Column.TurnN still names the last turn it
+//     took and the scan below skips it. That is load-bearing: without it, a
+//     /retry after an "@codex" turn would widen the bill to four seats the
+//     operator deliberately did not address.
+//
+// It re-sends the brief UNCHANGED and does nothing else. No re-briefing, no
+// edit, no automatic second attempt. That is what keeps §9.17's `--brief`
+// question unfiled: `--brief` is first-turn context by definition, re-briefing
+// is a separate feature to be decided on its own, and this verb never reads
+// Model.brief.
+//
+// AFTER A RACE it re-sends the race's brief as an ORDINARY turn. Column.Prompt
+// holds the brief the racers were given and never the "/arena" draft that
+// wrapped it, and this verb invents no grammar to put the wrapper back. The
+// composer shows exactly what will be sent before enter, which is where the
+// operator reads that the worktrees are not part of it; "/arena <brief>" races
+// again.
+//
+// THREE REFUSALS, THREE SENTENCES, and only the first keeps the draft. A turn in
+// flight: the phases this verb reads are not settled, so any list it produced
+// would be a claim about a turn that has not ended — and the operator still
+// wants the verb one turn later, which is postureCommand's own reason for
+// holding the draft. No brief on record: turn 0 and the degenerate turn whose
+// brief sanitized away to nothing are one sentence, because they are one fact.
+// Every seat answered: there is nothing to re-send, and saying so is better than
+// a composer the operator has to clear by hand.
+func (m *Model) retryCommand(_ string) bool {
+	if m.turn != nil {
+		m.st.Notice = "a turn is in flight — /retry re-sends between turns"
+		return true
+	}
+
+	brief, seats := m.lastTurnUnanswered()
+	if brief == "" {
+		m.st.Notice = "no brief to re-send — /retry sends the last one again to the seats that did not answer it"
+		m.setDraft("")
+		return true
+	}
+	if len(seats) == 0 {
+		m.st.Notice = "every seat answered turn " + itoa(m.st.Turn) + " — /retry has nothing to re-send"
+		m.setDraft("")
+		return true
+	}
+
+	var draft strings.Builder
+	names := make([]string, 0, len(seats))
+	for _, v := range seats {
+		draft.WriteString("@" + string(v) + " ")
+		names = append(names, string(v))
+	}
+	draft.WriteString(brief)
+	m.setDraft(draft.String())
+	// ", " joins the names, because Route.label joins them that way and the
+	// footer is about to print the same set one line below this notice. Two
+	// spellings of one list would read as two lists.
+	m.st.Notice = strings.Join(names, ", ") + " did not answer turn " + itoa(m.st.Turn) +
+		" — enter re-sends that brief to them, and to no other seat"
+	return true
+}
+
+// lastTurnUnanswered reads the previous turn off the columns: the brief it
+// carried, and the seats it left without an answer.
+//
+// THE COLUMNS ARE THE RECORD HERE, not Column.History, and that is not a
+// shortcut. startTurn files a turn into History when the NEXT one is dispatched,
+// so between turns the finished turn is still the live one on the column;
+// reading History would answer about the turn before last.
+//
+// The brief is taken from the first column that took the turn, and any of them
+// would do — dispatch sanitizes ONE echo for the whole turn and hands that same
+// string to every seat it starts. It is read WITHOUT the seating filter, so a
+// seat unseated since the turn can still supply the text it was asked. The seat
+// list applies the filter, because a mention of an unseated seat prices nothing:
+// State.SeatsIn intersects the route with the roster, and dispatch drops the
+// same seat for the same reason.
+//
+// An empty brief with seats behind it is possible and is left to the caller: a
+// draft of nothing but control characters passes dispatch's own empty check and
+// sanitizes to "", so the turn is on record with no text to re-send.
+func (m *Model) lastTurnUnanswered() (brief string, seats []model.VendorID) {
+	last := m.st.Turn
+	if last == 0 {
+		return "", nil
+	}
+	for _, c := range m.st.Columns {
+		if c.TurnN != last {
+			continue
+		}
+		if brief == "" {
+			brief = c.Prompt
+		}
+		if c.Phase == PhaseDone || !m.st.seats(c) {
+			continue
+		}
+		seats = append(seats, c.Vendor)
+	}
+	return brief, seats
 }
 
 // plural is the one-word difference between "1 turn" and "2 turns".
