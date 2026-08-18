@@ -2759,7 +2759,8 @@ more than it did:
   stays invisible, and every hourly slope is an extrapolation.
 - **Not a loaded listener.** Both listeners sat idle, and no hook posted to either port. A
   listener under traffic is a different measurement.
-- **Not the council room.** That arm is owed, and the next paragraph states it.
+- **Not the council room.** That arm was owed when this list was written; the
+  dated payment below records its run (2026-08-18).
 - **Not macOS.** The instrument uses PowerShell and `Win32_Process`, so it is Windows-only.
 
 **Owed: the council arm, which an operator must run.** The room cannot be soaked
@@ -2796,6 +2797,50 @@ The arm prints its own table when it ends. Read the same file again at any later
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\soak.ps1 -Summarize "$env:TEMP\soak-council.jsonl"
 ```
+
+**Paid, 2026-08-18. The owner ran the arm exactly as written above.** A `--read`
+room with all five seats reattached sat idle for 34.8 minutes, 210 samples at
+10 s, on the same box as the three headless arms (Intel i7-7700K, Windows 11).
+One honest difference from those arms is stated up front: the room ran the
+operator's own clone build (the binary a CI-gate run leaves in the repo root),
+so the revision is not pinned, and the operator used the machine for other work
+during the window — the sampler is tree-scoped, so only the room's own process
+tree was counted, but the CPU percentages share a loaded box.
+
+| metric | min | median | p95 | max |
+|---|---|---|---|---|
+| working set | 21.55 MiB | 587.95 MiB | 727.81 MiB | 1790.64 MiB |
+| private bytes | 56.58 MiB | 648.42 MiB | 795.28 MiB | 2217.25 MiB |
+| handles | 155 | 949 | 1500 | 6978 |
+| processes | 1 | 5 | 9 | 34 |
+
+Robust drift (median of the second half minus the first): working set
++2.44 MiB, private bytes −1.38 MiB, handles −3, processes 0. CPU over 205
+comparable intervals: median 0.429%, max 1.779%, 91.16 s total.
+
+Three readings, in the order they matter:
+
+1. **The room is not the residency; the seats are.** The tree's first sample is
+   21.55 MiB and one process — the room alone, before reattach. Steady state is
+   ~590 MiB, five processes and ~950 handles: one TUI plus four persistent
+   vendor children. An all-day room costs what its vendors cost, and the gauge
+   binary itself is the smallest process in its own tree.
+2. **No leak at steady state.** The robust drift is +2.44 MiB of working set
+   and exactly zero processes across the halves. The large negative
+   least-squares slopes (−173 MiB/hour) are the reattach transient, not a
+   decline: the peaks — 34 processes, 1.79 GiB, 6978 handles — all belong to
+   the opening minutes when five conversations reattached at once, and the tree
+   settled from there. The same outlier-versus-median disagreement the
+   statusline arm showed, with the sign flipped.
+3. **"Idle" seats are not quiescent.** 91 CPU-seconds over an idle
+   35 minutes, and bursts to nine processes mid-window: the vendor CLIs run
+   their own background machinery inside an idle room. That is vendor
+   behavior observed from outside, not attributed to any one vendor — a
+   per-seat attribution would need one arm per seat, which nobody has run.
+
+What this arm still is not: one run, one build, one box, 35 minutes — and a
+loaded box for the CPU column. The reattach transient it measured is also the
+demo's opening beat, which is worth knowing before a stage.
 
 <a id="s6"></a>
 
