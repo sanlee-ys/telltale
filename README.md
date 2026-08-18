@@ -1,14 +1,11 @@
 # telltale
 
-**A dispatch room for your coding agents.** One brief, answered by five vendor CLIs
-side by side — Claude Code, Codex, Antigravity, Cursor and Grok — each column claiming
-only what was measured about that vendor. Under the room, an honest gauge: a statusline
-and a cross-vendor HUD where every number is traceable to measured tool output, nothing
-narrated, nothing guessed.
+A dispatch room for five vendor CLIs. One brief, answered side by side
+by Claude Code, Codex, Antigravity, Cursor, and Grok.
+A statusline and a HUD sit under the room.
+Every number comes from measured tool output.
 
-> A telltale is the ribbon on a sail that shows true airflow. Sailors watch whether
-> it streams smoothly or flutters to judge the sail's trim. It doesn't interpret;
-> it just tells you what's actually happening.
+> A telltale is the ribbon on a sail. It shows the air. It does not interpret it.
 
 <p align="center">
   <picture>
@@ -18,86 +15,34 @@ narrated, nothing guessed.
   </picture>
 </p>
 
----
-
-**Status: v1 shipped as v0.2.0 on 2026-08-14; development continues daily.** All three
-surfaces are shipped — the room, the statusline and the HUD. The same binary carries
-five more modes that render no surface of their own: the relays (`telltale hook`,
-`telltale otel`), the preflight (`telltale doctor`), and the observation modes
-(`telltale events`, `telltale snapshot`).
-
-**v1 is a snapshot, not a freeze.** It cuts when three checkable gates hold — nothing on
-the surface is half-finished or unused by its own author, the README is verified true
-against the code, and no breaking change to the grammar or keymap is planned — not when
-development goes quiet, because it doesn't: this room is driven daily. Cutting v1 as
-gauges only — statusline and HUD, with declared vendor version pins — was the standing
-alternative and it is rejected: a release names the product, and the product is the room.
-The gates and the argument are in [docs/design.md §1](docs/design.md#s1).
-
-Every adapter here was verified against something real rather than against vendor docs — a
-live on-disk corpus, a live payload capture, or the vendor's own persistence code read at a
-pinned version — and [docs/design.md §3](docs/design.md#s3) itemizes per vendor which of those
-it was, what the verification changed about this project's guesses, and what each one still
-owes. **Cursor (Composer)** is the first IDE-resident agent here, and the first whose store
-also holds live credentials, which is why that adapter's most load-bearing property is the
-list of things it does not read ([docs/design.md §3.9](docs/design.md#s3-9)). **`telltale
-council`** seats the 5-vendor fleet, and every sandbox and streaming claim in it was
-measured against a live run of that CLI rather than read off its `--help`
-([docs/design.md §9](docs/design.md#s9)).
+**v0.2.0** (2026-08-14). Windows is verified on every commit.
+Intel macOS is smoke-checked. `darwin_arm64` and `linux_amd64` are built, not run.
+No binary is signed. Check `checksums.txt` on the release.
+Detail: [SECURITY.md](SECURITY.md). The v1 cut gates are in [docs/design.md §1](docs/design.md#s1).
 
 ## Install
 
-**v0.2.0 is released** (2026-08-14, the first release; the snapshot gates held). The
-repo's own CI gate ran before any artifact was built, and the release attaches four
-archives with a `checksums.txt`. Read the per-download verification labels on the
-release itself before you pick one — they say what was measured, and they differ by
-platform.
-
-One honest note on the scoop line below, in this project's usual terms: the install was
-exercised once, on Windows 11 on 2026-08-14 — scoop verified the archive's SHA-256
-itself, the installed binary reported `telltale 0.2.0`, and `telltale doctor` ran clean
-through it. One exercised install is one data point, not a support matrix. Building from
-source is the path this project runs every day.
-
-**From source** — works now:
+**From source**
 
 ```
 go build -o telltale.exe ./cmd/telltale
-./telltale.exe council
+./telltale.exe doctor
 ```
 
-However you installed: run `telltale` with no arguments for a short first frame — the
-three modes that need no configuration, and which one to start with. `telltale doctor`
-is that one. It reports which vendor CLIs are on this machine, where each was found and
-what version it reports, and says out loud what it never checked: it runs
-`<binary> --version` and nothing else — no turn, no login, no network, and it writes
-nothing. On a machine with no vendor store yet, the HUD is not blank either: it names
-every path it looked in, and points at `doctor` for the one thing it cannot see —
-whether the vendor binaries are installed at all.
+A source build reports `dev` from `telltale version`. A release binary reports its tag.
 
-**Windows, scoop** — the bucket is live; exercised once on 2026-08-14 (above):
+**Windows, scoop** (exercised once, 2026-08-14)
 
 ```
 scoop bucket add telltale https://github.com/sanlee-ys/telltale
 scoop install telltale
-telltale council
 ```
 
-**Windows, winget** — pending submission to `microsoft/winget-pkgs`; the manifest
-draft and the flow are in [packaging/](packaging/). `winget install sanlee-ys.telltale`
-does not work yet — use scoop or a source build until the submission lands.
+**Direct download.** Each release attaches `windows_amd64`, `darwin_amd64`,
+`darwin_arm64`, and `linux_amd64`, plus `checksums.txt`. Unpack one archive
+and put `telltale` on `PATH`.
 
-**Direct download** — each release attaches archives for `windows_amd64`,
-`darwin_amd64`, `darwin_arm64` and `linux_amd64` with a `checksums.txt`. Unpack one,
-put `telltale` on your PATH, and:
-
-```
-telltale council
-```
-
-**macOS, the whole arrival, measured on 2026-08-17.** This sequence ran on an
-Intel MBP on macOS 26.5.2, against the published `v0.2.0` archive. Substitute
-the tag and the architecture you want:
+Measured on Intel macOS against `v0.2.0` (2026-08-17):
 
 ```
 curl -fLO https://github.com/sanlee-ys/telltale/releases/download/v0.2.0/telltale_0.2.0_darwin_amd64.tar.gz
@@ -107,63 +52,18 @@ tar -xzf telltale_0.2.0_darwin_amd64.tar.gz
 ./telltale doctor
 ```
 
-`shasum` printed `telltale_0.2.0_darwin_amd64.tar.gz: OK` on that run. A
-mismatch prints `FAILED` instead, and you stop there.
+A browser download on macOS sets `com.apple.quarantine`. After the checksum
+passes, run `xattr -d com.apple.quarantine telltale`. Do not add that line
+to the `curl` block: `curl` does not set the mark, and the command then
+exits 1. The measured walk is in [SECURITY.md](SECURITY.md).
 
-**A browser download needs one more command, and without it macOS kills the
-binary.** `curl` does not mark a file with `com.apple.quarantine`, but a browser
-does, and `tar` copies that mark onto the binary it extracts. Gatekeeper then
-refuses the binary, because no archive here is signed or notarized. The refusal
-was measured on 2026-08-17 on the same machine, with the quarantine mark applied
-by hand to reproduce a browser download. macOS killed the process and showed a
-dialog:
+**Windows, winget.** Not submitted. Use scoop or a source build.
+Draft: [packaging/](packaging/).
 
-> **"telltale" Not Opened**
->
-> Apple could not verify "telltale" is free of malware that may harm your Mac or
-> compromise your privacy.
->
-> \[Move to Trash]  \[Done]
+Run `telltale` with no arguments for the first frame.
+`telltale doctor` is the preflight. `telltale council` opens the room.
 
-The terminal reported `Killed: 9` and exit status 137. The binary printed
-nothing and stayed on disk. Right-click-open does not apply here, because
-`telltale` is a command-line binary and not an app bundle. Clear the mark, then
-run it:
-
-```
-xattr -d com.apple.quarantine telltale
-./telltale doctor
-```
-
-That was the measured remedy: `doctor` then ran to completion at exit 0. Run
-`xattr -d` only after `shasum` says `OK`, because clearing the mark is the step
-that lets an unverified download run. The command reports `No such xattr` and
-exits 1 on a `curl` download, which has no mark to clear.
-
-**The binaries do not all claim the same thing, and each release says so per
-download.** Windows is the **continuously verified target** — every commit runs the
-suite, the build and binary-level smokes on `windows-latest`. `darwin_amd64` is
-**smoke-verified on Intel macOS**, point-in-time and SHA-bearing. `darwin_arm64` and
-`linux_amd64` are **built, not verified**: cross-compiled and never run by this
-project. That is the same flagged-limitation rule the gauges apply to a segment,
-applied to a platform ([docs/design.md §8](docs/design.md#s8)).
-
-**No binary here is signed, on any platform.** The release workflow runs no
-signing step, so every archive is unsigned and the macOS archives are not
-notarized. Windows raises no signature to check, and `scoop` and `winget` install
-that same unsigned binary. On macOS, Gatekeeper refuses an unsigned, un-notarized
-binary that a browser downloaded and marked with `com.apple.quarantine`. Check
-the SHA-256 in `checksums.txt` before you run a download — it proves the archive
-is the one the release built, which is a weaker claim than a signature and is the
-claim this project can make today. [SECURITY.md](SECURITY.md) states the per-platform
-detail and says why signing is an owner decision rather than a to-do.
-
-`telltale version` prints the tag a binary was built from; a source build says `dev`.
-
-`telltale.exe council` opens the room, which is the mode this project is for and has its
-own section below. The two gauges wire in underneath it.
-
-Then wire the statusline into Claude Code (`~/.claude/settings.json`):
+Wire the statusline into Claude Code (`~/.claude/settings.json`):
 
 ```json
 {
@@ -174,22 +74,13 @@ Then wire the statusline into Claude Code (`~/.claude/settings.json`):
 }
 ```
 
-…and/or into Antigravity CLI (`~/.gemini/antigravity-cli/settings.json` — same block,
-same binary; telltale detects the vendor from the payload's documented `product`
-field):
+The same block works for Antigravity CLI
+(`~/.gemini/antigravity-cli/settings.json`). telltale reads the vendor
+from the payload `product` field.
 
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "C:\\path\\to\\telltale.exe statusline"
-  }
-}
-```
-
-…and/or into Cursor CLI (`~/.cursor/cli-config.json`, a top-level key). **This one needs
-`--vendor cursor`**: unlike the other two, Cursor's payload carries no vendor name to
-detect, so the flag is the only way to route it.
+Cursor CLI (`~/.cursor/cli-config.json`) needs `--vendor cursor`.
+Its payload has no vendor name. This statusline is interactive only
+(measured; [docs/design.md §7.16](docs/design.md#s7-16)):
 
 ```json
 {
@@ -200,19 +91,7 @@ detect, so the flag is the only way to route it.
 }
 ```
 
-Cursor's statusline is **interactive-only** — it does not fire in `-p` print mode or over
-ACP (measured; `docs/design.md` §7.16). To see it, start an interactive session in a
-folder you have opened with `cursor-agent` before:
-
-```
-cursor-agent
-```
-
-…and run the HUD:
-
-```
-telltale.exe hud
-```
+Then start an interactive `cursor-agent` session and run `telltale hud`.
 
 <p align="center">
   <picture>
@@ -222,294 +101,121 @@ telltale.exe hud
   </picture>
 </p>
 
-That picture is emitted from the HUD's own render by the test suite, not drawn by hand,
-and it is doing the thing this project is about: the Claude, Gemini and Antigravity rows' context cells are em
-dashes because none of those vendors writes a context-window size to disk, the Codex
-row's `~` marks a percentage telltale computed rather than read, the Gemini row's `⑂~2`
-chip is a sub-agent count telltale derived (and marks as derived) from the vendor's
-nested transcript tree, and the `COST` column is missing entirely because no vendor puts
-a session total in dollars on disk — Grok writes a per-turn figure and still gets no COST
-cell for it. None of those is rendered as a zero. Read the `CU` and `GR` rows against the
-`CX` row: all three show a context bar, and only the Codex one is marked an estimate,
-because Cursor and Grok write their own percentages down and telltale reads them. The `AG`
-row is labelled by its conversation id for a different reason: Antigravity writes no
-session title anywhere, and the only free text on its disk is your prompts, which
-telltale will not read.
+The test suite emits that picture from the HUD render.
+Empty cells are fields no vendor writes. A `~` marks an estimate.
+`↑`/`↓` move the selection. `enter` opens the detail pane. `/` filters rows.
 
-In the HUD, `↑`/`↓` move the selection and `enter` opens a detail pane for it — quota
-windows, the vendor extras, and the session's own diagnostics and degraded-field marks,
-plus a line naming the fields that vendor **cannot** source at all. That last line is the
-answer to "why is this cell empty?", and it is the difference between "we have no value
-right now" and "this vendor never had one". `/` narrows the rows by name or path.
-
-`telltale hud` flags: `--vendor all|claude|codex|gemini|agy|cursor|grok`, `--hide
-gemini,cursor` (a standing hide list; `TELLTALE_HUD_HIDE` is its default, the footer
-states the hide), `--ascii` (also `TELLTALE_ASCII=1`), `--no-title`. `NO_COLOR` is
-honoured through the standard mechanism.
+HUD flags: `--vendor all|claude|codex|gemini|agy|cursor|grok`,
+`--hide gemini,cursor` (default from `TELLTALE_HUD_HIDE`),
+`--ascii` (`TELLTALE_ASCII=1`), `--no-title`. `NO_COLOR` is honoured.
 
 ## What it is
 
-- **A dispatch room** — `telltale council`, one brief typed once and answered by Claude
-  Code, Codex, Cursor, Antigravity and Grok side by side. The one mode that spawns vendor
-  CLIs instead of reading their files; it gets its own section below.
-- **In-prompt statusline for Claude Code** — model, context %, session cost, and quota
-  pacing (`rate_limits` windows), rendered from the JSON Claude Code hands your
-  statusline command on stdin. No network calls, no credential reads.
-- **A watch-mode HUD (TUI)** for parallel sessions — the cross-vendor surface, and a
-  first-class UI investment (Go + Bubble Tea/Lipgloss; Windows Terminal is the reference
-  environment). Ships with adapters for **Claude Code**, **Codex CLI**, **Gemini CLI**,
-  **Antigravity CLI**, **Cursor (Composer)**, **Grok CLI**, and **Pi**, each reading that vendor's
-  own native on-disk data — for Antigravity and Cursor that means a read-only SQLite
-  reader written into this repo rather than a 9 MB dependency added to it.
-- **A machine-readable read mode** — `telltale snapshot` prints the fleet's current state
-  as one JSON document, for a reader that is a program rather than a person. It gets its
-  own section below.
-- **A documented adapter interface** — one module per vendor — so you can wire in
-  anything else that leaves session data on disk. The worked example in
-  [docs/design.md §4a.7](docs/design.md#s4a-7) is the method the Gemini adapter was actually
-  built with, kept alongside what live verification changed about its guesses.
-- **A drop-file relay for everything else** — a tool telltale ships no adapter for can write
-  one small JSON file under `~/.telltale/dropfile/` and get a fleet row, with no plugin and
-  no code of yours running inside telltale. Those rows are marked self-reported everywhere
-  they appear, because telltale measured the file and not the session.
-  [docs/dropfile.md](docs/dropfile.md) is the format spec.
+- **`telltale council`:** one brief, five vendor columns. This is the product.
+- **`telltale statusline`:** model, context, session cost, and quota pacing
+  from the JSON the vendor sends on stdin. No network. No credential read.
+- **`telltale hud`:** a watch TUI over Claude Code, Codex, Gemini CLI,
+  Antigravity CLI, Cursor (Composer), Grok CLI, and Pi.
+- **`telltale snapshot`:** the same scan as JSON, for a program.
+- **`telltale doctor`:** which vendor binaries this machine has.
+- **`telltale events`** / **`telltale events view`:** a loopback hook sink
+  and its reader.
+- **`telltale hook`** / **`telltale otel`:** relays that write per-turn
+  token totals under `~/.telltale/`. They print nothing.
+- A documented adapter interface, plus a drop-file relay for a tool with
+  no adapter. Spec: [docs/dropfile.md](docs/dropfile.md).
 
-One binary, three surfaces: `telltale statusline`, `telltale hud` and `telltale council` —
-and they are not three co-equal products. **The room is the product; the gauges are the
-infrastructure under it.** The statusline and the HUD are where this project surveyed each
-vendor's seam and wrote down what it found, and the honest-gauge rule they were built
-under is the rule a council column inherits when it states a sandbox posture. They are
-finished, they are load-bearing, and they are not the thing this is for. The statusline
-code path never initializes the TUI framework (the single binary links it, but no Bubble
-Tea code runs on a statusline invocation).
-
-Three surfaces are not the whole binary, and this file does not claim they are. The
-binary has eight modes, and `telltale` run with no argument prints all of them. The
-five that draw no surface stand behind these three: the
-**relays** (`telltale hook <vendor>`, `telltale otel <vendor>`) read one turn's token
-counts and print nothing; the **preflight** (`telltale doctor`) reports which vendor
-binaries this machine has; and the **observation modes** (`telltale events`, `telltale
-snapshot`) answer a program rather than a person, except for `telltale events view`,
-which reads the sink's own store back for a person. `telltale snapshot`, `telltale
-events` and `telltale doctor` get their own sections below; the two relays are described
-under the read/write boundary, because a relay is a write.
-
-Honest claim, stated precisely: *dispatch across the 5-vendor fleet (Claude Code, Codex,
-Cursor, Antigravity, Grok); cross-vendor monitoring; vendor-native statusline where the seam
-exists — and it exists twice: Claude Code and Antigravity CLI.* (Codex CLI has
-no statusline hook today. Antigravity was statusline-only until a re-survey found the
-transcript its own docs advertise, which is what made its HUD adapter buildable — the
-first verdict and the reversal are both in [docs/design.md §2.1](docs/design.md#s2-1)/[§3.8](docs/design.md#s3-8).
-Cursor reaches telltale both ways: a built-in HUD adapter because its seam is on disk,
-and a council seat driven through `cursor-agent`'s own bundled `node.exe` — the `cursor`
-binary on PATH is only the editor launcher and council never drives it. Grok is a council
-seat and a HUD adapter on the same binary — the seat has no fleet guards wired yet, which
-is an open obligation on the fleet rather than a reason the column is missing.)
-
-**The gauges never write to anything that isn't theirs.** `telltale statusline` and
-`telltale hud` read vendor files, make no network calls, read no credentials, and no
-keybinding can mutate vendor state or send anything to a running agent. What the gauges
-and the room write is three stores of their own under `~/.telltale/`, all keys and
-numbers, never content: council's room file (`council/room.json` — the vendor session ids
-reattaching needs and the room's workspace, no transcript, output or brief content),
-the statusline's quota relay (`quota/<vendor>.json` — the rate-limit windows it
-just rendered, so the HUD can show account quota per vendor instead of only for
-vendors whose stores carry it; [docs/design.md §7.15](docs/design.md#s7-15)), and the
-token relay (`usage/<vendor>.json` — a running total of per-turn token counts,
-with two writers: `telltale hook cursor` reads Cursor's `afterAgentResponse`
-payload on stdin, and `telltale otel grok` is a loopback listener grok's own
-OpenTelemetry exporter pushes to; [docs/design.md §7.16](docs/design.md#s7-16), [§7.16a](docs/design.md#s7-16a)).
-That last one is spend, not quota: there is no denominator anywhere in it, so it
-never renders as a percentage or a bar, and Cursor's and grok's account quota
-stay visibly absent.
-
-**A fourth store carries content, and it is named as an exception rather than
-counted with the three.** The event sink (`telltale events`, below) stores each hook payload
-VERBATIM under `~/.telltale/events/` — content, not keys and numbers. What contains
-it is scope, not redaction: it is its own foreground mode that you start, its server
-binds loopback only, a web page is not a sender, and no gauge reads or renders those
-files. Its reader (`telltale events view`) is its own foreground mode for that last
-reason: a gauge that read this store would have spent the containment. The
-keys-and-numbers rule above still binds every store the gauges themselves write
-([docs/design.md §7.21](docs/design.md#s7-21)).
-
-`telltale
-council` remains the one mode that acts on the world, and it is labelled as one
-everywhere it can be: it spawns vendor CLIs, it is entered only by typing the
-subcommand, it is not reachable from the HUD, and it shares no keybinding with it.
-"Reads no credentials" stopped being free with the Cursor adapter — that vendor
-keeps its access tokens, refresh tokens and OAuth secrets in the *same SQLite file* as
-its session state — so it is enforced there as a read allowlist with a test that plants
-credential-shaped strings in the fixtures and asserts none of them reaches anything the
-HUD can display ([docs/design.md §3.9](docs/design.md#s3-9)). The Cursor *hook* is the same
-discipline against a different hazard: its payload carries the model's reply text and
-the user's email address beside the four numbers, so the parser's struct is the
-allowlist and markers planted in a real payload shape must reach neither the parse nor
-the file.
+Gauges read vendor files on this machine. They make no network calls.
+They write keys and numbers under `~/.telltale/` only.
+`telltale council` is the one mode that starts vendor CLIs.
+The Cursor store holds tokens in the same SQLite file as session state.
+The adapter does not read them. [SECURITY.md](SECURITY.md) states the
+boundary.
 
 ## The dispatch room
-
-`telltale council` is one brief, typed once and answered by five vendors side by side —
-**Claude Code**, **Codex**, **Antigravity**, **Cursor** and **Grok**, each in its own
-column, in your terminal. It exists because the alternative is five terminals and a
-clipboard.
 
 ```
 telltale.exe council
 ```
 
-Every column carries its own sandbox posture and its own streaming granularity, because the
-five vendors differ on both and one blanket claim would be false for at least one of them —
-and each of those claims was measured against a live run of that CLI rather than read off
-its `--help`. A plain `telltale council` can write, and says so in the header for the whole
-session; `--read` opens a room that only talks. But no badge is what keeps this room out of
-your files — the directory it was pointed at is, and `--cd` is how you move it.
+An unaddressed brief goes to Claude. `@codex`, `@agy`, `@cursor`,
+`@grok`, and `@all` route a turn. `-@claude` addresses every seat but
+that one. `--read` opens a room that only talks. `--cd` sets the
+workspace. A plain `telltale council` can write, and the header says so.
 
-An unaddressed brief goes to Claude alone; `@codex`, `@agy`, `@cursor`, `@grok` and `@all`
-route a turn, `-@claude` addresses everyone but that seat, and the composer prices the route before
-you press enter. Each seat keeps its own conversation and rides that vendor's own native
-resume rather than a re-sent transcript, so no session ever holds another's history.
+[docs/council.md](docs/council.md) is the room guide: badges, routing,
+keys, and flags. [docs/design.md §9](docs/design.md#s9) is the measured
+record per vendor.
 
-**[docs/council.md](docs/council.md) is the room's own guide** — the frame, the badge
-vocabulary, the routing grammar, the reading keys and the turn view, taking an answer out
-of the room with `y`, and every flag. [docs/design.md §9](docs/design.md#s9) is the record
-behind it: what was measured per vendor, what each seam cost, and what is still unverified.
-
-## `telltale snapshot` — the fleet as JSON
+## `telltale snapshot`
 
 ```
 telltale.exe snapshot
 ```
 
-One scan, one JSON document on stdout, exit 0. It reads the same vendor stores the HUD
-reads, and it prints numbers instead of a frame — so an agent gets its answer from one
-command and one parse, and never from scraping a TUI or reading `~/.telltale/` behind
-telltale's back.
-
-Three flags: `--vendor <id>` reports one vendor, `--compact` prints the document on one
-line, and `--timeout <dur>` bounds the scan (default 10s). An unknown flag, an unknown
-vendor or a stray argument is refused with the correction and prints no document — a
-script that mistypes a flag must not receive a well-formed answer to a different
-question.
-
-The schema is `{schema_version, generated_at, scan_error, fleet, vendors[]}`, and it
-carries this project's honesty rules rather than restating them in prose:
+One scan, one JSON document on stdout, exit 0. Flags: `--vendor <id>`,
+`--compact`, `--timeout <dur>` (default 10s). An unknown flag or vendor
+prints no document.
 
 | the document says | it means |
 |---|---|
 | `"cost_usd_total": 0` | measured zero |
 | `"cost_usd_total": null` | no reading right now |
-| `"unsupported": ["cost"]` | this vendor exposes no such thing, ever |
-| `"estimated": ["context_pct"]` | the adapter computed that value; it was not reported |
-| `"quota": []` | no relayed account reading — never an implied 0% |
+| `"unsupported": ["cost"]` | this vendor never exposes that field |
+| `"estimated": ["context_pct"]` | the adapter computed the value |
+| `"quota": []` | no relayed account reading |
 
-No optional key is ever omitted, so an absent value and a changed schema can never look
-alike. `fleet` is the pre-computed rollup — the session count, the liveness census, the
-vendor census by status, the highest context percentage anywhere and the total cost — so
-the common question costs no arithmetic on the reader's side.
+The document holds numbers and keys. It holds no session names, paths,
+or reply text. Schema: [docs/design.md §7.22](docs/design.md#s7-22) and
+[docs/snapshot.schema.json](docs/snapshot.schema.json).
 
-It renders **numbers and keys, never content**: no session names, workspace paths,
-transcripts, briefs or reply text, and no per-session rows at all. It writes nothing, calls
-no network and reads no credential. [docs/design.md §7.22](docs/design.md#s7-22) is the full
-schema record and the reasoning; `internal/snapshot/testdata/golden/zero-vs-absent.json`
-is the build-failing test that the two kinds of nothing stay apart.
-
-### A worked consumer
-
-[`tools/fleet-prompt.ps1`](tools/fleet-prompt.ps1) is one PowerShell function that runs
-the command once, parses the line, and returns a fleet segment for a prompt:
+[`tools/fleet-prompt.ps1`](tools/fleet-prompt.ps1) is one consumer:
 
 ```
 . .\tools\fleet-prompt.ps1
 Get-TelltaleFleetLine
 ```
 
-Driven on Windows PowerShell 5.1 against this machine's real stores, that prints:
-
-```
-tt 6 watching | 1554 sessions, 3 live | ctx ~75.8% codex | quota 12.2% agy/gemini-weekly
-```
-
-It carries the rules above into a caller rather than restating them. A null prints
-nothing: a fleet with no context reading anywhere has no `ctx` segment at all, while a
-measured zero prints as `0%`. The `~` is there because codex's block lists `context_pct`
-under `estimated`. An unknown `schema_version` prints an empty line rather than a guess.
-
-[`docs/snapshot.schema.json`](docs/snapshot.schema.json) is the contract it reads against
-— the same file CI validates the built binary's output with. Its `-FromFile` parameter
-reads a document instead of running the binary, which is how the refused store, the
-drifted store and the scan error were driven: those are shapes a healthy machine does not
-produce, and `internal/snapshot/testdata/golden/` carries all four.
-
-## `telltale events` — the fleet event sink, and `telltale events view` reads it
+## `telltale events`
 
 ```
 telltale.exe events
 telltale.exe events view
 ```
 
-One hook event per POST on loopback, appended to a durable log under
-`~/.telltale/events/` and rebroadcast to every client connected to `/stream`. Any
-process that can pipe JSON is a source: wire `tools/emit-event.py` as a hook command,
-where `--source-app <name>` is the one per-repo edit. Two flags: `--addr <host:port>`
-(default `127.0.0.1:4519`; any other host is refused at startup) and `--retain <days>`
-(default 30).
+One hook event per POST on loopback, appended under `~/.telltale/events/`
+and rebroadcast on `/stream`. Default bind: `127.0.0.1:4519`. Any other
+host is refused. This store holds payload content.
+`telltale events view` reads the files. No gauge reads them.
+Flags and the boundary: [docs/design.md §7.21](docs/design.md#s7-21).
 
-`telltale events view` is the sink's reader, and it is its own foreground mode rather
-than a line on a gauge. It lists the newest events, filters by `--source`, `--session`,
-`--type` or `--day`, and follows the store with `--follow`. It reads the day files
-directly and opens no socket, so it answers with no sink running and after the sink has
-exited; `--interval` is therefore the honest latency bound in follow mode, not a push.
-Each row shows the keys. The payload is stored VERBATIM and prints only under
-`--payload`.
-
-**This is the one store that holds content rather than keys and numbers**, and the
-read/write boundary above names it as the fourth exception. What contains it is scope:
-the operator starts the mode, the server binds loopback, a web page is not a sender, and
-no gauge reads these files — which is exactly why the reader is a separate mode.
-[docs/design.md §7.21](docs/design.md#s7-21) carries the record and the 2026-08-17
-amendment that added the viewer.
-
-## `telltale doctor` — the launch-time preflight
+## `telltale doctor`
 
 ```
 telltale.exe doctor
 ```
 
-Which vendor binaries are on this machine, where each one was found, and what version
-each one reports — plus, said out loud rather than left blank, what was never checked.
-Auth and network always read `not checked`: nothing here probes a login or calls the
-network, and a preflight that implied otherwise would be trusted on the one day it was
-wrong. It runs each vendor bounded to `<binary> --version`, writes nothing, and gives
-each seat its own `--timeout` (default 15s) so a wedged vendor costs its own deadline
-and not the report. The report is words and no colour, so it reads the same in a
-terminal, in a pipe and in a pasted issue.
+Which vendor binaries are on this machine, where each one was found, and
+what version each one reports. Auth and network always read `not checked`.
+The command runs `<binary> --version` and writes nothing.
 
 ## The honest-gauge rule
 
-A segment may only display a value read from tool or vendor output. Anything inferred is
-either omitted or visibly marked as an estimate. Every segment's data source is named in
-[docs/design.md](docs/design.md), and the eval harness asserts each segment's render
-against fixture inputs — including empty and degraded states. A gauge that can't tell
-"no data" from "zero" fails the build.
+A segment may only display a value read from tool or vendor output.
+Anything inferred is omitted or marked as an estimate.
+A gauge that cannot tell "no data" from "zero" fails the build.
+`internal/hud` renders one session at 0% and one session with no context
+source, and asserts the two rows differ.
 
-That last sentence is a literal test. `internal/hud` renders one session at 0% and one
-session whose vendor exposes no context source, and asserts the two rows differ: 0% draws
-a full track, absent draws nothing at all.
-
-Fixtures are **synthesized** — fake session ids, fake text, fake paths, realistic in shape
-only. No real session content is in this repository.
+Fixtures are synthesized. This repository holds no real session content.
 
 ## Design
 
-- [docs/council.md](docs/council.md) — the dispatch room in use: the badge vocabulary, the
-  routing grammar, the reading keys, and every flag
-- [docs/design.md](docs/design.md) — segments, data sources, the normalized schema, the
-  adapter contract, the HUD UI specification, and the council record (§9)
-- [STATE.md](STATE.md) — where the project is right now: what is in flight, what is
-  unsettled, and what is known-missing and unowned
-- [PARITY.md](PARITY.md) — cross-platform and cross-machine differences, and which of
-  them are measured rather than assumed
+- [docs/council.md](docs/council.md): the room in use
+- [docs/design.md](docs/design.md): segments, adapters, HUD, council record
+- [STATE.md](STATE.md): what is in flight
+- [PARITY.md](PARITY.md): what differs across machines
+- [SECURITY.md](SECURITY.md): trust model, signing, checksums
 
 ## License
 
