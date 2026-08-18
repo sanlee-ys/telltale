@@ -2518,6 +2518,153 @@ it with more than it does:
 - **Not the other two gauges.** `internal/hud` and `internal/council` are TUI surfaces;
   the rule does not apply to them and the gate does not look at them.
 
+**Amendment, 2026-08-18: what the long-running modes cost after the first minute, measured.**
+Everything above measures one call, and the 2026-08-16 timing step measures 15 of them.
+Three modes do not stop after one call. `telltale events` and `telltale otel grok` are
+listeners that an operator starts once and leaves. `telltale council` holds a room and one
+long-lived child for each seat. A benchmark cannot answer the question these modes raise:
+does an idle process hold a constant amount of memory across a day? Nothing in this
+repository measured that. This amendment records the instrument and the first measurement.
+
+**The instrument is `tools/soak.ps1`, and it is not a gate.** It has three modes. Residency
+mode samples one process tree at an interval, and it records the working set, the private
+bytes, the handle count, the live CPU and the child count. Per-fire mode starts a
+short-lived process many times and records each run, because `telltale statusline` has no
+residency to sample. Summary mode renders a finished JSONL file again, so a later reader
+re-reads an arm without a second soak. The samples are the artifact, and a table is one
+view of them. Re-read a finished arm with
+`.\tools\soak.ps1 -Summarize "$env:TEMP\soak-events.jsonl"`.
+
+Three decisions in that script are load-bearing, and each one comes from a measured
+failure:
+
+- **`Win32_Process`, and never `Get-Counter`.** The counter set names of `Get-Counter` are
+  localized, so `\Process(*)\Working Set` does not resolve on a Windows installation in
+  another language. Its instances also carry process names, so three `telltale.exe`
+  processes arrive as `telltale`, `telltale#1` and `telltale#2`, with no stable relation to
+  a pid and no parent data. A tree soak needs the parent data. One CIM query also serves a
+  whole sample at any tree size.
+- **The summary prints a median-based drift beside the least-squares slope.** One outlier
+  moves a slope, and no outlier moves a median. Arm C below proves why that matters: its
+  slope and its drift disagree, and the drift is the honest figure.
+- **An absent figure prints `--`, and never `0`.** `PeakWorkingSet64` reads 0 after a
+  process exits, and PowerShell evaluates `$null / 1MB` as 0. Both defects produced a
+  measured-looking zero in the first smoke arms. That is the zero-vs-absent collapse
+  ADR-001 forbids, inside the instrument that exists to find drift.
+
+**Conditions.** The reference workstation: Intel i7-7700K (4 cores, 8 logical threads),
+Windows 11, Windows PowerShell 5.1.26100.9168, Go 1.26.5. The binary came from `d024f03`.
+Both listeners bound non-default loopback ports (14519 and 14318), and every arm ran with
+`USERPROFILE` redirected to a scratch directory. The redirect is verified in both
+directions: the listeners wrote their stores under the scratch home, and
+`~/.telltale` held no file newer than the previous day when the arms ended. No arm read or
+wrote a real store. Arms A and B ran concurrently, and arm C ran on the same machine while
+they sampled.
+
+**Arm A — `telltale events`, idle, 34.8 min, 210 samples at 10 s.**
+
+| metric | min | median | p95 | max | slope/hour |
+|---|---|---|---|---|---|
+| working set | 9.14 MiB | 9.23 MiB | 9.23 MiB | 9.25 MiB | +0.11 MiB |
+| private bytes | 45.32 MiB | 45.32 MiB | 45.35 MiB | 45.36 MiB | -0.02 MiB |
+| handles | 128 | 128 | 128 | 128 | 0.0 |
+| processes | 1 | 1 | 1 | 1 | 0.0 |
+
+Robust drift: working set 0.00 MiB, private bytes 0.00 MiB, handles 0.0, processes 0.0.
+CPU over 209 comparable intervals, 0 dropped: min, median and max all 0.000%, total 0.02 s.
+
+**Arm B — `telltale otel grok`, idle, 34.8 min, 210 samples at 10 s.**
+
+| metric | min | median | p95 | max | slope/hour |
+|---|---|---|---|---|---|
+| working set | 9.02 MiB | 9.11 MiB | 9.11 MiB | 9.13 MiB | +0.11 MiB |
+| private bytes | 45.15 MiB | 45.15 MiB | 45.18 MiB | 45.20 MiB | -0.02 MiB |
+| handles | 128 | 128 | 128 | 128 | 0.0 |
+| processes | 1 | 1 | 1 | 1 | 0.0 |
+
+Robust drift: working set 0.00 MiB, private bytes 0.00 MiB, handles 0.0, processes 0.0.
+CPU over 209 comparable intervals, 0 dropped: min, median and max all 0.000%, total 0.00 s.
+
+**Arm C — `telltale statusline`, 1000 fires.** Every fire exited 0, and every fire rendered
+the `Opus` marker that `ci.yml` asserts on its own 15 samples.
+
+| metric | min | median | p95 | max | slope/1k fires |
+|---|---|---|---|---|---|
+| wall ms | 20.0 | 20.9 | 26.0 | 2035.7 | -41.2 |
+| cpu ms | 0.0 | 15.6 | 31.3 | 93.8 | 0.0 |
+| peak working set | 9.32 MiB | 9.43 MiB | 9.61 MiB | 9.63 MiB | -0.01 MiB |
+| peak private | 44.90 MiB | 45.24 MiB | 45.44 MiB | 46.25 MiB | -0.01 MiB |
+
+Robust drift: wall -0.2 ms, cpu 0.0 ms, peak working set 0.00 MiB, peak private 0.00 MiB.
+p99 is 55.23 ms. 11 fires passed 50 ms, and 6 of those passed 100 ms. The cpu figure is
+quantized to the 15.625 ms scheduler tick, so only its distribution carries information.
+
+**What the three arms found.**
+
+1. **Neither listener leaks.** The handle count and the process count held exactly constant
+   across 210 samples of each arm. Both working-set slopes read +0.11 MiB/hour, and that
+   figure is smaller than the 0.11 MiB total spread of the same arm. The robust drift is
+   0.00 MiB on every metric. The slope is therefore the noise of the arm, and it is not a
+   trend. Each arm ran 34.8 min, so every hourly slope above is a 1.7x extrapolation.
+2. **Idle CPU is under the measurement floor.** Every comparable interval read 0.000%, and
+   no interval was dropped. The two listeners spent 0.02 s and 0.00 s of CPU across 35
+   minutes. An idle listener costs nothing this instrument can measure.
+3. **The statusline cost does not drift, and its tail is the finding.** 6 fires of 1000
+   blocked for 2019-2036 ms, while their CPU stayed at the usual 15-31 ms. The process
+   waited; it did not compute. The -41.2 ms per 1000 fires slope comes from those 6 samples
+   alone, and the median-based drift reads -0.2 ms across the same run. This is the
+   disagreement the drift figure exists to expose, and the drift is the honest one. **This
+   arm does not name a cause.** Two residency arms polled `Win32_Process` on the same
+   machine throughout, so the condition is recorded and the cause is not claimed. A
+   statusline fires on every prompt, so a 2 s stall earns a later arm on an idle machine.
+
+**What this measurement does NOT assert**, stated so a later reader does not credit it with
+more than it did:
+
+- **Not a CI gate.** `tools/soak.ps1` is an operator instrument. No workflow runs it, and a
+  leak introduced tomorrow turns nothing red.
+- **Not a multi-hour figure.** 35 minutes is the arm. A leak under this arm's noise floor
+  stays invisible, and every hourly slope is an extrapolation.
+- **Not a loaded listener.** Both listeners sat idle, and no hook posted to either port. A
+  listener under traffic is a different measurement.
+- **Not the council room.** That arm is owed, and the next paragraph states it.
+- **Not macOS.** The instrument uses PowerShell and `Win32_Process`, so it is Windows-only.
+
+**Owed: the council arm, which an operator must run.** The room cannot be soaked
+headlessly, for two reasons that belong to the mode rather than to the script. The room is
+a TUI, so it needs a real terminal. Its seats are live vendor CLIs that read their
+credentials from the real home directory, so this arm cannot use the redirected
+`USERPROFILE` that isolated the other three arms. The room is also the arm that matters
+most, because it is the only mode whose process count can move: each persistent seat is a
+long-lived child, and residency mode counts the whole tree.
+
+Terminal 1 opens the room and leaves it idle. `--read` seats every vendor and forbids every
+write, which is what an unattended 35-minute arm needs:
+
+```powershell
+cd C:\Users\sanle\code\telltale
+.\telltale.exe council --read
+```
+
+Terminal 2 resolves the room's pid, then samples the tree. `-Name telltale` is wrong here,
+because it fails whenever more than one `telltale.exe` runs:
+
+```powershell
+cd C:\Users\sanle\code\telltale
+$room = @(Get-CimInstance Win32_Process -Filter "Name='telltale.exe'" |
+    Where-Object { $_.CommandLine -match '\bcouncil\b' })
+$room.Count      # must print 1 before the next command runs
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\soak.ps1 `
+    -Id $room[0].ProcessId -Label council-idle `
+    -Out "$env:TEMP\soak-council.jsonl" -IntervalSeconds 10 -DurationMinutes 35
+```
+
+The arm prints its own table when it ends. Read the same file again at any later time with:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\soak.ps1 -Summarize "$env:TEMP\soak-council.jsonl"
+```
+
 <a id="s6"></a>
 
 ## 6. Open design questions
