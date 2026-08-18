@@ -7,17 +7,39 @@
 // §3.8). Pointer types mark fields observed or documented as conditionally
 // absent — absence must stay distinguishable from a zero value.
 //
-// That pin is STILL 1.1.9 and the 2026-08-15 re-verification at agy 1.1.13 did
-// not move it, because moving it needs a live payload capture and a capture
-// needs an interactive session. What the re-verification did measure on the
-// quota surface is one rung less direct and is recorded as such: `agy -p
-// "/quota"` reported FOUR windows — a weekly and a five-hour one for each of
-// "Gemini Models" and "Claude and GPT models" — where §3.8 observed two weekly
-// buckets in the payload. Those are the slash command's human labels, not the
-// payload's bucket ids, so this is a reason to expect more buckets and NOT an
-// observation of their ids. Nothing here needs changing either way: the ids are
-// relayed verbatim and the renderer draws one segment per named bucket, so a
-// third and fourth bucket already render without a vocabulary to update.
+// That pin was STILL 1.1.9 until 2026-08-17, because moving it needs a live
+// payload capture and a capture needs an interactive session. The 2026-08-15
+// re-verification measured the quota surface one rung less directly and was
+// recorded as such: `agy -p "/quota"` reported FOUR windows — a weekly and a
+// five-hour one for each of "Gemini Models" and "Claude and GPT models" — where
+// §3.8 observed two weekly buckets in the payload. Those are the slash command's
+// human labels, not the payload's bucket ids, so that was a reason to expect
+// more buckets and NOT an observation of their ids.
+//
+// # Re-captured 2026-08-17 at agy 1.1.13 — the pin MOVES
+//
+// Fifteen payloads from one live interactive turn (docs/design.md §3.8's
+// re-capture block). The six-payload 1.1.9 record above is superseded on every
+// point below, and is kept as the older reading rather than deleted.
+//
+// The expect-four prediction is CONFIRMED, and the ids are now OBSERVED rather
+// than inferred from human labels. The payload carries four named buckets:
+// "3p-5h", "3p-weekly", "gemini-5h" and "gemini-weekly". Each of the four
+// carries remaining_fraction, reset_time AND reset_in_seconds — the 1.1.9 record
+// claimed those three keys for two buckets and they hold for all four. The
+// renderer needed no change, exactly as the paragraph above predicted: the ids
+// are relayed verbatim and one segment is drawn per named bucket.
+//
+// Two quota readings are worth carrying, because both are honesty cases:
+//
+//   - three of the four buckets reported remaining_fraction exactly 1, and agy
+//     serializes it as the bare literal `1` rather than `1.0`. Go reads that
+//     into a float64 without complaint. It renders `0%` used, which is a
+//     MEASURED zero and not an absence — §4a.1's distinction, arriving from the
+//     wire this time rather than from the renderer.
+//   - remaining_fraction never moved across the fifteen fires; only
+//     reset_in_seconds counted down. So the quota a line draws is not the turn
+//     it is drawing. Nothing here should be changed to hide that.
 //
 // Detection: every observed payload carries `"product": "antigravity"`, which
 // Claude Code's statusline payload does not. cmd/telltale routes on that
@@ -25,13 +47,20 @@
 //
 // What this payload has that no other vendor's statusline seam offers:
 //
-//   - quota as NAMED BUCKETS (observed: "gemini-weekly", "3p-weekly"), each
-//     with remaining_fraction and an exact reset_time;
+//   - quota as NAMED BUCKETS (observed at 1.1.13: "3p-5h", "3p-weekly",
+//     "gemini-5h", "gemini-weekly"), each with remaining_fraction, reset_time
+//     and reset_in_seconds;
 //   - agent_state — the first vendor-REPORTED liveness signal in this
-//     product's universe (idle/thinking/working/tool_use/initializing);
+//     product's universe. The documented vocabulary is
+//     idle/thinking/working/tool_use/initializing. The 2026-08-17 capture
+//     observed "idle" and "working" from that list, and one value that is NOT
+//     on it: "authenticating", on the first fire of the turn. An unlisted value
+//     is not a defect here — the renderer draws an unknown state verbatim in
+//     dim by design — but the vocabulary above is a documented list and not a
+//     closed set, and this line is the measurement that says so;
 //   - vcs — branch and dirty state in the payload itself, so a branch segment
-//     needs no exec (documented; not yet observed live — the capture session
-//     ran outside a repo).
+//     needs no exec (documented; STILL not observed live — the 1.1.9 capture and
+//     the 2026-08-17 re-capture both ran outside a git repo).
 //
 // # transcript_path, and a correction (2026-08-15, agy 1.1.13)
 //
@@ -57,9 +86,35 @@
 // separate and unchanged decision: this is the statusline seam, whose whole
 // contract is that it does no I/O beyond stdin (§2). The HUD adapter reaches
 // the transcript by its own root, never by trusting a path handed to a gauge.
-// Whether the payload's transcript_path string now points at the real file or
-// still at the docs' `antigravity/` tree is UNMEASURED at 1.1.13 — confirming it
-// needs a live payload capture, and the 2026-08-15 re-read captured none.
+//
+// # transcript_path is FALSIFIED at 1.1.13 (measured 2026-08-17)
+//
+// The paragraph above left one question UNMEASURED: whether the payload's
+// transcript_path now points at the real file or still at the docs'
+// `antigravity/` tree. The 2026-08-17 capture measured it. It points at the
+// docs' tree, and that directory does not hold the file.
+//
+// The payload's value is rooted at `~/.gemini/antigravity/brain/<id>/...`. The
+// real transcript for the SAME session exists only at
+// `~/.gemini/antigravity-cli/brain/<id>/...`. The payload drops the `-cli`
+// segment. Both roots exist on disk at 1.1.13, which is what makes this worth
+// pinning: `antigravity/brain/` is present and EMPTY, `antigravity-cli/brain/`
+// holds every conversation. A reader that trusted the payload would open
+// nothing and could not tell a missing file from a missing session.
+//
+// So §2.1's refusal to display this field now rests on a measurement rather than
+// on caution. The field was withheld because it was unverified; it is now
+// verified WRONG. Nothing about the code changes, because nothing ever followed
+// the path — no non-test code dereferences TranscriptPath, in this package or
+// any other, and TestTranscriptPathIsHeldButNeverAPath pins that it is held as a
+// string and never resolved. The value stays parsed and unused on purpose: it is
+// evidence about the vendor, and deleting the field would delete the evidence.
+//
+// One more shape, recorded because it would confuse a future reader of a raw
+// capture: on the fires before a session id exists, the vendor joins an EMPTY
+// id segment rather than omitting the field, so the path collapses to
+// `~/.gemini/antigravity/brain/.system_generated/logs/transcript.jsonl`. That is
+// a second reason never to hand this string to a file operation.
 //
 // # email is never parsed and must never be rendered
 //
@@ -98,8 +153,9 @@ type StatuslineInput struct {
 	Workspace      *Workspace     `json:"workspace,omitempty"`
 	ContextWindow  *ContextWindow `json:"context_window,omitempty"`
 	// Quota is a map of bucket id to window; bucket ids are vendor-defined
-	// (two weekly buckets observed on the Starter tier) and are rendered
-	// verbatim rather than translated through an assumed vocabulary.
+	// (FOUR observed at 1.1.13 — a weekly and a five-hour window for each of
+	// two model families) and are rendered verbatim rather than translated
+	// through an assumed vocabulary.
 	Quota      map[string]*QuotaBucket `json:"quota,omitempty"`
 	AgentState string                  `json:"agent_state,omitempty"`
 	VCS        *VCS                    `json:"vcs,omitempty"`
@@ -118,6 +174,25 @@ type StatuslineInput struct {
 	ToolConfirmationPending bool   `json:"tool_confirmation_pending,omitempty"`
 	TerminalWidth           int    `json:"terminal_width,omitempty"`
 	ExecutionMode           string `json:"execution_mode,omitempty"`
+
+	// exceeds_200k_tokens is DELIBERATELY NOT MODELLED, and this comment is the
+	// agy-side record of that decision, which did not exist before 2026-08-17.
+	// The 1.1.13 capture carries the key on every fire. design.md's
+	// unmodelled-field list covers the same key on the CLAUDE payload; that is a
+	// different vendor and its ruling does not transfer, so the field was
+	// unmodelled here by silence rather than by decision. It is a decision now.
+	//
+	// Two reasons to leave it out. It is a THRESHOLD the vendor computed, not a
+	// reading — context_window already carries the tokens and the window size a
+	// gauge would need, so modelling this would be storing someone else's
+	// comparison beside the operands. And nothing renders it: §7.16's display
+	// hold binds this seam, so a parsed field with no destination is exactly the
+	// "modelling a field nothing reads" case §7.16b says needs a reason.
+	//
+	// Recorded honestly: it is three-state in practice (null before the turn's
+	// numbers land, then false or true), so a future bool field would collapse
+	// "not yet known" into "no". A *bool is the only correct shape if it is ever
+	// wanted, and it is not wanted today.
 }
 
 type Model struct {

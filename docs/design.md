@@ -230,9 +230,25 @@ that agy "never writes that file" was false and is corrected there), but whether
 PAYLOAD's value points at that real file needs a live capture nobody has run, and
 displaying an unverified path would be narrating.
 
+**Amended 2026-08-17 — `transcript_path` is no longer unverified. It is verified WRONG.**
+The live capture that paragraph asks for was taken (§3.8's re-capture block). The payload's
+path drops the `-cli` segment: it names `~\.gemini\antigravity\brain\<id>\…`, while the real
+transcript for that same session sits only under `~\.gemini\antigravity-cli\brain\<id>\…`.
+The advertised directory exists and is EMPTY, so a reader that trusted the value would open
+nothing and could not tell a missing file from a missing session. The refusal above stands
+unchanged and its GROUND changes: it was caution about an unverified value, and it is now a
+measurement of a false one. No code ever followed the path, which was re-checked across the
+repository rather than assumed.
+
 Schema verification record: documented contract (antigravity.google/docs/cli/statusline)
 cross-checked against a six-payload live capture from a real interactive session on agy
-1.1.9, 2026-08-02 (§3.8). Fixtures are synthesized to the observed shapes.
+1.1.9, 2026-08-02 (§3.8). **Re-captured 2026-08-17 at agy 1.1.13 — fifteen payloads, one
+live interactive turn** (§3.8's re-capture block): quota confirmed at FOUR named buckets
+(`3p-5h`, `3p-weekly`, `gemini-5h`, `gemini-weekly`), each carrying `remaining_fraction`,
+`reset_time` and `reset_in_seconds`; `agent_state` observed live, including one value the
+documented vocabulary omits; `context_window` grown to the §7.16b shape. `vcs` is still the
+one documented segment nobody has observed — both capture sessions ran outside a git repo.
+Fixtures are synthesized to the observed shapes.
 
 <a id="s2-2"></a>
 
@@ -320,8 +336,11 @@ session (the shape with every `context_window` key null — that session had mad
 call), cross-checked against the vendor's bundled `statusline` skill and a source read of
 `./src/hooks/use-status-line.ts` and `./src/ui.tsx` at 2026.08.04-aaa8809. Fixtures are
 synthesized to the observed shapes; the populated-context fixture is synthesized to the
-documented one, because no captured payload ever carried a number there. **That is the one
-gap in this record** — see §7.16's amendment for the hand-back that closes it.
+documented one, because no captured payload ever carried a number there. **That gap is
+CLOSED, 2026-08-17**: a live interactive session at cursor-agent `2026.08.11-e8db854`
+rendered `ctx 12.7%` after its first reply, so `used_percentage` is observed populated at
+one-decimal precision. §7.16's amendment carries the capture and the build caveat. The
+fixture's assumed shape was correct and did not move.
 
 <a id="s3"></a>
 
@@ -1324,6 +1343,91 @@ have. It cannot say which one agy has, and the four conversations that grew a ch
 still hold one chunk each. The instrument this seam wants is a live multi-chunk
 conversation, and nothing above substitutes for it.
 
+**Re-capture, 2026-08-17 — the statusline pin moves to agy 1.1.13, and one field is
+FALSIFIED.** The statusline seam block above is pinned at 1.1.9 and six payloads. That
+record is superseded here and kept as the older reading. Capture method: the same
+temporary statusline command as 2026-08-02, appending each stdin payload to its own file;
+**fifteen payloads across one live interactive turn**, in Windows Terminal. The session
+ran outside a git repo again, so `vcs` is still unobserved.
+
+**The four-bucket prediction is CONFIRMED, with ids rather than labels.** §3.8's `/quota`
+cross-check reported four windows under human labels and refused to call that an
+observation of bucket ids, because the labels are not the ids. The payload now names them:
+**`3p-5h`, `3p-weekly`, `gemini-5h`, `gemini-weekly`** — a five-hour and a weekly window
+for each of two model families. **All four carry `remaining_fraction`, `reset_time` AND
+`reset_in_seconds`**; the 1.1.9 record claimed those three keys for two buckets, and they
+hold for four. Nothing in the renderer changed, which is what §2.1's verbatim-id rule was
+built to buy. The `week` page's fixture already carried all four names, so the fixture was
+right before the capture was taken.
+
+Two quota readings are recorded because both are honesty cases rather than trivia:
+
+- **Three of the four buckets reported `remaining_fraction` exactly 1**, serialized as the
+  bare literal `1` rather than `1.0`. That renders `0%` used — a MEASURED zero, drawing a
+  full empty track, not an absence. §4a.1's zero-versus-absent distinction, arriving off
+  the wire this time instead of out of the renderer. `week.txt`'s `3p-weekly ─── 0%` row is
+  the shape this produces, and it was synthesized correctly.
+- **`remaining_fraction` never moved across the fifteen fires.** Only `reset_in_seconds`
+  counted down. The quota a line draws is therefore not the turn it is drawing. This is a
+  vendor property, it is not hidden, and nothing here compensates for it.
+
+**`agent_state` is observed live, and the documented vocabulary is incomplete.** The turn
+moved `authenticating` → `idle` → `working` → `idle`. `idle` and `working` are on the
+documented list; **`authenticating` is not**. The renderer draws an unknown state verbatim
+in dim, so an unlisted value costs nothing — which is the point of having built it that
+way. The list is documented, not closed, and this is the measurement that says so.
+`thinking`, `tool_use` and `initializing` did not appear on this turn.
+
+**The payload GREW since 1.1.9, into the same shape Claude's block has.** `context_window`
+now carries `total_input_tokens`, `total_output_tokens`, `context_window_size`, float
+`used_percentage` and `remaining_percentage`, and a populated `current_usage` object
+(`input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`)
+— the §7.16b block's shape, on a second vendor. Also present and not previously recorded
+here: `conversation_id` (**equal to `session_id` byte for byte on all fifteen fires**),
+`exceeds_200k_tokens`, `sandbox.enabled`, `terminal_width` and `model.effort`. The parser
+was checked field by field against this capture: it models fourteen of the sixteen
+top-level keys. `email` is excluded deliberately and that exclusion is tested. The one
+field genuinely unmodelled by silence was `exceeds_200k_tokens`, and
+`internal/antigravity/stdin.go` now carries the agy-side reason instead of inheriting a
+ruling made about Claude's payload. **Nothing new was wired to a renderer or a relay** —
+§7.16's display hold binds this seam.
+
+**The numbers populate on the LAST fire only, and that is a zero-versus-absent collapse in
+the vendor's own serializer.** Through fourteen of fifteen fires the vendor sent
+`used_percentage: 0` with the token counters at `0`; every real number arrived at once on
+the final fire, after the turn. On the very first fire it sent `used_percentage: 0`
+alongside `context_window_size: 0`, which is a placeholder that no pointer type can tell
+from a measured zero — the vendor writes a literal `0` instead of omitting the key. So the
+statusline honestly draws `ctx 0%` for the length of a turn and then jumps. This is
+recorded, not compensated for: inferring "not yet known" from a zero the vendor stated
+would be exactly the invention §4a.1 forbids, and the collapse happens upstream of
+anything this repo controls.
+
+**`transcript_path` is FALSIFIED, and §2.1's refusal now has a measured reason.** §2.1
+declined to display the field because the payload's value was *unverified* — the transcript
+is real on disk, but nobody had captured a payload to check whether its path pointed at it.
+This capture checked. **It does not.** The payload roots the path at
+`~\.gemini\antigravity\brain\<id>\.system_generated\logs\transcript.jsonl`, and the real
+transcript for that same session exists only under `~\.gemini\antigravity-cli\brain\<id>\`.
+The payload drops the `-cli` segment. Both roots exist at 1.1.13 and that is what makes the
+trap sharp: `antigravity/brain/` is present and EMPTY while `antigravity-cli/brain/` holds
+every conversation, so a reader that trusted the payload would open nothing and could not
+distinguish a missing file from a missing session. This is the docs-versus-data tree
+disagreement §3.8 recorded in 2026-08-02, still unfixed at 1.1.13 and now measured on the
+statusline seam as well as on disk.
+
+**No code trusted it, and that was checked rather than assumed.** Every use of
+`transcript_path` and `TranscriptPath` in the repository was read. No non-test code
+dereferences the field — it is parsed and held, never opened, stated or rendered — and
+`TestTranscriptPathIsHeldButNeverAPath` already pins that. The HUD adapter reaches the
+transcript by its own root by name (`internal/adapter/antigravity`), never by trusting a
+path handed to a gauge, which is the decision that makes this vendor bug a non-event here.
+So nothing is fixed, because nothing is broken; §2.1's refusal is upgraded from caution to
+measurement and the field stays parsed-and-unused, because deleting it would delete the
+evidence. One further shape is recorded for whoever reads a raw capture next: before a
+session id exists, the vendor joins an EMPTY id segment rather than omitting the key, so
+the path collapses to `…\brain\.system_generated\logs\transcript.jsonl`.
+
 **One inventory cell went stale with the re-verify, and is now fixed.** §3.10's canary
 table read `agy 1.1.9` for the Antigravity row after the adapter moved to `agy 1.1.13`;
 the row was corrected in the same-day ledger pass. The weakness this exposed stands
@@ -1467,6 +1571,34 @@ does **not** cover, itemized: no in-flight session was sampled, no fan-out was o
 the derived-percentage path did not fire on live data (no real session was missing
 `contextUsagePercent` while carrying raw counts), and the corpus is one machine, one day,
 one Cursor version.
+
+**Observed 2026-08-17: a live `cursor-agent` CLI session drew no HUD row — and that is the
+DESIGN, not a defect.** While the operator drove the interactive session that paid §7.16's
+context capture, no HUD row appeared for it. The reason is structural and already on the
+record: this adapter reads exactly one store,
+`%APPDATA%\Cursor\User\globalStorage\state.vscdb`, which is the **IDE's** Composer store,
+and the `cursor-agent` **CLI keeps its own** (§7.16's three-excluded-fields block says so in
+as many words, and it is why a `conversation_id` is not stored — it would dangle a join that
+does not exist). A CLI session was therefore never a row this adapter could draw. The
+observation confirms an existing claim rather than opening a question, and it is written
+down because "the gauge showed nothing" is the kind of report that gets re-investigated
+every few months unless the expected answer is recorded beside it.
+
+**What the same observation does NOT settle, and it is the measurement worth taking.** The
+operator's Cursor configuration carries `ghostMode: true` and `privacyMode: 2`. Neither
+setting can explain the missing row above, because that row was never expected. They bear on
+a different and live question: **whether those settings suppress session writes to the IDE
+Composer store this adapter DOES read.** If they do, then every Cursor row in the HUD is
+conditional on a vendor privacy setting nobody has measured, and a reader would see an empty
+Cursor section with no way to tell "no sessions" from "sessions not written". That is a
+zero-versus-absent failure one layer below the renderer, where §4a.1 cannot reach it.
+
+Stated as an open item rather than a finding, because nothing here was measured: the hypothesis
+is untested, and it must not be repeated as though it were observed. The measurement is
+cheap and needs the IDE rather than the CLI — drive a Composer session in the IDE with those
+settings on, then off, and compare what `composerHeaders` gains in each arm. Until somebody
+runs it, this paragraph is a hypothesis with its reason attached and nothing in the adapter
+changes.
 
 <a id="s3-9a"></a>
 
@@ -4157,6 +4289,34 @@ thing an agent cannot drive here. Roughly a minute:
 2. Run `cursor-agent` in a workspace it has opened before, and send any one prompt.
 3. Read the line above the input. `ctx N%` appearing after the reply is the confirmation;
    the segment staying hidden means `used_percentage` is null for longer than assumed.
+
+**Paid, 2026-08-17, at cursor-agent `2026.08.11-e8db854`.** The operator ran the three
+steps above. The environment was an interactive session in Windows Terminal, from a
+PowerShell parent, in this repository's own workspace. After the first reply the line
+read:
+
+```
+Composer 2.5 Fast │ ctx 12.7% │ telltale
+```
+
+The segment drew, so `used_percentage` populates on a real session. Three things are now
+observed rather than assumed. The magnitude is live: `12.7` is a reading, not a null and
+not a zero. The precision is **one decimal**, which is the precision the synthesized
+fixture already assumed — so the fixture shape stands unchanged. The field populates
+**after the first reply**, which answers step 3's alternative outcome; nothing waited
+longer than one turn.
+
+**The build is newer than this section's own pin, and that is stated rather than
+smoothed.** Every other measurement in this section came from `2026.08.04-aaa8809`,
+including the bundle arithmetic that ruled two fields derived. This capture ran at
+`2026.08.11-e8db854`, the build §9.46 pinned. So read the populated shape as confirmed at
+the newer build, and the derived-field ruling as measured at the older one. The two do not
+substitute for each other.
+
+**One limit, named.** This capture confirms that the field carries a number. It does not
+re-measure `remaining_percentage` or `total_input_tokens`, because §2.2 keeps both out of
+the structs and the line renders neither. A capture cannot observe a field the parser
+deletes.
 
 <a id="s7-16a"></a>
 
@@ -12512,6 +12672,39 @@ The goldens are `composer-clipped-to-one-row.txt` and its `-ascii` partner, at 6
 is bytes in both glyph sets; they render `PlainStyles`, which is the NO_COLOR half. No existing
 golden moved — a draft that fits its compose area reaches none of this, and that is every room
 above the floor.
+
+**Amendment, 2026-08-17 — the decisive measurement was taken, and the composer drew THREE
+rows.** "What is left, stated rather than rounded up" above named one cheap next step:
+reproduce the paste in a live 5/5 room and record the terminal's rows and columns with it.
+The operator ran it. A three-line brief went into a live 5-of-5 room in Windows Terminal at
+a recorded geometry of **170 columns x 54 rows**, and the composer drew **three rows**. The
+geometry was recorded this time rather than read back off the frame, which is the whole
+reason the step was specified that way.
+
+**So the live render agrees with the sweep (#253), and the t9 one-row observation stands
+UNREPRODUCED.** The render is now verified twice by two different instruments — 588
+synthesized geometries and one live room — and the wire was never in doubt. Against that,
+one unrepeated eyeball reading. The finding is recorded as a **probable observation error**,
+and this section already documents the trap that produces one: the echo's row breaks are
+ambiguous between a newline and a word wrap. That warning was applied to the column echo at
+the time and the wire was checked against the vendor's transcript because of it. The
+composer's own row count was the one thing still read by eye, and it is the one thing that
+did not reproduce.
+
+**What this run does NOT establish, because the geometry is the generous kind.** 170x54 sits
+inside the swept band on width (60 to 240) and ABOVE it on height (`MinHeight` to 40), and
+above means MORE compose room, never less. It is nowhere near the 60x10 floor where the
+amendment above found forty cells that used to flatten. At 170x54 the pre-marker code and
+the marker code draw the same three rows, so this run cannot tell them apart and is not
+evidence about either. It closes the reported defect and it closes nothing else. The
+one-row branch is still exercised only by `composer-clipped-to-one-row.txt` and its ascii
+partner, which is where that claim belongs.
+
+**One independent corroboration of the column figure, and only the column figure.** The agy
+statusline capture taken on the same machine the same evening (§3.8's re-capture block)
+carried `terminal_width: 170` on all fifteen fires. That is a second instrument reading the
+same terminal width, which is worth one sentence because the geometry is the evidence here.
+It says nothing about the row count, which no payload carries.
 
 **Amendment, 2026-08-09 — the ergonomic other half: ctrl+u clears the draft.** Paste changed
 the arithmetic on regret. A draft used to cost at most a typed sentence, so backspace's

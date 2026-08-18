@@ -67,10 +67,12 @@ copies, the gates and the argument; this file does not restate any of them.
      reaches. It shows no money, and this beat must never promise a price.
      **Paid, 2026-08-15/16.** A pasted three-line brief was sent with enter:
      one dispatch, and the newlines verified as bytes in the seat's own
-     transcript ([design.md §9.38](docs/design.md)'s dated payment). One
-     caveat rides with it: the composer DREW the three-line draft as one row
-     (the render gap below), so the demo should type or paste the brief and
-     trust the wire, not the row count.
+     transcript ([design.md §9.38](docs/design.md)'s dated payment).
+     **The render caveat this beat carried is RETIRED, 2026-08-17.** It read
+     that the composer drew the three-line draft as one row, so the demo should
+     trust the wire and not the row count. A live 5/5 room at a recorded 170x54
+     drew three rows, matching the sweep, so wire AND render are both verified
+     and the beat can be demonstrated as it reads.
   4. **One honesty beat.** A column whose vendor reported no cost renders no
      cost cell at all. A turn that reported zero renders `$0.0000`. The two
      states stay apart on screen. The `~` estimate marker is NOT on this
@@ -97,8 +99,9 @@ copies, the gates and the argument; this file does not restate any of them.
      Absent is `null`, a measured zero is `0`, and no optional key is omitted.
 
   **The path is frozen as recorded.** Both markers were paid by the owner's
-  drive on 2026-08-15/16 (race t9), each with a live run behind it. The one
-  residue is beat 3's render caveat, owned in the gaps below.
+  drive on 2026-08-15/16 (race t9), each with a live run behind it. Beat 3's
+  render caveat was the one residue, and it is retired as of 2026-08-17 — the
+  path now carries no unpaid marker.
 
   **Amended 2026-08-17: the beat ORDER is reopened, by the owner's ruling.**
   A re-cut is planned for the final two weeks before the demo: open on the
@@ -148,8 +151,11 @@ copies, the gates and the argument; this file does not restate any of them.
   under the finish fix (design.md §9.37): 18 seconds to retire, against the 21
   minutes that found the bug. §9.38's composer paste is paid too, on Windows
   Terminal 1.24.11911.0 — one insertion, three composer rows, zero dispatches.
-  **The one thing still unexercised is named in design.md §9.38** and is not an
-  arena debt: a pasted multi-line draft has never been sent with enter.
+  **That §9.38 thread is now closed end to end**, and this line said otherwise
+  until 2026-08-17: a pasted multi-line draft WAS sent with enter on 2026-08-15/16
+  (one dispatch, the newlines verified as bytes in the seat's own transcript), and
+  the composer's row count — the last half in doubt — reproduced as three rows in
+  a live 5/5 room at 170x54 on 2026-08-17. Nothing on the paste path is owed.
 
 - **How the family got here** (2026-08-09, race t9 on the
   reference box, after three earlier races each exposed and funded a fix —
@@ -333,14 +339,17 @@ Nothing open. The last one here was the 44 seconds, and it was measured
 
 - **OBSERVED 2026-08-15/16, the drive that paid the demo path found three.
   The 2026-08-16 lane batch measured all three, and what is left is smaller.**
-  1. **The composer one-row report is unexplained, and its recorded suspect
-     is refuted.** The render is measured correct at every geometry the room
-     draws (the 588-combination sweep in §9.38's second dated amendment): the
-     compose area wraps against the terminal width, so the seat count has no
-     path to the composer's row count, and the one silent-collapse branch is
-     unreachable above the 60x10 floor. The wire half was already paid. What
-     remains is one decisive live measurement: reproduce the paste in a live
-     5/5 room and record the terminal's rows and columns with it.
+  1. **CLOSED 2026-08-17. The composer one-row report did not reproduce.** The
+     decisive live measurement named here was taken: a three-line brief into a
+     live 5/5 room in Windows Terminal at a recorded 170x54 drew **three rows**.
+     That agrees with the 588-combination sweep, so the render is now verified
+     both synthetically and live, and the wire half was already paid. The
+     original one-row sighting stands unreproduced and is recorded as a probable
+     observation error — §9.38 documents the trap that produces one, the echo's
+     ambiguous row breaks, and the composer's row count was the one figure still
+     read by eye. Named honestly in §9.38's dated amendment: 170x54 is a
+     generous geometry, so it closes the reported defect and says nothing about
+     the tight cells near the 60x10 floor.
   2. **Arena turns were always traced; the record could not name the race.**
      The "records nothing" premise did not survive measurement — racers'
      records were emitted all along, and a racer's line now ends
@@ -445,18 +454,32 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   (§7.24). The
   **Windows `danger-full-access` finding does not port to `codex app-server`**
   — that path has its own `windowsSandbox/*` surface nobody has probed; any
-  seat move re-measures rather than inherits. The **agy statusline payload is still pinned at 1.1.9** and
-  needs an interactive re-capture — expect FOUR quota buckets now, not two
-  (§3.8); the **multi-chunk transcript** is now PINNED synthetically (§3.8's
+  seat move re-measures rather than inherits. **The agy statusline re-capture is
+  PAID (2026-08-17)** and the pin moves to 1.1.13: fifteen live payloads
+  confirmed FOUR quota buckets rather than two, `agent_state` was observed live
+  (including one value the documented vocabulary omits), and the payload has
+  grown to carry the §7.16b context block. It also FALSIFIED `transcript_path` —
+  the payload names a directory that does not exist, so §2.1's refusal to display
+  it is now a measurement rather than caution; no code ever followed the path,
+  which was re-checked across the repo (§3.8's re-capture block). The
+  **multi-chunk transcript** is now PINNED synthetically (§3.8's
   2026-08-16 amendment: the adapter reads the flat file by decision and proved
   correct under its own contract, and the head/tail overlap guard was shown
   load-bearing) — the live multi-chunk capture remains the missing instrument,
-  since a synthetic fixture cannot say which behavior agy actually has. One
-  capture is owed on the cursor statusline seam (§7.16's
-  amendment carries the one-minute manual step for a populated
-  `context_window`). The Claude payload capture landed 2026-08-16: seven live
+  since a synthetic fixture cannot say which behavior agy actually has. **The
+  cursor statusline capture is PAID (2026-08-17)**: a live interactive session at
+  cursor-agent `2026.08.11-e8db854` rendered `ctx 12.7%` after its first reply,
+  so `used_percentage` is observed populated at one-decimal precision and the
+  synthesized fixture's assumed shape was correct (§7.16's amendment, which also
+  names the build caveat — that capture ran one build ahead of the section's own
+  pin). The Claude payload capture landed 2026-08-16: seven live
   fires at the pinned 2.1.233 agreed with the source read on every count, and
-  §7.16b's amended limitation carries the record.
+  §7.16b's amended limitation carries the record. Two more items from that
+  batch's tail: the seat's advertised **capabilities are parsed for the record
+  and gate nothing** (#285) — `subagentStatusLine` was REFUSED as a source and
+  `FieldSubagents` stays `CapDerived` — and the event sink's **reader exists as
+  its own foreground mode** (#286, `telltale events view`), reading the day files
+  rather than the sink's endpoints so it still answers after the sink exits.
 
 - **ATTRIBUTED, 2026-08-08. Spawning was never the cost; `wait` is, and only on
   the three seats that are not persistent.** One traced `@all` turn, all four
