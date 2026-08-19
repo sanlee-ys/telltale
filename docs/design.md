@@ -12800,6 +12800,103 @@ race has been run against this build, so the claim that a real held `index.lock`
 notice instead of a freeze rests on the tests and on an expired-deadline fixture, not on the
 lock that started this.
 
+**Amendment, 2026-08-18: the room RUNS something, and reports the exit code it got.** Until
+now the arena compared attempts by arrival order and by `git diff --stat`, and nothing in this
+room had ever executed a line of what the racers wrote. The one question a reader of five
+diffs actually has — *does it work?* — was the one question the room answered by not asking
+it. **After a racer settles, an operator-named command runs inside THAT racer's worktree, and
+the column reports `check PASS · exit 0 · 44s` or `check FAIL · exit 1 · 51s` from the
+process's own exit code.** The competition has answered this for a while (Crystal runs a
+per-workspace script per attempt; Codex cloud shows per-attempt test results), and what makes
+it admissible *here* is narrower than what makes it useful there: an exit code is a
+measurement, so it is a thing this room may display (§4a.1, ADR-001).
+
+**No judge, in any form, and that is a ruling rather than a scoping decision.** The candidate
+this came from also proposed an LLM opinion on each attempt, rendered with a `~`. It is
+refused twice over by rulings that already stand: §9.2 ("what this deliberately does not add:
+a ranking stage, a chairman, or any synthesis hop") and §9.44's Declined, where a cross-seat
+quality mark "would be council judging them, which no adapter sourced". The `~` does not
+rescue it either, and that is the part worth writing down — **`~` marks a value telltale
+COMPUTED, never an opinion it formed**, so marking an opinion with it would widen the one
+honesty marker this project has into a shrug. An exit code is neither a reading nor an
+opinion; it is a number a process returned, which is why it is the only verdict here.
+
+**The operator names the command, in the operator's own environment** (`TELLTALE_ARENA_CHECK`),
+and the two surfaces NOT chosen each closed on an existing ruling rather than on taste:
+
+- **Not a file the repository carries.** This section's own seeding ruling took exactly half
+  of agent-deck's `.worktreeinclude` — copying bytes into a tree the room already owns is
+  containable, EXECUTING content the repo carries is not — and a checked-in check file is
+  that refused half wearing this feature's name. A clone from a stranger must not be able to
+  run a program on this machine by containing a file.
+- **Not a new room verb.** §9.31's refusal line has a hard width budget
+  (`TestTheRefusalFitsTheRoomItIsShownIn`) and its own note says the next verb has to find its
+  characters somewhere else. The check is also not state that drifts while the room is open,
+  which is what §9.17 requires a command for.
+
+**It is called a check and not a gate, deliberately.** This room already spends the word
+*gate* on the permission gate — gate cards, the gate hook, the gate clock, `PostureWriteGated`
+— where it means *the thing that asks you before a command runs*. This runs a command and
+reports what it returned. One word, one meaning.
+
+**Four states on a settled attempt, and the two that are not verdicts are the ones this
+feature could most easily get wrong.** A measured PASS. A measured FAIL. An **unavailable**
+check that produced no exit code at all — a binary that would not start, a spelling the room
+refused, an attempt whose own diff was never read, a deadline. And **absent**, which draws
+nothing whatever, because a room that never named a check must render exactly what it rendered
+before this existed. (A fifth, `check · running`, holds the block while the process is alive:
+a room that starts a process and draws nothing is hiding it.) **Absent is not FAIL and
+unavailable is not FAIL**: a verdict on an attempt nobody measured is a claim about somebody's
+code, which is the invented value §4a.1 exists to refuse, pointed at the one surface where it
+would be read as a judgement.
+
+Mechanics, each shaped by a rule that was already here:
+
+- **Argv, never a shell** (§9.3). A spelling carrying a pipe, a redirection, a separator, a
+  substitution or a quote is refused by name with the character quoted back, rather than split
+  into an argv that means something else — `go test ./... > out.txt` run as three arguments
+  would report an exit code for a command the operator did not write.
+- **The check runs in the racer's worktree and never the room's tree.** `dueArenaChecks` takes
+  the directory off the settled `ArenaResult`, which is the tree `arenaSetup` created for that
+  seat this race. Council already spawns processes and owns those trees, so this is inside the
+  read/write exception `/arena` carries rather than a new one.
+- **Bounded by the ROOM, not by the turn**, with a 15-minute deadline over one run. A check is
+  a test suite and outlives the race that started it as a matter of course; this repository's
+  own package suite runs ~455s locally, so a tighter bound would kill a legitimate check on
+  the very repo this room was built in. A killed process has no exit code, so a deadline
+  reports as unavailable with the deadline named — never as FAIL. Stated rather than hidden:
+  the next brief to that seat clears its arena block, and a check still running under a
+  cleared block runs to completion with nothing left to render it. The room's context ends it
+  at quit, and its outcome is dropped on arrival rather than written onto the new turn.
+- **Launched from the spinner tick, and identified by race number on the way back.** The LAST
+  racer's settlement is what ends the turn, so an event-driven launch would be waiting on a
+  channel nothing writes to any more. A returning outcome names the vendor and the race, and
+  is dropped unless the receipt on the column is still that race's — otherwise one attempt's
+  PASS lands under another attempt's diff.
+- **Output is read and discarded.** The exit code is the whole measurement, so it is the whole
+  claim; a column is not a terminal, and half of a build log is worse than none of it.
+
+**Deliberately not built, and why it is not a deferral:** repeat sampling — N attempts of one
+seat — needs an owner's ruling before any code. It contradicts this section's own v1 ruling
+that a race is not routable and that a one-seat race is an ordinary turn in a worktree, and it
+reshapes race identity itself: `arena/t<N>/<vendor>` branch names, sibling worktree names, and
+`lifecycle.go`'s re-minting of race numbers from refs all assume one attempt per seat. The two
+other columns the candidate asked for already ship: per-attempt diff size is this section's
+`git diff --stat`, and per-attempt cost is §9.21's reported-cost cell, absent by design on the
+vendors that report none.
+
+Verification note: the mechanics are pinned offline — the exit code becoming PASS and FAIL,
+every no-exit-code path rendering as unavailable rather than as a verdict, the refused shell
+spellings with the character named, one run per attempt across repeated ticks, each racer's
+run landing in its own tree and never the workspace, a stale outcome dropped by race number,
+and the frame itself (`testdata/golden/arena-check.txt`, three states side by side). The run
+is STUBBED in every test, and `main_test.go` now panics on any test that reaches the real
+runner with a binary this machine can resolve — the same fail-closed rule the three vendor
+spawn vars carry, for a different hazard: a check is an arbitrary program the operator named.
+**The live half is owed in full**: no real race has run with a check configured, so nothing
+here rests on a measured PASS or FAIL from a real vendor's attempt. `STATE.md`'s known gaps
+carries that debt.
+
 <a id="s9-38"></a>
 
 ### 9.38 paste lands whole, and never sends (2026-08-09)

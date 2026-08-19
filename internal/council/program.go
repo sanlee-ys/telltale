@@ -293,6 +293,15 @@ type Model struct {
 	// them except dispatch itself — a second race started here would cut names
 	// from the same ref scan as the first.
 	arenaPrep *arenaPrep
+	// arenaCheck is the check command this room was started with, resolved once
+	// from the operator's environment (arenacheck.go, §9.37 amended
+	// 2026-08-18), and empty in the ordinary room that races without one.
+	//
+	// Resolved at construction rather than per race, so two races in one
+	// transcript cannot answer different questions with the same word — and
+	// held on Model rather than State because Render never reads it: what the
+	// frame draws is the per-attempt ArenaCheck the run produced.
+	arenaCheck arenaCheckSpec
 	// arenaPrepN numbers preps, so a message from a setup the room has already
 	// stopped can be dropped by comparison. Never reset: an id has to be unique
 	// over the room's whole life, not over the current setup.
@@ -353,6 +362,11 @@ func newWithBrief(opts Options, b Brief, hs GateHook, re Reattachment) *Model {
 		roomCancel: cancel,
 		brief:      b,
 		hooks:      hs,
+		// The check is read from the environment HERE and nowhere else, so the
+		// room holds one answer for its whole life and no later code has to ask
+		// the environment a second time (Render is pure over State, and a
+		// per-frame env read is the shape that breaks it).
+		arenaCheck: resolveArenaCheck(os.Getenv(arenaCheckEnv)),
 		// Never nil, so /trace has something to answer with in a model a test
 		// built directly. Run replaces it with the sink it installed into the
 		// runner, because there must be exactly one ring and the runner has to be
@@ -735,6 +749,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyArenaStat(msg)
 		return m, nil
 
+	case arenaCheckMsg:
+		// One check run landing (or being dropped as stale — the drop rules
+		// live with the handler). No follow-up command: a check runs once per
+		// attempt, and the next one is launched by the tick when a later
+		// attempt settles.
+		m.applyArenaCheck(msg)
+		return m, nil
+
 	case quotaMsg:
 		// One read of the quota relay landing. No follow-up command: the next
 		// read is launched when a turn ends, because the file only changes when
@@ -761,10 +783,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// but a seat armed mid-interval has to be read when the interval
 		// expires even if the vendor has gone quiet since — a burst of writes
 		// followed by silence is exactly the seat whose stat is most behind.
+		//
+		// It is also where a settled attempt's check is launched, and the tick
+		// is the right launcher for the opposite reason: the LAST racer's
+		// settlement ends the turn, so an event-driven launch would be waiting
+		// on a channel nothing writes to any more (arenacheck.go).
+		cmds := []tea.Cmd{spin()}
 		if ref := m.dueArenaRefreshes(); ref != nil {
-			return m, tea.Batch(spin(), ref)
+			cmds = append(cmds, ref)
 		}
-		return m, spin()
+		if k := m.dueArenaChecks(); k != nil {
+			cmds = append(cmds, k)
+		}
+		if len(cmds) == 1 {
+			// The ordinary tick, returned bare rather than wrapped: a Batch of
+			// one is a second message hop for nothing, on the message this room
+			// sends ten times a second.
+			return m, cmds[0]
+		}
+		return m, tea.Batch(cmds...)
 	}
 	return m, nil
 }

@@ -10,9 +10,10 @@ import (
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 )
 
-// TestMain makes the package's three spawn vars FAIL-CLOSED for the whole test
-// binary: reaching one with a binary that actually RESOLVES, without having
-// stubbed it, panics instead of launching a real vendor CLI.
+// TestMain makes the package's three vendor spawn vars — and the arena check
+// runner beside them — FAIL-CLOSED for the whole test binary: reaching one with
+// a binary that actually RESOLVES, without having stubbed it, panics instead of
+// launching a real program.
 //
 // It exists because the default was the opposite, and the default was measured
 // costing real money. On 2026-08-09 an ordinary `go test ./internal/council` on
@@ -61,7 +62,40 @@ import (
 // beyond that is WHAT would have run — without the argv, the next person is
 // back to polling the process table.
 func TestMain(m *testing.M) {
+	// The arena check is the operator's own command, read from their own
+	// environment (arenacheck.go), so a developer who has it set would
+	// otherwise have every arena test in this package start running it. Unset
+	// for the whole binary: a suite whose behavior depends on the shell it was
+	// launched from is a suite that passes here and fails on the next machine.
+	// A test that WANTS one sets it with t.Setenv, which still wins.
+	os.Unsetenv(arenaCheckEnv)
+
 	realProcess, realSession, realRPC := startProcess, startSession, startRPCSession
+	realCheck := startCheck
+
+	// The check runner is fail-closed for the same reason the three vendor
+	// spawn vars below are, with one difference in the hazard: a check costs no
+	// vendor quota, but it is an ARBITRARY program the operator named, so a
+	// test that reaches the real runner runs whatever that machine happens to
+	// have. The rule is the same one refuseRealVendor uses and for the same
+	// reason — the binary resolving is the question the operating system is
+	// about to ask, not a declaration a future test can copy without meaning
+	// it.
+	startCheck = func(ctx context.Context, dir string, argv []string) checkOutcome {
+		if len(argv) > 0 {
+			if _, err := exec.LookPath(argv[0]); err == nil {
+				panic(fmt.Sprintf(
+					"council test ran a REAL arena check command — that executes an "+
+						"arbitrary program on this machine.\n"+
+						"  argv: %q\n"+
+						"  dir:  %s\n"+
+						"Stub startCheck in this test — countCheckRuns(t) in "+
+						"arenacheck_test.go does it.",
+					argv, dir))
+			}
+		}
+		return realCheck(ctx, dir, argv)
+	}
 
 	startProcess = func(ctx context.Context, spec runner.Spec, out chan<- runner.Event, parse runner.ParseFunc) (*runner.Handle, error) {
 		refuseRealVendor("startProcess", spec)

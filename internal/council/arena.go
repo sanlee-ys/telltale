@@ -137,6 +137,17 @@ type ArenaResult struct {
 	// THIS number, or a race that outran its turn becomes unguardable.
 	RaceN int
 
+	// Check is what the operator's check command measured in THIS attempt's
+	// worktree, nil when no check is configured (arenacheck.go, §9.37 amended
+	// 2026-08-18). Nil renders nothing at all: a room with no check and a check
+	// that failed are not the same fact, and absent is never FAIL (§4a.1).
+	//
+	// It is the one field on this struct that is filled in AFTER collection —
+	// a check is a test run and outlives the race that started it — which is
+	// why the render has a running state and why applyArenaCheck identifies the
+	// receipt by RaceN before writing to it.
+	Check *ArenaCheck
+
 	// Seed is this seat's .worktreeinclude receipt, nil when the room repo has
 	// no .worktreeinclude at all. The render draws NOTHING for nil and
 	// "seeded 0 files" for a report that copied nothing — a repo that never

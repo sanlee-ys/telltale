@@ -452,6 +452,31 @@ story, and an empty commit would be a receipt claiming work that did not happen.
 that could not land degrades that one seat's receipt — `not committed: <git's reason>` —
 and touches nothing else.
 
+**Set `TELLTALE_ARENA_CHECK` and the room RUNS something in each attempt, then reports the
+exit code.** The variable holds one command — `TELLTALE_ARENA_CHECK="go test ./..."`, then
+`telltale council` — and after a racer settles, that command runs inside *that racer's*
+worktree. The column says `check PASS · exit 0 · 44s` or `check FAIL · exit 1 · 51s`, and the
+line under it names the command, so a verdict is always checkable against what produced it.
+Until it lands, the block says `check · running`. Nothing else about the room changes:
+without the variable there is no check line at all, because a room that never named one must
+read exactly as it did before.
+
+Four things this is not, and each of them is the point:
+
+- **It is not a judgement.** PASS and FAIL come from the process's exit code and from nothing
+  else. There is no model opinion on any attempt, marked or unmarked — council does not rank
+  answers by quality anywhere, and it does not start here.
+- **A check that could not RUN is never a FAIL.** A binary that is not installed, a spelling
+  the room refused, an attempt whose own diff could not be read, or the 15-minute deadline all
+  read `check unavailable: <why>`. A verdict on an attempt nobody measured would be a claim
+  about somebody's code.
+- **There is no shell.** The command runs as argv, so a pipe, a redirection, a `&&`, a `$(…)`
+  or a quote is refused by name with the character quoted back — put the chaining in a script
+  and name the script. A repo cannot supply the command either: only your environment can, so
+  a clone from a stranger can never run a program on your machine by containing a file.
+- **It runs in the racer's worktree, never in your own tree.** That is the same containment
+  the race itself has.
+
 **`d` flips the focused seat's arena block from the stat to the full patch**, and back —
 per column, because reading one seat's stat against another's whole diff is a legitimate
 way to compare. The frame shows at most 400 patch lines, and the cutoff names what it
@@ -527,7 +552,10 @@ commits — and the `arena · so far` stat watched growing from a non-empty read
 columns before the settled block replaced it. **Live in part**: the cursor seat's
 throwaway racer has been spawned, streamed and killed live — twice now — but never
 watched finish on its own; that half still stands on its offline tests, and
-[design.md §9.37](design.md) says so beside its payment blocks.
+[design.md §9.37](design.md) says so beside its payment blocks. **Not live at all**:
+`TELLTALE_ARENA_CHECK`, added 2026-08-18. No real race has run with a check configured, so
+every claim above about PASS, FAIL and unavailable stands on offline tests and a golden
+frame — the run itself is stubbed in all of them.
 
 ## Flags
 
@@ -548,6 +576,10 @@ guessing separately at a convention you already wrote down. The flag takes a **p
 never content: telltale is public and a briefing is not, so no default location inside a
 repo is searched, and the file is never logged, never rendered and never stored by
 telltale. The header says `briefed` or `no brief` on every frame.
+
+`TELLTALE_ARENA_CHECK` has no flag beside it, on purpose — it is the command each racer's
+attempt is measured with, described under [The race](#the-race-arena) above, and a room
+without it races exactly as it always did.
 
 ---
 

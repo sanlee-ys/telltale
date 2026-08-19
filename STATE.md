@@ -355,6 +355,20 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   that act on that result are unexercised. §8's 2026-08-18 amendment carries
   the record.
 
+- **The arena check has never run in a real race, and is owed one before
+  2026-09-30.** `TELLTALE_ARENA_CHECK` shipped 2026-08-18 (design.md §9.37's
+  dated amendment): after a racer settles, the operator's command runs in that
+  racer's worktree and the column reports PASS or FAIL from the exit code.
+  Every claim about it stands on offline tests and one golden — the run itself
+  is stubbed in all of them, and `main_test.go` panics on any test that reaches
+  the real runner. What a live race would pay is narrow and worth naming, so
+  nobody reads the debt wider than it is: that a real vendor's attempt returns
+  an exit code the column renders, that a suite outliving its race still lands
+  on the right receipt, and that the 15-minute deadline is not tight enough to
+  kill a real one. The cheapest payment is a race on this repo with
+  `TELLTALE_ARENA_CHECK="go test ./internal/theme"` set — one seat's attempt,
+  a real exit code, no new vendor spend beyond the race itself.
+
 - **A live ordinary-turn give-up is owed on the reference box before
   2026-09-30.** `x` on an ordinary turn shipped 2026-08-17 with offline tests
   only. Whether a real vendor's interrupt lands mid-turn, and whether the

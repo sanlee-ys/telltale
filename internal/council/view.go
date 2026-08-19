@@ -1819,6 +1819,39 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 				out = append(out, wrap("(the yankable diff is truncated at 1 MB — the worktree holds the whole of it)", w)...)
 			}
 		}
+		if k := c.Arena.Check; k != nil {
+			// The measured check (§9.37, amended 2026-08-18). BELOW the diff,
+			// because that is the order it happened in: the seat wrote, the
+			// tree was read, and THEN the operator's command ran in it.
+			//
+			// Four states, four renders, and the fourth is the nil pointer this
+			// branch is not entered for — no check configured draws nothing at
+			// all, which is why a room without one is unchanged by this
+			// feature. The three that do draw keep §4a.1's distinction where it
+			// matters most on this surface: a check that could not RUN is never
+			// spelled FAIL, because a verdict nobody measured is exactly the
+			// invented value this repository exists to refuse.
+			//
+			// The word carries the whole signal and the colour is second
+			// (§9.11): PASS and FAIL survive --ascii and NO_COLOR, and the
+			// goldens render them through PlainStyles, which is what makes the
+			// bytes the proof.
+			switch {
+			case k.Running:
+				out = append(out, styleAll(wrap("check · running", w), sty.Muted)...)
+			case k.Err != "":
+				out = append(out, styleAll(wrap("check unavailable: "+k.Err, w), sty.SevWarn)...)
+			case k.Exit == 0:
+				out = append(out, styleAll(wrap("check PASS · exit 0"+checkElapsed(k), w), sty.SevOK)...)
+			default:
+				out = append(out, styleAll(wrap("check FAIL · exit "+itoa(k.Exit)+checkElapsed(k), w), sty.SevCrit)...)
+			}
+			// The command, under its own verdict, muted the way the worktree
+			// path under the label is: a PASS whose command is invisible is a
+			// claim the reader has no way to check, and the operator who set it
+			// last week is exactly the reader who needs telling.
+			out = append(out, styleAll(wrap(k.Cmd, w), sty.Muted)...)
+		}
 		if c.Arena.Undone {
 			// LAST, below the stat, because that is when it happened: the
 			// attempt was made, measured, and THEN taken back. The stat above
@@ -1872,6 +1905,20 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		}
 	}
 	return out, anchors
+}
+
+// checkElapsed is the check's own clock as a suffix, and NOTHING when the run
+// reported no duration.
+//
+// A zero elapsed is not "0s" here: the only way a finished check carries zero
+// is a stub or a fixture that never timed anything, and printing a measurement
+// nobody took is the bug this file is full of guards against. Absent stays
+// absent (§4a.1).
+func checkElapsed(k *ArenaCheck) string {
+	if k.Elapsed <= 0 {
+		return ""
+	}
+	return " · " + dur(k.Elapsed)
 }
 
 // shortSHA is the seven-character convention, guarded for the synthetic bases
