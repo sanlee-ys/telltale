@@ -7,6 +7,18 @@ Every number comes from measured tool output.
 
 > A telltale is the ribbon on a sail. It shows the air. It does not interpret it.
 
+[![CI](https://github.com/sanlee-ys/telltale/actions/workflows/ci.yml/badge.svg)](https://github.com/sanlee-ys/telltale/actions/workflows/ci.yml)
+
+<!-- BADGE SLOT. One rule, and it is the honest-gauge rule wearing a different
+     hat: a badge states a fact somebody measured, and it names who measured it.
+     The CI badge above is GitHub rendering GitHub's own run result, so it needs
+     no third-party host and cannot go stale.
+     Allowed here later: a directory-inclusion badge, once that listing has
+     actually merged. Never here: a star count, a download count, an install
+     count, or any "used by" figure — telltale measures none of them, and a
+     third-party render of an unmeasured number is the badge form of a rendered
+     guess. See docs/design.md §8, the 2026-08-18 amendment. -->
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="images/telltale-council-dark.svg">
@@ -14,6 +26,17 @@ Every number comes from measured tool output.
     <img alt="telltale council dispatch room showing multi-agent panel" src="images/telltale-council-dark.svg">
   </picture>
 </p>
+
+<!-- HERO SLOT, for the animated capture that replaces or joins the still above.
+     It is the last open piece of adoption item 1 (docs/design.md §8). Two
+     conditions bind whatever lands here, and neither is negotiable by the
+     session that lands it:
+     1. The owner drives the eight beats. A scripted race is an invented
+        recording (design.md §8, the recording chain).
+     2. Every frame gets a review for workspace paths, session names and seat
+        identity before the capture is committed (owner's ruling, 2026-08-17).
+     The runbook is packaging/tape/README.md. No cast or GIF is in this
+     repository today. -->
 
 **v0.2.0** (2026-08-14). Windows is verified on every commit.
 Intel macOS is smoke-checked. `darwin_arm64` and `linux_amd64` are built, not run.
@@ -30,6 +53,18 @@ go build -o telltale.exe ./cmd/telltale
 ```
 
 A source build reports `dev` from `telltale version`. A release binary reports its tag.
+
+**Windows, one paste** (measured against `v0.2.0`, 2026-08-18)
+
+```powershell
+irm https://raw.githubusercontent.com/sanlee-ys/telltale/main/packaging/install.ps1 | iex
+```
+
+It downloads the latest release, checks the archive against `checksums.txt`,
+refuses on a mismatch, and puts `telltale.exe` on your user `PATH`.
+It needs no administrator rights. The binary it installs is **not signed**,
+and the script says so before it names the next command.
+Source and knobs: [packaging/install.ps1](packaging/install.ps1).
 
 **Windows, scoop** (exercised once, 2026-08-14)
 
@@ -57,8 +92,8 @@ passes, run `xattr -d com.apple.quarantine telltale`. Do not add that line
 to the `curl` block: `curl` does not set the mark, and the command then
 exits 1. The measured walk is in [SECURITY.md](SECURITY.md).
 
-**Windows, winget.** Not submitted. Use scoop or a source build.
-Draft: [packaging/](packaging/).
+**Windows, winget.** Not submitted. Use the one paste above, scoop, or a
+source build. Draft: [packaging/](packaging/).
 
 Run `telltale` with no arguments for the first frame.
 `telltale doctor` is the preflight. `telltale council` opens the room.
@@ -108,6 +143,28 @@ Empty cells are fields no vendor writes. A `~` marks an estimate.
 HUD flags: `--vendor all|claude|codex|gemini|agy|cursor|grok`,
 `--hide gemini,cursor` (default from `TELLTALE_HUD_HIDE`),
 `--ascii` (`TELLTALE_ASCII=1`), `--no-title`. `NO_COLOR` is honoured.
+
+## First five minutes
+
+Run `telltale doctor` first. It reports what is installed here, it probes no
+login and makes no network call, and it **exits 0 even when every seat is
+missing**. Read its own words before you read this table: each row below is
+keyed to a line `doctor` actually prints.
+
+| What you see | What it means | What to do |
+|---|---|---|
+| `0 checks passed`, and `no seat above passed every check that ran` | telltale is working. `council` drives a vendor CLI, and this machine has none. | Install one vendor CLI and run `doctor` again. `telltale hud` runs either way. |
+| `binary FAILED  not found on PATH (looked for codex)` | This shell cannot resolve that vendor. | Open the shell you normally run the vendor in, or put its binary on `PATH`. `doctor` also finds a vendor at a known install location and says `a known install location, not on this shell's PATH`. |
+| `drivable FAILED` under a `binary ok` | The binary is here and council will not seat it. "Is it there" and "can it be driven" have different fixes, so `doctor` refuses to collapse them. | Read the reason on that row. It names the entry point and why: usually a shell shim that takes its prompt as an argument, which council will not put through `cmd.exe`. |
+| `auth  not checked` and `network  not checked`, on every seat, always | Not a failure and not a soft pass. This report probes neither. | Nothing. A seat that is installed and signed out reports its own auth failure on its column the first time you dispatch to it. |
+| `re-measure §3.x before trusting the fields this adapter sources` | Your vendor runs a version other than the one telltale surveyed. | Nothing on this machine. It is a staleness fact about telltale: no check failed, the tally is unchanged, and the command still exits 0. |
+| `telltale version` says `dev`, or an older tag, after the install | Another `telltale.exe` is earlier on `PATH`. The install script appends its directory rather than jumping the queue. | Run `Get-Command telltale`. It names the one that runs. Remove the other one, or set `TELLTALE_INSTALL_DIR` to the directory it already lives in. |
+| A column in the room stays empty after a dispatch | The seat answered nothing, or the vendor refused the turn. | The column carries the reason. [docs/council.md](docs/council.md) reads the badges and the phase words. |
+| Windows warns before the first run | The binary is unsigned. No telltale release carries an Authenticode signature ([docs/design.md §8](docs/design.md#s8), item 8). | Verify the archive against `checksums.txt`, which is the whole verification this release offers. [SECURITY.md](SECURITY.md) states what that does and does not prove. |
+| The statusline shows nothing, or `bad statusline input: unexpected end of JSON input` | The statusline is wired, not run. The vendor calls it and hands it JSON on stdin, so by hand it gets no payload. | Paste the `statusLine.command` block above, then start a session. |
+
+`telltale doctor` output pastes into an issue as it stands: it is plain text
+with no colour and no alternate screen, for exactly that reason.
 
 ## What it is
 
