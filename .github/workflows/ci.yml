@@ -370,6 +370,38 @@ jobs:
           if ($out -match 'listening on') { throw "a sink that failed to bind claimed it was listening: $out" }
           if ($err -match '\x1b') { throw "the collision message emitted ANSI escapes; it is read in pipes and pastes: $err" }
 
+      # packaging/install.ps1 is the `irm | iex` route (design.md §8, added
+      # 2026-08-18). It is the one shipped file no Go test can reach, and it
+      # runs on a stranger's machine before anything else telltale does.
+      #
+      # This step PARSES it and never executes it: running it would download a
+      # release on every push. It runs under Windows PowerShell 5.1 rather than
+      # pwsh, because 5.1 is the shell the trap lives in — it reads a BOM-less
+      # file as ANSI, so a single em dash anywhere in this file breaks the parse
+      # before the script runs. That was measured on 2026-08-18 and it cost four
+      # parser errors under 5.1.26100.9168 while pwsh 7.6.5 read the same file
+      # fine, which is exactly the shape of defect a gate has to hold.
+      - name: Gate (install.ps1 parses under Windows PowerShell 5.1, and is ASCII only)
+        shell: powershell
+        run: |
+          $path = (Resolve-Path packaging/install.ps1).Path
+          $bytes = [IO.File]::ReadAllBytes($path)
+          $high = @($bytes | Where-Object { $_ -ge 0x80 }).Count
+          if ($high -ne 0) {
+            throw "install.ps1 carries $high byte(s) at or above 0x80. Windows PowerShell 5.1 reads this BOM-less file as ANSI and the parse breaks. Keep it ASCII."
+          }
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errors)
+          if ($errors.Count -gt 0) {
+            throw "install.ps1 does not parse: $($errors | ForEach-Object { $_.Message })"
+          }
+          # `exit` inside a piped script ends the user's own shell session, so
+          # the script throws instead. A future edit that reaches for `exit` is
+          # the regression this line catches.
+          if (Select-String -Path $path -Pattern '^\s*exit\b' -Quiet) {
+            throw "install.ps1 calls exit; a script run through irm | iex ends the user's shell that way. Throw instead."
+          }
+
       # ADR-002's fast path, on the clock rather than on anecdote (design.md §5,
       # amendment 2026-08-16). This runs LAST on purpose: it drives full.json,
       # which carries rate_limits and therefore writes the quota relay, and two

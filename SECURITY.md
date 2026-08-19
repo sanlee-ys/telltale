@@ -85,11 +85,12 @@ not change any statement in this section.
 
 The consequences, per platform:
 
-- **Windows.** The binary carries no Authenticode signature. `scoop` and `winget`
-  install that same unsigned binary. A direct download through a browser can
-  raise a Microsoft Defender SmartScreen prompt, because SmartScreen weighs the
-  signature and the download reputation. This project has not measured that
-  prompt.
+- **Windows.** The binary carries no Authenticode signature. `scoop`, `winget`
+  and `packaging/install.ps1` install that same unsigned binary, and the script
+  says so in its own output before it names the next command. A direct download
+  through a browser can raise a Microsoft Defender SmartScreen prompt, because
+  SmartScreen weighs the signature and the download reputation. This project has
+  not measured that prompt.
 - **macOS.** The `darwin_amd64` and `darwin_arm64` archives are unsigned and not
   notarized. macOS applies the `com.apple.quarantine` attribute to a file that a
   browser downloads, and Gatekeeper then refuses to run an unsigned, un-notarized
@@ -111,7 +112,8 @@ The consequences, per platform:
 **Verify the checksum.** Every release attaches `checksums.txt` with a SHA-256
 for each archive. That file tells you the archive is the one the release workflow
 produced. It does not tell you who produced it. `scoop` verifies the SHA-256
-itself from the manifest.
+itself from the manifest, and `packaging/install.ps1` verifies it against
+`checksums.txt` before it unpacks anything, deleting the download on a mismatch.
 
 Signing is not planned work with a date. It needs a certificate or an Apple
 Developer account that the owner holds, plus release secrets, so it is an owner

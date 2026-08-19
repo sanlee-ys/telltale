@@ -6845,7 +6845,7 @@ notarization stay owner decisions, and no contributor builds that pipeline.
 
 | Check | Fires on | Runner | Fails on |
 |---|---|---|---|
-| `ci.yml` | push to main, pull request, release | windows-latest, ubuntu-latest | vet, the suite, the build, the binary smokes, the schema gate |
+| `ci.yml` | push to main, pull request, release | windows-latest, ubuntu-latest | vet, the suite, the build, the binary smokes, the schema gate, the install-script gate (added 2026-08-18) |
 | `govulncheck.yml` | push to main, pull request, Monday 07:00 UTC | windows-latest | a reachable known vulnerability |
 | `codeql.yml` | push to main, pull request, Monday 07:30 UTC | ubuntu-latest | a default-suite alert |
 | `dependabot.yml` | weekly | none | nothing. It opens a pull request |
@@ -6966,6 +6966,132 @@ session names, workspace paths and the absolute path of every vendor binary on
 the machine. The tape stays a personal artifact and the repository holds the
 script that makes it. What remains is not a tooling item — the owner drives the
 eight beats, because a scripted race would be an invented recording.
+
+#### The one-paste Windows install (added 2026-08-18)
+
+`packaging/install.ps1` is the third Windows route, and it is the only one that
+needs nothing installed first:
+
+```
+irm https://raw.githubusercontent.com/sanlee-ys/telltale/main/packaging/install.ps1 | iex
+```
+
+**It exists because scoop is a prerequisite and winget is not submitted.** Item
+1's "one-command install with scoop/winget first" shipped both of those, and
+both assume the reader already has the package manager. A reader who has
+neither had two choices before this: unpack an archive by hand, or build from
+source. A competitor sweep on 2026-08-17 read the same gap the other way round:
+every lane leader collapses README-read to first-run into one paste, and abtop's
+README carries this PowerShell shape. That is a reading of their documents, not
+a measurement of their installers, and it is cited as such.
+
+**What it verifies, and what it refuses to claim.** The script downloads the
+archive and `checksums.txt`, compares the SHA-256 **before** it unpacks
+anything, and deletes the download on a mismatch. It then prints, in its own
+output rather than only in a document nobody reads at install time, that the
+binary carries no Authenticode signature and that the checksum proves what the
+workflow built and not who built it. That sentence is item 8 restated at the
+one moment the reader can act on it. The script signs nothing and prepares no
+signing pipeline: item 8 stands unchanged.
+
+**Three refusals are in the script rather than in a note.** A machine reporting
+`PROCESSOR_ARCHITECTURE` other than `AMD64` is refused by name, because the
+release builds no `windows/arm64` binary and installing the amd64 one there
+would be the packaging form of a rendered guess. A tag with no published
+release fails with the URL that 404'd, not with a bare status code. A
+`checksums.txt` that names no entry for the archive stops the install rather
+than skipping the check.
+
+**Measured 2026-08-18, against the published `v0.2.0` release.** Windows 11,
+two shells: PowerShell 7.6.5 and Windows PowerShell 5.1.26100.9168. Both
+installed `telltale_0.2.0_windows_amd64.zip`, both computed
+`7a2401aa…33772528`, and that value equals the digest GitHub reports for the
+asset. The installed binary answers `telltale 0.2.0`, so the release ldflags
+survive the route. The `irm | iex` shape was exercised as `Get-Content -Raw |
+Invoke-Expression`, and the calling shell survived it: the script throws and
+never calls `exit`, because `exit` inside a piped script ends the user's
+session. The `PATH` branch was driven once with the real user variable and
+restored byte for byte afterwards: the install directory reached the persisted
+user `PATH` and the running shell's own `$env:Path`. That trial also measured
+the one surprise in this route, and it is recorded rather than smoothed over:
+the directory is APPENDED, so a `telltale.exe` already earlier on `PATH` — a
+`go install` build, in the measured case — goes on winning. `Get-Command
+telltale` names the one that runs. Prepending was the rejected alternative,
+because a script that quietly outranks a binary the operator put there is doing
+something the operator did not ask for. Two refusals ran end to end and
+installed nothing: the arm64 refusal, and a `TELLTALE_VERSION=v0.1.0` run
+against the tag that has no release.
+
+**What has no end-to-end live trial is the mismatch refusal**, because driving
+it needs a host that serves a corrupted archive. Its comparison was measured
+live instead: the real `checksums.txt` was parsed, a byte was appended to the
+real archive, and the two hashes differed. The branch that acts on that
+comparison is three lines below it and is unexercised. STATE.md carries it as a
+known gap.
+
+**One footgun is recorded because it cost a parse, and the gate holds it.** The
+file is ASCII only. Windows PowerShell 5.1 reads a BOM-less file as ANSI, so one
+em dash inside a `throw` produced four parser errors under 5.1 and none under
+PowerShell 7. The `irm | iex` path decodes UTF-8 correctly and would have hidden
+this; the download-then-run path would not. `ci.yml` now parses the file under
+Windows PowerShell 5.1 on every push, rejects any byte at or above 0x80, and
+rejects an `exit` statement. It never executes the script, because executing it
+would download a release on every push. The ASCII arm was measured non-vacuous
+the way the schema gate's mutations are: one em dash appended to a copy, and the
+gate reported three bytes and failed.
+
+**No other channel is reshaped by this.** No Homebrew tap, no npm, no winget
+automation. Items 2 and 7 rule each one, and a one-paste installer is not an
+argument to revisit any of them. macOS and Linux keep the measured `curl` and
+`shasum` walk in the README, which is the same verification without a script.
+
+#### The listing and launch cadence, recorded and not executed (added 2026-08-18)
+
+This subsection records strategy that no contributor may execute. It exists
+because this repository rejects unrecorded strategy, and because the pieces
+below are owner actions on surfaces outside it.
+
+1. **Directory listings.** `awesome-claude-code` and the neighbouring lists are
+   the lane's standing distribution channel, and an inclusion is a pull request
+   to somebody else's repository. That is the same class of act as the winget
+   submission in item 7, and it takes the same ruling: **a human action, never
+   automated, and never opened by a contributor session.** What lands in this
+   repository is the badge slot in `README.md` and this paragraph. The badge
+   goes in only after the listing merges.
+2. **One Show HN per versioned feature, with the maintainer working the
+   thread.** Recorded as the cadence, with one binding limit: item 2 pins the
+   launch to ONE hypothesis, cross-harness visibility of the room, and a serial
+   cadence must not quietly widen that claim. A second post about a second
+   feature tests that feature's own question and is read as such. The first post
+   is chain link 3 in `STATE.md`, and it is sequenced behind links 1 and 2,
+   which are paid.
+3. **Publish the run-evidence bar, the method, and the result.** Item 2 already
+   defines the signal that answers the launch hypothesis: a version-bearing bug
+   report, a real-session screenshot, a pull request grounded in running it,
+   package-manager feedback, or an unsolicited statement of use. Nobody in this
+   lane publishes that bar. Publishing it is the launch story only an
+   honest-gauge product can tell, and it costs nothing to tell, because the bar
+   is written down already.
+
+   **The threshold is an owner decision and is NOT taken here.** The candidate
+   sweep proposed "10 runs in 30 days". That number has no measurement behind
+   it and no ruling, so adopting it would be the invented figure ADR-001
+   refuses. What is settled is the KIND of evidence, quoted above. What the
+   owner names before the post: the count, the window, and what the result
+   means if it is missed. Whatever is published then cites measured evidence,
+   and it never cites a star count or an install count, because telltale
+   measures neither.
+
+**`README.md` carries two slots for this work and no adoption content.** The
+badge slot holds one badge, the CI result, which is GitHub rendering GitHub's
+own run and therefore needs no third-party host and cannot go stale. A
+directory-inclusion badge may join it after that listing merges. A star count,
+a download count, an install count or a "used by" figure never may: telltale
+measures none of them, and a third-party render of an unmeasured number is the
+badge form of a rendered guess. The hero slot is for the animated capture,
+which stays owner-driven under the recording chain above and under the
+2026-08-17 per-frame review ruling. The still SVG hero and the positioning line
+already landed; neither moves here.
 
 Neither track discharges what verification already owes: §3.4's remaining passive-tail
 items stay open (§3.7's first live Gemini pass ran and passed 2026-08-03), and

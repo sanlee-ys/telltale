@@ -70,6 +70,58 @@ user-local with `go install github.com/goreleaser/goreleaser/v2@latest`, which
 lands the binary in `$(go env GOPATH)/bin` and needs no admin rights and no
 package manager.
 
+## install.ps1 — the one-paste Windows route
+
+```
+irm https://raw.githubusercontent.com/sanlee-ys/telltale/main/packaging/install.ps1 | iex
+```
+
+The script reads the latest release, downloads
+`telltale_<version>_windows_amd64.zip` and `checksums.txt`, compares the
+SHA-256 **before** it unpacks anything, copies `telltale.exe` into
+`%LOCALAPPDATA%\Programs\telltale`, and adds that directory to the user `PATH`.
+No administrator rights, no machine-wide setting. It then prints that the
+binary is unsigned, and names `telltale doctor` as the next command.
+
+The directory is **appended** to `PATH`, never prepended. A `telltale.exe`
+already earlier on `PATH` goes on winning, and `Get-Command telltale` names the
+one that runs. A script that silently outranks a binary the operator put there
+is doing something the operator did not ask for.
+
+Three environment variables, because a piped script takes no parameters:
+
+| Variable | Effect |
+|---|---|
+| `TELLTALE_VERSION` | Install this tag instead of the latest release. |
+| `TELLTALE_INSTALL_DIR` | Put `telltale.exe` here instead of the default. |
+| `TELLTALE_NO_PATH=1` | Skip the user `PATH` edit. |
+
+Exercise it without touching your own machine:
+
+```powershell
+$env:TELLTALE_INSTALL_DIR = "$env:TEMP\telltale-trial"
+$env:TELLTALE_NO_PATH = '1'
+irm https://raw.githubusercontent.com/sanlee-ys/telltale/main/packaging/install.ps1 | iex
+& "$env:TEMP\telltale-trial\telltale.exe" doctor
+```
+
+Two rules for anyone editing this file.
+
+**Keep every character under 0x80.** Windows PowerShell 5.1 reads a BOM-less
+file as ANSI, so one em dash in a string breaks the parse before the script
+runs. Measured 2026-08-18: an em dash in one `throw` produced four parser
+errors under 5.1.26100.9168 and none under PowerShell 7.6.5. The `irm | iex`
+path decodes UTF-8 and hides this; the download-then-run path does not.
+
+**Never call `exit`.** A piped script runs inside the user's shell, so `exit`
+ends their session. The body is a function, every failure is a `throw`, and one
+`try/catch` at the bottom prints the reason.
+
+What the script deliberately does not do: sign anything, prepare a signing
+pipeline, or install on `windows/arm64`. The first two are the owner's decision
+([docs/design.md §8](../docs/design.md), item 8). The third has no binary to
+install, so the script refuses that machine by name.
+
 ## winget
 
 The three manifests in `winget/` are a **draft**. They are not submitted, and
