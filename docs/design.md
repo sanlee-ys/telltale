@@ -7022,12 +7022,32 @@ something the operator did not ask for. Two refusals ran end to end and
 installed nothing: the arm64 refusal, and a `TELLTALE_VERSION=v0.1.0` run
 against the tag that has no release.
 
-**What has no end-to-end live trial is the mismatch refusal**, because driving
+**What had no end-to-end live trial was the mismatch refusal**, because driving
 it needs a host that serves a corrupted archive. Its comparison was measured
 live instead: the real `checksums.txt` was parsed, a byte was appended to the
 real archive, and the two hashes differed. The branch that acts on that
-comparison is three lines below it and is unexercised. STATE.md carries it as a
-known gap.
+comparison is three lines below it and was unexercised until the payment below.
+
+**Paid 2026-08-19, on the MBP (Intel, macOS, PowerShell 7.6.4): two mismatch
+trials and one control.** The missing instrument was the corrupt host, so the
+trial built one. A `python3 -m http.server` on 127.0.0.1 served the published
+`v0.2.0` `checksums.txt` beside a copy of the real archive with one byte
+appended (`7a2401aa…33772528` became `8ea9111b…6eb47b8d3c`). The script under
+test was the shipped file with one recorded change: the `$base` line pointed at
+the local host. The OS and arch refusals read plain environment variables, so
+`OS=Windows_NT` and `PROCESSOR_ARCHITECTURE=AMD64` let the real function run on
+this machine; that shortcut is named below. Both trials refused, 2/2. The
+thrown message named both hashes and said the download was deleted and nothing
+was installed. No install directory was created, and no `telltale-install-*`
+work directory survived. The message itself is the proof that the three lines
+ran: it is the `throw` line's own text, and it carries the two hashes the lines
+above it computed. The control reversed the one appended byte and changed
+nothing else. The same server and the same patched script then installed
+cleanly: `sha256 ok (7a2401aa…)`, and a placed `telltale.exe`. Stated honestly:
+this trial redirected `$base` and satisfied the two host guards from the
+environment, so it measured the mismatch branch and not the GitHub download
+path or the Windows host — the 2026-08-18 block above already paid those two
+on the real host. STATE.md no longer carries the gap.
 
 **One footgun is recorded because it cost a parse, and the gate holds it.** The
 file is ASCII only. Windows PowerShell 5.1 reads a BOM-less file as ANSI, so one

@@ -345,16 +345,6 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   miss means are the owner's to name. The sweep's "10 runs in 30 days" is a
   proposal with no measurement behind it and was deliberately not adopted.
 
-- **`packaging/install.ps1`'s mismatch refusal has no end-to-end live trial
-  (2026-08-18).** The happy path ran on PowerShell 7.6.5 and Windows
-  PowerShell 5.1.26100.9168 against the published `v0.2.0`, and two refusals
-  ran end to end (an arm64 machine, and a tag with no release). Driving the
-  checksum mismatch needs a host that serves a corrupted archive. The
-  comparison itself was measured live over the real `checksums.txt` and a
-  tampered copy of the real archive, and the hashes differed; the three lines
-  that act on that result are unexercised. §8's 2026-08-18 amendment carries
-  the record.
-
 - **A live ordinary-turn give-up is owed on the reference box before
   2026-09-30.** `x` on an ordinary turn shipped 2026-08-17 with offline tests
   only. Whether a real vendor's interrupt lands mid-turn, and whether the
