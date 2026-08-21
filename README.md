@@ -146,7 +146,7 @@ The test suite emits that picture from the HUD render.
 Empty cells are fields no vendor writes. A `~` marks an estimate.
 `↑`/`↓` move the selection. `enter` opens the detail pane. `/` filters rows.
 
-HUD flags: `--vendor all|claude|codex|gemini|agy|cursor|grok`,
+HUD flags: `--vendor all|claude|codex|gemini|agy|cursor|grok|pi|self-reported`,
 `--hide gemini,cursor` (default from `TELLTALE_HUD_HIDE`),
 `--ascii` (`TELLTALE_ASCII=1`), `--no-title`. `NO_COLOR` is honoured.
 
