@@ -226,6 +226,111 @@ jobs:
           }
           Remove-Item snapshot-live.json
 
+      # The same document, in front of the other kind of machine reader
+      # (design.md §7.25). This step drives the BUILT binary as an MCP stdio
+      # server with a scripted client, and then feeds the tool's own document
+      # back through the validator the step above used. That reuse is the
+      # point: the MCP surface is a fourth READER of the snapshot document, so
+      # the way to check it is the contract the document already publishes, not
+      # a second reading of the same rules.
+      #
+      # It runs after the schema gate so the runner's relayed quota is already
+      # written — this document carries the same populated `quota` array that
+      # one asserts on, rather than the empty half a bare machine emits.
+      - name: Gate (the MCP server through the real binary)
+        shell: pwsh
+        run: |
+          function Tree {
+            $dir = "$env:USERPROFILE\.telltale"
+            if (-not (Test-Path $dir)) { return '<absent>' }
+            (Get-ChildItem $dir -Recurse -File | Sort-Object FullName |
+              ForEach-Object { "$($_.FullName)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join "`n"
+          }
+          $before = Tree
+
+          $psi = [System.Diagnostics.ProcessStartInfo]::new()
+          $psi.FileName = (Resolve-Path ./telltale.exe).Path
+          $psi.Arguments = 'mcp'
+          $psi.RedirectStandardInput = $true
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError = $true
+          $psi.UseShellExecute = $false
+          $p = [System.Diagnostics.Process]::Start($psi)
+          $errTask = $p.StandardError.ReadToEndAsync()
+
+          # One request per line, answers read one line at a time — the stdio
+          # transport's own framing. A notification carries no id and MUST NOT
+          # be answered, so nothing is read after it; if the server ever
+          # answered one, every read below would return the wrong frame and the
+          # assertions would fail together.
+          $requests = @(
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}'
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"fleet_snapshot","arguments":{}}}'
+            '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"fleet_snapshot","arguments":{"vendor":"chatgpt"}}}'
+          )
+          $frames = @()
+          foreach ($r in $requests) {
+            $p.StandardInput.WriteLine($r)
+            $p.StandardInput.Flush()
+            if ($r -match '"id"') { $frames += $p.StandardOutput.ReadLine() }
+          }
+          $p.StandardInput.Close()
+          if (-not $p.WaitForExit(60000)) {
+            $p.Kill($true)
+            throw "the MCP server did not exit after its client closed stdin; EOF is the clean end of an stdio session"
+          }
+          $err = $errTask.GetAwaiter().GetResult()
+          if ($p.ExitCode -ne 0) { throw "telltale mcp exited $($p.ExitCode): $err" }
+          if ($err) { throw "the MCP server wrote to stderr: $err" }
+          if ((Tree) -ne $before) { throw "an MCP session changed something under ~/.telltale; this mode writes nothing at all (§7.25)" }
+          # A closed stream reads as $null, and every assertion below would then
+          # fail on a missing property rather than on the thing that broke.
+          if ($frames.Count -ne 4 -or ($frames | Where-Object { -not $_ })) {
+            throw "the server stopped answering: got $($frames.Count) frames, one of them empty. $err"
+          }
+
+          $init = $frames[0] | ConvertFrom-Json
+          if ($init.result.protocolVersion -ne '2025-06-18') {
+            throw "the handshake answered $($init.result.protocolVersion) to a client asking for a supported revision"
+          }
+          if (-not $init.result.serverInfo.name) { throw "the handshake named no server: $($frames[0])" }
+
+          $list = $frames[1] | ConvertFrom-Json
+          if ($list.result.tools[0].name -ne 'fleet_snapshot') { throw "tools/list did not name the tool: $($frames[1])" }
+          # The calling MODEL reads this description and nothing else before it
+          # decides what a value means, so the honesty rules have to be in it.
+          foreach ($word in 'null', 'estimated', 'unsupported', 'self_reported') {
+            if ($list.result.tools[0].description -notmatch $word) {
+              throw "the tool description never mentions $word; a caller that does not know the rules reads a null as a zero"
+            }
+          }
+
+          $call = $frames[2] | ConvertFrom-Json
+          if ($call.result.isError) { throw "the tool call failed: $($frames[2])" }
+          # The text content and structuredContent are one document marshalled
+          # twice. Validating the TEXT is the stronger of the two, because that
+          # is the byte string a client shows a model.
+          $call.result.content[0].text | Set-Content -Path mcp-doc.json -Encoding utf8
+          python tools/validate-snapshot.py mcp-doc.json
+          if ($LASTEXITCODE -ne 0) { throw "the document served over MCP does not match docs/snapshot.schema.json" }
+          # A gate that only reads the text half would miss a structuredContent
+          # that had drifted, and a client may read either one.
+          $call.result.structuredContent | ConvertTo-Json -Depth 12 | Set-Content -Path mcp-structured.json -Encoding utf8
+          python tools/validate-snapshot.py mcp-structured.json
+          if ($LASTEXITCODE -ne 0) { throw "structuredContent does not match docs/snapshot.schema.json; the two spellings have drifted" }
+          Remove-Item mcp-doc.json, mcp-structured.json
+
+          # A bad argument is a RESULT the model can read, never a transport
+          # error it cannot — and it carries no document, because there is no
+          # measurement behind it.
+          $bad = $frames[3] | ConvertFrom-Json
+          if ($bad.error) { throw "a bad vendor came back as a JSON-RPC error: $($frames[3])" }
+          if (-not $bad.result.isError) { throw "a bad vendor was reported as a successful call: $($frames[3])" }
+          if ($bad.result.structuredContent) { throw "a failed call carried a document: $($frames[3])" }
+          if ($bad.result.content[0].text -notmatch 'chatgpt') { throw "the refusal does not name what was wrong: $($frames[3])" }
+
       - name: Smoke (cursor token relay through the real binary)
         shell: pwsh
         run: |

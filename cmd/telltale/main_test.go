@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"net"
 	"os"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/sanlee-ys/telltale/internal/council"
 	"github.com/sanlee-ys/telltale/internal/gatehook"
+	"github.com/sanlee-ys/telltale/internal/mcpserver"
 )
 
 // TestUsageNamesEverySeat stops the long help from describing a smaller room
@@ -247,6 +249,18 @@ func TestUsageNamesTheSnapshotMode(t *testing.T) {
 	}
 }
 
+// TestUsageNamesTheMCPMode, and names the two things a reader cannot guess: the
+// tool's name, and the fact that this mode is wired into a client rather than
+// typed. A mode nobody can see in the help is a mode nobody runs, and this one
+// has no interactive surface at all to stumble into.
+func TestUsageNamesTheMCPMode(t *testing.T) {
+	for _, want := range []string{"telltale mcp", mcpserver.ToolName, "mcp add"} {
+		if !strings.Contains(usageText, want) {
+			t.Errorf("usage text never mentions %q", want)
+		}
+	}
+}
+
 // TestUsageDescribesCouncilSeatsNotHudFilter guards the neighbouring trap.
 //
 // Two different flags spell themselves `--vendor`: council's seat roster and
@@ -317,5 +331,90 @@ func TestHookGateWritesTheDecisionAndNothingElse(t *testing.T) {
 	}
 	if string(got) != string(gatehook.Decision()) {
 		t.Errorf("stdout = %q, want exactly %q", got, gatehook.Decision())
+	}
+}
+
+// TestMCPFailsLoudOnWhatItCannotDo is `snapshot`'s flag contract, for the mode
+// whose reader is an agent — and the argument for it is one step stronger here.
+// Nobody types this command: it is written once into an MCP client's config and
+// then never read again, so a flag that is silently ignored stays wrong for as
+// long as the client is wired up.
+func TestMCPFailsLoudOnWhatItCannotDo(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"unknown flag", []string{"--vendor", "claude"}, "not defined"},
+		{"positional argument", []string{"serve"}, "unexpected argument"},
+		{"zero timeout", []string{"--timeout", "0"}, "positive duration"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := runMCP(tc.args)
+			if err == nil {
+				t.Fatalf("runMCP(%v) started serving instead of refusing", tc.args)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q does not carry the correction %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestMCPAnswersTheHandshakeThroughTheWiring drives the mode the way its client
+// does — lines of JSON-RPC down a real stdin, lines of JSON-RPC back up a real
+// stdout — and asserts the parts internal/mcpserver's own tests cannot see: that
+// `mcp` reaches the server at all, and that this path prints nothing but
+// protocol frames. One stray banner on this stdout is not noise, it is a frame
+// the client cannot parse, the same way one stray line breaks `hook gate` above.
+//
+// It stops at tools/list on purpose. A tools/call here would run a real scan of
+// whatever machine the suite is on, and the call's document is already pinned
+// against a fixture in internal/mcpserver and against the built binary in CI.
+func TestMCPAnswersTheHandshakeThroughTheWiring(t *testing.T) {
+	stdin, stdout := os.Stdin, os.Stdout
+	defer func() { os.Stdin, os.Stdout = stdin, stdout }()
+
+	in, inw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		io.WriteString(inw, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`+"\n")
+		io.WriteString(inw, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`+"\n")
+		inw.Close()
+	}()
+	out, outw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin, os.Stdout = in, outw
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runMCP(nil)
+		outw.Close()
+	}()
+	got, err := io.ReadAll(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("runMCP returned %v; a closed stdin is a clean end of session", err)
+	}
+
+	lines := strings.Split(strings.TrimRight(string(got), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("two requests produced %d lines of stdout; this path carries protocol frames and nothing else:\n%s", len(lines), got)
+	}
+	for _, line := range lines {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(line), &m); err != nil {
+			t.Fatalf("stdout carried a line no client could parse: %q (%v)", line, err)
+		}
+	}
+	if !strings.Contains(lines[1], mcpserver.ToolName) {
+		t.Errorf("tools/list did not name %s through the wiring: %s", mcpserver.ToolName, lines[1])
 	}
 }

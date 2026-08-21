@@ -128,6 +128,12 @@ Its payload has no vendor name. This statusline is interactive only
 
 Then start an interactive `cursor-agent` session and run `telltale hud`.
 
+Wire the MCP server into a client once, so an agent can read the fleet:
+
+```
+claude mcp add telltale -- C:\path\to\telltale.exe mcp
+```
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="images/telltale-hud-dark.svg">
@@ -174,6 +180,7 @@ with no colour and no alternate screen, for exactly that reason.
 - **`telltale hud`:** a watch TUI over Claude Code, Codex, Gemini CLI,
   Antigravity CLI, Cursor (Composer), Grok CLI, and Pi.
 - **`telltale snapshot`:** the same scan as JSON, for a program.
+- **`telltale mcp`:** the same document over MCP on stdio, for an agent.
 - **`telltale doctor`:** which vendor binaries this machine has.
 - **`telltale events`** / **`telltale events view`:** a loopback hook sink
   and its reader.
@@ -232,6 +239,22 @@ or reply text. Schema: [docs/design.md §7.22](docs/design.md#s7-22) and
 . .\tools\fleet-prompt.ps1
 Get-TelltaleFleetLine
 ```
+
+## `telltale mcp`
+
+```
+claude mcp add telltale -- <path>\telltale.exe mcp
+```
+
+The same document, served to an agent over the Model Context Protocol on
+stdio. You do not type this command: an MCP client starts it. One tool,
+`fleet_snapshot`, takes an optional `vendor` argument and returns the
+document above — the same bytes, so every rule in that table holds here.
+One flag: `--timeout <dur>` (default 10s), per call.
+
+It speaks stdio only. It binds no port, calls no network, and writes
+nothing. [docs/design.md §7.25](docs/design.md#s7-25) states the surface
+and what is not verified.
 
 ## `telltale events`
 

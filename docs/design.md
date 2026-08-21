@@ -6640,6 +6640,147 @@ applies before extending the claim. Nothing here defends against a local program
 not meant to. The gauges' no-network rule and the loopback-only bind are untouched and remain
 absolute: this change only narrows who may talk to a socket that was already loopback.
 
+<a id="s7-25"></a>
+
+### 7.25 `telltale mcp` — the same document, in front of an agent (2026-08-18)
+
+**What it is.** `telltale mcp` serves [§7.22](#s7-22)'s snapshot document over the Model
+Context Protocol on stdio. An MCP client starts the process, speaks JSON-RPC down its stdin
+and reads frames off its stdout, and calls one tool — `fleet_snapshot` — which runs one scan
+and returns the document. One flag: `--timeout` (default 10s), which is the deadline for each
+CALL rather than for the process. Nobody types this command; it goes in a client's config
+once, e.g. `claude mcp add telltale -- <path>\telltale.exe mcp`. That spelling is the CLI's
+own — read off `claude mcp add --help` at Claude Code 2.1.233 on 2026-08-18, where
+`claude mcp add my-server -- my-command --some-flag arg1` is the documented stdio form — and
+not a shape assumed from memory. Running it is the operator's to do; see the closing paragraph.
+
+**Why it exists, given that §7.22 already shipped.** The snapshot mode answered "a reader that
+is a program" and it answered it well: CI validates it, and `tools/fleet-prompt.ps1` renders
+it. Both of those readers are SCRIPTS somebody wrote on purpose. The reader this repo actually
+has most of is an agent, and the honest difference is not that an agent cannot shell out —
+several can — it is that a command nothing told it about is a command it does not run. A tool
+its client LISTS is the version it reaches without being asked, with the argument names and
+the value rules in front of it. That is the same gap §7.22 described one layer up: the data
+was honest and reachable, and nothing was reaching it.
+
+**It is a fourth READER, not a second document.** `internal/mcpserver` calls
+`snapshot.Encode` on the document `snapshot.Build` produced from the scan `cmd/telltale` runs
+for `telltale snapshot` — one scan path (`scanDocument`), one adapter roster (`allAdapters`),
+one vendor vocabulary (`snapshotAdapters`), one serializer. The tool result's text content is
+byte-for-byte what the CLI prints. That is the whole design, and
+`TestTheToolResultIsTheSnapshotDocumentUnchanged` is what holds it: every honesty property
+this surface claims is a property of those bytes — a measured zero is `0`, an absent reading
+is `null`, no optional key is omitted, `estimated` names what an adapter computed,
+`unsupported` names what a vendor can never source, `self_reported` names an entry whose
+writer claimed it. A second serializer here would be a second statement of that contract, and
+two statements of one contract drift — which is §7.22's own argument for a published schema
+over hand-written assertions, applied to itself.
+
+`structuredContent` carries the same document as JSON beside the text, for a client that
+reads it that way. It is the identical value marshalled twice by one package, so the two can
+never disagree. No `outputSchema` is declared beside it, deliberately: the document's schema
+is published at `docs/snapshot.schema.json` and CI validates the shipped binary against that
+file, and embedding a copy in the binary would be exactly the second statement just refused.
+
+**One tool, not a family.** Every fleet question — what is close to its window, what has been
+spent, which vendor stopped reading, how old is the quota reading — is already one parse of
+one document. A second tool answering a subset would have to re-serialize part of it, and that
+is where the zero-vs-absent rules get restated ([§4a.1](#s4a-1)).
+
+**The tool DESCRIPTION carries the honesty rules, because the model reads it.** A caller that
+does not know them reads a `null` as a zero and an estimate as a measurement — the collapse
+this repo exists to prevent, moved one process outward into the agent. So the description says,
+in the text the model sees before it decides to call: null is absent and never 0, `estimated`
+means telltale computed it, `unsupported` means the vendor can never report it, and
+`self_reported` means its writer claimed it. `TestTheToolListNamesTheOneTool` pins all four
+words.
+
+**Stdio only, and that is what makes [§7.24](#s7-24) not apply.** telltale's two other
+machine-facing surfaces listen on loopback, and §7.24 exists because a loopback bind is not
+containment on its own — a measured headless Chrome planted a usage row and read the whole
+event store. This mode binds nothing. The client owns both pipes and starts the process, so
+there is no third party to refuse and no `Origin` to check. `TestTheServerOpensNoSocket`
+asserts the direct imports rather than the transitive graph, and says so: the graph already
+reaches `net` through `internal/hud`'s TUI framework, and linking that code is not calling it
+([ADR-002](#adr-002)'s distinction).
+
+**It writes nothing**, with the gauges' contract one item spare for §7.22's reason: it renders
+no quota of its own to relay. `TestTheServerWritesNothing` drives a whole session with the
+home directory redirected and compares the tree before and after.
+
+**The protocol surface is four methods and stops there.** `initialize`, `tools/list`,
+`tools/call`, `ping`, plus the notifications a client sends and expects no answer to. Absent:
+resources, prompts, completion, sampling, subscriptions, and any server-initiated request.
+Their absence is *stated* in the capabilities object rather than discovered by a client that
+tried one. Two shapes are refused with the reason rather than half-answered: a JSON-RPC batch
+array (removed from MCP in 2025-06-18, and this server answers revisions on both sides of
+that), and a message with an id and no method, which is a response to a request this server
+never sent and would be a protocol error to answer.
+
+**Version negotiation echoes what the client asked for, within a list.**
+`supportedVersions` is `2024-11-05`, `2025-03-26`, `2025-06-18`, `2025-11-25`; the narrow
+surface above is spelled identically across all four, so echoing is a true statement rather
+than a compatibility guess. An unknown request gets `2025-11-25`, the latest supported, which
+is the lifecycle's own rule. **`2026-07-28` is deliberately not on the list, and it is the
+newest revision, so the omission is the interesting one**: that revision requires a server to
+implement `server/discover`, and this one does not. Claiming the version would be claiming a
+method a client is entitled to call — ADR-001's failure in protocol form, a capability
+asserted rather than built. The same revision's versioning section says a client may invoke
+methods inline instead, which is the path that works here.
+
+**Two error channels, and the split is about who can fix it.** A bad `vendor` argument and a
+scan that failed come back as a tool RESULT with `isError` set, because the model asked and
+the model can correct. A tool name this server never listed, an unknown method and a
+malformed line come back as JSON-RPC errors, because those are the client's plumbing. A failed
+call carries no `structuredContent` at all — there is no measurement behind it, and an empty
+document would be a fleet with nothing in it, which is a different claim.
+
+**Hand-written JSON-RPC over `encoding/json`, not the official MCP Go SDK.** This follows the
+module's standing position rather than inventing one: `go.mod` carries no direct dependency
+outside the TUI stack, and this document records the same refusal for the SQLite reader
+([§3.2](#s3-2)), the zstd reader, the OTLP listener ([§7.16a](#s7-16a)) and the event emitter
+([§7.21](#s7-21)). Four methods and one tool is a smaller surface than the SDK's own API.
+
+**Verified live, 2026-08-18, Windows 11, against the built binary** (branch `mcp-server` off
+main `4b58258`, `go build -o telltale.exe ./cmd/telltale`), driven by a scripted stdio client
+that writes request lines and reads response lines. Seven messages in, six responses out — the
+seventh was the notification, which is answered by silence — exit 0, empty stderr, ~2.3s for
+the whole session including one scan of the real stores:
+
+- `initialize` at `protocolVersion: "2025-06-18"` echoed that version and returned
+  `capabilities: {"tools":{}}` with `serverInfo`; `notifications/initialized` produced no
+  response at all, which is the half a client would hang on.
+- `tools/list` returned the one tool.
+- `tools/call fleet_snapshot` returned a document of 8 vendors and 1,523 sessions, and
+  `structuredContent` parsed EQUAL to the text content. **The zero-vs-absent pair appeared in
+  it unstaged**: `agy`'s `3p-weekly` window carried `used_pct` as the integer `0` — a measured
+  zero — beside `gemini-weekly` at `0.2`, while `cost_usd_total` was `null` fleet-wide and
+  five vendors carried `quota_read_at: null`. `codex` carried `estimated: ["context_pct"]`
+  against `cursor`'s `[]`, and the drop-file entry carried `self_reported: true`.
+- **That document was written to a file and validated against `docs/snapshot.schema.json`
+  with `tools/validate-snapshot.py`: `ok`.** The published contract holds on the new surface,
+  checked with the gate the CLI's own document is checked with rather than with a second
+  reading of it.
+- `--vendor chatgpt` came back as a tool result with `isError: true` naming the accepted
+  words; `fleet_quota` came back as JSON-RPC `-32602` naming the tool that does exist;
+  `resources/list` came back as `-32601` naming the methods that do.
+- **Writes nothing, measured on the real store**: `~/.telltale` held the identical 35 files,
+  sizes and modification times before and after a full session.
+
+CI drives the same sequence against the built binary on every run, and pipes BOTH spellings of
+the tool's document — the text content and `structuredContent` — through the same validator
+(`.github/workflows/ci.yml`). **That gate was proved non-vacuous the way §7.22's schema gate
+was**: one sentence was removed from the tool description, the binary rebuilt, and the gate
+failed naming the missing word; the sentence was restored and it passed again.
+
+**What is NOT verified, stated so nobody reads the run above as more than it is.** **No
+third-party MCP client has connected to this server.** The drive was telltale's own scripted
+client, which proves the framing, the document and the error channels, and says nothing about
+how a shipped client negotiates a version, orders its requests, or renders a tool result.
+Wiring one up writes an entry into the operator's own client configuration, which is his to
+make; until he does, this section claims a correct server and not a working integration.
+`STATE.md` carries the debt.
+
 <a id="s8"></a>
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)

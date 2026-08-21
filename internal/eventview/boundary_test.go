@@ -22,13 +22,17 @@ const (
 	viewPkg = "github.com/sanlee-ys/telltale/internal/eventview"
 )
 
-// gaugePkgs are the three read surfaces the boundary names. The statusline and
+// gaugePkgs are the four read surfaces the boundary names. The statusline and
 // the HUD are the gauges; snapshot is the third reader of the same scan and
-// holds the same contract with one item spare (CLAUDE.md).
+// holds the same contract with one item spare (CLAUDE.md), and mcpserver is the
+// fourth — it serves snapshot's own document to an agent (design.md §7.25), so
+// an import of the event store there would put verbatim hook content in front
+// of a model.
 var gaugePkgs = []string{
 	"github.com/sanlee-ys/telltale/internal/hud",
 	"github.com/sanlee-ys/telltale/internal/statusline",
 	"github.com/sanlee-ys/telltale/internal/snapshot",
+	"github.com/sanlee-ys/telltale/internal/mcpserver",
 }
 
 // TestNoGaugeReadsTheEventStore is the property that lets a viewer exist at

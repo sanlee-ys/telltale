@@ -345,6 +345,19 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   miss means are the owner's to name. The sweep's "10 runs in 30 days" is a
   proposal with no measurement behind it and was deliberately not adopted.
 
+- **No third-party MCP client has connected to `telltale mcp`** (2026-08-18,
+  design.md §7.25). The mode is verified against the built binary by a scripted
+  stdio client — seven messages in, six responses out, exit 0, the tool's
+  document validated against `docs/snapshot.schema.json`, and `~/.telltale`
+  byte-identical before and after — and CI drives the same sequence on every run.
+  What that proves is a correct server. It says nothing about how a shipped
+  client negotiates a version, orders its requests, or renders the result,
+  because wiring one up writes an entry into the operator's own client
+  configuration and that entry is his to make. One `claude mcp add telltale --
+  <path>\telltale.exe mcp` followed by one tool call pays this in a minute. The
+  command's shape is read off `claude mcp add --help` at Claude Code 2.1.233,
+  not assumed.
+
 - **A live ordinary-turn give-up is owed on the reference box before
   2026-09-30.** `x` on an ordinary turn shipped 2026-08-17 with offline tests
   only. Whether a real vendor's interrupt lands mid-turn, and whether the
