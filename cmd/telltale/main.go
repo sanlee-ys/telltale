@@ -1,6 +1,6 @@
 // telltale — an honest gauge for your coding agents.
 //
-// One binary, eight modes (decisions/002, decisions/008):
+// One binary, nine modes (decisions/002, decisions/008):
 //
 //	telltale statusline   read a vendor statusline JSON payload on stdin, print one
 //	                      line (Claude Code, or Antigravity CLI via its documented
@@ -25,6 +25,9 @@
 //	                      sink's own socket (design.md §7.21, 2026-08-17)
 //	telltale snapshot     the fleet's current gauge state as one JSON document,
 //	                      for a reader that is a program (design.md §7.22)
+//	telltale mcp          the same document over the Model Context Protocol on
+//	                      stdio, for a reader that is an AGENT: one tool, one
+//	                      scan per call, stdio only (design.md §7.25)
 //	telltale doctor       launch-time preflight: which vendor binaries are here,
 //	                      what version each reports, and what was never checked
 //
@@ -82,6 +85,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/gatehook"
 	"github.com/sanlee-ys/telltale/internal/grokotel"
 	"github.com/sanlee-ys/telltale/internal/hud"
+	"github.com/sanlee-ys/telltale/internal/mcpserver"
 	"github.com/sanlee-ys/telltale/internal/model"
 	"github.com/sanlee-ys/telltale/internal/quotacache"
 	"github.com/sanlee-ys/telltale/internal/snapshot"
@@ -137,6 +141,11 @@ func main() {
 	case "snapshot":
 		if err := runSnapshot(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "telltale snapshot:", err)
+			os.Exit(1)
+		}
+	case "mcp":
+		if err := runMCP(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "telltale mcp:", err)
 			os.Exit(1)
 		}
 	case "doctor":
@@ -640,29 +649,60 @@ func runSnapshot(args []string) error {
 		return errors.New("--timeout wants a positive duration")
 	}
 
-	filter, err := parseFilter(*vendor)
+	adapters, err := snapshotAdapters(*vendor)
 	if err != nil {
 		return err
-	}
-	adapters := allAdapters()
-	if v, ok := filter.VendorID(); ok {
-		adapters = nil
-		for _, a := range allAdapters() {
-			if a.Vendor() == v {
-				adapters = append(adapters, a)
-			}
-		}
-		// A filter naming a vendor no adapter serves would print an empty
-		// document that looks like an idle fleet. The seat roster and the
-		// adapter roster are allowed to differ (model.VendorGrok was a seat
-		// before it was an adapter), so this is a real case and not a typo.
-		if len(adapters) == 0 {
-			return errors.New("--vendor " + string(v) + " has no HUD adapter, so there is nothing to snapshot")
-		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
+	out, err := snapshot.Encode(scanDocument(ctx, adapters), *compact)
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(out)
+	return err
+}
+
+// snapshotAdapters resolves a --vendor word to the adapters that answer it.
+//
+// It is shared by `snapshot` and `mcp` so the two modes cannot come to disagree
+// about what a vendor word means. A word one accepts and the other refuses
+// would be the worst kind of disagreement here, because both surfaces are read
+// by programs: the caller would get a corrective error from one and a
+// well-formed document answering a different question from the other.
+func snapshotAdapters(vendor string) ([]model.Adapter, error) {
+	filter, err := parseFilter(vendor)
+	if err != nil {
+		return nil, err
+	}
+	v, ok := filter.VendorID()
+	if !ok {
+		return allAdapters(), nil
+	}
+	var adapters []model.Adapter
+	for _, a := range allAdapters() {
+		if a.Vendor() == v {
+			adapters = append(adapters, a)
+		}
+	}
+	// A filter naming a vendor no adapter serves would print an empty
+	// document that looks like an idle fleet. The seat roster and the
+	// adapter roster are allowed to differ (model.VendorGrok was a seat
+	// before it was an adapter), so this is a real case and not a typo.
+	if len(adapters) == 0 {
+		return nil, errors.New("--vendor " + string(v) + " has no HUD adapter, so there is nothing to snapshot")
+	}
+	return adapters, nil
+}
+
+// scanDocument runs one scan and reshapes it into the document.
+//
+// One function, two modes, one scan path — which is the same reason
+// allAdapters() exists above. `telltale snapshot` and `telltale mcp` serve the
+// identical document to two different kinds of reader, and a second scan here
+// would be a place for them to drift into two answers.
+func scanDocument(ctx context.Context, adapters []model.Adapter) snapshot.Document {
 	snap := hud.Scan(ctx, adapters, time.Now())
 	// The account relay rides the scan here exactly as it does in the HUD
 	// (design.md §7.15): read after the scan, off any render path, and a
@@ -670,12 +710,58 @@ func runSnapshot(args []string) error {
 	if dir, err := quotacache.Dir(); err == nil {
 		snap.Account = quotacache.ReadAll(dir, snap.At)
 	}
-	out, err := snapshot.Encode(snapshot.Build(snap, model.DefaultLivenessThresholds), *compact)
-	if err != nil {
+	return snapshot.Build(snap, model.DefaultLivenessThresholds)
+}
+
+// runMCP serves the snapshot document over the Model Context Protocol on stdio
+// (design.md §7.25): the same scan `snapshot` prints, in front of a reader that
+// is an agent rather than a script.
+//
+// A separate mode rather than a flag on `snapshot`, for the reason `doctor` and
+// `events view` are their own modes: what it prints goes somewhere else.
+// `snapshot` prints one document and returns; this holds the pipe open, answers
+// requests until its client closes stdin, and its stdout carries protocol
+// frames no human reads.
+//
+// Nobody types this. An MCP client is configured with the command and starts
+// the process itself, which is why the mode takes one flag and no arguments.
+//
+// It keeps the gauges' contract with one item spare, exactly as `snapshot`
+// does: it reads vendor stores and the quota relay, calls no network, binds no
+// port, reads no credential and writes nothing at all.
+func runMCP(args []string) error {
+	fs := flag.NewFlagSet("telltale mcp", flag.ContinueOnError)
+	// One deadline per TOOL CALL rather than one for the process: this mode
+	// serves for as long as its client keeps it, so a budget for the run would
+	// be a server that stops answering after ten seconds of uptime.
+	timeout := fs.Duration("timeout", 10*time.Second, "how long each scan gets before it reports what it has")
+	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	_, err = os.Stdout.Write(out)
-	return err
+	// The same loud refusal `snapshot` gives, for the same reason and one step
+	// worse: this mode's operator is a config file nobody re-reads, so an
+	// argument that is silently ignored would stay wrong for as long as the
+	// client is wired up.
+	if fs.NArg() > 0 {
+		return errors.New("unexpected argument " + fs.Arg(0) + " (this mode takes flags only: --timeout)")
+	}
+	if *timeout <= 0 {
+		return errors.New("--timeout wants a positive duration")
+	}
+
+	return mcpserver.Serve(context.Background(), os.Stdin, os.Stdout, mcpserver.Options{
+		Name:    "telltale",
+		Version: version,
+		Fleet: func(ctx context.Context, vendor string) (snapshot.Document, error) {
+			adapters, err := snapshotAdapters(vendor)
+			if err != nil {
+				return snapshot.Document{}, err
+			}
+			ctx, cancel := context.WithTimeout(ctx, *timeout)
+			defer cancel()
+			return scanDocument(ctx, adapters), nil
+		},
+	})
 }
 
 func runHUD(args []string) error {
@@ -890,10 +976,12 @@ Three modes need no configuration at all. Run one of them:
   telltale council   the dispatch room: one brief, several agents, side by
                      side. This is the mode the project is for.
 
-One mode is wired in rather than run: point Claude Code's — or Antigravity
+Two modes are wired in rather than run. Point Claude Code's — or Antigravity
 CLI's — statusLine.command at ` + "`telltale statusline`" + `. Cursor CLI's wants
 ` + "`telltale statusline --vendor cursor`" + `, because its payload carries no marker
-to route on. The README's Install section carries the settings block to paste.
+to route on. And an agent reads the fleet itself through ` + "`telltale mcp`" + `, an MCP
+server on stdio you add to a client once. The README's Install section carries
+the settings block to paste.
 
   telltale help      every mode and every flag
   telltale version   the tag this binary was built from`
@@ -958,6 +1046,14 @@ usage:
                          claimed rather than telltale measured carries
                          "self_reported": true. Numbers and keys only — no
                          session name, workspace, transcript or reply text
+  telltale mcp           serve that same document over the Model Context
+                         Protocol on stdio, so an agent reads fleet state with
+                         the mechanism it already has. Nobody types it: wire it
+                         into an MCP client as the command, e.g.
+                         claude mcp add telltale -- telltale mcp. One tool,
+                         fleet_snapshot, taking an optional vendor argument;
+                         one scan per call; stdio only, so it binds no port and
+                         writes nothing
   telltale doctor        launch-time preflight: which vendor binaries are on
                          this machine, where each was found, what version it
                          reports — and, said out loud rather than left blank,
@@ -988,6 +1084,12 @@ telltale snapshot flags:
   --timeout <dur>             how long the scan gets before it reports what it
                               has (default 10s). A scan that runs out says so
                               in scan_error rather than hanging or lying
+
+telltale mcp flags:
+  --timeout <dur>             how long each tool call's scan gets before it
+                              reports what it has (default 10s). One deadline
+                              per CALL, not one for the process: this mode
+                              serves for as long as its client keeps it
 
 telltale doctor flags:
   --timeout <dur>             how long each vendor gets to answer --version

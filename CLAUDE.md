@@ -180,7 +180,9 @@ and `telltale hud` read vendor files, make no network calls, read no credentials
 and no keybinding mutates vendor state. `telltale snapshot` (design.md §7.22) is
 a third reader of the same scan and holds the contract with one item spare — it
 writes nothing at all, not even the quota relay, because it renders no quota of
-its own to relay. **Three** deliberate, bounded exceptions
+its own to relay. `telltale mcp` (design.md §7.25) is a fourth reader of that
+same document and holds the same contract: stdio only, so it binds no port
+either. **Three** deliberate, bounded exceptions
 exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
 
 - `telltale council` — spawns vendor CLIs; writes `council/room.json` (session
