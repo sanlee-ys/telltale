@@ -33,6 +33,14 @@ type Options struct {
 	// agree without each checking the list. The footer states the hide for as
 	// long as it is in force.
 	Hide []model.VendorID
+
+	// Root is the substitute store root (`--root`): the Adapters above were
+	// rooted beneath this directory instead of this machine's own stores.
+	// The HUD does not act on it — the adapters are already rooted — it
+	// exists so the footer can STATE the substitution for the whole run.
+	// A frame whose every row comes from a corpus must say so on screen;
+	// anything else is the invented-gauge lie with extra steps.
+	Root string
 }
 
 // Model is the Bubble Tea model. It owns State plus the things Render must not
@@ -67,6 +75,7 @@ func stateWith(opts Options) State {
 	st := NewState()
 	st.Filter = opts.Filter
 	st.Hidden = opts.Hide
+	st.Root = opts.Root
 	st.Now = time.Now()
 	// Resolved once here so the render path never reads the environment.
 	if home, err := os.UserHomeDir(); err == nil {

@@ -1359,6 +1359,16 @@ func footerLine(st State, visible, hiddenBelow int, sty Styles, g Glyphs) string
 	if st.Sort != SortActivity {
 		notices = append(notices, footerNotice{rankSort, "sort " + st.Sort.String(), sty.Muted})
 	}
+	if st.Root != "" {
+		// The substitute root (`--root`) is stated for the hide's reason,
+		// one step further: it does not hide rows, it replaces every row's
+		// SOURCE. A frame drawn from a demo corpus that did not say so would
+		// be the one dishonest frame this gauge could ever render. The path
+		// is truncated as a backstop; the word "root" is the load-bearing
+		// half and is never dropped while the notice fits.
+		notices = append(notices, footerNotice{rankRoot,
+			"root " + truncate(RedactHome(st.Root, st.Home), 40, g.Ellipsis), sty.Muted})
+	}
 	// The two ⚠ notices sit together, drift first: a stale scan resolves itself
 	// on the next tick that succeeds, and a store that no longer matches does
 	// not resolve at all until somebody goes and looks. The durable fact should
@@ -1452,6 +1462,10 @@ const (
 	rankFilter
 	rankQuery
 	rankHide
+	// rankRoot outranks the hide because it is the bigger substitution: the
+	// hide removes vendors from a live frame, the root replaces the source of
+	// every row on it. Only the two ⚠ facts outrank it.
+	rankRoot
 	rankStale
 	rankDrift
 )
