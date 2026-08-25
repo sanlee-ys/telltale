@@ -349,6 +349,14 @@ type State struct {
 	// review finding 2026-08-01). Empty disables home redaction.
 	Home string
 
+	// Root is the launch-time substitute store root (`--root`). Every row on
+	// screen was read from beneath this directory rather than from this
+	// machine's own vendor stores, and the footer states that for the whole
+	// run — for the same reason Hidden below is stated: a reader who did not
+	// type the flag has no other way to learn that the fleet on screen is a
+	// corpus. Empty means the live stores, and nothing renders.
+	Root string
+
 	// Hidden is the launch-time hide list (`--hide` / TELLTALE_HUD_HIDE,
 	// §7.20). The scan already dropped these vendors from the snapshot, so
 	// Render never has to check it row by row; the field exists so the footer

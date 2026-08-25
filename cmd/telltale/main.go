@@ -79,6 +79,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/council"
 	"github.com/sanlee-ys/telltale/internal/cursorhook"
 	"github.com/sanlee-ys/telltale/internal/cursorstatus"
+	"github.com/sanlee-ys/telltale/internal/democorpus"
 	"github.com/sanlee-ys/telltale/internal/doctor"
 	"github.com/sanlee-ys/telltale/internal/eventsink"
 	"github.com/sanlee-ys/telltale/internal/eventview"
@@ -774,6 +775,13 @@ func runHUD(args []string) error {
 	hide := fs.String("hide", os.Getenv("TELLTALE_HUD_HIDE"), "comma list of vendors the HUD leaves out entirely (default $TELLTALE_HUD_HIDE); the footer states the hide")
 	ascii := fs.Bool("ascii", false, "draw with ASCII only (legacy consoles, non-UTF-8 code pages)")
 	noTitle := fs.Bool("no-title", false, "do not set the terminal window title")
+	// The substitute root exists for demo and fixture corpuses (see
+	// internal/democorpus and tools/demo-corpus): a projector must never see
+	// this machine's real session names and workspace paths. It swaps the
+	// DIRECTORY the adapters read, never what they do with it — the same
+	// parsers run over the same native formats, and the footer states the
+	// substitution for the whole run.
+	root := fs.String("root", "", "read every vendor store beneath this directory — a corpus laid out like a home directory (see tools/demo-corpus) — instead of this machine's own stores")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -803,15 +811,21 @@ func runHUD(args []string) error {
 	// --no-color flag of our own.
 	useASCII := *ascii || os.Getenv("TELLTALE_ASCII") != ""
 
+	// Every vendor is always registered. An adapter whose vendor is not
+	// installed — or has no data under a substitute root — reports
+	// ErrVendorAbsent and vanishes from the HUD; there is nothing to
+	// configure and nothing to fail.
+	adapters := allAdapters()
+	if *root != "" {
+		adapters = democorpus.Adapters(*root)
+	}
 	return hud.Run(hud.Options{
-		// Every vendor is always registered. An adapter whose vendor is not
-		// installed reports ErrVendorAbsent and vanishes from the HUD; there
-		// is nothing to configure and nothing to fail.
-		Adapters: allAdapters(),
+		Adapters: adapters,
 		Filter:   filter,
 		Hide:     hidden,
 		ASCII:    useASCII,
 		NoTitle:  *noTitle,
+		Root:     *root,
 	})
 }
 
@@ -1075,6 +1089,12 @@ telltale hud flags:
                               the hide, and the v cycle skips those vendors
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
+  --root <dir>                read every vendor store beneath this directory —
+                              a corpus laid out like a home directory —
+                              instead of this machine's own stores. Built for
+                              demos: go run ./tools/demo-corpus writes a
+                              synthetic fleet and prints this command. The
+                              footer states the root for the whole run
 
 telltale snapshot flags:
   --vendor all|claude|codex|gemini|agy|cursor|grok
