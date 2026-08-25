@@ -276,6 +276,19 @@ func writeCodex(dir string, now time.Time) error {
 	return nil
 }
 
+// baseName is the last segment of an invented Windows-style workspace path.
+// NOT filepath.Base: on Linux that treats '\' as an ordinary character and
+// returns the whole path, and a whole Windows path pasted into a JSON string
+// carries raw backslashes that break the parse — the same cross-OS trap
+// model.WorkspaceName documents. The corpus is Windows-shaped data written on
+// any platform, so it does its own string handling.
+func baseName(ws string) string {
+	if i := strings.LastIndexAny(ws, `/\`); i >= 0 {
+		return ws[i+1:]
+	}
+	return ws
+}
+
 // grokEncode is the percent-encoded directory name grok derives from a cwd.
 // The adapter prefers summary.json's own cwd and treats this as a fallback,
 // so shape is what matters: colon and backslash are the encoded characters.
@@ -327,7 +340,7 @@ func writeGrok(dir string, now time.Time) error {
   "sandbox_profile": "off",
   "reasoning_effort": "high"
 }`, sp.id, jsonPath(sp.ws), sp.name, ts(start), ts(last),
-			strings.ReplaceAll(sp.ws, `\`, "/"), filepath.Base(sp.ws), ts(last), sp.name)
+			strings.ReplaceAll(sp.ws, `\`, "/"), baseName(sp.ws), ts(last), sp.name)
 		if err := os.MkdirAll(sess, 0o755); err != nil {
 			return err
 		}
