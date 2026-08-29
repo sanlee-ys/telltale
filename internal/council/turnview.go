@@ -371,8 +371,27 @@ func seatMeta(st State, e turnEntry, g Glyphs) string {
 	if e.Live {
 		op = operatorWait(st, e.Vendor, e.GateWait)
 	}
-	parts := []string{phaseMark(e.Phase, st, g) + " " + e.Phase.String()}
+	// A LIVE seat the room is stopped on says so here too, in the same words the
+	// column header uses (stoppedOnYou, §9.45's amendment). A page states one
+	// seat's turn on one rule, and a page saying `streaming` while the grid behind
+	// it says `needs you` would be the two surfaces disagreeing about a fact both
+	// read out of the same queue.
+	//
+	// It is LIVE only, and that is what keeps a filed turn honest: a record's
+	// phase is how that turn ENDED, and the queue only ever describes now.
+	blocked := e.Live && (e.Phase == PhaseWaiting || e.Phase == PhaseStreaming) &&
+		st.gateStopped(e.Vendor)
+
+	word, mark := e.Phase.String(), phaseMark(e.Phase, st, g)
+	if blocked {
+		word, mark = needsYouWord, g.Warn
+	}
+	parts := []string{mark + " " + word}
 	switch {
+	case blocked:
+		// No vendor clock under the word, exactly as the header drops it: the
+		// number the reader wants is the operator's, and it arrives below in its
+		// long spelling — which this surface has the cells for.
 	case e.Live && (e.Phase == PhaseWaiting || e.Phase == PhaseStreaming):
 		// A running seat's clock is State.Now minus its own start, which is
 		// where the column header reads it from — never a clock inside Render.

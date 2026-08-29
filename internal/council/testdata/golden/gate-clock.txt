@@ -2,7 +2,7 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   › split the operator's wait out of the turn clock                                                                     
                                                                                                                         
-▌ ▸ 1 CC Claude Code ⠋ streaming 12s    │    2 CX Codex  ───────  ✓ done 1m36s  │    3 AG Antigravity  ─  ✓ done 1m36s  
+▌ ▸ 1 CC Claude Code  ───  ⚠ needs you  │    2 CX Codex  ───────  ✓ done 1m36s  │    3 AG Antigravity  ─  ✓ done 1m36s  
 ▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
 ▌ ⚠ waiting on you: Write:              │                                       │                                       
 ▌   internal/council/clock.go           │                                       │                                       

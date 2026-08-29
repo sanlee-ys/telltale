@@ -14486,6 +14486,54 @@ elapsed. That number is labelled as the turn's duration rather than as any vendo
 operator's own reading time really is part of how long the turn took. The per-seat rule under it
 carries the split, so the page states both without either one contradicting the other.
 
+**Amended 2026-08-29: the word was left behind, and the split alone could not fix the reading.**
+This section opens by naming the defect as a WORD problem — "`streaming` is a claim that output is
+arriving, and this column had a stopped process behind it" — and then corrects only the number.
+The result was `⠋ streaming 12s` on a seat with a blocked process behind it. Twelve seconds is the
+honest figure and `streaming` is still a false claim, so a reader who scanned the header still read
+a working seat. A corrected number under a wrong word is a wrong reading.
+
+**While a card is up, the header says `needs you` and states no clock.** The word is
+`needsYouWord`, which is `needsYouLead` in lower case rather than a second spelling of it. One state
+now has one vocabulary in three registers: `NEEDS YOU` on §9.40's strip, `waiting on you` on the
+card and on the long form of the operator's own figure, and `needs you` in the column header, where
+every state word is lower case. The mark is `Warn`, the card's own glyph. The spinner is this room's
+only moving cell and it means a turn in flight (§7.1 rule 4), so a spinner over a stopped process
+makes the same false claim the word did. Colour is `SevWarn` and carries nothing extra: the phrase
+survives `--ascii` and `NO_COLOR` on its own.
+
+**The clock goes because neither figure is time spent in this state.** The vendor's twelve seconds
+are frozen for as long as the card is up, so the number is not moving and it does not describe what
+the seat is doing. The operator's four minutes are moving, and they already have one home — the
+turn's own separator, where `historyMeta` states them for every filed turn as well. Printing them in
+the chrome too would put one fact in two places on one screen. What the header loses is a figure
+that had stopped; it returns the moment the card is answered, and
+`TestWaitingOnYouIsNotStreaming` asserts that arm rather than trusting it.
+
+**Nine cells, so no layout moves.** `needs you` costs exactly what `streaming` and `cancelled` cost,
+which is the width `stripColumn`'s floor is derived from (`layout.go`). The strip header takes the
+same substitution, because a folded seat can hold an unanswered card and a strip is the one width
+where the reader has no card beside the word to read it against.
+
+**Three conditions, and the queue is the only source.** `stoppedOnYou` requires an installed seat, a
+turn in flight, and a card in `State.Gates` for that vendor. `State.gateStopped` answers the last
+one, and it deliberately differs from `gateStoppedAt`: that function skips an unstamped card because
+a duration derived from an absence is the invented figure §4a.1 rejects, while this one reports the
+seat stopped, because the card's existence establishes that on its own. Every fixture in the package
+is unstamped and every one of them draws the card, so a stamp-sensitive predicate would have put the
+header back in contradiction with the card two rows under it.
+
+**The by-turn page takes the same word.** `seatMeta` states one seat's turn on one rule, and a page
+saying `streaming` while the grid says `needs you` would be two surfaces disagreeing over one queue.
+It applies to a LIVE entry only. A filed record's phase is how that turn ended, and the queue only
+ever describes now.
+
+**`gated-vs-streaming.txt` is a new golden rather than an extension of an existing one.** It puts a
+blocked seat and a working seat on one frame at the same wall clock, because the reader's question
+is never "what does a blocked seat look like" — it is "which of these two is running".
+`waiting-vs-streaming.txt` pins two claims about a VENDOR; this pins the same shape of claim about
+the operator, and neither case is an edge of the other.
+
 <a id="s9-46"></a>
 
 ### 9.46 cursor hooks report a blocked action, but never report a request to a human (2026-08-16)

@@ -1,11 +1,12 @@
-  council ⚠ WRITE  │  ~/code/telltale                                               turn 1  │  3/3 seated  │  no brief  
+  council READ  │  ~/code/telltale                                                  turn 1  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-▌ ▸ 1 CC Claude Code  ───  ⚠ needs you  │    2 CX Codex  ──────────  ⠋ waiting  │    3 AG Antigravity  ────  ⠋ waiting  
-▌   gated  tokens                       │    WRITES  final only                 │    WRITES  final only                 
+  › say which seat is working                                                                                           
+                                                                                                                        
+▌ ▸ 1 CC Claude Code  ───  ⚠ needs you  │    2 CX Codex  ───  ⠋ streaming 5m0s  │    3 AG Antigravity  ───────  ○ idle  
+▌   gated  tokens                       │    ro:requested  final only           │    unsandboxed  final only            
 ▌ ⚠ waiting on you: Write:              │                                       │                                       
-▌   internal/council/gate.go            │                                       │                                       
+▌   internal/council/clock.go           │                                       │                                       
 ▌   y approve   n deny   a stop asking  │                                       │                                       
-▌   +2 queued                           │                                       │                                       
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -14,11 +15,10 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-▌ ⚙ Read: internal/council/view.go ✓    │                                       │                                       
-▌ ⚙ Write: internal/council/gate.go     │                                       │                                       
-▌                                       │                                       │                                       
-▌ I need to add the card renderer.      │  working — the reply arrives whole.   │  working — the reply arrives whole.   
+                                                                                                                        
+▌ turn 1  ─────────────────  you 4m48s  │  turn 1  ───────────────────────────  │                                       
+▌ I need to write the new file.         │  Nobody has stopped me.               │  no turn dispatched yet.              
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  ›                                                                                                               │  
   ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  GATE  ─╯  
-     Write: internal/council/gate.go (+2 queued)  │  y approve  │  n deny  │  a stop asking  │  ctrl+c cancel the turn  
+                Write: internal/council/clock.go  │  y approve  │  n deny  │  a stop asking  │  ctrl+c cancel the turn  

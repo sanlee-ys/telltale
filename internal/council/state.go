@@ -1003,6 +1003,31 @@ func (s State) gateStoppedAt(v model.VendorID) (time.Time, bool) {
 	return first, !first.IsZero()
 }
 
+// gateStopped reports whether the room is stopped on the operator for this seat:
+// the queue holds at least one card nobody has answered.
+//
+// The companion to gateStoppedAt and deliberately NOT the same question. That one
+// asks WHEN the stretch began, so it skips an unstamped card — a duration derived
+// from an absence is the invented figure §4a.1 forbids. This one asks WHETHER the
+// seat is stopped, which is a fact the card's existence establishes on its own, so
+// a card with no stamp still answers yes. Every State this package's tests type out
+// by hand is unstamped, and each of them draws the approval card; a predicate that
+// called those seats unblocked would have the header contradicting the card two
+// rows under it.
+//
+// It walks the queue rather than reading a flag on the column for needsYou's
+// reason: the queue is the only thing that knows a vendor is waiting on a
+// keystroke, and a second copy of that fact drifts the first time a card is
+// answered while another is still up.
+func (s State) gateStopped(v model.VendorID) bool {
+	for _, p := range s.Gates {
+		if p.Vendor == v {
+			return true
+		}
+	}
+	return false
+}
+
 // Reattach is what a resumed room says about where it came from.
 //
 // The zero value is a fresh room, and a fresh room renders exactly as it always

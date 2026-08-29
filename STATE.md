@@ -442,7 +442,10 @@ Nothing open. The last one here was the 44 seconds, and it was measured
 - **RESIDUES of the 2026-08-16 roadmap batch (PRs #237–#247), each small and
   unowned.** The gate clock split (#243) is proven by unit tests and goldens
   only — no live gated turn has rendered `you 4m48s` yet; the owner's next real
-  gated turn exercises it for free. The codex seat's **post-answer linger is
+  gated turn exercises it for free. **The same debt now covers the WORD beside
+  that figure**: §9.45's 2026-08-29 amendment makes a blocked column say
+  `needs you` instead of `streaming`, and it too is pinned by goldens alone. One
+  live gated turn pays both at once. The codex seat's **post-answer linger is
   OWNED as of the same day's lane batch**: the column settles at the measured
   `turn.completed` marker and renders `done Ns exiting`, the process lifetime
   untouched (§9.33's dated payment block). What that lane left open, stated

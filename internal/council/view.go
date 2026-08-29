@@ -1122,7 +1122,13 @@ func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 
 	status := columnStatus(st, c, g)
 	style := sty.ForPhase(c.Phase)
-	if c.Avail != AvailInstalled {
+	if c.Avail != AvailInstalled || stoppedOnYou(st, c) {
+		// Two words, one hue, and one reason: both say this column is not
+		// working. SevWarn rather than Alert — the strip and the card spend
+		// weight on the phrase because they are competing with four columns of
+		// vendor prose, while in the header the seat NAME already spends weight
+		// on which column the keys move (§9.12), and a second bold cell on the
+		// same row would take that signal back.
 		style = sty.SevWarn
 	}
 	right := style.Render(status)
@@ -1200,6 +1206,14 @@ func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 func stripHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) string {
 	word, mark := c.Phase.String(), phaseMark(c.Phase, st, g)
 	style := sty.ForPhase(c.Phase)
+	if stoppedOnYou(st, c) {
+		// A folded seat can hold an unanswered card — needsYou walks every column
+		// for exactly that reason — so a strip that went on saying `streaming`
+		// would be the defect surviving at the one width where the reader has no
+		// card to read it against. Nine cells, the same as the word it replaces,
+		// so this line's shedding ladder is untouched.
+		word, mark, style = needsYouWord, g.Warn, sty.SevWarn
+	}
 	if c.Avail != AvailInstalled {
 		// The same substitution columnStatus makes, and for the same reason: the
 		// phase of a seat that is not there is not a fact about a turn.
@@ -1323,11 +1337,74 @@ func headerUsesLeader(c Column) bool {
 	return true
 }
 
+// stoppedOnYou reports whether this seat's state word has to say the room is
+// stopped on the OPERATOR rather than name what the vendor is doing (§9.45's
+// 2026-08-29 amendment).
+//
+// §9.45 split the CLOCK on a gated seat and left the word alone, so the header
+// went on reading `⋮ streaming` over a process that was blocked waiting to be told
+// yes or no. That is the half of the defect its own opening paragraph names —
+// "`streaming` is a claim that output is arriving, and this column had a stopped
+// process behind it" — and the clock split could not fix it, because a corrected
+// number under a wrong word is still a wrong reading.
+//
+// Three conditions, and each one earns its line:
+//
+//   - the seat is INSTALLED. A seat that is not there has no phase to override;
+//     `unavailable` is already the word, and it is a fact about the machine rather
+//     than about a turn.
+//   - the turn is IN FLIGHT. `done` and `failed` are outcomes, and a card left in
+//     the queue behind a settled column must not repaint one of them — what would
+//     be on screen then is a state word contradicting the record under it.
+//   - the QUEUE holds a card for this vendor (gateStopped). The queue is the only
+//     thing that knows a vendor is waiting on a keystroke; a seat that has merely
+//     gone quiet is not stopped on anybody, and saying so would be the invented
+//     claim §4a.1 forbids.
+func stoppedOnYou(st State, c Column) bool {
+	if c.Avail != AvailInstalled {
+		return false
+	}
+	if c.Phase != PhaseStreaming && c.Phase != PhaseWaiting {
+		return false
+	}
+	return st.gateStopped(c.Vendor)
+}
+
 // columnStatus is the state word with its mark and, where there is one, the
 // clock that says how long it took or has taken.
 func columnStatus(st State, c Column, g Glyphs) string {
 	if c.Avail != AvailInstalled {
 		return g.Warn + " unavailable"
+	}
+	if stoppedOnYou(st, c) {
+		// **The word is the strip's own, and it carries NO clock.** Both halves
+		// are the same argument (§9.45's amendment).
+		//
+		// The word first: `needs you` is `NEEDS YOU` in the case a column header
+		// speaks in, and the card two rows below already spells it `waiting on
+		// you`. One state, one vocabulary, three registers of it — which is why
+		// this is needsYouWord rather than a phrase invented for this cell.
+		//
+		// Then the clock, and the reason it goes is the reason §9.45 exists: the
+		// number under a state word has to be time spent in that state. The
+		// vendor's twelve seconds are not what this seat has been doing, and the
+		// operator's four minutes already have a home on the turn's own separator
+		// (columnLines, historyMeta) where the filed turns state them too —
+		// putting them here as well would be one fact in two places on one
+		// screen, which is the duplication §9.30 spent a section removing. What
+		// is lost is a figure that had stopped moving anyway: the vendor's clock
+		// is frozen for as long as the card is up, and it comes straight back the
+		// moment the card is answered. What is gained is that the only question
+		// the header clock ever answered — why is this one taking so long — is
+		// answered by the word outright.
+		//
+		// The mark is Warn, the card's own and the strip's own. The spinner is
+		// this room's ONLY moving cell (§7.1 rule 4) and it means a turn in
+		// flight; leaving it to spin over a stopped process would be the same
+		// false claim as the word, made by the glyph. Neither is load-bearing —
+		// the word survives --ascii and NO_COLOR on its own, which is the property
+		// every distinction here has to have.
+		return g.Warn + " " + needsYouWord
 	}
 	status := c.Phase.String()
 	if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
