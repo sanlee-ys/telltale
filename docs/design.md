@@ -13203,6 +13203,98 @@ race has been run against this build, so the claim that a real held `index.lock`
 notice instead of a freeze rests on the tests and on an expired-deadline fixture, not on the
 lock that started this.
 
+**Amendment, 2026-08-29: the brief also arrives as `AGENTS.md`, for the seats that were
+measured reading one.** The candidate (competitor sweep 2026-08-18) proposed AGENTS.md as the
+one cross-vendor context channel needing no per-vendor prompt plumbing, on the strength of
+agents.md's own "read natively by 20+ tools". That is a docs claim, and ADR-001 does not accept
+docs claims about vendor behavior. **The measurement came first, and the build was conditional
+on it**: one headless probe per vendor CLI on this box, from a scratch directory whose only
+content was an `AGENTS.md` naming a codename nothing else on the machine knew, asked for the
+codename and nothing else.
+
+| seat | version | result |
+| --- | --- | --- |
+| codex | codex-cli 0.149.1 | **answered `ZEPHYR-9`, no tool call** — the file reached the model as context |
+| grok | grok 1.0.5 | **answered `ZEPHYR-9`, no tool call**, and named its source on the wire: *"From the always_applied_workspace_rules, the Agents.md file says"* |
+| claude | Claude Code 2.1.251 | **answered `ZEPHYR-9` by going to look** — both trials ran `ls -la` then `cat`, recorded in the probe sessions' own transcripts |
+| agy | 1.1.20 | **unmeasured** — headless agy auto-denies tool turns, and the probe was not run |
+| cursor | — | **unmeasured** — this seat races over ACP on a throwaway session, and no probe of that path ran |
+
+Two seats demonstrably ingest the file unprompted, which is the bar the sweep set, so the
+feature is built. The claude row is deliberately NOT counted as the same fact: it is a real read
+of a real file in the cwd, in a directory holding exactly one file — the easiest possible
+discovery — and nothing here claims that seat auto-loads AGENTS.md. Whether the answer was
+shaped by the operator's global `CLAUDE.md` load order cannot be separated out by this probe
+either; what the transcripts DO show is that the words came from the file on disk, because the
+model went and read it before answering.
+
+The ruling that follows from that table is what shapes the feature: **council writes the file
+for every racer and claims it for none.** No column, no notice and no snapshot field says a seat
+was briefed via `AGENTS.md`, because the room cannot tell per race which seats ingested it — and
+two of five are unmeasured. Writing it costs a seat nothing; claiming it would be the room
+narrating a fact nobody measured (§4a.1). The file is offered exactly the way the worktree is.
+
+- **Identical for every seat, by construction.** Marker, `arenaConduct`, then the brief — the
+  same bytes in all five trees. `arenaBriefText` takes no seat parameter at all, so the
+  per-seat constraint text the candidate pitched is unrepresentable rather than merely
+  discouraged: it collides with `arenaConduct`'s standing position that the room's added words
+  are a CONSTANT so the cross-seat comparison stays undisturbed, and a later change that wants
+  divergence has to argue for it here.
+- **The attempt's receipt stays the racer's.** Council's file would otherwise land in the stat
+  through `git add -N .` — §9.37's own "lying diff" known limit, arriving from the other side.
+  The three reads that could pick it up (the finish-time `collectArena`, the live
+  `collectArenaStat`, and `commitArena`'s stage plus its dirty check) append one pathspec,
+  `:(exclude)AGENTS.md`, measured on git 2.55.0.windows.3: the file stays untracked, stays out
+  of the commit, and a tree holding nothing but it still reports clean — which is what keeps the
+  empty-commit ruling working. **`/adopt` therefore merges a branch that never held the file**,
+  and the operator's repo cannot acquire a stray `AGENTS.md` from a race.
+- **The lifecycle verbs read the racer's tree too, and all three reads were wrong until they
+  carried the same pathspec.** This was found by building the feature, not by reasoning about
+  it, and each one is a different bug: `/adopt`'s arming read (`lifecycle.go`) would have offered
+  to adopt a seat that changed nothing, because council's file made a clean tree look dirty;
+  `/adopt`'s OWN commit — the one it makes for a racer whose work never reached `commitArena`,
+  which is the give-up path race t9 exercised twice — would have staged the file with `add -A`
+  and merged it into the operator's repo; and `/arena drop`'s refusal would have named council's
+  write as the operator's uncommitted work and demanded the `!` spelling on every clean attempt.
+- **`/arena drop` takes council's file back before git sees the tree.** `git worktree remove`
+  counts an untracked file as a dirty worktree and refuses, so the pathspec alone was not
+  enough: an ordinary drop failed at git. `removeArenaBrief` deletes the file only while the
+  marker still stands, so a racer's own `AGENTS.md` keeps the refusal it has earned. That is the
+  ONLY deletion — the worktree is kept until the user drops it, and until then the file is the
+  visible record of what that seat was told.
+- **The exclusion is conditional on the marker, re-read per call.** `arenaBriefArgs` opens the
+  file and checks it still starts with council's marker. A racer that REPLACED it authored a
+  file, and it appears in the stat like any other; a file council never wrote is never excluded.
+  A stale flag recorded at setup would have hidden that authorship.
+- **Council never overwrites an `AGENTS.md` the checkout or `.worktreeinclude` seeding already
+  put in the tree.** In a repo that ships one, no racer gets council's copy, every seat reads
+  the repository's own instructions identically, and the comparison is as uniform as it was
+  before this existed. The pathspec is off there too, so a racer's edit to the repo's own file
+  is in the diff.
+- **A write that fails skips that seat**, named on its column through the existing `seatErr`
+  channel — the `.worktreeinclude` rule, applied for the `.worktreeinclude` reason: a tree the
+  room KNOWS holds a different brief from its siblings races a different question, and that is
+  not the comparison the operator opened. Nothing new is rendered for it.
+
+Known limit, stated rather than hidden: while the marker stands, a racer that APPENDS to
+council's `AGENTS.md` is excluded from its own diff on that path. A racer editing the room's
+brief file is not an answer to the brief, and the alternative — an exclusion that lapses on the
+first stray edit — would drop council's own file into every stat instead.
+
+Not built, and not by omission: `telltale doctor` reporting whether a repo carries an
+`AGENTS.md` was part of the same candidate. It is a different surface with a different reader
+and it is left for its own change.
+
+Verification note, on this section's own terms: the mechanics — the identical file in every
+tree, the file never reaching the stat, the patch or the commit, the zero-diff attempt staying a
+measured zero with council's file in its tree, the racer-authored file NOT being hidden, the
+repository's own file being left alone, the skip on a failed write, the ended-context stop, and
+all three lifecycle reads (`/adopt` still refusing a brief-only racer, `/adopt` not merging the
+file, `/arena drop` needing no force) — are pinned by offline tests against real temp
+repositories (`arenabrief_test.go`), and no test spawns a vendor. **The live half is owed**: the per-vendor probes above were run headlessly in a
+scratch directory, not inside a racer worktree during a real `/arena`, so no live race has yet
+watched a seat act on this file.
+
 **Amendment, 2026-08-29: `/adopt` says what it is about to merge INTO, before you say y.** The
 card named the act — the branch it cuts and the exact `git merge --no-ff` it runs — and named
 nothing about the room the merge lands in. Everything the operator needed in order to weigh the

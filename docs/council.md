@@ -486,6 +486,16 @@ nothing is named on the column rather than silently skipped; a copy that fails s
 seat with the reason, and its half-seeded worktree stays on disk with the other receipts.
 Copy only, never execute: the repo cannot run code on your machine by containing a file.
 
+**Every racer's tree also gets the brief as an `AGENTS.md`.** The prompt is unchanged — this
+is a second copy of the same words at the path the vendors already look at, so a seat that
+re-reads its instructions mid-turn finds them. The file is identical in every tree (marker,
+the conduct line, then your brief), it never reaches the attempt's stat, its patch or its
+commit, and `/adopt` therefore merges a branch that never held it. `/arena drop` takes the file
+back before it removes the tree, so a drop needs no `!` over it. A repo that ships its own
+root `AGENTS.md` keeps it: council writes nothing there, on any seat. **The room never says a
+seat was briefed this way**, because only some vendors were measured reading the file and the
+room cannot tell per race which did — the file is offered, exactly like the worktree is.
+
 **`/adopt <seat>` takes the winner — onto a fresh branch, behind a y/n card that names the
 exact commands.** `y` cuts `adopt/t<N>-<vendor>` from where the room is standing, checks it
 out, and runs `git merge --no-ff arena/t<N>/<seat>` there — so the branch you were on does

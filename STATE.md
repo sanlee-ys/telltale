@@ -241,6 +241,28 @@ copies, the gates and the argument; this file does not restate any of them.
   room (a new verb with its own measurements, not an overload of `/adopt`);
   per-racer port allocation, when an arena brief first needs live servers.
 
+- **`/arena` writes the brief as `AGENTS.md` too — built 2026-08-29, one live
+  half owed.** The competitor sweep's candidate rested on agents.md's own claim
+  that 20+ tools read the file natively. That claim was MEASURED first, one
+  headless probe per vendor CLI on this box, and the build was conditional on
+  the result: codex 0.149.1 and grok 1.0.5 both answered a codename only that
+  file carried, with no tool call, so both ingest it unprompted; Claude Code
+  2.1.251 answered by running `ls -la` and `cat` on it, which is a read but not
+  the same fact; agy 1.1.20 and cursor are UNMEASURED. The full table and the
+  rulings it forced are [design.md §9.37](docs/design.md)'s 2026-08-29
+  amendment.
+
+  What a future session needs from this entry rather than from git: the room
+  writes the file for every racer and **claims it for none** — no column, no
+  notice and no snapshot field says a seat was briefed this way, because two of
+  five seats are unmeasured and the room cannot tell per race which ingested
+  it. Do not add such a render without measuring the missing seats first.
+
+  **Owed:** the probes ran in a scratch directory, not inside a racer worktree
+  during a real `/arena`. No live race has yet watched a seat act on the file.
+  One race against a brief whose answer depends on something only the file says
+  pays it.
+
 ## Closed without code (do not re-open)
 
 - **Tall-window content anchor** — **bottom**, ruled 2026-08-05. Short content
