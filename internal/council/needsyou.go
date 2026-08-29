@@ -71,6 +71,21 @@ func (c needsYouCell) text() string {
 // distinction this UI makes has to have.
 const needsYouLead = "NEEDS YOU"
 
+// needsYouWord is the same phrase as a seat's own state word, in the case the
+// column header speaks in (§9.45's amendment).
+//
+// **Derived from needsYouLead rather than spelled again**, and that is the whole
+// reason it is a var. `idle`, `waiting`, `streaming`, `done` are lower case
+// because a column header names what a seat is doing; `NEEDS YOU` is upper case
+// because the strip announces a state to a room. One fact, two registers, and one
+// literal — so a room cannot end up saying `NEEDS YOU` above a column saying
+// something else. The alternative, a second const, is the drift §9.30 removed
+// everywhere else in this file.
+//
+// It is nine cells, exactly what `streaming` and `cancelled` cost, so the header
+// ladder and stripColumn's floor (layout.go) are unmoved by it.
+var needsYouWord = strings.ToLower(needsYouLead)
+
 // needsYouGap separates the seats on the strip.
 //
 // Three cells, which is the gate card's own spacing for its key list

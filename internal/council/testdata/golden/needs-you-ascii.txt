@@ -1,7 +1,7 @@
   council ! WRITE  |  ~/code/telltale                                               turn 1  |  3/3 seated  |  no brief  
 ========================================================================================================================
   ! NEEDS YOU   2 Codex   3 Antigravity                                                                                 
-[ ] 1 CC Claude Code  ---  - streaming  |    2 CX Codex  ----------  - waiting  |    3 AG Antigravity  ----  - waiting  
+[ ] 1 CC Claude Code  ---  ! needs you  |    2 CX Codex  --------  ! needs you  |    3 AG Antigravity  --  ! needs you  
 [   gated  tokens                       |    gated  final only                  |    gated  final only                  
 [ ! waiting on you: Write:              |  ! waiting on you: Bash: go test      |  ! waiting on you: Write:             
 [   internal/council/gate.go            |    ./...                              |    docs/design.md                     

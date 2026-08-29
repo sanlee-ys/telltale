@@ -1,6 +1,7 @@
 package council
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -8,6 +9,17 @@ import (
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
+
+// operatorFigure matches the operator's own clock in either spelling, and only
+// when it carries a NUMBER.
+//
+// A bare `strings.Contains(got, "you ")` used to be enough. It stopped being
+// enough when the state word became `needs you` (§9.45's amendment), because the
+// word ends in the same two syllables the figure opens with — so a test asking
+// "did an unmeasured span draw anything" would answer yes off the word alone. Both
+// spellings operatorCell renders weld `you ` to a digit, which is the thing an
+// unmeasured span must never produce.
+var operatorFigure = regexp.MustCompile(`you \d`)
 
 // gateClockRoom is one frame carrying all three states of the operator's clock
 // (§9.45), because the three are only meaningful against each other:
@@ -65,8 +77,16 @@ func TestGateClockSplitsTheOperatorsWait(t *testing.T) {
 	if strings.Contains(got, "streaming 5m0s") {
 		t.Error("the header still charges the operator's wait to the vendor")
 	}
-	if !strings.Contains(got, "streaming 12s") {
-		t.Error("the header does not state the vendor's own time")
+	// And it does not charge the operator's wait to a vendor WORD either, which
+	// is the amendment: while the card is up the header says `needs you` and
+	// states no clock, because neither figure is time spent in that state. The
+	// vendor's twelve seconds are asserted the moment the card is answered —
+	// TestWaitingOnYouIsNotStreaming (view_test.go) carries that arm.
+	if strings.Contains(got, "streaming") {
+		t.Error("a seat stopped behind a card still claims output is arriving")
+	}
+	if !strings.Contains(got, needsYouWord) {
+		t.Error("the header does not say the seat is stopped on the operator")
 	}
 	// 48s answered plus four minutes still open, measured against State.Now.
 	if !strings.Contains(got, "you 4m48s") {
@@ -94,6 +114,93 @@ func TestGateClockSplitsTheOperatorsWait(t *testing.T) {
 	golden(t, "gate-clock", got)
 }
 
+// gatedVsStreamingRoom puts the two states the amendment separates side by side,
+// on ONE frame and on the SAME wall clock.
+//
+// Both seats started five minutes ago. Seat 1 has been stopped on an approval
+// card for four minutes and forty-eight seconds of them; seat 2 has been working
+// for all five. A frame that could not tell them apart is the whole defect, so a
+// fixture that shows one without the other cannot pin the fix — the reader's
+// question is never "what does a blocked seat look like", it is "which of these
+// two is actually running".
+//
+// Seat 3 is idle and stays idle: a room where every column is doing something is
+// not the room, and the third seat is what shows that the word only lands where a
+// card is up.
+func gatedVsStreamingRoom() State {
+	st := room()
+	st.Turn = 1
+	st.Now = time.Date(2026, 8, 15, 12, 5, 0, 0, time.UTC)
+
+	c := &st.Columns[0]
+	c.Phase, c.TurnN = PhaseStreaming, 1
+	c.Sandbox = SandboxClaim{Level: SandboxGated, Detail: "asks before every tool call"}
+	c.Prompt = "say which seat is working"
+	c.Started = st.Now.Add(-5 * time.Minute)
+	c.Body = "I need to write the new file."
+	st.Gates = []PendingGate{{
+		Vendor: model.VendorClaude, RequestID: "r1", ToolUseID: "t1",
+		Text:      "Write: internal/council/clock.go",
+		StoppedAt: st.Now.Add(-4*time.Minute - 48*time.Second),
+	}}
+
+	c = &st.Columns[1]
+	c.Phase, c.TurnN = PhaseStreaming, 1
+	c.Prompt = "say which seat is working"
+	c.Started = st.Now.Add(-5 * time.Minute)
+	c.Body = "Nobody has stopped me."
+	return st
+}
+
+// TestGatedIsNotStreaming is the golden for the WORD, and it is deliberately the
+// twin of waiting-vs-streaming.txt rather than an extension of it.
+//
+// That golden pins a vendor that reports nothing until it finishes against one
+// whose text is arriving — two claims about the VENDOR. This one pins a vendor
+// blocked on the operator against one nobody blocked — the same shape of claim
+// about a different agent, which is why it is its own file: a golden's name is
+// what it pins, and neither case is an edge of the other.
+func TestGatedIsNotStreaming(t *testing.T) {
+	got := render(gatedVsStreamingRoom())
+
+	// The two headers on one row, and they must not say the same thing. The
+	// blocked seat names the operator and states no clock; the working seat keeps
+	// the word and the whole five minutes, because nobody took any of them.
+	if !strings.Contains(got, needsYouWord) {
+		t.Errorf("the blocked seat does not say it is stopped on the operator:\n%s", got)
+	}
+	if !strings.Contains(got, "streaming 5m0s") {
+		t.Errorf("the seat nobody blocked lost its own five minutes:\n%s", got)
+	}
+	if strings.Count(got, "streaming") != 1 {
+		t.Errorf("both seats claim output is arriving; only one of them has any:\n%s", got)
+	}
+	// The operator's figure stays where §9.45 put it, on the blocked seat's own
+	// turn separator, and the seat nobody asked anything draws none at all —
+	// absent, never a zero.
+	if !strings.Contains(got, "you 4m48s") {
+		t.Errorf("nothing says how long the room has waited on the operator:\n%s", got)
+	}
+	if n := len(operatorFigure.FindAllString(got, -1)); n != 1 {
+		t.Errorf("want one operator figure on this frame, got %d:\n%s", n, got)
+	}
+
+	golden(t, "gated-vs-streaming", got)
+}
+
+// TestGatedIsNotStreamingASCII: the distinction is a WORD, so the reduced glyph
+// set has to carry it whole. The mark in front of it is the room's existing
+// warning glyph and says nothing the phrase does not (§7.1 rule 2).
+func TestGatedIsNotStreamingASCII(t *testing.T) {
+	st := gatedVsStreamingRoom()
+	st.ASCII = true
+	got := Render(st, PlainStyles(), GlyphsFor(true))
+	if !strings.Contains(got, needsYouWord) {
+		t.Errorf("--ascii lost the word that says the seat is stopped on you:\n%s", got)
+	}
+	golden(t, "gated-vs-streaming-ascii", got)
+}
+
 // TestGateClockIsPureOverState is TestElapsedIsPureOverState for the second
 // figure this room now derives from a timestamp.
 //
@@ -116,6 +223,13 @@ func TestGateClockIsPureOverState(t *testing.T) {
 // carries no StoppedAt. An unstamped card must add nothing rather than count from
 // the epoch, or a fixture would render a fifty-year wait: a figure arrived at by
 // arithmetic over an absence, which is the top item on §4a.1's rejected list.
+//
+// The card is still a CARD, and the amendment is where the two questions come
+// apart. Whether the seat is stopped is answered by the card existing
+// (gateStopped), so the header says so on this fixture like any other; how LONG it
+// has been stopped is answered by a stamp, and there is none, so no figure is
+// printed. Nothing is charged to the vendor either — the arm below the render
+// takes the card away and finds the whole thirty seconds still there.
 func TestAnUnstampedCardIsNotAWait(t *testing.T) {
 	st := room()
 	st.Turn = 1
@@ -127,11 +241,19 @@ func TestAnUnstampedCardIsNotAWait(t *testing.T) {
 	}}
 
 	got := render(st)
-	if !strings.Contains(got, "streaming 30s") {
-		t.Error("an unstamped card moved the vendor's clock")
+	if !strings.Contains(got, needsYouWord) {
+		t.Error("an unstamped card left the header claiming the vendor was working")
 	}
-	if strings.Contains(got, "you ") {
+	// `you ` alone is no longer the tell — the state word above ends in it. What
+	// an unmeasured span must never draw is a FIGURE, and every one operatorCell
+	// renders is `you ` welded to a digit.
+	if operatorFigure.MatchString(got) {
 		t.Error("an unstamped card rendered a wait nothing measured")
+	}
+
+	st.Gates = nil
+	if got := render(st); !strings.Contains(got, "streaming 30s") {
+		t.Errorf("an unstamped card took time off the vendor's clock:\n%s", got)
 	}
 }
 
@@ -385,6 +507,13 @@ func TestTheTranscriptKeepsTheSplit(t *testing.T) {
 // The grid sheds the label because a column is thirty-six cells wide. A page
 // rule is the whole frame, so it prints the room's own phrase — the one on the
 // card and on the NEEDS YOU strip — rather than the abbreviation width forced.
+//
+// The page takes the amendment's word too, and for the reason the amendment
+// gives: two surfaces reading one queue must not disagree about what it says. So
+// the blocked seat's rule states `needs you` and the operator's whole figure, and
+// the vendor's own twelve seconds arrive when the card is answered — which is the
+// second arm here, because a word that hid a number would be no better than a
+// number under the wrong word.
 func TestThePageSaysItWhole(t *testing.T) {
 	st := gateClockRoom()
 	st.Page = TurnView{Open: true, Turn: 1}
@@ -393,7 +522,16 @@ func TestThePageSaysItWhole(t *testing.T) {
 	if !strings.Contains(got, "waiting on you 4m48s") {
 		t.Error("the page abbreviates a figure it has the width to spell")
 	}
-	if !strings.Contains(got, "12s") {
-		t.Error("the page lost the vendor's own time")
+	if !strings.Contains(got, needsYouWord) {
+		t.Error("the page says the vendor is working while the room is stopped on you")
+	}
+	if strings.Contains(got, "streaming") {
+		t.Error("the page still claims output is arriving from a stopped process")
+	}
+
+	st.Gates = nil
+	st.Columns[0].GateWait = runner.Span{D: 4*time.Minute + 48*time.Second, Measured: true}
+	if got := render(st); !strings.Contains(got, "12s") {
+		t.Errorf("the answered page lost the vendor's own time:\n%s", got)
 	}
 }

@@ -188,17 +188,21 @@ func TestWaitingIsNotStreaming(t *testing.T) {
 	golden(t, "waiting-vs-streaming", a)
 }
 
-// TestWaitingOnYouIsNotStreaming is the same claim through the CLOCK.
+// TestWaitingOnYouIsNotStreaming is the same claim about a seat stopped on the
+// OPERATOR, and it now guards both halves of it.
 //
-// TestWaitingIsNotStreaming above guards the word: a seat with nothing to show
-// must not render as one that is showing something. This guards the figure under
-// that word, and it is the same failure by a different route — a seat stopped
-// behind an approval card is not streaming either, and for five minutes it said
-// `⋮ streaming 5m0s`. The number was real wall clock and it was still a false
-// reading, because what it measured was a person reading a card (§9.45).
+// TestWaitingIsNotStreaming above guards the word for a seat with nothing to
+// show. This guards the word AND the figure for a seat with a stopped process
+// behind it, because the two arrived one at a time. §9.45 corrected the number —
+// the header stopped charging a person's reading time to the vendor — and left
+// `⋮ streaming` sitting over it, which is a corrected figure under a false word.
+// The amendment finishes it: the header says `needs you`, in the strip's own
+// vocabulary, and carries no clock at all.
 //
 // Two states that must not render alike, exactly as above: one seat blocked on
-// the operator, one seat with the identical wall clock and no card at all.
+// the operator, one seat with the identical wall clock and no card at all. And a
+// third, because the split has to SURVIVE the answer — the same seat with the
+// card gone states the vendor's twelve seconds again.
 func TestWaitingOnYouIsNotStreaming(t *testing.T) {
 	now := time.Date(2026, 8, 15, 12, 5, 0, 0, time.UTC)
 
@@ -224,18 +228,25 @@ func TestWaitingOnYouIsNotStreaming(t *testing.T) {
 		t.Fatal("a seat stopped on the operator renders identically to one that is working")
 	}
 	// The seat that really has been streaming for five minutes keeps its five
-	// minutes. Only the blocked one gives them up, and it gives them to a figure
-	// that says where they went — the vendor's twelve seconds, and the rest
-	// named as the operator's.
+	// minutes, and keeps the word for them too.
 	if !strings.Contains(b, "streaming 5m0s") {
 		t.Error("a seat nobody blocked lost its own five minutes")
 	}
-	if strings.Contains(a, "streaming 5m0s") {
-		t.Error("a stopped seat still wears the operator's wait as streaming")
+	// The blocked one gives up both. The word is the room's own — the same phrase
+	// the card two rows under it spells `waiting on you` and the strip spells
+	// `NEEDS YOU` — and no clock follows it, because neither figure is time this
+	// seat spent in this state.
+	if strings.Contains(a, "streaming") {
+		t.Error("a stopped seat still claims output is arriving")
 	}
-	if !strings.Contains(a, "streaming 12s") {
-		t.Error("the blocked seat does not state the vendor's own time")
+	if !strings.Contains(a, needsYouWord) {
+		t.Errorf("no word on the frame says the seat is stopped on the operator:\n%s", a)
 	}
+	if strings.Contains(a, needsYouWord+" 12s") || strings.Contains(a, needsYouWord+" 4m48s") {
+		t.Error("the state word grew a clock that is not time spent in that state")
+	}
+	// The operator's own figure is where §9.45 put it, on the turn's separator,
+	// and it is still counting.
 	if !strings.Contains(a, "you 4m48s") {
 		t.Error("no figure on the frame says how long the room waited on the operator")
 	}
@@ -243,6 +254,23 @@ func TestWaitingOnYouIsNotStreaming(t *testing.T) {
 	// which is the distinction zero-vs-absent.txt exists for.
 	if strings.Contains(b, "you ") {
 		t.Error("a seat that was never gated grew an operator figure")
+	}
+
+	// Answered: the card goes, the stretch is filed on the column, and the
+	// vendor's own twelve seconds come back to the header. This is the assertion
+	// that keeps the amendment from being a way to hide the split — the figure is
+	// deferred while the seat is stopped, never dropped.
+	// The columns are copied rather than shared: a State value carries a slice,
+	// so writing through the copy would edit the frame `a` was rendered from and
+	// leave the assertions above describing a State that no longer exists.
+	answered := blocked
+	answered.Gates = nil
+	answered.Columns = append([]Column(nil), blocked.Columns...)
+	answered.Columns[0].GateWait = runner.Span{
+		D: 4*time.Minute + 48*time.Second, Measured: true,
+	}
+	if got := render(answered); !strings.Contains(got, "streaming 12s") {
+		t.Errorf("the answered seat does not state the vendor's own time:\n%s", got)
 	}
 }
 

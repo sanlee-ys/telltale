@@ -514,10 +514,15 @@ func runHook(args []string) {
 // runGateHook answers one PreToolUse hook invocation on the gated council seat:
 // ask, every time, about every tool (design.md §9.8, amended 2026-08-12).
 //
-// Nobody types this. `telltale council --write` writes a settings file naming
-// it and points the Claude seat at it, and Claude Code runs it once per tool
-// call — so this is the hottest path in the binary and it does the least work
-// of anything in it.
+// Nobody types this. A plain `telltale council` writes a settings file naming it
+// and points the Claude seat at it, and Claude Code runs it once per tool call —
+// so this is the hottest path in the binary and it does the least work of
+// anything in it.
+//
+// The flag this sentence used to credit was `--write`, and `--write` is accepted
+// and IGNORED (runCouncil): the room writes by DEFAULT and `--read` is the opt-out.
+// The help panel's posture legend carried the same stale credit and was corrected
+// on 2026-08-15; this comment is the last copy of it in the tree.
 //
 // Two properties it must not lose. Stdin is DRAINED before anything is
 // printed: the vendor writes the tool payload down that pipe, and a hook that
