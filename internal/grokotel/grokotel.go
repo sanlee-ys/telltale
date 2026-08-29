@@ -10,7 +10,23 @@
 // disk swept twice, the free network half probed, the vendor's own monitoring
 // schema read). The one place it is DESIGNED to report what an account is
 // doing is this export stream — documented in its user guide 24
-// ("Monitoring Usage"), double opt-in, content-free by default. §4a.5's
+// ("Monitoring Usage"), double opt-in, content-free by default.
+//
+// Read that claim exactly as narrow as it is spelled, because a 2026-08-29
+// re-measure at grok 1.0.5 tightened it (§3.9a's `usage` re-measure, and
+// §7.16a's amendment of the same date). "No CUMULATIVE spend to disk" is
+// still measured and true, and this stream is still the only surface grok
+// DESIGNED for reporting. But grok's on-disk `updates.jsonl` does carry
+// per-turn token counts — inputTokens, outputTokens, totalTokens,
+// cachedReadTokens, cacheCreationTokens, reasoningTokens, modelCalls and
+// apiDurationMs, beside the costUsdTicks §3.9a already named — and they have
+// been there since 1.0.0. §3.9a missed them because its cost sweep was
+// spelled "[a-z_]*cost[a-z_]*" and could not match them, not because the
+// vendor changed. So this package is the only WIRED source of grok spend and
+// it is NOT the only POSSIBLE one, and nothing here should be read as saying
+// the counts exist nowhere else. §7.16a's amendment carries the three
+// constraints on any future disk reader; the first is that it and this
+// listener must never both count one turn into the same cache. §4a.5's
 // contract stands untouched because the PUSH IS GROK'S: telltale opens a
 // socket on 127.0.0.1 and grok's own exporter connects out to it. The gauges
 // still make no network calls and read no credentials; the collector is its
@@ -37,9 +53,15 @@
 //     api_request event of the same turn. That equality is why this package
 //     reads ONLY the event stream and acknowledges /v1/metrics without
 //     reading it: one source, one claim, no chance of double-counting a
-//     number that arrives twice.
-//   - turn_completed events carry outcome and duration and NO token counts,
-//     exactly as the vendor's schema table says.
+//     number that arrives twice. The rule is the durable half; "the two
+//     envelopes" is the perishable half, and a third envelope has since
+//     turned up on disk (see above).
+//   - turn_completed events ON THE WIRE carry outcome and duration and NO
+//     token counts, exactly as the vendor's schema table says. Note the
+//     qualifier: the record of the same name persisted to grok's own
+//     updates.jsonl carries all of them (§3.9a, 2026-08-29). One event name,
+//     two envelopes, opposite contents — do not carry a claim about either
+//     one across to the other.
 //
 // **NOT re-measured at grok 1.0.4 (2026-08-14).** The seat was re-verified when
 // four unnoticed patch bumps turned up (design.md §9.39's amendment), and that

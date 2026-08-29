@@ -76,7 +76,46 @@ func TestMain(m *testing.M) {
 		return realRPC(ctx, spec, out, proto)
 	}
 
+	// The arena check (arenacheck.go) is the fourth thing this package can
+	// spawn, and it is guarded on the same rule for a wider reason than the
+	// three above: what it runs is a command the OPERATOR named, so on the
+	// machine running this suite it is by definition a program somebody meant
+	// to have. A test that reached the model's check path unstubbed would run
+	// that person's build or test suite from inside `go test`.
+	realCheck := startCheck
+	startCheck = func(ctx context.Context, tree string, argv []string) checkResult {
+		refuseRealCheck(tree, argv)
+		return realCheck(ctx, tree, argv)
+	}
+
 	os.Exit(m.Run())
+}
+
+// refuseRealCheck panics if the check's first word names a program this
+// machine can actually run — refuseRealVendor's rule, stated for a command
+// rather than for a vendor spec.
+//
+// A path exec cannot find launches nothing, so it is let through to the real
+// call and fails there, which is what the could-not-run tests assert on. The
+// one deliberate way past this guard is calling runCheck directly rather than
+// through the var: arenacheck_test.go does so with THIS TEST BINARY as the
+// command, which is the only way to assert the claim the whole feature rests
+// on — that PASS and FAIL come from a real exit code.
+func refuseRealCheck(tree string, argv []string) {
+	if len(argv) == 0 {
+		return
+	}
+	if _, err := exec.LookPath(argv[0]); err != nil {
+		return
+	}
+	panic(fmt.Sprintf(
+		"council test ran a REAL arena check via startCheck — that executes a "+
+			"program on this machine from inside the suite.\n"+
+			"  args: %q\n"+
+			"  dir:  %s\n"+
+			"Stub the spawn vars in this test — countSpawns(t) in "+
+			"flow_security_test.go does all four.",
+		argv, tree))
 }
 
 // refuseRealVendor panics if spec.Binary names a program this machine can
