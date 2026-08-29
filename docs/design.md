@@ -6781,6 +6781,207 @@ Wiring one up writes an entry into the operator's own client configuration, whic
 make; until he does, this section claims a correct server and not a working integration.
 `STATE.md` carries the debt.
 
+<a id="s7-26"></a>
+
+### 7.26 `telltale history` — what one vendor spent, day by day, from its own files (2026-08-29)
+
+Every reader this product has answers about NOW. The statusline and the HUD render a scan;
+§7.22's `snapshot` and §7.25's `mcp` serve one scan to a program; §9.42's `doctor` reports a
+preflight. None of them can answer *where did last week go*, and the reason is structural
+rather than an omission: the HUD's Claude read is a head+tail parse — 64 KiB in, 256 KiB back
+(§3.1) — because §7.18 measured a whole-corpus walk at 164 MB and 46,727 records per second
+against a 1 s poll. A history needs every record of every file. **Measured on the owner's
+own corpus, 2026-08-29: 701 transcripts, 143,304 records, 10.4 s for a 30-day walk.** That is
+four orders of magnitude off a poll tick, so this is a foreground mode that reads once and
+returns, on `doctor`'s precedent, and never a page in the HUD.
+
+#### It is SPEND-shaped, and §7.16 and §7.17 are the vocabulary
+
+Nothing here is new grammar. §7.17's table of two claims puts this surface entirely in the
+right-hand column, and the consequences are the ones already ruled:
+
+- **No gauge, no percentage, no bar, no countdown, no ceiling.** There is no denominator
+  anywhere in a token count. `TestTheFrameBorrowsNoneOfQuotasVocabulary` is
+  `TestUsageSpendBorrowsNoneOfQuotasVocabulary` on this surface, and CI asserts the same
+  properties on the built binary's stdout.
+- **A sum never prints without its window** (§7.16's accumulation ruling). Every count
+  carries its day; the report carries the span it walked and the zone it resolved days in.
+- **Never a fleet total.** §7.17 already rejected one as "arithmetic telltale invented"; this
+  mode goes further and reports **one vendor per run**, so the arithmetic is not available to
+  make. The vendor's name is on the title, on the window line and on both refusal
+  paragraphs.
+
+**One rule here is narrower than §7.17's and is new.** The four columns are not added
+together either. Input, cache read, cache write and output are four separately billed
+categories and telltale holds no price, so their sum would be a number that reads like a bill
+and is not one — the §7.16 derived-`inputTokens` trap arriving through addition instead of
+through a vendor's own arithmetic. `TestNoTotalIsRenderedAnywhere` computes what such a total
+would render as and fails if it appears anywhere in the frame.
+
+#### Absent is not zero, on two axes
+
+§4a.1's rule, applied to a table instead of to a cell:
+
+| | What it means | What it renders |
+|---|---|---|
+| a request whose usage block reported zeros | a measured zero — the request happened | `0` in all four columns, `1` request |
+| a workspace with no request that day | it sent nothing | **no row** |
+| a day inside the window with nothing at all | nothing was written that day | **no row** |
+
+The failure this refuses is the natural implementation: pre-seeding a bucket for every
+(day, workspace) pair so the table comes out rectangular. **A rectangular table here is a
+table of claims** — every zero cell in it would assert a request nobody sent. What makes a
+missing day readable instead is the window line: the report states the span it walked, and a
+sentence under the table says in words that a day with no row carried no token-bearing
+record. `zero-vs-absent.txt` is the golden, named after `internal/hud`'s for the same reason.
+
+#### The derived value is the DAY, and it is disclosed in words rather than with a `~`
+
+The vendor writes an instant. A calendar day is that instant resolved in a time zone, and the
+zone is a choice telltale made — so the window line reads `days resolved in EDT UTC-04:00`,
+and the OFFSET is on it because a zone abbreviation alone is ambiguous across regions. This
+is deliberately not a `~`: that marker means an estimated VALUE (§4a.1), and a day bucket is
+an exact reading under a stated convention. Marking it `~` would say the count might be
+wrong, when what is conventional is which side of midnight it fell on.
+
+Two related refusals, both measured rather than assumed:
+
+- **A record with no readable timestamp is in no day.** It is counted and named in
+  diagnostics, never folded into today — that would move a measurement onto a day nothing
+  said it belonged to.
+- **A record stamped ahead of the clock cannot be dated**, on every adapter's own
+  `futureSkew` rule. A skewed clock must not be able to invent a day's spend.
+
+#### The survey: which vendors could support this, and which cannot
+
+The mode covers **claude only**, and the six it does not cover are named on **every run**,
+each with the reason. That block is not documentation politeness — it is the whole of what
+stops a table headed with one vendor's name from being carried away as a fleet answer, and
+it prints unconditionally for the reason `doctor` prints its three-state legend every time.
+
+The survey is a **source read of this repository's adapters** at the revision it was written
+on — each adapter's record struct, its package doc, and the live-corpus verdicts those docs
+already carry. It is **not** a fresh measurement against a live vendor, and the difference is
+stated because CLAUDE.md's measured-claims rule makes it load-bearing: the version pins these
+verdicts rest on are the adapters' own `VerifiedAgainst` constants.
+
+Two questions, in order. A vendor joins only when both answer yes, and **the second is the
+one that surprised the survey**: a count with no timestamp is not a smaller history, it has
+no day axis at all.
+
+| vendor | counts on disk? | dated? | verdict |
+|---|---|---|---|
+| **claude** | **yes** — `message.usage` carries four raw counts (`input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, `output_tokens`) on every assistant record | **yes** — RFC3339 `timestamp`, and `cwd` on the same record | **COVERED.** Four billed categories, dated, per request, per project. The only vendor with the cache split that makes four honest columns. Pinned at Claude Code 2.1.233 (§3.1) |
+| codex | yes — a `token_count` event carries `info.last_token_usage` (this turn) beside a cumulative `info.total_token_usage` | yes — the rollout envelope's own `timestamp` | **the next slice.** Two things owed: which of the two a day may sum is a ruling nobody has made, and there is no cache split, so a codex block carries two columns where claude's carries four |
+| gemini | partial — `tokens.input` is `promptTokenCount`, which [§3.7](#s3-7)'s adapter labels a context-occupancy proxy, and the cached subset is not separable from what it parses | yes | refused on UNITS. Summing an occupancy proxy per day counts one conversation's prefix once per turn, under a header that would read like uncached input |
+| agy | yes, and the best-guarded in the fleet — `gen_metadata` carries uncached input and output per generation behind the `thinking + answer == output` identity §3.8 requires | **no** — the reverse-engineered field map carries no per-generation timestamp | refused for want of a DAY. Real numbers, no axis to put them on |
+| cursor | **no** — `tokenCount.inputTokens`/`outputTokens` were 0 in 310 of 310 message rows; declared `CapNone` (§7.16) | n/a | nothing to read. This vendor's counts arrive by hook, not on disk |
+| grok | partial — `turn_completed` carries `usage.totalTokens` per turn, a total only | **no** — the parsed record carries no timestamp | agy's problem plus its own |
+| pi | yes — `message.usage.{input,output}` per assistant message, with a `cwd` | yes — record `timestamp` | datable, second after codex. No cache split, and it carries `usage.cost.total` per message — money, which this mode renders nowhere and would have to rule on |
+
+`self-reported` is absent from the table and that is not an omission: §7.23's drop-file rows
+are what a tool said about itself, with no session store behind them to walk. Giving it a
+"not covered" verdict would imply a file this mode could learn to read.
+
+**The block renders in fixed fleet order**, the same order §7.17's blocks and the header's
+per-vendor counts walk. Ordering it by how close each vendor is to coverage reads better as a
+roadmap and was **declined**: it would make one list in this product order vendors by a
+property no other list orders them by, which is the reshuffle §7.17 spends a paragraph
+refusing. The roadmap signal lives in the words — codex's verdict says it is the next slice.
+
+#### The layout, and what each choice is for
+
+The generated render (`internal/history/testdata/golden/ledger.txt`, at the default 100
+columns):
+
+```
+telltale history — what claude spent, day by day, read from claude's own session files
+
+  read from   C:\src\home\.claude\projects
+  window      7 local days, 2026-08-23 through 2026-08-29, days resolved in TST UTC-05:00
+  read        41 transcripts, 39,184 records
+
+  DAY         WORKSPACE                     IN  CACHE READ  CACHE WRITE      OUT  REQUESTS  SESSIONS
+  2026-08-24  C:\src\code\telltale       1,204   1,903,551       62,004   13,118        14         2
+  2026-08-27  C:\src\code\notes-api         96           0        4,102      812         3         1
+              C:\src\code\telltale      22,140   8,830,112      511,903  140,277       191         5
+  2026-08-29  ...rkspace-path\telltale       3          12            0       44         1         1
+```
+
+- **Plain text, no colour, no TUI** — `doctor`'s argument (§9.42), and it applies harder here:
+  a history is read in a pipe and pasted into a message. Every distinction the report draws is
+  a WORD, which satisfies §7.1 rule 2 by having no first signal that is not one. `--ascii` and
+  `NO_COLOR` have nothing to switch off, so neither is a flag: a flag that does nothing is a
+  promise that something was configurable.
+- **`REQUESTS`, not `TURNS`.** One turn can produce several API requests, so "turns" would be
+  a count telltale did not take. The column is the number of records that carried a usage
+  block, which is exactly what was counted.
+- **Counts are exact and grouped, never floored.** `theme.Tokens` floors to `1.9M` on the
+  gauge surfaces because a header line has no room for digits and rounding *up* would invent
+  tokens nobody was billed for (§7.16). This is a table with the room, so it rounds nothing at
+  all — strictly the more honest of the two, and affordable only here.
+- **The day is drawn once per day**, not restated on a second workspace row: repeating the
+  date makes the eye read a second reading where there is one.
+- **Rows are day-ASCENDING**, so today lands at the bottom, next to the prompt the reader is
+  looking at. Sorting by spend was refused for §7.17's reason — position is the navigation.
+- **The workspace column is the only one allowed to give way**, and it truncates from the
+  LEFT: a path's identifying half is its tail, and the marker sits at the front where it says
+  "something was removed" before the reader has read the value. Below the floor the table
+  overruns the wrap column rather than letting numbers collide (`narrow.txt` is the golden at
+  60 columns).
+- **A record whose own record named no `cwd` gets its own `(no cwd)` bucket**, never a
+  neighbour's. Attributing it to the last workspace seen in the file would be a guess, and a
+  guess in the project column is indistinguishable from a reading once it is on screen.
+
+#### The read/write boundary
+
+**This mode writes nothing at all.** It reads one vendor's store, calls no network, binds no
+port, reads no credential, and relays no quota — it renders none, which is `snapshot`'s own
+argument for holding the contract with one item spare (§7.22). It joins statusline, hud,
+snapshot and mcp as a **reader**; `CLAUDE.md` names it in that list.
+
+`internal/history/boundary_test.go` is the mechanical half, on
+`internal/eventview/boundary_test.go`'s precedent: `go list` answers what this package
+imports, and the gate fails if it ever reaches `quotacache`, `usagecache`, `eventsink`,
+`eventview`, `council`, `net/*`, `os/exec` or a TUI module. The check is on DIRECT imports
+and says so — this package imports `internal/adapter/claudecode` for `Discover`, and an
+adapter's dependency graph is not this mode's write surface.
+
+**Content cannot reach a rendered value**, by the technique `internal/cursorhook` uses against
+a payload carrying a user's email beside four numbers: the record struct IS the allowlist, and
+`encoding/json` drops every field with no destination. The only strings that survive a parse
+here are the workspace path and the timestamp. Diagnostics carry counts and never bytes.
+
+#### What it reuses, and the one thing it does not
+
+Sessions are discovered by `internal/adapter/claudecode`'s own `Discover`, so a session this
+mode counts is a session the HUD would draw and the two cannot come to disagree about what a
+session is — including the two traps that function encodes (the glob is not recursive, and a
+basename is validated as a UUID; recursing inflated the live session list 2.4× and
+double-counted every token). Records are framed by `internal/jsonl`, so the U+2028 trap and
+the 1,004,230-byte record are handled in the one tested place.
+
+What it does NOT reuse is that adapter's head+tail parse. A ledger needs every record, so it
+walks whole files through `jsonl.Scan`. Three record classes are refused and each is counted
+in diagnostics rather than dropped silently: unparseable records, `<synthetic>` records
+(Claude Code's own locally generated notices, which carry a zeroed usage block and would
+otherwise look exactly like the measured zero above), and inline `isSidechain` records — 0 of
+179,614 in the live corpus, so a non-zero there is a vendor change worth seeing rather than a
+routine skip.
+
+#### Known limitations, named
+
+- **The window is complete or it says so.** A walk stopped by `--timeout` prints what it read
+  and marks the report incomplete, in its own paragraph: the ROWS stay true and the WINDOW
+  stops being, and a reader who misses that sentence would read a lower bound as a total.
+- **A day is a local calendar day.** A session that crossed midnight in another zone lands
+  where this machine's zone puts it. The offset is on screen; nothing converts.
+- **`REQUESTS` counts records, not API calls, if the vendor ever writes two records for one
+  call.** No such case is known at 2.1.233; it is named because the column's honesty rests on
+  the vendor's record-per-request shape rather than on anything telltale can check.
+- **Nothing here is cached.** Every run re-walks, at the cost measured above. A cache would be
+  a ledger that can disagree with the files it came from, and the mode is not on a tick.
+
 <a id="s8"></a>
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)

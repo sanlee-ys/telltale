@@ -173,6 +173,70 @@ jobs:
       # stamps now in the past, which quotacache drops because a window whose
       # reset has passed describes a window that no longer exists. So this one
       # document happens to carry both halves of the quota shape.
+      # The ledger mode (design.md §7.26), driven through the BUILT binary
+      # against the synthetic corpus rather than against this runner's own home
+      # directory. A bare runner has no Claude transcripts, so an unrooted run
+      # would assert only the empty state — which is worth pinning too, and is
+      # the second half of this step.
+      - name: Smoke (history's honesty grammar through the real binary)
+        shell: pwsh
+        run: |
+          function Tree {
+            $dir = "$env:USERPROFILE\.telltale"
+            if (-not (Test-Path $dir)) { return '<absent>' }
+            (Get-ChildItem $dir -Recurse -File | Sort-Object FullName |
+              ForEach-Object { "$($_.FullName)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join "`n"
+          }
+          $corpus = Join-Path $env:RUNNER_TEMP 'history-corpus'
+          go run ./tools/demo-corpus -out $corpus
+          if ($LASTEXITCODE -ne 0) { throw "the demo corpus did not write" }
+
+          $before = Tree
+          $out = ./telltale.exe history --root $corpus --days 7 --width 120 | Out-String
+          if ($LASTEXITCODE -ne 0) { throw "history exited $LASTEXITCODE; this mode prints a report and returns 0" }
+          if ((Tree) -ne $before) { throw "history changed something under ~/.telltale; this mode writes nothing at all (§7.26)" }
+
+          # It read the corpus rather than reporting an absent store.
+          if ($out -notmatch 'C:\\demo\\') { throw "history read no workspace out of the synthetic corpus: $out" }
+          # The exact count the corpus writes. Each of its three Claude sessions
+          # carries one assistant record with cache_read_input_tokens 51200, in
+          # its own workspace, so the table draws the figure verbatim and
+          # ungrouped arithmetic is not involved. If the record shape ever stops
+          # being read, this is the line that says so.
+          if ($out -notmatch '51,200') { throw "the corpus's cache_read count did not reach the table: $out" }
+          # ...and it is EXACT. theme.Tokens' floored form belongs on the gauge
+          # surfaces, where a header has no room for digits; this table has the
+          # room and rounds nothing.
+          if ($out -match '51\.2k|2\.0k') { throw "the table rounded a count: $out" }
+
+          # The honesty grammar, asserted on stdout the way every other smoke in
+          # this file is. A token count has no denominator anywhere, so any of
+          # these would be a ceiling telltale invented (design.md §7.16, §7.17).
+          if ($out -match '%') { throw "honest-gauge violation: a percentage on a spend surface: $out" }
+          if ($out -match '\u2588|\u2593|\u21bb') { throw "honest-gauge violation: a gauge or reset glyph on a spend surface: $out" }
+          if ($out -match '\$') { throw "honest-gauge violation: a dollar figure telltale holds no price for: $out" }
+          if ($out -match '\x1b') { throw "history emitted ANSI escapes; it is read in pipes and pastes: $out" }
+
+          # The window and the vendor travel with every count, and the derived
+          # day names the zone it was resolved in.
+          if ($out -notmatch 'days resolved in') { throw "the day column does not name its time zone: $out" }
+          if ($out -notmatch 'local day') { throw "the report printed counts without their window: $out" }
+
+          # Partial coverage may never read as a fleet answer: every vendor this
+          # mode does not read has to be named, in the same frame, with a reason.
+          if ($out -notmatch 'covered today: claude') { throw "the report does not say which vendor it speaks for: $out" }
+          foreach ($v in 'codex', 'gemini', 'agy', 'cursor', 'grok', 'pi') {
+            if ($out -notmatch "\b$v\b") { throw "history never names $v, so its silence about that vendor reads as zero: $out" }
+          }
+
+          # A vendor that is surveyed and not read is refused with its verdict,
+          # and prints no table at all.
+          $refused = ./telltale.exe history --vendor cursor 2>&1 | Out-String
+          if ($LASTEXITCODE -eq 0) { throw "an uncovered vendor was accepted: $refused" }
+          if ($refused -notmatch 'CapNone') { throw "the refusal does not carry the survey's verdict: $refused" }
+
+          Remove-Item -Recurse -Force $corpus
+
       - name: Install the JSON Schema validator (pinned)
         run: python -m pip install --disable-pip-version-check jsonschema==4.23.0
       - name: Gate (the snapshot document against its published schema)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/sanlee-ys/telltale/internal/council"
 	"github.com/sanlee-ys/telltale/internal/gatehook"
+	"github.com/sanlee-ys/telltale/internal/history"
 	"github.com/sanlee-ys/telltale/internal/mcpserver"
 )
 
@@ -257,6 +258,93 @@ func TestUsageNamesTheMCPMode(t *testing.T) {
 	for _, want := range []string{"telltale mcp", mcpserver.ToolName, "mcp add"} {
 		if !strings.Contains(usageText, want) {
 			t.Errorf("usage text never mentions %q", want)
+		}
+	}
+}
+
+// TestUsageNamesTheHistoryModeAndWhatItCannotAnswer.
+//
+// This mode's help carries a load its neighbours' do not, and it is the reason
+// this test exists rather than being a third copy of the two above. `telltale
+// history` reads ONE vendor of seven. A help entry that named the mode and left
+// the coverage out would send a reader to a table headed "claude" and let them
+// carry it away as a fleet answer — which is the exact failure the report's own
+// coverage block is built to prevent, arriving one surface earlier.
+func TestUsageNamesTheHistoryModeAndWhatItCannotAnswer(t *testing.T) {
+	if !strings.Contains(usageText, "telltale history") {
+		t.Fatal("usage text never mentions telltale history")
+	}
+	// Every vendor the survey knows has to be named in the help's entry, covered
+	// or not, for the reason internal/history's own TestEveryFleetVendorHasAVerdict
+	// exists: silence about a vendor on a spend surface reads as zero.
+	entry := usageText[strings.Index(usageText, "telltale history"):]
+	for _, c := range history.Survey() {
+		if !strings.Contains(entry, string(c.Vendor)) {
+			t.Errorf("the history help never names %s, so a reader cannot tell whether it is "+
+				"covered, uncovered, or forgotten", c.Vendor)
+		}
+	}
+	// And the two refusals, because both are things a reader will otherwise
+	// assume the mode does and be quietly wrong about.
+	for _, want := range []string{"never sums two", "no denominator"} {
+		if !strings.Contains(entry, want) {
+			t.Errorf("the history help never says %q", want)
+		}
+	}
+}
+
+// TestHistoryFailsLoudOnWhatItCannotDo. The flag contract matters here for
+// snapshot's reason and one more: every number this mode prints belongs to
+// exactly one vendor, so a --vendor that was silently ignored would put a table
+// of claude's counts under a heading somebody typed "codex" into.
+func TestHistoryFailsLoudOnWhatItCannotDo(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"unknown flag", []string{"--json"}, "not defined"},
+		{"positional argument", []string{"claude"}, "unexpected argument"},
+		{"unknown vendor", []string{"--vendor", "chatgpt"}, "unknown --vendor"},
+		{"zero days", []string{"--days", "0"}, "positive number of days"},
+		{"zero timeout", []string{"--timeout", "0"}, "positive duration"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := runHistory(tc.args)
+			if err == nil {
+				t.Fatalf("runHistory(%v) printed a report instead of refusing", tc.args)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q does not carry the correction %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestARefusedVendorGetsTheSurveysVerdict. "unsupported" sends a reader to open
+// an issue about work that is already understood. The refusal here hands back
+// the survey's own sentence — the field, the file and what is missing — so the
+// reader finds out whether the gap is telltale's or the vendor's without asking.
+func TestARefusedVendorGetsTheSurveysVerdict(t *testing.T) {
+	for _, c := range history.Survey() {
+		err := historyVendor(string(c.Vendor))
+		if c.Covered {
+			if err != nil {
+				t.Errorf("%s is covered and was refused: %v", c.Vendor, err)
+			}
+			continue
+		}
+		if err == nil {
+			t.Errorf("%s is not covered and was accepted", c.Vendor)
+			continue
+		}
+		// The first clause of the verdict, which proves the reason travelled
+		// rather than being replaced by a generic sentence.
+		head := strings.Join(strings.Fields(c.Why)[:5], " ")
+		if !strings.Contains(strings.Join(strings.Fields(err.Error()), " "), head) {
+			t.Errorf("%s's refusal does not carry its verdict.\ngot:  %v\nwant it to contain: %q",
+				c.Vendor, err, head)
 		}
 	}
 }
