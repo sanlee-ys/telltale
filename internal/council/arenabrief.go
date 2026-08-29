@@ -2,6 +2,7 @@ package council
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -193,9 +194,12 @@ func arenaBriefArgs(tree string) []string {
 	// The marker is the first bytes of the file by construction, so the read is
 	// bounded rather than sized to the file: a racer that appended a megabyte
 	// below it must not cost every refresh that megabyte.
+	// io.ReadFull, not one Read: a Read that returns fewer bytes than asked for
+	// is legal and would fail the comparison on a file that does carry the
+	// marker — an exclusion that switched itself off on a short read would put
+	// council's file in the racer's stat.
 	buf := make([]byte, len(arenaBriefMarker))
-	n, err := f.Read(buf)
-	if err != nil || n < len(buf) || string(buf) != arenaBriefMarker {
+	if _, err := io.ReadFull(f, buf); err != nil || string(buf) != arenaBriefMarker {
 		return nil
 	}
 	return []string{arenaBriefPathspec}
