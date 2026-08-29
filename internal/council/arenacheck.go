@@ -265,7 +265,7 @@ type arenaCheckMsg struct {
 // armArenaCheck decides whether this landing seat gets a check, and returns
 // the record its column will render while the run is in flight.
 //
-// Three refusals, and each is a fact rather than a policy:
+// Two refusals live here, and each is a fact rather than a policy:
 //
 //   - No command is named: there is nothing to run and nothing to report.
 //   - The whole turn is being cancelled: the operator pressed ctrl+c, and a
@@ -273,8 +273,10 @@ type arenaCheckMsg struct {
 //     the one act it exists to obey. A seat cut on its own with `x` is NOT
 //     this case — §9.37's give-up ruling says a given-up seat lands like any
 //     other finisher, and its partial work is as worth checking as its diff.
-//   - The check ran already for this result: collection is once-only
-//     (finishColumn's c.Arena == nil guard) and so is this.
+//
+// A third is the CALLER's and is not restated here: collection is once-only
+// behind finishColumn's `c.Arena == nil` guard, so a racer that retires twice
+// reaches this once.
 func (m *Model) armArenaCheck(v model.VendorID, turnN int, tree string) *ArenaCheck {
 	if m.checkCmd == "" || len(m.checkArgv) == 0 {
 		return nil
@@ -323,10 +325,12 @@ func (m *Model) dueArenaChecks() tea.Cmd {
 // room started.
 func checkArenaCmd(roomCtx context.Context, p arenaCheckPending) tea.Cmd {
 	return func() tea.Msg {
-		if roomCtx == nil {
-			roomCtx = context.Background()
+		parent := roomCtx
+		if parent == nil {
+			// Only a hand-built Model reaches this — the room always has one.
+			parent = context.Background()
 		}
-		ctx, cancel := context.WithTimeout(roomCtx, arenaCheckTimeout)
+		ctx, cancel := context.WithTimeout(parent, arenaCheckTimeout)
 		defer cancel()
 		res := startCheck(ctx, p.tree, p.argv)
 		return arenaCheckMsg{
