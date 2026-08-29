@@ -14724,3 +14724,173 @@ was verified at SHA256 `3A9F05582D99DFEEB95E705559789F3B41D01DF1292F811D1A94834A
 (146 bytes), the test configuration preserved telltale's own `afterAgentResponse` entry, and the
 original was restored and re-verified at the same hash and length. No credential store was read or
 copied at any point.
+
+<a id="s9-47"></a>
+
+### 9.47 the room raced fourteen times and could not say who won (2026-08-29)
+
+`/arena` has been building a record since it shipped, and nothing could read it. Every race
+leaves an `arena/t<N>/<vendor>` branch per seat and every adoption leaves an
+`adopt/t<N>-<vendor>`; both outlive the room by design (§9.37's kept-until-deleted ruling),
+and `arenaRaceNumber` already reads the first namespace to number the next race — "the refs
+are the one record that shares the leftovers' lifetime". What the ROOM kept of a race was
+`Column.Arena`, a per-turn fact the next dispatch clears, and `TurnRecord` never carried it.
+So a repository holding fourteen races and nine adoptions could not answer *which seat do I
+actually take*, and the operator answered it by reading `git branch` in a second terminal —
+which is the one thing §9.17 says a command surface exists to remove.
+
+**`/arena record` reads the refs and states the standing, one line per seat.** It is a verb
+inside `/arena` rather than a new room word, and that is a budget decision with a name:
+`refuseUnknownCommand` prints the whole vocabulary on one line against a hard width, and that
+line's own comment records `/adopt` as "the last cheap one — the next verb has to find its
+characters somewhere else". `/arena drop` had already established the shape (a sub-verb, the
+exact form only, anything longer races as prose), so the record costs the refusal nothing and
+the help panel nothing. It is taught the way `x`, `/adopt` and `/arena drop` are: by this
+section, and by the notice the command itself prints.
+
+#### Derived from the refs, never stored
+
+**Nothing is written and no new file exists.** The obvious build was a counts file under
+`~/.telltale`. It was rejected before it was written: `CLAUDE.md` enumerates the writes the
+gauges are ratified to make — three relays and the event sink, each with a test pinning its
+serialized form — and a fourth exception is an owner-level edit to that contract, not a
+feature's side effect. A tally over refs the repository already holds needs no such grant,
+and it cannot go stale against them, because it IS them. Two `git for-each-ref` scans, over
+the two namespaces `freeAdoptBranch` and `arenaRaceNumber` already scan, through the same
+`gitOut` argv.
+
+**The read happens in the command handler and the page renders from State**, exactly as
+`ArenaResult` is computed in `finishColumn`. A body whose content came from a subprocess
+inside `Render` would make every golden depend on the repository the tests happen to run in,
+which is the purity rule `TestRenderIsPure` exists to hold.
+
+**The verb is not refused mid-turn**, and that is what separates it from the other two arena
+verbs. `/adopt` and `/arena drop` mutate worktrees a race is writing; this one reads refs. A
+record read during a race is a measurement of a moment already past, which is what every
+other reading in this room is.
+
+#### What the refs can say, and the three things they cannot
+
+This is the honesty boundary of the feature, and the page states both halves rather than
+implying the first.
+
+- **They CAN say who entered a race and whom the operator adopted from it.** An adopt branch
+  exists only on an adoption that LANDED — `undoAdoptBranch` deletes the branch a failed one
+  cut — so a surviving `adopt/t<N>-<vendor>` is a merge that happened, on the operator's own
+  `y`.
+- **They CANNOT say a rank, a phase word, or that a seat was cut with `x`.** Those are
+  turn-scoped and die with the room. **So this surface never claims a LOSS.** A seat that
+  entered a race the operator never decided is counted as UNDECIDED and reported beside the
+  rate, never inside it. A race with a give-up is exactly that case, and the give-up is the
+  most probable ending a five-seat race has (§9.37's 2026-08-17 amendment) — folding it into
+  a denominator would be the room scoring a seat for a race nobody judged, which is §9.22's
+  refused "cross-seat agreement mark" arriving through a side door.
+
+  **The narrower case is stated rather than solved: a seat CUT with `x` in a race the
+  operator then decided for somebody else counts as one that was not adopted.** The refs
+  cannot tell a stall from a worse answer, and no honest reading of them can. What answers it
+  is the WORD on the page. It is `adopted`, never `won`, and that is the whole mitigation:
+  `0 of 4 adopted` is literally true of a seat that stalled four times, and it makes no claim
+  about why. A column headed `won` would make one, on evidence that does not exist.
+- **A dropped branch leaves the record.** `/arena drop` deletes an arena ref by design, and
+  `adoptSeat`'s own notice offers that drop as the next command — so the winner's arena
+  branch is the one most likely to be gone. Two consequences, both handled: an adopt ref is
+  treated as evidence the seat ENTERED that race, which is what keeps a rate off the far side
+  of 100%; and the page says it counts over the branches the repository STILL HOLDS, in a
+  line of its own.
+
+**The window sentence is a LINE, not the rule's meta.** `labelRuleIn` drops a rule's meta
+whole when the width will not take it — correct for a count, wrong for the sentence that
+bounds the claim, which would then vanish exactly where the room has least room to make it.
+That is the act ledger's own ruling on its retention line (§9.22, amended 2026-08-17), and
+this page's claim is bounded the same way. The clipboard document carries it too, and there
+it matters more: a table pasted into a review a week later has nothing else saying these
+counts were ever bounded.
+
+**Only the refs this room minted are counted.** `arena/t<N>/<vendor>` and
+`adopt/t<N>-<vendor>` with `freeAdoptBranch`'s numeric collision suffixes, parsed back
+against the same two functions that write them. A hand-cut receipt is refused — the real one
+is `adopt/t9-claude-helpers`, which the first live adoption left behind before the 2026-08-11
+ruling gave the verb a spelling of its own. That is an UNDERCOUNT, said out loud here rather
+than papered over, and it is the honest direction to be wrong in: a looser parse would credit
+a seat for a branch somebody merely named after it. It is `dropRacer`'s judgement about paths
+— "no state this room's arena created can have that name" — applied to refs.
+
+#### The three renders, and the one figure this page is entitled to compute
+
+- **A seat with no ref at all is ABSENT: `never raced`.** Not 0%. §4a.1's founding rule, on
+  the surface where a zero would be read as a verdict about a vendor rather than as a count.
+- **A seat whose races were all undecided has NO RATE**, and its races are reported as
+  undecided. Inventing a denominator out of them is the same error one step down.
+- **A seat the operator decided against is a MEASURED zero and prints one: `0 of 4 adopted
+  0%`.** The distinction between that line and the one above it is the whole feature.
+
+**The rate never appears without its count, and the count comes first.** The two counts are
+what was measured; the percentage is arithmetic over them, which §7.12 names as the one kind
+of computed figure this product may show — "telltale's measurement of telltale's own
+observations" — and that carve-out is conditional on the reader being able to check the
+division. A bare `67%` would be the claim with its evidence removed, which is the same defect
+as a total printed without its window (§7.15).
+
+The seat name takes that seat's own hue and nothing else on the line does (§9.28's ratified
+exception), for the turn page's reason: this is a stack of seats in one column, so position
+answers nothing about who is being described. Every distinction the page makes is carried by
+a WORD first — `never raced`, `no decided race`, `undecided`, `adopted` — so `--ascii` and
+`NO_COLOR` lose nothing.
+
+#### The keys, and what the page deliberately does not get
+
+`t` closes it, because `t` is already what this room means by "give me the grid back" from a
+full-frame body. A key of its own would be a second thing to remember for one act, and no key
+at all would be a body reached by a typed command with no keyed way out — the help panel's
+missing `?` with a whole surface behind it. The mode word is `RECORD`, against `TURN` and
+`ACTS`: §7.8's always-on statement of what is on screen has to tell the room's three
+full-frame bodies apart, and this is the one whose subject is neither a turn nor the keymap.
+It carries no coordinate because it has none.
+
+`y` takes the page, on §9.22's own argument — a copy key that took the focused column's reply
+from behind a body the reader is looking at would break the one claim that earns it a footer
+cell. `Y` is the same document for the same reason the page's is: there is no per-seat focus
+for a narrower key to address.
+
+**No scroll cell, and no scroll keys.** The record is one short line per seat, so the only
+geometry that can clip it is the height floor, and there `recordCell` draws the overflow
+marker instead. A footer naming arrows that move nothing is the false promise §7.8 forbids —
+the same reason `f` and `tab` are absent and are swallowed rather than left to change the
+grid invisibly.
+
+**Deliberately not built, and each one is a ruling rather than a backlog item:**
+
+- **Elo, or any rating.** The sweep that proposed this feature said it plainly and it is
+  right: Elo is overkill for one operator's vote volume, and a rating is a number with no
+  measurement under it. A plain adopted-of-decided tally is the honest shape.
+- **A blind-review mode**, the other half of the sweep's candidate. §9.34 states that the
+  PERSON is never blinded — "columns stay labelled by vendor; the blind applies to what the
+  models read" — so an opt-in user-blind arena inverts a stated position and is an owner's
+  ruling, not a builder's. It is not built here and nothing here assumes it.
+- **Anything cross-repository.** The record is one repository's refs, because that is what a
+  room is pointed at and what `/cd` moves. A tally across every repo the operator has ever
+  raced in would need a store, which is the write this whole section refuses.
+- **A rank or a phase in the tally.** They are not in the refs. Carrying them would mean
+  filing `ArenaResult` into `TurnRecord` and persisting it, which buys a richer number by
+  taking on the store — and the number it buys is one the operator's own adopt decision
+  already summarises.
+
+Verified offline. `record_test.go` pins the tally's arithmetic against hand-written ref lists
+(one race counting once however many refs it left, an adopt ref proving entry, the numeric
+collision suffix not double-counting), the refs this room did not mint being ignored, zero and
+absent staying apart, no rate ever printing without its count, an undecided race never
+reaching a denominator, the window sentence surviving the narrow width, an unreadable record
+rendering as unavailable rather than as an empty one, `t` giving the grid back without opening
+the turn page, the clipboard document agreeing with the screen and carrying the window, and
+the verb taking only its own word — measured in a read-only room, where a longer draft is
+refused by name and therefore provably reached the race path. `arena-record.txt` and its
+`--ascii` twin are the frame. The one test that touches git builds its refs with `arenaBranch`
+and `adoptBranch` in a temp repository, so the parser is asserted against the functions that
+write the names rather than against the strings the test types. No test here spawns a vendor.
+
+**Nothing in this section is a claim about vendor behaviour, so no live vendor run is owed.**
+What IS owed is one live open against the reference box's own leftovers — 27 `arena/t<N>`
+branches and the `adopt/*` refs beside them are recorded in §9.37 — to confirm the counts a
+real pile of refs produces and that the page reads at the room's own geometry. Stated here
+rather than implied paid.

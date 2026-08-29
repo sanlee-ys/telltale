@@ -1132,6 +1132,22 @@ type State struct {
 	// any part of it reaching room.json: see TurnView.
 	Page TurnView
 
+	// Record is the room's arena record when `/arena record` has opened it, nil
+	// otherwise (§9.47, record.go).
+	//
+	// A POINTER holding a completed read, never a flag the renderer would have to
+	// fill in. Every count on it is tallied in the command handler, off two
+	// `git for-each-ref` calls, so Render stays pure over State exactly as it does
+	// for ArenaResult — a body whose content came from a subprocess inside Render
+	// would make the goldens depend on the repository the tests happen to run in.
+	//
+	// Nil is the closed page and NOT an empty record: a repository with no arena
+	// branches opens a record that says so, which is a different fact from never
+	// having asked (§4a.1). Nothing here reaches room.json — the record is
+	// re-read on every open, because the refs are the record and a copy of them
+	// would be a second answer that goes stale.
+	Record *ArenaRecord
+
 	// Briefed reports that shared operating context was loaded. The content
 	// itself is deliberately NOT on State: it is the user's private file and
 	// the renderer has no reason to be able to reach it.

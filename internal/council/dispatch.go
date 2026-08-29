@@ -300,6 +300,16 @@ func (m *Model) dispatch() tea.Cmd {
 				m.arenaDrop(seat, force)
 				return nil
 			}
+			// The record verb, caught here for the drop verb's reasons and one
+			// more: it does not even read a worktree, only two `for-each-ref`
+			// scans, so it runs in a read-only room and DURING a turn as well
+			// (§9.47). Only the exact one-word form is taken — anything longer
+			// after /arena is a brief and races as prose, the vocabulary rule the
+			// drop verb keeps one line up.
+			if strings.TrimSpace(brief) == "record" {
+				m.arenaRecordCommand()
+				return nil
+			}
 			// A race is a dispatch, not room state, so it lives here beside
 			// /flow rather than in roomCommand — and like a flow write hop, it
 			// cannot run in a room that may not write: every racing seat gets
