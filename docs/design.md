@@ -15183,10 +15183,10 @@ absence drawing nothing, a cancelled turn queueing nothing while a given-up seat
 the stale-message drops, the ordering — a check that writes into the tree reaching neither the
 stat nor the commit — and the four renders, with `arena-check.txt` and its `--ascii` twin as
 the frame. `contained_test.go` pins the run itself: an exit code coming back as itself, a
-missing binary carrying no code at all, and a cancelled run stopping a GRANDCHILD. Colour is asserted separately against the room's existing severity pair, per the
-goldens' own split. No test here spawns a vendor: `countSpawns` stubs the check as its fourth
-spawn var, and `TestMain` panics on any model-path run whose command this machine could
-actually resolve.
+missing binary carrying no code at all, and a cancelled run stopping a GRANDCHILD. Colour is
+asserted separately against the room's existing severity pair, per the goldens' own split. No
+test here spawns a vendor: `countSpawns` stubs the check as its fourth spawn var, and
+`TestMain` panics on any model-path run whose command this machine could actually resolve.
 
 **One test runs a real process, and the process is this test binary.**
 `TestPassAndFailComeFromARealExitCode` calls `runCheck` directly rather than through the
