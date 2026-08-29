@@ -46,10 +46,16 @@
 //   - `model` and `generation_id` — per-turn facts. The relay accumulates a
 //     TOTAL across turns (design.md §7.16), and a total that names one turn's
 //     model would invite reading the sum as that model's spend.
-//   - `conversation_id` — the id of a cursor-agent CLI conversation, which
-//     names nothing the HUD draws: the HUD's Cursor rows come from the IDE's
-//     Composer store (§3.9) and the CLI keeps a separate one. Storing it would
-//     dangle a join that does not exist.
+//   - `conversation_id` — the id of a cursor-agent CLI conversation. It stays
+//     out, and the REASON changed on 2026-08-29 while the ruling did not. It
+//     used to be that the HUD's Cursor rows all came from the IDE's Composer
+//     store (§3.9) and the CLI kept a separate one, so storing this id would
+//     dangle a join against nothing. The HUD now draws CLI rows too, out of
+//     `~/.cursor/chats/<hash>/<uuid>/meta.json` (§3.9's 2026-08-29 addendum),
+//     so a join is conceivable for the first time. It is still not built,
+//     because whether this id IS that directory's uuid was never measured —
+//     and a key stored on the assumption that two ids match is how a relay
+//     starts attributing one session's tokens to another. Measure it first.
 package cursorhook
 
 import (

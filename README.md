@@ -178,7 +178,8 @@ with no colour and no alternate screen, for exactly that reason.
 - **`telltale statusline`:** model, context, session cost, and quota pacing
   from the JSON the vendor sends on stdin. No network. No credential read.
 - **`telltale hud`:** a watch TUI over Claude Code, Codex, Gemini CLI,
-  Antigravity CLI, Cursor (Composer), Grok CLI, and Pi.
+  Antigravity CLI, Cursor (Composer and the `cursor-agent` CLI), Grok CLI,
+  and Pi.
 - **`telltale snapshot`:** the same scan as JSON, for a program.
 - **`telltale mcp`:** the same document over MCP on stdio, for an agent.
 - **`telltale doctor`:** which vendor binaries this machine has.
