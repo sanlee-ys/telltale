@@ -279,6 +279,161 @@ func TestAdoptOfAZeroChangeRacerRefuses(t *testing.T) {
 	}
 }
 
+// commitAttempt parks a racer's scribble on its own arena branch, the way
+// finishColumn's commitArena does at the end of a real race. The divergence
+// preview reads COMMITTED state, so a test about what it counts has to put the
+// attempt where a finished race would have left it.
+func commitAttempt(t *testing.T, m *Model, v model.VendorID) {
+	t.Helper()
+	tree := m.lastRace.trees[v]
+	if _, err := gitOut(tree, "add", "-A"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gitOut(tree, "commit", "-m", "attempt", "--no-gpg-sign"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// roomCommit moves the room's own branch, which is the state the preview exists
+// for: everything that landed since the race was cut.
+func roomCommit(t *testing.T, ws, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(ws, name), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gitOut(ws, "add", name); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gitOut(ws, "commit", "-m", "the room moves "+name, "--no-gpg-sign"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestTheAdoptCardSaysWhatItIsMergingInto is the preview on a room that has not
+// moved: the counts carry the branch they are measured against, the overlap is
+// a MEASURED zero, and the older contract — the exact commands y runs — is
+// still on the card beside it.
+func TestTheAdoptCardSaysWhatItIsMergingInto(t *testing.T) {
+	m, _ := racedModel(t, model.VendorCodex)
+	scribble(t, m, model.VendorCodex, "answer.go", "package answer\n")
+	commitAttempt(t, m, model.VendorCodex)
+
+	adopt(t, m, "codex", "")
+	if m.adoptPending == "" {
+		t.Fatalf("the preview refused a clean adoption: %q", m.st.Notice)
+	}
+	// The baseline is named, and both counts sit under it.
+	if !strings.Contains(m.st.Notice, "vs main: 1 ahead, 0 behind") {
+		t.Errorf("the card does not say what it is merging into: %q", m.st.Notice)
+	}
+	if !strings.Contains(m.st.Notice, "no overlapping path") {
+		t.Errorf("a measured zero overlap is not reported: %q", m.st.Notice)
+	}
+	// The preview ADDS to the card; it does not displace what y promises.
+	if !strings.Contains(m.st.Notice, "git merge --no-ff arena/t4/codex") ||
+		!strings.Contains(m.st.Notice, "cuts adopt/t4-codex") {
+		t.Errorf("the preview cost the card its own contract: %q", m.st.Notice)
+	}
+}
+
+// TestTheAdoptCardCountsWhatLandedSinceTheRace is the case the whole preview is
+// for: the room moved after the race, so the racer is behind, and one path was
+// written on both sides. Nothing here says "conflict" — this merge may still
+// land cleanly, and the card claims only what git measured.
+func TestTheAdoptCardCountsWhatLandedSinceTheRace(t *testing.T) {
+	m, ws := racedModel(t, model.VendorCodex)
+	scribble(t, m, model.VendorCodex, "a.txt", "the racer's line\n")
+	commitAttempt(t, m, model.VendorCodex)
+	roomCommit(t, ws, "a.txt", "the room's line\n")
+
+	adopt(t, m, "codex", "")
+	if m.adoptPending == "" {
+		t.Fatalf("a divergent racer was refused rather than previewed: %q", m.st.Notice)
+	}
+	if !strings.Contains(m.st.Notice, "vs main: 1 ahead, 1 behind") {
+		t.Errorf("the card does not count the room's own commit: %q", m.st.Notice)
+	}
+	if !strings.Contains(m.st.Notice, "1 overlapping path (a.txt)") {
+		t.Errorf("the card does not name the path both sides wrote: %q", m.st.Notice)
+	}
+	if strings.Contains(m.st.Notice, "conflict") {
+		t.Errorf("the card called an overlap a conflict — that is a merge result, not a read: %q", m.st.Notice)
+	}
+}
+
+// TestTheAdoptCardSaysWhenTheCountsExcludeUncommittedWork is the preview's own
+// limit, on the card rather than left to be discovered. Every figure is read
+// off committed state, so a racer whose worktree is still dirty has work that
+// none of them cover — and the card that will commit that worktree says so.
+func TestTheAdoptCardSaysWhenTheCountsExcludeUncommittedWork(t *testing.T) {
+	m, _ := racedModel(t, model.VendorCodex)
+	scribble(t, m, model.VendorCodex, "answer.go", "package answer\n")
+
+	adopt(t, m, "codex", "")
+	if m.adoptPending == "" {
+		t.Fatalf("an uncommitted attempt was refused: %q", m.st.Notice)
+	}
+	if !strings.Contains(m.st.Notice, "these counts exclude 1 uncommitted path") {
+		t.Errorf("the card hides that its counts miss the racer's dirty tree: %q", m.st.Notice)
+	}
+	// The counts themselves stay honest rather than being adjusted upward to
+	// cover a commit nobody has made: nothing is on the branch yet.
+	if !strings.Contains(m.st.Notice, "vs main: 0 ahead, 0 behind") {
+		t.Errorf("the counts were inflated past what the branch holds: %q", m.st.Notice)
+	}
+}
+
+// TestOverlapAbsentAndUnreadableStayApart is §4a.1 on this preview's one
+// advisory read. "Nothing overlaps" and "nobody could look" are different
+// facts, and a check that could not run must never render as a clean one.
+func TestOverlapAbsentAndUnreadableStayApart(t *testing.T) {
+	ws := gitRepo(t)
+
+	// A branch that does not exist is the read failing, not the answer being
+	// empty — git refuses the range and says so.
+	if _, err := readAdoptOverlap(ws, "arena/t4/nobody"); err == nil {
+		t.Fatal("an unreadable range answered as if it had been read")
+	} else if got := (adoptDivergence{base: "main", overlapErr: err}).sentence(0); !strings.Contains(got, "could not run") {
+		t.Errorf("an unreadable overlap does not say so: %q", got)
+	} else if strings.Contains(got, "no overlapping path") {
+		t.Errorf("an unreadable overlap rendered as a clean one: %q", got)
+	}
+
+	zero := (adoptDivergence{base: "main"}).sentence(0)
+	if !strings.Contains(zero, "no overlapping path") {
+		t.Errorf("a measured zero does not say so: %q", zero)
+	}
+	if strings.Contains(zero, "could not run") {
+		t.Errorf("a measured zero rendered as an unreadable one: %q", zero)
+	}
+}
+
+// TestTheAdoptCountsAlwaysCarryTheirBaseline: a count with no baseline is a
+// number with no question attached, so the clause is written even when git
+// cannot name the ref — and a detached room is named by its commit rather than
+// dropped.
+func TestTheAdoptCountsAlwaysCarryTheirBaseline(t *testing.T) {
+	unnamed := (adoptDivergence{ahead: 2}).sentence(0)
+	if !strings.Contains(unnamed, "vs the room's HEAD: 2 ahead, 0 behind") {
+		t.Errorf("a baseline git could not name was dropped instead of stated: %q", unnamed)
+	}
+
+	ws := gitRepo(t)
+	if got := adoptBase(ws); got != "main" {
+		t.Errorf("adoptBase on a checked-out branch = %q, want main", got)
+	}
+	if _, err := gitOut(ws, "checkout", "--detach"); err != nil {
+		t.Fatal(err)
+	}
+	head, err := gitOut(ws, "rev-parse", "--short", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := adoptBase(ws); got != head {
+		t.Errorf("a detached room is named %q, want the commit %q", got, head)
+	}
+}
+
 // TestAdoptConflictAbortsCleanly: a merge that conflicts is aborted, the room
 // tree comes back exactly as it was, and the notice says a human merge is
 // needed — never a repo left mid-merge with markers nobody asked for.

@@ -397,6 +397,16 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   reads at the room's own geometry. No vendor is spawned and nothing is written, so the debt
   costs a keystroke.
 
+- **The `/adopt` divergence preview has never been armed in a live room
+  (2026-08-29).** The card now leads with measured git state — the racer's
+  ahead/behind counts against the room's own HEAD, and the paths both sides
+  wrote — before it names the merge (design.md §9.37's dated amendment). Every
+  sentence it can print is pinned by offline tests against real temp
+  repositories, and none of them has been read on a real pile of leftovers. The
+  same keystroke pays it as the arena record above: race, then `/adopt <seat>`,
+  read the card and press `n`. Nothing is merged by arming the gate, so the debt
+  costs one race.
+
 - **OBSERVED 2026-08-15/16, the drive that paid the demo path found three.
   The 2026-08-16 lane batch measured all three, and what is left is smaller.**
   1. **CLOSED 2026-08-17. The composer one-row report did not reproduce.** The
