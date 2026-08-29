@@ -13002,6 +13002,86 @@ race has been run against this build, so the claim that a real held `index.lock`
 notice instead of a freeze rests on the tests and on an expired-deadline fixture, not on the
 lock that started this.
 
+**Amendment, 2026-08-29: `/adopt` says what it is about to merge INTO, before you say y.** The
+card named the act — the branch it cuts and the exact `git merge --no-ff` it runs — and named
+nothing about the room the merge lands in. Everything the operator needed in order to weigh the
+`y` was in a second terminal: how far the racer's branch had drifted from the room, what had
+landed in the room since the race was cut, and whether the two had written the same files. So
+the answer was "yes because I trust it" or "no because I don't", which is §9.41's finding about
+the room's *other* gate, arriving a second time at the one gate that merges.
+
+**The card now leads with measured git state and then names the act.**
+
+```
+adopt codex? vs main: 1 ahead, 1 behind · 1 overlapping path (a.txt) · y cuts adopt/t4-codex
+and runs git merge --no-ff arena/t4/codex · n cancels
+```
+
+- **Every count carries its baseline, and the baseline is the room's own HEAD** — because that
+  is the commit `/adopt` cuts the adopt branch from, so it is genuinely what the merge lands in.
+  It is named as the branch when one is checked out (`vs main`), as the short commit on a
+  detached HEAD, and as `vs the room's HEAD` when git could not answer at all. The clause is
+  never dropped: a bare `1 ahead` is a number with no question attached. `behind` is the half
+  the operator had no other way to see, and it is the whole point of the line — it is
+  everything that landed in the room while the race sat there, including an earlier adoption
+  from the same race.
+- **One `rev-list --left-right --count HEAD...<branch>` answers both counts**, and `ahead` is
+  the same figure `unadoptedCount` was already reading for the zero-change refusal, so the
+  preview costs the card one git call rather than two. Measured at git 2.55.0.windows.3: the
+  left count is what only HEAD holds and the right is what only the branch holds.
+- **"Overlap" is a read; "conflict" would be a claim.** The overlapping paths are the
+  intersection of two `diff --name-only` reads over the same merge base — `HEAD...<branch>` is
+  the incoming half git actually applies, `<branch>...HEAD` is the room's own half — so the
+  card states that both sides wrote a path and stops there. A repository can overlap on a path
+  and merge cleanly. The word "conflict" belongs to a merge that ran, and the reactive path
+  below still owns it.
+- **Three overlap states, kept apart (§4a.1).** A read that returned nothing renders `no
+  overlapping path`; a read that returned paths renders the count and names the first; a read
+  that failed renders `the overlap check could not run:` with git's own line. An unreadable ref
+  never renders as a clean one. The counts and the overlap fail differently on purpose: the
+  counts are load-bearing, so a failed read refuses the whole command by name, exactly as the
+  older `unadoptedCount` call did; the overlap is advisory, so a failed read degrades to its own
+  sentence and the card still arms. A broken preview must not brick a verb (`arenaRaceNumber`'s
+  rule).
+- **The preview states its own limit rather than leaving it to be discovered.** Every figure is
+  read off COMMITTED state, so a racer whose worktree is still dirty has work none of the
+  figures cover — and that card adds `these counts exclude 1 uncommitted path` beside the
+  clause that already says `y commits its worktree`. `TestAdoptConflictAbortsCleanly` is exactly
+  that case: an uncommitted racer edit conflicts against a room commit while the overlap read
+  correctly reports nothing shared. Without the clause, `no overlapping path` would be read as a
+  promise about the merge.
+
+**Two shapes recorded rather than taken.**
+
+- **`git merge-tree --write-tree`, which computes a REAL merge result.** It would let the card
+  say "conflict" honestly. It is not here because the claim would need a live measurement at a
+  pinned version on this box before it could ship (this section's own rule), it needs git ≥2.38,
+  and it writes objects into the repository — which puts a preview on the write side of a room
+  whose posture is offer, never take. The reactive abort already owns the real merge result, and
+  it owns it after the operator asked for one.
+- **Folding the racer's uncommitted paths into the overlap set**, by parsing
+  `git status --porcelain`. It would close the limit named above, and it was declined because
+  those paths are a prediction of a commit nobody has made yet — council reading a tree to guess
+  what a future commit will contain, where §4a.1 asks it to read what exists. The exclusion
+  clause states the gap instead.
+
+**The preview leads the line, and the cost of that is stated.** The notice truncates from the
+right at a narrow width, so leading with the measured state can cost the action clause its tail
+— and the action clause is the older contract. It leads anyway: an operator who can read only
+the first clause can still press `n`, and the preview is what makes that `n` a decision rather
+than a mood. The alternative, recorded and not taken, is a second sheddable cell on the status
+line (the mechanism `st.ArenaSetup` already uses), which would drop the preview whole instead of
+slicing it — a new render surface for one notice, in a file this change otherwise does not
+touch.
+
+Verification, on this section's own terms: the mechanics are pinned by offline tests against
+real temp repositories (`lifecycle_test.go`) — the counts against an unmoved room and against
+one that moved, the named overlapping path, the uncommitted exclusion, the two overlap failure
+states held apart, and the baseline on a named branch, on a detached HEAD and on no answer at
+all. No golden moved, because the card is a notice string and no golden renders one. **The live
+half is owed**: no real `/adopt` has been armed against this build, so every sentence above
+rests on the fixtures rather than on a race.
+
 <a id="s9-38"></a>
 
 ### 9.38 paste lands whole, and never sends (2026-08-09)
