@@ -1865,6 +1865,24 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		if c.Arena.CommitErr != "" {
 			out = append(out, wrap(c.Arena.CommitErr, w)...)
 		}
+		// The check verdict (§9.48), below the receipts and above the stat,
+		// because it belongs with the stat: both are measurements OVER the tree
+		// rather than facts about the attempt's identity. Nil draws nothing at
+		// all — no command was named, and a room that was never asked for a
+		// check has no check to report (the Seed line's rule, one field over).
+		if ck := c.Arena.Check; ck != nil {
+			raw := checkLine(ck)
+			for _, line := range wrap(raw, w) {
+				out = append(out, fit(checkStyle(sty, ck).Render(line), w))
+			}
+			if ck.Dirty {
+				// Said, not swept up. The check ran after the diff and the
+				// commit, so nothing it wrote is in either — but /adopt commits
+				// a dirty attempt before merging it, so an unsaid artifact would
+				// ride into the adoption wearing the racer's name.
+				out = append(out, styleAll(wrap("the check wrote into this tree — it is not in the diff or the commit above.", w), sty.Muted)...)
+			}
+		}
 		switch {
 		case c.Arena.Err != "":
 			out = append(out, wrap(c.Arena.Err, w)...)
@@ -1962,6 +1980,74 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		}
 	}
 	return out, anchors
+}
+
+// checkLine is one racer's check verdict as one sentence (§9.48).
+//
+// FOUR renders for four facts, and the fourth is the caller's: a nil Check
+// draws nothing, which is absence rather than any of the three below.
+//
+//	check PASS · 12.4s · go test ./...
+//	check FAIL · exit 2 · 12.4s · go test ./...
+//	check unavailable: <why> · go test ./...
+//	check running · go test ./...
+//
+// PASS and FAIL are UPPERCASE, and that is a vocabulary decision rather than
+// emphasis. This room already spends the word "failed" on a phase — a seat
+// whose process failed — and a check that reported exit 2 on a seat that
+// finished cleanly is a different fact entirely. Two facts cannot wear one
+// word (§9.13's own finding), so the verdict takes a spelling the phase never
+// uses. The word carries it alone: colour is the second signal, and `--ascii`
+// and NO_COLOR read the same sentence.
+//
+// The exit code rides the FAIL and nothing else. It is the measurement the
+// verdict comes from, and a reader who wants to know whether it was a test
+// failure or a compile error has the number without opening the tree.
+//
+// The command is last on the line rather than first because it is the same on
+// every column of a race: what differs between seats is the verdict, and the
+// eye should reach that first. It is still on every line, because a verdict
+// with no named command is a claim with its evidence removed.
+func checkLine(ck *ArenaCheck) string {
+	switch {
+	case ck.Running:
+		return "check running · " + ck.Cmd
+	case ck.Err != "":
+		// Never a FAIL. Nothing measured this attempt, and saying otherwise
+		// would be the degraded-vs-zero collapse §4a.1 exists to prevent.
+		return "check unavailable: " + ck.Err + " · " + ck.Cmd
+	case ck.Passed():
+		return "check PASS · " + dur(ck.Elapsed) + " · " + ck.Cmd
+	case ck.Exited:
+		return "check FAIL · exit " + itoa(ck.Code) + " · " + dur(ck.Elapsed) + " · " + ck.Cmd
+	default:
+		// Neither running, nor failed to run, nor exited: a record no path in
+		// arenacheck.go builds. Rendered as unmeasured rather than as either
+		// verdict, because a fixture is not a pass.
+		return "check unmeasured · " + ck.Cmd
+	}
+}
+
+// checkStyle is the check line's colour, and it spends only tokens the room
+// already has (style.go's no-new-hues rule). SevOK and SevCrit are severity
+// tokens spent on a non-severity fact here, exactly as ForDiffLine spends them
+// on `+` and `-` lines: a passing check and a failing one are the room's
+// existing good/bad pair, and inventing a hue for them would make the check the
+// only concept in council with a colour of its own.
+//
+// Everything that is not a verdict stays muted, which is the point: a check
+// that could not run must not wear the failure's red, because it is not one.
+func checkStyle(sty Styles, ck *ArenaCheck) lipgloss.Style {
+	switch {
+	case ck.Running || ck.Err != "":
+		return sty.Muted
+	case ck.Passed():
+		return sty.SevOK
+	case ck.Exited:
+		return sty.SevCrit
+	default:
+		return sty.Muted
+	}
 }
 
 // shortSHA is the seven-character convention, guarded for the synthetic bases

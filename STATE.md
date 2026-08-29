@@ -375,6 +375,19 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   reads at the room's own geometry. No vendor is spawned and nothing is written, so the debt
   costs a keystroke.
 
+- **No live race has run under the arena check (2026-08-29).** `/arena check <command>`
+  (design.md §9.48) runs one operator-named command in each racer's worktree and renders PASS
+  or FAIL from its real exit code. Every mechanic is pinned offline, and one test runs a real
+  process to prove the exit code is READ rather than assumed — but that process is the test
+  binary, in a temp repository, exiting on demand. What no test can witness is the case the
+  feature exists for: a real vendor's attempt meeting a real suite in a real worktree. Two
+  things are unmeasured there and only there. Whether a check that runs for MINUTES reads well
+  on a column whose turn has already ended, since the run outlives the turn by design and the
+  spinner does not. And whether a real racer's tree leaves the check something to do — a
+  worktree seeded by `.worktreeinclude`, with the vendor's own build state in it, is not the
+  clean fixture the tests build. One `/arena check go test ./...` followed by one `/arena`
+  against a brief that changes files pays both.
+
 - **OBSERVED 2026-08-15/16, the drive that paid the demo path found three.
   The 2026-08-16 lane batch measured all three, and what is left is smaller.**
   1. **CLOSED 2026-08-17. The composer one-row report did not reproduce.** The
