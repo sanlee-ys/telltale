@@ -594,22 +594,33 @@ func TestCursorGranularityIsMeasuredTokens(t *testing.T) {
 
 // TestNoVendorClaimsUnverifiedEnforcement is the ADR-008 §3 correction, pinned.
 //
-// Codex may only claim OS-level enforcement where it has been verified. On
-// Windows it claims nothing at all: council passes -s danger-full-access there,
-// because both sandboxed modes were measured failing every process spawn, reads
-// included (ADR-008, twelfth amendment). Claiming a sandbox we have not seen
-// engage is exactly the overstatement this repo refuses — and so is claiming a
-// requested one on an invocation that requests nothing.
+// Codex may only claim OS-level enforcement where it has been verified, and
+// since 2026-08-29 that is BOTH branches. Windows claimed nothing at all until
+// then — at codex-cli 0.146.0 both sandboxed modes failed every process spawn
+// (ADR-008, twelfth amendment) and council passed -s danger-full-access, so an
+// ro: prefix there would have been the worst false badge this room could
+// carry. The re-measurement at 0.149.1 earned the claim back the only way this
+// repo accepts: a live shell write under -s read-only was denied with no file
+// on disk. Claiming a sandbox we have not seen engage is exactly the
+// overstatement this repo refuses — and so is claiming a requested one on an
+// invocation that requests nothing.
 func TestNoVendorClaimsUnverifiedEnforcement(t *testing.T) {
-	if got := sandboxFor(model.VendorCodex, true).Level; got != SandboxNone {
-		t.Errorf("codex on windows claims %v, want SandboxNone", got)
+	if got := sandboxFor(model.VendorCodex, true).Level; got != SandboxEnforced {
+		t.Errorf("codex on windows claims %v, want SandboxEnforced — the 2026-08-29 re-measurement earned it", got)
 	}
-	// The badge is the load-bearing half of that. This seat renders
-	// `unsandboxed` on Windows, and an ro: prefix would be a read-only claim on
-	// a column invoked with danger-full-access — the worst false badge this
-	// room could carry, since it is the one San would trust to be looking.
-	if got := sandboxFor(model.VendorCodex, true).Badge(); strings.HasPrefix(got, "ro:") {
-		t.Errorf("codex badge on windows is %q; it is invoked unsandboxed and must not wear an ro: prefix", got)
+	// The badge is the load-bearing half of that, in both directions. It
+	// renders `ro:enforced` only while the invocation actually passes
+	// -s read-only there; if the argv ever collapses back to
+	// danger-full-access, this claim goes false with it, and
+	// vendors.TestCodexPostureIsPerOS pins that half.
+	if got := sandboxFor(model.VendorCodex, true).Badge(); got != "ro:enforced" {
+		t.Errorf("codex badge on windows is %q, want ro:enforced", got)
+	}
+	// The detail must carry the measurement, not just the conclusion: the date
+	// and the pinned version are what let a reader decide whether the claim is
+	// stale on their build.
+	if d := sandboxFor(model.VendorCodex, true).Detail; !strings.Contains(d, "0.149.1") {
+		t.Errorf("the windows codex detail does not cite the build it was measured on: %q", d)
 	}
 	if got := sandboxFor(model.VendorCodex, false).Level; got != SandboxEnforced {
 		t.Errorf("codex on unix claims %v, want SandboxEnforced", got)

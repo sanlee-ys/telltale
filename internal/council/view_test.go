@@ -554,8 +554,8 @@ func TestHelp(t *testing.T) {
 // read from sandboxFor, rather than the short stand-ins the layout fixture
 // uses. The posture page renders that prose verbatim, so a golden built on the
 // fixture would review a sentence no user ever sees. Windows, because that is
-// the reference machine and the OS on which two of these seats have no sandbox
-// at all.
+// the reference machine and the OS whose claims have moved the most — the
+// codex seat wore `unsandboxed` here until the 2026-08-29 re-measurement.
 func postureRoom() State {
 	st := room()
 	for i := range st.Columns {
