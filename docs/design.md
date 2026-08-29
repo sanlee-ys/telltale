@@ -6968,6 +6968,207 @@ Wiring one up writes an entry into the operator's own client configuration, whic
 make; until he does, this section claims a correct server and not a working integration.
 `STATE.md` carries the debt.
 
+<a id="s7-26"></a>
+
+### 7.26 `telltale history` — what one vendor spent, day by day, from its own files (2026-08-29)
+
+Every reader this product has answers about NOW. The statusline and the HUD render a scan;
+§7.22's `snapshot` and §7.25's `mcp` serve one scan to a program; §9.42's `doctor` reports a
+preflight. None of them can answer *where did last week go*, and the reason is structural
+rather than an omission: the HUD's Claude read is a head+tail parse — 64 KiB in, 256 KiB back
+(§3.1) — because §7.18 measured a whole-corpus walk at 164 MB and 46,727 records per second
+against a 1 s poll. A history needs every record of every file. **Measured on the owner's
+own corpus, 2026-08-29: 701 transcripts, 143,304 records, 10.4 s for a 30-day walk.** That is
+four orders of magnitude off a poll tick, so this is a foreground mode that reads once and
+returns, on `doctor`'s precedent, and never a page in the HUD.
+
+#### It is SPEND-shaped, and §7.16 and §7.17 are the vocabulary
+
+Nothing here is new grammar. §7.17's table of two claims puts this surface entirely in the
+right-hand column, and the consequences are the ones already ruled:
+
+- **No gauge, no percentage, no bar, no countdown, no ceiling.** There is no denominator
+  anywhere in a token count. `TestTheFrameBorrowsNoneOfQuotasVocabulary` is
+  `TestUsageSpendBorrowsNoneOfQuotasVocabulary` on this surface, and CI asserts the same
+  properties on the built binary's stdout.
+- **A sum never prints without its window** (§7.16's accumulation ruling). Every count
+  carries its day; the report carries the span it walked and the zone it resolved days in.
+- **Never a fleet total.** §7.17 already rejected one as "arithmetic telltale invented"; this
+  mode goes further and reports **one vendor per run**, so the arithmetic is not available to
+  make. The vendor's name is on the title, on the window line and on both refusal
+  paragraphs.
+
+**One rule here is narrower than §7.17's and is new.** The four columns are not added
+together either. Input, cache read, cache write and output are four separately billed
+categories and telltale holds no price, so their sum would be a number that reads like a bill
+and is not one — the §7.16 derived-`inputTokens` trap arriving through addition instead of
+through a vendor's own arithmetic. `TestNoTotalIsRenderedAnywhere` computes what such a total
+would render as and fails if it appears anywhere in the frame.
+
+#### Absent is not zero, on two axes
+
+§4a.1's rule, applied to a table instead of to a cell:
+
+| | What it means | What it renders |
+|---|---|---|
+| a request whose usage block reported zeros | a measured zero — the request happened | `0` in all four columns, `1` request |
+| a workspace with no request that day | it sent nothing | **no row** |
+| a day inside the window with nothing at all | nothing was written that day | **no row** |
+
+The failure this refuses is the natural implementation: pre-seeding a bucket for every
+(day, workspace) pair so the table comes out rectangular. **A rectangular table here is a
+table of claims** — every zero cell in it would assert a request nobody sent. What makes a
+missing day readable instead is the window line: the report states the span it walked, and a
+sentence under the table says in words that a day with no row carried no token-bearing
+record. `zero-vs-absent.txt` is the golden, named after `internal/hud`'s for the same reason.
+
+#### The derived value is the DAY, and it is disclosed in words rather than with a `~`
+
+The vendor writes an instant. A calendar day is that instant resolved in a time zone, and the
+zone is a choice telltale made — so the window line reads `days resolved in EDT UTC-04:00`,
+and the OFFSET is on it because a zone abbreviation alone is ambiguous across regions. This
+is deliberately not a `~`: that marker means an estimated VALUE (§4a.1), and a day bucket is
+an exact reading under a stated convention. Marking it `~` would say the count might be
+wrong, when what is conventional is which side of midnight it fell on.
+
+Two related refusals, both measured rather than assumed:
+
+- **A record with no readable timestamp is in no day.** It is counted and named in
+  diagnostics, never folded into today — that would move a measurement onto a day nothing
+  said it belonged to.
+- **A record stamped ahead of the clock cannot be dated**, on every adapter's own
+  `futureSkew` rule. A skewed clock must not be able to invent a day's spend.
+
+#### The survey: which vendors could support this, and which cannot
+
+The mode covers **claude only**, and the six it does not cover are named on **every run**,
+each with the reason. That block is not documentation politeness — it is the whole of what
+stops a table headed with one vendor's name from being carried away as a fleet answer, and
+it prints unconditionally for the reason `doctor` prints its three-state legend every time.
+
+The survey is a **source read of this repository's adapters** at the revision it was written
+on — each adapter's record struct, its package doc, and the live-corpus verdicts those docs
+already carry. It is **not** a fresh measurement against a live vendor, and the difference is
+stated because CLAUDE.md's measured-claims rule makes it load-bearing: the version pins these
+verdicts rest on are the adapters' own `VerifiedAgainst` constants.
+
+Two questions, in order. A vendor joins only when both answer yes, and **the second is the
+one that surprised the survey**: a count with no timestamp is not a smaller history, it has
+no day axis at all.
+
+| vendor | counts on disk? | dated? | verdict |
+|---|---|---|---|
+| **claude** | **yes** — `message.usage` carries four raw counts (`input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, `output_tokens`) on every assistant record | **yes** — RFC3339 `timestamp`, and `cwd` on the same record | **COVERED.** Four billed categories, dated, per request, per project. The only vendor with the cache split that makes four honest columns. Pinned at Claude Code 2.1.233 (§3.1) |
+| codex | yes — a `token_count` event carries `info.last_token_usage` (this turn) beside a cumulative `info.total_token_usage` | yes — the rollout envelope's own `timestamp` | **the next slice.** Two things owed: which of the two a day may sum is a ruling nobody has made, and there is no cache split, so a codex block carries two columns where claude's carries four |
+| gemini | partial — `tokens.input` is `promptTokenCount`, which [§3.7](#s3-7)'s adapter labels a context-occupancy proxy, and the cached subset is not separable from what it parses | yes | refused on UNITS. Summing an occupancy proxy per day counts one conversation's prefix once per turn, under a header that would read like uncached input |
+| agy | yes, and the best-guarded in the fleet — `gen_metadata` carries uncached input and output per generation behind the `thinking + answer == output` identity §3.8 requires | **no** — the reverse-engineered field map carries no per-generation timestamp | refused for want of a DAY. Real numbers, no axis to put them on |
+| cursor | **no** — `tokenCount.inputTokens`/`outputTokens` were 0 in 310 of 310 message rows; declared `CapNone` (§7.16) | n/a | nothing to read. This vendor's counts arrive by hook, not on disk |
+| grok | partial — `turn_completed` carries `usage.totalTokens` per turn, a total only | **no** — the parsed record carries no timestamp | agy's problem plus its own |
+| pi | yes — `message.usage.{input,output}` per assistant message, with a `cwd` | yes — record `timestamp` | datable, second after codex. No cache split, and it carries `usage.cost.total` per message — money, which this mode renders nowhere and would have to rule on |
+
+`self-reported` is absent from the table and that is not an omission: §7.23's drop-file rows
+are what a tool said about itself, with no session store behind them to walk. Giving it a
+"not covered" verdict would imply a file this mode could learn to read.
+
+**The block renders in fixed fleet order**, the same order §7.17's blocks and the header's
+per-vendor counts walk. Ordering it by how close each vendor is to coverage reads better as a
+roadmap and was **declined**: it would make one list in this product order vendors by a
+property no other list orders them by, which is the reshuffle §7.17 spends a paragraph
+refusing. The roadmap signal lives in the words — codex's verdict says it is the next slice.
+
+#### The layout, and what each choice is for
+
+The generated render (`internal/history/testdata/golden/ledger.txt`, at the default 100
+columns):
+
+```
+telltale history — what claude spent, day by day, read from claude's own session files
+
+  read from   C:\src\home\.claude\projects
+  window      7 local days, 2026-08-23 through 2026-08-29, days resolved in TST UTC-05:00
+  read        41 transcripts, 39,184 records
+
+  DAY         WORKSPACE                     IN  CACHE READ  CACHE WRITE      OUT  REQUESTS  SESSIONS
+  2026-08-24  C:\src\code\telltale       1,204   1,903,551       62,004   13,118        14         2
+  2026-08-27  C:\src\code\notes-api         96           0        4,102      812         3         1
+              C:\src\code\telltale      22,140   8,830,112      511,903  140,277       191         5
+  2026-08-29  ...rkspace-path\telltale       3          12            0       44         1         1
+```
+
+- **Plain text, no colour, no TUI** — `doctor`'s argument (§9.42), and it applies harder here:
+  a history is read in a pipe and pasted into a message. Every distinction the report draws is
+  a WORD, which satisfies §7.1 rule 2 by having no first signal that is not one. `--ascii` and
+  `NO_COLOR` have nothing to switch off, so neither is a flag: a flag that does nothing is a
+  promise that something was configurable.
+- **`REQUESTS`, not `TURNS`.** One turn can produce several API requests, so "turns" would be
+  a count telltale did not take. The column is the number of records that carried a usage
+  block, which is exactly what was counted.
+- **Counts are exact and grouped, never floored.** `theme.Tokens` floors to `1.9M` on the
+  gauge surfaces because a header line has no room for digits and rounding *up* would invent
+  tokens nobody was billed for (§7.16). This is a table with the room, so it rounds nothing at
+  all — strictly the more honest of the two, and affordable only here.
+- **The day is drawn once per day**, not restated on a second workspace row: repeating the
+  date makes the eye read a second reading where there is one.
+- **Rows are day-ASCENDING**, so today lands at the bottom, next to the prompt the reader is
+  looking at. Sorting by spend was refused for §7.17's reason — position is the navigation.
+- **The workspace column is the only one allowed to give way**, and it truncates from the
+  LEFT: a path's identifying half is its tail, and the marker sits at the front where it says
+  "something was removed" before the reader has read the value. Below the floor the table
+  overruns the wrap column rather than letting numbers collide (`narrow.txt` is the golden at
+  60 columns).
+- **A record whose own record named no `cwd` gets its own `(no cwd)` bucket**, never a
+  neighbour's. Attributing it to the last workspace seen in the file would be a guess, and a
+  guess in the project column is indistinguishable from a reading once it is on screen.
+
+#### The read/write boundary
+
+**This mode writes nothing at all.** It reads one vendor's store, calls no network, binds no
+port, reads no credential, and relays no quota — it renders none, which is `snapshot`'s own
+argument for holding the contract with one item spare (§7.22). It joins statusline, hud,
+snapshot and mcp as a **reader**; `CLAUDE.md` names it in that list.
+
+`internal/history/boundary_test.go` is the mechanical half, on
+`internal/eventview/boundary_test.go`'s precedent: `go list` answers what this package
+imports, and the gate fails if it ever reaches `quotacache`, `usagecache`, `eventsink`,
+`eventview`, `council`, `net/*`, `os/exec` or a TUI module. The check is on DIRECT imports
+and says so — this package imports `internal/adapter/claudecode` for `Discover`, and an
+adapter's dependency graph is not this mode's write surface.
+
+**Content cannot reach a rendered value**, by the technique `internal/cursorhook` uses against
+a payload carrying a user's email beside four numbers: the record struct IS the allowlist, and
+`encoding/json` drops every field with no destination. The only strings that survive a parse
+here are the workspace path and the timestamp. Diagnostics carry counts and never bytes.
+
+#### What it reuses, and the one thing it does not
+
+Sessions are discovered by `internal/adapter/claudecode`'s own `Discover`, so a session this
+mode counts is a session the HUD would draw and the two cannot come to disagree about what a
+session is — including the two traps that function encodes (the glob is not recursive, and a
+basename is validated as a UUID; recursing inflated the live session list 2.4× and
+double-counted every token). Records are framed by `internal/jsonl`, so the U+2028 trap and
+the 1,004,230-byte record are handled in the one tested place.
+
+What it does NOT reuse is that adapter's head+tail parse. A ledger needs every record, so it
+walks whole files through `jsonl.Scan`. Three record classes are refused and each is counted
+in diagnostics rather than dropped silently: unparseable records, `<synthetic>` records
+(Claude Code's own locally generated notices, which carry a zeroed usage block and would
+otherwise look exactly like the measured zero above), and inline `isSidechain` records — 0 of
+179,614 in the live corpus, so a non-zero there is a vendor change worth seeing rather than a
+routine skip.
+
+#### Known limitations, named
+
+- **The window is complete or it says so.** A walk stopped by `--timeout` prints what it read
+  and marks the report incomplete, in its own paragraph: the ROWS stay true and the WINDOW
+  stops being, and a reader who misses that sentence would read a lower bound as a total.
+- **A day is a local calendar day.** A session that crossed midnight in another zone lands
+  where this machine's zone puts it. The offset is on screen; nothing converts.
+- **`REQUESTS` counts records, not API calls, if the vendor ever writes two records for one
+  call.** No such case is known at 2.1.233; it is named because the column's honesty rests on
+  the vendor's record-per-request shape rather than on anything telltale can check.
+- **Nothing here is cached.** Every run re-walks, at the cost measured above. A cache would be
+  a ledger that can disagree with the files it came from, and the mode is not on a tick.
+
 <a id="s8"></a>
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
@@ -13188,6 +13389,178 @@ messages being dropped by comparison, and the rendered frame. **The live half is
 race has been run against this build, so the claim that a real held `index.lock` now ends in a
 notice instead of a freeze rests on the tests and on an expired-deadline fixture, not on the
 lock that started this.
+
+**Amendment, 2026-08-29: the brief also arrives as `AGENTS.md`, for the seats that were
+measured reading one.** The candidate (competitor sweep 2026-08-18) proposed AGENTS.md as the
+one cross-vendor context channel needing no per-vendor prompt plumbing, on the strength of
+agents.md's own "read natively by 20+ tools". That is a docs claim, and ADR-001 does not accept
+docs claims about vendor behavior. **The measurement came first, and the build was conditional
+on it**: one headless probe per vendor CLI on this box, from a scratch directory whose only
+content was an `AGENTS.md` naming a codename nothing else on the machine knew, asked for the
+codename and nothing else.
+
+| seat | version | result |
+| --- | --- | --- |
+| codex | codex-cli 0.149.1 | **answered `ZEPHYR-9`, no tool call** — the file reached the model as context |
+| grok | grok 1.0.5 | **answered `ZEPHYR-9`, no tool call**, and named its source on the wire: *"From the always_applied_workspace_rules, the Agents.md file says"* |
+| claude | Claude Code 2.1.251 | **answered `ZEPHYR-9` by going to look** — both trials ran `ls -la` then `cat`, recorded in the probe sessions' own transcripts |
+| agy | 1.1.20 | **unmeasured** — headless agy auto-denies tool turns, and the probe was not run |
+| cursor | — | **unmeasured** — this seat races over ACP on a throwaway session, and no probe of that path ran |
+
+Two seats demonstrably ingest the file unprompted, which is the bar the sweep set, so the
+feature is built. The claude row is deliberately NOT counted as the same fact: it is a real read
+of a real file in the cwd, in a directory holding exactly one file — the easiest possible
+discovery — and nothing here claims that seat auto-loads AGENTS.md. Whether the answer was
+shaped by the operator's global `CLAUDE.md` load order cannot be separated out by this probe
+either; what the transcripts DO show is that the words came from the file on disk, because the
+model went and read it before answering.
+
+The ruling that follows from that table is what shapes the feature: **council writes the file
+for every racer and claims it for none.** No column, no notice and no snapshot field says a seat
+was briefed via `AGENTS.md`, because the room cannot tell per race which seats ingested it — and
+two of five are unmeasured. Writing it costs a seat nothing; claiming it would be the room
+narrating a fact nobody measured (§4a.1). The file is offered exactly the way the worktree is.
+
+- **Identical for every seat, by construction.** Marker, `arenaConduct`, then the brief — the
+  same bytes in all five trees. `arenaBriefText` takes no seat parameter at all, so the
+  per-seat constraint text the candidate pitched is unrepresentable rather than merely
+  discouraged: it collides with `arenaConduct`'s standing position that the room's added words
+  are a CONSTANT so the cross-seat comparison stays undisturbed, and a later change that wants
+  divergence has to argue for it here.
+- **The attempt's receipt stays the racer's.** Council's file would otherwise land in the stat
+  through `git add -N .` — §9.37's own "lying diff" known limit, arriving from the other side.
+  The three reads that could pick it up (the finish-time `collectArena`, the live
+  `collectArenaStat`, and `commitArena`'s stage plus its dirty check) append one pathspec,
+  `:(exclude)AGENTS.md`, measured on git 2.55.0.windows.3: the file stays untracked, stays out
+  of the commit, and a tree holding nothing but it still reports clean — which is what keeps the
+  empty-commit ruling working. **`/adopt` therefore merges a branch that never held the file**,
+  and the operator's repo cannot acquire a stray `AGENTS.md` from a race.
+- **The lifecycle verbs read the racer's tree too, and all three reads were wrong until they
+  carried the same pathspec.** This was found by building the feature, not by reasoning about
+  it, and each one is a different bug: `/adopt`'s arming read (`lifecycle.go`) would have offered
+  to adopt a seat that changed nothing, because council's file made a clean tree look dirty;
+  `/adopt`'s OWN commit — the one it makes for a racer whose work never reached `commitArena`,
+  which is the give-up path race t9 exercised twice — would have staged the file with `add -A`
+  and merged it into the operator's repo; and `/arena drop`'s refusal would have named council's
+  write as the operator's uncommitted work and demanded the `!` spelling on every clean attempt.
+- **`/arena drop` takes council's file back before git sees the tree.** `git worktree remove`
+  counts an untracked file as a dirty worktree and refuses, so the pathspec alone was not
+  enough: an ordinary drop failed at git. `removeArenaBrief` deletes the file only while the
+  marker still stands, so a racer's own `AGENTS.md` keeps the refusal it has earned. That is the
+  ONLY deletion — the worktree is kept until the user drops it, and until then the file is the
+  visible record of what that seat was told.
+- **The exclusion is conditional on the marker, re-read per call.** `arenaBriefArgs` opens the
+  file and checks it still starts with council's marker. A racer that REPLACED it authored a
+  file, and it appears in the stat like any other; a file council never wrote is never excluded.
+  A stale flag recorded at setup would have hidden that authorship.
+- **Council never overwrites an `AGENTS.md` the checkout or `.worktreeinclude` seeding already
+  put in the tree.** In a repo that ships one, no racer gets council's copy, every seat reads
+  the repository's own instructions identically, and the comparison is as uniform as it was
+  before this existed. The pathspec is off there too, so a racer's edit to the repo's own file
+  is in the diff.
+- **A write that fails skips that seat**, named on its column through the existing `seatErr`
+  channel — the `.worktreeinclude` rule, applied for the `.worktreeinclude` reason: a tree the
+  room KNOWS holds a different brief from its siblings races a different question, and that is
+  not the comparison the operator opened. Nothing new is rendered for it.
+
+Known limit, stated rather than hidden: while the marker stands, a racer that APPENDS to
+council's `AGENTS.md` is excluded from its own diff on that path. A racer editing the room's
+brief file is not an answer to the brief, and the alternative — an exclusion that lapses on the
+first stray edit — would drop council's own file into every stat instead.
+
+Not built, and not by omission: `telltale doctor` reporting whether a repo carries an
+`AGENTS.md` was part of the same candidate. It is a different surface with a different reader
+and it is left for its own change.
+
+Verification note, on this section's own terms: the mechanics — the identical file in every
+tree, the file never reaching the stat, the patch or the commit, the zero-diff attempt staying a
+measured zero with council's file in its tree, the racer-authored file NOT being hidden, the
+repository's own file being left alone, the skip on a failed write, the ended-context stop, and
+all three lifecycle reads (`/adopt` still refusing a brief-only racer, `/adopt` not merging the
+file, `/arena drop` needing no force) — are pinned by offline tests against real temp
+repositories (`arenabrief_test.go`), and no test spawns a vendor. **The live half is owed**: the per-vendor probes above were run headlessly in a
+scratch directory, not inside a racer worktree during a real `/arena`, so no live race has yet
+watched a seat act on this file.
+
+**Amendment, 2026-08-29: `/adopt` says what it is about to merge INTO, before you say y.** The
+card named the act — the branch it cuts and the exact `git merge --no-ff` it runs — and named
+nothing about the room the merge lands in. Everything the operator needed in order to weigh the
+`y` was in a second terminal: how far the racer's branch had drifted from the room, what had
+landed in the room since the race was cut, and whether the two had written the same files. So
+the answer was "yes because I trust it" or "no because I don't", which is §9.41's finding about
+the room's *other* gate, arriving a second time at the one gate that merges.
+
+**The card now leads with measured git state and then names the act.**
+
+```
+adopt codex? vs main: 1 ahead, 1 behind · 1 overlapping path (a.txt) · y cuts adopt/t4-codex
+and runs git merge --no-ff arena/t4/codex · n cancels
+```
+
+- **Every count carries its baseline, and the baseline is the room's own HEAD** — because that
+  is the commit `/adopt` cuts the adopt branch from, so it is genuinely what the merge lands in.
+  It is named as the branch when one is checked out (`vs main`), as the short commit on a
+  detached HEAD, and as `vs the room's HEAD` when git could not answer at all. The clause is
+  never dropped: a bare `1 ahead` is a number with no question attached. `behind` is the half
+  the operator had no other way to see, and it is the whole point of the line — it is
+  everything that landed in the room while the race sat there, including an earlier adoption
+  from the same race.
+- **One `rev-list --left-right --count HEAD...<branch>` answers both counts**, and `ahead` is
+  the same figure `unadoptedCount` was already reading for the zero-change refusal, so the
+  preview costs the card one git call rather than two. Measured at git 2.55.0.windows.3: the
+  left count is what only HEAD holds and the right is what only the branch holds.
+- **"Overlap" is a read; "conflict" would be a claim.** The overlapping paths are the
+  intersection of two `diff --name-only` reads over the same merge base — `HEAD...<branch>` is
+  the incoming half git actually applies, `<branch>...HEAD` is the room's own half — so the
+  card states that both sides wrote a path and stops there. A repository can overlap on a path
+  and merge cleanly. The word "conflict" belongs to a merge that ran, and the reactive path
+  below still owns it.
+- **Three overlap states, kept apart (§4a.1).** A read that returned nothing renders `no
+  overlapping path`; a read that returned paths renders the count and names the first; a read
+  that failed renders `the overlap check could not run:` with git's own line. An unreadable ref
+  never renders as a clean one. The counts and the overlap fail differently on purpose: the
+  counts are load-bearing, so a failed read refuses the whole command by name, exactly as the
+  older `unadoptedCount` call did; the overlap is advisory, so a failed read degrades to its own
+  sentence and the card still arms. A broken preview must not brick a verb (`arenaRaceNumber`'s
+  rule).
+- **The preview states its own limit rather than leaving it to be discovered.** Every figure is
+  read off COMMITTED state, so a racer whose worktree is still dirty has work none of the
+  figures cover — and that card adds `these counts exclude 1 uncommitted path` beside the
+  clause that already says `y commits its worktree`. `TestAdoptConflictAbortsCleanly` is exactly
+  that case: an uncommitted racer edit conflicts against a room commit while the overlap read
+  correctly reports nothing shared. Without the clause, `no overlapping path` would be read as a
+  promise about the merge.
+
+**Two shapes recorded rather than taken.**
+
+- **`git merge-tree --write-tree`, which computes a REAL merge result.** It would let the card
+  say "conflict" honestly. It is not here because the claim would need a live measurement at a
+  pinned version on this box before it could ship (this section's own rule), it needs git ≥2.38,
+  and it writes objects into the repository — which puts a preview on the write side of a room
+  whose posture is offer, never take. The reactive abort already owns the real merge result, and
+  it owns it after the operator asked for one.
+- **Folding the racer's uncommitted paths into the overlap set**, by parsing
+  `git status --porcelain`. It would close the limit named above, and it was declined because
+  those paths are a prediction of a commit nobody has made yet — council reading a tree to guess
+  what a future commit will contain, where §4a.1 asks it to read what exists. The exclusion
+  clause states the gap instead.
+
+**The preview leads the line, and the cost of that is stated.** The notice truncates from the
+right at a narrow width, so leading with the measured state can cost the action clause its tail
+— and the action clause is the older contract. It leads anyway: an operator who can read only
+the first clause can still press `n`, and the preview is what makes that `n` a decision rather
+than a mood. The alternative, recorded and not taken, is a second sheddable cell on the status
+line (the mechanism `st.ArenaSetup` already uses), which would drop the preview whole instead of
+slicing it — a new render surface for one notice, in a file this change otherwise does not
+touch.
+
+Verification, on this section's own terms: the mechanics are pinned by offline tests against
+real temp repositories (`lifecycle_test.go`) — the counts against an unmoved room and against
+one that moved, the named overlapping path, the uncommitted exclusion, the two overlap failure
+states held apart, and the baseline on a named branch, on a detached HEAD and on no answer at
+all. No golden moved, because the card is a notice string and no golden renders one. **The live
+half is owed**: no real `/adopt` has been armed against this build, so every sentence above
+rests on the fixtures rather than on a race.
 
 <a id="s9-38"></a>
 

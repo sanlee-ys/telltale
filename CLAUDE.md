@@ -184,7 +184,11 @@ a third reader of the same scan and holds the contract with one item spare — i
 writes nothing at all, not even the quota relay, because it renders no quota of
 its own to relay. `telltale mcp` (design.md §7.25) is a fourth reader of that
 same document and holds the same contract: stdio only, so it binds no port
-either. **Three** deliberate, bounded exceptions
+either. `telltale history` (design.md §7.26) is a fifth reader, and the first
+that does not read the scan at all — it walks one vendor's transcripts whole,
+which is why it is a foreground mode rather than a HUD page. It holds the
+contract with the same item spare, for the same reason: it renders no quota, so
+it has none to relay. **Three** deliberate, bounded exceptions
 exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
 
 - `telltale council` — spawns vendor CLIs; writes `council/room.json` (session

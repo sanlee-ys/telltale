@@ -120,7 +120,10 @@ type arenaStatMsg struct {
 // reason: without it a seat whose work so far is only NEW files reads as "no
 // changes yet", the false zero again.
 func collectArenaStat(tree, base string) (stat, errLine string) {
-	if _, err := gitOut(tree, "add", "-N", "."); err != nil {
+	// Excluded here for the same reason the finish-time read excludes it: a
+	// "so far" block that opened with council's own brief file would report the
+	// room's write as the racer's first move (arenabrief.go).
+	if _, err := gitOut(tree, append([]string{"add", "-N", "."}, arenaBriefArgs(tree)...)...); err != nil {
 		return "", err.Error()
 	}
 	out, err := gitOut(tree, "--no-pager", "diff", base, "--stat")
