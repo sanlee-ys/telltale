@@ -447,7 +447,9 @@ func arenaSetup(ctx context.Context, workspace string, turn int, seats []model.V
 // session/git/diff.go, verified against git's own documentation of --intent-to-add.)
 func collectArena(tree, base string) ArenaResult {
 	r := ArenaResult{Tree: tree, Base: base}
-	if _, err := gitOut(tree, "add", "-N", "."); err != nil {
+	// Council's own AGENTS.md is excluded while it is still council's file, so
+	// the brief carrier cannot appear in the attempt's stat (arenabrief.go).
+	if _, err := gitOut(tree, append([]string{"add", "-N", "."}, arenaBriefArgs(tree)...)...); err != nil {
 		r.Err = "diff unavailable: " + err.Error()
 		return r
 	}
@@ -518,10 +520,17 @@ func arenaCommitMsg(raceN int, brief string) string {
 // fails this seat's commit with git's own first stderr line, which the
 // column then carries as a named degradation.
 func commitArena(tree, base, msg string) (string, error) {
-	if _, err := gitOut(tree, "add", "-A"); err != nil {
+	// The same exclusion the diff read uses, for the receipt this time: a
+	// commit carrying council's brief file would park words the racer never
+	// wrote on the branch /adopt merges (arenabrief.go). The dirty check
+	// carries it too, or a tree holding nothing but that file would read as
+	// work owed and land a commit with no racer content in it — the false
+	// nonzero the empty-commit ruling exists to refuse.
+	exclude := arenaBriefArgs(tree)
+	if _, err := gitOut(tree, append([]string{"add", "-A"}, exclude...)...); err != nil {
 		return "", err
 	}
-	dirty, err := gitOut(tree, "status", "--porcelain")
+	dirty, err := gitOut(tree, append([]string{"status", "--porcelain"}, exclude...)...)
 	if err != nil {
 		return "", err
 	}
