@@ -632,11 +632,13 @@ func canGate(v model.VendorID) bool {
 // blanket promise (ADR-008 §3).
 //
 // These are the claims the scaffold renders; what backs them arrives with each
-// vendor's adapter. Codex is the seat where that split is widest: `-s read-only`
-// is OS-enforced on macOS and Linux and reads Enforced there, while on Windows
-// council passes no read-only flag at all and the badge says `unsandboxed` —
-// claiming a posture we have not seen would be the exact overstatement this
-// product exists to refuse, in either direction.
+// vendor's adapter. Codex is the seat where the OS most changed the answer:
+// `-s read-only` is OS-enforced everywhere now, but the Windows branch said
+// `unsandboxed` until 2026-08-29, because until codex-cli 0.149.1 the mode
+// failed every process spawn there and council could not pass it at all.
+// Each branch may claim only what was measured on it — claiming a posture we
+// have not seen would be the exact overstatement this product exists to
+// refuse, in either direction.
 func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 	switch v {
 	case model.VendorClaude:
@@ -661,42 +663,35 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 	case model.VendorCodex:
 		if windows {
 			return SandboxClaim{
-				// NOT SandboxRequested, and the change of level is the honest
-				// part of this branch rather than a downgrade in tone. Council
-				// no longer requests a read-only sandbox from this seat on
-				// Windows: it passes -s danger-full-access, because the two
-				// sandboxed modes were BOTH re-measured on 2026-08-04 failing
-				// every process spawn with CreateProcessAsUserW access-denied —
-				// including one asked merely to list a directory. `read-only`
-				// there is not a read/write distinction, it is a seat that
-				// cannot read, which is exactly how this was found: a live
-				// council turn answered a "thoughts on this repo" brief with "I
-				// could not inspect the repository".
-				//
-				// So the badge must not say ro: anything here. It renders
-				// `unsandboxed` — the same deliberate break of the ro: prefix
-				// SandboxNone was added for, because a reader scanning column
-				// headers takes in the prefix before the qualifier, and this
-				// seat has no sandbox at all on this OS.
-				Level: SandboxNone,
-				Detail: "nothing at the OS level stops this column reading or writing " +
-					"here, and that is why: on Windows both sandboxed modes were measured " +
-					"failing every process spawn, reads included, so -s read-only was not " +
-					"a restriction, it was a seat that could not read. Council passes " +
-					"-s danger-full-access so this column can work at all. The workspace " +
-					"above is the containment, not a flag — point council at a worktree " +
-					"if that matters",
+				// SandboxNone until 2026-08-29, and the level moved on a
+				// measurement rather than a release note. At codex-cli 0.146.0
+				// both sandboxed modes failed every process spawn on Windows,
+				// so council passed -s danger-full-access and this branch said
+				// `unsandboxed` — the honest word for a seat with no sandbox at
+				// all. Re-measured 2026-08-29 at codex-cli 0.149.1: the mode
+				// enforces now. A shell write under -s read-only came back
+				// "Access is denied." at exit 1 with no file on disk, a read
+				// ran clean, and the resume path's -c override was measured
+				// enforcing the same. Council passes -s read-only here again,
+				// so the badge may say so. vendors/codex.go carries the full
+				// capture, including the caveat the detail below names.
+				Level: SandboxEnforced,
+				Detail: "-s read-only, applied by the vendor's own Windows sandbox — " +
+					"measured 2026-08-29 at codex-cli 0.149.1: a shell write was denied " +
+					"with no file on disk, a read ran clean, and the resume override " +
+					"enforced the same. One residual is liveness, not safety: the " +
+					"sandbox could not spawn this machine's PowerShell, and turns " +
+					"completed because the model retried through cmd.exe — a turn can " +
+					"still fail to inspect when it does not retry",
 			}
 		}
 		return SandboxClaim{
 			Level: SandboxEnforced,
-			// The one posture in this room an operating system is behind rather
-			// than a flag. Stated as what it is and no further: this repo has
-			// measured the Windows branch, not this one, so it does not add a
-			// "cannot write" it did not run.
+			// Stated as what it is and no further: this branch's measurement is
+			// the macOS one, so it does not borrow the Windows capture's dates
+			// or its caveat.
 			Detail: "-s read-only, applied by the vendor's own OS-level sandbox on macOS " +
-				"and Linux — the one posture in this room that an operating system rather " +
-				"than a flag is behind",
+				"and Linux — a posture an operating system rather than a flag is behind",
 		}
 	case model.VendorAntigravity:
 		return SandboxClaim{
