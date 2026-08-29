@@ -33,6 +33,22 @@ type spawnLog struct {
 	// request the protocol sends after its handshake. A test that could only read
 	// argv would have nothing left to witness there.
 	protos map[int]runner.Protocol
+	// checks records every arena check run this test provoked (arenacheck.go):
+	// the worktree it would have run in, and the argv it would have run. Kept
+	// apart from specs because a check is not a seat — a test asserting "no
+	// vendor spawned" must not be answered by a check that did.
+	checks []checkRun
+	// checkOut is what the stubbed run reports back. Its zero value is a
+	// measured PASS (exited, code 0); a test that wants a FAIL, or a run that
+	// could not happen, sets this before the race lands.
+	checkOut checkResult
+}
+
+// checkRun is one stubbed check: where it would have run, and what it would
+// have run there.
+type checkRun struct {
+	tree string
+	argv []string
 }
 
 type deadSession struct{}
@@ -44,8 +60,9 @@ func (deadSession) Alive() bool              { return true }
 
 func countSpawns(t *testing.T) *spawnLog {
 	t.Helper()
-	log := &spawnLog{protos: map[int]runner.Protocol{}}
+	log := &spawnLog{protos: map[int]runner.Protocol{}, checkOut: checkResult{exited: true}}
 	origProcess, origSession, origRPC := startProcess, startSession, startRPCSession
+	origCheck := startCheck
 	startProcess = func(_ context.Context, spec runner.Spec, _ chan<- runner.Event, _ runner.ParseFunc) (*runner.Handle, error) {
 		log.specs = append(log.specs, spec)
 		return &runner.Handle{}, nil
@@ -63,10 +80,17 @@ func countSpawns(t *testing.T) *spawnLog {
 		log.specs = append(log.specs, spec)
 		return deadSession{}, nil
 	}
-	// The fourth spawn, and it is counted here for the same reason the third
-	// was: `o` then `y` starts an editor (§9.49), and a spawn that escaped this
-	// count would let "nothing was spawned" pass over a program that had been
-	// launched on the operator's desktop.
+	// The fourth spawn. A check is a process this package starts, so the same
+	// hole applies: an unstubbed check would run the operator's own build from
+	// inside the suite, and TestMain's guard would panic on any machine where
+	// the named program exists.
+	startCheck = func(_ context.Context, tree string, argv []string) checkResult {
+		log.checks = append(log.checks, checkRun{tree: tree, argv: argv})
+		return log.checkOut
+	}
+	// The fifth, counted for the third's reason: `o` then `y` starts an editor
+	// (§9.49), and a spawn that escaped this count would let "nothing was
+	// spawned" pass over a program launched on the operator's desktop.
 	origEditor := startEditor
 	startEditor = func(name string, args []string, dir string) error {
 		log.specs = append(log.specs, runner.Spec{Binary: name, Args: args, Dir: dir})
@@ -74,6 +98,7 @@ func countSpawns(t *testing.T) *spawnLog {
 	}
 	t.Cleanup(func() {
 		startProcess, startSession, startRPCSession = origProcess, origSession, origRPC
+		startCheck = origCheck
 		startEditor = origEditor
 	})
 	return log

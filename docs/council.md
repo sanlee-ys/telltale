@@ -511,6 +511,16 @@ nothing is named on the column rather than silently skipped; a copy that fails s
 seat with the reason, and its half-seeded worktree stays on disk with the other receipts.
 Copy only, never execute: the repo cannot run code on your machine by containing a file.
 
+**Every racer's tree also gets the brief as an `AGENTS.md`.** The prompt is unchanged — this
+is a second copy of the same words at the path the vendors already look at, so a seat that
+re-reads its instructions mid-turn finds them. The file is identical in every tree (marker,
+the conduct line, then your brief), it never reaches the attempt's stat, its patch or its
+commit, and `/adopt` therefore merges a branch that never held it. `/arena drop` takes the file
+back before it removes the tree, so a drop needs no `!` over it. A repo that ships its own
+root `AGENTS.md` keeps it: council writes nothing there, on any seat. **The room never says a
+seat was briefed this way**, because only some vendors were measured reading the file and the
+room cannot tell per race which did — the file is offered, exactly like the worktree is.
+
 **`/adopt <seat>` takes the winner — onto a fresh branch, behind a y/n card that names the
 exact commands.** `y` cuts `adopt/t<N>-<vendor>` from where the room is standing, checks it
 out, and runs `git merge --no-ff arena/t<N>/<seat>` there — so the branch you were on does
@@ -552,6 +562,21 @@ bound — a race whose branches were dropped is no longer in the record — and 
 whole table with that sentence attached. `t` gives the grid back. There is no rank and no
 phase word in it, because those live on the turn and the turn is gone.
 
+**`/arena check <command>` says whether each attempt WORKS.** Name one command — `/arena
+check go test ./...` — and every racer runs it in its own worktree when that seat lands.
+The block then says `check PASS` or `check FAIL · exit 2`, from the command's real exit
+code and from nothing else: there is no judge, no opinion, and no verdict inferred from the
+diff. A command that could not run at all — a missing program, a run the ten-minute bound
+stopped — says `check unavailable: <why>` instead, because that is not a failing attempt,
+it is an unmeasured one. Name nothing and no race mentions a check at all. The command is
+resolved when you name it, so a draft whose first word is not a program is refused and
+handed back rather than raced — which is what keeps a brief opening with the word "check"
+from becoming a command. `/arena check` alone says what is named; `/arena check off` stops
+it. The check runs AFTER the diff is read and the attempt is committed, so nothing it
+writes is in either — and if it leaves the tree dirty, the column says so, because
+`/adopt` would otherwise carry that build output into your merge. It never gates anything:
+it reports, and you adopt.
+
 The record behind all of this — the rulings, which live race verified what, and what is
 still owed — is [design.md §9.37](design.md). Read it before trusting the edges, because
 they are not all at the same standard. **Live-verified** as of race t9 (2026-08-09): the
@@ -568,7 +593,9 @@ finishes with ranked receipts and two seats given up mid-stall, both keeping the
 commits — and the `arena · so far` stat watched growing from a non-empty read on two
 columns before the settled block replaced it. **Offline only**: the arena record
 ([design.md §9.47](design.md)) — its tally, its three renders and its frame are pinned by
-tests, and no live open against a real pile of leftover branches is recorded yet.
+tests, and no live open against a real pile of leftover branches is recorded yet — and the
+arena check ([design.md §9.48](design.md)), whose exit-code reading is pinned against a real
+process but never yet against a real race.
 **Live in part**: the cursor seat's
 throwaway racer has been spawned, streamed and killed live — twice now — but never
 watched finish on its own; that half still stands on its offline tests, and

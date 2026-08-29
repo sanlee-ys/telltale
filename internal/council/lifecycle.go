@@ -133,17 +133,26 @@ func (m *Model) adoptCommand(arg string) bool {
 		return true
 	}
 
-	dirty, err := worktreePorcelain(tree)
+	// Council's brief file is not work, so it must not make a zero-work seat
+	// look adoptable — the refusal below is a measured zero and would become a
+	// false nonzero the moment an untracked AGENTS.md counted (arenabrief.go).
+	dirty, err := worktreePorcelain(tree, arenaBriefArgs(tree)...)
 	if err != nil {
 		m.st.Notice = "adopt: " + err.Error()
 		return true
 	}
-	ahead, err := unadoptedCount(race, v)
+	// One read answers two questions. `ahead` is the same figure unadoptedCount
+	// takes off `rev-list --count HEAD..<branch>` — the zero-change refusal
+	// below is unchanged — and the same command also returns `behind`, which is
+	// what the card needs to say where the merge is going. A failed read still
+	// refuses by name, exactly as the older call did: an unreadable ref must
+	// never reach the operator as a clean one.
+	div, err := readAdoptDivergence(race.workspace, arenaBranch(race.raceN, v))
 	if err != nil {
 		m.st.Notice = "adopt: " + err.Error()
 		return true
 	}
-	if len(dirty) == 0 && ahead == 0 {
+	if len(dirty) == 0 && div.ahead == 0 {
 		// A measured zero, not a guess: the worktree is clean and the branch
 		// sits at commits the room already has. Adopting it would create an
 		// empty merge commit claiming work that does not exist.
@@ -192,14 +201,205 @@ func (m *Model) adoptCommand(arg string) bool {
 	}
 	m.adoptPending = v
 	m.adoptOnto = onto
-	q := "adopt " + string(v) + "? y cuts " + onto + " and runs git merge --no-ff " + branch
+	// THE PREVIEW LEADS, and that placement is the decision (§9.37's 2026-08-29
+	// amendment). This line truncates from the right at a narrow width, so
+	// leading with the measured state can cost the action clause its tail — and
+	// the action clause is the older contract. It leads anyway, for §9.41's
+	// reason on the room's other gate: a card that names the act and not its
+	// subject leaves "yes because I trust it" and "no because I don't", which is
+	// the gate reduced to a mood. An operator who can see only the first clause
+	// can still press n, and the preview is what makes that n a decision.
+	act := " · y cuts " + onto + " and runs git merge --no-ff " + branch
 	if len(dirty) > 0 {
-		q = "adopt " + string(v) + "? y commits its worktree, cuts " + onto +
+		act = " · y commits its worktree, cuts " + onto +
 			" and runs git merge --no-ff " + branch
 	}
-	m.st.Notice = q + " · n cancels"
+	m.st.Notice = "adopt " + string(v) + "? " + div.sentence(len(dirty)) + act + " · n cancels"
 	m.setDraft("")
 	return true
+}
+
+// adoptDivergence is what the /adopt card reports BEFORE y: how far the racer's
+// branch and the room have moved apart, and which paths both of them wrote
+// since they parted.
+//
+// WHY IT IS ON THE CARD AT ALL. /adopt already handles a bad merge reactively —
+// `git merge --no-ff`, then `git merge --abort` when a conflict stops it, the
+// branch removed and the tree restored — so nothing here saves the operator
+// from a failure the verb could not already survive. What it ends is the
+// operator answering y without knowing what the merge is going INTO. That is
+// §9.41's finding, on the room's other gate: a card that names the act and not
+// its subject leaves only "yes because I trust it" and "no because I don't".
+//
+// EVERY FIELD IS READ AND NONE IS INFERRED (§4a.1). The counts come from one
+// `rev-list --left-right --count`, the paths from two `diff --name-only` reads,
+// and the baseline is the room's own HEAD because that is the commit /adopt
+// cuts the adopt branch from. Nothing here predicts a merge RESULT: the word
+// "conflict" belongs to a merge that ran, and an overlap is only the measured
+// fact that both sides changed one path. A repository can overlap on a path and
+// merge cleanly, and this card must never be read as promising otherwise.
+type adoptDivergence struct {
+	// base names the ref the adoption merges into, for a human to read. Empty
+	// when git could not answer, which the sentence says rather than hides.
+	base string
+	// ahead is commits on the arena branch the room's HEAD cannot reach, and
+	// behind is commits on the room's HEAD the arena branch cannot reach. The
+	// second is the one the operator has no other way to see: it is everything
+	// that landed in the room since the race was cut.
+	ahead, behind int
+	// overlap is the paths BOTH sides changed since their merge base, in the
+	// order the incoming side lists them.
+	//
+	// Three states, kept apart on purpose (§4a.1, and the whole reason this is
+	// a slice plus an error rather than a slice alone): a nil error with no
+	// entries is a MEASURED zero and renders "no overlapping path"; a nil error
+	// with entries renders the count and names the first; a non-nil error
+	// renders that the check could not run, carrying git's own line. "Nothing
+	// overlaps" and "nobody looked" are different facts.
+	overlap    []string
+	overlapErr error
+}
+
+// readAdoptDivergence measures one racer's branch against the room as it stands
+// now.
+//
+// The counts are load-bearing and the overlap is advisory, so they fail
+// differently. A counts read that fails returns an error and /adopt refuses by
+// name — the caller needs `ahead` for the zero-change refusal, and an
+// unreadable ref rendered as a clean one is the exact defect this repository
+// exists to prevent. An overlap read that fails is carried on the struct and
+// the card still arms, because a broken advisory read must not brick a verb
+// (arenaRaceNumber's rule, applied to a preview).
+func readAdoptDivergence(workspace, branch string) (adoptDivergence, error) {
+	var d adoptDivergence
+	// `A...B` is the symmetric difference: the left count is what only A holds
+	// and the right count is what only B holds. With the room on the left, left
+	// is how far the racer is BEHIND and right is how far it is AHEAD. One
+	// command for both, measured 2026-08-29 at git 2.55.0.windows.3, which
+	// prints them tab-separated on one line.
+	out, err := gitOut(workspace, "rev-list", "--left-right", "--count", "HEAD..."+branch)
+	if err != nil {
+		return d, err
+	}
+	f := strings.Fields(out)
+	if len(f) != 2 {
+		return d, gitError("rev-list answered " + strconv.Quote(out) + " rather than two counts")
+	}
+	if d.behind, err = strconv.Atoi(f[0]); err != nil {
+		return d, gitError("rev-list answered " + strconv.Quote(out) + " rather than two counts")
+	}
+	if d.ahead, err = strconv.Atoi(f[1]); err != nil {
+		return d, gitError("rev-list answered " + strconv.Quote(out) + " rather than two counts")
+	}
+	d.base = adoptBase(workspace)
+	d.overlap, d.overlapErr = readAdoptOverlap(workspace, branch)
+	return d, nil
+}
+
+// readAdoptOverlap is the paths both sides changed since their merge base.
+//
+// Two diffs against the same base, intersected. `HEAD...<branch>` is the
+// incoming half — the merge-base..branch range `git merge` actually applies,
+// and the same range adoptBlockers reads — and `<branch>...HEAD` is the room's
+// own half over the identical base. A path in both is a path two people wrote
+// after they agreed, which is the fact worth showing and the whole of what is
+// claimed here.
+//
+// An empty half short-circuits the other read, because an intersection with an
+// empty set is empty whichever way it is measured; that is arithmetic on a read
+// value, not a skipped measurement.
+func readAdoptOverlap(workspace, branch string) ([]string, error) {
+	incoming, err := changedFiles(workspace, "HEAD..."+branch)
+	if err != nil || len(incoming) == 0 {
+		return nil, err
+	}
+	room, err := changedFiles(workspace, branch+"...HEAD")
+	if err != nil || len(room) == 0 {
+		return nil, err
+	}
+	in := make(map[string]bool, len(room))
+	for _, f := range room {
+		in[f] = true
+	}
+	var both []string
+	for _, f := range incoming {
+		if in[f] {
+			both = append(both, f)
+		}
+	}
+	return both, nil
+}
+
+// changedFiles is one `diff --name-only` over a range, split into paths — the
+// one spelling of "which files does this range touch", shared by the overlap
+// read and by adoptBlockers' untracked-collision check so the two can never
+// disagree about what an adoption writes.
+func changedFiles(workspace, rng string) ([]string, error) {
+	out, err := gitOut(workspace, "--no-pager", "diff", "--name-only", rng)
+	if err != nil {
+		return nil, err
+	}
+	if out == "" {
+		return nil, nil
+	}
+	return strings.Split(out, "\n"), nil
+}
+
+// adoptBase names, for a reader, the ref the adoption is cut from and merged
+// into: the branch when one is checked out, else the short commit.
+//
+// It is NOT roomRef, and the two must not be merged. roomRef's answer is handed
+// back to `git checkout` after a failed adoption, so it has to be exact and
+// carries the full sha; this one is read by a person on one status line, where
+// forty hex characters would crowd out the sentence they are labelling. An
+// empty answer is legal and the sentence names the baseline anyway.
+func adoptBase(workspace string) string {
+	if name, err := gitOut(workspace, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil && name != "" {
+		return name
+	}
+	if short, err := gitOut(workspace, "rev-parse", "--short", "HEAD"); err == nil && short != "" {
+		return short
+	}
+	return ""
+}
+
+// sentence is the preview as the card says it, given how many paths the racer's
+// worktree still holds uncommitted.
+//
+// EVERY COUNT CARRIES ITS BASELINE. "3 ahead" alone is a number with no
+// question attached, so the baseline opens the clause and both counts sit under
+// it. When git could not name the ref, the baseline is still stated — "the
+// room's HEAD" is true, and dropping the clause would leave the counts floating
+// against nothing.
+//
+// THE UNCOMMITTED CLAUSE IS THE PREVIEW'S OWN LIMIT, stated rather than left to
+// be discovered. Every figure here is read off COMMITTED state, and a racer
+// whose worktree is still dirty has work that is not in any of it — the commit
+// y makes is what puts it there. So a dirty racer's card says which counts it
+// is outside of. Without that clause "no overlapping path" would be read as a
+// claim about the whole merge, and TestAdoptConflictAbortsCleanly is the case
+// where that reading is wrong: an uncommitted racer edit conflicts against a
+// room commit the overlap read correctly reports as touching nothing shared.
+func (d adoptDivergence) sentence(uncommitted int) string {
+	base := d.base
+	if base == "" {
+		base = "the room's HEAD"
+	}
+	parts := []string{"vs " + base + ": " + itoa(d.ahead) + " ahead, " + itoa(d.behind) + " behind"}
+	switch {
+	case d.overlapErr != nil:
+		parts = append(parts, "the overlap check could not run: "+d.overlapErr.Error())
+	case len(d.overlap) == 0:
+		parts = append(parts, "no overlapping path")
+	default:
+		n := len(d.overlap)
+		parts = append(parts, itoa(n)+" overlapping "+plural(n, "path")+" ("+d.overlap[0]+")")
+	}
+	if uncommitted > 0 {
+		parts = append(parts, "these counts exclude "+itoa(uncommitted)+
+			" uncommitted "+plural(uncommitted, "path"))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // adoptBranch names the branch an adoption lands on, from the same race number
@@ -349,12 +549,19 @@ func (m *Model) adoptSeat(v model.VendorID, onto string) string {
 		}
 	}
 
-	dirty, err := worktreePorcelain(tree)
+	// Council's own AGENTS.md is excluded from BOTH halves, and the dirty read
+	// is the half that matters more. This commit is the one /adopt makes for a
+	// racer whose work never reached commitArena — the give-up path, mostly —
+	// and without the exclusion a seat whose tree holds nothing but council's
+	// brief file would read as work owed, land a commit carrying only that
+	// file, and merge it into the operator's repo (arenabrief.go).
+	exclude := arenaBriefArgs(tree)
+	dirty, err := worktreePorcelain(tree, exclude...)
 	if err != nil {
 		return "adopt: " + err.Error()
 	}
 	if len(dirty) > 0 {
-		if _, err := gitOut(tree, "add", "-A"); err != nil {
+		if _, err := gitOut(tree, append([]string{"add", "-A"}, exclude...)...); err != nil {
 			return "adopt: " + err.Error()
 		}
 		if _, err := gitOut(tree, "commit", "-m", string(v)+"'s arena attempt, race t"+itoa(race.raceN)); err != nil {
@@ -545,7 +752,10 @@ func (m *Model) dropRacer(v model.VendorID, force bool) string {
 	if !force {
 		// Two guards, two sentences, each naming what would be lost AND how to
 		// proceed — a refusal without its remedy is §9.17's defect.
-		dirty, err := worktreePorcelain(tree)
+		// Council's brief file excluded: a drop that demanded the `!` spelling
+		// on every clean attempt would be refusing over the room's own write
+		// (arenabrief.go).
+		dirty, err := worktreePorcelain(tree, arenaBriefArgs(tree)...)
 		if err != nil {
 			return string(v) + ": " + err.Error()
 		}
@@ -562,6 +772,14 @@ func (m *Model) dropRacer(v model.VendorID, force bool) string {
 				" the room has not merged — /adopt " + string(v) + " takes them, " + spell + " discards them"
 		}
 	}
+
+	// Council takes its own brief file back before git is asked to remove the
+	// tree. `git worktree remove` counts an untracked file as dirty and refuses,
+	// so leaving it there would make every ordinary drop fail and demand the `!`
+	// spelling — the room's own write turning a plain verb into a forced one.
+	// removeArenaBrief deletes only a file still carrying council's marker, so a
+	// racer's own AGENTS.md keeps the refusal it has earned (arenabrief.go).
+	removeArenaBrief(tree)
 
 	args := []string{"worktree", "remove"}
 	if force {
@@ -583,8 +801,13 @@ func (m *Model) dropRacer(v model.VendorID, force bool) string {
 
 // worktreePorcelain is one `git status --porcelain`, split into its lines: the
 // count is what refusals name, and empty means a measured clean.
-func worktreePorcelain(dir string) ([]string, error) {
-	out, err := gitOut(dir, "status", "--porcelain")
+//
+// pathspec is what a caller reading a RACER's tree passes: council's own brief
+// file is not the racer's uncommitted work, and counting it would turn every
+// clean attempt into a dirty one (arenabrief.go). Callers reading the ROOM's
+// tree pass nothing — an AGENTS.md there is the repository's own.
+func worktreePorcelain(dir string, pathspec ...string) ([]string, error) {
+	out, err := gitOut(dir, append([]string{"status", "--porcelain"}, pathspec...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -633,11 +856,10 @@ func adoptBlockers(workspace, branch string) ([]string, error) {
 		blockers = append(blockers, strings.TrimSpace(l))
 	}
 	if len(untracked) > 0 {
-		out, err := gitOut(workspace, "--no-pager", "diff", "--name-only", "HEAD..."+branch)
+		incoming, err := changedFiles(workspace, "HEAD..."+branch)
 		if err != nil {
 			return nil, err
 		}
-		incoming := strings.Split(out, "\n")
 		for _, u := range untracked {
 			for _, f := range incoming {
 				if f == "" {
@@ -658,6 +880,10 @@ func adoptBlockers(workspace, branch string) ([]string, error) {
 // Measured with rev-list against the room repo's own HEAD rather than the
 // recorded base, because "unadopted" is a fact about where the ROOM is now: a
 // branch already merged counts zero even though it is ahead of the base.
+//
+// This is the drop guard's reader. /adopt takes the identical figure off
+// readAdoptDivergence's wider command (`adoptDivergence.ahead`), which answers
+// the card's `behind` in the same call rather than paying for a second one.
 func unadoptedCount(race *arenaRace, v model.VendorID) (int, error) {
 	out, err := gitOut(race.workspace, "rev-list", "--count", "HEAD.."+arenaBranch(race.raceN, v))
 	if err != nil {
