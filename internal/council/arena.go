@@ -137,6 +137,13 @@ type ArenaResult struct {
 	// THIS number, or a race that outran its turn becomes unguardable.
 	RaceN int
 
+	// Check is this seat's check run (arenacheck.go, §9.48): the exit code of
+	// the command `/arena check` named, measured in THIS worktree. Nil when no
+	// command is named, and nil renders NOTHING — a room that never asked for
+	// a check has no check to report, which is Seed's own zero-vs-absent rule
+	// on a second field. PASS and FAIL come from the exit code alone; a run
+	// that produced no exit code carries Err and is neither.
+	Check *ArenaCheck
 	// Seed is this seat's .worktreeinclude receipt, nil when the room repo has
 	// no .worktreeinclude at all. The render draws NOTHING for nil and
 	// "seeded 0 files" for a report that copied nothing — a repo that never

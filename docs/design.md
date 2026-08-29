@@ -15309,3 +15309,188 @@ What IS owed is one live open against the reference box's own leftovers — 27 `
 branches and the `adopt/*` refs beside them are recorded in §9.37 — to confirm the counts a
 real pile of refs produces and that the page reads at the room's own geometry. Stated here
 rather than implied paid.
+
+<a id="s9-48"></a>
+
+### 9.48 the race said what changed and never whether it worked (2026-08-29)
+
+`/arena` measures everything about an attempt except the one thing an operator adopts on.
+It reports what each racer CHANGED — the live stat, the settled `git diff --stat`, the full
+patch, the commit receipt (§9.37) — and `/arena record` reports which seat the operator TOOK
+(§9.47). Neither says whether the attempt WORKS. The room's own founding note admits it: rank
+is arrival order, and the only clock that ranks a race is the room's. So the operator answered
+the question by hand, once per seat, in a second terminal — `/cd` into each kept worktree and
+run the same command — which is the act §9.17 says a command surface exists to remove.
+
+**`/arena check <command>` names one command; every racer runs it in its own worktree, and
+each attempt's block says PASS or FAIL from that run's real exit code.**
+
+#### The grammar, and the two shapes it is not
+
+It is a sub-verb inside `/arena`, for §9.47's budget reason: `refuseUnknownCommand` prints the
+whole room vocabulary against a hard width, and that line's own comment records `/adopt` as
+"the last cheap one — the next verb has to find its characters somewhere else". `/arena drop`
+and `/arena record` had already established the shape, so a third costs the refusal nothing
+and the help panel nothing. It is taught the way they are: by this section, and by the notice
+the command itself prints.
+
+**It is NOT a file in the repository, and that is a ruling rather than a preference.** The
+obvious build was `.worktreeinclude`'s sibling — a `.arenacheck` the racer trees inherit — and
+arena.go's own seeding doc already refuses exactly that shape: agent-deck pairs seeding with
+repo-carried setup scripts, and council took "copy only, never execute", because a repository
+that can run a command on the machine by merely CONTAINING a file is a different product with
+a different threat model. A command a person typed into their own room is that person's act. A
+command a clone brought with it is not. The parked byte-level trust question is untouched by
+this feature, which is the point of not touching it.
+
+**It is NOT a new room word.** `/check` would have cost the refusal line a re-wording and,
+worse, a second meaning for a word this codebase already spends: the write gate, the gate
+cards, `gatehook.go`. Two facts cannot wear one word (§9.13) — which is also why the verdict
+is spelled `FAIL` and never `failed`. The room already spends `failed` on a phase, and a seat
+that finished cleanly while its check exited 2 is a different fact from a seat whose process
+died.
+
+**The cost of taking free text, stated the way `parseArenaDrop` states its own.** This is the
+one `/arena` sub-verb that cannot close its grammar with a length cap, so a brief opening with
+the word `check` is at risk. What protects it is a PATH lookup on the first word: a draft whose
+first word after `check` is not a program this machine can run is refused by name, handed back
+to the composer, and neither raced nor set — nothing spawns and nothing is billed. The narrow
+case that survives is a brief opening `check <something that IS on PATH>`; the notice names
+exactly what was set, and `/arena check off` takes it back in one line. A path-bearing first
+word (`./scripts/check.sh`) skips the lookup on purpose, because it is resolved against the
+RACER's tree rather than against the room's own directory.
+
+**The command is room state and survives `/cd`**, which is `/write`'s rule rather than an
+oversight: posture is room state and moving the workspace does not quieten it either. The
+mitigation is that every result names the command it ran, so a command left over from another
+repository is visible in the verdict rather than assumed behind it.
+
+**It does NOT survive the room.** `room.json` holds session ids and a workspace — keys and
+numbers, never content (`CLAUDE.md`'s read/write boundary) — and a command is neither. The
+consequence is deliberate rather than reluctant: a saved command would run in a session whose
+operator never typed it, which is the one property the "a person typed it into their own room"
+argument above rests on. Re-naming it is one line.
+
+#### Four rulings, and each is a line the code may not cross
+
+- **The exit code is the only source.** PASS is exit 0; FAIL is any other code; both are read
+  back from the process. Nothing here infers a verdict from output, from the diff, from a
+  duration, or from a model's opinion. **An LLM judge is refused by ruling twice over** —
+  §9.2's refusal of "a ranking stage, a chairman, or any synthesis hop" and §9.44's declined
+  cross-seat quality mark — and it stays refused even wearing an estimate's `~`, because `~`
+  marks a figure telltale COMPUTED and an opinion is not a computation. A measured exit code is
+  the opposite case, and it complies with ADR-001 exactly as the diff does.
+- **A command that could not run is its own state.** A missing binary, a tree that could not be
+  entered, a run the deadline stopped: none of them is a FAIL. They render as
+  `check unavailable: <why>`, because "this attempt failed the check" and "nothing measured
+  this attempt" are the degraded-vs-zero distinction §4a.1 exists to keep apart. `Exited` is a
+  field of its own and is the ONLY gate on a verdict, so a check record's zero value can never
+  read as a pass.
+- **No command named is ABSENT, and absence draws nothing at all.** Not a dash, not a 0, not a
+  pending word. It is nil `Seed`'s rule on a second field: a room that was never asked for a
+  check has no check to report. Absence is a whole-race property rather than a per-seat one —
+  the command is the room's, so either every racer with a tree carries a check or none does.
+- **The room captures no output.** The exit code is the whole claim. A failing command's stdout
+  would put unredacted subprocess text on a screen whose vendor streams all pass through a
+  `Redactor` first, and reading it would need the scroll surface the gate cards were already
+  refused. The block names the command and the worktree; the operator re-runs it there.
+
+#### Where it runs in the finish line, and what that costs
+
+**The check runs LAST, after the diff is read and after the attempt is committed, and the
+order is a ruling.** A check that ran first would park its own build output on the arena branch
+wearing the racer's name — the false receipt, §4a.1 pointed at a write. So nothing a check
+writes can reach the stat, the patch or the commit.
+
+What it CAN reach is a later `/adopt`, which commits a dirty attempt before merging it. That is
+said rather than swept up: the run is bracketed by two `git status --porcelain` reads, and a
+check that found a clean tree and left a dirty one prints one sentence saying so. The room does
+not reset a tree the operator did not ask it to reset, and `/adopt`'s own y/n card names every
+command it will run before it runs one. A tree that was ALREADY dirty, and a state that could
+not be read, both claim nothing — the field reports a measured change, never the absence of
+one.
+
+**It runs off the render loop**, for the reason `arenaSetup` moved off it (§9.37's 2026-08-17
+amendment): a `go test` inside `Update` is a room that draws no frame and reads no key for
+minutes. `finishColumn` queues the run, `Update` drains the queue on the event batch and again
+on the spinner tick, and the result arrives as a message — `arenalive.go`'s pattern, with one
+difference that matters.
+
+**The check's lifetime is the ROOM's, not the turn's.** The last racer landing ends the turn,
+and a check that started at that moment must still be allowed to finish and report onto a
+column that is still on screen — so the run hangs off `roomCtx`, and teardown kills it for the
+same reason quitting kills every other child this room started. A stale run is dropped by
+comparison (the vendor and the turn number), never by hoping the timing worked out.
+
+**The run is a process TREE, and it is contained like one.** `runner.RunContained` is a new
+one-shot sibling of `runner.Start` — no streaming, no parsing, no clock record, because a check
+is not a turn — and what it takes from `Start` is the Windows job object and the unix process
+group. That is not belt and braces: `proc_windows.go` exists because `codex` resolves to an npm
+`.cmd` shim, and `npm test` has exactly that shape, so a deadline that killed only the direct
+child would leave the real work running two processes down with nothing on screen to say so.
+`contained_test.go` asserts it the way the vendor path is asserted — a helper that spawns a
+grandchild writing to a file, and a cancel that has to stop the FILE growing. Both of `Start`'s
+own limits carry over unchanged and are recorded there: the microsecond window before the group
+is assigned, and unix's need to be killed on the way out.
+
+**A cancelled turn runs no check.** ctrl+c is the operator saying stop, and a room that
+answered it by starting a subprocess per seat would be ignoring the one act it exists to obey.
+A seat cut on its own with `x` is NOT that case: §9.37's give-up ruling says a given-up seat
+lands like any other finisher, and its partial work is as worth checking as its diff is worth
+reading.
+
+**The bound is ten minutes, and the anchor is this repository's own suite.** `CLAUDE.md`
+records `go test ./...` at ~455s locally and ~4m22s in CI, which is about the slowest command
+an operator would name here; ten minutes is past twice that. The margin is the decision rather
+than the figure — what this bound must never do is kill a run that would have finished, since a
+killed run yields no exit code and therefore no verdict at all. A run the clock stops is
+reported as unavailable with the bound named.
+
+**Checks may overlap, and that is stated rather than serialised.** Seats land at different
+moments, so in practice they stagger; two that land together run together. The worktree adds
+are serial because they contend for the repository's own refs (§9.37), and nothing analogous is
+true here — each check runs in its own tree. Serialising them would make one slow check hold
+every other seat's verdict, and the room measures nothing about the machine's capacity, so the
+bound would be chosen from nothing.
+
+#### Deliberately not built
+
+- **Any LLM judge**, per the ruling above. It is the half of the sweep candidate that fails
+  §9.2 and §9.44, and a mark does not soften it.
+- **Repeat sampling** (N attempts of one seat), the candidate's other half. §9.37 rules every
+  attempt a fresh session across all seated vendors and rules a one-seat race an ordinary turn
+  in a worktree; N-of-one contradicts that as written and collides with the
+  `arena/t<N>/<vendor>` identity scheme `lifecycle.go` re-mints from refs. It needs an owner's
+  ruling rather than a builder's, and nothing here assumes one.
+- **Per-attempt cost and diff-size columns.** They already ship — the stat is §9.37's, and the
+  vendor-reported cost is `turnview.go`'s, absent where the vendor reports none.
+- **A check that gates anything.** It reports; it does not refuse an `/adopt` and it does not
+  re-order a rank. The founding posture is offer-never-take, and a room that blocked an
+  adoption on its own reading of a test would be taking.
+- **A check on an ordinary turn.** The question is whether an ATTEMPT works, and an ordinary
+  turn writes into the operator's own tree rather than into an attempt.
+
+Verified offline. `arenacheck_test.go` pins the grammar (set, report, clear, and the refusal
+that hands a brief back), one run per racer in that racer's own tree with the named argv,
+absence drawing nothing, a cancelled turn queueing nothing while a given-up seat still runs,
+the stale-message drops, the ordering — a check that writes into the tree reaching neither the
+stat nor the commit — and the four renders, with `arena-check.txt` and its `--ascii` twin as
+the frame. `contained_test.go` pins the run itself: an exit code coming back as itself, a
+missing binary carrying no code at all, and a cancelled run stopping a GRANDCHILD. Colour is
+asserted separately against the room's existing severity pair, per the goldens' own split. No
+test here spawns a vendor: `countSpawns` stubs the check as its fourth spawn var, and
+`TestMain` panics on any model-path run whose command this machine could actually resolve.
+
+**One test runs a real process, and the process is this test binary.**
+`TestPassAndFailComeFromARealExitCode` calls `runCheck` directly rather than through the
+guarded var, with `os.Args[0]` and a helper `-test.run` as the command, and asserts that three
+exit codes come back as themselves, that a missing binary comes back with no verdict at all,
+and that a run which writes a file is measured as having written one. Without it the feature
+would rest on a stub returning the answer it was handed, which pins the render and nothing
+about the claim.
+
+**The live half is owed.** No live race has run under a check. What is unmeasured is a real
+vendor's attempt meeting a real suite in a real worktree, and specifically whether a check that
+runs for minutes reads well on a column whose turn has already ended. One `/arena check` and
+one `/arena` against a brief that changes files pays it. Recorded in `STATE.md` rather than
+implied paid.

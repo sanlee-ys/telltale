@@ -310,6 +310,15 @@ func (m *Model) dispatch() tea.Cmd {
 				m.arenaRecordCommand()
 				return nil
 			}
+			// The check verb, caught here for the record verb's reasons: it
+			// spawns nothing, bills nothing and mutates no worktree — it names
+			// the command a LATER race will run. It is the one /arena sub-verb
+			// that takes free text, so the guard that keeps it from stealing a
+			// brief is inside it rather than in the parse (arenacheck.go).
+			if arg, isCheck := parseArenaCheck(brief); isCheck {
+				m.arenaCheckCommand(arg)
+				return nil
+			}
 			// A race is a dispatch, not room state, so it lives here beside
 			// /flow rather than in roomCommand — and like a flow write hop, it
 			// cannot run in a room that may not write: every racing seat gets
@@ -1424,6 +1433,15 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 			// "2nd" on a failed attempt cannot read as a result.
 			m.turn.arenaFinished++
 			r.Rank, r.Of = m.turn.arenaFinished, len(m.turn.arenaTrees)
+			// The check runs LAST, and the order is a ruling (§9.48): the diff
+			// is read and the attempt is committed above, so nothing the check
+			// writes into the tree can reach this seat's stat or its receipt.
+			// A check that runs before the commit would park its own build
+			// output on the arena branch wearing the racer's name. The run
+			// itself is queued rather than started — it is a subprocess of the
+			// operator's choosing, so it goes off the render loop the way the
+			// worktree setup did (arenacheck.go).
+			r.Check = m.armArenaCheck(c.Vendor, c.TurnN, tree)
 			c.Arena = &r
 			// The finish-time read REPLACES the last interim stat, never
 			// merges with it (§9.37): the interim was a moment already past,
