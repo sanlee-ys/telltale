@@ -471,7 +471,10 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   `turn.completed` marker and renders `done Ns exiting`, the process lifetime
   untouched (§9.33's dated payment block). What that lane left open, stated
   there: the linger's CAUSE is unmeasured and the tool-using turn's tail is
-  unmeasured (probing it needs `danger-full-access`, a redline). The agy tail
+  unmeasured (probing it needed `danger-full-access`, a redline, when every
+  sandboxed spawn failed on Windows; since the 2026-08-29 re-measurement at
+  codex-cli 0.149.1, `-s read-only` runs commands there — §9.2's dated
+  amendment — so the probe is possible now and still unrun). The agy tail
   is now MEASURED and ruled (§9.43's dated amendment): 0.049–0.314s behind a
   reliable `result` marker, too small to justify `EndsTurn` on a whole-second
   clock, and a test pins the refusal — what stays unknown there is the FAILED
