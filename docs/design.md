@@ -1645,12 +1645,12 @@ a first-class state here and not a failure.
 | name | **MEASURED** | `summary.json` → `generated_title` (17 of 30), falling back to `session_summary`, which held the identical string on every session carrying both. A headless `--single` run has `session_summary: ""` and **no `generated_title` key at all** — verified by running one — so an unnamed grok row is absence, not a failed read. |
 | model | **MEASURED** | `summary.json` → `current_model_id`. `grok-4.5` on 30 of 30. Note the per-model usage blocks key off `grok-4.5-build` instead; the adapter reports the id the vendor puts in the session's own model field, not the billing variant. |
 | workspace | **MEASURED** | `summary.json` → `info.cwd`, absolute and native (`C:\Users\sanle\code\telltale`), on 30 of 30. The parent directory name carries the same path percent-encoded and is the **fallback** — see the round-trip note below. |
-| context % | **MEASURED** | `signals.json` → `contextWindowUsage`, an integer percentage the vendor computes, beside the raw `contextTokensUsed` / `contextWindowTokens` (500000 on every session). It TRUNCATES: 39656/500000 = 7.93 is written `7`, 22675/500000 = 4.535 is written `4`. The adapter reports the vendor's integer and does not recompute — grok is the second vendor after Cursor with no assumed denominator, and the more precise float would be a number the vendor never said. |
-| cost | **PER-TURN ONLY, so the field stays `CapNone`** | `updates.jsonl` → each `turn_completed` record's `usage.costUsdTicks`. The unit is measured twice over (below). It is **not cumulative**: one session's three turns read 455412000, 820464000, 747416000 ticks, the third smaller than the second. `"[a-z_]*cost[a-z_]*"` over every `.json`/`.jsonl` in the store matched `costUsdTicks` and **nothing else** — no session total exists anywhere. Summing needs every turn record and `updates.jsonl` reached **818 KB** in one session, past any bounded tail; a tail-window sum is a lower bound, and a lower bound in a column headed COST is a derived number wearing a read one's clothes. The **last turn's** cost is carried as a labeled Extra instead. |
+| context % | **MEASURED** | `signals.json` → `contextWindowUsage`, an integer percentage the vendor computes, beside the raw `contextTokensUsed` / `contextWindowTokens` (500000 on every session). It TRUNCATES: 39656/500000 = 7.93 is written `7`, 22675/500000 = 4.535 is written `4`. The adapter reports the vendor's integer and does not recompute — grok is the second vendor after Cursor with no assumed denominator, and the more precise float would be a number the vendor never said. These three keys are still the source, and `signals.json` holds 61 more beside them — see the 2026-08-29 drift census below. |
+| cost | **PER-TURN ONLY, so the field stays `CapNone`** | `updates.jsonl` → each `turn_completed` record's `usage.costUsdTicks`. The unit is measured twice over (below). It is **not cumulative**: one session's three turns read 455412000, 820464000, 747416000 ticks, the third smaller than the second. `"[a-z_]*cost[a-z_]*"` over every `.json`/`.jsonl` in the store matched `costUsdTicks` and **nothing else** — no session total exists anywhere. Summing needs every turn record and `updates.jsonl` reached **818 KB** in one session, past any bounded tail; a tail-window sum is a lower bound, and a lower bound in a column headed COST is a derived number wearing a read one's clothes. The **last turn's** cost is carried as a labeled Extra instead. **This row named one key and the record carries eleven** — see the 2026-08-29 re-measure below, which is a correction to this row's completeness and not to its verdict: the sweep spelled here could not match `inputTokens` and its siblings. |
 | quota | **ABSENT** | `"[a-z_]*(rate\|limit\|quota)[a-z_]*"` over the whole store returned only tool-configuration keys (`output_byte_limit`, `head_limit`). No window, no ordinal, no reset time reaches disk. That is a statement about the *disk*; the network half of the same question is measured and closed separately below. |
 | last_activity | **MEASURED** | `summary.json` → `last_active_at` (29 of 30) then `updated_at` (30 of 30) then `created_at`, folded with the file's mtime per §6 Q8. `summary.json` is rewritten every turn, which is also why it — not the session DIRECTORY, whose mtime moves only when an entry is added — is the freshness hint `Discover` returns. |
 | liveness | **ABSENT, and this one was probed rather than reasoned about** | See below. |
-| sub-agent count | **ABSENT** | grok ships a `spawn_subagent` tool (it is in the tool list every headless run prints), and `"subagent[A-Za-z_]*"` matched nothing on disk outside the system prompt's own description of it. No nest, no count, no parent link. Same ruling as Codex (§3.3): declaring the field and emitting zero would assert something the format cannot check. |
+| sub-agent count | **ABSENT** | grok ships a `spawn_subagent` tool (it is in the tool list every headless run prints), and `"subagent[A-Za-z_]*"` matched nothing on disk outside the system prompt's own description of it. No nest, no count, no parent link. Same ruling as Codex (§3.3): declaring the field and emitting zero would assert something the format cannot check. **The sweep spelled here read file contents and a `subagents/` DIRECTORY exists — see the 2026-08-29 drift census below.** The verdict is unchanged and its stated reason is not. |
 
 **The cost unit, pinned twice.** `costUsdTicks` is fixed-point USD at **1e10 ticks to the
 dollar**, and neither half of that was inferred from the name. First, grok's headless wire
@@ -1789,7 +1789,10 @@ versus what the doc says:
 - The `grok_code.token.usage` metric (delta temporality, by `model` and `type`) carried
   **the same four counts value-for-value** as the same turn's api_request event:
   20323/56/42/2560 on both sides of one capture. One number, two envelopes.
-- `turn_completed` carries outcome and duration and **no token counts**, as the table says.
+- `turn_completed` **on the stream** carries outcome and duration and **no token counts**, as
+  the table says. The qualifier was added 2026-08-29 and it matters: the record of the same
+  name that grok persists to `updates.jsonl` carries nine of them, which is the re-measure
+  block below. One event name, two envelopes, opposite contents.
 - One departure from the doc's letter: `OTEL_METRICS_INCLUDE_SESSION_ID` defaults on, but
   the token.usage data points carried no `session.id` — only `session.count`'s did. Nothing
   here reads metrics, so nothing turns on it; recorded because the doc says otherwise.
@@ -1965,6 +1968,142 @@ unmeasured. `active_sessions.lock` was never opened and `active_sessions.json.tm
 never observed mid-write, so the write is atomic by the vendor's own naming rather than by
 observation here. The adapter reads none of these bytes, and this measurement did not
 change that.
+
+#### The `usage` object re-measured 2026-08-29 — the token counts were always beside the cost, and this section's own sweep could not have seen them
+
+**Environment:** grok 1.0.5 (5115b46bc9) [stable], the same Windows 11 box, model
+`grok-4.6`. One billed headless turn (`grok --output-format streaming-json --single=…`)
+from a fresh empty workspace, with the session's `updates.jsonl` read back and
+cross-checked against the same turn's wire output. **This block corrects the section
+above rather than reporting vendor drift, and that is the point of it: the miss was
+telltale's instrument, not the vendor's format.**
+
+**What the cost row says, and what the record actually carries.** The row names
+`usage.costUsdTicks` and nothing else, because the sweep behind it was
+`"[a-z_]*cost[a-z_]*"` — lowercase, and anchored on the substring `cost`. A key spelled
+`inputTokens` matches neither half. The regex answered the question it was asked and was
+**structurally incapable** of the question a reader takes the row to answer. The
+`turn_completed` record's `usage` object carries **eleven keys** — nine scalar counts, a
+per-model breakdown of the same nine, and a turn count — read verbatim off the measured
+turn:
+
+```json
+"usage":{"inputTokens":22772,"outputTokens":27,"totalTokens":22799,
+         "cachedReadTokens":256,"cacheCreationTokens":0,"reasoningTokens":22,
+         "modelCalls":1,"apiDurationMs":3481,"costUsdTicks":77047400,
+         "modelUsage":{"grok-4.6-build":{ the same nine scalars, per model }},
+         "numTurns":1}
+```
+
+**It is not drift, and that was checked rather than asserted.** A session directory
+written 2026-08-09 at 09:35 local — the same day, the same build (grok 1.0.0) and the same
+model (`grok-4.5`) this section surveyed — carries the identical key set, `numTurns`
+included: `"inputTokens":22222, "outputTokens":37, "totalTokens":22259,
+"cachedReadTokens":128, "cacheCreationTokens":0, "reasoningTokens":29, "modelCalls":1,
+"apiDurationMs":2605, "costUsdTicks":444484000`. The counts were on disk before the
+adapter was written. The vendor changed nothing; the survey looked with an instrument that
+could match one key and reported one key.
+
+**The wire and the disk spell `input` differently, and the difference is exactly the cache
+read.** The same turn's `end` event on `--output-format streaming-json` reports
+`input_tokens: 22516`, `cache_read_input_tokens: 256`, `output_tokens: 27`,
+`reasoning_tokens: 22`, `total_tokens: 22799`. The disk reports `inputTokens: 22772`,
+which is 22516 + 256. Both envelopes agree on 22799 and reach it by different arithmetic:
+**the wire's `input_tokens` EXCLUDES the cache read; the disk's `inputTokens` INCLUDES
+it.** So `inputTokens + cachedReadTokens` on disk double-counts, and the two seams' "input"
+columns are not the same statistic. §7.16a's collector reads the OTLP wire, whose
+`input_tokens` follows the wire spelling — anything that ever holds both must convert
+rather than add.
+
+**`costUsdTicks` re-pins at 1e10 on the same record.** The wire printed
+`total_cost_usd: 0.00770474` beside `total_cost_usd_ticks: 77047400`, and the disk record
+carries `costUsdTicks: 77047400` for that turn. The 2026-08-09 unit measurement holds at
+1.0.5, value for value, on a fourth run.
+
+**The counts are per-turn and they do not accumulate — measured on a two-turn session.**
+Its two `turn_completed` records read `inputTokens 21548 / totalTokens 21588` then
+`inputTokens 21958 / totalTokens 21999`. The second is not the first plus anything; each
+record describes one API call, and `inputTokens` grows between turns because the context
+is resent, not because a counter advanced. `numTurns` is `1` on **every** record, both
+turns included, so it counts the turn the record describes and is not a session ordinal.
+That is the same shape as `costUsdTicks`, measured again in a second unit.
+
+**What this changes, and what it does not.**
+
+- **The cost row's verdict stands unchanged, and it now covers nine counts instead of
+  one.** A session total needs every record, `updates.jsonl` reached 818 KB in one observed
+  session, and a tail-window sum is a lower bound. A lower bound in a TOKENS column is the
+  same derived number in a different unit.
+- **The seam map is what moves.** §7.16a opens with grok's OTLP stream as the vendor's one
+  designed-for-reporting surface, and that sentence is still true about *designed
+  reporting*. It is no longer true that the stream is the only place telltale **could** read
+  grok's per-turn counts. The disk is a second source, and a passive one: no collector
+  running, no double opt-in, no port held.
+- **That second source creates a constraint, recorded here before anything is built on
+  it.** §7.16a's replay guard exists because one number arriving twice must be counted once,
+  and the same rule already chose the event stream over the redundant metric. A disk reader
+  would be a **third** envelope for the same turn, and the guard cannot see it: the
+  collector's guard lives in collector memory and keys on `(session.id, event.sequence)`,
+  while a disk reader would key on a file offset. **A disk reader and the OTLP listener must
+  never both count one turn into `~/.telltale/usage/grok.json`.** One envelope per turn is
+  the rule. Which envelope is the design question, and this block does not answer it.
+
+**Nothing is built on this, deliberately.** The DISPLAY of grok spend is HELD by owner
+ruling (§7.16's amendment, applied in §7.16a), so a reader has no consumer to feed, and a
+reader design would first have to settle the one-envelope question above, the read-budget
+question the cost row raises, and the `input` spelling. This block exists so that work
+starts from a measurement instead of from a row that could not see it.
+
+#### Session-file drift, censused 2026-08-29 at grok 1.0.5 — `signals.json` is 64 keys, and there is a `subagents/` directory
+
+Read-only census over the whole sessions tree: **108 session directories in 27
+workspaces**, against the 30 in 8 this section surveyed. Nothing below changes a verdict,
+and two entries say the *description* above is narrower than the store.
+
+**The inventory's invariant holds.** `summary.json` is present on 108 of 108, which is the
+one file every required field is sourced from. `chat_history.jsonl`, `events.jsonl`,
+`prompt_context.json` and `system_prompt.txt` are on 107, `updates.jsonl` on 105,
+`signals.json` on 95, `resources_state.json` on 73.
+
+**`signals.json` carries 64 keys, uniform across all 95 files that have one** — measured by
+parsing every one and comparing key sets, which returned a single set. The context row
+above names three of them (`contextWindowUsage`, `contextTokensUsed`,
+`contextWindowTokens`); all three are still present and still the adapter's source, so no
+code is wrong. The description is: a fixture synthesized to a three-key file models a file
+that does not exist. The other 61 are session statistics — `turnCount`, `toolCallCount`,
+`errorCount`, `compactionCount`, `totalTokensBeforeCompaction`, `sessionDurationSeconds`,
+`modelsUsed`, `primaryModelId`, plus latency and line-count blocks. **No cost key and no
+quota key is among the 64**, so the quota verdict survives one more sweep.
+
+**Fifteen entry names the inventory above does not list**, with the count of session
+directories carrying each: `title_refresh_idx` (19), `last_recap_main_turn` (11),
+`recap_requests` (11), `hunk_records.jsonl` (9), `subagents` (6), `web_fetch` (5),
+`compaction` (2), `compaction_checkpoints` (2), `compaction_requests` (2), `mcp` (2),
+`plan.json` (2), `plan_mode.json` (2), `outputs` (1), `plan.md` (1), `workflows` (1). The
+adapter reads none of them. They are recorded because a presence-census fixture built from
+this section's ten names would call every one of them unexpected.
+
+**One of the fifteen contradicts a verdict's REASON, and it is the cost regex's mistake a
+second time.** The field map rules sub-agent count ABSENT because `"subagent[A-Za-z_]*"`
+matched nothing on disk outside the system prompt's own tool description. That sweep read
+file *contents*, so it could not match a **directory name** — and `subagents/` is a
+directory. Six sessions carry one; the largest holds 18 child directories, each named with
+a UUID, each holding `meta.json` and `output.json`. `meta.json`'s key set, read as keys and
+not values, is `subagent_id`, `subagent_type`, `parent_session_id`, `child_session_id`,
+`child_cwd`, `status`, `turns`, `tool_calls`, `duration_ms`, `started_at`, `completed_at`,
+`effective_model_id`, `effective_context_source`, `description`, `prompt`. **This is not
+drift either**: the largest `subagents/` tree is dated 2026-08-09, the day of this survey.
+
+**The verdict is NOT changed here, and the reason is a measurement nobody has taken.**
+`CapNone` on sub-agent count refuses to assert "this session is running no sub-agents", and
+a directory that is present on 6 of 108 sessions does not yet establish that its absence
+means zero rather than not-yet-written — which is §4a.1's zero-versus-absent question, and
+answering it needs a live run that spawns one and watches the directory appear. Two further
+facts a future lane must start from: every child UUID observed is **also a top-level
+session directory** in the same workspace, so the HUD already lists sub-agents as
+independent rows and a count would need to decide whether they stay listed; and
+`meta.json`'s `description` and `prompt` are user content, so they fall under the same rule
+that keeps `prompt_context.json` closed. Recorded as the seam, not spent.
 
 <a id="s3-9b"></a>
 
@@ -4535,7 +4674,11 @@ a foreground server holding a port — belongs to neither gauge. The bind refuse
 non-loopback address at startup, mechanically: a collector reachable off-box would be an
 open door wearing a gauge's name.
 
-**One source, chosen over a redundant second.** The stream carries the same counts twice —
+**One source, chosen over a redundant second — and there turned out to be a third.** The
+rule below is scoped to the two envelopes on the wire, which is all that was known here in
+2026-08-10. A 2026-08-29 re-measure found the same per-turn counts on grok's DISK as well
+(§3.9a's `usage` re-measure), so the rule now has a wider job; the amendment at the end of
+this section states it. The stream carries the same counts twice —
 per-request on `api_request` events, aggregated on the `token.usage` metric — and §3.9a's
 capture measured them value-for-value equal. The collector reads the EVENTS and
 acknowledges `/v1/metrics` without reading it: one record is one claim, an event carries
@@ -4676,6 +4819,50 @@ require `Content-Type: application/x-protobuf` — the media type this section's
 pinned on grok's exporter, so a correctly configured grok is unaffected. A local *program*
 is still trusted completely and deliberately, because it can write the cache file directly;
 §7.24 states that boundary rather than pretending a token would move it.
+
+**Amended 2026-08-29 — this listener is no longer the only way to read what grok spent, and
+the one-envelope rule is what that costs.** §3.9a's `usage` re-measure at grok 1.0.5 found
+`inputTokens`, `outputTokens`, `totalTokens`, `cachedReadTokens`, `cacheCreationTokens`,
+`reasoningTokens`, `modelCalls` and `apiDurationMs` sitting beside `costUsdTicks` on every
+`turn_completed` record on disk — present since 1.0.0, and missed only because §3.9a's cost
+sweep was spelled `"[a-z_]*cost[a-z_]*"` and could not match them. **Nothing in this section
+is falsified by that.** The opening sentence claims the OTLP stream is the vendor's one
+*designed-for-reporting* surface and that is still true; a session-update log persisted
+verbatim is not a reporting surface. What is no longer true is the unstated corollary a
+reader would draw, that the push is the only way telltale **could** obtain grok's per-turn
+counts. It is not. The disk is a second source and a passive one: nothing to run, no double
+opt-in, no port to hold, and no batch lost while a collector is down — which is this
+section's first Known limitation, answered by a seam it did not know it had.
+
+Three constraints bind any future disk reader, and they are recorded now precisely because
+nothing is being built here.
+
+1. **One envelope per turn, and the replay guard cannot enforce it across seams.** The
+   guard above refuses a repeated `(session.id, event.sequence)` pair, in collector memory,
+   over OTLP records. A disk reader keys on a file and an offset and would be invisible to
+   it, so a machine running both would fold one turn into `~/.telltale/usage/grok.json`
+   twice and the file would be overstated by an amount nothing could name. That is the
+   failure §7.7 rates worst, arriving through the front door. **A disk reader and this
+   listener must never both count the same turn.** Which of the two is the source is a
+   design question, and this amendment does not answer it — it only forbids the answer
+   "both".
+2. **`input` does not mean the same thing on the two seams.** Measured on one turn: the wire
+   reports `input_tokens: 22516` beside `cache_read_input_tokens: 256`, and the disk reports
+   `inputTokens: 22772` for that same turn, which is the sum. The wire excludes the cache
+   read and the disk includes it. This cache's `input_tokens` field currently holds the wire
+   sense, because this collector is its only writer. A disk reader writing `inputTokens`
+   into the same field would silently change what the column means, and history already in
+   the file would not convert.
+3. **The read budget is unmeasured and it is the deciding question.** `updates.jsonl`
+   reached 818 KB in one observed session and is append-only, so whether a complete read is
+   bounded — not whether the fields exist — is what decides a disk reader. §3.9a's cost row
+   ruled a tail-window sum a lower bound, and a lower bound accumulated into a total is the
+   derived-number refusal in a second unit.
+
+**The display stays held** by the owner's ruling above, so none of this has a consumer
+today, and the reader is deliberately NOT built in the lane that measured it. Recorded as
+the seam, not spent — the same way §3.9a recorded this listener's own seam before it was
+spent.
 
 <a id="s7-16b"></a>
 
