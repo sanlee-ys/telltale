@@ -46,8 +46,22 @@ type Coverage struct {
 //
 // Four vendors pass the first question and fail the second or fail on units. A
 // count with no timestamp is not a smaller version of a history; it has no day
-// axis at all, which is why agy and grok are refused here despite writing real
-// per-generation and per-turn numbers.
+// axis at all, which is why agy is refused here despite writing real
+// per-generation numbers.
+//
+// # The source read has already been caught out once, exactly where it said it
+// # would be
+//
+// grok's verdict said its record carried a total and no date. A LIVE re-measure
+// on 2026-08-29 at grok 1.0.5 read the record off disk and found a full
+// input/output/cache split beside the envelope's own timestamp, present since
+// 1.0.0 (design.md §3.9a). Nothing was wrong with the reading of
+// internal/adapter/grok — that struct really does parse totalTokens alone. What
+// was wrong is that a struct is an allowlist, so what it omits is a decision and
+// not an absence, and the verdict reported the omission as the file's shape.
+// This is the caveat above landing rather than a surprise, and the lesson
+// generalises to every uncovered row here: BEFORE a vendor is built, re-read its
+// records, not its struct.
 //
 // # Order
 //
@@ -111,10 +125,15 @@ var survey = []Coverage{
 	{
 		Vendor:  model.VendorGrok,
 		Covered: false,
-		Why: "a turn_completed record in updates.jsonl carries usage.totalTokens " +
-			"per turn, and a total only — no input/output split. The record the " +
-			"adapter parses carries no timestamp either, so it has agy's problem " +
-			"as well as its own.",
+		Why: "the split and the date are both there, and this verdict said the " +
+			"opposite until 2026-08-29. A turn_completed record's usage carries " +
+			"inputTokens, outputTokens, cachedReadTokens and cacheCreationTokens " +
+			"beside the envelope's own timestamp — measured at grok 1.0.5, and on " +
+			"disk since 1.0.0 (design.md §3.9a). internal/adapter/grok parses " +
+			"totalTokens alone, which is what the old reading described. A unit " +
+			"trap is owed before any block: inputTokens INCLUDES the cache read " +
+			"here, where claude's input_tokens excludes it, so the four columns " +
+			"are not the same four.",
 	},
 	{
 		Vendor:  model.VendorPi,

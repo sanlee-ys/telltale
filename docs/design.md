@@ -7056,6 +7056,18 @@ Two questions, in order. A vendor joins only when both answer yes, and **the sec
 one that surprised the survey**: a count with no timestamp is not a smaller history, it has
 no day axis at all.
 
+**Amended 2026-08-29, the same day: the source read was caught out on grok, exactly where
+the caveat above says it can be.** grok's row said the record carried a total and no date.
+A live re-measure at grok 1.0.5 read a real `turn_completed` record off disk and found a
+full input/output/cache split beside the envelope's own `timestamp` ([§3.9a](#s3-9a)'s
+2026-08-29 block). The reading of `internal/adapter/grok` was correct — that struct does
+parse `totalTokens` alone. The error is that **a record struct is an allowlist, so what it
+omits is a decision and not an absence**, and the verdict reported the omission as the
+file's shape. The row below is corrected and grok stays uncovered, because nobody has built
+or measured the coverage; it is no longer refused on fields. The general rule this buys is
+worth more than the row: **before a vendor is built here, re-read its records, not its
+struct.**
+
 | vendor | counts on disk? | dated? | verdict |
 |---|---|---|---|
 | **claude** | **yes** — `message.usage` carries four raw counts (`input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, `output_tokens`) on every assistant record | **yes** — RFC3339 `timestamp`, and `cwd` on the same record | **COVERED.** Four billed categories, dated, per request, per project. The only vendor with the cache split that makes four honest columns. Pinned at Claude Code 2.1.233 (§3.1) |
@@ -7063,7 +7075,7 @@ no day axis at all.
 | gemini | partial — `tokens.input` is `promptTokenCount`, which [§3.7](#s3-7)'s adapter labels a context-occupancy proxy, and the cached subset is not separable from what it parses | yes | refused on UNITS. Summing an occupancy proxy per day counts one conversation's prefix once per turn, under a header that would read like uncached input |
 | agy | yes, and the best-guarded in the fleet — `gen_metadata` carries uncached input and output per generation behind the `thinking + answer == output` identity §3.8 requires | **no** — the reverse-engineered field map carries no per-generation timestamp | refused for want of a DAY. Real numbers, no axis to put them on |
 | cursor | **no** — `tokenCount.inputTokens`/`outputTokens` were 0 in 310 of 310 message rows; declared `CapNone` (§7.16) | n/a | nothing to read. This vendor's counts arrive by hook, not on disk |
-| grok | partial — `turn_completed` carries `usage.totalTokens` per turn, a total only | **no** — the parsed record carries no timestamp | agy's problem plus its own |
+| grok | **yes, and this row said "a total only" until 2026-08-29** — `turn_completed`'s `usage` carries `inputTokens`, `outputTokens`, `cachedReadTokens` and `cacheCreationTokens` beside `totalTokens`, measured at grok 1.0.5 and on disk since 1.0.0 ([§3.9a](#s3-9a)) | **yes** — the envelope's own `timestamp`, which `internal/adapter/grok`'s struct does not parse | **the old verdict described the adapter's STRUCT, not the record**, and both halves of it were wrong about the file. Not refused on fields any more; simply not built. One unit trap is owed first: `inputTokens` INCLUDES the cache read here and claude's `input_tokens` excludes it, so the four columns are not the same four |
 | pi | yes — `message.usage.{input,output}` per assistant message, with a `cwd` | yes — record `timestamp` | datable, second after codex. No cache split, and it carries `usage.cost.total` per message — money, which this mode renders nowhere and would have to rule on |
 
 `self-reported` is absent from the table and that is not an omission: §7.23's drop-file rows
