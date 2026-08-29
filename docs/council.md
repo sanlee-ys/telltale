@@ -510,6 +510,19 @@ named with their reasons. Only the exact two-word form is the verb; anything lon
 not a vendor's, so they work in a `--read` room too — and both answer with usage when
 typed bare.
 
+**`/arena record` says which seat you actually take.** One line per seat, read from the
+`arena/` and `adopt/` branches this repository still holds — nothing is stored, and no
+file is written. A seat that has never raced says `never raced`; a seat you decided
+against says `0 of 4 adopted  0%`, because a measured zero and an absence are different
+facts. The rate never appears without the two counts it divides, and races **nobody was
+adopted from** are reported beside it as undecided rather than inside it — a race you
+walked away from is not a verdict on anyone. The word is `adopted` and never `won`, and
+that is deliberate: a seat you cut with `x` still counts as one you did not adopt, because
+the branches record who entered and whom you took and nothing else. The page states its own
+bound — a race whose branches were dropped is no longer in the record — and `y` copies the
+whole table with that sentence attached. `t` gives the grid back. There is no rank and no
+phase word in it, because those live on the turn and the turn is gone.
+
 The record behind all of this — the rulings, which live race verified what, and what is
 still owed — is [design.md §9.37](design.md). Read it before trusting the edges, because
 they are not all at the same standard. **Live-verified** as of race t9 (2026-08-09): the
@@ -524,7 +537,10 @@ landed there, and the room's own branch never moved. **Live-verified** as of the
 5-of-5 race (2026-08-15/16): all five vendors racing one brief at once — three clean
 finishes with ranked receipts and two seats given up mid-stall, both keeping their
 commits — and the `arena · so far` stat watched growing from a non-empty read on two
-columns before the settled block replaced it. **Live in part**: the cursor seat's
+columns before the settled block replaced it. **Offline only**: the arena record
+([design.md §9.47](design.md)) — its tally, its three renders and its frame are pinned by
+tests, and no live open against a real pile of leftover branches is recorded yet.
+**Live in part**: the cursor seat's
 throwaway racer has been spawned, streamed and killed live — twice now — but never
 watched finish on its own; that half still stands on its offline tests, and
 [design.md §9.37](design.md) says so beside its payment blocks.

@@ -65,6 +65,15 @@ func Render(st State, sty Styles, g Glyphs) string {
 
 	if st.Help != HelpClosed {
 		b.WriteString(helpBody(st, lay, sty, g))
+	} else if st.Record != nil {
+		// The arena record (§9.47). It sits between the help panel and the turn
+		// page for the reason each of those sits where it does: `?` is a panel the
+		// user opened over whatever was underneath and must always come back from,
+		// while the record and the page are both bodies the room was asked for.
+		// The record outranks the page because it is a fact about the ROOM across
+		// every race it kept, and the page is a fact about one turn — the same
+		// subject-size ordering the chrome above already follows.
+		b.WriteString(recordBody(st, lay, sty, g))
 	} else if st.Page.Open {
 		// The by-turn page outranks the tier branch rather than living inside
 		// one, because it is a PROJECTION of the transcript and not a width
@@ -108,7 +117,7 @@ func Render(st State, sty Styles, g Glyphs) string {
 func layoutFor(st State, g Glyphs) Layout {
 	vis := st.VisibleColumns()
 	cols, primary := len(vis), framePrimary(st, vis)
-	if st.Page.Open {
+	if st.Page.Open || st.Record != nil {
 		// A turn page is ONE reading area at the full frame, so it plans as one
 		// column — which is the tabs tier's own arithmetic, already written and
 		// already swept by the frame matrix. Reusing it is what keeps the height
@@ -119,6 +128,10 @@ func layoutFor(st State, g Glyphs) Layout {
 		//
 		// The frame owners go with it. FrameOwners apportions width between
 		// seats, and there are no seats side by side here for it to apportion.
+		//
+		// The arena record is the same geometry for the same reason (§9.47): one
+		// reading area at the full frame, one line per seat. A third layout path
+		// would be a third place for the frame to tear.
 		cols, primary = 1, nil
 	}
 	// The band is asked for only when the body is the GRID. A turn page already
@@ -128,7 +141,7 @@ func layoutFor(st State, g Glyphs) Layout {
 	// rather than inside bandLines, so the content rule and the "which body is
 	// this" rule stay in the two places that own them.
 	band := 0
-	if st.Help == HelpClosed && !st.Page.Open {
+	if st.Help == HelpClosed && !st.Page.Open && st.Record == nil {
 		band = bandRows(st, g)
 	}
 	return resolveLayoutIn(layoutInput{
@@ -3121,6 +3134,14 @@ func composerLabel(st State, sty Styles, g Glyphs) (styled, plain string) {
 		if strings.TrimSpace(st.Draft) == "" {
 			style = sty.Muted
 		}
+	case st.Record != nil:
+		// RECORD, at the same rank the page's own word takes: §7.8's always-on
+		// statement of what is on screen has to tell the room's three full-frame
+		// bodies apart, and the record is the one whose subject is neither a turn
+		// nor the keymap. It carries no coordinate because it has none — the page
+		// numbers a turn, and this counts every race the refs still hold, which
+		// the body's own window line states in words (§9.47).
+		word = "RECORD"
 	case st.Page.Open:
 		word = pageLabel(st)
 	}
@@ -3440,7 +3461,7 @@ func modeHints(st State, g Glyphs) []hint {
 	// it to the width it already has. Dropped in both modes for that reason —
 	// including compose, where the page stays open while a brief is typed
 	// (§9.22).
-	several := len(st.VisibleColumns()) > 1 && !st.Page.Open
+	several := len(st.VisibleColumns()) > 1 && !st.Page.Open && st.Record == nil
 	if st.Mode == ModeComposing {
 		// The routing is stated before the keybindings because it is the one
 		// thing on this line that changes what enter DOES. An @typo has to read
@@ -3515,6 +3536,27 @@ func modeHints(st State, g Glyphs) []hint {
 			hs = append(hs, hint{key: "^j", label: "newline"}, hint{key: "^r", label: "rebut"})
 		}
 		return hs
+	}
+
+	if st.Record != nil {
+		// The arena record's line (§9.47), and it is short because the surface is.
+		//
+		// `t grid` is the one cell here that may never shed: a body you cannot
+		// leave is the help panel's missing `?` with a whole surface behind it,
+		// and this body is reached by a typed command rather than by the key that
+		// closes it. It keeps the word `grid` it has on the turn page, because it
+		// is the same act — give me the columns back — and one word for one act is
+		// what stops a reader learning two.
+		//
+		// NO SCROLL CELL. The record is one line per seat and its only overflow is
+		// at the height floor, where recordCell draws the marker instead; a footer
+		// naming arrows that move nothing is the false promise §7.8 forbids, which
+		// is the same reason `f` and `tab` are absent (see several, above).
+		hs := []hint{{key: "t", label: "grid"}, {key: "y", label: "yank", shed: true}}
+		if st.InFlight() {
+			return append(hs, hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
+		}
+		return append(hs, hint{key: "?", label: "help"}, hint{key: "q", label: "quit"})
 	}
 
 	if st.Page.Open {

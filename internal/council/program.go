@@ -1558,6 +1558,16 @@ func (m *Model) toggleArenaDiff() {
 // shape and askClearSeat's reason: a control that opens onto nothing teaches
 // that the key is unreliable, not that the room is empty.
 func (m *Model) toggleTurnView() {
+	if m.closeRecord() {
+		// `t` is the room's one way back to the columns from a full-frame body,
+		// and the arena record is one (§9.47). Giving the record a key of its own
+		// would be a second thing to remember for the same act, and giving it none
+		// would be a body reached by a typed command with no keyed way out. It
+		// closes to the GRID rather than to the turn page, because that is what
+		// the cell on the mode line says the key does.
+		m.st.Notice = ""
+		return
+	}
 	if m.st.Page.Open {
 		m.st.Page.Open = false
 		m.st.Notice = ""
@@ -1842,7 +1852,7 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "f":
 		// One column at full width. Three columns are for comparing at a
 		// glance; one is for actually reading a long reply.
-		if m.pageOpen() {
+		if m.pageOpen() || m.st.Record != nil {
 			// A page is already the whole frame and has no column to expand.
 			// Swallowed rather than allowed to flip Expanded invisibly: the mode
 			// line does not offer this key here, and a key the room says is
@@ -1938,6 +1948,13 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// keystroke the user believes approved a tool call quietly copying text
 		// instead. That precedence is unchanged by the by-turn page below: key()
 		// still routes a pending gate to gateKey first, in either projection.
+		if m.st.Record != nil {
+			// The record is a full-frame body, so `y` takes what is on it — the
+			// page's own rule (§9.47). A `y` that copied the focused column's
+			// reply from behind a body the reader is looking at would break the
+			// one claim that earns this key a footer cell.
+			return m, m.yank(m.st.YankRecord())
+		}
 		if m.pageOpen() {
 			// On a page `y` and `Y` produce the same document, because the page
 			// IS that document (§9.15's `Y`, rendered). A per-seat `y` would need
@@ -1958,6 +1975,12 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// modifier on the first because they produce different documents, and
 		// shift is what this room already uses for the wider version of a
 		// motion (`G` against `g`).
+		if m.st.Record != nil {
+			// `Y` follows `y` here for the page's own reason: the record has no
+			// per-seat focus for a narrower key to address, so both take the one
+			// document the body is showing.
+			return m, m.yank(m.st.YankRecord())
+		}
 		if m.pageOpen() {
 			return m, m.yank(m.st.YankPage())
 		}

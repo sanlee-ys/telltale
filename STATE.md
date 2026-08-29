@@ -364,6 +364,17 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   persistent seat's next brief resumes the interrupted conversation, has no
   live payment yet. design.md §9.37's dated amendment carries the debt.
 
+- **The arena record has never been opened against a real pile of leftovers
+  (2026-08-29).** `/arena record` (design.md §9.47) tallies every seat's adopted-of-decided
+  standing from the repository's own `arena/` and `adopt/` branches. It stores nothing, so
+  there is no state to be wrong — but every count it prints is a claim about what a real ref
+  pile produces, and the only refs it has ever read are the ones its tests build. This box
+  holds 27 `arena/t<N>` branches and the `adopt/*` refs beside them, which is exactly the
+  input the feature was written for. One `/arena record` in a live room pays this: read the
+  counts, check them against `git branch --list "arena/*" "adopt/*"`, and confirm the page
+  reads at the room's own geometry. No vendor is spawned and nothing is written, so the debt
+  costs a keystroke.
+
 - **OBSERVED 2026-08-15/16, the drive that paid the demo path found three.
   The 2026-08-16 lane batch measured all three, and what is left is smaller.**
   1. **CLOSED 2026-08-17. The composer one-row report did not reproduce.** The
