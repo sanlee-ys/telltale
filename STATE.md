@@ -392,9 +392,17 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   is the next slice and it is unowned, and it is blocked on a ruling rather than on work —
   a codex rollout carries `info.last_token_usage` (this turn) beside a cumulative
   `info.total_token_usage`, and which of the two a day may sum is a decision nobody has made.
-  agy and grok are refused for want of a per-turn TIMESTAMP, which is a survey finding and not
-  a todo: if either vendor ever dates its counts, that is a new measurement and the verdict is
-  re-taken, not assumed.
+  agy is refused for want of a per-turn TIMESTAMP, which is a survey finding and not
+  a todo: if that vendor ever dates its counts, that is a new measurement and the verdict is
+  re-taken, not assumed. **grok was refused on the same ground and that was wrong, corrected
+  the same day** (#316): a live re-measure at grok 1.0.5 read a `turn_completed` record off
+  disk carrying a full input/output/cache split beside the envelope's own timestamp. The
+  survey had read `internal/adapter/grok`'s struct, which parses `totalTokens` alone, and a
+  record struct is an allowlist — what it omits is a decision, not an absence. grok is still
+  uncovered and is now unowned rather than refused, behind one named unit trap: its
+  `inputTokens` INCLUDES the cache read where claude's `input_tokens` excludes it. The
+  general rule that bought is in §7.26 — before a vendor is built there, re-read its
+  records, not its struct — and it applies to every remaining row.
 
 - **The arena record has never been opened against a real pile of leftovers
   (2026-08-29).** `/arena record` (design.md §9.47) tallies every seat's adopted-of-decided
