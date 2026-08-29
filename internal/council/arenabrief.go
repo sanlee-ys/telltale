@@ -204,3 +204,25 @@ func arenaBriefArgs(tree string) []string {
 	}
 	return []string{arenaBriefPathspec}
 }
+
+// removeArenaBrief takes council's own file back, and ONLY council's own file:
+// it is a no-op unless the marker is still there.
+//
+// It has exactly one caller, `/arena drop`, and the reason is git's rather than
+// tidiness. `git worktree remove` counts an untracked file as a dirty worktree
+// and refuses, so a brief file left standing would make every ordinary drop
+// fail and demand the `!` spelling — the room's own write turning a plain verb
+// into a forced one. Nothing else deletes it: the worktree is KEPT until the
+// user drops it, and until then the file is the visible record of what that
+// seat was told.
+//
+// The failure is deliberately swallowed. The caller hands the whole tree to
+// `git worktree remove` next, which reports its own refusal in its own words; a
+// second sentence about one file inside a directory that is going away would
+// name a problem the operator cannot act on separately.
+func removeArenaBrief(tree string) {
+	if arenaBriefArgs(tree) == nil {
+		return
+	}
+	_ = os.Remove(filepath.Join(tree, arenaBriefFileName))
+}

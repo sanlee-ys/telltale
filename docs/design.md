@@ -13047,6 +13047,20 @@ narrating a fact nobody measured (§4a.1). The file is offered exactly the way t
   of the commit, and a tree holding nothing but it still reports clean — which is what keeps the
   empty-commit ruling working. **`/adopt` therefore merges a branch that never held the file**,
   and the operator's repo cannot acquire a stray `AGENTS.md` from a race.
+- **The lifecycle verbs read the racer's tree too, and all three reads were wrong until they
+  carried the same pathspec.** This was found by building the feature, not by reasoning about
+  it, and each one is a different bug: `/adopt`'s arming read (`lifecycle.go`) would have offered
+  to adopt a seat that changed nothing, because council's file made a clean tree look dirty;
+  `/adopt`'s OWN commit — the one it makes for a racer whose work never reached `commitArena`,
+  which is the give-up path race t9 exercised twice — would have staged the file with `add -A`
+  and merged it into the operator's repo; and `/arena drop`'s refusal would have named council's
+  write as the operator's uncommitted work and demanded the `!` spelling on every clean attempt.
+- **`/arena drop` takes council's file back before git sees the tree.** `git worktree remove`
+  counts an untracked file as a dirty worktree and refuses, so the pathspec alone was not
+  enough: an ordinary drop failed at git. `removeArenaBrief` deletes the file only while the
+  marker still stands, so a racer's own `AGENTS.md` keeps the refusal it has earned. That is the
+  ONLY deletion — the worktree is kept until the user drops it, and until then the file is the
+  visible record of what that seat was told.
 - **The exclusion is conditional on the marker, re-read per call.** `arenaBriefArgs` opens the
   file and checks it still starts with council's marker. A racer that REPLACED it authored a
   file, and it appears in the stat like any other; a file council never wrote is never excluded.
@@ -13073,9 +13087,10 @@ and it is left for its own change.
 Verification note, on this section's own terms: the mechanics — the identical file in every
 tree, the file never reaching the stat, the patch or the commit, the zero-diff attempt staying a
 measured zero with council's file in its tree, the racer-authored file NOT being hidden, the
-repository's own file being left alone, the skip on a failed write, and the ended-context stop —
-are pinned by offline tests against real temp repositories (`arenabrief_test.go`), and no test
-spawns a vendor. **The live half is owed**: the per-vendor probes above were run headlessly in a
+repository's own file being left alone, the skip on a failed write, the ended-context stop, and
+all three lifecycle reads (`/adopt` still refusing a brief-only racer, `/adopt` not merging the
+file, `/arena drop` needing no force) — are pinned by offline tests against real temp
+repositories (`arenabrief_test.go`), and no test spawns a vendor. **The live half is owed**: the per-vendor probes above were run headlessly in a
 scratch directory, not inside a racer worktree during a real `/arena`, so no live race has yet
 watched a seat act on this file.
 

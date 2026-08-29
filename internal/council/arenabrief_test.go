@@ -274,6 +274,63 @@ func TestBriefLeavesAPreExistingPathAlone(t *testing.T) {
 	}
 }
 
+// TestAdoptOfABriefOnlyRacerStillRefuses: /adopt reads the racer's tree to
+// decide whether there is anything to adopt at all, and council's own file must
+// not answer that question. Without the exclusion the room would offer to adopt
+// a seat that changed nothing — the false nonzero, on the verb where it costs a
+// merge commit.
+func TestAdoptOfABriefOnlyRacerStillRefuses(t *testing.T) {
+	m, _ := racedModel(t, model.VendorCodex)
+	writeArenaBriefs(context.Background(), m.lastRace.raceN, "do nothing",
+		m.lastRace.trees, map[model.VendorID]string{})
+
+	adopt(t, m, "codex", "")
+	if !strings.Contains(m.st.Notice, "changed nothing in the race") {
+		t.Fatalf("adopt armed over a tree holding only council's brief file: %q", m.st.Notice)
+	}
+}
+
+// TestAdoptNeverMergesTheBriefFile is the same property one verb further on:
+// a racer whose work never reached commitArena is committed by /adopt itself,
+// and that commit must carry the racer's work alone. This is the give-up
+// path's shape — race t9 cut two seats exactly this way.
+func TestAdoptNeverMergesTheBriefFile(t *testing.T) {
+	m, ws := racedModel(t, model.VendorCodex)
+	writeArenaBriefs(context.Background(), m.lastRace.raceN, "add a file",
+		m.lastRace.trees, map[model.VendorID]string{})
+	scribble(t, m, model.VendorCodex, "answer.go", "package answer\n")
+
+	adopt(t, m, "codex", "y")
+	if !strings.Contains(m.st.Notice, "adopted codex") {
+		t.Fatalf("adopt did not report success: %q", m.st.Notice)
+	}
+	if _, err := os.Stat(filepath.Join(ws, "answer.go")); err != nil {
+		t.Error("the attempt's file did not arrive in the room repo")
+	}
+	if _, err := os.Stat(filepath.Join(ws, arenaBriefFileName)); err == nil {
+		t.Error("the adoption planted council's brief file in the operator's repo")
+	}
+}
+
+// TestDropOfABriefOnlyRacerNeedsNoForce: `/arena drop` refuses over
+// uncommitted work and names the `!` spelling that discards it. Council's own
+// file is not the racer's work, so a clean attempt must drop on the plain
+// spelling — otherwise this feature makes every drop a forced one.
+func TestDropOfABriefOnlyRacerNeedsNoForce(t *testing.T) {
+	m, _ := racedModel(t, model.VendorCodex)
+	tree := m.lastRace.trees[model.VendorCodex]
+	writeArenaBriefs(context.Background(), m.lastRace.raceN, "do nothing",
+		m.lastRace.trees, map[model.VendorID]string{})
+
+	drop(t, m, "codex")
+	if strings.Contains(m.st.Notice, "uncommitted") {
+		t.Fatalf("drop refused over council's own brief file: %q", m.st.Notice)
+	}
+	if _, err := os.Stat(tree); err == nil {
+		t.Error("the worktree survived a drop that reported no refusal")
+	}
+}
+
 // TestBriefStopsOnAnEndedSetup: the setup's context is the room's patience, and
 // a brief pass that outlived it writes into trees nobody will race.
 func TestBriefStopsOnAnEndedSetup(t *testing.T) {

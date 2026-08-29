@@ -490,7 +490,8 @@ Copy only, never execute: the repo cannot run code on your machine by containing
 is a second copy of the same words at the path the vendors already look at, so a seat that
 re-reads its instructions mid-turn finds them. The file is identical in every tree (marker,
 the conduct line, then your brief), it never reaches the attempt's stat, its patch or its
-commit, and `/adopt` therefore merges a branch that never held it. A repo that ships its own
+commit, and `/adopt` therefore merges a branch that never held it. `/arena drop` takes the file
+back before it removes the tree, so a drop needs no `!` over it. A repo that ships its own
 root `AGENTS.md` keeps it: council writes nothing there, on any seat. **The room never says a
 seat was briefed this way**, because only some vendors were measured reading the file and the
 room cannot tell per race which did — the file is offered, exactly like the worktree is.

@@ -133,7 +133,10 @@ func (m *Model) adoptCommand(arg string) bool {
 		return true
 	}
 
-	dirty, err := worktreePorcelain(tree)
+	// Council's brief file is not work, so it must not make a zero-work seat
+	// look adoptable — the refusal below is a measured zero and would become a
+	// false nonzero the moment an untracked AGENTS.md counted (arenabrief.go).
+	dirty, err := worktreePorcelain(tree, arenaBriefArgs(tree)...)
 	if err != nil {
 		m.st.Notice = "adopt: " + err.Error()
 		return true
@@ -349,12 +352,19 @@ func (m *Model) adoptSeat(v model.VendorID, onto string) string {
 		}
 	}
 
-	dirty, err := worktreePorcelain(tree)
+	// Council's own AGENTS.md is excluded from BOTH halves, and the dirty read
+	// is the half that matters more. This commit is the one /adopt makes for a
+	// racer whose work never reached commitArena — the give-up path, mostly —
+	// and without the exclusion a seat whose tree holds nothing but council's
+	// brief file would read as work owed, land a commit carrying only that
+	// file, and merge it into the operator's repo (arenabrief.go).
+	exclude := arenaBriefArgs(tree)
+	dirty, err := worktreePorcelain(tree, exclude...)
 	if err != nil {
 		return "adopt: " + err.Error()
 	}
 	if len(dirty) > 0 {
-		if _, err := gitOut(tree, "add", "-A"); err != nil {
+		if _, err := gitOut(tree, append([]string{"add", "-A"}, exclude...)...); err != nil {
 			return "adopt: " + err.Error()
 		}
 		if _, err := gitOut(tree, "commit", "-m", string(v)+"'s arena attempt, race t"+itoa(race.raceN)); err != nil {
@@ -545,7 +555,10 @@ func (m *Model) dropRacer(v model.VendorID, force bool) string {
 	if !force {
 		// Two guards, two sentences, each naming what would be lost AND how to
 		// proceed — a refusal without its remedy is §9.17's defect.
-		dirty, err := worktreePorcelain(tree)
+		// Council's brief file excluded: a drop that demanded the `!` spelling
+		// on every clean attempt would be refusing over the room's own write
+		// (arenabrief.go).
+		dirty, err := worktreePorcelain(tree, arenaBriefArgs(tree)...)
 		if err != nil {
 			return string(v) + ": " + err.Error()
 		}
@@ -562,6 +575,14 @@ func (m *Model) dropRacer(v model.VendorID, force bool) string {
 				" the room has not merged — /adopt " + string(v) + " takes them, " + spell + " discards them"
 		}
 	}
+
+	// Council takes its own brief file back before git is asked to remove the
+	// tree. `git worktree remove` counts an untracked file as dirty and refuses,
+	// so leaving it there would make every ordinary drop fail and demand the `!`
+	// spelling — the room's own write turning a plain verb into a forced one.
+	// removeArenaBrief deletes only a file still carrying council's marker, so a
+	// racer's own AGENTS.md keeps the refusal it has earned (arenabrief.go).
+	removeArenaBrief(tree)
 
 	args := []string{"worktree", "remove"}
 	if force {
@@ -583,8 +604,13 @@ func (m *Model) dropRacer(v model.VendorID, force bool) string {
 
 // worktreePorcelain is one `git status --porcelain`, split into its lines: the
 // count is what refusals name, and empty means a measured clean.
-func worktreePorcelain(dir string) ([]string, error) {
-	out, err := gitOut(dir, "status", "--porcelain")
+//
+// pathspec is what a caller reading a RACER's tree passes: council's own brief
+// file is not the racer's uncommitted work, and counting it would turn every
+// clean attempt into a dirty one (arenabrief.go). Callers reading the ROOM's
+// tree pass nothing — an AGENTS.md there is the repository's own.
+func worktreePorcelain(dir string, pathspec ...string) ([]string, error) {
+	out, err := gitOut(dir, append([]string{"status", "--porcelain"}, pathspec...)...)
 	if err != nil {
 		return nil, err
 	}
