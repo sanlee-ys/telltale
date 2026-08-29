@@ -94,11 +94,15 @@ const (
 	//     and did: the file landed on disk, its reported permission mode was
 	//     byte-identical to a run without the flags, and its tool list still
 	//     held write_to_file. A refuted claim, not an unverified one.
-	//   - No read-only flag is passed AT ALL, because none of them work. Codex
-	//     on Windows: both sandboxed modes fail every process spawn, so the
-	//     only mode that runs is `danger-full-access`, and a seat that can read
-	//     is worth more than a flag that stops it reading (ADR-008, twelfth
-	//     amendment).
+	//   - No read-only flag is passed AT ALL, because none of them can be
+	//     trusted. Grok: its plan mode was refuted the Antigravity way, and its
+	//     --sandbox flag silently accepts a profile name that cannot exist, so
+	//     a request is indistinguishable from a typo (§9.39). Codex on Windows
+	//     arrived by this route too until codex-cli 0.149.1 — both sandboxed
+	//     modes failed every process spawn, so the only mode that ran was
+	//     `danger-full-access`, and a seat that can read is worth more than a
+	//     flag that stops it reading (ADR-008, twelfth amendment). The
+	//     2026-08-29 re-measurement moved that seat to SandboxEnforced.
 	//
 	// This level exists because "unverified" turned out to be too generous for
 	// either case: rendering `ro:requested` alongside vendors that at least

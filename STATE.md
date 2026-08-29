@@ -388,6 +388,16 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   clean fixture the tests build. One `/arena check go test ./...` followed by one `/arena`
   against a brief that changes files pays both.
 
+- **The `/adopt` divergence preview has never been armed in a live room
+  (2026-08-29).** The card now leads with measured git state — the racer's
+  ahead/behind counts against the room's own HEAD, and the paths both sides
+  wrote — before it names the merge (design.md §9.37's dated amendment). Every
+  sentence it can print is pinned by offline tests against real temp
+  repositories, and none of them has been read on a real pile of leftovers. The
+  same keystroke pays it as the arena record above: race, then `/adopt <seat>`,
+  read the card and press `n`. Nothing is merged by arming the gate, so the debt
+  costs one race.
+
 - **OBSERVED 2026-08-15/16, the drive that paid the demo path found three.
   The 2026-08-16 lane batch measured all three, and what is left is smaller.**
   1. **CLOSED 2026-08-17. The composer one-row report did not reproduce.** The
@@ -474,7 +484,10 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   `turn.completed` marker and renders `done Ns exiting`, the process lifetime
   untouched (§9.33's dated payment block). What that lane left open, stated
   there: the linger's CAUSE is unmeasured and the tool-using turn's tail is
-  unmeasured (probing it needs `danger-full-access`, a redline). The agy tail
+  unmeasured (probing it needed `danger-full-access`, a redline, when every
+  sandboxed spawn failed on Windows; since the 2026-08-29 re-measurement at
+  codex-cli 0.149.1, `-s read-only` runs commands there — §9.2's dated
+  amendment — so the probe is possible now and still unrun). The agy tail
   is now MEASURED and ruled (§9.43's dated amendment): 0.049–0.314s behind a
   reliable `result` marker, too small to justify `EndsTurn` on a whole-second
   clock, and a test pins the refusal — what stays unknown there is the FAILED

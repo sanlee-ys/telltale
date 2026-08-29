@@ -21,7 +21,9 @@ import (
 // It earned its keep AGAIN in this file on the same date, one level subtler:
 // `-s workspace-write` was documented here as un-breaking codex on Windows. No
 // flag name was misread — the sentence was simply an inference nobody ran. It
-// is false. See windowsSandboxMode for the re-probe that caught it.
+// was false at codex-cli 0.146.0. See windowsWriteSandboxMode for the re-probe
+// that caught it, and for the 2026-08-29 re-measurement that later moved the
+// READ posture back to a real sandbox on Windows.
 //
 // The two traps this adapter exists to route around:
 //
@@ -43,18 +45,34 @@ var _ Vendor = Codex{}
 
 func (Codex) ID() model.VendorID { return model.VendorCodex }
 
-// sandboxMode is council's read-only posture for this vendor OFF Windows,
-// where the OS sandbox is real and enforces the read/write distinction.
+// sandboxMode is council's read-only posture for this vendor on EVERY OS.
 //
-// READ THE VERIFICATION BEFORE PUTTING A BADGE ON THIS. The Windows story is a
-// different one entirely and is carried by windowsSandboxMode below.
+// Until 2026-08-29 this constant was OFF-Windows only, because at codex-cli
+// 0.146.0 the mode failed every process spawn on Windows and both postures
+// there collapsed to danger-full-access (see windowsWriteSandboxMode for that
+// record). Re-measured 2026-08-29 against codex-cli 0.149.1 on Windows 11, one
+// turn per probe in a throwaway directory, and the mode now ENFORCES:
 //
-// One gap on the non-Windows claim, stated rather than papered over: the
-// non-shell write path is UNVERIFIED. Asked to create a file with its built-in
-// patch/edit tool instead of the shell, codex replied "REFUSED" without
-// attempting a tool call. That is a model choice, not evidence of sandbox
-// enforcement, and it means nothing is known about whether the sandbox would
-// have stopped it.
+//   - a read turn completed: a directory listing and a file read both ran and
+//     returned real contents, exit 0.
+//   - a write turn was DENIED: `cmd /c echo probe> wrote-ro2.txt` came back
+//     "Access is denied.", exit 1, and no file was on disk afterwards.
+//
+// One Windows caveat rides the read half, and it is liveness rather than
+// safety. The sandboxed child could not spawn this machine's PowerShell —
+// every pwsh spawn failed with the same `CreateProcessAsUserW failed: 5` line
+// that 0.146.0 failed everything with — and the turns completed because codex
+// retried through `C:\WINDOWS\system32\cmd.exe`, which spawns INSIDE the
+// sandbox and obeys it. The retry is the model's own move, not a runtime
+// guarantee, so a Windows read turn can still fail to inspect when the model
+// stops at the spawn error instead. The cause of the pwsh-only failure is
+// unmeasured; only the behavior is recorded.
+//
+// One gap on the claim, stated rather than papered over: the non-shell write
+// path is UNVERIFIED. Asked to create a file with its built-in patch/edit tool
+// instead of the shell, codex replied "REFUSED" without attempting a tool
+// call. That is a model choice, not evidence of sandbox enforcement, and it
+// means nothing is known about whether the sandbox would have stopped it.
 const sandboxMode = "read-only"
 
 // writeSandboxMode is what write posture asks for OFF Windows.
@@ -63,56 +81,48 @@ const sandboxMode = "read-only"
 // actually offers is the directory it was pointed at, so the vendor flag should
 // agree with that boundary instead of removing it.
 //
-// It used to carry the parenthetical "which also un-breaks it on Windows".
-// That was never measured, and on 2026-08-04 it was measured and is FALSE. See
-// windowsSandboxMode.
+// On Windows the mode is real now too — measured 2026-08-29 at codex-cli
+// 0.149.1: a write inside the workspace landed, a write outside it (and
+// outside the temp roots the mode allows by design) was denied with no file on
+// disk. Write posture still does not use it there, for the reason on
+// windowsWriteSandboxMode: the `.git` carve-out cannot be bought back on
+// Windows, so a workspace-write seat there can edit and never commit.
 const writeSandboxMode = "workspace-write"
 
-// windowsSandboxMode is what BOTH postures pass on Windows, and it is the only
-// value under which this seat can run anything there at all.
+// windowsWriteSandboxMode is what WRITE posture passes on Windows.
 //
-// This is the loudest flag in the room and it is not chosen for convenience, so
-// the measurement that forces it is recorded in full. Re-probed 2026-08-04
-// against codex-cli 0.146.0 on Windows 11, in a throwaway directory, one turn
-// per mode, each asked merely to LIST the directory and read a text file:
+// This is the loudest flag in the room and it is not chosen for convenience.
+// Two dated measurements stand behind it, and they force different halves:
 //
-//	-s read-only        → every spawn fails, exit_code -1
-//	-s workspace-write  → every spawn fails, exit_code -1
-//	-s danger-full-access → exit_code 0, real listing, real file contents
+// 1. Re-probed 2026-08-04 against codex-cli 0.146.0 on Windows 11: BOTH
+// sandboxed modes failed every process spawn with `CreateProcessAsUserW
+// failed: 5 (Access is denied.)`, including a turn asked merely to list a
+// directory. So both postures passed danger-full-access — `-s read-only` there
+// was not a read/write distinction, it was a seat that could not read, which
+// is how it surfaced: a live turn answered a "thoughts on this repo" brief
+// with "I could not inspect the repository". The host-sandbox confound was
+// ruled out: the probe re-run with the harness's own process sandbox disabled
+// failed identically.
 //
-// The failure is identical in both sandboxed modes, and it is a failure to
-// LAUNCH rather than a refusal of an operation:
-//
-//	windows sandbox: runner failed during SpawnChild: CreateProcessAsUserW
-//	failed: 5 (Access is denied.) | ... | si_flags=256 | creation_flags=525312
-//	(Windows error 5)
-//
-// Three things follow, and each is a measurement rather than a reading:
-//
-//   - `-s read-only` on Windows is not a read/write distinction. It is a seat
-//     that cannot read. That is the whole of the complaint this constant fixes.
-//   - `-s workspace-write` does NOT un-break it. The third amendment of ADR-008
-//     said it did, in a parenthetical, and nothing had ever run it. So the
-//     WRITE posture was broken on Windows too, silently, for exactly as long.
-//   - `danger-full-access` is the only mode that skips the Windows sandbox
-//     spawn path, so it is the only one that runs. There is no middle setting:
-//     `-c sandbox_permissions=["disk-full-read-access"]`, the escalation the
-//     CLI's own `--config` help advertises, is rejected outright by this build
-//     — "unknown configuration field sandbox_permissions" — so there is no way
-//     to buy back read access while keeping a sandbox.
-//
-// The host-sandbox confound was ruled out rather than assumed: the read-only
-// probe was re-run with the harness's own process sandbox disabled and failed
-// identically, so this is codex's Windows sandbox and not something wrapped
-// around it.
+// 2. Re-measured 2026-08-29 against codex-cli 0.149.1 on Windows 11: the
+// sandboxed modes now spawn (through cmd.exe; see sandboxMode) and ENFORCE, so
+// the READ posture went back to `-s read-only` there. The write posture stays
+// here, because `-s workspace-write` on Windows denies `.git` and the
+// writable_roots override that buys it back on macOS does NOT work there:
+// with `-c sandbox_workspace_write.writable_roots=["<ws>/.git"]` passed — in
+// the forward-slash spelling gitWritableOverride emits AND in a backslash
+// spelling — a write to `.git/probe.txt` still came back "Access is denied.",
+// while the same override named an ordinary outside directory and unlocked it.
+// The deny on `.git` outranks the override at this build. A workspace-write
+// seat on Windows is therefore the exact defect gitWritableOverride exists to
+// prevent: it edits files all session and never lands one.
 //
 // Why this is allowed to ship, in one line: **the workspace is the containment,
 // not the flag** (ADR-008 third amendment, on the fleet contract in agent-ops
-// ADR-012). The alternative on this OS is not a safer seat — it is a seat that
-// cannot read the repo it was convened to discuss, which is what San hit live.
-// The badge is what pays for it: this seat renders `unsandboxed` on Windows and
-// must never render `ro:` anything there.
-const windowsSandboxMode = "danger-full-access"
+// ADR-012). The badge is what pays for it: the room's write posture renders its
+// own loud badge, and the read posture's `ro:enforced` claim never covers this
+// flag.
+const windowsWriteSandboxMode = "danger-full-access"
 
 func sandboxFor(p Posture) string {
 	return codexSandboxFor(p, runtime.GOOS == "windows")
@@ -123,16 +133,17 @@ func sandboxFor(p Posture) string {
 // was measured; a test that could only run it on Windows would be the half
 // nobody checks — and this file's whole history is claims nobody checked.
 func codexSandboxFor(p Posture, windows bool) string {
-	if windows {
-		// Posture-independent ON PURPOSE. Read and write collapse to one flag
-		// here because every other value fails to spawn, and grading them would
-		// imply a safety difference that does not exist — the same reasoning
-		// ADR-008's third amendment used to give every write column one badge.
-		return windowsSandboxMode
-	}
 	if p == PostureWrite {
+		if windows {
+			// Not workspace-write: the mode enforces on Windows now, but its
+			// .git carve-out cannot be bought back there, so a seat under it
+			// builds and never commits. See windowsWriteSandboxMode.
+			return windowsWriteSandboxMode
+		}
 		return writeSandboxMode
 	}
+	// Read posture is one value on every OS since codex-cli 0.149.1 — the
+	// Windows measurement behind that is on sandboxMode.
 	return sandboxMode
 }
 
@@ -159,11 +170,13 @@ func codexSandboxFor(p Posture, windows bool) string {
 // resume takes -c at all — so they are wired to one source instead of kept in
 // step by hand.
 //
-// What this still does NOT establish: that the override changes runtime
-// behaviour on the resume path. The key is recognised; its effect was never
-// separately observed. Until 2026-08-04 it could not be, because every
-// sandboxed spawn failed regardless — now that the Windows value is one that
-// actually runs, this became measurable, and it has not yet been measured.
+// The override's runtime effect on the resume path is now OBSERVED, not just
+// recognised. Measured 2026-08-29 against codex-cli 0.149.1 on Windows 11: a
+// turn resumed with `-c sandbox_mode="read-only"` was asked to write a file
+// through the shell, the write came back "Access is denied." at exit 1, and no
+// file was on disk afterwards. Until 2026-08-04 this could not be measured,
+// because every sandboxed spawn failed regardless; the note that stood here
+// until 2026-08-29 said so and named the measurement still owed. It is paid.
 func resumeOverrideFor(p Posture) string {
 	return codexResumeOverrideFor(p, runtime.GOOS == "windows")
 }
@@ -201,6 +214,17 @@ func codexResumeOverrideFor(p Posture, windows bool) string {
 // that `exec` accepts — the trap already recorded for -s and --cd — and -c is
 // the channel resume already carries posture on. The dotted form was the one
 // probed; both spellings worked, and this is the one that composes.
+//
+// ON WINDOWS THIS OVERRIDE DOES NOT WORK, and that is measured rather than
+// suspected — 2026-08-29, codex-cli 0.149.1, Windows 11: under `-s
+// workspace-write` a write to `.git/probe.txt` was denied, and it stayed
+// denied with this override passed in the forward-slash spelling this function
+// emits AND in a backslash spelling, while the same override named an ordinary
+// outside directory and unlocked it. The `.git` deny outranks writable_roots
+// at that build. This is the reason Windows write posture keeps
+// danger-full-access (see windowsWriteSandboxMode); the override is still sent
+// there, where it is harmless — danger-full-access has no sandbox for it to
+// widen — so the spawn and resume shapes stay uniform across OSes.
 func gitWritableOverride(workspace string) string {
 	return `sandbox_workspace_write.writable_roots=["` + filepath.ToSlash(filepath.Join(workspace, ".git")) + `"]`
 }
@@ -335,14 +359,16 @@ type codexLine struct {
 // refusal). status is the fallback for item types that carry no exit code.
 //
 // The asymmetry here is deliberate and is the honest reading of what was
-// observed. "failed" IS a captured status value. "completed" is NOT — no
-// captured line carries it — so it is not mapped, and an item that resolves
-// with neither an exit code nor a failure status renders Unknown rather than
-// OK. Guessing the success spelling from the failure one would be a success
-// claim built on a string nobody has seen, which is the exact move that put a
-// read-only badge on a session that could write (§9.2). If a live run later
-// shows the spelling, this becomes one more case and the trace gets sharper;
-// until then Unknown is the truth and it is a survivable one.
+// observed. "failed" IS a captured status value. "completed" has now been
+// captured too — 2026-08-29, codex-cli 0.149.1, on command_execution items —
+// but every captured "completed" line also carried `"exit_code":0`, so the
+// exit code already resolves those and mapping the status would change
+// nothing observed. It stays unmapped for the item types that carry NO exit
+// code (patch_apply and friends), where the spelling has still never been
+// seen: claiming it across item types would be a success claim built on a
+// string captured somewhere else, which is the exact move that put a
+// read-only badge on a session that could write (§9.2). For those, Unknown is
+// still the truth and it is a survivable one.
 func codexOutcome(status string, exitCode *int) runner.ActStatus {
 	if exitCode != nil {
 		if *exitCode == 0 {
@@ -480,8 +506,10 @@ func (Codex) ParseEvent(line []byte) (runner.Event, bool) {
 		//
 		// What that does NOT license is killing the process, and council does not:
 		// both probe turns were told to use no tools, so a turn that ran commands
-		// is unmeasured here and would need danger-full-access to probe, which is
-		// a redline. So the exit is still what retires the column from the turn
+		// is unmeasured here. At the build it was measured on, probing one needed
+		// danger-full-access, a redline; since codex-cli 0.149.1 `-s read-only`
+		// runs commands on Windows (see sandboxMode), so that probe is possible
+		// now and still unrun. So the exit is still what retires the column from the turn
 		// (dispatch.go, KindMeta's spawn-per-turn branch) — this event only makes
 		// the column stop claiming to be working.
 		return runner.Event{Kind: runner.KindMeta, EndsTurn: true}, true

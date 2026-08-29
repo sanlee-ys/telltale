@@ -4471,7 +4471,10 @@ func helpBadgeGloss() []struct {
 			"against what the session reported about itself, not a flag",
 		}},
 		{SandboxEnforced, []string{
-			"the vendor's own OS-level sandbox does it — codex, mac/linux",
+			// "every OS" earned its second half on 2026-08-29: the Windows
+			// branch was `unsandboxed` until codex-cli 0.149.1 was measured
+			// denying a live write there (§9.2's dated amendment).
+			"the vendor's own OS-level sandbox does it — codex, every OS",
 		}},
 		{SandboxRequested, []string{
 			"a flag was passed and accepted; what it actually enforces",
