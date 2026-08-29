@@ -85,6 +85,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/eventview"
 	"github.com/sanlee-ys/telltale/internal/gatehook"
 	"github.com/sanlee-ys/telltale/internal/grokotel"
+	"github.com/sanlee-ys/telltale/internal/history"
 	"github.com/sanlee-ys/telltale/internal/hud"
 	"github.com/sanlee-ys/telltale/internal/mcpserver"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -147,6 +148,11 @@ func main() {
 	case "mcp":
 		if err := runMCP(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "telltale mcp:", err)
+			os.Exit(1)
+		}
+	case "history":
+		if err := runHistory(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "telltale history:", err)
 			os.Exit(1)
 		}
 	case "doctor":
@@ -582,6 +588,98 @@ func runCursorHook() {
 // what it costs is argued in internal/doctor's package doc: `--version` parses
 // argv, prints a string and exits, so nothing here starts a turn, spends quota,
 // reads a credential, writes under ~/.telltale, or calls the network.
+// runHistory is the ledger read mode (design.md §7.26): one walk over a vendor's
+// own session files, a per-day per-project table on stdout, exit 0.
+//
+// A separate mode rather than a page in the HUD, for the reason `doctor` and
+// `events view` are their own modes: what it reads is not what the HUD reads. The
+// HUD's scan is a head+tail parse on a 1 s tick (design.md §7.18); a history has
+// to walk every record of every transcript, which is seconds of work and belongs
+// nowhere near a poll.
+//
+// It is a READ and it takes the gauges' contract with it: it reads one vendor's
+// store, calls no network, binds no port, reads no credential, and writes nothing
+// at all — not even the quota relay, because it renders no quota to relay.
+func runHistory(args []string) error {
+	fs := flag.NewFlagSet("telltale history", flag.ContinueOnError)
+	vendor := fs.String("vendor", string(model.VendorClaude),
+		"which vendor's files to read. One vendor per run, always: no report here may sum two")
+	days := fs.Int("days", history.DefaultDays, "how many local days back to read, ending today")
+	width := fs.Int("width", 0, "wrap column for the report (default 100)")
+	// Same meaning as `telltale hud --root`, deliberately: a substitute HOME
+	// directory, not a vendor store path. Two flags spelled --root that took
+	// different kinds of path would be the worst possible pair — the wrong one
+	// resolves to a directory that does not exist, and this mode would then
+	// report an absent store rather than refusing.
+	root := fs.String("root", "", "read the vendor store beneath this directory — a corpus laid out "+
+		"like a home directory (see tools/demo-corpus) — instead of this machine's own")
+	// One deadline for the run rather than per file. A whole-corpus walk is the
+	// slowest read in this binary — 693 MB over 967 transcripts was measured on
+	// the owner's own machine (design.md §7.18) — so the deadline is generous,
+	// and running out prints what was read with the window marked incomplete
+	// rather than hanging or returning nothing.
+	timeout := fs.Duration("timeout", 60*time.Second, "how long the walk gets before it reports what it has")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	// A positional argument is almost always a flag someone forgot the dashes on,
+	// and here it would silently be a vendor name that was ignored — which is the
+	// one mistake this mode must never make, because the whole report is about
+	// exactly one vendor.
+	if fs.NArg() > 0 {
+		return errors.New("unexpected argument " + fs.Arg(0) +
+			" (this mode takes flags only: --vendor, --days, --width, --root, --timeout)")
+	}
+	if *days <= 0 {
+		return errors.New("--days wants a positive number of days")
+	}
+	if *timeout <= 0 {
+		return errors.New("--timeout wants a positive duration")
+	}
+	// A vendor this mode does not read is refused with the SURVEY's own verdict,
+	// not with "unsupported". The verdict names the field and the file and says
+	// what is missing, so a reader finds out whether the gap is telltale's or the
+	// vendor's without opening an issue to ask.
+	if err := historyVendor(*vendor); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+	rep, err := history.Read(ctx, history.Query{Home: *root, Days: *days, Now: time.Now()})
+	if err != nil {
+		return err
+	}
+	fmt.Print(history.Render(rep, history.Options{Width: *width}))
+	// Exit 0 whatever the report says, for doctor's reason: an empty window is
+	// this command working. A non-zero exit on "you spent nothing this week"
+	// would make it indistinguishable from the mode itself breaking.
+	return nil
+}
+
+// historyVendor accepts the covered vendor and refuses every other with the
+// survey's verdict for it.
+func historyVendor(name string) error {
+	v := model.VendorID(name)
+	c, known := history.Verdict(v)
+	if !known {
+		var names []string
+		for _, row := range history.Survey() {
+			names = append(names, string(row.Vendor))
+		}
+		return errors.New("unknown --vendor " + name + " (want one of " + strings.Join(names, ", ") + ")")
+	}
+	if c.Covered {
+		return nil
+	}
+	var covered []string
+	for _, id := range history.CoveredVendors() {
+		covered = append(covered, string(id))
+	}
+	return errors.New("--vendor " + name + " is surveyed and not yet read: " + c.Why +
+		"\n  covered today: " + strings.Join(covered, ", "))
+}
+
 func runDoctor(args []string) error {
 	fs := flag.NewFlagSet("telltale doctor", flag.ContinueOnError)
 	width := fs.Int("width", 0, "wrap column for the report (default 80)")
@@ -1073,6 +1171,25 @@ usage:
                          fleet_snapshot, taking an optional vendor argument;
                          one scan per call; stdio only, so it binds no port and
                          writes nothing
+  telltale history       what one vendor spent, day by day, re-read from that
+                         vendor's own session files. A table of exact token
+                         counts per day and per working directory: input, cache
+                         read, cache write and output, kept in four columns and
+                         never added up, because they are four separately billed
+                         categories and telltale holds no price. It reports ONE
+                         vendor per run and never sums two — a single number
+                         over two vendors' counts would be arithmetic telltale
+                         invented. No gauge, no percentage, no ceiling: a token
+                         count has no denominator anywhere.
+                         COVERED TODAY: claude only. The other six are surveyed
+                         and named on every run, with the reason each is not
+                         read yet — codex and pi are datable and owe a units
+                         ruling, gemini's input field is a context-occupancy
+                         proxy rather than uncached input, agy and grok write
+                         real per-turn counts that nothing on disk dates, and
+                         cursor writes no counts at all (CapNone). Partial
+                         coverage is stated in the report so it can never read
+                         as a fleet answer
   telltale doctor        launch-time preflight: which vendor binaries are on
                          this machine, where each was found, what version it
                          reports — and, said out loud rather than left blank,
@@ -1115,6 +1232,32 @@ telltale mcp flags:
                               reports what it has (default 10s). One deadline
                               per CALL, not one for the process: this mode
                               serves for as long as its client keeps it
+
+telltale history flags:
+  --vendor <name>             whose files to read (default claude). One vendor
+                              per run, always. A vendor this mode does not read
+                              yet is refused with the survey's own verdict for
+                              it — the field, the file, and what is missing —
+                              rather than with the word "unsupported"
+  --days <n>                  how many local days back to read, ending today
+                              (default 7). The window is printed with every
+                              count, and so is the time zone the day buckets
+                              were resolved in: the vendor writes an instant,
+                              and a calendar day is telltale's convention over it
+  --width <n>                 wrap column for the report (default 100)
+  --root <dir>                read the vendor store beneath this directory
+                              instead of this machine's own — a corpus laid out
+                              like a home directory, the same meaning the hud's
+                              --root has (see tools/demo-corpus)
+  --timeout <dur>             how long the walk gets before it reports what it
+                              has (default 60s). This reads every record of
+                              every transcript, not the head and tail the hud
+                              reads, so it is the slowest read in this binary. A
+                              walk that runs out prints what it read and says
+                              the window is incomplete, so each day is a lower
+                              bound rather than a wrong number
+It prints words and no colour, like doctor, so it reads the same in a terminal,
+in a pipe and in a pasted issue; --ascii and NO_COLOR have nothing to switch off.
 
 telltale doctor flags:
   --timeout <dur>             how long each vendor gets to answer --version

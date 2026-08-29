@@ -364,6 +364,16 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   persistent seat's next brief resumes the interrupted conversation, has no
   live payment yet. design.md §9.37's dated amendment carries the debt.
 
+- **`telltale history` reads one vendor of seven, and the other six are surveyed rather than
+  owned (2026-08-29).** design.md §7.26 carries the per-vendor verdicts and the mode prints
+  them on every run, so this entry does not restate them. What it records is the INTENT: codex
+  is the next slice and it is unowned, and it is blocked on a ruling rather than on work —
+  a codex rollout carries `info.last_token_usage` (this turn) beside a cumulative
+  `info.total_token_usage`, and which of the two a day may sum is a decision nobody has made.
+  agy and grok are refused for want of a per-turn TIMESTAMP, which is a survey finding and not
+  a todo: if either vendor ever dates its counts, that is a new measurement and the verdict is
+  re-taken, not assumed.
+
 - **The arena record has never been opened against a real pile of leftovers
   (2026-08-29).** `/arena record` (design.md §9.47) tallies every seat's adopted-of-decided
   standing from the repository's own `arena/` and `adopt/` branches. It stores nothing, so
