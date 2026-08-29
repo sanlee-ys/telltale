@@ -158,11 +158,13 @@ This is the thing the whole codebase optimizes for, more than idiomatic Go. Read
   percentage needs a window-size denominator that varies by model, so any
   percentage would be invented).
 - **Claims about vendor behavior are measured against a live run, never read off
-  `--help` or vendor docs.** The council sandbox badges are the clearest example:
-  Codex's Windows posture (`unsandboxed` rather than `ro:enforced`) exists
-  because `-s read-only` was measured failing *every* process spawn on Windows,
-  including one that only listed a directory — not because the flag's
-  documentation says so. If you add a claim about what a vendor does, it needs a
+  `--help` or vendor docs.** The council sandbox badges are the clearest example,
+  in both directions: Codex's Windows read posture wore `unsandboxed` rather than
+  `ro:enforced` because `-s read-only` was measured failing *every* process spawn
+  there at codex-cli 0.146.0 — and it got `ro:enforced` back only when a
+  2026-08-29 re-measurement at 0.149.1 showed a live shell write denied with no
+  file on disk (design.md §9.2's dated amendment). Neither move rested on the
+  flag's documentation. If you add a claim about what a vendor does, it needs a
   measurement backing it (a live run, a source read at a pinned version) — cite
   it in a doc comment the way the existing adapters do, including the version
   pinned against.

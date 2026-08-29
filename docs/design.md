@@ -7430,7 +7430,7 @@ all seated vendors when only one had a mechanism named.
 |---|---|---|
 | Claude Code | `--disallowedTools <write/exec list>` + `--strict-mcp-config` | `ro:tools` |
 | Codex (macOS/Linux) | `-s read-only`, enforced by the OS sandbox | `ro:enforced` |
-| Codex (Windows) | **no sandbox**: `-s danger-full-access`, the only mode that can spawn a process there | `unsandboxed` |
+| Codex (Windows) | `-s read-only`, enforced since codex-cli 0.149.1 — before that, **no sandbox**: `-s danger-full-access` was the only mode that could spawn a process there (the 2026-08-29 amendment below) | `ro:enforced` |
 | Antigravity | **no posture flag at all**: `--mode plan --sandbox` were measured not to restrict writes, and were dropped once their only observed effect turned out to be a dead turn (§9.6b) | `unsandboxed` |
 
 There is no level that renders as an unqualified "read-only", and after the live spike there is
@@ -7449,17 +7449,49 @@ so. This is the second seat where a posture flag came off because it was doing n
 and one measured harm; the Codex row above is the first, and the two were decided on the same
 ledger. §9.6b carries the argument.
 
-**Codex is the seat where the OS changes the answer, and on Windows it wears that same
-`unsandboxed` badge.** Re-probed 2026-08-04 against codex-cli 0.146.0: `-s read-only` *and*
-`-s workspace-write` both fail every process spawn there with `CreateProcessAsUserW failed: 5
-(Access is denied.)`, including a control asked merely to list a directory. So "read-only" on
-Windows was never a read/write distinction — it was a seat that could not read, which is
-exactly how this surfaced: a live council turn answered a "thoughts on this repo" brief with
-*"I could not inspect the repository."* Council now passes `-s danger-full-access` on Windows
-in **both** postures, because it is the only mode that runs, and the badge tells the truth
-about that rather than keeping a comfortable word. The containment is the workspace, not the
-flag (ADR-008, third and twelfth amendments). macOS and Linux are untouched and still
-`ro:enforced`.
+**Codex is the seat where the OS changes the answer, and until 2026-08-29 it wore that same
+`unsandboxed` badge on Windows.** Re-probed 2026-08-04 against codex-cli 0.146.0: `-s read-only`
+*and* `-s workspace-write` both failed every process spawn there with `CreateProcessAsUserW
+failed: 5 (Access is denied.)`, including a control asked merely to list a directory. So
+"read-only" on Windows was not a read/write distinction — it was a seat that could not read,
+which is exactly how this surfaced: a live council turn answered a "thoughts on this repo"
+brief with *"I could not inspect the repository."* Council passed `-s danger-full-access` on
+Windows in **both** postures for as long as that held, because it was the only mode that ran,
+and the badge told the truth about that rather than keeping a comfortable word. The containment
+is the workspace, not the flag (ADR-008, third and twelfth amendments).
+
+**Amended 2026-08-29 — the Windows sandbox re-measured at codex-cli 0.149.1, and the read
+posture earned its badge back.** A chip re-probed the twelfth amendment's finding against the
+build now installed, in throwaway directories, one turn per probe, files checked on disk rather
+than read out of the reply:
+
+- **`-s read-only` enforces.** The pwsh spawn still fails with the same `CreateProcessAsUserW
+  failed: 5` line — but only pwsh: the model retried through `C:\WINDOWS\system32\cmd.exe`,
+  which spawned *inside* the sandbox and obeyed it. A read turn listed the directory and read a
+  marker file, exit 0. A write turn (`cmd /c echo probe> wrote-ro2.txt`) came back
+  `Access is denied.`, exit 1, no file on disk.
+- **`-s workspace-write` enforces and contains.** A write inside the workspace landed; a write
+  outside it (and outside the temp roots the mode allows by design) was denied with no file on
+  disk.
+- **The `.git` carve-out holds on Windows and CANNOT be bought back.** The
+  `sandbox_workspace_write.writable_roots=["<ws>/.git"]` override that §9.6's macOS measurement
+  showed unlocking `.git` was passed in both the forward-slash spelling `gitWritableOverride`
+  emits and a backslash spelling — the `.git` write stayed denied in both, while the same
+  override named an ordinary outside directory and unlocked it. The deny outranks the override
+  at this build.
+- **The resume override enforces.** A turn resumed with `-c sandbox_mode="read-only"` had its
+  shell write denied, no file on disk — the effect §9.7 recorded as owed and unobservable is
+  now observed.
+
+So the postures split on Windows instead of collapsing: **read passes `-s read-only` and is
+badged `ro:enforced`** — with the stated residual that the pwsh spawn failure is routed around
+by the model's own retry, so a read turn can still fail to inspect when the model stops at the
+spawn error (a liveness caveat, not a safety one; its cause is unmeasured) — while **write
+keeps `-s danger-full-access`**, because a workspace-write seat that cannot write `.git` is the
+exact defect the `.git` widening exists to prevent: it edits files all session and never lands
+one. `vendors/codex.go` carries the capture on its constants; `TestCodexPostureIsPerOS` pins
+both halves of the split, and `TestNoVendorClaimsUnverifiedEnforcement` now requires the
+Windows claim to cite the build it was measured on. macOS and Linux are untouched.
 
 `TestSandboxBadgesAreNeverBlanket` fails the build if a bare claim reappears, and asserts the
 badges stay distinct — convergence on one string is how a per-vendor claim quietly becomes
@@ -7959,6 +7991,12 @@ and so does `-s workspace-write`. Codex on Windows is invoked `danger-full-acces
 this seat is narrower: whether the `-c sandbox_mode=` override actually changes behaviour on
 the *resume* path. The key is accepted; its effect has never been separately observed, and
 until this change every mode failed identically so there was nothing to observe.
+
+*(Both halves of that paragraph moved on 2026-08-29, at codex-cli 0.149.1: the Windows sandbox
+now enforces and the read posture is `-s read-only` again, and the resume override's effect was
+observed — a resumed read-only turn had its shell write denied. §9.2's 2026-08-29 amendment
+carries the measurements. The paragraph above is kept as the record of what was true at
+0.146.0.)*
 
 One claim in this section is looser than its measurement and is flagged rather than quietly
 corrected, because fixing it is a separate change to a separate surface. The Claude column's
@@ -8891,7 +8929,10 @@ they remain that way?* The badge table answers it where a first-time reader
 is, and the answer is not about flags: **no badge is what keeps this room out of your
 files — the workspace is.** `unsandboxed` on Codex is not a setting anyone chose to leave
 off; both sandboxed modes were measured failing every process spawn there, so read-only was
-a seat that could not read (ADR-008, twelfth amendment). The control that holds is `--cd`
+a seat that could not read (ADR-008, twelfth amendment; true when written — §9.2's
+2026-08-29 amendment later moved that seat's read posture to `ro:enforced` on a
+re-measurement, and the sentence about the workspace is unchanged by it). The control that
+holds is `--cd`
 into a throwaway worktree, and the fleet contract rules the same way independently:
 `agent-ops` ADR-012 rules capability parity, with guard wiring rather than lane shape as the
 control. A column that looked read-only because of a broken sandbox was never a safety
@@ -14059,9 +14100,10 @@ fourth column borrowing one would put this block back inside the block it is out
 **Measured on the reference Mac, 2026-08-17.** The five rows read `claude ro:tools`,
 `codex ro:enforced`, `agy unsandboxed`, `cursor ro:requested`, `grok unsandboxed`, and the
 declaration reads *1 of the 5 seats above can be asked to ask first: claude*. The `codex` row is
-the platform branch working: the same block on Windows reads `unsandboxed` there, because council
-passes `-s danger-full-access` on that OS (ADR-008's twelfth amendment) — and it reads it from
-`postureClaim`, not from a second platform test in the preflight.
+the platform branch working: at that date the same block on Windows read `unsandboxed` there,
+because council passed `-s danger-full-access` on that OS (ADR-008's twelfth amendment; since
+§9.2's 2026-08-29 amendment the Windows row reads `ro:enforced` too, with its own dated detail)
+— and it reads it from `postureClaim`, not from a second platform test in the preflight.
 
 <a id="s9-43"></a>
 
