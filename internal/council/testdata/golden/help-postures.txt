@@ -5,7 +5,7 @@
                                                                                                                         
     ro:tools     the write tools are ABSENT from that session — checked                                                 
                  against what the session reported about itself, not a flag                                             
-    ro:enforced  the vendor's own OS-level sandbox does it — codex, mac/linux                                           
+    ro:enforced  the vendor's own OS-level sandbox does it — codex, every OS                                            
     ro:requested a flag was passed and accepted; what it actually enforces                                              
                  was never observed. Weaker than the two above, and says so                                             
     unsandboxed  nothing restricts this vendor at the OS level. MEASURED,                                               
@@ -26,12 +26,12 @@
                  "tokens" — text arrives as the vendor writes it, so you are watching it land rather than waiting for   
                  it                                                                                                     
                                                                                                                         
-    unsandboxed  Codex                                                                                                  
-                 nothing at the OS level stops this column reading or writing here, and that is why: on Windows both    
-                 sandboxed modes were measured failing every process spawn, reads included, so -s read-only was not a   
-                 restriction, it was a seat that could not read. Council passes -s danger-full-access so this column    
-                 can work at all. The workspace above is the containment, not a flag — point council at a worktree if   
-                 that matters                                                                                           
+    ro:enforced  Codex                                                                                                  
+                 -s read-only, applied by the vendor's own Windows sandbox — measured 2026-08-29 at codex-cli 0.149.1:  
+                 a shell write was denied with no file on disk, a read ran clean, and the resume override enforced the  
+                 same. One residual is liveness, not safety: the sandbox could not spawn this machine's PowerShell,     
+                 and turns completed because the model retried through cmd.exe — a turn can still fail to inspect when  
+                 it does not retry                                                                                      
                  "final only" — MEASURED: this vendor sends nothing at all until its turn is done, so a quiet column    
                  here is a working one and not a stalled one                                                            
                                                                                                                         

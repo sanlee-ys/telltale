@@ -58,12 +58,16 @@ Every claim in the two header lines is made per vendor, never as a blanket:
   was asked to write a file under both of its own read-only flags and wrote it: refuted,
   not unverified.
 
-  **On Windows, Codex wears it too**, and the frame above is a rendering fixture rather than
-  a capture from any one machine. `-s read-only` and `-s workspace-write` were both measured
-  failing *every* process spawn there — including one asked merely to list a directory — so
-  council passes `-s danger-full-access`, the only mode that runs, and says so. A read-only
-  badge on that seat would be the one false claim in this room that someone would actually
-  rely on. On macOS and Linux the same seat is `ro:enforced` by the OS sandbox.
+  **On Windows, Codex wore it too until 2026-08-29**, and the frame above is a rendering
+  fixture rather than a capture from any one machine. At codex-cli 0.146.0, `-s read-only`
+  and `-s workspace-write` were both measured failing *every* process spawn there — including
+  one asked merely to list a directory — so council passed `-s danger-full-access`, the only
+  mode that ran, and said so. Re-measured at codex-cli 0.149.1, the sandbox enforces: a
+  shell write under `-s read-only` was denied with no file on disk, so the read posture
+  passes `-s read-only` again and the seat is `ro:enforced` on every OS. The write posture
+  still passes `danger-full-access` on Windows only, because that build's sandbox denies
+  `.git` and refuses the override that unlocks it elsewhere — a seat that cannot commit
+  builds and never lands (design.md §9.2's 2026-08-29 amendment).
 - **The streaming granularity.** Only Claude streams (`tokens`, verified live). Codex and
   Antigravity were measured to emit nothing at all until the turn ends, so they are
   labelled `final only` and open on a waiting card that says so, rather than on an empty
@@ -81,7 +85,7 @@ table, followed by the full claim each of your own seats is making.
 | badge | what it means for you |
 |---|---|
 | `ro:tools` | The write and shell tools are **absent** from that session, so it cannot edit your files. Verified by reading what the session reported about itself, not by trusting a flag. Residual: a deny list cannot cover a tool a future release adds. |
-| `ro:enforced` | The vendor's own **OS-level sandbox** is applying it — `codex -s read-only` on macOS and Linux. The one posture here that an operating system rather than a flag is behind. |
+| `ro:enforced` | The vendor's own **OS-level sandbox** is applying it — `codex -s read-only`, on every OS since codex-cli 0.149.1. The one posture here that an operating system rather than a flag is behind. |
 | `ro:requested` | A read-only flag was passed and accepted, and **what it actually enforces was never observed**. Weaker than the two above, and it says so rather than borrowing their word. |
 | `unsandboxed` | **Nothing restricts this vendor at the OS level** — measured, not assumed. Treat the column as able to change your files. It deliberately does not open with `ro:`, because a reader scanning four headers takes in the prefix before the qualifier. |
 | `WRITES` | The room can write — the default. This column may edit and run things in the workspace. |

@@ -96,33 +96,45 @@ func TestReadPostureStillDenies(t *testing.T) {
 //
 // This test replaces TestCodexWritePostureAlsoUnbreaksIt, which asserted the
 // flag `workspace-write` and named, in its own title, an effect nobody had run.
-// On 2026-08-04 the effect was run: workspace-write fails every process spawn
-// on Windows exactly as read-only does. The old test passed throughout, because
-// it checked the argv it was given rather than the sentence it was named for —
-// this file's oldest lesson, wearing the newest costume.
+// On 2026-08-04 the effect was run: workspace-write failed every process spawn
+// on Windows exactly as read-only did, at codex-cli 0.146.0. The old test
+// passed throughout, because it checked the argv it was given rather than the
+// sentence it was named for — this file's oldest lesson, wearing the newest
+// costume.
+//
+// The Windows half moved on 2026-08-29, and by measurement rather than by
+// hope: at codex-cli 0.149.1 `-s read-only` enforces there (a shell write was
+// denied with no file on disk, a read ran clean), so the read posture is one
+// value on every OS. The write posture stays split — workspace-write also
+// enforces on Windows now, but its .git deny cannot be bought back by the
+// writable_roots override there, so a seat under it edits and never commits.
+// Both measurements are recorded on the constants in codex.go.
 func TestCodexPostureIsPerOS(t *testing.T) {
-	// Off Windows the OS sandbox is real, so the two postures stay graded.
-	if got := codexSandboxFor(PostureRead, false); got != "read-only" {
-		t.Errorf("unix read posture = %q, want read-only (enforced there)", got)
+	// The read posture asks for the real sandbox EVERYWHERE. Until 2026-08-29
+	// the Windows branch was danger-full-access, and a regression back to it
+	// would put a working sandbox back on the loudest flag in the room.
+	for _, windows := range []bool{true, false} {
+		if got := codexSandboxFor(PostureRead, windows); got != "read-only" {
+			t.Errorf("read posture (windows=%v) = %q, want read-only — measured enforcing on both branches", windows, got)
+		}
 	}
 	if got := codexSandboxFor(PostureWrite, false); got != "workspace-write" {
 		t.Errorf("unix write posture = %q, want workspace-write", got)
 	}
-	// danger-full-access must never leak onto a platform where a real sandbox
-	// works. It is a Windows-only concession, not this adapter's new default.
+	// danger-full-access must never leak onto a platform where the graded mode
+	// can land work. It is a Windows-write-only concession, not this adapter's
+	// default.
 	for _, p := range []Posture{PostureRead, PostureWrite} {
 		if got := codexSandboxFor(p, false); got == "danger-full-access" {
 			t.Errorf("unix posture %v removed the sandbox entirely", p)
 		}
 	}
 
-	// On Windows both collapse to the only mode that can spawn a process at
-	// all. Read is the branch San's complaint was about: a read seat that
-	// answered "I could not inspect the repository".
-	for _, p := range []Posture{PostureRead, PostureWrite} {
-		if got := codexSandboxFor(p, true); got != "danger-full-access" {
-			t.Errorf("windows posture %v = %q, want danger-full-access — every other mode fails to spawn", p, got)
-		}
+	// Windows write posture: the one place the loud flag remains, because a
+	// workspace-write seat there cannot write .git even with the override, and
+	// a seat that cannot commit builds and never lands.
+	if got := codexSandboxFor(PostureWrite, true); got != "danger-full-access" {
+		t.Errorf("windows write posture = %q, want danger-full-access — workspace-write cannot reach .git there", got)
 	}
 }
 
