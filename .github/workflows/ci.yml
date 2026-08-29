@@ -236,6 +236,13 @@ jobs:
           if ($refused -notmatch 'CapNone') { throw "the refusal does not carry the survey's verdict: $refused" }
 
           Remove-Item -Recurse -Force $corpus
+          # The refusal above leaves $LASTEXITCODE at 1 ON PURPOSE, and the pwsh
+          # runner exits the STEP with whatever that variable holds — a cmdlet
+          # like Remove-Item does not reset it. Measured: this step failed with
+          # no assertion message at all, which is exactly what a leaked exit code
+          # looks like. Clearing it is the last line here, so the step's verdict
+          # comes from the throws above and from nothing else.
+          $global:LASTEXITCODE = 0
 
       - name: Install the JSON Schema validator (pinned)
         run: python -m pip install --disable-pip-version-check jsonschema==4.23.0
