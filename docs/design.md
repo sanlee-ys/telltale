@@ -14936,3 +14936,156 @@ What IS owed is one live open against the reference box's own leftovers — 27 `
 branches and the `adopt/*` refs beside them are recorded in §9.37 — to confirm the counts a
 real pile of refs produces and that the page reads at the room's own geometry. Stated here
 rather than implied paid.
+
+### 9.49 the patch was on screen and there was no way to say anything about it (2026-08-29)
+
+`d` has flipped a racer's arena block between the diffstat and the whole patch since §9.37,
+and the block prints the branch and the worktree path under it. What the operator could do
+with any of that was read it. To say *this hunk is the problem* they retyped the hunk into
+the composer by hand, and to open the tree they selected an abbreviated path off a
+fixed-width column and repaired it in another terminal. The help panel, meanwhile, named
+none of it: `d` shipped and no page ever said the key existed.
+
+**Three keys close that, and the surface they make is the patch view itself.** A cursor
+points at one hunk of the drawn patch, `D` quotes that hunk into the composer draft, and `o`
+hands the operator the worktree — started in their own editor, or copied to the clipboard.
+
+#### The comment is a DRAFT, and that is the whole design
+
+The lane this was taken from (Vibe Kanban, Parallel Code, Sculptor) routes an inline comment
+straight back to the agent as its next instruction. **This room cannot do that honestly.** A
+race attempt is one-shot in a worktree: the seat that wrote the patch has finished, and
+§9.37 rules every attempt a fresh session, so there is no conversation for a comment to
+resume. A "reply to this attempt" control would therefore have to invent one — a new race, a
+new turn dressed as a continuation, or a queue.
+
+So the quote lands in the **live composer draft**, and nothing else happens. It is visible on
+the next frame, it is editable with every key the composer already has, and `enter` — a
+person, pressing a key — stays the only thing in this room that spends a quota. That is the
+standing rule about queued drafts (one visible, editable draft, never auto-send) reaching a
+feature that was invented to break it, and it is asserted as a spawn count and a turn counter
+rather than as prose: `TestDQuotesIntoTheDraftAndSpawnsNothing`.
+
+Two consequences are stated rather than hidden. The next brief runs in the **room's**
+workspace, not in the racer's worktree — so the fence names the worktree path, which is the
+difference between a comment a seat can act on and one it can only agree with. And an empty
+draft is seeded with the racer's own `@mention`, because silence routes to claude (§9.9) and
+a comment about codex's attempt reaching claude would be the room misdelivering the
+operator's words. The seed is one token, the footer's route cell resolves it on the very next
+frame, and a draft that already says something is left alone — it may carry a route the
+operator chose, and a second mention would be the room editing a line being written.
+
+#### The quote is fenced as DATA, because that is what §9.15 settled
+
+The fence is `quote.go`'s, for `quote.go`'s reason: this text goes from one program's output
+into another language model's input, which is a prompt-injection path whatever wrote it. The
+wording differs in exactly one way, and it matters — it names the material as **measured `git
+diff` output** rather than as another participant's answer, because that is what it is. A
+fence that mislabelled its contents would be the room narrating over its own evidence.
+
+The **whole hunk** crosses even when the drawn frame cut it off partway. The cursor points at
+a hunk and the hunk is the unit git itself framed; sending half of one because a render cap
+fell inside it would hand a seat an incomplete measurement under a fence claiming to carry
+git's output. What the frame decides is where the cursor may GO, not what a quote CONTAINS.
+
+A quote that would push the draft past the composer's own cap is **refused whole**, never
+truncated — `paste.go`'s atomicity rule reached by a different key, and for `paste.go`'s
+reason: the Antigravity seat takes its prompt on argv, so a draft past that size is one no
+seat could be handed.
+
+#### The cursor never scrolls, and that is a refusal rather than a limit
+
+The drawn patch is capped at `arenaDiffScreenLines` and does not scroll. A cursor free to
+walk past that cutoff would need a second scroll surface inside a column — the device this
+product already refused for the gate card's preview — so **the cursor points inside the frame
+the reader can see and refuses to leave it by name.** Both ends say which end they are, and
+the far end says *the cursor does not scroll* and names the two routes to the rest of the
+patch the cutoff line already carries (`y` copies the whole diff, the worktree holds it).
+
+The anchor is a **hunk**, not a rendered line, and the reason is that a rendered line has no
+name anything can resolve: "line 412" is a position in a capped render of a one-megabyte
+diff. A hunk header is git's own anchor, printed in the patch, and it survives the cap, the
+yank and the quote.
+
+The parser reads git's framing and no heuristic. Inside a hunk every line is prefixed by git
+(space, `+`, `-`, `\`), so a line that is not prefixed is not in the hunk — which is what
+makes it safe against its own input. A patch is whatever five language models wrote into five
+worktrees, and this repository's own diffs routinely ADD lines beginning `+++`, `---` and
+`diff --git`; a parser that scanned for those anywhere would cut a hunk in half at the first
+of them.
+
+#### The keys, and why none of them is new vocabulary
+
+- **`D`** is SHIFT on the key whose surface it acts on, which is the spelling `T` already
+  earns beside `t` and `Y` beside `y`. It costs the help panel no row of its own for `T`'s
+  reason: it is taught on the row that teaches `d`.
+- **`[` and `]`** step the cursor. These keys have always meant *step one unit of whatever
+  the body is showing* — a turn in the grid, a page in the by-turn projection (§9.22) — and a
+  patch is a body with a unit of its own. A third reading of one motion, not a fourth
+  binding. The footer's cell says `[ ] hunk` while a patch is open, because §7.8's contract
+  is that the mode line announces what every key means on every frame.
+- **`o`** raises the worktree card. A key rather than a room command for `c`'s reason: no
+  vocabulary leaves the composer.
+
+The cursor arms with the patch and costs no key at all: `d` opens the patch and puts the
+cursor on the first hunk, so the patch view IS the review surface rather than a mode a reader
+has to discover before the feature exists for them. Its mark is the room's own `▸` — reuse,
+not a collision, because that glyph already means *this is what the keys address*, which is
+exactly what it means here. It is drawn only on the FOCUSED column, since that is the column
+`D` reaches.
+
+#### `o`: the one process council starts that no vendor asked for
+
+Spawning an editor is council's loud exception and it is taken deliberately. The gauges spawn
+nothing; council spawns vendor CLIs already, and this is a **stricter** trigger than any
+vendor spawn in the package has: two keys, in front of a card that names the program.
+
+- **$VISUAL, then $EDITOR, then nothing.** An unset pair renders as unset and the card offers
+  the copy instead. Falling back to `notepad` or `vi` would be the room inventing a value the
+  operator never gave it — §4a.1 on a setting rather than on a gauge.
+- **The whole variable is tried as a program first.** `C:\Program Files\…\code.cmd` is one
+  program with a space in it, and splitting on whitespace before asking the operating system
+  would turn the operator's own setting into a program named `C:\Program`. Only when the
+  whole string does not resolve is it read as `program arg arg`.
+- **The card names the program and `y` starts THAT program**, resolved when the card armed
+  rather than when the key was pressed — `adoptOnto`'s contract, applied to a spawn.
+- **No stdio is wired**, because the room owns the terminal. The honest consequence is that a
+  terminal editor opens where the operator cannot see it, and the notice says so rather than
+  letting them discover it. What is REPORTED is exactly what `Start` measured: the process
+  began, or the operating system said why it could not. Whether the editor then drew a window
+  is not observable from here, and the notice does not claim it — `yank`'s rule, one keystroke
+  over.
+- **`c` copies the FULL path**, through the same native-helper-then-OSC-52 path `y` uses, and
+  a cancel writes nothing at all: an empty OSC 52 write is how a clipboard is CLEARED, so
+  "nothing happened" must not be spelled the same way as "your clipboard is now empty".
+
+`startEditor` is a package var for the reason the other three spawn vars are: `TestMain`
+makes it fail closed for the whole suite, and `countSpawns` stubs it with the vendors. A test
+that pressed `o` then `y` on a box where `$EDITOR` resolves would otherwise open a window on
+the desktop of whoever ran `go test`.
+
+#### What the help panel had to give up
+
+The panel's budget is hard (16 rows) and the arena keys had nowhere to come from, so the
+line-wise and screenful scroll rows were merged into one. That merge is the category rather
+than a saving — the bar this panel's own budget comment sets: they are one act at two scales,
+which is the argument `f / t / T`, `y / Y` and `g / G` are each already merged on, and the two
+rows had come to restate each other's "in compose too" clause besides. The row it freed pays
+for `d / D / o`, and `d` is documented for the first time.
+
+Verified offline. `review_test.go` pins the parser against a patch whose hunk body carries
+three lines that are file headers in every other context, a deletion's `/dev/null` never
+rendering as a filename, absent staying apart from hunk zero, the cursor stopping at the drawn
+frame with the reason named, `[` and `]` yielding the turn hop when no patch is open, the mark
+appearing only on the focused column and surviving `--ascii`, the footer cell following the
+body, `D` spawning nothing and starting no turn, the quote following the cursor rather than
+the column, the route seeded only into an empty draft, an over-large quote refused whole, four
+refusals each saying their own reason, the card copying the path without spawning, `y`
+starting the program the card named in the racer's own tree, an absent `$EDITOR` said rather
+than guessed, a stray key touching neither clipboard nor process table, and the three keys
+named above the help panel's fold. `arena-review.txt` and its `--ascii` twin are the frame. No
+test here spawns a vendor or an editor.
+
+**Nothing in this section is a claim about vendor behaviour, so no live vendor run is owed.**
+What IS owed is one live open: `o` then `y` against a real `$EDITOR` on the reference box, and
+`D` on a real race's patch through to a dispatched turn. Stated here rather than implied paid.

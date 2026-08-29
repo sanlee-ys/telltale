@@ -1880,7 +1880,16 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 			if len(lines) > arenaDiffScreenLines {
 				shown = lines[:arenaDiffScreenLines]
 			}
-			for _, line := range shown {
+			// The review cursor (§9.49). Marked only on the column the keys
+			// address, because `D` quotes the FOCUSED seat's hunk — a mark on a
+			// neighbour would promise a key that does not reach it, which is
+			// §7.8's surprise pointing the same way `y` and the scroll hint
+			// already refuse. -1 is "no cursor here" and draws nothing.
+			cursorAt := -1
+			if h, ok := reviewCursor(c); ok && st.focusedIs(c) {
+				cursorAt = h.At
+			}
+			for i, line := range shown {
 				// Classify RAW, style, then fit — in that order and no other.
 				// ForDiffLine reads the line's own prefix (headers before
 				// change markers, so `+++` never wears the addition's green),
@@ -1892,7 +1901,17 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 				// exact bytes, which is what keeps the goldens the proof that
 				// the prefixes still carry it alone.
 				raw := strings.TrimRight(line, " ")
-				out = append(out, fit(sty.ForDiffLine(raw).Render(raw), w))
+				// The cursor mark goes on AFTER the classification and before
+				// the style, so the hunk header keeps the muted weight its own
+				// prefix earns and the mark travels inside it. Prefixing the
+				// raw line before ForDiffLine read it would leave the marked
+				// hunk header rendering as ordinary text — the one line on this
+				// block whose classification a reader depends on.
+				shownLine := raw
+				if i == cursorAt {
+					shownLine = g.Focus + " " + raw
+				}
+				out = append(out, fit(sty.ForDiffLine(raw).Render(shownLine), w))
 			}
 			if n := len(lines) - len(shown); n > 0 {
 				out = append(out, wrap("(… "+itoa(n)+" more lines — y copies the whole diff, d returns to the stat)", w)...)
@@ -3708,7 +3727,7 @@ func modeHints(st State, g Glyphs) []hint {
 
 	hs := []hint{
 		{key: g.Up + g.Down, label: "scroll"},
-		{key: "[ ]", label: "turn", shed: true},
+		{key: "[ ]", label: hopUnit(st), shed: true},
 	}
 	// A room that has stopped asking still says so on every frame, and still says
 	// it next to the key that reverses it — on the composer box's bottom border
@@ -3759,6 +3778,26 @@ func modeHints(st State, g Glyphs) []hint {
 	}
 	return append(hs, hint{key: "i", label: "compose"},
 		hint{key: "?", label: "help"}, hint{key: "q", label: "quit"})
+}
+
+// hopUnit names what `[` and `]` step, in the body that is on screen (§9.49).
+//
+// The cell has to say HUNK while a patch is open, or the footer promises a turn
+// and the key moves a cursor — §7.8's surprise, on the one line this room holds
+// up as the contract that the surprise cannot happen. It is not the chrome
+// churn §7.1 rule 4 budgets against either: this changes when the operator
+// presses `d`, which is their own act, exactly as the `f expand` cell comes and
+// goes with the room's shape.
+//
+// It reads the FOCUSED column, because that is the column the keys address. A
+// neighbour with a patch open is not what `[` and `]` would move.
+func hopUnit(st State) string {
+	if st.Focus >= 0 && st.Focus < len(st.Columns) {
+		if c := st.Columns[st.Focus]; c.ArenaShowDiff && len(reviewHunks(c)) > 0 {
+			return "hunk"
+		}
+	}
+	return "turn"
 }
 
 // modeLine is now the KEYS and nothing else — the mode word and the gate cadence
@@ -4300,8 +4339,16 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		helpKeyCol("tab / 1-"+seatTop()) +
 			"focus between columns — in compose too; 1-" + seatTop() +
 			" goes straight to a seat, by position",
-		"  ↑ ↓ / j k    scroll the focused column's whole transcript — ↑ ↓ in compose too",
-		"  pgup/pgdn    scroll by a screenful, in compose too (space = pgdn in view mode);",
+		// The screenful keys merged onto the line-wise row, and the merge is the
+		// category rather than a saving — the bar this panel's budget comment
+		// sets. They are one act at two scales, which is exactly the argument
+		// `f / t / T`, `y / Y` and `g / G` are each already merged on, and the
+		// two rows had come to restate each other's "in compose too" clause
+		// besides. The row it frees pays for the arena row below, which had
+		// nowhere else to come from: the budget is hard (16 rows, above), the
+		// panel documented neither `d` nor `x` before this, and a review surface
+		// nobody can find is the §9.20 defect built on purpose.
+		"  ↑ ↓ / j k    scroll the focused column by a line, pgup/pgdn by a screenful — both in compose (space = pgdn here)",
 		// The turn keys land on the row that already holds the other jumps rather
 		// than on one of their own, because the budget is hard (16 rows, above)
 		// and this is the row a reader is already on when they are looking for a
@@ -4309,7 +4356,21 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// for it: the line above says `scroll`, so what g / G do is unambiguous
 		// without the verb, and a key documented below the fold is a key nobody
 		// finds (§9.20).
-		"               g / G first turn or newest; [ ] step one turn at a time",
+		//
+		// The hunk reading of `[ ]` is stated HERE rather than on the arena row,
+		// because it is the same key doing the same thing at a third scale
+		// (§9.49) and a reader hunting for what `[ ]` does is on this row. "at a
+		// time" paid for it; the clause it bought says which body the unit
+		// belongs to, which is the only part a reader cannot guess.
+		"               g / G first turn or newest; [ ] step one turn — or one hunk, in an open patch",
+		// The arena block's own keys, and the row exists because none of them
+		// was on this panel: `d` has flipped a racer's block to the patch since
+		// §9.37 and no page ever said so. Grouped rather than scattered for the
+		// `/cd` row's reason — these are the keys that address ONE surface, the
+		// arena block under a column, so a reader who finds any of them has
+		// found the surface. `D` and `o` are taught beside the key that opens
+		// what they act on, which is what keeps them off rows of their own.
+		"  d / D / o    d flips a racer's block to the patch; D quotes the ▸ hunk into the draft; o opens its worktree",
 		// `t` lands on the row that already holds `f` rather than on one of its
 		// own, because the budget is hard (16 rows, above) and these two are the
 		// same question asked twice: how much of the room is the reading area.

@@ -10,7 +10,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 )
 
-// TestMain makes the package's three spawn vars FAIL-CLOSED for the whole test
+// TestMain makes the package's spawn vars FAIL-CLOSED for the whole test
 // binary: reaching one with a binary that actually RESOLVES, without having
 // stubbed it, panics instead of launching a real vendor CLI.
 //
@@ -62,6 +62,7 @@ import (
 // back to polling the process table.
 func TestMain(m *testing.M) {
 	realProcess, realSession, realRPC := startProcess, startSession, startRPCSession
+	realEditor := startEditor
 
 	startProcess = func(ctx context.Context, spec runner.Spec, out chan<- runner.Event, parse runner.ParseFunc) (*runner.Handle, error) {
 		refuseRealVendor("startProcess", spec)
@@ -74,6 +75,29 @@ func TestMain(m *testing.M) {
 	startRPCSession = func(ctx context.Context, spec runner.Spec, out chan<- runner.Event, proto runner.Protocol) (seatSession, error) {
 		refuseRealVendor("startRPCSession", spec)
 		return realRPC(ctx, spec, out, proto)
+	}
+
+	// The EDITOR spawn is guarded on the same rule and for a sharper version of
+	// the same reason (§9.49). It is not a vendor and costs no quota, but it is
+	// still a real program starting on the machine running the suite — and
+	// unlike the three above it is spawned by a KEYSTROKE, so a test that
+	// presses `o` then `y` on a box where $EDITOR resolves would open a window
+	// on the operator's desktop from a `go test` run. Whether the binary
+	// resolves is the same question the operating system is about to ask, so
+	// the rule is copied rather than re-invented.
+	startEditor = func(name string, args []string, dir string) error {
+		if _, err := exec.LookPath(name); err == nil {
+			panic(fmt.Sprintf(
+				"council test started a REAL editor process — that opens a program "+
+					"on the desktop of whoever ran the suite.\n"+
+					"  binary: %s\n"+
+					"  args:   %q\n"+
+					"  dir:    %s\n"+
+					"Stub startEditor in this test — countSpawns(t) in "+
+					"flow_security_test.go does it with the vendor spawns.",
+				name, args, dir))
+		}
+		return realEditor(name, args, dir)
 	}
 
 	os.Exit(m.Run())
