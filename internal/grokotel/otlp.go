@@ -125,8 +125,12 @@ func (r apiRequest) nonnegative() bool {
 // ResourceLogs.scope_logs(2) → ScopeLogs.log_records(2), all measured live.
 // Records with any other event name — session_start, turn_completed,
 // mcp_server_connection and the rest of the §3.9a event table — are walked
-// past without being read: turn_completed carries no token counts (measured),
-// and one record type is one claim.
+// past without being read: turn_completed carries no token counts ON THIS
+// WIRE (measured 2026-08-10), and one record type is one claim. The qualifier
+// is load-bearing — grok's own updates.jsonl persists a turn_completed record
+// of the same name whose usage object carries nine counts (§3.9a's 2026-08-29
+// re-measure). Same name, different envelope; this parser walks past the OTLP
+// one, and nothing here reads disk.
 func apiRequests(body []byte) ([]apiRequest, error) {
 	var out []apiRequest
 	err := each(body, func(rl field) error {

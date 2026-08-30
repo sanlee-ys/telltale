@@ -41,9 +41,14 @@ telltale history — what claude spent, day by day, read from claude's own sessi
               message rows in the live store, and the field is declared CapNone rather than filled
               with a plausible number (design.md §7.16). The vendor's counts arrive by hook, not on
               disk.
-    grok      a turn_completed record in updates.jsonl carries usage.totalTokens per turn, and a
-              total only — no input/output split. The record the adapter parses carries no timestamp
-              either, so it has agy's problem as well as its own.
+    grok      the split and the date are both there, and this verdict said the opposite until
+              2026-08-29. A turn_completed record's usage carries inputTokens, outputTokens,
+              cachedReadTokens and cacheCreationTokens beside the envelope's own timestamp —
+              measured at grok 1.0.5, and on disk since 1.0.0 (design.md §3.9a).
+              internal/adapter/grok parses totalTokens alone, which is what the old reading
+              described. A unit trap is owed before any block: inputTokens INCLUDES the cache read
+              here, where claude's input_tokens excludes it, so the four columns are not the same
+              four.
     pi        an assistant message carries usage.input and usage.output with a record timestamp and
               a cwd, so this vendor is datable — the second-strongest seam after codex. It carries
               no cache split either, and it carries usage.cost.total per message — money, which this
