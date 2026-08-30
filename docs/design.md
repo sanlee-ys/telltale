@@ -13703,6 +13703,7 @@ collision suffix, a committed donor read off its branch instead of its tree, and
 restoring the room. The record half is pinned in `record_test.go` against ref lists, with its own
 golden in both glyph sets. **The live half is owed**: no real hybrid has been armed against a race on
 this box, and it is owed on the same keystroke as the divergence preview's live debt above.
+
 <a id="s9-38"></a>
 
 ### 9.38 paste lands whole, and never sends (2026-08-09)
