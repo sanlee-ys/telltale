@@ -392,9 +392,17 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   is the next slice and it is unowned, and it is blocked on a ruling rather than on work —
   a codex rollout carries `info.last_token_usage` (this turn) beside a cumulative
   `info.total_token_usage`, and which of the two a day may sum is a decision nobody has made.
-  agy and grok are refused for want of a per-turn TIMESTAMP, which is a survey finding and not
-  a todo: if either vendor ever dates its counts, that is a new measurement and the verdict is
-  re-taken, not assumed.
+  agy is refused for want of a per-turn TIMESTAMP, which is a survey finding and not
+  a todo: if that vendor ever dates its counts, that is a new measurement and the verdict is
+  re-taken, not assumed. **grok was refused on the same ground and that was wrong, corrected
+  the same day** (#316): a live re-measure at grok 1.0.5 read a `turn_completed` record off
+  disk carrying a full input/output/cache split beside the envelope's own timestamp. The
+  survey had read `internal/adapter/grok`'s struct, which parses `totalTokens` alone, and a
+  record struct is an allowlist — what it omits is a decision, not an absence. grok is still
+  uncovered and is now unowned rather than refused, behind one named unit trap: its
+  `inputTokens` INCLUDES the cache read where claude's `input_tokens` excludes it. The
+  general rule that bought is in §7.26 — before a vendor is built there, re-read its
+  records, not its struct — and it applies to every remaining row.
 
 - **The arena record has never been opened against a real pile of leftovers
   (2026-08-29).** `/arena record` (design.md §9.47) tallies every seat's adopted-of-decided
@@ -440,6 +448,25 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   same keystroke pays it as the arena record above: race, then `/adopt <seat>`,
   read the card and press `n`. Nothing is merged by arming the gate, so the debt
   costs one race.
+
+- **The HYBRID adopt has never run against a live race (2026-08-29).**
+  `/adopt <seat> +<seat> <path...>` merges one attempt whole and takes named
+  paths from another, on `adopt/t<N>-<base>+<donor>` (design.md §9.37's dated
+  hybrid amendment). The git mechanics and all four refusals are pinned by
+  offline tests against real temp repositories (`hybrid_test.go`), and the
+  arena record's hybrid state is pinned against ref lists with its own golden.
+  Neither has met a real race. **The same race pays this and the two debts
+  above**: race, `/adopt <seat>` and press `n` for the preview, then
+  `/adopt <a> +<b> <path>` and press `n` for the hybrid card, then `/arena
+  record`. Arming a card merges nothing, so all three cost one race and no
+  commit. Paying it fully — pressing `y` — additionally wants a look at the
+  receipt commit, which is the sentence the feature stands on.
+
+- **Per-HUNK adoption is deferred, not rejected (2026-08-29).** The hybrid ships
+  per-PATH because a hunk picker is a new full-frame body with its own scroll,
+  keys and mode word. The grammar does not block it: a picker would narrow what
+  `+<seat>` contributes and leave `/adopt <seat> +<seat> <path...>` alone. Its
+  own change, judged against §9.37 like every other item on that list.
 
 - **OBSERVED 2026-08-15/16, the drive that paid the demo path found three.
   The 2026-08-16 lane batch measured all three, and what is left is smaller.**
@@ -670,6 +697,17 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   Method note, because it cost a round trip: `/trace` resolves a relative path
   against the ROOM's workspace, so a trace has to be named relative to the repo
   for anything confined to it to read the result.
+
+- **Whether telltale should draw HUD rows for its own council seats is UNDECIDED
+  (2026-08-29).** `internal/adapter/cursor` now reads the `cursor-agent` CLI's
+  session manifests ([design.md §3.9](docs/design.md#s3-9)'s 2026-08-29
+  addendum), and `~/.cursor/acp-sessions/<uuid>/meta.json` carries the same
+  shape — 49 manifests, same three key sets, measured the same day. It is
+  deliberately NOT read. Those are `cursor-agent acp` sessions, which is the
+  server council's own Cursor seat runs (§9.36), so reading them would put the
+  room's seats on the grid beside the operator's own work. That may be right; it
+  is a product question nobody has answered, and the reader is one root away
+  from it either way.
 
 Cross-platform and cross-machine status has its own file: [PARITY.md](PARITY.md).
 

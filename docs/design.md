@@ -1551,6 +1551,9 @@ is a supported, versioned contract and it is where a liveness/needs-input signal
 come from — not from reverse-engineering `status` out of the store. Recorded as the
 watch item; §8 carries it. Separately, the `cursor-agent` CLI keeps its own store, which
 is **not installed on this machine** and therefore an unverified surface, out of scope.
+(That last sentence held until 2026-08-29. `cursor-agent` is installed here now and its
+session manifest IS read; see this section's 2026-08-29 addendum. The Cursor Hooks watch
+item above is untouched.)
 
 **Adapter built, 2026-08-02 (`internal/adapter/cursor`).**
 Name, model, workspace and last_activity REPORTED; context % declared DERIVED and marked
@@ -1582,7 +1585,9 @@ as many words, and it is why a `conversation_id` is not stored — it would dang
 does not exist). A CLI session was therefore never a row this adapter could draw. The
 observation confirms an existing claim rather than opening a question, and it is written
 down because "the gauge showed nothing" is the kind of report that gets re-investigated
-every few months unless the expected answer is recorded beside it.
+every few months unless the expected answer is recorded beside it. **This paragraph
+describes the build it was written at and no longer describes the HUD: a CLI session draws
+a row as of 2026-08-29. See this section's addendum below.**
 
 **What the same observation does NOT settle, and it is the measurement worth taking.** The
 operator's Cursor configuration carries `ghostMode: true` and `privacyMode: 2`. Neither
@@ -1599,6 +1604,104 @@ cheap and needs the IDE rather than the CLI — drive a Composer session in the 
 settings on, then off, and compare what `composerHeaders` gains in each arm. Until somebody
 runs it, this paragraph is a hypothesis with its reason attached and nothing in the adapter
 changes.
+
+**Amended 2026-08-29 — the CLI store is readable on this machine, and the 2026-08-17 gap is
+CLOSED. `cursor-agent` CLI sessions draw HUD rows now.** The paragraph above stays correct
+about the build it described. Its premise moved: `cursor-agent` is installed here, and a
+2026-08-29 read-only survey of its trees measured a per-session manifest the 2026-08-02
+survey could not have seen. `internal/adapter/cursor` reads it, in `chats.go`, beside the
+Composer store it already read.
+
+**First, the claim that did NOT survive the survey.** A JSONL transcript tree exists at
+`~/.cursor/projects/<slug>/agent-transcripts/<uuid>/<uuid>.jsonl`, and a vendor-seam refresh
+candidate described it as Claude-compatible JSONL carrying per-turn token counts. Both halves
+are false, measured structurally over 71 files and 1,951 records with 0 unparseable. The
+envelope carries exactly three key sets — `message`+`role` (1,852), `status`+`type` (87),
+`error`+`status`+`type` (12) — and none of `sessionId`, `timestamp`, `cwd` or `version`, so
+`internal/adapter/claudecode` cannot be reused: its canary is `sessionId`. A key sweep for
+`usage|tokens|input_tokens|output_tokens|totalTokens|cacheRead|cost` over all 71 files
+returns zero matches. That CONFIRMS §7.16's 2026-08-08 measurement on a corpus 1.4x larger at
+a CLI build one week newer, so §7.16's held display is untouched and cost stays `CapNone` for
+this vendor. The transcript tree is not read and no adapter opens it.
+
+**What IS built, and what it measures.** The store is one plain-JSON manifest per session:
+
+```
+~/.cursor/chats/<workspace-hash>/<session-uuid>/meta.json
+```
+
+Observed key sets over 43 manifests, at `cursor-agent 2026.08.11-e8db854`: 40 carry
+`schemaVersion`, `createdAtMs`, `hasConversation`, `updatedAtMs`, `cwd`; 3 add `title`.
+`schemaVersion` is `1` on 43 of 43. **This is the first Cursor surface anywhere that declares
+its own format version**, against the "Version fragility" caution above, and the value is
+PINNED in `chats.go` and in a fixture.
+
+| Field | Verdict | Source, and what was measured |
+|---|---|---|
+| name | **MEASURED** | `title`, on 3 of 43 manifests. An absent title is therefore genuine absence, not a failed read. The row then takes the `cwd` basename, which is the fallback `internal/hud`'s own `sessionLabel` applies and `internal/adapter/pi` applies at the adapter. |
+| workspace | **MEASURED** | `cwd`, a native path (`C:\...` on 43 of 43 here), taken verbatim. It is NOT the `file:///c%3A/...` URI the Composer store's `workspace.json` carries, so no conversion runs. |
+| last_activity | **MEASURED** | `updatedAtMs`, epoch milliseconds, folded with the manifest's own mtime per §6 Q8. |
+| model | **ABSENT** | No key of any kind. The Composer store's `composerData` names one; this store does not. |
+| context %, cost, quota | **ABSENT** | See the token sweep above. Zero matches in 1,951 records. |
+| liveness | **ABSENT** | No in-flight session was sampled, same as the Composer half. The HUD classifies age. |
+
+**The Q8 fold runs here, and that is not a contradiction of the build caution above.** The
+Composer half deliberately excludes the store's file mtime because ONE file backs every
+session there. The CLI gives every session its own manifest, so that file's mtime dates that
+session, and the fold is the ordinary shape every other adapter uses. The two agreed within
+0.2 s on 43 of 43 manifests, so the fold is a guard rather than a source: it is what keeps
+the age honest if the vendor ever rewrites the file without restamping the key.
+
+**`hasConversation:false` is an empty shell and draws no row. The ruling is measured.** All
+three such manifests held nothing but themselves — no `store.db`, no `prompt_history.json` —
+and their `updatedAtMs` stood 263–387 ms past their own `createdAtMs`. They are the directory
+the vendor stamps when a session is created and nobody types. That is the same class as the
+Composer store's `empty-state-draft` and its pre-created composers, so the same filter applies.
+An ABSENT `hasConversation` key is NOT read as a declared false and keeps its row: a vendor
+that stopped writing the key must not empty the HUD.
+
+**Two more shapes are skipped in silence, and the counts are recorded here so the row count is
+not read as a defect.** 22 of the 65 session directories hold `store.db` with no `meta.json` at
+all, because the manifest is newer than the tree; a row for one would date a session from a
+directory mtime whose meaning was never measured. Together with the 3 shells, 40 of 65
+directories drew rows on the survey machine. A manifest whose `schemaVersion` this adapter does
+not read is the opposite case and is REPORTED every time: it draws no row (dropfile's rule —
+the keys may no longer mean what the reader thinks) and the skip is counted into a diagnostic
+that rides on every Cursor row, Composer rows included. A silent skip there would turn a vendor
+format bump into "you have no CLI sessions", which is a wrong answer rather than a missing one.
+
+**One adapter, two stores, and every row says which one it came from.** Both stores describe
+Cursor sessions, so both feed `model.VendorCursor`; the Adapter composes a sibling reader
+rather than shipping a second adapter, because a vendor id is what the HUD's identity column
+and the `--vendor` flag address, and two adapters sharing one id would give the registry two
+answers. The distinction IS measurable, so it is displayed: every session carries an Extra
+labelled `source` naming its store, and a CLI row's id is prefixed `cli:`. The labels are
+symmetric — a Composer row carries one too — so that the ABSENCE of a label never becomes the
+thing that identifies a store. The alternative was a second vendor id (`cursor-cli`); it was
+rejected because it buys one distinction and pays a second vendor line, a second `--vendor`
+value and a second doctor pin for what the operator experiences as one tool. The composition
+has one honest cost and `chats.go` states it on the row rather than hiding it:
+`model.Capabilities` is static per adapter, so a CLI row's empty model and context cells read
+as "absent now" when the truthful reading is "this store has no such field". Each CLI row
+carries a second Extra, `not in this manifest`, naming those two fields.
+
+**The credential rule is unchanged and narrower here.** The tree sits beside `store.db`
+(4096 bytes with a 300 KB–1.7 MB `-wal`, the WAL trap in its strongest form),
+`prompt_history.json`, and the config and cache files in `~/.cursor`. The reader opens ONE
+file name, `meta.json`, at a fixed depth of two directories below `chats/`. It never opens
+`store.db`, never recurses, and never looks at a sibling for any purpose. `chats_test.go`
+plants credential-shaped and prompt-shaped markers in those neighbours and asserts none
+reaches a displayed field, which is the same standing test the Composer reader carries.
+`conversation-search.db` — a new FTS5 index over conversation `body` text that appeared beside
+`state.vscdb`, with a `source` column admitting `'cloud-cache'` — stays unopened under the rule
+that keeps grok's `session_search.sqlite` closed.
+
+**What this amendment did NOT measure.** `~/.cursor/acp-sessions/<uuid>/meta.json` carries the
+same shape (49 manifests, same three key sets, 3 of them shells) and is deliberately NOT read:
+those are `cursor-agent acp` sessions, which is the server council's own Cursor seat runs
+(§9.36), and whether telltale should draw rows for its own council seats is a separate
+question this change does not answer. The `~/.cursor` root is measured on Windows only; see
+`PARITY.md`. No transcript, no `store.db` blob and no `ItemTable` row was read.
 
 <a id="s3-9a"></a>
 
@@ -2236,12 +2339,22 @@ has moved, and says so. `internal/adapter/drift` holds the mechanism; this is th
 | Antigravity | `agy 1.1.13` | `gen_metadata table` | model |
 | | | `trajectory_metadata_blob table` | workspace |
 | Cursor | `Cursor 3.14.7` | `composerHeaders timestamp columns` | last activity |
+| | | `meta.json updatedAtMs` — the CLI manifest's clock, on 43 of 43 manifests | last activity |
 | Grok CLI | `grok 1.0.4 (d846eb93d9)` | `summary.json info.id` — the identity envelope, on 30 of 30 sessions | name, model, workspace, last activity |
 | Pi | `pi 0.84.1` | `session header id` — first JSONL record is `type=session` with a non-empty `id` | name, model, workspace, last activity |
 
 The middle column quotes each canary by the **name the adapter gives it**, not a paraphrase, so
 the string in this table is the string in the code — which is what makes the guard tests below
 able to check it at all.
+
+**Cursor's row gained a second canary on 2026-08-29, and its `verified against` cell did not
+move.** The cell names the Cursor APPLICATION the SQLite store was surveyed inside, and
+`internal/adapter/pins` already records that this pin and an installed `cursor-agent` version
+cannot be compared. The second canary watches a different store written by a different
+program, so it carries its own pin — `cursor-agent 2026.08.11-e8db854`, in `chats.go`'s
+`chatsVerifiedAgainst` — rather than borrowing this cell. The `pins` table stays one row per
+vendor: `pins.For` answers per vendor id, and a second Cursor row there would make that answer
+depend on ordering.
 
 **Grok's row moved to 1.0.4 on 2026-08-14, and the row's two halves were re-checked to different
 depths.** The version came from re-measuring the seat after four patch bumps went unnoticed
@@ -4331,6 +4444,15 @@ beside a sum invites reading the sum as that model's. `conversation_id` names a
 cursor-agent **CLI** conversation, and the HUD's Cursor rows come from the **IDE's**
 Composer store (§3.9); the CLI keeps a separate one. Storing it would dangle a join that
 does not exist, which is also why this reading is not rendered on a session row.
+
+**Amended 2026-08-29: the `conversation_id` ruling HOLDS and its reason no longer does.**
+The HUD draws CLI rows now, out of `~/.cursor/chats/<hash>/<uuid>/meta.json` (§3.9's
+2026-08-29 addendum), so the join has something to join to for the first time. It is still
+not built and the field is still not stored, because whether this `conversation_id` IS that
+directory's session uuid was never measured. A key stored on the assumption that two ids
+match is how a relay begins attributing one session's tokens to another, and §7.16's whole
+argument is that the tokens must not be attributed to a row on a guess. Measure the two ids
+against each other first; nothing about the held display changes either way.
 
 #### The accumulation ruling: a total, and never without its window
 
@@ -7269,7 +7391,11 @@ these items are ordered by that sequence, not by version number.
    where item 3's needs-input signal should come from for this vendor, rather than
    reverse-engineering `status` out of the store; and the `cursor-agent` CLI keeps a
    separate store that is not installed on the survey machine and stays unverified and
-   out of scope until it is.
+   out of scope until it is. — **The second watch item CLOSED 2026-08-29.**
+   `cursor-agent` is installed on this machine now, its store was surveyed, and
+   `internal/adapter/cursor` reads its per-session manifest. §3.9's 2026-08-29 addendum
+   carries the field map, the `schemaVersion` pin and the composition argument. The
+   Cursor Hooks watch item is untouched and still open.
 
 #### Packaging decisions (settled 2026-08-08; §6.5 closed here)
 
@@ -13573,6 +13699,136 @@ states held apart, and the baseline on a named branch, on a detached HEAD and on
 all. No golden moved, because the card is a notice string and no golden renders one. **The live
 half is owed**: no real `/adopt` has been armed against this build, so every sentence above
 rests on the fixtures rather than on a race.
+
+**Amendment, 2026-08-29: `/adopt` can take the winner plus the parts of the runner-up you point
+at.** A race ends with four attempts and one decision, and the decision the room offered was
+all-or-nothing: adopt one seat whole, and retype by hand whatever the runner-up got right. The ask
+is not ours — it is the one users put to Cursor's own multi-agent judging thread, in those words:
+synthesize a best-of-both instead of picking one wholesale. No surveyed tool ships it. Council
+already owns the substrate — per-attempt worktrees, one base SHA, commit receipts, and a y/n card
+that names exact git commands — so this is a grammar and four refusals, not new machinery.
+
+**The grammar is one more argument, and the fork is PER-PATH.**
+
+```
+/adopt claude +codex internal/council/helper.go docs/council.md
+```
+
+- **Per-path, not per-hunk.** The sweep's own evidence is users asking to mix at path OR hunk
+  level, so the choice was open. Per-hunk needs an interactive picker inside the room — a
+  full-frame body with its own scroll, its own keys and its own mode word — which is a new render
+  surface for a v1 whose value is that the operator can take one file from the runner-up. A path
+  is also the unit already in front of them: the column's `git diff --stat`, and this card's own
+  overlap clause, both speak in paths. **Per-hunk is deferred, not rejected**, and this shape does
+  not block it: a hunk picker would narrow what `+<seat>` contributes and leave the grammar alone.
+- **`+` glued to the donor seat.** A bare `+` as its own word would make `/adopt claude + codex`
+  legal, and that reads as a request for two whole attempts — which this verb cannot do and must
+  not appear to offer. `/adopt` already takes its whole argument (roomcmd's `parseCommand`), so the
+  longer form needs none of the vocabulary handling `/arena drop` needed.
+- **User-typed, never computed.** §9.34 rejected a synthesis hop, and that ruling binds here:
+  council applies the paths the operator named and chooses nothing. The refusals below are how that
+  promise is kept mechanically rather than by intention.
+
+**Four refusals, and not one of them resolves anything.** Each names the path and a way forward
+(§9.17's tell), and each fires before the card arms, so a `y` is always one that can be honored:
+
+- **A path BOTH racers wrote.** This is the founding refusal. `git checkout <donor> -- <path>`
+  would discard the base attempt's answer with no merge and no conflict marker, so council refuses
+  by name and the operator decides — drop the path, or merge it by hand afterwards.
+- **A path the ROOM wrote since the race was cut.** The same silent clobber one level out: the
+  merge machinery never sees a path taken by checkout, so the room's own work there would vanish.
+- **A path the donor did not write.** Taking it would land the base attempt's own content under a
+  receipt saying it came from the donor.
+- **A path the donor deleted.** A hybrid takes files a racer wrote, never a deletion — a stated v1
+  limit rather than a `git checkout` pathspec error discovered after the branch was already cut.
+
+**The card says exactly what will be merged from where, composed with the divergence preview
+above.** The preview still leads, for that amendment's reason; the leading question gains the
+hybrid's own scope, and the action clause gains its second half:
+
+```
+adopt claude + 1 path from codex? vs main: 1 ahead, 0 behind · no overlapping path · y commits
+both worktrees, cuts adopt/t4-claude+codex and runs git merge --no-ff arena/t4/claude, then
+takes helper.go from arena/t4/codex · n cancels
+```
+
+Every path is named rather than counted-with-an-example. The count-plus-first grammar the overlap
+clause uses is right for a measurement the room took; these paths are the SCOPE the `y`
+authorizes, and a card that authorized "2 paths (a.txt)" would leave the second one unread. The
+operator typed them, so the list is short by construction.
+
+**The branch name carries both seats: `adopt/t<N>-<base>+<donor>`.** This is a naming decision and
+the arena record (§9.47) forced it, because that page derives everything it knows from these refs.
+The alternative — keep `adopt/t<N>-<base>` and let the commit message carry the donor — would leave
+one seat's name alone on a branch holding another seat's work, in the one place `git branch` shows
+a reader, and the record would then count the base seat as having won the race outright. `+` is the
+joiner because it is legal in a ref name, because `-` is already the collision suffix and because
+`/` is already the arena namespace. `freeAdoptBranch` suffixes a collider identically, from the
+same single scan, so the two spellings cannot disagree about what "taken" means.
+
+**The receipt names both sources.** The base arrives as the unchanged `git merge --no-ff`, and the
+paths arrive in a second commit whose message names both arena branches, lists every path, and says
+what council refused to do:
+
+```
+adopt race t4: arena/t4/claude whole, plus 1 path from arena/t4/codex
+
+the merge below this commit carries arena/t4/claude whole. this commit
+adds the paths that came from arena/t4/codex, and it adds nothing else:
+
+  helper.go
+
+telltale council took no path that both seats wrote. a shared path is
+refused by name, and the operator merges it.
+```
+
+The notice says it a third time, because that is the last moment the operator is still looking:
+`adopted claude onto adopt/t4-claude+codex, with 1 path from codex (helper.go)`.
+
+**The arena record renders a hybrid as its OWN state, and credits nobody.** The refs can say a race
+was decided and which two seats the adoption was cut from; they cannot say which paths came from
+where, because that lives in a commit message the page does not read. So a hybrid raises a fourth
+per-seat count and moves no rate at all: the race counts as decided, both seats count as having
+entered it, and neither seat's `adopted of decided` moves. Crediting the base seat would score it
+for work the donor wrote; counting it against both would score two seats down for a race the
+operator resolved in both their favour. A seat whose only decided races were hybrids reads
+`no attempt adopted whole  part of 2 hybrid adopts`, which is the true statement — and the window
+sentence carries the difference a reader adding the seats up would otherwise not find:
+`3 decided by you (2 by a hybrid adopt, counted for no seat)`. A whole adoption of the same race
+still outranks a hybrid of it, because an operator who adopted whole, reverted and then took a
+hybrid did adopt it whole once, and both receipts survive.
+
+**One fork from the divergence-preview ruling above, recorded because it is a fork.** That ruling
+declined to fold a racer's uncommitted paths into the OVERLAP set, on the grounds that they are a
+prediction of a commit nobody has made. The hybrid's path checks DO read them, and the difference is
+what the read is for. There it was a preview of a merge RESULT; here it decides a refusal about
+paths the operator named, and `y` commits both worktrees in the same act with `git add -A` — so the
+set is `tracked changes ∪ untracked-and-not-ignored`, which is what that commit will contain by
+definition rather than by forecast. Refusing to read them would refuse every hybrid on an ordinary
+race, because arena seats leave their work uncommitted (commit-per-turn is deferred). The card still
+states the older ruling's limit, in the same clause it already used.
+
+**A conflicted hybrid restores exactly like the conservative whole adopt.** The base merge is
+unchanged, so a conflict aborts, the branch is deleted, the room goes back to the branch it came
+from, and the donor's paths are never written. A failure in the second half restores the same way,
+with one extra step named rather than hidden: a `git reset --hard` before the checkout back. It is
+bounded to a branch council cut, at a commit council made, over a room tree measured clean before
+any of it — the only content it can discard is a half-checked-out copy of files that exist whole on
+the donor's own branch.
+
+**Two shapes recorded rather than taken.** A `+<seat>` with no paths, meaning "take everything of
+the donor's that does not collide" — declined because it makes the scope a thing council computed
+rather than a thing the operator read, which is the whole contract of the card. And renaming the
+donor's paths on the way in — declined as a second grammar to learn, for a case `git mv` already
+handles after the adoption.
+
+Verification, on this section's own terms: the mechanics are pinned by offline tests against real
+temp repositories (`hybrid_test.go`) — the merge plus the named path landing while the donor's other
+file does not, the receipt naming both branches, all four refusals, the grammar's own refusals, the
+collision suffix, a committed donor read off its branch instead of its tree, and a conflicted hybrid
+restoring the room. The record half is pinned in `record_test.go` against ref lists, with its own
+golden in both glyph sets. **The live half is owed**: no real hybrid has been armed against a race on
+this box, and it is owed on the same keystroke as the divergence preview's live debt above.
 
 <a id="s9-38"></a>
 

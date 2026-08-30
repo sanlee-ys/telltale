@@ -71,6 +71,22 @@
 //     last_activity, same as every other vendor. §3.9 records the documented
 //     Cursor Hooks payload as the seam where that becomes buildable.
 //
+// # Two stores, one vendor
+//
+// Since 2026-08-29 this adapter reads a SECOND store: the cursor-agent CLI's
+// per-session manifest at ~/.cursor/chats/<hash>/<uuid>/meta.json. §3.9
+// recorded on 2026-08-17 that a live CLI session drew no HUD row and that this
+// was the design; the manifest is what made it buildable, and chats.go holds
+// the reader, its own version pin, and the argument for composing it here
+// rather than shipping a second adapter with a second vendor id.
+//
+// The two sources are distinguished on every row rather than merged into an
+// undifferentiated "cursor": each session carries an Extra labelled
+// extraSource naming the store it was read from, and a CLI row's id is
+// prefixed cliIDPrefix. Neither store may pass for the other, because they
+// source different fields — the Composer store has a model and a context
+// percentage and the manifest has neither.
+//
 // # Traps encoded here
 //
 //   - THE WAL IS WHERE THE DATA IS. This is not the usual "read the sidecar
@@ -191,10 +207,45 @@ const futureSkew = 2 * time.Second
 // vendor wrote no title. Eight hex characters, matching the agy adapter.
 const nameLen = 8
 
-// Adapter reads Cursor's Composer state. Safe for concurrent use.
+// The provenance labels. Both stores carry one, and the symmetry is the point:
+// a label on the CLI rows alone would make its ABSENCE the thing that
+// identifies an IDE row, and absence is the one signal this repo refuses to
+// give meaning to. internal/adapter/dropfile sets the precedent — an Extra
+// labelled "source" is how a row says where its numbers came from.
+const (
+	extraSource = "source"
+	// extraNotInManifest names what the CLI store does not have, on the CLI
+	// rows only. model.Capabilities is static per adapter, so this adapter
+	// declares model and context % sourceable and a CLI row's empty cells read
+	// as "absent now" rather than "this store cannot know". That is the one
+	// honesty cost of composing two stores under one vendor id (chats.go), and
+	// this line is where the row pays it in words.
+	extraNotInManifest = "not in this manifest"
+
+	sourceIDE = "Cursor IDE Composer store"
+	sourceCLI = "cursor-agent CLI chats manifest"
+)
+
+// Adapter reads Cursor's Composer state and the cursor-agent CLI's session
+// manifests. Safe for concurrent use.
 type Adapter struct {
 	// root is Cursor's user-data directory, %APPDATA%\Cursor\User on Windows.
 	root string
+
+	// chats reads the CLI's own store. Nil-safe: a reader with no root reports
+	// the vendor absent and the adapter falls back to the Composer store
+	// alone, which is what NewWithRoot leaves behind.
+	chats *chatsReader
+
+	// lastChats is the most recent CLI walk, held so that the Reads following a
+	// Discover answer from the same evidence the Discover listed — the same
+	// reason `cache` exists for the Composer store. Guarded by mu.
+	//
+	// Its notes ride onto EVERY row this adapter produces, Composer rows
+	// included. A schemaVersion the reader does not know is a fact about the
+	// vendor's format, and on a machine whose CLI tree is entirely unreadable
+	// there would be no CLI row left to carry it.
+	lastChats *chatsScan
 
 	// One store backs every session, so the parse is per-STORE, not per
 	// session: Discover loads it and the Reads that follow reuse that load.
@@ -204,24 +255,64 @@ type Adapter struct {
 	cache *snapshot
 }
 
-// New returns an adapter rooted at Cursor's user-data directory.
+// New returns an adapter rooted at Cursor's two stores.
 //
-// os.UserConfigDir is exactly right on all three platforms — %APPDATA% on
-// Windows, ~/Library/Application Support on macOS, ~/.config elsewhere — which
-// is why there is no environment override to get wrong. Tests use NewWithRoot.
+// The two roots hang off DIFFERENT base directories and neither is derivable
+// from the other. os.UserConfigDir is exactly right for the IDE store on all
+// three platforms — %APPDATA% on Windows, ~/Library/Application Support on
+// macOS, ~/.config elsewhere. The CLI writes its manifests under ~/.cursor
+// instead, which is the home directory on every platform. Neither has an
+// environment override, so there is nothing to get wrong. Tests use
+// NewWithRoot or NewWithRoots.
+//
+// A base directory that does not resolve switches off only the store it
+// serves: a machine with no home still gets Composer rows, and a machine with
+// no config directory still gets CLI rows.
 func New() *Adapter {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return &Adapter{}
+	a := &Adapter{}
+	if dir, err := os.UserConfigDir(); err == nil {
+		a.root = filepath.Join(dir, "Cursor", "User")
 	}
-	return &Adapter{root: filepath.Join(dir, "Cursor", "User")}
+	if home, err := os.UserHomeDir(); err == nil {
+		a.chats = newChatsReader(filepath.Join(home, ".cursor", chatsDir))
+	}
+	return a
 }
 
-// NewWithRoot points the adapter at an explicit user-data directory.
+// NewWithRoot points the adapter at an explicit user-data directory, with the
+// CLI reader switched off.
+//
+// Its meaning is unchanged from before the CLI store was read, which is why
+// there is a second constructor rather than a second argument: the callers of
+// this one (internal/democorpus, the Composer fixtures) hand over a synthesized
+// %APPDATA%\Cursor\User tree and have no CLI tree to name. A root that quietly
+// grew a second meaning would make those trees describe a fleet they do not
+// contain.
 func NewWithRoot(root string) *Adapter { return &Adapter{root: root} }
 
+// NewWithRoots points the adapter at both stores explicitly. Either may be
+// empty, which switches that store off.
+func NewWithRoots(root, chats string) *Adapter {
+	a := &Adapter{root: root}
+	if chats != "" {
+		a.chats = newChatsReader(chats)
+	}
+	return a
+}
+
 // Root is the directory this adapter watches, for the HUD's empty state.
-func (a *Adapter) Root() string { return a.root }
+//
+// It names the Composer store's root, and falls back to the CLI tree only when
+// there is no Composer root at all. The empty state answers "where did you
+// look and find nothing", and naming two paths there would cost the line more
+// width than the answer is worth; the CLI tree's path travels on each CLI row's
+// own Locator instead.
+func (a *Adapter) Root() string {
+	if a.root == "" && a.chats != nil {
+		return a.chats.root
+	}
+	return a.root
+}
 
 func (a *Adapter) Vendor() model.VendorID { return Vendor }
 
@@ -298,13 +389,55 @@ func (a *Adapter) storePath() string {
 	return filepath.Join(a.root, globalStorage, storeFile)
 }
 
-// Discover lists the Composer sessions in the store.
+// Discover lists both stores' sessions.
 //
-// This is the one adapter whose Discover cannot be stat-only: there is no
-// directory of sessions to list, only rows inside a single database. The cost
-// is paid once per tick and shared with the Reads that follow (see Adapter.mu),
-// and a tick on which the store did not move costs two stats.
+// The Composer half cannot be stat-only: there is no directory of sessions to
+// list, only rows inside a single database. The cost is paid once per tick and
+// shared with the Reads that follow (see Adapter.mu), and a tick on which the
+// store did not move costs two stats. The CLI half is a fixed-depth directory
+// walk whose per-manifest parses are cached the same way.
+//
+// The two failures do not weigh the same, and the ordering here is deliberate:
+//
+//   - A Composer store that EXISTS and cannot be read wins outright and takes
+//     the whole vendor down with it. That is ErrSchemaMismatch's standing
+//     ruling — "I cannot read this" must reach the vendor line, and returning
+//     CLI rows beside it would draw a Cursor section that looks like a
+//     complete answer while the larger store is silently unreadable.
+//   - Either store being ABSENT is ordinary and costs only its own rows. Only
+//     when both are absent is the vendor absent.
 func (a *Adapter) Discover(ctx context.Context) ([]model.SessionRef, error) {
+	ideRefs, ideErr := a.discoverComposer(ctx)
+	if ideErr != nil && !errors.Is(ideErr, model.ErrVendorAbsent) {
+		return nil, ideErr
+	}
+	cliRefs, cliErr := a.discoverCLI(ctx)
+	switch {
+	case cliErr == nil:
+	case errors.Is(cliErr, model.ErrVendorAbsent):
+		// The tree is gone, or was never there. Drop the last walk with it: a
+		// note from a tree that no longer exists would keep riding on the
+		// Composer rows, describing a store nobody can look at.
+		a.forgetChats()
+	case ideErr != nil:
+		return nil, cliErr
+	default:
+		// The Composer store answered. A CLI tree the OS refuses degrades to
+		// its own rows going missing, said once on the rows that survived,
+		// rather than blanking a vendor that is reading fine.
+		a.noteChatsFailure(cliErr)
+	}
+	if ideErr != nil && cliErr != nil {
+		return nil, model.ErrVendorAbsent
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return append(ideRefs, cliRefs...), nil
+}
+
+// discoverComposer lists the sessions the IDE's SQLite store holds.
+func (a *Adapter) discoverComposer(ctx context.Context) ([]model.SessionRef, error) {
 	if a.root == "" {
 		return nil, model.ErrVendorAbsent
 	}
@@ -328,12 +461,76 @@ func (a *Adapter) Discover(ctx context.Context) ([]model.SessionRef, error) {
 	return refs, nil
 }
 
-// Read assembles one session from the store parse Discover already did.
+// discoverCLI walks the cursor-agent manifest tree and holds the walk for the
+// Reads that follow.
+func (a *Adapter) discoverCLI(ctx context.Context) ([]model.SessionRef, error) {
+	if a.chats == nil {
+		return nil, model.ErrVendorAbsent
+	}
+	scan, err := a.chats.scan(ctx, time.Now())
+	if err != nil {
+		return nil, err
+	}
+
+	a.mu.Lock()
+	a.lastChats = scan
+	a.mu.Unlock()
+
+	refs := make([]model.SessionRef, 0, len(scan.recs))
+	for _, r := range scan.recs {
+		ref := model.SessionRef{
+			Vendor:  Vendor,
+			ID:      cliIDPrefix + r.id,
+			Locator: r.path,
+		}
+		if !r.lastActivity.IsZero() {
+			ref.LastActivity = model.TimePtr(r.lastActivity)
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
+}
+
+// forgetChats drops the last CLI walk.
+func (a *Adapter) forgetChats() {
+	a.mu.Lock()
+	a.lastChats = nil
+	a.mu.Unlock()
+}
+
+// noteChatsFailure records that the CLI tree could not be walked, so the note
+// travels on the rows the Composer store still produced.
+func (a *Adapter) noteChatsFailure(err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.lastChats = &chatsScan{notes: []string{"the cursor-agent CLI session tree could not be read: " + err.Error()}}
+}
+
+// chatsSnapshot returns the walk Discover held, or an empty one.
+func (a *Adapter) chatsSnapshot() *chatsScan {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.lastChats == nil {
+		return &chatsScan{}
+	}
+	return a.lastChats
+}
+
+// Read assembles one session from whichever store Discover listed it out of.
+//
+// The id's prefix routes the ref, rather than a lookup in one store falling
+// back to the other: a fallback would answer "which store is this row from"
+// with "whichever one still had it", and the answer would change under a
+// vendor's own pruning.
 //
 // Partial failure is not an error: a field that cannot be read is left nil,
 // marked degraded and explained in Diagnostics, and the row still renders with
 // an em dash in that cell.
 func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Session, error) {
+	if id, ok := strings.CutPrefix(ref.ID, cliIDPrefix); ok {
+		return a.readCLI(ctx, id)
+	}
+
 	snap, err := a.load()
 	if err != nil {
 		return nil, err
@@ -351,7 +548,9 @@ func (a *Adapter) Read(ctx context.Context, ref model.SessionRef) (*model.Sessio
 		ObservedAt: time.Now(),
 		Name:       model.Ptr(displayName(rec)),
 	}
+	s.Extras = append(s.Extras, model.Extra{Label: extraSource, Value: sourceIDE})
 	s.Diagnostics = append(s.Diagnostics, snap.notes...)
+	s.Diagnostics = append(s.Diagnostics, a.chatsSnapshot().notes...)
 
 	if rec.modelName != "" {
 		// The id IS the display name here: Cursor writes one string
