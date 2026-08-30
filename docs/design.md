@@ -1551,6 +1551,9 @@ is a supported, versioned contract and it is where a liveness/needs-input signal
 come from — not from reverse-engineering `status` out of the store. Recorded as the
 watch item; §8 carries it. Separately, the `cursor-agent` CLI keeps its own store, which
 is **not installed on this machine** and therefore an unverified surface, out of scope.
+(That last sentence held until 2026-08-29. `cursor-agent` is installed here now and its
+session manifest IS read; see this section's 2026-08-29 addendum. The Cursor Hooks watch
+item above is untouched.)
 
 **Adapter built, 2026-08-02 (`internal/adapter/cursor`).**
 Name, model, workspace and last_activity REPORTED; context % declared DERIVED and marked
@@ -1582,7 +1585,9 @@ as many words, and it is why a `conversation_id` is not stored — it would dang
 does not exist). A CLI session was therefore never a row this adapter could draw. The
 observation confirms an existing claim rather than opening a question, and it is written
 down because "the gauge showed nothing" is the kind of report that gets re-investigated
-every few months unless the expected answer is recorded beside it.
+every few months unless the expected answer is recorded beside it. **This paragraph
+describes the build it was written at and no longer describes the HUD: a CLI session draws
+a row as of 2026-08-29. See this section's addendum below.**
 
 **What the same observation does NOT settle, and it is the measurement worth taking.** The
 operator's Cursor configuration carries `ghostMode: true` and `privacyMode: 2`. Neither
@@ -1599,6 +1604,104 @@ cheap and needs the IDE rather than the CLI — drive a Composer session in the 
 settings on, then off, and compare what `composerHeaders` gains in each arm. Until somebody
 runs it, this paragraph is a hypothesis with its reason attached and nothing in the adapter
 changes.
+
+**Amended 2026-08-29 — the CLI store is readable on this machine, and the 2026-08-17 gap is
+CLOSED. `cursor-agent` CLI sessions draw HUD rows now.** The paragraph above stays correct
+about the build it described. Its premise moved: `cursor-agent` is installed here, and a
+2026-08-29 read-only survey of its trees measured a per-session manifest the 2026-08-02
+survey could not have seen. `internal/adapter/cursor` reads it, in `chats.go`, beside the
+Composer store it already read.
+
+**First, the claim that did NOT survive the survey.** A JSONL transcript tree exists at
+`~/.cursor/projects/<slug>/agent-transcripts/<uuid>/<uuid>.jsonl`, and a vendor-seam refresh
+candidate described it as Claude-compatible JSONL carrying per-turn token counts. Both halves
+are false, measured structurally over 71 files and 1,951 records with 0 unparseable. The
+envelope carries exactly three key sets — `message`+`role` (1,852), `status`+`type` (87),
+`error`+`status`+`type` (12) — and none of `sessionId`, `timestamp`, `cwd` or `version`, so
+`internal/adapter/claudecode` cannot be reused: its canary is `sessionId`. A key sweep for
+`usage|tokens|input_tokens|output_tokens|totalTokens|cacheRead|cost` over all 71 files
+returns zero matches. That CONFIRMS §7.16's 2026-08-08 measurement on a corpus 1.4x larger at
+a CLI build one week newer, so §7.16's held display is untouched and cost stays `CapNone` for
+this vendor. The transcript tree is not read and no adapter opens it.
+
+**What IS built, and what it measures.** The store is one plain-JSON manifest per session:
+
+```
+~/.cursor/chats/<workspace-hash>/<session-uuid>/meta.json
+```
+
+Observed key sets over 43 manifests, at `cursor-agent 2026.08.11-e8db854`: 40 carry
+`schemaVersion`, `createdAtMs`, `hasConversation`, `updatedAtMs`, `cwd`; 3 add `title`.
+`schemaVersion` is `1` on 43 of 43. **This is the first Cursor surface anywhere that declares
+its own format version**, against the "Version fragility" caution above, and the value is
+PINNED in `chats.go` and in a fixture.
+
+| Field | Verdict | Source, and what was measured |
+|---|---|---|
+| name | **MEASURED** | `title`, on 3 of 43 manifests. An absent title is therefore genuine absence, not a failed read. The row then takes the `cwd` basename, which is the fallback `internal/hud`'s own `sessionLabel` applies and `internal/adapter/pi` applies at the adapter. |
+| workspace | **MEASURED** | `cwd`, a native path (`C:\...` on 43 of 43 here), taken verbatim. It is NOT the `file:///c%3A/...` URI the Composer store's `workspace.json` carries, so no conversion runs. |
+| last_activity | **MEASURED** | `updatedAtMs`, epoch milliseconds, folded with the manifest's own mtime per §6 Q8. |
+| model | **ABSENT** | No key of any kind. The Composer store's `composerData` names one; this store does not. |
+| context %, cost, quota | **ABSENT** | See the token sweep above. Zero matches in 1,951 records. |
+| liveness | **ABSENT** | No in-flight session was sampled, same as the Composer half. The HUD classifies age. |
+
+**The Q8 fold runs here, and that is not a contradiction of the build caution above.** The
+Composer half deliberately excludes the store's file mtime because ONE file backs every
+session there. The CLI gives every session its own manifest, so that file's mtime dates that
+session, and the fold is the ordinary shape every other adapter uses. The two agreed within
+0.2 s on 43 of 43 manifests, so the fold is a guard rather than a source: it is what keeps
+the age honest if the vendor ever rewrites the file without restamping the key.
+
+**`hasConversation:false` is an empty shell and draws no row. The ruling is measured.** All
+three such manifests held nothing but themselves — no `store.db`, no `prompt_history.json` —
+and their `updatedAtMs` stood 263–387 ms past their own `createdAtMs`. They are the directory
+the vendor stamps when a session is created and nobody types. That is the same class as the
+Composer store's `empty-state-draft` and its pre-created composers, so the same filter applies.
+An ABSENT `hasConversation` key is NOT read as a declared false and keeps its row: a vendor
+that stopped writing the key must not empty the HUD.
+
+**Two more shapes are skipped in silence, and the counts are recorded here so the row count is
+not read as a defect.** 22 of the 65 session directories hold `store.db` with no `meta.json` at
+all, because the manifest is newer than the tree; a row for one would date a session from a
+directory mtime whose meaning was never measured. Together with the 3 shells, 40 of 65
+directories drew rows on the survey machine. A manifest whose `schemaVersion` this adapter does
+not read is the opposite case and is REPORTED every time: it draws no row (dropfile's rule —
+the keys may no longer mean what the reader thinks) and the skip is counted into a diagnostic
+that rides on every Cursor row, Composer rows included. A silent skip there would turn a vendor
+format bump into "you have no CLI sessions", which is a wrong answer rather than a missing one.
+
+**One adapter, two stores, and every row says which one it came from.** Both stores describe
+Cursor sessions, so both feed `model.VendorCursor`; the Adapter composes a sibling reader
+rather than shipping a second adapter, because a vendor id is what the HUD's identity column
+and the `--vendor` flag address, and two adapters sharing one id would give the registry two
+answers. The distinction IS measurable, so it is displayed: every session carries an Extra
+labelled `source` naming its store, and a CLI row's id is prefixed `cli:`. The labels are
+symmetric — a Composer row carries one too — so that the ABSENCE of a label never becomes the
+thing that identifies a store. The alternative was a second vendor id (`cursor-cli`); it was
+rejected because it buys one distinction and pays a second vendor line, a second `--vendor`
+value and a second doctor pin for what the operator experiences as one tool. The composition
+has one honest cost and `chats.go` states it on the row rather than hiding it:
+`model.Capabilities` is static per adapter, so a CLI row's empty model and context cells read
+as "absent now" when the truthful reading is "this store has no such field". Each CLI row
+carries a second Extra, `not in this manifest`, naming those two fields.
+
+**The credential rule is unchanged and narrower here.** The tree sits beside `store.db`
+(4096 bytes with a 300 KB–1.7 MB `-wal`, the WAL trap in its strongest form),
+`prompt_history.json`, and the config and cache files in `~/.cursor`. The reader opens ONE
+file name, `meta.json`, at a fixed depth of two directories below `chats/`. It never opens
+`store.db`, never recurses, and never looks at a sibling for any purpose. `chats_test.go`
+plants credential-shaped and prompt-shaped markers in those neighbours and asserts none
+reaches a displayed field, which is the same standing test the Composer reader carries.
+`conversation-search.db` — a new FTS5 index over conversation `body` text that appeared beside
+`state.vscdb`, with a `source` column admitting `'cloud-cache'` — stays unopened under the rule
+that keeps grok's `session_search.sqlite` closed.
+
+**What this amendment did NOT measure.** `~/.cursor/acp-sessions/<uuid>/meta.json` carries the
+same shape (49 manifests, same three key sets, 3 of them shells) and is deliberately NOT read:
+those are `cursor-agent acp` sessions, which is the server council's own Cursor seat runs
+(§9.36), and whether telltale should draw rows for its own council seats is a separate
+question this change does not answer. The `~/.cursor` root is measured on Windows only; see
+`PARITY.md`. No transcript, no `store.db` blob and no `ItemTable` row was read.
 
 <a id="s3-9a"></a>
 
@@ -2236,12 +2339,22 @@ has moved, and says so. `internal/adapter/drift` holds the mechanism; this is th
 | Antigravity | `agy 1.1.13` | `gen_metadata table` | model |
 | | | `trajectory_metadata_blob table` | workspace |
 | Cursor | `Cursor 3.14.7` | `composerHeaders timestamp columns` | last activity |
+| | | `meta.json updatedAtMs` — the CLI manifest's clock, on 43 of 43 manifests | last activity |
 | Grok CLI | `grok 1.0.4 (d846eb93d9)` | `summary.json info.id` — the identity envelope, on 30 of 30 sessions | name, model, workspace, last activity |
 | Pi | `pi 0.84.1` | `session header id` — first JSONL record is `type=session` with a non-empty `id` | name, model, workspace, last activity |
 
 The middle column quotes each canary by the **name the adapter gives it**, not a paraphrase, so
 the string in this table is the string in the code — which is what makes the guard tests below
 able to check it at all.
+
+**Cursor's row gained a second canary on 2026-08-29, and its `verified against` cell did not
+move.** The cell names the Cursor APPLICATION the SQLite store was surveyed inside, and
+`internal/adapter/pins` already records that this pin and an installed `cursor-agent` version
+cannot be compared. The second canary watches a different store written by a different
+program, so it carries its own pin — `cursor-agent 2026.08.11-e8db854`, in `chats.go`'s
+`chatsVerifiedAgainst` — rather than borrowing this cell. The `pins` table stays one row per
+vendor: `pins.For` answers per vendor id, and a second Cursor row there would make that answer
+depend on ordering.
 
 **Grok's row moved to 1.0.4 on 2026-08-14, and the row's two halves were re-checked to different
 depths.** The version came from re-measuring the seat after four patch bumps went unnoticed
@@ -4331,6 +4444,15 @@ beside a sum invites reading the sum as that model's. `conversation_id` names a
 cursor-agent **CLI** conversation, and the HUD's Cursor rows come from the **IDE's**
 Composer store (§3.9); the CLI keeps a separate one. Storing it would dangle a join that
 does not exist, which is also why this reading is not rendered on a session row.
+
+**Amended 2026-08-29: the `conversation_id` ruling HOLDS and its reason no longer does.**
+The HUD draws CLI rows now, out of `~/.cursor/chats/<hash>/<uuid>/meta.json` (§3.9's
+2026-08-29 addendum), so the join has something to join to for the first time. It is still
+not built and the field is still not stored, because whether this `conversation_id` IS that
+directory's session uuid was never measured. A key stored on the assumption that two ids
+match is how a relay begins attributing one session's tokens to another, and §7.16's whole
+argument is that the tokens must not be attributed to a row on a guess. Measure the two ids
+against each other first; nothing about the held display changes either way.
 
 #### The accumulation ruling: a total, and never without its window
 
@@ -7269,7 +7391,11 @@ these items are ordered by that sequence, not by version number.
    where item 3's needs-input signal should come from for this vendor, rather than
    reverse-engineering `status` out of the store; and the `cursor-agent` CLI keeps a
    separate store that is not installed on the survey machine and stays unverified and
-   out of scope until it is.
+   out of scope until it is. — **The second watch item CLOSED 2026-08-29.**
+   `cursor-agent` is installed on this machine now, its store was surveyed, and
+   `internal/adapter/cursor` reads its per-session manifest. §3.9's 2026-08-29 addendum
+   carries the field map, the `schemaVersion` pin and the composition argument. The
+   Cursor Hooks watch item is untouched and still open.
 
 #### Packaging decisions (settled 2026-08-08; §6.5 closed here)
 

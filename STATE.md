@@ -668,6 +668,17 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   against the ROOM's workspace, so a trace has to be named relative to the repo
   for anything confined to it to read the result.
 
+- **Whether telltale should draw HUD rows for its own council seats is UNDECIDED
+  (2026-08-29).** `internal/adapter/cursor` now reads the `cursor-agent` CLI's
+  session manifests ([design.md §3.9](docs/design.md#s3-9)'s 2026-08-29
+  addendum), and `~/.cursor/acp-sessions/<uuid>/meta.json` carries the same
+  shape — 49 manifests, same three key sets, measured the same day. It is
+  deliberately NOT read. Those are `cursor-agent acp` sessions, which is the
+  server council's own Cursor seat runs (§9.36), so reading them would put the
+  room's seats on the grid beside the operator's own work. That may be right; it
+  is a product question nobody has answered, and the reader is one root away
+  from it either way.
+
 Cross-platform and cross-machine status has its own file: [PARITY.md](PARITY.md).
 
 The conventions a fresh session would otherwise re-derive — golden-test traps,
