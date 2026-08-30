@@ -241,6 +241,28 @@ copies, the gates and the argument; this file does not restate any of them.
   room (a new verb with its own measurements, not an overload of `/adopt`);
   per-racer port allocation, when an arena brief first needs live servers.
 
+- **`/arena` writes the brief as `AGENTS.md` too — built 2026-08-29, one live
+  half owed.** The competitor sweep's candidate rested on agents.md's own claim
+  that 20+ tools read the file natively. That claim was MEASURED first, one
+  headless probe per vendor CLI on this box, and the build was conditional on
+  the result: codex 0.149.1 and grok 1.0.5 both answered a codename only that
+  file carried, with no tool call, so both ingest it unprompted; Claude Code
+  2.1.251 answered by running `ls -la` and `cat` on it, which is a read but not
+  the same fact; agy 1.1.20 and cursor are UNMEASURED. The full table and the
+  rulings it forced are [design.md §9.37](docs/design.md)'s 2026-08-29
+  amendment.
+
+  What a future session needs from this entry rather than from git: the room
+  writes the file for every racer and **claims it for none** — no column, no
+  notice and no snapshot field says a seat was briefed this way, because two of
+  five seats are unmeasured and the room cannot tell per race which ingested
+  it. Do not add such a render without measuring the missing seats first.
+
+  **Owed:** the probes ran in a scratch directory, not inside a racer worktree
+  during a real `/arena`. No live race has yet watched a seat act on the file.
+  One race against a brief whose answer depends on something only the file says
+  pays it.
+
 ## Closed without code (do not re-open)
 
 - **Tall-window content anchor** — **bottom**, ruled 2026-08-05. Short content
@@ -364,6 +386,16 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   persistent seat's next brief resumes the interrupted conversation, has no
   live payment yet. design.md §9.37's dated amendment carries the debt.
 
+- **`telltale history` reads one vendor of seven, and the other six are surveyed rather than
+  owned (2026-08-29).** design.md §7.26 carries the per-vendor verdicts and the mode prints
+  them on every run, so this entry does not restate them. What it records is the INTENT: codex
+  is the next slice and it is unowned, and it is blocked on a ruling rather than on work —
+  a codex rollout carries `info.last_token_usage` (this turn) beside a cumulative
+  `info.total_token_usage`, and which of the two a day may sum is a decision nobody has made.
+  agy and grok are refused for want of a per-turn TIMESTAMP, which is a survey finding and not
+  a todo: if either vendor ever dates its counts, that is a new measurement and the verdict is
+  re-taken, not assumed.
+
 - **The arena record has never been opened against a real pile of leftovers
   (2026-08-29).** `/arena record` (design.md §9.47) tallies every seat's adopted-of-decided
   standing from the repository's own `arena/` and `adopt/` branches. It stores nothing, so
@@ -374,6 +406,19 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   counts, check them against `git branch --list "arena/*" "adopt/*"`, and confirm the page
   reads at the room's own geometry. No vendor is spawned and nothing is written, so the debt
   costs a keystroke.
+
+- **No live race has run under the arena check (2026-08-29).** `/arena check <command>`
+  (design.md §9.48) runs one operator-named command in each racer's worktree and renders PASS
+  or FAIL from its real exit code. Every mechanic is pinned offline, and one test runs a real
+  process to prove the exit code is READ rather than assumed — but that process is the test
+  binary, in a temp repository, exiting on demand. What no test can witness is the case the
+  feature exists for: a real vendor's attempt meeting a real suite in a real worktree. Two
+  things are unmeasured there and only there. Whether a check that runs for MINUTES reads well
+  on a column whose turn has already ended, since the run outlives the turn by design and the
+  spinner does not. And whether a real racer's tree leaves the check something to do — a
+  worktree seeded by `.worktreeinclude`, with the vendor's own build state in it, is not the
+  clean fixture the tests build. One `/arena check go test ./...` followed by one `/arena`
+  against a brief that changes files pays both.
 
 - **The `/adopt` divergence preview has never been armed in a live room
   (2026-08-29).** The card now leads with measured git state — the racer's

@@ -1,0 +1,59 @@
+telltale history — what claude spent, day by day, read from claude's own session files
+
+  read from   C:\src\home\.claude\projects
+  window      7 local days, 2026-08-23 through 2026-08-29, days resolved in TST UTC-05:00
+  read        41 transcripts, 39,184 records
+
+  DAY         WORKSPACE                     IN  CACHE READ  CACHE WRITE      OUT  REQUESTS  SESSIONS
+  2026-08-24  C:\src\code\telltale       1,204   1,903,551       62,004   13,118        14         2
+  2026-08-27  C:\src\code\notes-api         96           0        4,102      812         3         1
+              C:\src\code\telltale      22,140   8,830,112      511,903  140,277       191         5
+  2026-08-29  ...rkspace-path\telltale       3          12            0       44         1         1
+
+  A day inside the window with no row carried no token-bearing record. It is not drawn as a row of
+  zeros: a request that reported zero counts renders 0, and a request that never happened renders
+  nothing at all.
+
+  2 unparseable records skipped
+
+  Every count above is claude's own and claude's alone. No line here sums two vendors: their counts
+  are different measurements of different things, and one number over them would be arithmetic
+  telltale invented.
+  The four columns are not added either. Input, cache read, cache write and output are billed as
+  four separate categories and telltale holds no price, so a total across them would look like a
+  bill and would not be one.
+
+  covered today: claude. Every other vendor in the fleet is surveyed and not yet read:
+
+    codex     the strongest next slice. A token_count event carries info.last_token_usage (this
+              turn) and info.total_token_usage (cumulative) beside the envelope's own timestamp, so
+              the day axis is there. Two things are owed first: which of the two a day may sum is a
+              ruling nobody has made, and there is no cache split, so a codex block would carry two
+              columns where the claude block carries four.
+    gemini    a message carries tokens.input beside a timestamp, but input is promptTokenCount — the
+              size of the context that was SENT, which the adapter already labels an occupancy
+              proxy. Summing it per day counts one conversation's prefix once per turn, under a
+              column header that would read like uncached input. The cached subset is not separable
+              from what the adapter parses, so the split that makes claude's four columns honest is
+              unavailable here.
+    agy       counts are on disk and are the best-guarded in the fleet — gen_metadata carries
+              uncached input and output per generation, behind a thinking + answer == output
+              identity the adapter asserts. Nothing dates them: the reverse-engineered field map
+              (design.md §3.8) carries no per-generation timestamp, so there is no day to put a
+              generation in.
+    cursor    there is nothing to read. tokenCount.inputTokens and outputTokens were 0 in 310 of 310
+              message rows in the live store, and the field is declared CapNone rather than filled
+              with a plausible number (design.md §7.16). The vendor's counts arrive by hook, not on
+              disk.
+    grok      the split and the date are both there, and this verdict said the opposite until
+              2026-08-29. A turn_completed record's usage carries inputTokens, outputTokens,
+              cachedReadTokens and cacheCreationTokens beside the envelope's own timestamp —
+              measured at grok 1.0.5, and on disk since 1.0.0 (design.md §3.9a).
+              internal/adapter/grok parses totalTokens alone, which is what the old reading
+              described. A unit trap is owed before any block: inputTokens INCLUDES the cache read
+              here, where claude's input_tokens excludes it, so the four columns are not the same
+              four.
+    pi        an assistant message carries usage.input and usage.output with a record timestamp and
+              a cwd, so this vendor is datable — the second-strongest seam after codex. It carries
+              no cache split either, and it carries usage.cost.total per message — money, which this
+              mode renders nowhere and would have to rule on.

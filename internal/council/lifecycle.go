@@ -199,7 +199,10 @@ func (m *Model) adoptCommand(arg string) bool {
 		donor = d
 	}
 
-	dirty, err := worktreePorcelain(tree)
+	// Council's brief file is not work, so it must not make a zero-work seat
+	// look adoptable — the refusal below is a measured zero and would become a
+	// false nonzero the moment an untracked AGENTS.md counted (arenabrief.go).
+	dirty, err := worktreePorcelain(tree, arenaBriefArgs(tree)...)
 	if err != nil {
 		m.st.Notice = "adopt: " + err.Error()
 		return true
@@ -239,8 +242,10 @@ func (m *Model) adoptCommand(arg string) bool {
 		// chosen paths, because `y` commits the whole tree — the same act the base
 		// racer's attempt gets, for the same reason. A card that named the commit
 		// only when a chosen path was dirty would stay silent while y committed
-		// the donor's other files.
-		lines, err := worktreePorcelain(race.trees[donor])
+		// the donor's other files. Council's own brief file is excluded, exactly
+		// as it is for the base racer's read above (arenabrief.go).
+		donorTree := race.trees[donor]
+		lines, err := worktreePorcelain(donorTree, arenaBriefArgs(donorTree)...)
 		if err != nil {
 			m.st.Notice = "adopt: " + err.Error()
 			return true
@@ -455,20 +460,26 @@ func (m *Model) hybridPaths(race *arenaRace, base, donor model.VendorID, typed [
 // racerWrites is every path an adoption of one racer will write: what its arena
 // branch already holds over the room, and what its worktree is about to commit.
 //
-// The second half is read as git itself defines the commit `adoptSeat` makes.
-// `git add -A` stages tracked changes and untracked files that are not ignored,
-// so `diff --name-only HEAD` plus `ls-files --others --exclude-standard` IS that
-// commit's path list — not a forecast of it. Both are read with `-z`, so a path
-// carrying a space or a quote arrives whole instead of C-quoted.
+// The second half is read as git itself defines the commit `commitRacerAttempt`
+// makes. `git add -A` stages tracked changes and untracked files that are not
+// ignored, so `diff --name-only HEAD` plus `ls-files --others --exclude-standard`
+// IS that commit's path list — not a forecast of it. Both are read with `-z`, so
+// a path carrying a space or a quote arrives whole instead of C-quoted.
+//
+// Council's own brief file is excluded from both, through the same
+// arenaBriefArgs the commit itself uses (arenabrief.go). It is not the racer's
+// work, `add -A` will not stage it, and offering it as an adoptable path would
+// let a hybrid merge council's own AGENTS.md into the operator's repo.
 func racerWrites(workspace, tree, branch string) (committed, pending []string, err error) {
 	if committed, err = changedFiles(workspace, "HEAD..."+branch); err != nil {
 		return nil, nil, err
 	}
-	tracked, err := gitOut(tree, "--no-pager", "diff", "--name-only", "-z", "HEAD")
+	exclude := arenaBriefArgs(tree)
+	tracked, err := gitOut(tree, append([]string{"--no-pager", "diff", "--name-only", "-z", "HEAD", "--"}, exclude...)...)
 	if err != nil {
 		return nil, nil, err
 	}
-	others, err := gitOut(tree, "ls-files", "--others", "--exclude-standard", "-z")
+	others, err := gitOut(tree, append([]string{"ls-files", "--others", "--exclude-standard", "-z", "--"}, exclude...)...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1007,15 +1018,21 @@ func (m *Model) adoptSeat(v model.VendorID, onto string, donor model.VendorID, p
 // commit enters the room's history, and council inventing an identity or skipping
 // the user's signing rule there would be the room writing history that misstates
 // its provenance.
+//
+// Council's own AGENTS.md is excluded from BOTH halves, and the dirty read is the
+// half that matters more. Without the exclusion a seat whose tree holds nothing
+// but council's brief file would read as work owed, land a commit carrying only
+// that file, and merge it into the operator's repo (arenabrief.go).
 func commitRacerAttempt(tree, branch string, v model.VendorID, raceN int) string {
-	dirty, err := worktreePorcelain(tree)
+	exclude := arenaBriefArgs(tree)
+	dirty, err := worktreePorcelain(tree, exclude...)
 	if err != nil {
 		return "adopt: " + err.Error()
 	}
 	if len(dirty) == 0 {
 		return ""
 	}
-	if _, err := gitOut(tree, "add", "-A"); err != nil {
+	if _, err := gitOut(tree, append([]string{"add", "-A"}, exclude...)...); err != nil {
 		return "adopt: " + err.Error()
 	}
 	if _, err := gitOut(tree, "commit", "-m", string(v)+"'s arena attempt, race t"+itoa(raceN)); err != nil {
@@ -1208,7 +1225,10 @@ func (m *Model) dropRacer(v model.VendorID, force bool) string {
 	if !force {
 		// Two guards, two sentences, each naming what would be lost AND how to
 		// proceed — a refusal without its remedy is §9.17's defect.
-		dirty, err := worktreePorcelain(tree)
+		// Council's brief file excluded: a drop that demanded the `!` spelling
+		// on every clean attempt would be refusing over the room's own write
+		// (arenabrief.go).
+		dirty, err := worktreePorcelain(tree, arenaBriefArgs(tree)...)
 		if err != nil {
 			return string(v) + ": " + err.Error()
 		}
@@ -1225,6 +1245,14 @@ func (m *Model) dropRacer(v model.VendorID, force bool) string {
 				" the room has not merged — /adopt " + string(v) + " takes them, " + spell + " discards them"
 		}
 	}
+
+	// Council takes its own brief file back before git is asked to remove the
+	// tree. `git worktree remove` counts an untracked file as dirty and refuses,
+	// so leaving it there would make every ordinary drop fail and demand the `!`
+	// spelling — the room's own write turning a plain verb into a forced one.
+	// removeArenaBrief deletes only a file still carrying council's marker, so a
+	// racer's own AGENTS.md keeps the refusal it has earned (arenabrief.go).
+	removeArenaBrief(tree)
 
 	args := []string{"worktree", "remove"}
 	if force {
@@ -1246,8 +1274,13 @@ func (m *Model) dropRacer(v model.VendorID, force bool) string {
 
 // worktreePorcelain is one `git status --porcelain`, split into its lines: the
 // count is what refusals name, and empty means a measured clean.
-func worktreePorcelain(dir string) ([]string, error) {
-	out, err := gitOut(dir, "status", "--porcelain")
+//
+// pathspec is what a caller reading a RACER's tree passes: council's own brief
+// file is not the racer's uncommitted work, and counting it would turn every
+// clean attempt into a dirty one (arenabrief.go). Callers reading the ROOM's
+// tree pass nothing — an AGENTS.md there is the repository's own.
+func worktreePorcelain(dir string, pathspec ...string) ([]string, error) {
+	out, err := gitOut(dir, append([]string{"status", "--porcelain"}, pathspec...)...)
 	if err != nil {
 		return nil, err
 	}

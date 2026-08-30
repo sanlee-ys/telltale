@@ -221,10 +221,23 @@ func (m *Model) beginArenaSetup(route Route, prompt string) tea.Cmd {
 	// arenalive.go's rule, and it binds harder here because this worker outlives
 	// several frames.
 	id, ch, ws, turn := p.id, p.ch, p.workspace, m.st.Turn+1
+	// The brief the racers are about to be sent, copied out with everything
+	// else the goroutine touches. It is the prompt rather than the raw draft
+	// because the file must carry exactly the words the wire carries — a file
+	// that still held a stripped @mention would be a second brief, not a copy
+	// of the one.
+	briefText := prompt
 	go func() {
 		defer close(ch)
 		raceN, base, trees, seeds, seatErr, err := arenaSetup(ctx, ws, turn, racers,
 			func(s string) { ch <- arenaSetupMsg{prep: id, step: s} })
+		if err == nil {
+			// After the worktrees exist and after seeding, so a seat whose tree
+			// or seed already failed is never written into, and a
+			// `.worktreeinclude` that carries the repo's own AGENTS.md wins
+			// over council's copy (arenabrief.go's never-overwrite rule).
+			writeArenaBriefs(ctx, raceN, briefText, trees, seatErr)
+		}
 		ch <- arenaSetupMsg{prep: id, done: &arenaSetupResult{
 			workspace: ws, raceN: raceN, base: base,
 			trees: trees, seeds: seeds, seatErr: seatErr, err: err,
