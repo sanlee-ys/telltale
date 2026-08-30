@@ -13,7 +13,7 @@ import (
 // The `codex app-server` wire, as it was actually driven.
 //
 // EVERYTHING in this file is MEASURED against **codex-cli 0.149.1** on Windows
-// 11, over eight billed turns on 2026-08-29 (design.md §9.49 carries the arms,
+// 11, over eight billed turns on 2026-08-29 (design.md §9.50 carries the arms,
 // the timings and the two verdicts). This file carries the shapes, so a reader
 // changing a struct field can see the line it was copied from without leaving
 // the code. Where a shape is a SCHEMA READ rather than a capture, the comment
@@ -79,7 +79,7 @@ import (
 // That is a seat that cannot inspect — the exact 0.146.0-class defect the
 // codex badge history is built around, arriving on a NEW path after #311
 // cleared it off the old one. The protocol, its parser and its tests ship;
-// the seat does not move until that is measured away. See design.md §9.49's
+// the seat does not move until that is measured away. See design.md §9.50's
 // "the fork, taken conservatively".
 
 // appServerProtocol is one `codex app-server` conversation, for the life of one
@@ -392,7 +392,7 @@ func (a *appServerProtocol) Opening() [][]byte {
 //
 // WHAT WAS MEASURED, 2026-08-29, codex-cli 0.149.1, Windows 11, one turn per
 // probe in throwaway directories, files checked on disk rather than read out of
-// the reply (design.md §9.49):
+// the reply (design.md §9.50):
 //
 //   - `read-only` ENFORCES when a process actually starts. Told to invoke
 //     `cmd.exe` directly, the seat ran it and the write came back

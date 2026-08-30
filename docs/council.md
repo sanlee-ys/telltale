@@ -184,7 +184,7 @@ question a reader actually had, and the only two answers were both ends. All of 
 **while composing** as well as in view mode, which is the point: a finished turn drops the
 room back into compose, so the mode you are in when four long answers land is the mode you
 need to read in. Keys that can be text stay text there — `j`, `k`, `g`, `G`, `q`, `t`, `c`,
-`d`, `u`, the digits and the brackets are all just characters in the composer — and the mode
+`d`, `D`, `o`, `u`, the digits and the brackets are all just characters in the composer — and the mode
 line says which set is live on every frame. `?` lists all of them and says when it is holding
 more than fits (`↓ 5 more below`); `?` again explains what the posture badge on each column
 means, with your own seats' full claims underneath; `?` a third time closes the panel.
@@ -463,6 +463,35 @@ dropped and both routes to the rest: `y` copies the whole diff (capped at 1 MB, 
 stated), and the worktree holds all of it. `d` refuses with the reason named when there is
 nothing to flip to — no race this turn, an attempt that changed nothing, or a diff that
 could not be read.
+
+**Opening the patch puts a cursor `▸` on one hunk, and `[` `]` step it.** Those are the
+same two keys that step a turn in the grid and a page in the by-turn view: in an open
+patch the unit is a hunk, and the footer's cell says `[ ] hunk` so the key and the line
+that names it never disagree. The cursor stays **inside the drawn 400 lines** — it does
+not scroll the frame — and both ends refuse by name rather than wrapping.
+
+**`D` quotes the hunk under the cursor into the composer draft.** It is a review comment
+without a round trip the room could not make honest: a race attempt is one-shot, so there
+is no session for a reply to resume, and the quote therefore lands in your **live draft**
+— visible, editable, and sent by the same `enter` as any other brief. Nothing is queued and
+nothing is auto-sent. The whole hunk crosses even when the 400-line frame cut it off, fenced
+as data with the branch, the base and the **worktree path** named, so the seat reading it
+knows the code is not in the room's own workspace. An empty draft is seeded with that
+racer's `@mention` — silence routes to claude, and a comment about codex's attempt should
+not reach claude — and a draft you have already started is left exactly as you typed it. A
+hunk too big for the composer's 8,192-character cap is refused whole rather than truncated;
+`y` still copies the diff.
+
+**`o` hands you the worktree: `y` opens it in your editor, `c` copies the path.** The card
+names the program before it starts one — `$VISUAL` first, then `$EDITOR`, and **nothing is
+guessed** if neither is set, which the card says while still offering the copy. `c` puts the
+full absolute path on the clipboard through the same mechanism `y` uses. The room keeps the
+screen, so a terminal editor opens where you cannot see it; the notice says so rather than
+letting you find out.
+
+Both `D` and `o` address a **column**, so both refuse while a turn page, an act ledger or an
+arena record is filling the frame — those have no hunk and no worktree, and the cursor is not
+on screen to point at. `t` gives the columns back.
 
 **`u` takes the focused seat's attempt back — y/n-gated, like `c`.** A stray keystroke
 must cost a `y` before it costs an attempt: the card names exactly what happens (`y resets

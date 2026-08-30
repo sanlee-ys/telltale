@@ -38,7 +38,7 @@ from the vendor's own `--version` at capture time.
 **Two files pin one CLI, and that is not a stale entry.** `codex-0.147.0-turn.jsonl`
 is `codex exec --json` — the invocation the room seats — and
 `codex-app-server-0.149.1-turn.jsonl` is `codex app-server`, a second protocol
-that ships parsed and unseated (design.md §9.49). They are different surfaces of
+that ships parsed and unseated (design.md §9.50). They are different surfaces of
 one binary, so a bump retires them independently; when the seat moves, the exec
 pin goes with it.
 

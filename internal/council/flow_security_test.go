@@ -88,9 +88,18 @@ func countSpawns(t *testing.T) *spawnLog {
 		log.checks = append(log.checks, checkRun{tree: tree, argv: argv})
 		return log.checkOut
 	}
+	// The fifth, counted for the third's reason: `o` then `y` starts an editor
+	// (§9.49), and a spawn that escaped this count would let "nothing was
+	// spawned" pass over a program launched on the operator's desktop.
+	origEditor := startEditor
+	startEditor = func(name string, args []string, dir string) error {
+		log.specs = append(log.specs, runner.Spec{Binary: name, Args: args, Dir: dir})
+		return nil
+	}
 	t.Cleanup(func() {
 		startProcess, startSession, startRPCSession = origProcess, origSession, origRPC
 		startCheck = origCheck
+		startEditor = origEditor
 	})
 	return log
 }

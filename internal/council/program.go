@@ -286,6 +286,28 @@ type Model struct {
 	// the key — would authorize something the operator never read.
 	adoptDonor model.VendorID
 	adoptPaths []string
+	// worktreePending names the racer whose worktree card is up (`o`, §9.49),
+	// empty when none is. The card is the room's only three-answer card outside
+	// the gate: y starts an editor, c copies the path, anything else cancels.
+	//
+	// Carded rather than immediate, and NOT for clearPending's reason — nothing
+	// here is destroyed. What a card buys is the DELIBERATENESS the editor
+	// spawn needs: this is the one process council starts that no vendor asked
+	// for, so it costs a second key, in front of a sentence naming the program
+	// that is about to run. The copy sits on the same card because it answers
+	// the same question — the operator wants to get AT the tree — and a second
+	// key for the second answer would be two controls for one act.
+	worktreePending model.VendorID
+	// worktreeEditor and worktreeArgs are $VISUAL/$EDITOR as resolved when the
+	// card ARMED, empty when neither is set.
+	//
+	// Resolved at arm rather than at y for adoptOnto's contract: the card names
+	// the program, and a y that started a different one — the environment can
+	// move under a long-lived room — would make the card a description of
+	// something else. It is also what keeps Render pure: the environment is
+	// read here, on a keypress, never in a render path.
+	worktreeEditor string
+	worktreeArgs   []string
 	// lastRace is the most recent /arena race's receipt: workspace, turn, base,
 	// and each racer's kept worktree (lifecycle.go). Nil until a race runs.
 	// Held on Model rather than State because Render never reads it — the
@@ -838,6 +860,9 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.adoptPending != "" {
 		return m.adoptGateKey(msg)
 	}
+	if m.worktreePending != "" {
+		return m.worktreeGateKey(msg)
+	}
 	if m.writePending {
 		return m.writeGateKey(msg)
 	}
@@ -894,6 +919,210 @@ func (m *Model) adoptGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.st.Notice = "adopt cancelled — y confirms, n declines"
 	}
 	return m, nil
+}
+
+// worktreeGateKey answers the card armed by `o` (§9.49).
+//
+// Three answers rather than two, and the third is not an afterthought: `c`
+// copies the path, which is what an operator wants when the editor they use is
+// not the one this room could start — a second terminal, a file manager, a
+// vendor's own open command. It is also the ONLY answer available when neither
+// $VISUAL nor $EDITOR is set, and the card says so when it arms rather than
+// offering a y that would have to refuse itself.
+//
+// Anything else cancels, matching clearGateKey rather than the flow gate and
+// for clearGateKey's reason: this interrupts nothing, so the safe reading of a
+// key nobody meant to press is to start no program and touch no clipboard —
+// the second half mattering because an empty clipboard write is destructive
+// (yank's own rule).
+func (m *Model) worktreeGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	v := m.worktreePending
+	name, args := m.worktreeEditor, m.worktreeArgs
+	m.worktreePending, m.worktreeEditor, m.worktreeArgs = "", "", nil
+
+	c := m.column(v)
+	if c == nil || c.Arena == nil {
+		// The race was replaced between the card arming and the key. Nothing to
+		// open and nothing to copy, said rather than acted on a stale path.
+		m.st.Notice = "the attempt this card named is gone — o reads the current turn's race"
+		return m, nil
+	}
+	switch msg.String() {
+	case "y":
+		if name == "" {
+			m.st.Notice = "nothing to open — neither $VISUAL nor $EDITOR is set · o then c copies the path"
+			return m, nil
+		}
+		if err := startEditor(name, args, c.Arena.Tree); err != nil {
+			// The operating system's own sentence, not a diagnosis council
+			// wrote — the same rule the arena block follows for a diff it could
+			// not read.
+			m.st.Notice = "could not start " + name + ": " + err.Error()
+			return m, nil
+		}
+		// What council DID, never what the operator can now see. Start
+		// succeeding is a measured fact; whether the editor drew anything is
+		// not observable from here, and a terminal editor genuinely will not
+		// draw — the room holds the screen (launchEditor).
+		m.st.Notice = "started " + name + " on " + c.Label +
+			"'s worktree — the room keeps the screen, so a terminal editor draws where you cannot see it"
+	case "c":
+		return m, m.yank(Yank{
+			Text:   c.Arena.Tree,
+			Notice: "copied " + c.Label + "'s worktree path",
+		})
+	default:
+		m.st.Notice = "cancelled — y starts an editor, c copies the path"
+	}
+	return m, nil
+}
+
+// askWorktree arms the worktree card for the focused seat.
+//
+// Refused with the reason named when there is nothing to open, which is
+// toggleArenaDiff's rule at toggleArenaDiff's stake: "no race this turn" and
+// "a race that recorded no tree" are different facts and a key that silently
+// did nothing would teach that the key is unreliable.
+//
+// A MID-RACE column is refused too, and deliberately by the same sentence as no
+// race at all. ArenaInterim carries a stat and no worktree path — the finish
+// line's receipt is the final block's (view.go) — so there is no path to hand
+// over yet, and inventing one from the race's naming scheme would be council
+// deriving a value it can simply wait to be told.
+func (m *Model) askWorktree() {
+	if body := m.bodyOverColumns(); body != "" {
+		// quoteHunk's refusal, for quoteHunk's reason: these keys address a
+		// COLUMN, and a full-frame body deliberately has no per-seat focus for
+		// a narrower key to aim at (§9.22).
+		m.st.Notice = "the " + body + " is open — t gives the columns back, then o opens a racer's worktree"
+		return
+	}
+	c := m.focused()
+	if c == nil {
+		m.st.Notice = "no seat is focused"
+		return
+	}
+	switch {
+	case c.Arena == nil:
+		m.st.Notice = "no finished race on " + c.Label + "'s current turn — o opens a racer's worktree"
+	case c.Arena.Tree == "":
+		m.st.Notice = c.Label + "'s attempt recorded no worktree path — there is nothing to open"
+	default:
+		m.worktreePending = c.Vendor
+		m.worktreeEditor, m.worktreeArgs = editorCommand()
+		if m.worktreeEditor == "" {
+			m.st.Notice = "neither $VISUAL nor $EDITOR is set — nothing to start · c copies " +
+				c.Label + "'s worktree path · n cancels"
+			return
+		}
+		m.st.Notice = "open " + c.Label + "'s worktree in " + m.worktreeEditor +
+			"? y starts it · c copies the path · n cancels"
+	}
+}
+
+// quoteHunk puts the review cursor's hunk in the composer draft (§9.49).
+//
+// It does not send, it does not queue, and it does not reach a vendor: the
+// quote lands in the LIVE draft, the room switches to compose, and the operator
+// types their comment and presses enter like any other brief. That is the whole
+// design — a race attempt is one-shot, so there is no session for a comment to
+// resume, and the honest destination for one is the next turn.
+//
+// Refusals name their reason and there are five of them, because "no race",
+// "the patch is not open", "the diff could not be read", "the attempt changed
+// nothing" and "this hunk will not fit the composer" are five different facts
+// and one sentence for all of them would be the collapse §4a.1 forbids.
+func (m *Model) quoteHunk() (tea.Model, tea.Cmd) {
+	if body := m.bodyOverColumns(); body != "" {
+		// A full-frame body has replaced the columns, so the cursor is not on
+		// screen and neither is the block it points into. `y` answers this by
+		// taking what the body IS showing (§9.22, §9.47); this key has no such
+		// answer — a page has no hunk — so it refuses rather than quoting from
+		// a column nobody can see. The claim `D` makes is "the hunk under ▸",
+		// and a claim a reader cannot check against the screen is the one thing
+		// this room does not print.
+		m.st.Notice = "the " + body + " is open — t gives the columns back, then d shows a patch"
+		return m, nil
+	}
+	c := m.focused()
+	if c == nil {
+		m.st.Notice = "no seat is focused"
+		return m, nil
+	}
+	switch {
+	case c.Arena == nil:
+		m.st.Notice = "no race on " + c.Label + "'s current turn — D quotes a hunk of a racer's patch"
+		return m, nil
+	case c.Arena.Err != "":
+		m.st.Notice = "no diff to quote — " + c.Arena.Err
+		return m, nil
+	case c.Arena.Diff == "":
+		m.st.Notice = c.Label + "'s attempt changed nothing — there is no hunk to quote"
+		return m, nil
+	case !c.ArenaShowDiff:
+		m.st.Notice = c.Label + "'s patch is not open — d shows it, then D quotes the hunk under ▸"
+		return m, nil
+	}
+	h, ok := reviewCursor(*c)
+	if !ok {
+		// A patch the parser found no hunk in — a mode change, a binary file,
+		// or a first hunk past the drawn frame. Said as itself, with the two
+		// routes to the whole patch the cutoff line already names.
+		m.st.Notice = "no hunk in the drawn patch — y copies the whole diff, o opens the worktree"
+		return m, nil
+	}
+	quote := reviewQuote(*c, h)
+	if !reviewFits(m.st.Draft, quote) {
+		m.st.Notice = "this hunk does not fit the composer's " + itoa(maxPasteRunes) +
+			" chars — y copies the whole diff instead"
+		return m, nil
+	}
+	m.setDraft(reviewDraft(m.st.Draft, string(c.Vendor), quote))
+	m.st.Mode = ModeComposing
+	m.st.Help = HelpClosed
+	n := h.End - h.At
+	m.st.Notice = "quoted " + c.Label + "'s hunk into the draft (" + itoa(n) + " " +
+		plural(n, "line") + ") — type your comment, then enter sends it as an ordinary turn"
+	return m, nil
+}
+
+// hopHunk steps the review cursor, and reports whether it took the key.
+//
+// It answers `[` and `]` — the keys that already mean "step one unit of
+// whatever the body is showing" (§9.20, extended by §9.22's page). In an open
+// patch that unit is a hunk. This is a third reading of one motion rather than
+// a fourth binding for the same idea, which is the argument the by-turn page
+// made when it took the same two keys one projection over.
+//
+// Both ends REFUSE by name rather than wrapping. Wrapping would make a key
+// pressed one time too many jump the reader to the other end of a patch, which
+// is hopTurn's own argument at the patch's scale — and the top end's sentence
+// has to say the cursor cannot leave the drawn frame, because that is a real
+// boundary a reader would otherwise read as a bug.
+func (m *Model) hopHunk(d int) bool {
+	c := m.focused()
+	if c == nil || !c.ArenaShowDiff {
+		return false
+	}
+	hs := reviewHunks(*c)
+	if len(hs) == 0 {
+		return false
+	}
+	next := c.ArenaHunk + d
+	switch {
+	case next < 0:
+		m.st.Notice = "the first hunk — d returns to the stat"
+	case next >= len(hs):
+		if len(arenaHunks(c.Arena.Diff)) > len(hs) {
+			m.st.Notice = "the last hunk the drawn patch reaches — the cursor does not scroll · y copies the whole diff"
+			break
+		}
+		m.st.Notice = "the last hunk"
+	default:
+		c.ArenaHunk = next
+		m.st.Notice = ""
+	}
+	return true
 }
 
 // stopAsking turns the approval card off for the rest of the room, and clears
@@ -1558,6 +1787,25 @@ func (m *Model) navKey(name string) bool {
 // are asking the same question (§9.22).
 func (m *Model) pageOpen() bool { return m.st.Page.Open }
 
+// bodyOverColumns names the full-frame body that has replaced the grid, or is
+// empty when the columns are on screen.
+//
+// The name is for a NOTICE, so it is the word the mode line already uses for
+// each surface rather than a field name. It exists because the column keys
+// added by §9.49 have to refuse here: `y` can follow a page because a page IS a
+// document, and `D` and `o` cannot, because a page has no hunk and no worktree.
+func (m *Model) bodyOverColumns() string {
+	switch {
+	case m.st.Record != nil:
+		return "arena record"
+	case m.st.Page.Ledger && m.st.Page.Open:
+		return "act ledger"
+	case m.st.Page.Open:
+		return "turn page"
+	}
+	return ""
+}
+
 // toggleTurnView swaps the body between the by-seat grid and one turn read
 // across every seat.
 //
@@ -1587,6 +1835,14 @@ func (m *Model) toggleArenaDiff() {
 		m.st.Notice = c.Label + "'s attempt changed nothing — there is no diff to show"
 	default:
 		c.ArenaShowDiff = !c.ArenaShowDiff
+		// The review cursor arms with the patch and costs no key of its own
+		// (§9.49): the patch view IS the review surface, so a separate "start
+		// reviewing" key would be a mode a reader has to discover before the
+		// feature exists for them. It goes back to the first hunk on every
+		// open rather than remembering where it was — `d` twice is how a reader
+		// starts over, and a cursor restored to a hunk chosen before the last
+		// read would put the mark somewhere nobody put it.
+		c.ArenaHunk = 0
 	}
 }
 
@@ -1933,6 +2189,31 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// no race this turn, and an attempt whose diff is a measured nothing or
 		// an error, are different facts and get different sentences.
 		m.toggleArenaDiff()
+	case "D":
+		// The cursor's hunk into the composer draft (§9.49). SHIFT on the key
+		// whose surface it acts on, which is the spelling `T` already earns
+		// beside `t` and `Y` beside `y`: `d` shows the patch, `D` takes a piece
+		// of it somewhere. Every free lowercase letter left in this keymap is
+		// free because it means nothing here, and a review key under an
+		// unrelated letter is a review key a reader finds by accident.
+		//
+		// It costs the help panel no row of its own for the same reason `T`
+		// does not: it is taught on the row that teaches `d`.
+		//
+		// In compose it is the letter D, which needs no second list — composeKey
+		// routes any key carrying text into the draft, the contract `q`, `f`,
+		// `c`, `t` and `T` already keep. That a shifted letter arrives here as
+		// `"D"` rather than `"shift+d"` is the same pinned-module reading `T`
+		// records above.
+		return m.quoteHunk()
+	case "o":
+		// The focused racer's worktree: open it, or copy its path (§9.49). A
+		// key rather than a room command for `c`'s reason — no vocabulary
+		// leaves the composer — and `o` because it is free in view mode, is the
+		// letter every tool in this class spells "open" with, and is unclaimed
+		// by any gate or nav key. View mode only: in compose `o` is the letter
+		// o, the contract q, f and c already keep.
+		m.askWorktree()
 	case "u":
 		// Undo the focused seat's whole race attempt — worktree and arena
 		// branch back to the recorded base (§9.37, amended 2026-08-09). A key
@@ -2055,10 +2336,21 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.hopPage(-1)
 			return m, nil
 		}
+		// And in an open patch the unit is a HUNK (§9.49). Third reading of one
+		// motion, not a fourth binding: these keys have always meant "step one
+		// unit of whatever the body is showing", and the patch is a body with a
+		// unit of its own. It yields to the page above it because the page
+		// replaces the columns — no patch is on screen there to step through.
+		if m.hopHunk(-1) {
+			return m, nil
+		}
 		m.hopTurn(-1)
 	case "]":
 		if m.pageOpen() {
 			m.hopPage(1)
+			return m, nil
+		}
+		if m.hopHunk(1) {
 			return m, nil
 		}
 		m.hopTurn(1)

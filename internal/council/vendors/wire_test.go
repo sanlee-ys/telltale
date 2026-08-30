@@ -56,7 +56,7 @@ const (
 	// above: they pin different SURFACES of one CLI. `codex-0.147.0-turn.jsonl`
 	// is `codex exec --json`, the invocation the room seats; this one is
 	// `codex app-server`, a second protocol that ships parsed and unseated
-	// (design.md §9.49). When the seat moves, the exec pin goes with it.
+	// (design.md §9.50). When the seat moves, the exec pin goes with it.
 	codexAppServerWireVersion = "0.149.1" // codex --version -> codex-cli 0.149.1
 )
 
@@ -434,7 +434,7 @@ func TestCursorACPZeroTextChunksRendersFallbackSummary(t *testing.T) {
 // and openThread build, so the ids line up and the state machine runs
 // unmodified.
 //
-// The turn behind it is the SANDBOX ARM (design.md §9.49): a read-posture seat
+// The turn behind it is the SANDBOX ARM (design.md §9.50): a read-posture seat
 // told to write a file through cmd.exe. That is what makes it worth pinning
 // rather than a cheaper "reply with ok" — the frames it exercises are the ones
 // the room's honesty depends on. A denial arriving as a success, or the

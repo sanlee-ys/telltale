@@ -36,7 +36,7 @@ weaker than a live run, it says so.
 
 **`codex app-server` is unverified off Windows, 2026-08-29.** The row above
 describes the SEATED path, `codex exec --json`, and it is the only codex path
-the room dispatches. A second protocol ships parsed and unseated (§9.49), and
+the room dispatches. A second protocol ships parsed and unseated (§9.50), and
 every one of its eight arms ran on Windows 11 against codex-cli 0.149.1. Two of
 its findings are Windows-shaped and are the likeliest to differ on a Mac: the
 tool router wrapping shell commands in `pwsh.exe`, which cannot start under the

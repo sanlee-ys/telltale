@@ -14,7 +14,7 @@ import (
 // The codex app-server seat's tests.
 //
 // Everything here replays SHAPES captured live on 2026-08-29 against codex-cli
-// 0.149.1 (design.md §9.49) with the ids, paths and prose synthesized — this
+// 0.149.1 (design.md §9.50) with the ids, paths and prose synthesized — this
 // repository is public and its fixtures are never real session content. The
 // version-pinned REAL capture is `testdata/wire/codex-app-server-0.149.1-turn.jsonl`
 // and `wire_test.go` replays it.
@@ -485,13 +485,13 @@ func TestCodexAppServerHasNoBatchInvocation(t *testing.T) {
 
 func TestTheRoomStillSeatsTheExecCodexAdapter(t *testing.T) {
 	// The deliberate absence, pinned so it is a decision rather than an
-	// oversight. design.md §9.49 records why: on this path the shell router goes
+	// oversight. design.md §9.50 records why: on this path the shell router goes
 	// through pwsh, pwsh cannot start under the Windows sandbox on this box, and
 	// a read-posture seat abandoned its turn rather than inspecting on two of
 	// three arms. Registering this type is the one-line follow-up once that is
 	// measured away — and this test is what will fail and be read on that day.
 	if _, ok := Registry()[model.VendorCodex].(CodexAppServer); ok {
-		t.Fatal("the codex seat moved to app-server; §9.49's read-posture liveness must be re-measured and its record updated first")
+		t.Fatal("the codex seat moved to app-server; §9.50's read-posture liveness must be re-measured and its record updated first")
 	}
 	if _, ok := Registry()[model.VendorCodex].(Codex); !ok {
 		t.Fatalf("the codex seat must still be the exec adapter, got %T", Registry()[model.VendorCodex])
