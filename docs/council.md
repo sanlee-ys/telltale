@@ -512,6 +512,19 @@ starting says the tree is untouched instead — two different endings, kept apar
 the branch cut for the merge is deleted and the room goes back where it was, so a failed
 adoption leaves nothing behind.
 
+**`/adopt <seat> +<seat> <path...>` takes the winner plus the parts of the runner-up you
+point at.** `/adopt claude +codex internal/helper.go` merges claude's attempt whole and then
+takes exactly that one file from codex's, on a branch named for both of them —
+`adopt/t<N>-claude+codex`. The card names both sources and every path before you press `y`,
+and the commit it writes names them again, so nothing reading the history later has to guess
+where a file came from. The paths are yours to name: council picks nothing. It refuses, by
+name and before the card arms, a path **both racers wrote** (taking one would discard the
+other's answer with no merge and no marker — drop it, or merge it by hand afterwards), a
+path **the room itself wrote** since the race was cut, a path **the runner-up never touched**,
+and a path **it deleted** — a hybrid takes files a racer wrote, never a deletion. A hybrid
+whose merge conflicts restores your tree and deletes its branch exactly as the plain form
+does. Only one runner-up per adopt, and the seat must be a different one.
+
 **`/arena drop <seat>` deletes a racer's worktree and branch, and the force is a spelling,
 not a keystroke.** Drop refuses while a worktree holds uncommitted changes (counted), and
 while the arena branch holds commits the room has not merged (counted, with
@@ -530,7 +543,12 @@ file is written. A seat that has never raced says `never raced`; a seat you deci
 against says `0 of 4 adopted  0%`, because a measured zero and an absence are different
 facts. The rate never appears without the two counts it divides, and races **nobody was
 adopted from** are reported beside it as undecided rather than inside it — a race you
-walked away from is not a verdict on anyone. The word is `adopted` and never `won`, and
+walked away from is not a verdict on anyone. A race you settled with a **hybrid** adopt is
+its own state and credits nobody: the race counts as decided, both seats count as having
+entered it, and neither rate moves — the page says `part of 2 hybrid adopts` beside the rate,
+and the line under the heading says how many decided races no seat's column claims. The refs
+can say which two seats a hybrid was cut from; they cannot say which paths came from where,
+because that lives in a commit message this page does not read. The word is `adopted` and never `won`, and
 that is deliberate: a seat you cut with `x` still counts as one you did not adopt, because
 the branches record who entered and whom you took and nothing else. The page states its own
 bound — a race whose branches were dropped is no longer in the record — and `y` copies the

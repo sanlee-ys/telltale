@@ -276,6 +276,16 @@ type Model struct {
 	// that cut a different one — the collision suffix moves the name — would
 	// make the card a description of something else.
 	adoptOnto string
+	// adoptDonor and adoptPaths are the HYBRID half of a pending adoption: the
+	// second racer some paths are taken from, and those paths (§9.37's 2026-08-29
+	// hybrid amendment). Both empty for an ordinary whole adoption.
+	//
+	// They ride beside adoptOnto for adoptOnto's reason. The card names every one
+	// of these paths and names the seat they come from, so a y that took a
+	// different set — recomputed against a tree that moved between the arming and
+	// the key — would authorize something the operator never read.
+	adoptDonor model.VendorID
+	adoptPaths []string
 	// lastRace is the most recent /arena race's receipt: workspace, turn, base,
 	// and each racer's kept worktree (lifecycle.go). Nil until a race runs.
 	// Held on Model rather than State because Render never reads it — the
@@ -873,10 +883,11 @@ func (m *Model) clearGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *Model) adoptGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	v := m.adoptPending
 	onto := m.adoptOnto
-	m.adoptPending, m.adoptOnto = "", ""
+	donor, paths := m.adoptDonor, m.adoptPaths
+	m.adoptPending, m.adoptOnto, m.adoptDonor, m.adoptPaths = "", "", "", nil
 	switch msg.String() {
 	case "y":
-		m.st.Notice = m.adoptSeat(v, onto)
+		m.st.Notice = m.adoptSeat(v, onto, donor, paths)
 	case "n":
 		m.st.Notice = "kept — nothing was merged"
 	default:
