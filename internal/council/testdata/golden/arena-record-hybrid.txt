@@ -1,0 +1,24 @@
+  council READ  │  ~/code/telltale                                             no turn yet  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+  arena record  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  telltale  3 races  
+  read from the arena/ and adopt/ branches this repository still holds, t2 through t6: 3 decided by you (2 by a hybrid  
+  adopt, counted for no seat). A race whose branches were dropped is no longer in the record.                           
+                                                                                                                        
+  Claude Code  ─────────────────────────────────────────────────────────  1 of 1 adopted  100%  part of 1 hybrid adopt  
+                                                                                                                        
+  Codex  ────────────────────────────────────────────────────────────────  0 of 1 adopted  0%  part of 2 hybrid adopts  
+                                                                                                                        
+  Antigravity  ───────────────────────────────────────────────────────────  0 of 1 adopted  0%  part of 1 hybrid adopt  
+                                                                                                                        
+  Cursor  ───────────────────────────────────────────────────────────────────────────────────────────────  never raced  
+                                                                                                                        
+  Grok  ─────────────────────────────────────────────────────────────────────────────────────────────────  never raced  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰───────────────────────────────────────────────────────────────────────────────────────────────────────  RECORD  ─╯  
+                                                                               t grid  │  y yank  │  ? help  │  q quit  

@@ -1,6 +1,8 @@
 package council
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -16,6 +18,10 @@ import (
 //
 //   - /adopt <seat> merges the racer's arena branch into the room's repo,
 //     behind a y/n gate whose question names the exact git command.
+//   - /adopt <seat> +<seat> <path...> merges the first racer whole and then
+//     takes exactly the named paths from the second — the hybrid form, added
+//     2026-08-29. The card names both sources and every path, and the receipt
+//     commit on the adopt branch names them again.
 //   - /arena drop <seat> (or all) deletes a racer's worktree and branch,
 //     refusing while either still holds work the room has not taken.
 //
@@ -49,6 +55,27 @@ import (
 // it is only ever cut on the user's own y, and a FAILED adoption removes it
 // again — a room left standing on an empty branch it cut for a merge that never
 // landed would be the verb charging for its own failure.
+//
+// THE HYBRID IS PER-PATH AND USER-TYPED, and both halves of that are the
+// decision (§9.37's 2026-08-29 hybrid amendment).
+//
+// Per-PATH rather than per-hunk. The room's whole command style is a typed verb
+// with typed arguments; it owns no picker, and a per-hunk selector is a new
+// full-frame surface with its own scroll, its own keys and its own mode word —
+// disproportionate to a v1 whose value is that the operator can take one file
+// from the runner-up. A path is also the unit the operator already has in front
+// of them: `git diff --stat` in the column, and the overlap clause on this very
+// card, both name paths. Per-hunk stays open, and this shape does not block it:
+// a hunk picker would narrow what `+<seat>` contributes, not change the grammar.
+//
+// User-typed rather than computed. §9.34 rejected a synthesis hop — no model
+// merges the seats' answers — and that ruling binds here: council applies the
+// paths the operator named and chooses nothing. A path that BOTH racers wrote is
+// refused by name rather than resolved, because resolving it would be council
+// deciding between two writers with nobody watching. So is a path the ROOM wrote
+// since the race was cut: `git checkout <branch> -- <path>` overwrites without a
+// merge and without a conflict marker, so a silent clobber is the same defect
+// one level out.
 //
 // Neither verb consults the room's read/write posture. Posture governs what
 // the SEATS may do (§9.16); both of these run only on the user's own y or
@@ -109,7 +136,8 @@ func (m *Model) adoptCommand(arg string) bool {
 			m.st.Notice = "no race has run — /arena <brief> races the seats, then /adopt <seat> takes the winner"
 		} else {
 			m.st.Notice = "the last race is t" + itoa(race.raceN) +
-				" — /adopt <seat> merges that seat's arena branch into the room"
+				" — /adopt <seat> merges that seat's arena branch into the room" +
+				" · +<seat> <path...> takes those paths from a second racer too"
 		}
 		m.setDraft("")
 		return true
@@ -118,10 +146,19 @@ func (m *Model) adoptCommand(arg string) bool {
 		m.st.Notice = "no race has run — /arena <brief> races the seats first"
 		return true
 	}
-	v, ok := mentionAliases()[strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "@")))]
+	baseWord, donorWord, paths, ok := parseAdoptArg(arg)
+	if !ok {
+		// Neither shape. The refusal teaches both rather than only the one the
+		// draft came closest to: a reader who typed the second form wrong needs
+		// to see the second form.
+		m.st.Notice = "/adopt takes a seat, or a seat plus paths from another — " +
+			"/adopt <seat> · /adopt <seat> +<seat> <path...>"
+		return true
+	}
+	v, ok := mentionAliases()[strings.ToLower(strings.TrimSpace(strings.TrimPrefix(baseWord, "@")))]
 	if !ok {
 		// The draft is kept: a typo is cheap to fix and nothing has run.
-		m.st.Notice = "no racer called " + arg +
+		m.st.Notice = "no racer called " + baseWord +
 			" — /adopt takes " + strings.Join(SeatNames(), ", ")
 		return true
 	}
@@ -131,6 +168,35 @@ func (m *Model) adoptCommand(arg string) bool {
 		// dropped — either way there is no kept worktree to adopt from.
 		m.st.Notice = string(v) + " has no kept worktree from race t" + itoa(race.raceN) + " — nothing to adopt"
 		return true
+	}
+
+	// The donor half is resolved before anything is measured, so a mistyped seat
+	// costs no git call and keeps the draft.
+	var donor model.VendorID
+	if donorWord != "" {
+		d, ok := mentionAliases()[strings.ToLower(strings.TrimPrefix(donorWord, "@"))]
+		if !ok {
+			m.st.Notice = "no racer called " + donorWord +
+				" — /adopt takes paths from " + strings.Join(SeatNames(), ", ")
+			return true
+		}
+		if d == v {
+			// Not a hybrid at all, and the plain verb already does it. Naming the
+			// plain verb is the remedy, per §9.17's tell.
+			m.st.Notice = "the two seats are the same — /adopt " + string(v) + " takes that attempt whole"
+			return true
+		}
+		if _, raced := race.trees[d]; !raced {
+			m.st.Notice = string(d) + " has no kept worktree from race t" + itoa(race.raceN) +
+				" — there are no paths to take from it"
+			return true
+		}
+		if len(paths) == 0 {
+			m.st.Notice = "name the paths to take from " + string(d) +
+				" — /adopt " + string(v) + " +" + string(d) + " <path...>"
+			return true
+		}
+		donor = d
 	}
 
 	dirty, err := worktreePorcelain(tree)
@@ -157,6 +223,31 @@ func (m *Model) adoptCommand(arg string) bool {
 		return true
 	}
 
+	// The hybrid's paths are checked HERE, before the gate arms, so the card can
+	// name every one of them and mean it. Each refusal is its own sentence with
+	// its own remedy, and none of them resolves anything on the operator's
+	// behalf: a path two writers touched is handed back, never merged.
+	var donorPaths []string
+	donorDirty := false
+	if donor != "" {
+		var why string
+		if donorPaths, why = m.hybridPaths(race, v, donor, paths); why != "" {
+			m.st.Notice = why
+			return true
+		}
+		// The card's commit clause is keyed on the donor's WHOLE tree, not on the
+		// chosen paths, because `y` commits the whole tree — the same act the base
+		// racer's attempt gets, for the same reason. A card that named the commit
+		// only when a chosen path was dirty would stay silent while y committed
+		// the donor's other files.
+		lines, err := worktreePorcelain(race.trees[donor])
+		if err != nil {
+			m.st.Notice = "adopt: " + err.Error()
+			return true
+		}
+		donorDirty = len(lines) > 0
+	}
+
 	// THE CLEAN-TREE GATE IS THE ONE HARD PRECONDITION. A merge writes into
 	// the room's working tree, and if that tree holds uncommitted work the
 	// merge can entangle or (on abort) discard it. Adopt must never eat the
@@ -165,7 +256,11 @@ func (m *Model) adoptCommand(arg string) bool {
 	// only when the adoption writes them (adoptBlockers, and the t9 incident
 	// recorded on it — the first live adopt was refused over an untracked
 	// settings directory the merge would never have touched).
-	roomDirty, err := adoptBlockers(race.workspace, arenaBranch(race.raceN, v))
+	//
+	// A hybrid writes the chosen paths too, so they are handed to the same check
+	// rather than to a second one — one spelling of "what this adoption writes"
+	// is what keeps the untracked-collision rule from disagreeing with itself.
+	roomDirty, err := adoptBlockers(race.workspace, arenaBranch(race.raceN, v), donorPaths)
 	if err != nil {
 		m.st.Notice = "adopt: " + err.Error()
 		return true
@@ -191,13 +286,19 @@ func (m *Model) adoptCommand(arg string) bool {
 	// remaining window, and that one ends as a named checkout failure with git's
 	// own line rather than as a silent rename.
 	branch := arenaBranch(race.raceN, v)
-	onto, err := freeAdoptBranch(race.workspace, race.raceN, v)
+	want := adoptBranch(race.raceN, v)
+	if donor != "" {
+		want = hybridAdoptBranch(race.raceN, v, donor)
+	}
+	onto, err := freeAdoptBranch(race.workspace, want)
 	if err != nil {
 		m.st.Notice = "adopt: " + err.Error()
 		return true
 	}
 	m.adoptPending = v
 	m.adoptOnto = onto
+	m.adoptDonor = donor
+	m.adoptPaths = donorPaths
 	// THE PREVIEW LEADS, and that placement is the decision (§9.37's 2026-08-29
 	// amendment). This line truncates from the right at a narrow width, so
 	// leading with the measured state can cost the action clause its tail — and
@@ -206,14 +307,238 @@ func (m *Model) adoptCommand(arg string) bool {
 	// subject leaves "yes because I trust it" and "no because I don't", which is
 	// the gate reduced to a mood. An operator who can see only the first clause
 	// can still press n, and the preview is what makes that n a decision.
+	//
+	// THE HYBRID NAMES EVERY PATH, not a count with an example. The count-plus-
+	// first-path grammar the overlap clause uses is right for a measurement the
+	// room took; these paths are the SCOPE the y authorizes, and a card that
+	// authorized "2 paths (a.txt)" would leave the second one unread. The
+	// operator typed them, so the list is short by construction.
+	commits := "commits its worktree"
+	if donorDirty && len(dirty) > 0 {
+		commits = "commits both worktrees"
+	} else if donorDirty {
+		commits = "commits " + string(donor) + "'s worktree"
+	}
 	act := " · y cuts " + onto + " and runs git merge --no-ff " + branch
-	if len(dirty) > 0 {
-		act = " · y commits its worktree, cuts " + onto +
+	if len(dirty) > 0 || donorDirty {
+		act = " · y " + commits + ", cuts " + onto +
 			" and runs git merge --no-ff " + branch
 	}
-	m.st.Notice = "adopt " + string(v) + "? " + div.sentence(len(dirty)) + act + " · n cancels"
+	head := "adopt " + string(v) + "? "
+	if donor != "" {
+		act += ", then takes " + strings.Join(donorPaths, ", ") + " from " + arenaBranch(race.raceN, donor)
+		head = "adopt " + string(v) + " + " + itoa(len(donorPaths)) + " " +
+			plural(len(donorPaths), "path") + " from " + string(donor) + "? "
+	}
+	m.st.Notice = head + div.sentence(len(dirty)) + act + " · n cancels"
 	m.setDraft("")
 	return true
+}
+
+// parseAdoptArg reads /adopt's argument in its two shapes:
+//
+//	<seat>                       — the whole attempt
+//	<seat> +<seat> <path...>     — the attempt, plus named paths from another
+//
+// ok is false for anything else, and the caller then teaches BOTH forms rather
+// than guessing which one was meant.
+//
+// The `+` is glued to the donor seat on purpose. A bare `+` as its own word
+// would make `/adopt claude + codex` legal, and that reads as a request for two
+// whole attempts — which this verb cannot do and must not appear to offer. Glued,
+// the token is unmistakably one argument naming one seat.
+//
+// A missing path list parses as ok with an empty paths slice, because "you named
+// a donor and no paths" has a better answer than "that is not a command": the
+// caller refuses it by naming the seat and the form.
+func parseAdoptArg(arg string) (base, donor string, paths []string, ok bool) {
+	f := strings.Fields(arg)
+	switch {
+	case len(f) == 0:
+		return "", "", nil, false
+	case len(f) == 1:
+		return f[0], "", nil, true
+	}
+	if !strings.HasPrefix(f[1], "+") || len(f[1]) == 1 {
+		return "", "", nil, false
+	}
+	return f[0], strings.TrimPrefix(f[1], "+"), f[2:], true
+}
+
+// hybridPaths validates the paths a hybrid adopt would take from the donor and
+// returns them de-duplicated, or the refusal sentence when one of them cannot be
+// taken.
+//
+// FIVE REFUSALS, AND NOT ONE OF THEM RESOLVES ANYTHING. Each names the offending
+// path and what to do instead, per §9.17's tell:
+//
+//  1. A path outside the repository. An absolute path or one climbing through
+//     `..` is a pathspec aimed somewhere this verb has no business writing.
+//  2. A path the donor did not write. Taking it would land the base attempt's own
+//     content and call it an adoption from the donor — a receipt that lies.
+//  3. A path the BASE racer also wrote. This is the hybrid's founding refusal:
+//     two seats answered the same file, and `git checkout <donor> -- <path>`
+//     would discard the base's answer with no merge and no marker. Council does
+//     not pick between two writers (§9.34's no-synthesis ruling, applied to a
+//     file rather than to prose).
+//  4. A path the ROOM wrote since the race was cut. The same silent clobber, one
+//     level out: the merge machinery never sees this path, so the room's own work
+//     at it would vanish under the donor's copy.
+//  5. A path the donor deleted, or that is not a file in its worktree. The
+//     checkout would fail with git's own pathspec error after the branch was
+//     already cut; refusing before the card arms is the same rule the clean-tree
+//     gate follows. A hybrid takes files a racer wrote, never a deletion — a
+//     stated v1 limit, not a silence.
+//
+// THE DONOR'S UNCOMMITTED WORK COUNTS AS WRITTEN, and that is a deliberate fork
+// from the 2026-08-29 preview ruling, which declined to fold a racer's
+// uncommitted paths into the OVERLAP set. That ruling was about a preview of a
+// merge result — a guess about a commit nobody had made. This is not a guess:
+// `y` commits both worktrees in the same act, with `git add -A`, so the paths
+// that commit will hold are exactly (tracked changes ∪ untracked-and-not-ignored)
+// — which is what racerWrites reads, by definition rather than by prediction.
+// Refusing to read them would refuse every hybrid on the ordinary race, because
+// arena seats leave their work uncommitted (commit-per-turn is deferred).
+func (m *Model) hybridPaths(race *arenaRace, base, donor model.VendorID, typed []string) (paths []string, why string) {
+	donorTree := race.trees[donor]
+	donorCommitted, donorPending, err := racerWrites(race.workspace, donorTree, arenaBranch(race.raceN, donor))
+	if err != nil {
+		return nil, "adopt: " + err.Error()
+	}
+	baseCommitted, basePending, err := racerWrites(race.workspace, race.trees[base], arenaBranch(race.raceN, base))
+	if err != nil {
+		return nil, "adopt: " + err.Error()
+	}
+	// The room's own half over the same merge base readAdoptOverlap uses, so the
+	// card's overlap clause and this refusal can never disagree about what the
+	// room wrote.
+	roomWrote, err := changedFiles(race.workspace, arenaBranch(race.raceN, donor)+"...HEAD")
+	if err != nil {
+		return nil, "adopt: " + err.Error()
+	}
+
+	donorAll := union(donorCommitted, donorPending)
+	baseAll := union(baseCommitted, basePending)
+	room := set(roomWrote)
+
+	seen := map[string]bool{}
+	for _, raw := range typed {
+		p := cleanRepoPath(raw)
+		if p == "" {
+			return nil, raw + " is not a path inside the repository — /adopt takes paths as git spells them, from the repository root"
+		}
+		if seen[p] {
+			// Typing one path twice is a slip, not a request; the second copy is
+			// dropped rather than refused.
+			continue
+		}
+		switch {
+		case !donorAll[p]:
+			return nil, string(donor) + " changed nothing at " + p +
+				" — /adopt takes paths that racer wrote"
+		case baseAll[p]:
+			return nil, string(base) + " and " + string(donor) + " both wrote " + p +
+				" — /adopt merges no path two seats changed; drop it, or merge it by hand afterwards"
+		case room[p]:
+			return nil, "the room and " + string(donor) + " both wrote " + p +
+				" — /adopt would overwrite the room's copy; merge that path by hand"
+		case !isFileIn(donorTree, p):
+			return nil, string(donor) + " has no file at " + p +
+				" — a hybrid adopt takes files a racer wrote, never a deletion"
+		}
+		seen[p] = true
+		paths = append(paths, p)
+	}
+	return paths, ""
+}
+
+// racerWrites is every path an adoption of one racer will write: what its arena
+// branch already holds over the room, and what its worktree is about to commit.
+//
+// The second half is read as git itself defines the commit `adoptSeat` makes.
+// `git add -A` stages tracked changes and untracked files that are not ignored,
+// so `diff --name-only HEAD` plus `ls-files --others --exclude-standard` IS that
+// commit's path list — not a forecast of it. Both are read with `-z`, so a path
+// carrying a space or a quote arrives whole instead of C-quoted.
+func racerWrites(workspace, tree, branch string) (committed, pending []string, err error) {
+	if committed, err = changedFiles(workspace, "HEAD..."+branch); err != nil {
+		return nil, nil, err
+	}
+	tracked, err := gitOut(tree, "--no-pager", "diff", "--name-only", "-z", "HEAD")
+	if err != nil {
+		return nil, nil, err
+	}
+	others, err := gitOut(tree, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return nil, nil, err
+	}
+	return committed, append(splitNUL(tracked), splitNUL(others)...), nil
+}
+
+// splitNUL reads a `-z` git listing into paths, empties dropped.
+func splitNUL(out string) []string {
+	var paths []string
+	for _, p := range strings.Split(out, "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths
+}
+
+func set(paths []string) map[string]bool {
+	m := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		if p != "" {
+			m[p] = true
+		}
+	}
+	return m
+}
+
+func union(a, b []string) map[string]bool {
+	m := set(a)
+	for _, p := range b {
+		if p != "" {
+			m[p] = true
+		}
+	}
+	return m
+}
+
+// cleanRepoPath is a typed path as git spells one, or empty when it is not a
+// path this verb may touch.
+//
+// Backslashes become forward slashes so a Windows operator typing a Windows path
+// is understood — every other path in this room comes out of git, which spells
+// them with forward slashes, and the two must compare equal. An absolute path or
+// one containing a `..` segment is refused rather than resolved: a hybrid writes
+// inside the room repo, and a pathspec that leaves it is a mistake worth naming.
+func cleanRepoPath(p string) string {
+	p = strings.TrimSpace(strings.ReplaceAll(p, `\`, "/"))
+	p = strings.TrimPrefix(p, "./")
+	if p == "" || strings.HasPrefix(p, "/") || strings.Contains(p, "//") {
+		return ""
+	}
+	if len(p) > 1 && p[1] == ':' {
+		// A drive letter — `C:/…`. Absolute on the one platform this room calls
+		// primary (ADR-002).
+		return ""
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if seg == ".." || seg == "" {
+			return ""
+		}
+	}
+	return p
+}
+
+// isFileIn reports that the racer's worktree holds a regular file at this path —
+// the fact `git checkout <branch> -- <path>` will need, read off the tree whose
+// contents that branch is about to hold.
+func isFileIn(tree, p string) bool {
+	fi, err := os.Stat(filepath.Join(tree, filepath.FromSlash(p)))
+	return err == nil && fi.Mode().IsRegular()
 }
 
 // adoptDivergence is what the /adopt card reports BEFORE y: how far the racer's
@@ -411,13 +736,38 @@ func adoptBranch(raceN int, v model.VendorID) string {
 	return "adopt/t" + itoa(raceN) + "-" + string(v)
 }
 
+// hybridAdoptBranch names the branch a hybrid adoption lands on:
+// `adopt/t<N>-<base>+<donor>`.
+//
+// THE NAME CARRIES BOTH SOURCES, and that is the naming decision (§9.37's
+// 2026-08-29 hybrid amendment). The alternative was to keep `adopt/t<N>-<base>`
+// and let the commit message carry the donor — which would leave one seat's name
+// alone on a branch holding another seat's work, in the one place `git branch`
+// shows a reader. The arena record derives everything it knows from these refs
+// (record.go), so a hybrid whose ref looked like a whole adoption would be
+// counted as one, and the base seat would be credited with an adoption it only
+// half won.
+//
+// `+` is the joiner because it is legal in a ref name, it is not `-` (the
+// collision suffix already owns that) and it is not `/` (the arena namespace
+// owns that). parseHybridAdoptRef reads this spelling back, so the two must
+// change together.
+func hybridAdoptBranch(raceN int, base, donor model.VendorID) string {
+	return adoptBranch(raceN, base) + "+" + string(donor)
+}
+
 // adoptBranchLimit caps the collision suffixes freeAdoptBranch will try. A repo
 // holding 50 adoptions of one racer from one race is a state to report, not to
 // keep counting through.
 const adoptBranchLimit = 50
 
-// freeAdoptBranch picks the name this adoption cuts: adoptBranch's own spelling
+// freeAdoptBranch picks the name this adoption cuts: the caller's own spelling
 // when nothing holds it, else the first free `-2`, `-3` … suffix.
+//
+// It takes the wanted NAME rather than a race and a seat, because there are two
+// spellings now (adoptBranch and hybridAdoptBranch) and one scan answers both.
+// A second collision loop over the same namespace would be the place the two
+// forms start disagreeing about what "taken" means.
 //
 // A COLLISION IS ORDINARY, not exotic. Race numbers repeat by design —
 // arenaRaceNumber scans `refs/heads/arena/` alone, so dropping a race's
@@ -434,8 +784,7 @@ const adoptBranchLimit = 50
 // name with the adoption still running (arenaRaceNumber's rule): the worst case
 // is the collision itself, and `git checkout -b` reports that by name, carrying
 // git's own fatal line.
-func freeAdoptBranch(workspace string, raceN int, v model.VendorID) (string, error) {
-	name := adoptBranch(raceN, v)
+func freeAdoptBranch(workspace, name string) (string, error) {
 	out, err := gitOut(workspace, "for-each-ref", "--format=%(refname:short)", "refs/heads/adopt/")
 	if err != nil {
 		return name, nil
@@ -524,7 +873,14 @@ func undoAdoptBranch(workspace, from, onto string) string {
 //     The two endings are different facts and are not collapsed (§4a.1).
 //     Either way the branch cut in step 3 is removed and the room goes back to
 //     the branch it was on (undoAdoptBranch).
-func (m *Model) adoptSeat(v model.VendorID, onto string) string {
+//  5. A HYBRID ONLY: `git checkout arena/t<N>/<donor> -- <path...>` on the same
+//     branch, then a commit whose message names both arena branches and every
+//     path. `git checkout` is the smallest git operation that lands exactly the
+//     chosen paths and nothing else, and it merges nothing — which is why the
+//     card refuses every path a second writer touched before it arms. A failure
+//     here restores exactly as a failed merge does: the branch is deleted and
+//     the room goes back where it came from.
+func (m *Model) adoptSeat(v model.VendorID, onto string, donor model.VendorID, paths []string) string {
 	race := m.lastRace
 	if race == nil {
 		// Unreachable from the gate, which only arms over a live race — kept so
@@ -536,30 +892,46 @@ func (m *Model) adoptSeat(v model.VendorID, onto string) string {
 		return string(v) + " has no kept worktree from race t" + itoa(race.raceN)
 	}
 	branch := arenaBranch(race.raceN, v)
+	if donor != "" && len(paths) == 0 {
+		// Unreachable from the gate, which refuses an empty path list before it
+		// arms. A hybrid with no paths is a whole adoption wearing a hybrid's
+		// branch name, and the name would then lie to the arena record.
+		return "adopt: a hybrid names the paths it takes — nothing was merged"
+	}
+	donorBranch := ""
+	if donor != "" {
+		donorTree, ok := race.trees[donor]
+		if !ok {
+			return string(donor) + " has no kept worktree from race t" + itoa(race.raceN)
+		}
+		donorBranch = arenaBranch(race.raceN, donor)
+		// The donor's attempt has to be a commit before a checkout can read it,
+		// for the reason the base racer's does: arena seats leave their work
+		// uncommitted. Committed FIRST, before anything moves the room, so a
+		// failure here leaves the room untouched.
+		if why := commitRacerAttempt(donorTree, donorBranch, donor, race.raceN); why != "" {
+			return why
+		}
+	}
 	if onto == "" {
 		// Unreachable from the gate, which resolves the name when it arms. Kept
 		// so a future caller cannot land an adoption on an unnamed branch — the
 		// same defensive shape the nil-race check above keeps.
+		want := adoptBranch(race.raceN, v)
+		if donor != "" {
+			want = hybridAdoptBranch(race.raceN, v, donor)
+		}
 		var err error
-		if onto, err = freeAdoptBranch(race.workspace, race.raceN, v); err != nil {
+		if onto, err = freeAdoptBranch(race.workspace, want); err != nil {
 			return "adopt: " + err.Error()
 		}
 	}
 
-	dirty, err := worktreePorcelain(tree)
-	if err != nil {
-		return "adopt: " + err.Error()
-	}
-	if len(dirty) > 0 {
-		if _, err := gitOut(tree, "add", "-A"); err != nil {
-			return "adopt: " + err.Error()
-		}
-		if _, err := gitOut(tree, "commit", "-m", string(v)+"'s arena attempt, race t"+itoa(race.raceN)); err != nil {
-			return "adopt: the attempt could not be committed to " + branch + " — " + err.Error()
-		}
+	if why := commitRacerAttempt(tree, branch, v, race.raceN); why != "" {
+		return why
 	}
 
-	roomDirty, err := adoptBlockers(race.workspace, branch)
+	roomDirty, err := adoptBlockers(race.workspace, branch, paths)
 	if err != nil {
 		return "adopt: " + err.Error()
 	}
@@ -598,12 +970,106 @@ func (m *Model) adoptSeat(v model.VendorID, onto string) string {
 		}
 		return "the merge failed: " + err.Error() + " — the room tree is untouched and " + where
 	}
+
+	if donor != "" {
+		if why := takeDonorPaths(race.workspace, from, onto, donorBranch, branch, donor, race.raceN, paths); why != "" {
+			return why
+		}
+	}
+
 	// The next command is named because the adoption is deliberately NOT the
 	// end of the hand-off: publishing is the operator's act, as it is for every
 	// other commit (§9.37's founding posture), and the branch this now stands on
 	// is what makes that act one command instead of four.
-	return "adopted " + string(v) + " onto " + onto +
-		" — gh pr create opens the PR · /arena drop " + string(v) + " removes its worktree"
+	//
+	// A hybrid names both seats here too. The notice is the last place the room
+	// speaks about this adoption, and a sentence saying only "adopted claude"
+	// over a branch holding codex's file would be the room hiding a mixed
+	// provenance at the one moment the operator is still looking at it.
+	took := ""
+	drops := " · /arena drop " + string(v) + " removes its worktree"
+	if donor != "" {
+		took = ", with " + itoa(len(paths)) + " " + plural(len(paths), "path") +
+			" from " + string(donor) + " (" + strings.Join(paths, ", ") + ")"
+		drops = " · /arena drop " + string(v) + " and /arena drop " + string(donor) +
+			" remove their worktrees"
+	}
+	return "adopted " + string(v) + " onto " + onto + took +
+		" — gh pr create opens the PR" + drops
+}
+
+// commitRacerAttempt commits one racer's worktree onto its own arena branch, or
+// returns the refusal sentence. Empty means the tree was already clean or the
+// commit landed.
+//
+// Lifted out of adoptSeat when the hybrid gave it a second caller. Signing and
+// author identity come from the user's own git config, unmodified: an adopt
+// commit enters the room's history, and council inventing an identity or skipping
+// the user's signing rule there would be the room writing history that misstates
+// its provenance.
+func commitRacerAttempt(tree, branch string, v model.VendorID, raceN int) string {
+	dirty, err := worktreePorcelain(tree)
+	if err != nil {
+		return "adopt: " + err.Error()
+	}
+	if len(dirty) == 0 {
+		return ""
+	}
+	if _, err := gitOut(tree, "add", "-A"); err != nil {
+		return "adopt: " + err.Error()
+	}
+	if _, err := gitOut(tree, "commit", "-m", string(v)+"'s arena attempt, race t"+itoa(raceN)); err != nil {
+		return "adopt: the attempt could not be committed to " + branch + " — " + err.Error()
+	}
+	return ""
+}
+
+// takeDonorPaths is the hybrid's second half: the chosen paths, checked out of
+// the donor's arena branch onto the adoption branch and committed with a receipt
+// that names where each half came from. Empty means it landed.
+//
+// THE RECEIPT IS THE HONESTY OF THIS FEATURE. A hybrid adoption's history holds
+// two sources, and the one place a reader meets it a year later is `git log`. So
+// the message names both arena branches, lists every path taken, and says what
+// council refused to do — take a path two seats wrote. Nothing in it is inferred:
+// the branches and the paths are the same strings the card showed before `y`.
+//
+// A FAILURE RESTORES EXACTLY AS A FAILED MERGE DOES. The `reset --hard` before
+// the restore is bounded and it is not a general-purpose escape: the room tree
+// was measured clean before the branch was cut, the branch is about to be
+// deleted, and the only content it can discard is the half-checked-out copy of
+// files that exist whole on the donor's own branch. Without it, `git checkout`
+// back to the room's branch would refuse over the very paths this step staged.
+func takeDonorPaths(workspace, from, onto, donorBranch, baseBranch string, donor model.VendorID, raceN int, paths []string) string {
+	args := append([]string{"checkout", donorBranch, "--"}, paths...)
+	if _, err := gitOut(workspace, args...); err != nil {
+		return "the paths could not be taken from " + donorBranch + ": " + err.Error() +
+			" — the merge is discarded and " + undoHybrid(workspace, from, onto)
+	}
+
+	var b strings.Builder
+	b.WriteString("adopt race t" + itoa(raceN) + ": " + baseBranch + " whole, plus " +
+		itoa(len(paths)) + " " + plural(len(paths), "path") + " from " + donorBranch + "\n\n")
+	b.WriteString("the merge below this commit carries " + baseBranch + " whole. this commit\n" +
+		"adds the paths that came from " + donorBranch + ", and it adds nothing else:\n\n")
+	for _, p := range paths {
+		b.WriteString("  " + p + "\n")
+	}
+	b.WriteString("\ntelltale council took no path that both seats wrote. a shared path is\n" +
+		"refused by name, and the operator merges it.\n")
+
+	if _, err := gitOut(workspace, "commit", "-m", b.String()); err != nil {
+		return "the paths from " + string(donor) + " could not be committed: " + err.Error() +
+			" — the merge is discarded and " + undoHybrid(workspace, from, onto)
+	}
+	return ""
+}
+
+// undoHybrid drops whatever the failed second half staged and then restores the
+// room the way every other failed adoption restores it.
+func undoHybrid(workspace, from, onto string) string {
+	_, _ = gitOut(workspace, "reset", "--hard")
+	return undoAdoptBranch(workspace, from, onto)
 }
 
 // parseArenaDrop recognises the drop verb inside a /arena draft: "drop",
@@ -813,7 +1279,12 @@ func worktreePorcelain(dir string) ([]string, error) {
 //     overlap itself ("untracked working tree files would be overwritten");
 //     the gate saying it first, by name, before y is armed, is the whole
 //     improvement.
-func adoptBlockers(workspace, branch string) ([]string, error) {
+//
+// `extra` is what the adoption writes BESIDES the merge — a hybrid's chosen
+// paths, nil for a whole adoption. It joins the branch's own file list rather
+// than getting a check of its own, because "what this adoption writes" has to
+// have exactly one answer.
+func adoptBlockers(workspace, branch string, extra []string) ([]string, error) {
 	lines, err := worktreePorcelain(workspace)
 	if err != nil {
 		return nil, err
@@ -834,6 +1305,7 @@ func adoptBlockers(workspace, branch string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
+		incoming = append(incoming, extra...)
 		for _, u := range untracked {
 			for _, f := range incoming {
 				if f == "" {

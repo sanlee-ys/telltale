@@ -25,6 +25,10 @@ import (
 //   - `adopt/t<N>-<vendor>` is minted by adoptSeat, on the operator's own `y`,
 //     and only on an adoption that LANDED — undoAdoptBranch deletes the branch a
 //     failed adoption cut, so a surviving adopt ref is a merge that happened.
+//   - `adopt/t<N>-<base>+<donor>` is the same, for a HYBRID adoption (§9.37's
+//     2026-08-29 hybrid amendment): the base attempt merged whole, plus named
+//     paths taken from the donor. The ref carries both seats precisely so this
+//     page can stay derivable — see the hybrid note on tallyArenaRefs.
 //
 // The alternative was a counts file under ~/.telltale. It was rejected: CLAUDE.md
 // enumerates the writes the gauges are ratified to make, a fourth one is an
@@ -63,11 +67,29 @@ type SeatRecord struct {
 	Entered int
 	Judged  int
 	Adopted int
+
+	// Hybrid is the races this seat entered that the operator decided by a
+	// HYBRID adoption this seat was part of — as the base attempt or as the seat
+	// some paths were taken from (§9.37's 2026-08-29 hybrid amendment).
+	//
+	// A FOURTH COUNT RATHER THAN A SHARE OF THE OTHER THREE, because a hybrid is
+	// not a verdict either way and the refs cannot make it one. Crediting the base
+	// seat with the adoption would score it for work the donor wrote; counting the
+	// race as a loss for both would score two seats against for a race the
+	// operator resolved in both their favour; and there is no honest fraction to
+	// invent, because the refs record which paths came from where only in a commit
+	// message, which this page does not read. So a hybrid leaves the rate entirely
+	// and is reported beside it — the same treatment Undecided already gets, for
+	// the same reason: a bounded claim states what it is not counting.
+	Hybrid int
 }
 
 // Undecided is the races this seat entered that the operator never decided.
 // Reported beside the rate and never inside it (see the file's header).
-func (s SeatRecord) Undecided() int { return s.Entered - s.Judged }
+//
+// Hybrids come out too. A race decided by a hybrid was decided; calling it
+// undecided would say nobody was taken from a race where this very seat was.
+func (s SeatRecord) Undecided() int { return s.Entered - s.Judged - s.Hybrid }
 
 // Rate is the seat's adoption rate over the DECIDED races it entered, as a
 // percentage, and ok is false when there is no denominator to divide by.
@@ -111,6 +133,12 @@ type ArenaRecord struct {
 	// Decided is how many of those races the operator resolved by adopting some
 	// seat. Races minus Decided is what nobody judged.
 	Decided int
+
+	// Hybrid is how many of the decided races were resolved by a HYBRID adoption
+	// — one attempt taken whole plus named paths from another. Named on the window
+	// sentence, because a reader adding up the seats' rates would otherwise find
+	// decided races that no seat's `adopted` column accounts for.
+	Hybrid int
 
 	// Seats is one entry per addressable vendor, in seating order — including the
 	// seats that never raced, which is the whole reason this is not built from
@@ -187,8 +215,12 @@ func tallyArenaRefs(repo string, arenaRefs, adoptRefs []string) ArenaRecord {
 	// and adopts again). Counting refs would score that seat twice for one race.
 	entered := map[model.VendorID]map[int]bool{}
 	won := map[model.VendorID]map[int]bool{}
+	// part[vendor] is the races this seat was one of the two sources of a HYBRID
+	// adoption in, and hybrids is the races decided that way.
+	part := map[model.VendorID]map[int]bool{}
 	races := map[int]bool{}
 	decided := map[int]bool{}
+	hybrids := map[int]bool{}
 
 	mark := func(m map[model.VendorID]map[int]bool, v model.VendorID, n int) {
 		if m[v] == nil {
@@ -206,6 +238,23 @@ func tallyArenaRefs(repo string, arenaRefs, adoptRefs []string) ArenaRecord {
 		mark(entered, v, n)
 	}
 	for _, ref := range adoptRefs {
+		// The hybrid spelling is tried FIRST, and the order is load-bearing rather
+		// than stylistic: `adopt/t4-claude+codex` must never fall through to the
+		// whole-adoption parse and credit one seat with the whole act. It cannot
+		// today — knownVendor refuses `claude+codex` — and trying the narrower
+		// reading first is what keeps that true if a vendor id ever grows a `+`.
+		if n, base, donor, ok := parseHybridAdoptRef(ref); ok {
+			races[n] = true
+			decided[n] = true
+			hybrids[n] = true
+			// Both seats ENTERED the race, on the same evidence a whole adopt ref
+			// carries: council cut this ref from those two arena branches.
+			mark(entered, base, n)
+			mark(entered, donor, n)
+			mark(part, base, n)
+			mark(part, donor, n)
+			continue
+		}
 		n, v, ok := parseAdoptRef(ref)
 		if !ok {
 			continue
@@ -222,12 +271,21 @@ func tallyArenaRefs(repo string, arenaRefs, adoptRefs []string) ArenaRecord {
 
 	rec.Races = sortedKeys(races)
 	rec.Decided = len(decided)
+	rec.Hybrid = len(hybrids)
 	for _, v := range addressableVendors() {
 		s := SeatRecord{Vendor: v, Label: vendorLabel(v)}
 		for n := range entered[v] {
 			s.Entered++
-			if decided[n] {
+			// A WHOLE adoption of this seat outranks a hybrid of the same race,
+			// and that ordering is the honest one: an operator who adopted the
+			// attempt whole, reverted, and then took a hybrid did adopt it whole
+			// once, and the refs hold both receipts. Only when there is no whole
+			// adoption does a hybrid take the race out of the rate.
+			switch {
+			case won[v][n], !part[v][n] && decided[n]:
 				s.Judged++
+			case part[v][n]:
+				s.Hybrid++
 			}
 		}
 		s.Adopted = len(won[v])
@@ -281,6 +339,50 @@ func parseAdoptRef(ref string) (n int, v model.VendorID, ok bool) {
 	}
 	v, ok = knownVendor(seat)
 	return n, v, ok
+}
+
+// parseHybridAdoptRef reads `adopt/t<N>-<base>+<donor>` — hybridAdoptBranch's
+// own spelling, with freeAdoptBranch's `-<k>` collision suffix read back the same
+// way parseAdoptRef reads it.
+//
+// It exists so the record can say a hybrid HAPPENED. Without it the ref falls
+// through every parse here and the race counts as one nobody was adopted from —
+// the page reporting an operator who decided as one who walked away, which is a
+// worse lie than any undercount, because the operator is looking at the branch
+// while they read it.
+//
+// Both ids must be known seats and they are not required to differ: `/adopt`
+// refuses a hybrid of a seat with itself, so such a ref cannot come from this
+// room, but marking one seat twice in a set costs nothing and needs no branch.
+func parseHybridAdoptRef(ref string) (n int, base, donor model.VendorID, ok bool) {
+	rest, found := strings.CutPrefix(ref, "adopt/t")
+	if !found {
+		return 0, "", "", false
+	}
+	num, seats, found := strings.Cut(rest, "-")
+	if !found {
+		return 0, "", "", false
+	}
+	n, ok = raceNumber(num)
+	if !ok {
+		return 0, "", "", false
+	}
+	if head, tail, cut := lastDash(seats); cut && allDigits(tail) {
+		seats = head
+	}
+	b, d, found := strings.Cut(seats, "+")
+	if !found {
+		return 0, "", "", false
+	}
+	base, ok = knownVendor(b)
+	if !ok {
+		return 0, "", "", false
+	}
+	donor, ok = knownVendor(d)
+	if !ok {
+		return 0, "", "", false
+	}
+	return n, base, donor, true
 }
 
 func lastDash(s string) (head, tail string, ok bool) {
@@ -470,6 +572,12 @@ func recordWindow(rec ArenaRecord) string {
 	}
 	s := "read from the arena/ and adopt/ branches this repository still holds, " + span +
 		": " + itoa(rec.Decided) + " decided by you"
+	if rec.Hybrid > 0 {
+		// Said on the WINDOW line rather than left to the seats, because a hybrid
+		// is the one decided race no seat's `adopted` column claims. A reader
+		// adding the seats up and coming out short must find the difference here.
+		s += " (" + itoa(rec.Hybrid) + " by a hybrid adopt, counted for no seat)"
+	}
 	if u := rec.Undecided(); u > 0 {
 		s += ", " + itoa(u) + " nobody was adopted from"
 	}
@@ -490,6 +598,10 @@ func recordWindow(rec ArenaRecord) string {
 //     exactly what a race with a give-up or a cut seat leaves behind.
 //   - A seat the operator decided against is a MEASURED zero and says so:
 //     `0 of 4 adopted  0%`.
+//   - A seat that was part of a HYBRID adoption says that too, beside the rate
+//     and never inside it. A seat whose only decided races were hybrids reads
+//     `no attempt adopted whole`, which is the true statement: the operator
+//     decided, and what they took was neither this attempt nor not this attempt.
 //
 // THE RATE NEVER APPEARS WITHOUT ITS COUNT, and in that order — the fraction
 // first, the percentage second. The counts are what was measured; the percentage
@@ -501,10 +613,16 @@ func seatStanding(s SeatRecord) string {
 		return "never raced"
 	}
 	var parts []string
-	if pct, ok := s.Rate(); ok {
+	switch pct, ok := s.Rate(); {
+	case ok:
 		parts = append(parts, itoa(s.Adopted)+" of "+itoa(s.Judged)+" adopted", itoa(pct)+"%")
-	} else {
+	case s.Hybrid > 0:
+		parts = append(parts, "no attempt adopted whole")
+	default:
 		parts = append(parts, "no decided race")
+	}
+	if s.Hybrid > 0 {
+		parts = append(parts, "part of "+itoa(s.Hybrid)+" hybrid "+plural(s.Hybrid, "adopt"))
 	}
 	if u := s.Undecided(); u > 0 {
 		parts = append(parts, itoa(u)+" undecided")

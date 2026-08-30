@@ -13082,6 +13082,135 @@ all. No golden moved, because the card is a notice string and no golden renders 
 half is owed**: no real `/adopt` has been armed against this build, so every sentence above
 rests on the fixtures rather than on a race.
 
+**Amendment, 2026-08-29: `/adopt` can take the winner plus the parts of the runner-up you point
+at.** A race ends with four attempts and one decision, and the decision the room offered was
+all-or-nothing: adopt one seat whole, and retype by hand whatever the runner-up got right. The ask
+is not ours — it is the one users put to Cursor's own multi-agent judging thread, in those words:
+synthesize a best-of-both instead of picking one wholesale. No surveyed tool ships it. Council
+already owns the substrate — per-attempt worktrees, one base SHA, commit receipts, and a y/n card
+that names exact git commands — so this is a grammar and four refusals, not new machinery.
+
+**The grammar is one more argument, and the fork is PER-PATH.**
+
+```
+/adopt claude +codex internal/council/helper.go docs/council.md
+```
+
+- **Per-path, not per-hunk.** The sweep's own evidence is users asking to mix at path OR hunk
+  level, so the choice was open. Per-hunk needs an interactive picker inside the room — a
+  full-frame body with its own scroll, its own keys and its own mode word — which is a new render
+  surface for a v1 whose value is that the operator can take one file from the runner-up. A path
+  is also the unit already in front of them: the column's `git diff --stat`, and this card's own
+  overlap clause, both speak in paths. **Per-hunk is deferred, not rejected**, and this shape does
+  not block it: a hunk picker would narrow what `+<seat>` contributes and leave the grammar alone.
+- **`+` glued to the donor seat.** A bare `+` as its own word would make `/adopt claude + codex`
+  legal, and that reads as a request for two whole attempts — which this verb cannot do and must
+  not appear to offer. `/adopt` already takes its whole argument (roomcmd's `parseCommand`), so the
+  longer form needs none of the vocabulary handling `/arena drop` needed.
+- **User-typed, never computed.** §9.34 rejected a synthesis hop, and that ruling binds here:
+  council applies the paths the operator named and chooses nothing. The refusals below are how that
+  promise is kept mechanically rather than by intention.
+
+**Four refusals, and not one of them resolves anything.** Each names the path and a way forward
+(§9.17's tell), and each fires before the card arms, so a `y` is always one that can be honored:
+
+- **A path BOTH racers wrote.** This is the founding refusal. `git checkout <donor> -- <path>`
+  would discard the base attempt's answer with no merge and no conflict marker, so council refuses
+  by name and the operator decides — drop the path, or merge it by hand afterwards.
+- **A path the ROOM wrote since the race was cut.** The same silent clobber one level out: the
+  merge machinery never sees a path taken by checkout, so the room's own work there would vanish.
+- **A path the donor did not write.** Taking it would land the base attempt's own content under a
+  receipt saying it came from the donor.
+- **A path the donor deleted.** A hybrid takes files a racer wrote, never a deletion — a stated v1
+  limit rather than a `git checkout` pathspec error discovered after the branch was already cut.
+
+**The card says exactly what will be merged from where, composed with the divergence preview
+above.** The preview still leads, for that amendment's reason; the leading question gains the
+hybrid's own scope, and the action clause gains its second half:
+
+```
+adopt claude + 1 path from codex? vs main: 1 ahead, 0 behind · no overlapping path · y commits
+both worktrees, cuts adopt/t4-claude+codex and runs git merge --no-ff arena/t4/claude, then
+takes helper.go from arena/t4/codex · n cancels
+```
+
+Every path is named rather than counted-with-an-example. The count-plus-first grammar the overlap
+clause uses is right for a measurement the room took; these paths are the SCOPE the `y`
+authorizes, and a card that authorized "2 paths (a.txt)" would leave the second one unread. The
+operator typed them, so the list is short by construction.
+
+**The branch name carries both seats: `adopt/t<N>-<base>+<donor>`.** This is a naming decision and
+the arena record (§9.47) forced it, because that page derives everything it knows from these refs.
+The alternative — keep `adopt/t<N>-<base>` and let the commit message carry the donor — would leave
+one seat's name alone on a branch holding another seat's work, in the one place `git branch` shows
+a reader, and the record would then count the base seat as having won the race outright. `+` is the
+joiner because it is legal in a ref name, because `-` is already the collision suffix and because
+`/` is already the arena namespace. `freeAdoptBranch` suffixes a collider identically, from the
+same single scan, so the two spellings cannot disagree about what "taken" means.
+
+**The receipt names both sources.** The base arrives as the unchanged `git merge --no-ff`, and the
+paths arrive in a second commit whose message names both arena branches, lists every path, and says
+what council refused to do:
+
+```
+adopt race t4: arena/t4/claude whole, plus 1 path from arena/t4/codex
+
+the merge below this commit carries arena/t4/claude whole. this commit
+adds the paths that came from arena/t4/codex, and it adds nothing else:
+
+  helper.go
+
+telltale council took no path that both seats wrote. a shared path is
+refused by name, and the operator merges it.
+```
+
+The notice says it a third time, because that is the last moment the operator is still looking:
+`adopted claude onto adopt/t4-claude+codex, with 1 path from codex (helper.go)`.
+
+**The arena record renders a hybrid as its OWN state, and credits nobody.** The refs can say a race
+was decided and which two seats the adoption was cut from; they cannot say which paths came from
+where, because that lives in a commit message the page does not read. So a hybrid raises a fourth
+per-seat count and moves no rate at all: the race counts as decided, both seats count as having
+entered it, and neither seat's `adopted of decided` moves. Crediting the base seat would score it
+for work the donor wrote; counting it against both would score two seats down for a race the
+operator resolved in both their favour. A seat whose only decided races were hybrids reads
+`no attempt adopted whole  part of 2 hybrid adopts`, which is the true statement — and the window
+sentence carries the difference a reader adding the seats up would otherwise not find:
+`3 decided by you (2 by a hybrid adopt, counted for no seat)`. A whole adoption of the same race
+still outranks a hybrid of it, because an operator who adopted whole, reverted and then took a
+hybrid did adopt it whole once, and both receipts survive.
+
+**One fork from the divergence-preview ruling above, recorded because it is a fork.** That ruling
+declined to fold a racer's uncommitted paths into the OVERLAP set, on the grounds that they are a
+prediction of a commit nobody has made. The hybrid's path checks DO read them, and the difference is
+what the read is for. There it was a preview of a merge RESULT; here it decides a refusal about
+paths the operator named, and `y` commits both worktrees in the same act with `git add -A` — so the
+set is `tracked changes ∪ untracked-and-not-ignored`, which is what that commit will contain by
+definition rather than by forecast. Refusing to read them would refuse every hybrid on an ordinary
+race, because arena seats leave their work uncommitted (commit-per-turn is deferred). The card still
+states the older ruling's limit, in the same clause it already used.
+
+**A conflicted hybrid restores exactly like the conservative whole adopt.** The base merge is
+unchanged, so a conflict aborts, the branch is deleted, the room goes back to the branch it came
+from, and the donor's paths are never written. A failure in the second half restores the same way,
+with one extra step named rather than hidden: a `git reset --hard` before the checkout back. It is
+bounded to a branch council cut, at a commit council made, over a room tree measured clean before
+any of it — the only content it can discard is a half-checked-out copy of files that exist whole on
+the donor's own branch.
+
+**Two shapes recorded rather than taken.** A `+<seat>` with no paths, meaning "take everything of
+the donor's that does not collide" — declined because it makes the scope a thing council computed
+rather than a thing the operator read, which is the whole contract of the card. And renaming the
+donor's paths on the way in — declined as a second grammar to learn, for a case `git mv` already
+handles after the adoption.
+
+Verification, on this section's own terms: the mechanics are pinned by offline tests against real
+temp repositories (`hybrid_test.go`) — the merge plus the named path landing while the donor's other
+file does not, the receipt naming both branches, all four refusals, the grammar's own refusals, the
+collision suffix, a committed donor read off its branch instead of its tree, and a conflicted hybrid
+restoring the room. The record half is pinned in `record_test.go` against ref lists, with its own
+golden in both glyph sets. **The live half is owed**: no real hybrid has been armed against a race on
+this box, and it is owed on the same keystroke as the divergence preview's live debt above.
 <a id="s9-38"></a>
 
 ### 9.38 paste lands whole, and never sends (2026-08-09)

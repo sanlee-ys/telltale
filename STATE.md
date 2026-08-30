@@ -385,6 +385,25 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   read the card and press `n`. Nothing is merged by arming the gate, so the debt
   costs one race.
 
+- **The HYBRID adopt has never run against a live race (2026-08-29).**
+  `/adopt <seat> +<seat> <path...>` merges one attempt whole and takes named
+  paths from another, on `adopt/t<N>-<base>+<donor>` (design.md §9.37's dated
+  hybrid amendment). The git mechanics and all four refusals are pinned by
+  offline tests against real temp repositories (`hybrid_test.go`), and the
+  arena record's hybrid state is pinned against ref lists with its own golden.
+  Neither has met a real race. **The same race pays this and the two debts
+  above**: race, `/adopt <seat>` and press `n` for the preview, then
+  `/adopt <a> +<b> <path>` and press `n` for the hybrid card, then `/arena
+  record`. Arming a card merges nothing, so all three cost one race and no
+  commit. Paying it fully — pressing `y` — additionally wants a look at the
+  receipt commit, which is the sentence the feature stands on.
+
+- **Per-HUNK adoption is deferred, not rejected (2026-08-29).** The hybrid ships
+  per-PATH because a hunk picker is a new full-frame body with its own scroll,
+  keys and mode word. The grammar does not block it: a picker would narrow what
+  `+<seat>` contributes and leave `/adopt <seat> +<seat> <path...>` alone. Its
+  own change, judged against §9.37 like every other item on that list.
+
 - **OBSERVED 2026-08-15/16, the drive that paid the demo path found three.
   The 2026-08-16 lane batch measured all three, and what is left is smaller.**
   1. **CLOSED 2026-08-17. The composer one-row report did not reproduce.** The
