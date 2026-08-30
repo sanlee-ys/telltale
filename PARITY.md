@@ -179,6 +179,20 @@ PATH of the shell running the detection. A seat that folds out as "not
 installed" here is usually this. The `cursor` binary on PATH is only the editor
 launcher and council never drives it.
 
+**The `cursor-agent` CLI manifest tree is measured on Windows only, 2026-08-29.**
+`internal/adapter/cursor` now reads a second store, `~/.cursor/chats/<hash>/<uuid>/meta.json`
+(design.md §3.9's 2026-08-29 addendum), and resolves it from `os.UserHomeDir()` on
+every platform. Everything behind that path was measured on Windows 11, at
+`cursor-agent 2026.08.11-e8db854`: 43 manifests, `schemaVersion` 1 on all of them,
+`cwd` a native `C:\...` path on all of them. Nothing was read on the Mac, where
+PARITY already records `cursor-agent` living at `~/.local/bin/cursor-agent` rather
+than under `%LOCALAPPDATA%` — a different install location, which is exactly the
+kind of difference that could move the state directory too. **The measurement to
+take on the Mac:** confirm `~/.cursor/chats` exists and holds the same
+`<hash>/<uuid>/meta.json` layout, and confirm `cwd` is a POSIX path there. A tree
+that is absent costs nothing — the reader reports the store absent and the Composer
+rows still render — so this is a coverage gap, not a suspected defect.
+
 ## Killing the seats when the room dies abnormally
 
 **Measured 2026-08-17**, on the Mac (Intel x86_64, macOS 26.5.2), against

@@ -19,7 +19,17 @@ func TestTheCanaryInventoryMatchesThisAdapter(t *testing.T) {
 	if !strings.Contains(doc, VerifiedAgainst) {
 		t.Errorf("design.md §3.10 does not name the version this adapter is pinned to (%q)", VerifiedAgainst)
 	}
-	if !strings.Contains(doc, canaryRowClock.Name) {
-		t.Errorf("design.md §3.10 does not name the %q canary; the inventory has drifted from the adapter", canaryRowClock.Name)
+	for _, c := range []string{canaryRowClock.Name, canaryChatsClock.Name} {
+		if !strings.Contains(doc, c) {
+			t.Errorf("design.md §3.10 does not name the %q canary; the inventory has drifted from the adapter", c)
+		}
+	}
+	// The CLI half carries its own pin, because it reads a store a different
+	// program writes on a numbering scheme of its own. §3.10's `verified
+	// against` cell cannot hold it — internal/adapter/pins keeps one row per
+	// vendor — so the doc has to name it somewhere for it to be checkable at
+	// all.
+	if !strings.Contains(doc, chatsVerifiedAgainst) {
+		t.Errorf("design.md does not name the version the CLI manifest reader is pinned to (%q)", chatsVerifiedAgainst)
 	}
 }

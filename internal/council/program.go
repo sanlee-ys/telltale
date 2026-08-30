@@ -276,6 +276,16 @@ type Model struct {
 	// that cut a different one — the collision suffix moves the name — would
 	// make the card a description of something else.
 	adoptOnto string
+	// adoptDonor and adoptPaths are the HYBRID half of a pending adoption: the
+	// second racer some paths are taken from, and those paths (§9.37's 2026-08-29
+	// hybrid amendment). Both empty for an ordinary whole adoption.
+	//
+	// They ride beside adoptOnto for adoptOnto's reason. The card names every one
+	// of these paths and names the seat they come from, so a y that took a
+	// different set — recomputed against a tree that moved between the arming and
+	// the key — would authorize something the operator never read.
+	adoptDonor model.VendorID
+	adoptPaths []string
 	// lastRace is the most recent /arena race's receipt: workspace, turn, base,
 	// and each racer's kept worktree (lifecycle.go). Nil until a race runs.
 	// Held on Model rather than State because Render never reads it — the
@@ -297,6 +307,20 @@ type Model struct {
 	// stopped can be dropped by comparison. Never reset: an id has to be unique
 	// over the room's whole life, not over the current setup.
 	arenaPrepN int
+	// checkCmd is the command `/arena check` named, verbatim, and checkArgv is
+	// the same command split for exec — argv, never a shell (§9.48). Empty
+	// means no check, which is ABSENT on every racer's block rather than a
+	// verdict of any kind.
+	//
+	// On Model rather than State because Render never reads it: what a column
+	// draws is the copy carried on its own ArenaResult.Check, so a command
+	// re-named between races cannot re-label a race that already ran.
+	checkCmd  string
+	checkArgv []string
+	// pendingChecks are check runs queued by finishColumn and drained by
+	// Update. The queue exists because finishColumn cannot return a tea.Cmd;
+	// see dueArenaChecks for the two legs that drain it.
+	pendingChecks []arenaCheckPending
 	// writePending is true while /write awaits y/n before the room's posture is
 	// loosened, and is the only one of the three room controls that asks.
 	//
@@ -694,6 +718,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case eventBatchMsg:
 		m.applyEvents(msg.events)
+		// A racer that landed in this batch may have queued a check run
+		// (arenacheck.go). Drained before the branch below, because that branch
+		// returns on the turn ending — and the batch that retires the LAST
+		// racer is exactly the one that ends the turn, so a drain after it
+		// would strand the final seat's check until the next tick.
+		chk := m.dueArenaChecks()
 		if m.turn == nil {
 			if m.flowAdvancePending {
 				m.flowAdvancePending = false
@@ -709,16 +739,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// construction — council does not write the relay, so a vendor's
 			// new figure appears only after its own statusline renders again —
 			// which is what the age suffix on the reading is for.
-			return m, readQuotaCmd()
+			return m, tea.Batch(readQuotaCmd(), chk)
 		}
 		// A racing seat's stream activity may have armed a live stat read
 		// (arenalive.go); launch what is due alongside the next wait. Batched
 		// rather than sequenced — the read is independent of the event
 		// channel, and waitEvents blocks.
-		if ref := m.dueArenaRefreshes(); ref != nil {
-			return m, tea.Batch(m.waitEvents(), ref)
-		}
-		return m, m.waitEvents()
+		return m, tea.Batch(m.waitEvents(), m.dueArenaRefreshes(), chk)
 
 	case arenaSetupMsg:
 		// One step of a race's worktree setup beginning, or the whole setup
@@ -733,6 +760,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// is launched by the tick or the next event batch, through the same
 		// due check everything else goes through.
 		m.applyArenaStat(msg)
+		return m, nil
+
+	case arenaCheckMsg:
+		// One check run landing (or being dropped as stale — the drop rules
+		// live with the handler). No follow-up command: a check is launched
+		// once, when its racer lands, and never re-run on its own.
+		m.applyArenaCheck(msg)
 		return m, nil
 
 	case quotaMsg:
@@ -761,10 +795,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// but a seat armed mid-interval has to be read when the interval
 		// expires even if the vendor has gone quiet since — a burst of writes
 		// followed by silence is exactly the seat whose stat is most behind.
-		if ref := m.dueArenaRefreshes(); ref != nil {
-			return m, tea.Batch(spin(), ref)
-		}
-		return m, spin()
+		// The tick is the check queue's second leg as well as the throttle's.
+		// It is the backstop rather than the usual path: a check queued by an
+		// event batch is launched there, and this is what catches one queued on
+		// any other path into finishColumn.
+		return m, tea.Batch(spin(), m.dueArenaRefreshes(), m.dueArenaChecks())
 	}
 	return m, nil
 }
@@ -848,10 +883,11 @@ func (m *Model) clearGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *Model) adoptGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	v := m.adoptPending
 	onto := m.adoptOnto
-	m.adoptPending, m.adoptOnto = "", ""
+	donor, paths := m.adoptDonor, m.adoptPaths
+	m.adoptPending, m.adoptOnto, m.adoptDonor, m.adoptPaths = "", "", "", nil
 	switch msg.String() {
 	case "y":
-		m.st.Notice = m.adoptSeat(v, onto)
+		m.st.Notice = m.adoptSeat(v, onto, donor, paths)
 	case "n":
 		m.st.Notice = "kept — nothing was merged"
 	default:

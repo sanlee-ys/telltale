@@ -1551,6 +1551,9 @@ is a supported, versioned contract and it is where a liveness/needs-input signal
 come from — not from reverse-engineering `status` out of the store. Recorded as the
 watch item; §8 carries it. Separately, the `cursor-agent` CLI keeps its own store, which
 is **not installed on this machine** and therefore an unverified surface, out of scope.
+(That last sentence held until 2026-08-29. `cursor-agent` is installed here now and its
+session manifest IS read; see this section's 2026-08-29 addendum. The Cursor Hooks watch
+item above is untouched.)
 
 **Adapter built, 2026-08-02 (`internal/adapter/cursor`).**
 Name, model, workspace and last_activity REPORTED; context % declared DERIVED and marked
@@ -1582,7 +1585,9 @@ as many words, and it is why a `conversation_id` is not stored — it would dang
 does not exist). A CLI session was therefore never a row this adapter could draw. The
 observation confirms an existing claim rather than opening a question, and it is written
 down because "the gauge showed nothing" is the kind of report that gets re-investigated
-every few months unless the expected answer is recorded beside it.
+every few months unless the expected answer is recorded beside it. **This paragraph
+describes the build it was written at and no longer describes the HUD: a CLI session draws
+a row as of 2026-08-29. See this section's addendum below.**
 
 **What the same observation does NOT settle, and it is the measurement worth taking.** The
 operator's Cursor configuration carries `ghostMode: true` and `privacyMode: 2`. Neither
@@ -1599,6 +1604,104 @@ cheap and needs the IDE rather than the CLI — drive a Composer session in the 
 settings on, then off, and compare what `composerHeaders` gains in each arm. Until somebody
 runs it, this paragraph is a hypothesis with its reason attached and nothing in the adapter
 changes.
+
+**Amended 2026-08-29 — the CLI store is readable on this machine, and the 2026-08-17 gap is
+CLOSED. `cursor-agent` CLI sessions draw HUD rows now.** The paragraph above stays correct
+about the build it described. Its premise moved: `cursor-agent` is installed here, and a
+2026-08-29 read-only survey of its trees measured a per-session manifest the 2026-08-02
+survey could not have seen. `internal/adapter/cursor` reads it, in `chats.go`, beside the
+Composer store it already read.
+
+**First, the claim that did NOT survive the survey.** A JSONL transcript tree exists at
+`~/.cursor/projects/<slug>/agent-transcripts/<uuid>/<uuid>.jsonl`, and a vendor-seam refresh
+candidate described it as Claude-compatible JSONL carrying per-turn token counts. Both halves
+are false, measured structurally over 71 files and 1,951 records with 0 unparseable. The
+envelope carries exactly three key sets — `message`+`role` (1,852), `status`+`type` (87),
+`error`+`status`+`type` (12) — and none of `sessionId`, `timestamp`, `cwd` or `version`, so
+`internal/adapter/claudecode` cannot be reused: its canary is `sessionId`. A key sweep for
+`usage|tokens|input_tokens|output_tokens|totalTokens|cacheRead|cost` over all 71 files
+returns zero matches. That CONFIRMS §7.16's 2026-08-08 measurement on a corpus 1.4x larger at
+a CLI build one week newer, so §7.16's held display is untouched and cost stays `CapNone` for
+this vendor. The transcript tree is not read and no adapter opens it.
+
+**What IS built, and what it measures.** The store is one plain-JSON manifest per session:
+
+```
+~/.cursor/chats/<workspace-hash>/<session-uuid>/meta.json
+```
+
+Observed key sets over 43 manifests, at `cursor-agent 2026.08.11-e8db854`: 40 carry
+`schemaVersion`, `createdAtMs`, `hasConversation`, `updatedAtMs`, `cwd`; 3 add `title`.
+`schemaVersion` is `1` on 43 of 43. **This is the first Cursor surface anywhere that declares
+its own format version**, against the "Version fragility" caution above, and the value is
+PINNED in `chats.go` and in a fixture.
+
+| Field | Verdict | Source, and what was measured |
+|---|---|---|
+| name | **MEASURED** | `title`, on 3 of 43 manifests. An absent title is therefore genuine absence, not a failed read. The row then takes the `cwd` basename, which is the fallback `internal/hud`'s own `sessionLabel` applies and `internal/adapter/pi` applies at the adapter. |
+| workspace | **MEASURED** | `cwd`, a native path (`C:\...` on 43 of 43 here), taken verbatim. It is NOT the `file:///c%3A/...` URI the Composer store's `workspace.json` carries, so no conversion runs. |
+| last_activity | **MEASURED** | `updatedAtMs`, epoch milliseconds, folded with the manifest's own mtime per §6 Q8. |
+| model | **ABSENT** | No key of any kind. The Composer store's `composerData` names one; this store does not. |
+| context %, cost, quota | **ABSENT** | See the token sweep above. Zero matches in 1,951 records. |
+| liveness | **ABSENT** | No in-flight session was sampled, same as the Composer half. The HUD classifies age. |
+
+**The Q8 fold runs here, and that is not a contradiction of the build caution above.** The
+Composer half deliberately excludes the store's file mtime because ONE file backs every
+session there. The CLI gives every session its own manifest, so that file's mtime dates that
+session, and the fold is the ordinary shape every other adapter uses. The two agreed within
+0.2 s on 43 of 43 manifests, so the fold is a guard rather than a source: it is what keeps
+the age honest if the vendor ever rewrites the file without restamping the key.
+
+**`hasConversation:false` is an empty shell and draws no row. The ruling is measured.** All
+three such manifests held nothing but themselves — no `store.db`, no `prompt_history.json` —
+and their `updatedAtMs` stood 263–387 ms past their own `createdAtMs`. They are the directory
+the vendor stamps when a session is created and nobody types. That is the same class as the
+Composer store's `empty-state-draft` and its pre-created composers, so the same filter applies.
+An ABSENT `hasConversation` key is NOT read as a declared false and keeps its row: a vendor
+that stopped writing the key must not empty the HUD.
+
+**Two more shapes are skipped in silence, and the counts are recorded here so the row count is
+not read as a defect.** 22 of the 65 session directories hold `store.db` with no `meta.json` at
+all, because the manifest is newer than the tree; a row for one would date a session from a
+directory mtime whose meaning was never measured. Together with the 3 shells, 40 of 65
+directories drew rows on the survey machine. A manifest whose `schemaVersion` this adapter does
+not read is the opposite case and is REPORTED every time: it draws no row (dropfile's rule —
+the keys may no longer mean what the reader thinks) and the skip is counted into a diagnostic
+that rides on every Cursor row, Composer rows included. A silent skip there would turn a vendor
+format bump into "you have no CLI sessions", which is a wrong answer rather than a missing one.
+
+**One adapter, two stores, and every row says which one it came from.** Both stores describe
+Cursor sessions, so both feed `model.VendorCursor`; the Adapter composes a sibling reader
+rather than shipping a second adapter, because a vendor id is what the HUD's identity column
+and the `--vendor` flag address, and two adapters sharing one id would give the registry two
+answers. The distinction IS measurable, so it is displayed: every session carries an Extra
+labelled `source` naming its store, and a CLI row's id is prefixed `cli:`. The labels are
+symmetric — a Composer row carries one too — so that the ABSENCE of a label never becomes the
+thing that identifies a store. The alternative was a second vendor id (`cursor-cli`); it was
+rejected because it buys one distinction and pays a second vendor line, a second `--vendor`
+value and a second doctor pin for what the operator experiences as one tool. The composition
+has one honest cost and `chats.go` states it on the row rather than hiding it:
+`model.Capabilities` is static per adapter, so a CLI row's empty model and context cells read
+as "absent now" when the truthful reading is "this store has no such field". Each CLI row
+carries a second Extra, `not in this manifest`, naming those two fields.
+
+**The credential rule is unchanged and narrower here.** The tree sits beside `store.db`
+(4096 bytes with a 300 KB–1.7 MB `-wal`, the WAL trap in its strongest form),
+`prompt_history.json`, and the config and cache files in `~/.cursor`. The reader opens ONE
+file name, `meta.json`, at a fixed depth of two directories below `chats/`. It never opens
+`store.db`, never recurses, and never looks at a sibling for any purpose. `chats_test.go`
+plants credential-shaped and prompt-shaped markers in those neighbours and asserts none
+reaches a displayed field, which is the same standing test the Composer reader carries.
+`conversation-search.db` — a new FTS5 index over conversation `body` text that appeared beside
+`state.vscdb`, with a `source` column admitting `'cloud-cache'` — stays unopened under the rule
+that keeps grok's `session_search.sqlite` closed.
+
+**What this amendment did NOT measure.** `~/.cursor/acp-sessions/<uuid>/meta.json` carries the
+same shape (49 manifests, same three key sets, 3 of them shells) and is deliberately NOT read:
+those are `cursor-agent acp` sessions, which is the server council's own Cursor seat runs
+(§9.36), and whether telltale should draw rows for its own council seats is a separate
+question this change does not answer. The `~/.cursor` root is measured on Windows only; see
+`PARITY.md`. No transcript, no `store.db` blob and no `ItemTable` row was read.
 
 <a id="s3-9a"></a>
 
@@ -1645,12 +1748,12 @@ a first-class state here and not a failure.
 | name | **MEASURED** | `summary.json` → `generated_title` (17 of 30), falling back to `session_summary`, which held the identical string on every session carrying both. A headless `--single` run has `session_summary: ""` and **no `generated_title` key at all** — verified by running one — so an unnamed grok row is absence, not a failed read. |
 | model | **MEASURED** | `summary.json` → `current_model_id`. `grok-4.5` on 30 of 30. Note the per-model usage blocks key off `grok-4.5-build` instead; the adapter reports the id the vendor puts in the session's own model field, not the billing variant. |
 | workspace | **MEASURED** | `summary.json` → `info.cwd`, absolute and native (`C:\Users\sanle\code\telltale`), on 30 of 30. The parent directory name carries the same path percent-encoded and is the **fallback** — see the round-trip note below. |
-| context % | **MEASURED** | `signals.json` → `contextWindowUsage`, an integer percentage the vendor computes, beside the raw `contextTokensUsed` / `contextWindowTokens` (500000 on every session). It TRUNCATES: 39656/500000 = 7.93 is written `7`, 22675/500000 = 4.535 is written `4`. The adapter reports the vendor's integer and does not recompute — grok is the second vendor after Cursor with no assumed denominator, and the more precise float would be a number the vendor never said. |
-| cost | **PER-TURN ONLY, so the field stays `CapNone`** | `updates.jsonl` → each `turn_completed` record's `usage.costUsdTicks`. The unit is measured twice over (below). It is **not cumulative**: one session's three turns read 455412000, 820464000, 747416000 ticks, the third smaller than the second. `"[a-z_]*cost[a-z_]*"` over every `.json`/`.jsonl` in the store matched `costUsdTicks` and **nothing else** — no session total exists anywhere. Summing needs every turn record and `updates.jsonl` reached **818 KB** in one session, past any bounded tail; a tail-window sum is a lower bound, and a lower bound in a column headed COST is a derived number wearing a read one's clothes. The **last turn's** cost is carried as a labeled Extra instead. |
+| context % | **MEASURED** | `signals.json` → `contextWindowUsage`, an integer percentage the vendor computes, beside the raw `contextTokensUsed` / `contextWindowTokens` (500000 on every session). It TRUNCATES: 39656/500000 = 7.93 is written `7`, 22675/500000 = 4.535 is written `4`. The adapter reports the vendor's integer and does not recompute — grok is the second vendor after Cursor with no assumed denominator, and the more precise float would be a number the vendor never said. These three keys are still the source, and `signals.json` holds 61 more beside them — see the 2026-08-29 drift census below. |
+| cost | **PER-TURN ONLY, so the field stays `CapNone`** | `updates.jsonl` → each `turn_completed` record's `usage.costUsdTicks`. The unit is measured twice over (below). It is **not cumulative**: one session's three turns read 455412000, 820464000, 747416000 ticks, the third smaller than the second. `"[a-z_]*cost[a-z_]*"` over every `.json`/`.jsonl` in the store matched `costUsdTicks` and **nothing else** — no session total exists anywhere. Summing needs every turn record and `updates.jsonl` reached **818 KB** in one session, past any bounded tail; a tail-window sum is a lower bound, and a lower bound in a column headed COST is a derived number wearing a read one's clothes. The **last turn's** cost is carried as a labeled Extra instead. **This row named one key and the record carries eleven** — see the 2026-08-29 re-measure below, which is a correction to this row's completeness and not to its verdict: the sweep spelled here could not match `inputTokens` and its siblings. |
 | quota | **ABSENT** | `"[a-z_]*(rate\|limit\|quota)[a-z_]*"` over the whole store returned only tool-configuration keys (`output_byte_limit`, `head_limit`). No window, no ordinal, no reset time reaches disk. That is a statement about the *disk*; the network half of the same question is measured and closed separately below. |
 | last_activity | **MEASURED** | `summary.json` → `last_active_at` (29 of 30) then `updated_at` (30 of 30) then `created_at`, folded with the file's mtime per §6 Q8. `summary.json` is rewritten every turn, which is also why it — not the session DIRECTORY, whose mtime moves only when an entry is added — is the freshness hint `Discover` returns. |
 | liveness | **ABSENT, and this one was probed rather than reasoned about** | See below. |
-| sub-agent count | **ABSENT** | grok ships a `spawn_subagent` tool (it is in the tool list every headless run prints), and `"subagent[A-Za-z_]*"` matched nothing on disk outside the system prompt's own description of it. No nest, no count, no parent link. Same ruling as Codex (§3.3): declaring the field and emitting zero would assert something the format cannot check. |
+| sub-agent count | **ABSENT** | grok ships a `spawn_subagent` tool (it is in the tool list every headless run prints), and `"subagent[A-Za-z_]*"` matched nothing on disk outside the system prompt's own description of it. No nest, no count, no parent link. Same ruling as Codex (§3.3): declaring the field and emitting zero would assert something the format cannot check. **The sweep spelled here read file contents and a `subagents/` DIRECTORY exists — see the 2026-08-29 drift census below.** The verdict is unchanged and its stated reason is not. |
 
 **The cost unit, pinned twice.** `costUsdTicks` is fixed-point USD at **1e10 ticks to the
 dollar**, and neither half of that was inferred from the name. First, grok's headless wire
@@ -1789,7 +1892,10 @@ versus what the doc says:
 - The `grok_code.token.usage` metric (delta temporality, by `model` and `type`) carried
   **the same four counts value-for-value** as the same turn's api_request event:
   20323/56/42/2560 on both sides of one capture. One number, two envelopes.
-- `turn_completed` carries outcome and duration and **no token counts**, as the table says.
+- `turn_completed` **on the stream** carries outcome and duration and **no token counts**, as
+  the table says. The qualifier was added 2026-08-29 and it matters: the record of the same
+  name that grok persists to `updates.jsonl` carries nine of them, which is the re-measure
+  block below. One event name, two envelopes, opposite contents.
 - One departure from the doc's letter: `OTEL_METRICS_INCLUDE_SESSION_ID` defaults on, but
   the token.usage data points carried no `session.id` — only `session.count`'s did. Nothing
   here reads metrics, so nothing turns on it; recorded because the doc says otherwise.
@@ -1966,6 +2072,142 @@ never observed mid-write, so the write is atomic by the vendor's own naming rath
 observation here. The adapter reads none of these bytes, and this measurement did not
 change that.
 
+#### The `usage` object re-measured 2026-08-29 — the token counts were always beside the cost, and this section's own sweep could not have seen them
+
+**Environment:** grok 1.0.5 (5115b46bc9) [stable], the same Windows 11 box, model
+`grok-4.6`. One billed headless turn (`grok --output-format streaming-json --single=…`)
+from a fresh empty workspace, with the session's `updates.jsonl` read back and
+cross-checked against the same turn's wire output. **This block corrects the section
+above rather than reporting vendor drift, and that is the point of it: the miss was
+telltale's instrument, not the vendor's format.**
+
+**What the cost row says, and what the record actually carries.** The row names
+`usage.costUsdTicks` and nothing else, because the sweep behind it was
+`"[a-z_]*cost[a-z_]*"` — lowercase, and anchored on the substring `cost`. A key spelled
+`inputTokens` matches neither half. The regex answered the question it was asked and was
+**structurally incapable** of the question a reader takes the row to answer. The
+`turn_completed` record's `usage` object carries **eleven keys** — nine scalar counts, a
+per-model breakdown of the same nine, and a turn count — read verbatim off the measured
+turn:
+
+```json
+"usage":{"inputTokens":22772,"outputTokens":27,"totalTokens":22799,
+         "cachedReadTokens":256,"cacheCreationTokens":0,"reasoningTokens":22,
+         "modelCalls":1,"apiDurationMs":3481,"costUsdTicks":77047400,
+         "modelUsage":{"grok-4.6-build":{ the same nine scalars, per model }},
+         "numTurns":1}
+```
+
+**It is not drift, and that was checked rather than asserted.** A session directory
+written 2026-08-09 at 09:35 local — the same day, the same build (grok 1.0.0) and the same
+model (`grok-4.5`) this section surveyed — carries the identical key set, `numTurns`
+included: `"inputTokens":22222, "outputTokens":37, "totalTokens":22259,
+"cachedReadTokens":128, "cacheCreationTokens":0, "reasoningTokens":29, "modelCalls":1,
+"apiDurationMs":2605, "costUsdTicks":444484000`. The counts were on disk before the
+adapter was written. The vendor changed nothing; the survey looked with an instrument that
+could match one key and reported one key.
+
+**The wire and the disk spell `input` differently, and the difference is exactly the cache
+read.** The same turn's `end` event on `--output-format streaming-json` reports
+`input_tokens: 22516`, `cache_read_input_tokens: 256`, `output_tokens: 27`,
+`reasoning_tokens: 22`, `total_tokens: 22799`. The disk reports `inputTokens: 22772`,
+which is 22516 + 256. Both envelopes agree on 22799 and reach it by different arithmetic:
+**the wire's `input_tokens` EXCLUDES the cache read; the disk's `inputTokens` INCLUDES
+it.** So `inputTokens + cachedReadTokens` on disk double-counts, and the two seams' "input"
+columns are not the same statistic. §7.16a's collector reads the OTLP wire, whose
+`input_tokens` follows the wire spelling — anything that ever holds both must convert
+rather than add.
+
+**`costUsdTicks` re-pins at 1e10 on the same record.** The wire printed
+`total_cost_usd: 0.00770474` beside `total_cost_usd_ticks: 77047400`, and the disk record
+carries `costUsdTicks: 77047400` for that turn. The 2026-08-09 unit measurement holds at
+1.0.5, value for value, on a fourth run.
+
+**The counts are per-turn and they do not accumulate — measured on a two-turn session.**
+Its two `turn_completed` records read `inputTokens 21548 / totalTokens 21588` then
+`inputTokens 21958 / totalTokens 21999`. The second is not the first plus anything; each
+record describes one API call, and `inputTokens` grows between turns because the context
+is resent, not because a counter advanced. `numTurns` is `1` on **every** record, both
+turns included, so it counts the turn the record describes and is not a session ordinal.
+That is the same shape as `costUsdTicks`, measured again in a second unit.
+
+**What this changes, and what it does not.**
+
+- **The cost row's verdict stands unchanged, and it now covers nine counts instead of
+  one.** A session total needs every record, `updates.jsonl` reached 818 KB in one observed
+  session, and a tail-window sum is a lower bound. A lower bound in a TOKENS column is the
+  same derived number in a different unit.
+- **The seam map is what moves.** §7.16a opens with grok's OTLP stream as the vendor's one
+  designed-for-reporting surface, and that sentence is still true about *designed
+  reporting*. It is no longer true that the stream is the only place telltale **could** read
+  grok's per-turn counts. The disk is a second source, and a passive one: no collector
+  running, no double opt-in, no port held.
+- **That second source creates a constraint, recorded here before anything is built on
+  it.** §7.16a's replay guard exists because one number arriving twice must be counted once,
+  and the same rule already chose the event stream over the redundant metric. A disk reader
+  would be a **third** envelope for the same turn, and the guard cannot see it: the
+  collector's guard lives in collector memory and keys on `(session.id, event.sequence)`,
+  while a disk reader would key on a file offset. **A disk reader and the OTLP listener must
+  never both count one turn into `~/.telltale/usage/grok.json`.** One envelope per turn is
+  the rule. Which envelope is the design question, and this block does not answer it.
+
+**Nothing is built on this, deliberately.** The DISPLAY of grok spend is HELD by owner
+ruling (§7.16's amendment, applied in §7.16a), so a reader has no consumer to feed, and a
+reader design would first have to settle the one-envelope question above, the read-budget
+question the cost row raises, and the `input` spelling. This block exists so that work
+starts from a measurement instead of from a row that could not see it.
+
+#### Session-file drift, censused 2026-08-29 at grok 1.0.5 — `signals.json` is 64 keys, and there is a `subagents/` directory
+
+Read-only census over the whole sessions tree: **108 session directories in 27
+workspaces**, against the 30 in 8 this section surveyed. Nothing below changes a verdict,
+and two entries say the *description* above is narrower than the store.
+
+**The inventory's invariant holds.** `summary.json` is present on 108 of 108, which is the
+one file every required field is sourced from. `chat_history.jsonl`, `events.jsonl`,
+`prompt_context.json` and `system_prompt.txt` are on 107, `updates.jsonl` on 105,
+`signals.json` on 95, `resources_state.json` on 73.
+
+**`signals.json` carries 64 keys, uniform across all 95 files that have one** — measured by
+parsing every one and comparing key sets, which returned a single set. The context row
+above names three of them (`contextWindowUsage`, `contextTokensUsed`,
+`contextWindowTokens`); all three are still present and still the adapter's source, so no
+code is wrong. The description is: a fixture synthesized to a three-key file models a file
+that does not exist. The other 61 are session statistics — `turnCount`, `toolCallCount`,
+`errorCount`, `compactionCount`, `totalTokensBeforeCompaction`, `sessionDurationSeconds`,
+`modelsUsed`, `primaryModelId`, plus latency and line-count blocks. **No cost key and no
+quota key is among the 64**, so the quota verdict survives one more sweep.
+
+**Fifteen entry names the inventory above does not list**, with the count of session
+directories carrying each: `title_refresh_idx` (19), `last_recap_main_turn` (11),
+`recap_requests` (11), `hunk_records.jsonl` (9), `subagents` (6), `web_fetch` (5),
+`compaction` (2), `compaction_checkpoints` (2), `compaction_requests` (2), `mcp` (2),
+`plan.json` (2), `plan_mode.json` (2), `outputs` (1), `plan.md` (1), `workflows` (1). The
+adapter reads none of them. They are recorded because a presence-census fixture built from
+this section's ten names would call every one of them unexpected.
+
+**One of the fifteen contradicts a verdict's REASON, and it is the cost regex's mistake a
+second time.** The field map rules sub-agent count ABSENT because `"subagent[A-Za-z_]*"`
+matched nothing on disk outside the system prompt's own tool description. That sweep read
+file *contents*, so it could not match a **directory name** — and `subagents/` is a
+directory. Six sessions carry one; the largest holds 18 child directories, each named with
+a UUID, each holding `meta.json` and `output.json`. `meta.json`'s key set, read as keys and
+not values, is `subagent_id`, `subagent_type`, `parent_session_id`, `child_session_id`,
+`child_cwd`, `status`, `turns`, `tool_calls`, `duration_ms`, `started_at`, `completed_at`,
+`effective_model_id`, `effective_context_source`, `description`, `prompt`. **This is not
+drift either**: the largest `subagents/` tree is dated 2026-08-09, the day of this survey.
+
+**The verdict is NOT changed here, and the reason is a measurement nobody has taken.**
+`CapNone` on sub-agent count refuses to assert "this session is running no sub-agents", and
+a directory that is present on 6 of 108 sessions does not yet establish that its absence
+means zero rather than not-yet-written — which is §4a.1's zero-versus-absent question, and
+answering it needs a live run that spawns one and watches the directory appear. Two further
+facts a future lane must start from: every child UUID observed is **also a top-level
+session directory** in the same workspace, so the HUD already lists sub-agents as
+independent rows and a count would need to decide whether they stay listed; and
+`meta.json`'s `description` and `prompt` are user content, so they fall under the same rule
+that keeps `prompt_context.json` closed. Recorded as the seam, not spent.
+
 <a id="s3-9b"></a>
 
 ### 3.9b Pi seam — source-surveyed then live-verified 2026-08-16, `pi 0.84.1`
@@ -2097,12 +2339,22 @@ has moved, and says so. `internal/adapter/drift` holds the mechanism; this is th
 | Antigravity | `agy 1.1.13` | `gen_metadata table` | model |
 | | | `trajectory_metadata_blob table` | workspace |
 | Cursor | `Cursor 3.14.7` | `composerHeaders timestamp columns` | last activity |
+| | | `meta.json updatedAtMs` — the CLI manifest's clock, on 43 of 43 manifests | last activity |
 | Grok CLI | `grok 1.0.4 (d846eb93d9)` | `summary.json info.id` — the identity envelope, on 30 of 30 sessions | name, model, workspace, last activity |
 | Pi | `pi 0.84.1` | `session header id` — first JSONL record is `type=session` with a non-empty `id` | name, model, workspace, last activity |
 
 The middle column quotes each canary by the **name the adapter gives it**, not a paraphrase, so
 the string in this table is the string in the code — which is what makes the guard tests below
 able to check it at all.
+
+**Cursor's row gained a second canary on 2026-08-29, and its `verified against` cell did not
+move.** The cell names the Cursor APPLICATION the SQLite store was surveyed inside, and
+`internal/adapter/pins` already records that this pin and an installed `cursor-agent` version
+cannot be compared. The second canary watches a different store written by a different
+program, so it carries its own pin — `cursor-agent 2026.08.11-e8db854`, in `chats.go`'s
+`chatsVerifiedAgainst` — rather than borrowing this cell. The `pins` table stays one row per
+vendor: `pins.For` answers per vendor id, and a second Cursor row there would make that answer
+depend on ordering.
 
 **Grok's row moved to 1.0.4 on 2026-08-14, and the row's two halves were re-checked to different
 depths.** The version came from re-measuring the seat after four patch bumps went unnoticed
@@ -4193,6 +4445,15 @@ cursor-agent **CLI** conversation, and the HUD's Cursor rows come from the **IDE
 Composer store (§3.9); the CLI keeps a separate one. Storing it would dangle a join that
 does not exist, which is also why this reading is not rendered on a session row.
 
+**Amended 2026-08-29: the `conversation_id` ruling HOLDS and its reason no longer does.**
+The HUD draws CLI rows now, out of `~/.cursor/chats/<hash>/<uuid>/meta.json` (§3.9's
+2026-08-29 addendum), so the join has something to join to for the first time. It is still
+not built and the field is still not stored, because whether this `conversation_id` IS that
+directory's session uuid was never measured. A key stored on the assumption that two ids
+match is how a relay begins attributing one session's tokens to another, and §7.16's whole
+argument is that the tokens must not be attributed to a row on a guess. Measure the two ids
+against each other first; nothing about the held display changes either way.
+
 #### The accumulation ruling: a total, and never without its window
 
 A hook fires once per agent response, so the file is either the last turn's numbers or a
@@ -4535,7 +4796,11 @@ a foreground server holding a port — belongs to neither gauge. The bind refuse
 non-loopback address at startup, mechanically: a collector reachable off-box would be an
 open door wearing a gauge's name.
 
-**One source, chosen over a redundant second.** The stream carries the same counts twice —
+**One source, chosen over a redundant second — and there turned out to be a third.** The
+rule below is scoped to the two envelopes on the wire, which is all that was known here in
+2026-08-10. A 2026-08-29 re-measure found the same per-turn counts on grok's DISK as well
+(§3.9a's `usage` re-measure), so the rule now has a wider job; the amendment at the end of
+this section states it. The stream carries the same counts twice —
 per-request on `api_request` events, aggregated on the `token.usage` metric — and §3.9a's
 capture measured them value-for-value equal. The collector reads the EVENTS and
 acknowledges `/v1/metrics` without reading it: one record is one claim, an event carries
@@ -4676,6 +4941,50 @@ require `Content-Type: application/x-protobuf` — the media type this section's
 pinned on grok's exporter, so a correctly configured grok is unaffected. A local *program*
 is still trusted completely and deliberately, because it can write the cache file directly;
 §7.24 states that boundary rather than pretending a token would move it.
+
+**Amended 2026-08-29 — this listener is no longer the only way to read what grok spent, and
+the one-envelope rule is what that costs.** §3.9a's `usage` re-measure at grok 1.0.5 found
+`inputTokens`, `outputTokens`, `totalTokens`, `cachedReadTokens`, `cacheCreationTokens`,
+`reasoningTokens`, `modelCalls` and `apiDurationMs` sitting beside `costUsdTicks` on every
+`turn_completed` record on disk — present since 1.0.0, and missed only because §3.9a's cost
+sweep was spelled `"[a-z_]*cost[a-z_]*"` and could not match them. **Nothing in this section
+is falsified by that.** The opening sentence claims the OTLP stream is the vendor's one
+*designed-for-reporting* surface and that is still true; a session-update log persisted
+verbatim is not a reporting surface. What is no longer true is the unstated corollary a
+reader would draw, that the push is the only way telltale **could** obtain grok's per-turn
+counts. It is not. The disk is a second source and a passive one: nothing to run, no double
+opt-in, no port to hold, and no batch lost while a collector is down — which is this
+section's first Known limitation, answered by a seam it did not know it had.
+
+Three constraints bind any future disk reader, and they are recorded now precisely because
+nothing is being built here.
+
+1. **One envelope per turn, and the replay guard cannot enforce it across seams.** The
+   guard above refuses a repeated `(session.id, event.sequence)` pair, in collector memory,
+   over OTLP records. A disk reader keys on a file and an offset and would be invisible to
+   it, so a machine running both would fold one turn into `~/.telltale/usage/grok.json`
+   twice and the file would be overstated by an amount nothing could name. That is the
+   failure §7.7 rates worst, arriving through the front door. **A disk reader and this
+   listener must never both count the same turn.** Which of the two is the source is a
+   design question, and this amendment does not answer it — it only forbids the answer
+   "both".
+2. **`input` does not mean the same thing on the two seams.** Measured on one turn: the wire
+   reports `input_tokens: 22516` beside `cache_read_input_tokens: 256`, and the disk reports
+   `inputTokens: 22772` for that same turn, which is the sum. The wire excludes the cache
+   read and the disk includes it. This cache's `input_tokens` field currently holds the wire
+   sense, because this collector is its only writer. A disk reader writing `inputTokens`
+   into the same field would silently change what the column means, and history already in
+   the file would not convert.
+3. **The read budget is unmeasured and it is the deciding question.** `updates.jsonl`
+   reached 818 KB in one observed session and is append-only, so whether a complete read is
+   bounded — not whether the fields exist — is what decides a disk reader. §3.9a's cost row
+   ruled a tail-window sum a lower bound, and a lower bound accumulated into a total is the
+   derived-number refusal in a second unit.
+
+**The display stays held** by the owner's ruling above, so none of this has a consumer
+today, and the reader is deliberately NOT built in the lane that measured it. Recorded as
+the seam, not spent — the same way §3.9a recorded this listener's own seam before it was
+spent.
 
 <a id="s7-16b"></a>
 
@@ -6781,6 +7090,219 @@ Wiring one up writes an entry into the operator's own client configuration, whic
 make; until he does, this section claims a correct server and not a working integration.
 `STATE.md` carries the debt.
 
+<a id="s7-26"></a>
+
+### 7.26 `telltale history` — what one vendor spent, day by day, from its own files (2026-08-29)
+
+Every reader this product has answers about NOW. The statusline and the HUD render a scan;
+§7.22's `snapshot` and §7.25's `mcp` serve one scan to a program; §9.42's `doctor` reports a
+preflight. None of them can answer *where did last week go*, and the reason is structural
+rather than an omission: the HUD's Claude read is a head+tail parse — 64 KiB in, 256 KiB back
+(§3.1) — because §7.18 measured a whole-corpus walk at 164 MB and 46,727 records per second
+against a 1 s poll. A history needs every record of every file. **Measured on the owner's
+own corpus, 2026-08-29: 701 transcripts, 143,304 records, 10.4 s for a 30-day walk.** That is
+four orders of magnitude off a poll tick, so this is a foreground mode that reads once and
+returns, on `doctor`'s precedent, and never a page in the HUD.
+
+#### It is SPEND-shaped, and §7.16 and §7.17 are the vocabulary
+
+Nothing here is new grammar. §7.17's table of two claims puts this surface entirely in the
+right-hand column, and the consequences are the ones already ruled:
+
+- **No gauge, no percentage, no bar, no countdown, no ceiling.** There is no denominator
+  anywhere in a token count. `TestTheFrameBorrowsNoneOfQuotasVocabulary` is
+  `TestUsageSpendBorrowsNoneOfQuotasVocabulary` on this surface, and CI asserts the same
+  properties on the built binary's stdout.
+- **A sum never prints without its window** (§7.16's accumulation ruling). Every count
+  carries its day; the report carries the span it walked and the zone it resolved days in.
+- **Never a fleet total.** §7.17 already rejected one as "arithmetic telltale invented"; this
+  mode goes further and reports **one vendor per run**, so the arithmetic is not available to
+  make. The vendor's name is on the title, on the window line and on both refusal
+  paragraphs.
+
+**One rule here is narrower than §7.17's and is new.** The four columns are not added
+together either. Input, cache read, cache write and output are four separately billed
+categories and telltale holds no price, so their sum would be a number that reads like a bill
+and is not one — the §7.16 derived-`inputTokens` trap arriving through addition instead of
+through a vendor's own arithmetic. `TestNoTotalIsRenderedAnywhere` computes what such a total
+would render as and fails if it appears anywhere in the frame.
+
+#### Absent is not zero, on two axes
+
+§4a.1's rule, applied to a table instead of to a cell:
+
+| | What it means | What it renders |
+|---|---|---|
+| a request whose usage block reported zeros | a measured zero — the request happened | `0` in all four columns, `1` request |
+| a workspace with no request that day | it sent nothing | **no row** |
+| a day inside the window with nothing at all | nothing was written that day | **no row** |
+
+The failure this refuses is the natural implementation: pre-seeding a bucket for every
+(day, workspace) pair so the table comes out rectangular. **A rectangular table here is a
+table of claims** — every zero cell in it would assert a request nobody sent. What makes a
+missing day readable instead is the window line: the report states the span it walked, and a
+sentence under the table says in words that a day with no row carried no token-bearing
+record. `zero-vs-absent.txt` is the golden, named after `internal/hud`'s for the same reason.
+
+#### The derived value is the DAY, and it is disclosed in words rather than with a `~`
+
+The vendor writes an instant. A calendar day is that instant resolved in a time zone, and the
+zone is a choice telltale made — so the window line reads `days resolved in EDT UTC-04:00`,
+and the OFFSET is on it because a zone abbreviation alone is ambiguous across regions. This
+is deliberately not a `~`: that marker means an estimated VALUE (§4a.1), and a day bucket is
+an exact reading under a stated convention. Marking it `~` would say the count might be
+wrong, when what is conventional is which side of midnight it fell on.
+
+Two related refusals, both measured rather than assumed:
+
+- **A record with no readable timestamp is in no day.** It is counted and named in
+  diagnostics, never folded into today — that would move a measurement onto a day nothing
+  said it belonged to.
+- **A record stamped ahead of the clock cannot be dated**, on every adapter's own
+  `futureSkew` rule. A skewed clock must not be able to invent a day's spend.
+
+#### The survey: which vendors could support this, and which cannot
+
+The mode covers **claude only**, and the six it does not cover are named on **every run**,
+each with the reason. That block is not documentation politeness — it is the whole of what
+stops a table headed with one vendor's name from being carried away as a fleet answer, and
+it prints unconditionally for the reason `doctor` prints its three-state legend every time.
+
+The survey is a **source read of this repository's adapters** at the revision it was written
+on — each adapter's record struct, its package doc, and the live-corpus verdicts those docs
+already carry. It is **not** a fresh measurement against a live vendor, and the difference is
+stated because CLAUDE.md's measured-claims rule makes it load-bearing: the version pins these
+verdicts rest on are the adapters' own `VerifiedAgainst` constants.
+
+Two questions, in order. A vendor joins only when both answer yes, and **the second is the
+one that surprised the survey**: a count with no timestamp is not a smaller history, it has
+no day axis at all.
+
+**Amended 2026-08-29, the same day: the source read was caught out on grok, exactly where
+the caveat above says it can be.** grok's row said the record carried a total and no date.
+A live re-measure at grok 1.0.5 read a real `turn_completed` record off disk and found a
+full input/output/cache split beside the envelope's own `timestamp` ([§3.9a](#s3-9a)'s
+2026-08-29 block). The reading of `internal/adapter/grok` was correct — that struct does
+parse `totalTokens` alone. The error is that **a record struct is an allowlist, so what it
+omits is a decision and not an absence**, and the verdict reported the omission as the
+file's shape. The row below is corrected and grok stays uncovered, because nobody has built
+or measured the coverage; it is no longer refused on fields. The general rule this buys is
+worth more than the row: **before a vendor is built here, re-read its records, not its
+struct.**
+
+| vendor | counts on disk? | dated? | verdict |
+|---|---|---|---|
+| **claude** | **yes** — `message.usage` carries four raw counts (`input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, `output_tokens`) on every assistant record | **yes** — RFC3339 `timestamp`, and `cwd` on the same record | **COVERED.** Four billed categories, dated, per request, per project. The only vendor with the cache split that makes four honest columns. Pinned at Claude Code 2.1.233 (§3.1) |
+| codex | yes — a `token_count` event carries `info.last_token_usage` (this turn) beside a cumulative `info.total_token_usage` | yes — the rollout envelope's own `timestamp` | **the next slice.** Two things owed: which of the two a day may sum is a ruling nobody has made, and there is no cache split, so a codex block carries two columns where claude's carries four |
+| gemini | partial — `tokens.input` is `promptTokenCount`, which [§3.7](#s3-7)'s adapter labels a context-occupancy proxy, and the cached subset is not separable from what it parses | yes | refused on UNITS. Summing an occupancy proxy per day counts one conversation's prefix once per turn, under a header that would read like uncached input |
+| agy | yes, and the best-guarded in the fleet — `gen_metadata` carries uncached input and output per generation behind the `thinking + answer == output` identity §3.8 requires | **no** — the reverse-engineered field map carries no per-generation timestamp | refused for want of a DAY. Real numbers, no axis to put them on |
+| cursor | **no** — `tokenCount.inputTokens`/`outputTokens` were 0 in 310 of 310 message rows; declared `CapNone` (§7.16) | n/a | nothing to read. This vendor's counts arrive by hook, not on disk |
+| grok | **yes, and this row said "a total only" until 2026-08-29** — `turn_completed`'s `usage` carries `inputTokens`, `outputTokens`, `cachedReadTokens` and `cacheCreationTokens` beside `totalTokens`, measured at grok 1.0.5 and on disk since 1.0.0 ([§3.9a](#s3-9a)) | **yes** — the envelope's own `timestamp`, which `internal/adapter/grok`'s struct does not parse | **the old verdict described the adapter's STRUCT, not the record**, and both halves of it were wrong about the file. Not refused on fields any more; simply not built. One unit trap is owed first: `inputTokens` INCLUDES the cache read here and claude's `input_tokens` excludes it, so the four columns are not the same four |
+| pi | yes — `message.usage.{input,output}` per assistant message, with a `cwd` | yes — record `timestamp` | datable, second after codex. No cache split, and it carries `usage.cost.total` per message — money, which this mode renders nowhere and would have to rule on |
+
+`self-reported` is absent from the table and that is not an omission: §7.23's drop-file rows
+are what a tool said about itself, with no session store behind them to walk. Giving it a
+"not covered" verdict would imply a file this mode could learn to read.
+
+**The block renders in fixed fleet order**, the same order §7.17's blocks and the header's
+per-vendor counts walk. Ordering it by how close each vendor is to coverage reads better as a
+roadmap and was **declined**: it would make one list in this product order vendors by a
+property no other list orders them by, which is the reshuffle §7.17 spends a paragraph
+refusing. The roadmap signal lives in the words — codex's verdict says it is the next slice.
+
+#### The layout, and what each choice is for
+
+The generated render (`internal/history/testdata/golden/ledger.txt`, at the default 100
+columns):
+
+```
+telltale history — what claude spent, day by day, read from claude's own session files
+
+  read from   C:\src\home\.claude\projects
+  window      7 local days, 2026-08-23 through 2026-08-29, days resolved in TST UTC-05:00
+  read        41 transcripts, 39,184 records
+
+  DAY         WORKSPACE                     IN  CACHE READ  CACHE WRITE      OUT  REQUESTS  SESSIONS
+  2026-08-24  C:\src\code\telltale       1,204   1,903,551       62,004   13,118        14         2
+  2026-08-27  C:\src\code\notes-api         96           0        4,102      812         3         1
+              C:\src\code\telltale      22,140   8,830,112      511,903  140,277       191         5
+  2026-08-29  ...rkspace-path\telltale       3          12            0       44         1         1
+```
+
+- **Plain text, no colour, no TUI** — `doctor`'s argument (§9.42), and it applies harder here:
+  a history is read in a pipe and pasted into a message. Every distinction the report draws is
+  a WORD, which satisfies §7.1 rule 2 by having no first signal that is not one. `--ascii` and
+  `NO_COLOR` have nothing to switch off, so neither is a flag: a flag that does nothing is a
+  promise that something was configurable.
+- **`REQUESTS`, not `TURNS`.** One turn can produce several API requests, so "turns" would be
+  a count telltale did not take. The column is the number of records that carried a usage
+  block, which is exactly what was counted.
+- **Counts are exact and grouped, never floored.** `theme.Tokens` floors to `1.9M` on the
+  gauge surfaces because a header line has no room for digits and rounding *up* would invent
+  tokens nobody was billed for (§7.16). This is a table with the room, so it rounds nothing at
+  all — strictly the more honest of the two, and affordable only here.
+- **The day is drawn once per day**, not restated on a second workspace row: repeating the
+  date makes the eye read a second reading where there is one.
+- **Rows are day-ASCENDING**, so today lands at the bottom, next to the prompt the reader is
+  looking at. Sorting by spend was refused for §7.17's reason — position is the navigation.
+- **The workspace column is the only one allowed to give way**, and it truncates from the
+  LEFT: a path's identifying half is its tail, and the marker sits at the front where it says
+  "something was removed" before the reader has read the value. Below the floor the table
+  overruns the wrap column rather than letting numbers collide (`narrow.txt` is the golden at
+  60 columns).
+- **A record whose own record named no `cwd` gets its own `(no cwd)` bucket**, never a
+  neighbour's. Attributing it to the last workspace seen in the file would be a guess, and a
+  guess in the project column is indistinguishable from a reading once it is on screen.
+
+#### The read/write boundary
+
+**This mode writes nothing at all.** It reads one vendor's store, calls no network, binds no
+port, reads no credential, and relays no quota — it renders none, which is `snapshot`'s own
+argument for holding the contract with one item spare (§7.22). It joins statusline, hud,
+snapshot and mcp as a **reader**; `CLAUDE.md` names it in that list.
+
+`internal/history/boundary_test.go` is the mechanical half, on
+`internal/eventview/boundary_test.go`'s precedent: `go list` answers what this package
+imports, and the gate fails if it ever reaches `quotacache`, `usagecache`, `eventsink`,
+`eventview`, `council`, `net/*`, `os/exec` or a TUI module. The check is on DIRECT imports
+and says so — this package imports `internal/adapter/claudecode` for `Discover`, and an
+adapter's dependency graph is not this mode's write surface.
+
+**Content cannot reach a rendered value**, by the technique `internal/cursorhook` uses against
+a payload carrying a user's email beside four numbers: the record struct IS the allowlist, and
+`encoding/json` drops every field with no destination. The only strings that survive a parse
+here are the workspace path and the timestamp. Diagnostics carry counts and never bytes.
+
+#### What it reuses, and the one thing it does not
+
+Sessions are discovered by `internal/adapter/claudecode`'s own `Discover`, so a session this
+mode counts is a session the HUD would draw and the two cannot come to disagree about what a
+session is — including the two traps that function encodes (the glob is not recursive, and a
+basename is validated as a UUID; recursing inflated the live session list 2.4× and
+double-counted every token). Records are framed by `internal/jsonl`, so the U+2028 trap and
+the 1,004,230-byte record are handled in the one tested place.
+
+What it does NOT reuse is that adapter's head+tail parse. A ledger needs every record, so it
+walks whole files through `jsonl.Scan`. Three record classes are refused and each is counted
+in diagnostics rather than dropped silently: unparseable records, `<synthetic>` records
+(Claude Code's own locally generated notices, which carry a zeroed usage block and would
+otherwise look exactly like the measured zero above), and inline `isSidechain` records — 0 of
+179,614 in the live corpus, so a non-zero there is a vendor change worth seeing rather than a
+routine skip.
+
+#### Known limitations, named
+
+- **The window is complete or it says so.** A walk stopped by `--timeout` prints what it read
+  and marks the report incomplete, in its own paragraph: the ROWS stay true and the WINDOW
+  stops being, and a reader who misses that sentence would read a lower bound as a total.
+- **A day is a local calendar day.** A session that crossed midnight in another zone lands
+  where this machine's zone puts it. The offset is on screen; nothing converts.
+- **`REQUESTS` counts records, not API calls, if the vendor ever writes two records for one
+  call.** No such case is known at 2.1.233; it is named because the column's honesty rests on
+  the vendor's record-per-request shape rather than on anything telltale can check.
+- **Nothing here is cached.** Every run re-walks, at the cost measured above. A cache would be
+  a ledger that can disagree with the files it came from, and the mode is not on a tick.
+
 <a id="s8"></a>
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
@@ -6869,7 +7391,11 @@ these items are ordered by that sequence, not by version number.
    where item 3's needs-input signal should come from for this vendor, rather than
    reverse-engineering `status` out of the store; and the `cursor-agent` CLI keeps a
    separate store that is not installed on the survey machine and stays unverified and
-   out of scope until it is.
+   out of scope until it is. — **The second watch item CLOSED 2026-08-29.**
+   `cursor-agent` is installed on this machine now, its store was surveyed, and
+   `internal/adapter/cursor` reads its per-session manifest. §3.9's 2026-08-29 addendum
+   carries the field map, the `schemaVersion` pin and the composition argument. The
+   Cursor Hooks watch item is untouched and still open.
 
 #### Packaging decisions (settled 2026-08-08; §6.5 closed here)
 
@@ -13002,6 +13528,98 @@ race has been run against this build, so the claim that a real held `index.lock`
 notice instead of a freeze rests on the tests and on an expired-deadline fixture, not on the
 lock that started this.
 
+**Amendment, 2026-08-29: the brief also arrives as `AGENTS.md`, for the seats that were
+measured reading one.** The candidate (competitor sweep 2026-08-18) proposed AGENTS.md as the
+one cross-vendor context channel needing no per-vendor prompt plumbing, on the strength of
+agents.md's own "read natively by 20+ tools". That is a docs claim, and ADR-001 does not accept
+docs claims about vendor behavior. **The measurement came first, and the build was conditional
+on it**: one headless probe per vendor CLI on this box, from a scratch directory whose only
+content was an `AGENTS.md` naming a codename nothing else on the machine knew, asked for the
+codename and nothing else.
+
+| seat | version | result |
+| --- | --- | --- |
+| codex | codex-cli 0.149.1 | **answered `ZEPHYR-9`, no tool call** — the file reached the model as context |
+| grok | grok 1.0.5 | **answered `ZEPHYR-9`, no tool call**, and named its source on the wire: *"From the always_applied_workspace_rules, the Agents.md file says"* |
+| claude | Claude Code 2.1.251 | **answered `ZEPHYR-9` by going to look** — both trials ran `ls -la` then `cat`, recorded in the probe sessions' own transcripts |
+| agy | 1.1.20 | **unmeasured** — headless agy auto-denies tool turns, and the probe was not run |
+| cursor | — | **unmeasured** — this seat races over ACP on a throwaway session, and no probe of that path ran |
+
+Two seats demonstrably ingest the file unprompted, which is the bar the sweep set, so the
+feature is built. The claude row is deliberately NOT counted as the same fact: it is a real read
+of a real file in the cwd, in a directory holding exactly one file — the easiest possible
+discovery — and nothing here claims that seat auto-loads AGENTS.md. Whether the answer was
+shaped by the operator's global `CLAUDE.md` load order cannot be separated out by this probe
+either; what the transcripts DO show is that the words came from the file on disk, because the
+model went and read it before answering.
+
+The ruling that follows from that table is what shapes the feature: **council writes the file
+for every racer and claims it for none.** No column, no notice and no snapshot field says a seat
+was briefed via `AGENTS.md`, because the room cannot tell per race which seats ingested it — and
+two of five are unmeasured. Writing it costs a seat nothing; claiming it would be the room
+narrating a fact nobody measured (§4a.1). The file is offered exactly the way the worktree is.
+
+- **Identical for every seat, by construction.** Marker, `arenaConduct`, then the brief — the
+  same bytes in all five trees. `arenaBriefText` takes no seat parameter at all, so the
+  per-seat constraint text the candidate pitched is unrepresentable rather than merely
+  discouraged: it collides with `arenaConduct`'s standing position that the room's added words
+  are a CONSTANT so the cross-seat comparison stays undisturbed, and a later change that wants
+  divergence has to argue for it here.
+- **The attempt's receipt stays the racer's.** Council's file would otherwise land in the stat
+  through `git add -N .` — §9.37's own "lying diff" known limit, arriving from the other side.
+  The three reads that could pick it up (the finish-time `collectArena`, the live
+  `collectArenaStat`, and `commitArena`'s stage plus its dirty check) append one pathspec,
+  `:(exclude)AGENTS.md`, measured on git 2.55.0.windows.3: the file stays untracked, stays out
+  of the commit, and a tree holding nothing but it still reports clean — which is what keeps the
+  empty-commit ruling working. **`/adopt` therefore merges a branch that never held the file**,
+  and the operator's repo cannot acquire a stray `AGENTS.md` from a race.
+- **The lifecycle verbs read the racer's tree too, and all three reads were wrong until they
+  carried the same pathspec.** This was found by building the feature, not by reasoning about
+  it, and each one is a different bug: `/adopt`'s arming read (`lifecycle.go`) would have offered
+  to adopt a seat that changed nothing, because council's file made a clean tree look dirty;
+  `/adopt`'s OWN commit — the one it makes for a racer whose work never reached `commitArena`,
+  which is the give-up path race t9 exercised twice — would have staged the file with `add -A`
+  and merged it into the operator's repo; and `/arena drop`'s refusal would have named council's
+  write as the operator's uncommitted work and demanded the `!` spelling on every clean attempt.
+- **`/arena drop` takes council's file back before git sees the tree.** `git worktree remove`
+  counts an untracked file as a dirty worktree and refuses, so the pathspec alone was not
+  enough: an ordinary drop failed at git. `removeArenaBrief` deletes the file only while the
+  marker still stands, so a racer's own `AGENTS.md` keeps the refusal it has earned. That is the
+  ONLY deletion — the worktree is kept until the user drops it, and until then the file is the
+  visible record of what that seat was told.
+- **The exclusion is conditional on the marker, re-read per call.** `arenaBriefArgs` opens the
+  file and checks it still starts with council's marker. A racer that REPLACED it authored a
+  file, and it appears in the stat like any other; a file council never wrote is never excluded.
+  A stale flag recorded at setup would have hidden that authorship.
+- **Council never overwrites an `AGENTS.md` the checkout or `.worktreeinclude` seeding already
+  put in the tree.** In a repo that ships one, no racer gets council's copy, every seat reads
+  the repository's own instructions identically, and the comparison is as uniform as it was
+  before this existed. The pathspec is off there too, so a racer's edit to the repo's own file
+  is in the diff.
+- **A write that fails skips that seat**, named on its column through the existing `seatErr`
+  channel — the `.worktreeinclude` rule, applied for the `.worktreeinclude` reason: a tree the
+  room KNOWS holds a different brief from its siblings races a different question, and that is
+  not the comparison the operator opened. Nothing new is rendered for it.
+
+Known limit, stated rather than hidden: while the marker stands, a racer that APPENDS to
+council's `AGENTS.md` is excluded from its own diff on that path. A racer editing the room's
+brief file is not an answer to the brief, and the alternative — an exclusion that lapses on the
+first stray edit — would drop council's own file into every stat instead.
+
+Not built, and not by omission: `telltale doctor` reporting whether a repo carries an
+`AGENTS.md` was part of the same candidate. It is a different surface with a different reader
+and it is left for its own change.
+
+Verification note, on this section's own terms: the mechanics — the identical file in every
+tree, the file never reaching the stat, the patch or the commit, the zero-diff attempt staying a
+measured zero with council's file in its tree, the racer-authored file NOT being hidden, the
+repository's own file being left alone, the skip on a failed write, the ended-context stop, and
+all three lifecycle reads (`/adopt` still refusing a brief-only racer, `/adopt` not merging the
+file, `/arena drop` needing no force) — are pinned by offline tests against real temp
+repositories (`arenabrief_test.go`), and no test spawns a vendor. **The live half is owed**: the per-vendor probes above were run headlessly in a
+scratch directory, not inside a racer worktree during a real `/arena`, so no live race has yet
+watched a seat act on this file.
+
 **Amendment, 2026-08-29: `/adopt` says what it is about to merge INTO, before you say y.** The
 card named the act — the branch it cuts and the exact `git merge --no-ff` it runs — and named
 nothing about the room the merge lands in. Everything the operator needed in order to weigh the
@@ -13081,6 +13699,136 @@ states held apart, and the baseline on a named branch, on a detached HEAD and on
 all. No golden moved, because the card is a notice string and no golden renders one. **The live
 half is owed**: no real `/adopt` has been armed against this build, so every sentence above
 rests on the fixtures rather than on a race.
+
+**Amendment, 2026-08-29: `/adopt` can take the winner plus the parts of the runner-up you point
+at.** A race ends with four attempts and one decision, and the decision the room offered was
+all-or-nothing: adopt one seat whole, and retype by hand whatever the runner-up got right. The ask
+is not ours — it is the one users put to Cursor's own multi-agent judging thread, in those words:
+synthesize a best-of-both instead of picking one wholesale. No surveyed tool ships it. Council
+already owns the substrate — per-attempt worktrees, one base SHA, commit receipts, and a y/n card
+that names exact git commands — so this is a grammar and four refusals, not new machinery.
+
+**The grammar is one more argument, and the fork is PER-PATH.**
+
+```
+/adopt claude +codex internal/council/helper.go docs/council.md
+```
+
+- **Per-path, not per-hunk.** The sweep's own evidence is users asking to mix at path OR hunk
+  level, so the choice was open. Per-hunk needs an interactive picker inside the room — a
+  full-frame body with its own scroll, its own keys and its own mode word — which is a new render
+  surface for a v1 whose value is that the operator can take one file from the runner-up. A path
+  is also the unit already in front of them: the column's `git diff --stat`, and this card's own
+  overlap clause, both speak in paths. **Per-hunk is deferred, not rejected**, and this shape does
+  not block it: a hunk picker would narrow what `+<seat>` contributes and leave the grammar alone.
+- **`+` glued to the donor seat.** A bare `+` as its own word would make `/adopt claude + codex`
+  legal, and that reads as a request for two whole attempts — which this verb cannot do and must
+  not appear to offer. `/adopt` already takes its whole argument (roomcmd's `parseCommand`), so the
+  longer form needs none of the vocabulary handling `/arena drop` needed.
+- **User-typed, never computed.** §9.34 rejected a synthesis hop, and that ruling binds here:
+  council applies the paths the operator named and chooses nothing. The refusals below are how that
+  promise is kept mechanically rather than by intention.
+
+**Four refusals, and not one of them resolves anything.** Each names the path and a way forward
+(§9.17's tell), and each fires before the card arms, so a `y` is always one that can be honored:
+
+- **A path BOTH racers wrote.** This is the founding refusal. `git checkout <donor> -- <path>`
+  would discard the base attempt's answer with no merge and no conflict marker, so council refuses
+  by name and the operator decides — drop the path, or merge it by hand afterwards.
+- **A path the ROOM wrote since the race was cut.** The same silent clobber one level out: the
+  merge machinery never sees a path taken by checkout, so the room's own work there would vanish.
+- **A path the donor did not write.** Taking it would land the base attempt's own content under a
+  receipt saying it came from the donor.
+- **A path the donor deleted.** A hybrid takes files a racer wrote, never a deletion — a stated v1
+  limit rather than a `git checkout` pathspec error discovered after the branch was already cut.
+
+**The card says exactly what will be merged from where, composed with the divergence preview
+above.** The preview still leads, for that amendment's reason; the leading question gains the
+hybrid's own scope, and the action clause gains its second half:
+
+```
+adopt claude + 1 path from codex? vs main: 1 ahead, 0 behind · no overlapping path · y commits
+both worktrees, cuts adopt/t4-claude+codex and runs git merge --no-ff arena/t4/claude, then
+takes helper.go from arena/t4/codex · n cancels
+```
+
+Every path is named rather than counted-with-an-example. The count-plus-first grammar the overlap
+clause uses is right for a measurement the room took; these paths are the SCOPE the `y`
+authorizes, and a card that authorized "2 paths (a.txt)" would leave the second one unread. The
+operator typed them, so the list is short by construction.
+
+**The branch name carries both seats: `adopt/t<N>-<base>+<donor>`.** This is a naming decision and
+the arena record (§9.47) forced it, because that page derives everything it knows from these refs.
+The alternative — keep `adopt/t<N>-<base>` and let the commit message carry the donor — would leave
+one seat's name alone on a branch holding another seat's work, in the one place `git branch` shows
+a reader, and the record would then count the base seat as having won the race outright. `+` is the
+joiner because it is legal in a ref name, because `-` is already the collision suffix and because
+`/` is already the arena namespace. `freeAdoptBranch` suffixes a collider identically, from the
+same single scan, so the two spellings cannot disagree about what "taken" means.
+
+**The receipt names both sources.** The base arrives as the unchanged `git merge --no-ff`, and the
+paths arrive in a second commit whose message names both arena branches, lists every path, and says
+what council refused to do:
+
+```
+adopt race t4: arena/t4/claude whole, plus 1 path from arena/t4/codex
+
+the merge below this commit carries arena/t4/claude whole. this commit
+adds the paths that came from arena/t4/codex, and it adds nothing else:
+
+  helper.go
+
+telltale council took no path that both seats wrote. a shared path is
+refused by name, and the operator merges it.
+```
+
+The notice says it a third time, because that is the last moment the operator is still looking:
+`adopted claude onto adopt/t4-claude+codex, with 1 path from codex (helper.go)`.
+
+**The arena record renders a hybrid as its OWN state, and credits nobody.** The refs can say a race
+was decided and which two seats the adoption was cut from; they cannot say which paths came from
+where, because that lives in a commit message the page does not read. So a hybrid raises a fourth
+per-seat count and moves no rate at all: the race counts as decided, both seats count as having
+entered it, and neither seat's `adopted of decided` moves. Crediting the base seat would score it
+for work the donor wrote; counting it against both would score two seats down for a race the
+operator resolved in both their favour. A seat whose only decided races were hybrids reads
+`no attempt adopted whole  part of 2 hybrid adopts`, which is the true statement — and the window
+sentence carries the difference a reader adding the seats up would otherwise not find:
+`3 decided by you (2 by a hybrid adopt, counted for no seat)`. A whole adoption of the same race
+still outranks a hybrid of it, because an operator who adopted whole, reverted and then took a
+hybrid did adopt it whole once, and both receipts survive.
+
+**One fork from the divergence-preview ruling above, recorded because it is a fork.** That ruling
+declined to fold a racer's uncommitted paths into the OVERLAP set, on the grounds that they are a
+prediction of a commit nobody has made. The hybrid's path checks DO read them, and the difference is
+what the read is for. There it was a preview of a merge RESULT; here it decides a refusal about
+paths the operator named, and `y` commits both worktrees in the same act with `git add -A` — so the
+set is `tracked changes ∪ untracked-and-not-ignored`, which is what that commit will contain by
+definition rather than by forecast. Refusing to read them would refuse every hybrid on an ordinary
+race, because arena seats leave their work uncommitted (commit-per-turn is deferred). The card still
+states the older ruling's limit, in the same clause it already used.
+
+**A conflicted hybrid restores exactly like the conservative whole adopt.** The base merge is
+unchanged, so a conflict aborts, the branch is deleted, the room goes back to the branch it came
+from, and the donor's paths are never written. A failure in the second half restores the same way,
+with one extra step named rather than hidden: a `git reset --hard` before the checkout back. It is
+bounded to a branch council cut, at a commit council made, over a room tree measured clean before
+any of it — the only content it can discard is a half-checked-out copy of files that exist whole on
+the donor's own branch.
+
+**Two shapes recorded rather than taken.** A `+<seat>` with no paths, meaning "take everything of
+the donor's that does not collide" — declined because it makes the scope a thing council computed
+rather than a thing the operator read, which is the whole contract of the card. And renaming the
+donor's paths on the way in — declined as a second grammar to learn, for a case `git mv` already
+handles after the adoption.
+
+Verification, on this section's own terms: the mechanics are pinned by offline tests against real
+temp repositories (`hybrid_test.go`) — the merge plus the named path landing while the donor's other
+file does not, the receipt naming both branches, all four refusals, the grammar's own refusals, the
+collision suffix, a committed donor read off its branch instead of its tree, and a conflicted hybrid
+restoring the room. The record half is pinned in `record_test.go` against ref lists, with its own
+golden in both glyph sets. **The live half is owed**: no real hybrid has been armed against a race on
+this box, and it is owed on the same keystroke as the divergence preview's live debt above.
 
 <a id="s9-38"></a>
 
@@ -15017,6 +15765,190 @@ branches and the `adopt/*` refs beside them are recorded in §9.37 — to confir
 real pile of refs produces and that the page reads at the room's own geometry. Stated here
 rather than implied paid.
 
+<a id="s9-48"></a>
+
+### 9.48 the race said what changed and never whether it worked (2026-08-29)
+
+`/arena` measures everything about an attempt except the one thing an operator adopts on.
+It reports what each racer CHANGED — the live stat, the settled `git diff --stat`, the full
+patch, the commit receipt (§9.37) — and `/arena record` reports which seat the operator TOOK
+(§9.47). Neither says whether the attempt WORKS. The room's own founding note admits it: rank
+is arrival order, and the only clock that ranks a race is the room's. So the operator answered
+the question by hand, once per seat, in a second terminal — `/cd` into each kept worktree and
+run the same command — which is the act §9.17 says a command surface exists to remove.
+
+**`/arena check <command>` names one command; every racer runs it in its own worktree, and
+each attempt's block says PASS or FAIL from that run's real exit code.**
+
+#### The grammar, and the two shapes it is not
+
+It is a sub-verb inside `/arena`, for §9.47's budget reason: `refuseUnknownCommand` prints the
+whole room vocabulary against a hard width, and that line's own comment records `/adopt` as
+"the last cheap one — the next verb has to find its characters somewhere else". `/arena drop`
+and `/arena record` had already established the shape, so a third costs the refusal nothing
+and the help panel nothing. It is taught the way they are: by this section, and by the notice
+the command itself prints.
+
+**It is NOT a file in the repository, and that is a ruling rather than a preference.** The
+obvious build was `.worktreeinclude`'s sibling — a `.arenacheck` the racer trees inherit — and
+arena.go's own seeding doc already refuses exactly that shape: agent-deck pairs seeding with
+repo-carried setup scripts, and council took "copy only, never execute", because a repository
+that can run a command on the machine by merely CONTAINING a file is a different product with
+a different threat model. A command a person typed into their own room is that person's act. A
+command a clone brought with it is not. The parked byte-level trust question is untouched by
+this feature, which is the point of not touching it.
+
+**It is NOT a new room word.** `/check` would have cost the refusal line a re-wording and,
+worse, a second meaning for a word this codebase already spends: the write gate, the gate
+cards, `gatehook.go`. Two facts cannot wear one word (§9.13) — which is also why the verdict
+is spelled `FAIL` and never `failed`. The room already spends `failed` on a phase, and a seat
+that finished cleanly while its check exited 2 is a different fact from a seat whose process
+died.
+
+**The cost of taking free text, stated the way `parseArenaDrop` states its own.** This is the
+one `/arena` sub-verb that cannot close its grammar with a length cap, so a brief opening with
+the word `check` is at risk. What protects it is a PATH lookup on the first word: a draft whose
+first word after `check` is not a program this machine can run is refused by name, handed back
+to the composer, and neither raced nor set — nothing spawns and nothing is billed. The narrow
+case that survives is a brief opening `check <something that IS on PATH>`; the notice names
+exactly what was set, and `/arena check off` takes it back in one line. A path-bearing first
+word (`./scripts/check.sh`) skips the lookup on purpose, because it is resolved against the
+RACER's tree rather than against the room's own directory.
+
+**The command is room state and survives `/cd`**, which is `/write`'s rule rather than an
+oversight: posture is room state and moving the workspace does not quieten it either. The
+mitigation is that every result names the command it ran, so a command left over from another
+repository is visible in the verdict rather than assumed behind it.
+
+**It does NOT survive the room.** `room.json` holds session ids and a workspace — keys and
+numbers, never content (`CLAUDE.md`'s read/write boundary) — and a command is neither. The
+consequence is deliberate rather than reluctant: a saved command would run in a session whose
+operator never typed it, which is the one property the "a person typed it into their own room"
+argument above rests on. Re-naming it is one line.
+
+#### Four rulings, and each is a line the code may not cross
+
+- **The exit code is the only source.** PASS is exit 0; FAIL is any other code; both are read
+  back from the process. Nothing here infers a verdict from output, from the diff, from a
+  duration, or from a model's opinion. **An LLM judge is refused by ruling twice over** —
+  §9.2's refusal of "a ranking stage, a chairman, or any synthesis hop" and §9.44's declined
+  cross-seat quality mark — and it stays refused even wearing an estimate's `~`, because `~`
+  marks a figure telltale COMPUTED and an opinion is not a computation. A measured exit code is
+  the opposite case, and it complies with ADR-001 exactly as the diff does.
+- **A command that could not run is its own state.** A missing binary, a tree that could not be
+  entered, a run the deadline stopped: none of them is a FAIL. They render as
+  `check unavailable: <why>`, because "this attempt failed the check" and "nothing measured
+  this attempt" are the degraded-vs-zero distinction §4a.1 exists to keep apart. `Exited` is a
+  field of its own and is the ONLY gate on a verdict, so a check record's zero value can never
+  read as a pass.
+- **No command named is ABSENT, and absence draws nothing at all.** Not a dash, not a 0, not a
+  pending word. It is nil `Seed`'s rule on a second field: a room that was never asked for a
+  check has no check to report. Absence is a whole-race property rather than a per-seat one —
+  the command is the room's, so either every racer with a tree carries a check or none does.
+- **The room captures no output.** The exit code is the whole claim. A failing command's stdout
+  would put unredacted subprocess text on a screen whose vendor streams all pass through a
+  `Redactor` first, and reading it would need the scroll surface the gate cards were already
+  refused. The block names the command and the worktree; the operator re-runs it there.
+
+#### Where it runs in the finish line, and what that costs
+
+**The check runs LAST, after the diff is read and after the attempt is committed, and the
+order is a ruling.** A check that ran first would park its own build output on the arena branch
+wearing the racer's name — the false receipt, §4a.1 pointed at a write. So nothing a check
+writes can reach the stat, the patch or the commit.
+
+What it CAN reach is a later `/adopt`, which commits a dirty attempt before merging it. That is
+said rather than swept up: the run is bracketed by two `git status --porcelain` reads, and a
+check that found a clean tree and left a dirty one prints one sentence saying so. The room does
+not reset a tree the operator did not ask it to reset, and `/adopt`'s own y/n card names every
+command it will run before it runs one. A tree that was ALREADY dirty, and a state that could
+not be read, both claim nothing — the field reports a measured change, never the absence of
+one.
+
+**It runs off the render loop**, for the reason `arenaSetup` moved off it (§9.37's 2026-08-17
+amendment): a `go test` inside `Update` is a room that draws no frame and reads no key for
+minutes. `finishColumn` queues the run, `Update` drains the queue on the event batch and again
+on the spinner tick, and the result arrives as a message — `arenalive.go`'s pattern, with one
+difference that matters.
+
+**The check's lifetime is the ROOM's, not the turn's.** The last racer landing ends the turn,
+and a check that started at that moment must still be allowed to finish and report onto a
+column that is still on screen — so the run hangs off `roomCtx`, and teardown kills it for the
+same reason quitting kills every other child this room started. A stale run is dropped by
+comparison (the vendor and the turn number), never by hoping the timing worked out.
+
+**The run is a process TREE, and it is contained like one.** `runner.RunContained` is a new
+one-shot sibling of `runner.Start` — no streaming, no parsing, no clock record, because a check
+is not a turn — and what it takes from `Start` is the Windows job object and the unix process
+group. That is not belt and braces: `proc_windows.go` exists because `codex` resolves to an npm
+`.cmd` shim, and `npm test` has exactly that shape, so a deadline that killed only the direct
+child would leave the real work running two processes down with nothing on screen to say so.
+`contained_test.go` asserts it the way the vendor path is asserted — a helper that spawns a
+grandchild writing to a file, and a cancel that has to stop the FILE growing. Both of `Start`'s
+own limits carry over unchanged and are recorded there: the microsecond window before the group
+is assigned, and unix's need to be killed on the way out.
+
+**A cancelled turn runs no check.** ctrl+c is the operator saying stop, and a room that
+answered it by starting a subprocess per seat would be ignoring the one act it exists to obey.
+A seat cut on its own with `x` is NOT that case: §9.37's give-up ruling says a given-up seat
+lands like any other finisher, and its partial work is as worth checking as its diff is worth
+reading.
+
+**The bound is ten minutes, and the anchor is this repository's own suite.** `CLAUDE.md`
+records `go test ./...` at ~455s locally and ~4m22s in CI, which is about the slowest command
+an operator would name here; ten minutes is past twice that. The margin is the decision rather
+than the figure — what this bound must never do is kill a run that would have finished, since a
+killed run yields no exit code and therefore no verdict at all. A run the clock stops is
+reported as unavailable with the bound named.
+
+**Checks may overlap, and that is stated rather than serialised.** Seats land at different
+moments, so in practice they stagger; two that land together run together. The worktree adds
+are serial because they contend for the repository's own refs (§9.37), and nothing analogous is
+true here — each check runs in its own tree. Serialising them would make one slow check hold
+every other seat's verdict, and the room measures nothing about the machine's capacity, so the
+bound would be chosen from nothing.
+
+#### Deliberately not built
+
+- **Any LLM judge**, per the ruling above. It is the half of the sweep candidate that fails
+  §9.2 and §9.44, and a mark does not soften it.
+- **Repeat sampling** (N attempts of one seat), the candidate's other half. §9.37 rules every
+  attempt a fresh session across all seated vendors and rules a one-seat race an ordinary turn
+  in a worktree; N-of-one contradicts that as written and collides with the
+  `arena/t<N>/<vendor>` identity scheme `lifecycle.go` re-mints from refs. It needs an owner's
+  ruling rather than a builder's, and nothing here assumes one.
+- **Per-attempt cost and diff-size columns.** They already ship — the stat is §9.37's, and the
+  vendor-reported cost is `turnview.go`'s, absent where the vendor reports none.
+- **A check that gates anything.** It reports; it does not refuse an `/adopt` and it does not
+  re-order a rank. The founding posture is offer-never-take, and a room that blocked an
+  adoption on its own reading of a test would be taking.
+- **A check on an ordinary turn.** The question is whether an ATTEMPT works, and an ordinary
+  turn writes into the operator's own tree rather than into an attempt.
+
+Verified offline. `arenacheck_test.go` pins the grammar (set, report, clear, and the refusal
+that hands a brief back), one run per racer in that racer's own tree with the named argv,
+absence drawing nothing, a cancelled turn queueing nothing while a given-up seat still runs,
+the stale-message drops, the ordering — a check that writes into the tree reaching neither the
+stat nor the commit — and the four renders, with `arena-check.txt` and its `--ascii` twin as
+the frame. `contained_test.go` pins the run itself: an exit code coming back as itself, a
+missing binary carrying no code at all, and a cancelled run stopping a GRANDCHILD. Colour is
+asserted separately against the room's existing severity pair, per the goldens' own split. No
+test here spawns a vendor: `countSpawns` stubs the check as its fourth spawn var, and
+`TestMain` panics on any model-path run whose command this machine could actually resolve.
+
+**One test runs a real process, and the process is this test binary.**
+`TestPassAndFailComeFromARealExitCode` calls `runCheck` directly rather than through the
+guarded var, with `os.Args[0]` and a helper `-test.run` as the command, and asserts that three
+exit codes come back as themselves, that a missing binary comes back with no verdict at all,
+and that a run which writes a file is measured as having written one. Without it the feature
+would rest on a stub returning the answer it was handed, which pins the render and nothing
+about the claim.
+
+**The live half is owed.** No live race has run under a check. What is unmeasured is a real
+vendor's attempt meeting a real suite in a real worktree, and specifically whether a check that
+runs for minutes reads well on a column whose turn has already ended. One `/arena check` and
+one `/arena` against a brief that changes files pays it. Recorded in `STATE.md` rather than
+implied paid.
 <a id="s9-49"></a>
 
 ### 9.49 the codex seat gets a second protocol, and the sandbox re-measurement that kept it unseated (2026-08-29)

@@ -11,6 +11,34 @@ import (
 // state: the tally is a pure function over two lists of ref names, and the one
 // test that touches git builds its refs in a temp repository.
 
+// hybridFixture is the record a repository holds once a HYBRID adoption has run
+// (§9.37's 2026-08-29 hybrid amendment). Its own fixture and its own golden,
+// rather than more rows on recordFixture, for the reason the golden files are one
+// per named scenario: this pins what a hybrid does to the page, and mixing it in
+// would make one golden move whenever either feature moves.
+//
+// Read the refs, not the counts:
+//
+//	t2  claude codex agy   adopted: claude, whole
+//	t5  claude codex       adopted: claude + paths from codex (a hybrid)
+//	t6  codex agy          adopted: agy + paths from codex (a hybrid)
+//
+// claude therefore has one whole adoption and one hybrid; codex has no whole
+// adoption at all and two hybrids; agy has one whole loss and one hybrid.
+func hybridFixture() ArenaRecord {
+	return tallyArenaRefs("telltale",
+		[]string{
+			"arena/t2/claude", "arena/t2/codex", "arena/t2/agy",
+			"arena/t5/claude", "arena/t5/codex",
+			"arena/t6/codex", "arena/t6/agy",
+		},
+		[]string{
+			"adopt/t2-claude",
+			"adopt/t5-claude+codex",
+			"adopt/t6-agy+codex",
+		})
+}
+
 // recordFixture is a record with every rendering state in it at once, so one
 // golden pins the whole vocabulary rather than four goldens pinning a word each.
 //
@@ -421,4 +449,160 @@ func TestTheRecordReadsTheRefsARaceReallyLeaves(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestAHybridAdoptIsItsOwnState, and it is the honesty question this feature had
+// to answer before it could ship. The refs record that the operator DECIDED a
+// race and that two seats were in the adoption; they cannot record which paths
+// came from where, because that lives in a commit message this page never reads.
+//
+// So a hybrid is counted in three places and credited in none: the race is
+// decided, both seats entered it, and neither seat's adopted-of-decided rate moves
+// at all. Crediting the base seat would score it for work the donor wrote;
+// counting it against both would score two seats down for a race the operator
+// resolved in both their favour.
+func TestAHybridAdoptIsItsOwnState(t *testing.T) {
+	rec := hybridFixture()
+
+	if got, want := len(rec.Races), 3; got != want {
+		t.Fatalf("races = %d, want %d (%v)", got, want, rec.Races)
+	}
+	if got, want := rec.Decided, 3; got != want {
+		t.Errorf("decided = %d, want %d — a hybrid is a race the operator decided", got, want)
+	}
+	if got, want := rec.Hybrid, 2; got != want {
+		t.Errorf("hybrid races = %d, want %d", got, want)
+	}
+	if rec.Undecided() != 0 {
+		t.Errorf("undecided = %d, want 0 — no race here was walked away from", rec.Undecided())
+	}
+
+	want := map[model.VendorID]SeatRecord{
+		// t2 whole, t5 hybrid.
+		model.VendorClaude: {Entered: 2, Judged: 1, Adopted: 1, Hybrid: 1},
+		// Never adopted whole, and in both hybrids: no rate at all.
+		model.VendorCodex: {Entered: 3, Judged: 1, Adopted: 0, Hybrid: 2},
+		// t2 decided against it, t6 a hybrid it was the base of.
+		model.VendorAntigravity: {Entered: 2, Judged: 1, Adopted: 0, Hybrid: 1},
+		model.VendorCursor:      {},
+		model.VendorGrok:        {},
+	}
+	for _, s := range rec.Seats {
+		w := want[s.Vendor]
+		if s.Entered != w.Entered || s.Judged != w.Judged || s.Adopted != w.Adopted || s.Hybrid != w.Hybrid {
+			t.Errorf("%s: entered/judged/adopted/hybrid = %d/%d/%d/%d, want %d/%d/%d/%d",
+				s.Vendor, s.Entered, s.Judged, s.Adopted, s.Hybrid,
+				w.Entered, w.Judged, w.Adopted, w.Hybrid)
+		}
+		// The invariant the whole page rests on, with the fourth count added: a
+		// seat's races are decided whole, decided by a hybrid, or undecided, and
+		// they never add up to more than it entered.
+		if s.Adopted > s.Judged || s.Judged+s.Hybrid > s.Entered || s.Undecided() < 0 {
+			t.Errorf("%s: the counts do not partition its races: %d/%d/%d/%d",
+				s.Vendor, s.Adopted, s.Judged, s.Hybrid, s.Entered)
+		}
+	}
+}
+
+// TestAHybridRefIsNeverReadAsAWholeAdoption. This is the failure the branch
+// naming exists to prevent: `adopt/t5-claude+codex` read by the older parse would
+// credit one seat with an adoption it only half won, or — worse — fall through
+// every parse and report a decided race as one nobody was adopted from.
+func TestAHybridRefIsNeverReadAsAWholeAdoption(t *testing.T) {
+	if _, _, ok := parseAdoptRef("adopt/t5-claude+codex"); ok {
+		t.Error("the whole-adoption parse accepted a hybrid ref")
+	}
+	n, base, donor, ok := parseHybridAdoptRef("adopt/t5-claude+codex")
+	if !ok || n != 5 || base != model.VendorClaude || donor != model.VendorCodex {
+		t.Errorf("parseHybridAdoptRef = %d %q %q %v, want 5 claude codex true", n, base, donor, ok)
+	}
+	// freeAdoptBranch's collision suffix reads back the same way it does on a
+	// whole adoption, and the race is still t5.
+	if n, base, donor, ok := parseHybridAdoptRef("adopt/t5-claude+codex-2"); !ok || n != 5 ||
+		base != model.VendorClaude || donor != model.VendorCodex {
+		t.Errorf("a suffixed hybrid ref = %d %q %q %v, want 5 claude codex true", n, base, donor, ok)
+	}
+	// A ref this room did not mint stays uncounted, in both parses.
+	for _, ref := range []string{"adopt/t5-claude+notaseat", "adopt/t5-notaseat+codex", "adopt/t5-claude+"} {
+		if _, _, _, ok := parseHybridAdoptRef(ref); ok {
+			t.Errorf("%q was read as a hybrid receipt", ref)
+		}
+	}
+	// hybridAdoptBranch and the parse are one spelling, asserted against each
+	// other rather than against the string this test happens to type.
+	ref := hybridAdoptBranch(9, model.VendorAntigravity, model.VendorGrok)
+	if n, base, donor, ok := parseHybridAdoptRef(ref); !ok || n != 9 ||
+		base != model.VendorAntigravity || donor != model.VendorGrok {
+		t.Errorf("%s did not read back: %d %q %q %v", ref, n, base, donor, ok)
+	}
+}
+
+// TestTheHybridPageSaysWhatNoSeatClaims. A reader adding up the seats' adopted
+// columns on a page with hybrids in it comes out short of the decided count, and
+// the window sentence is where that difference has to be — a bounded claim states
+// its bound.
+func TestTheHybridPageSaysWhatNoSeatClaims(t *testing.T) {
+	rec := hybridFixture()
+	window := recordWindow(rec)
+	if !strings.Contains(window, "2 by a hybrid adopt, counted for no seat") {
+		t.Errorf("the window sentence does not account for the hybrids: %q", window)
+	}
+
+	byVendor := map[model.VendorID]SeatRecord{}
+	for _, s := range rec.Seats {
+		byVendor[s.Vendor] = s
+	}
+	// A seat whose whole-adoption record and whose hybrids are BOTH real keeps
+	// both, and keeps them apart: the rate covers the race it was judged in, and
+	// the hybrids sit beside it. codex lost t2 outright and was taken from twice.
+	codex := seatStanding(byVendor[model.VendorCodex])
+	for _, want := range []string{"0 of 1 adopted", "0%", "part of 2 hybrid adopts"} {
+		if !strings.Contains(codex, want) {
+			t.Errorf("codex standing does not say %q: %q", want, codex)
+		}
+	}
+	// A seat whose ONLY decided races were hybrids has no rate to state, and the
+	// sentence says which fact that is. It is not `0%`: the operator did not
+	// decide against this attempt, they took part of it.
+	only := tallyArenaRefs("repo",
+		[]string{"arena/t1/claude", "arena/t1/codex"},
+		[]string{"adopt/t1-claude+codex"})
+	for _, s := range only.Seats {
+		if s.Vendor != model.VendorCodex {
+			continue
+		}
+		line := seatStanding(s)
+		if strings.Contains(line, "%") {
+			t.Errorf("a seat with no decided whole race printed a rate: %q", line)
+		}
+		for _, want := range []string{"no attempt adopted whole", "part of 1 hybrid adopt"} {
+			if !strings.Contains(line, want) {
+				t.Errorf("a hybrid-only seat does not say %q: %q", want, line)
+			}
+		}
+	}
+	// A seat with both keeps its rate over the races it WAS judged in, with the
+	// hybrid beside it and never inside it.
+	claude := seatStanding(byVendor[model.VendorClaude])
+	if !strings.Contains(claude, "1 of 1 adopted") || !strings.Contains(claude, "100%") {
+		t.Errorf("claude lost the rate it earned whole: %q", claude)
+	}
+	if !strings.Contains(claude, "part of 1 hybrid adopt") {
+		t.Errorf("claude standing hides the hybrid: %q", claude)
+	}
+	// And a seat with neither is untouched by any of this.
+	if got := seatStanding(byVendor[model.VendorGrok]); got != "never raced" {
+		t.Errorf("a seat with no ref = %q, want never raced", got)
+	}
+}
+
+// TestTheHybridRecordPage is the frame, in both glyph sets.
+func TestTheHybridRecordPage(t *testing.T) {
+	st := room()
+	rec := hybridFixture()
+	st.Record = &rec
+	golden(t, "arena-record-hybrid", render(st))
+
+	st.ASCII = true
+	golden(t, "arena-record-hybrid-ascii", Render(st, PlainStyles(), GlyphsFor(true)))
 }

@@ -241,6 +241,28 @@ copies, the gates and the argument; this file does not restate any of them.
   room (a new verb with its own measurements, not an overload of `/adopt`);
   per-racer port allocation, when an arena brief first needs live servers.
 
+- **`/arena` writes the brief as `AGENTS.md` too — built 2026-08-29, one live
+  half owed.** The competitor sweep's candidate rested on agents.md's own claim
+  that 20+ tools read the file natively. That claim was MEASURED first, one
+  headless probe per vendor CLI on this box, and the build was conditional on
+  the result: codex 0.149.1 and grok 1.0.5 both answered a codename only that
+  file carried, with no tool call, so both ingest it unprompted; Claude Code
+  2.1.251 answered by running `ls -la` and `cat` on it, which is a read but not
+  the same fact; agy 1.1.20 and cursor are UNMEASURED. The full table and the
+  rulings it forced are [design.md §9.37](docs/design.md)'s 2026-08-29
+  amendment.
+
+  What a future session needs from this entry rather than from git: the room
+  writes the file for every racer and **claims it for none** — no column, no
+  notice and no snapshot field says a seat was briefed this way, because two of
+  five seats are unmeasured and the room cannot tell per race which ingested
+  it. Do not add such a render without measuring the missing seats first.
+
+  **Owed:** the probes ran in a scratch directory, not inside a racer worktree
+  during a real `/arena`. No live race has yet watched a seat act on the file.
+  One race against a brief whose answer depends on something only the file says
+  pays it.
+
 ## Closed without code (do not re-open)
 
 - **Tall-window content anchor** — **bottom**, ruled 2026-08-05. Short content
@@ -364,6 +386,24 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   persistent seat's next brief resumes the interrupted conversation, has no
   live payment yet. design.md §9.37's dated amendment carries the debt.
 
+- **`telltale history` reads one vendor of seven, and the other six are surveyed rather than
+  owned (2026-08-29).** design.md §7.26 carries the per-vendor verdicts and the mode prints
+  them on every run, so this entry does not restate them. What it records is the INTENT: codex
+  is the next slice and it is unowned, and it is blocked on a ruling rather than on work —
+  a codex rollout carries `info.last_token_usage` (this turn) beside a cumulative
+  `info.total_token_usage`, and which of the two a day may sum is a decision nobody has made.
+  agy is refused for want of a per-turn TIMESTAMP, which is a survey finding and not
+  a todo: if that vendor ever dates its counts, that is a new measurement and the verdict is
+  re-taken, not assumed. **grok was refused on the same ground and that was wrong, corrected
+  the same day** (#316): a live re-measure at grok 1.0.5 read a `turn_completed` record off
+  disk carrying a full input/output/cache split beside the envelope's own timestamp. The
+  survey had read `internal/adapter/grok`'s struct, which parses `totalTokens` alone, and a
+  record struct is an allowlist — what it omits is a decision, not an absence. grok is still
+  uncovered and is now unowned rather than refused, behind one named unit trap: its
+  `inputTokens` INCLUDES the cache read where claude's `input_tokens` excludes it. The
+  general rule that bought is in §7.26 — before a vendor is built there, re-read its
+  records, not its struct — and it applies to every remaining row.
+
 - **The arena record has never been opened against a real pile of leftovers
   (2026-08-29).** `/arena record` (design.md §9.47) tallies every seat's adopted-of-decided
   standing from the repository's own `arena/` and `adopt/` branches. It stores nothing, so
@@ -375,6 +415,19 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   reads at the room's own geometry. No vendor is spawned and nothing is written, so the debt
   costs a keystroke.
 
+- **No live race has run under the arena check (2026-08-29).** `/arena check <command>`
+  (design.md §9.48) runs one operator-named command in each racer's worktree and renders PASS
+  or FAIL from its real exit code. Every mechanic is pinned offline, and one test runs a real
+  process to prove the exit code is READ rather than assumed — but that process is the test
+  binary, in a temp repository, exiting on demand. What no test can witness is the case the
+  feature exists for: a real vendor's attempt meeting a real suite in a real worktree. Two
+  things are unmeasured there and only there. Whether a check that runs for MINUTES reads well
+  on a column whose turn has already ended, since the run outlives the turn by design and the
+  spinner does not. And whether a real racer's tree leaves the check something to do — a
+  worktree seeded by `.worktreeinclude`, with the vendor's own build state in it, is not the
+  clean fixture the tests build. One `/arena check go test ./...` followed by one `/arena`
+  against a brief that changes files pays both.
+
 - **The `/adopt` divergence preview has never been armed in a live room
   (2026-08-29).** The card now leads with measured git state — the racer's
   ahead/behind counts against the room's own HEAD, and the paths both sides
@@ -384,6 +437,25 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   same keystroke pays it as the arena record above: race, then `/adopt <seat>`,
   read the card and press `n`. Nothing is merged by arming the gate, so the debt
   costs one race.
+
+- **The HYBRID adopt has never run against a live race (2026-08-29).**
+  `/adopt <seat> +<seat> <path...>` merges one attempt whole and takes named
+  paths from another, on `adopt/t<N>-<base>+<donor>` (design.md §9.37's dated
+  hybrid amendment). The git mechanics and all four refusals are pinned by
+  offline tests against real temp repositories (`hybrid_test.go`), and the
+  arena record's hybrid state is pinned against ref lists with its own golden.
+  Neither has met a real race. **The same race pays this and the two debts
+  above**: race, `/adopt <seat>` and press `n` for the preview, then
+  `/adopt <a> +<b> <path>` and press `n` for the hybrid card, then `/arena
+  record`. Arming a card merges nothing, so all three cost one race and no
+  commit. Paying it fully — pressing `y` — additionally wants a look at the
+  receipt commit, which is the sentence the feature stands on.
+
+- **Per-HUNK adoption is deferred, not rejected (2026-08-29).** The hybrid ships
+  per-PATH because a hunk picker is a new full-frame body with its own scroll,
+  keys and mode word. The grammar does not block it: a picker would narrow what
+  `+<seat>` contributes and leave `/adopt <seat> +<seat> <path...>` alone. Its
+  own change, judged against §9.37 like every other item on that list.
 
 - **OBSERVED 2026-08-15/16, the drive that paid the demo path found three.
   The 2026-08-16 lane batch measured all three, and what is left is smaller.**
@@ -625,6 +697,17 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   Method note, because it cost a round trip: `/trace` resolves a relative path
   against the ROOM's workspace, so a trace has to be named relative to the repo
   for anything confined to it to read the result.
+
+- **Whether telltale should draw HUD rows for its own council seats is UNDECIDED
+  (2026-08-29).** `internal/adapter/cursor` now reads the `cursor-agent` CLI's
+  session manifests ([design.md §3.9](docs/design.md#s3-9)'s 2026-08-29
+  addendum), and `~/.cursor/acp-sessions/<uuid>/meta.json` carries the same
+  shape — 49 manifests, same three key sets, measured the same day. It is
+  deliberately NOT read. Those are `cursor-agent acp` sessions, which is the
+  server council's own Cursor seat runs (§9.36), so reading them would put the
+  room's seats on the grid beside the operator's own work. That may be right; it
+  is a product question nobody has answered, and the reader is one root away
+  from it either way.
 
 Cross-platform and cross-machine status has its own file: [PARITY.md](PARITY.md).
 

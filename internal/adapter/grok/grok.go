@@ -45,6 +45,18 @@
 //     read one's clothes (decisions/001). The last turn's cost is carried as a
 //     display-only Extra instead, labeled as the turn's, where it cannot be
 //     mistaken for the session's.
+//     Re-measured 2026-08-29 at grok 1.0.5, and the VERDICT is unchanged while
+//     the sweep quoted above is now known to be incomplete. That regex is
+//     lowercase and anchored on the substring "cost", so it could not match
+//     the token counts sharing the same usage object: inputTokens,
+//     outputTokens, totalTokens, cachedReadTokens, cacheCreationTokens,
+//     reasoningTokens, modelCalls and apiDurationMs, plus a per-model
+//     modelUsage breakdown of the same nine and a numTurns that reads 1 on
+//     every record. They have been on disk since 1.0.0, so this was telltale's
+//     instrument and not vendor drift (design.md §3.9a's 2026-08-29 block).
+//     Every one of them is per-turn in the same append-only file, so each
+//     inherits the argument above unchanged: a session total would need every
+//     record, and a tail-window sum is a lower bound in a second unit.
 //   - quota — nothing account-level reaches disk. `"[a-z_]*(rate|limit|quota)[a-z_]*"`
 //     over every .json and .jsonl in the store returned only tool-configuration
 //     keys (`output_byte_limit`, `head_limit`). There is no window, no ordinal
@@ -56,6 +68,18 @@
 //     outside the system prompt's tool description. Declaring the field and
 //     emitting zero would assert "this session is running no sub-agents", which
 //     the format gives no way to check — the same ruling Codex got (§3.3).
+//     Corrected 2026-08-29: that sweep read file CONTENTS, and a `subagents/`
+//     DIRECTORY does exist — on 6 of 108 session directories, each child a
+//     UUID dir holding meta.json (subagent_id, subagent_type,
+//     parent_session_id, child_session_id, status, turns, tool_calls,
+//     duration_ms, started_at, completed_at, …) and output.json. It dates to
+//     2026-08-09, so it is this survey's blind spot rather than drift. The
+//     CapNone verdict stands and its stated reason does not: what is still
+//     unmeasured is whether an absent directory means zero sub-agents or
+//     merely none written yet, which is the §4a.1 question a live spawn would
+//     answer. Note also that every child UUID observed is itself a top-level
+//     session directory, so the HUD already lists sub-agents as their own
+//     rows. design.md §3.9a's 2026-08-29 census is the record.
 //
 // # Liveness, and the registry that claims it and does not
 //
@@ -435,6 +459,20 @@ type updateLine struct {
 	} `json:"params"`
 }
 
+// usage is the subset of a turn_completed record's usage object this adapter
+// reads, and the subset is deliberate rather than exhaustive.
+//
+// The real object carries eleven keys (measured 2026-08-29 at grok 1.0.5, and
+// present since 1.0.0 — design.md §3.9a): the two below, plus inputTokens,
+// outputTokens, cachedReadTokens, cacheCreationTokens, reasoningTokens,
+// modelCalls, apiDurationMs, a per-model modelUsage breakdown and numTurns.
+// encoding/json drops every one of them here, which is this repo's usual
+// allowlist-by-struct. They are not read because they are per-turn counts in
+// an append-only file, so accumulating them faces the same lower-bound
+// refusal as the cost above, and because grok spend already has a wired
+// writer on a different seam (§7.16a) — two writers folding one turn into one
+// cache is the failure that section's 2026-08-29 amendment forbids. Adding a
+// field here is therefore a design decision, not a parsing convenience.
 type usage struct {
 	TotalTokens int64 `json:"totalTokens"`
 	// CostUsdTicks is a fixed-point USD figure at 1e10 ticks to the dollar.
