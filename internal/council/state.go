@@ -503,6 +503,18 @@ type Column struct {
 	// legitimate way to read a race, so one seat's toggle must not drag the
 	// others'.
 	ArenaShowDiff bool
+	// ArenaHunk is the review cursor: which hunk of the drawn patch `D` would
+	// quote, as an index into reviewHunks (§9.49). Per column for
+	// ArenaShowDiff's reason — the patch it indexes is per column — and zero on
+	// every seat that has not moved it, which is the first hunk rather than a
+	// missing one: a patch that HAS a hunk always has a cursor, and a patch
+	// with none renders none (reviewCursor keeps those two apart).
+	//
+	// An index rather than a line number. The drawn patch is capped and the
+	// cursor may only address hunks inside that frame, so counting hunks is
+	// counting the things a key can actually reach; a line number would also
+	// have to be re-derived every time the frame moved.
+	ArenaHunk int
 	// ArenaInterim is the latest MID-RACE stat read for the current turn's
 	// attempt (arenalive.go), nil until a read has returned. Nil is absence
 	// and renders nothing — "no read yet" is not a zero (§4a.1). Each read
@@ -613,6 +625,10 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	c.Arena = nil
 	c.ArenaInterim = nil
 	c.ArenaShowDiff = false
+	// The cursor goes with the patch it indexed. A new turn's attempt is a
+	// different patch, and an index carried across would point the reader at a
+	// hunk chosen for a diff that is gone.
+	c.ArenaHunk = 0
 	c.CostUSD = nil
 	c.CostSession = false
 	c.Started = time.Time{}
@@ -827,6 +843,20 @@ func (s State) VisibleColumns() []int {
 		}
 	}
 	return vis
+}
+
+// focusedIs reports whether c is the column the keys address.
+//
+// By VENDOR rather than by index, because the renderer is handed a COPY of the
+// column and has no index to compare — and a vendor seats exactly once, so the
+// two questions have the same answer. It exists for the review cursor (§9.49):
+// a mark that claimed a key on a column the key does not reach would be §7.8's
+// surprise drawn into the body.
+func (s State) focusedIs(c Column) bool {
+	if s.Focus < 0 || s.Focus >= len(s.Columns) {
+		return false
+	}
+	return s.Columns[s.Focus].Vendor == c.Vendor
 }
 
 // SeatNumber is the key that focuses this seat: its one-based position among the

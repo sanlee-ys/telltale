@@ -415,6 +415,17 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   reads at the room's own geometry. No vendor is spawned and nothing is written, so the debt
   costs a keystroke.
 
+- **The attempt review surface has never been driven live (2026-08-29).** `D` and `o`
+  (design.md §9.49) put a hunk of a racer's patch in the composer draft and start the
+  operator's editor on the worktree. Both are offline-tested only, and both make a claim a
+  suite cannot settle. `D`'s is end to end: the quoted hunk has to survive the composer, the
+  seeded `@mention` has to route the turn to the seat under review, and the seat has to be
+  able to act on a worktree path that is not the room's workspace — one live race, one `D`,
+  one dispatched turn pays it. `o`'s is narrower and shares `y`'s known limit: council can
+  measure that the process STARTED and nothing more, so whether a real `$EDITOR` draws a
+  window, and what a terminal editor does when the room owns the screen, needs one press
+  against a real setting. Neither costs a vendor turn to check the second half.
+
 - **No live race has run under the arena check (2026-08-29).** `/arena check <command>`
   (design.md §9.48) runs one operator-named command in each racer's worktree and renders PASS
   or FAIL from its real exit code. Every mechanic is pinned offline, and one test runs a real

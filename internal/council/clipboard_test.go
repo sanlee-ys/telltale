@@ -17,6 +17,17 @@ func stubNoNativeClipboard(t *testing.T) {
 	t.Cleanup(func() { nativeClipboard = orig })
 }
 
+// stubClipboard swaps the native helper for one a test can observe, so a key
+// that CLAIMS to have copied something can be asserted against what actually
+// reached the clipboard seam — the distinction §9.15 spent a whole comment on,
+// and the one the OSC 52 path cannot answer at all.
+func stubClipboard(t *testing.T, f func(string) bool) {
+	t.Helper()
+	orig := nativeClipboard
+	nativeClipboard = f
+	t.Cleanup(func() { nativeClipboard = orig })
+}
+
 // TestNativeClipboardRoundTripsOnThisPlatform.
 //
 // The bug this exists for could not have been caught by a unit test of the old
