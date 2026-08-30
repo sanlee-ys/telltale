@@ -215,10 +215,10 @@ func TestASessionDirectoryWithNoManifestDrawsNothing(t *testing.T) {
 func TestTheVendorTitleIsTheName(t *testing.T) {
 	s := readCLIOne(t, cliAdapter(t), cli1)
 	if s.Name == nil || *s.Name != "Synthetic Session Title" {
-		t.Errorf("name = %v, want the manifest's own title", s.Name)
+		t.Errorf("name = %q, want the manifest's own title", show(s.Name))
 	}
 	if s.WorkspaceDir == nil || *s.WorkspaceDir != `C:\synthetic\alpha-project` {
-		t.Errorf("workspace = %v, want the manifest's cwd verbatim", s.WorkspaceDir)
+		t.Errorf("workspace = %q, want the manifest's cwd verbatim", show(s.WorkspaceDir))
 	}
 }
 
@@ -226,10 +226,17 @@ func TestTheVendorTitleIsTheName(t *testing.T) {
 // rather than the edge. It is the workspace basename — the fallback
 // internal/hud's own sessionLabel applies and internal/adapter/pi applies at
 // the adapter — and never a fabricated label.
+//
+// It is also the cross-platform assertion for this reader, which is why the
+// fixture's cwd is a Windows path and the expectation is a bare basename. The
+// manifest records the path of whichever machine ran the session, so this test
+// runs on Linux CI against a `C:\...` string. `filepath.Base` would hand back
+// the whole thing there; model.Session.WorkspaceName splits on either
+// separator, which is why cliSession calls that instead.
 func TestAnAbsentTitleFallsBackToTheWorkspaceBasename(t *testing.T) {
 	s := readCLIOne(t, cliAdapter(t), cli2)
 	if s.Name == nil || *s.Name != "beta-project" {
-		t.Errorf("name = %v, want the cwd's basename", s.Name)
+		t.Errorf("name = %q, want the cwd's basename", show(s.Name))
 	}
 }
 
@@ -451,6 +458,16 @@ func TestAnUnreadableComposerStoreStillWinsOverCLIRows(t *testing.T) {
 }
 
 // ---------------------------------------------------------------- helpers
+
+// show renders an optional string for a failure message. A bare *string prints
+// as an address, which says nothing about what went wrong — CI reported exactly
+// that on 2026-08-29 and cost a round trip to reproduce.
+func show(p *string) string {
+	if p == nil {
+		return "<absent>"
+	}
+	return *p
+}
 
 func hasNote(s *model.Session, want string) bool {
 	for _, d := range s.Diagnostics {

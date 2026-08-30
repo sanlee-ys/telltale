@@ -440,6 +440,14 @@ func (a *Adapter) cliSession(rec chatsRecord, scan *chatsScan, now time.Time) *m
 		ObservedAt: now,
 	}
 
+	// The manifest writes a native path (`C:\...` on 43 of 43 here), not the
+	// `file:///c%3A/...` URI the Composer store's workspace.json carries. It is
+	// taken verbatim: there is no unit to convert and inventing one would be
+	// the adapter guessing at a path.
+	if rec.workspace != "" {
+		s.WorkspaceDir = model.Ptr(rec.workspace)
+	}
+
 	// The title when the vendor wrote one — it did on 3 of 43 manifests, so an
 	// absent title is genuine absence and not a read that failed. Otherwise the
 	// workspace basename, which is the fallback internal/hud's own sessionLabel
@@ -447,19 +455,19 @@ func (a *Adapter) cliSession(rec chatsRecord, scan *chatsScan, now time.Time) *m
 	// Naming the row after a directory the manifest itself states is a reading;
 	// the eight-hex-character id the Composer side falls back to is what is
 	// left when there is not even that.
-	switch {
+	//
+	// model.Session.WorkspaceName splits the basename, NOT filepath.Base, and
+	// the difference is load-bearing rather than stylistic. This path was
+	// written by whichever machine ran the session, so a manifest carrying
+	// `C:\...` can be read on a machine whose filepath separator is `/` — a
+	// corpus copied between machines, or a test fixture in a repository CI
+	// builds on Linux. WorkspaceName splits on either separator; filepath.Base
+	// would hand back the whole `C:\a\b` string as the row's name.
+	switch name, ok := s.WorkspaceName(); {
 	case rec.name != "":
 		s.Name = model.Ptr(rec.name)
-	case rec.workspace != "":
-		s.Name = model.Ptr(filepath.Base(rec.workspace))
-	}
-
-	// The manifest writes a native path (`C:\...` on 43 of 43 here), not the
-	// `file:///c%3A/...` URI the Composer store's workspace.json carries. It is
-	// taken verbatim: there is no unit to convert and inventing one would be
-	// the adapter guessing at a path.
-	if rec.workspace != "" {
-		s.WorkspaceDir = model.Ptr(rec.workspace)
+	case ok:
+		s.Name = model.Ptr(name)
 	}
 
 	if rec.lastActivity.IsZero() {
