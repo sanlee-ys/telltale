@@ -15016,3 +15016,193 @@ What IS owed is one live open against the reference box's own leftovers — 27 `
 branches and the `adopt/*` refs beside them are recorded in §9.37 — to confirm the counts a
 real pile of refs produces and that the page reads at the room's own geometry. Stated here
 rather than implied paid.
+
+<a id="s9-49"></a>
+
+### 9.49 the codex seat gets a second protocol, and the sandbox re-measurement that kept it unseated (2026-08-29)
+
+§9.33 drove `codex app-server` on 2026-08-15, recorded a warm turn at **1.44 s** against
+`codex exec --json`'s 5.33 s, and stopped: *"This is measurement only. It authorises no seat
+change."* `STATE.md` carried the standing caution beside it — the Windows sandbox finding does
+not port to that path, and **any seat move re-measures rather than inherits**. This is that
+re-measurement, and the build it authorised.
+
+**The verdict is split, and both halves are measured.** The protocol ships: a second
+`runner.Protocol` beside the ACP one, parsed, tested, and pinned to a real capture. The SEAT
+does not move: the room still dispatches codex through `codex exec --json`. What decided that
+is not caution — it is a liveness defect measured on the new path that #311 had just cleared
+off the old one.
+
+#### Version pinned first, and the surface was driven before it was believed
+
+Everything below is **codex-cli 0.149.1** on Windows 11 (`codex --version`), 2026-08-29 — the
+same build #311 re-measured the `exec` seat on the same day, so nothing here is confounded by a
+version difference between the two surfaces. `codex app-server generate-json-schema --out <dir>`
+wrote the whole protocol at this build; every shape below was then either captured live or is
+labelled a schema read. **Eight billed turns**, one to three per arm, in throwaway directories,
+with files checked on disk rather than read out of the model's reply. Prompts are
+**brief-shaped**: they open with `brief.go`'s own `--- operating context …---` fence, because
+§9.39 records a seat that shipped broken for a day behind a green live test whose prompt began
+with a letter.
+
+#### The handshake, and what a warm thread actually costs
+
+| stamped line | arm A | arm F |
+|---|---|---|
+| spawn returned | 0.035 s | 0.151 s |
+| `initialize` response | 1.091 s | 0.673 s |
+| `thread/start` response | 1.986 s | 1.032 s |
+
+Two round trips, and the spread is this box rather than the vendor: five MCP servers start on
+the same path and a `sessionStart` hook runs, both of them the operator's own configuration.
+§9.33's warning stands unchanged — **that figure must never be quoted as a property of the
+vendor.**
+
+Then the two turns of arm A, one thread, one process, read-only posture:
+
+| turn | sent | `turn/completed` | total |
+|---|---|---|---|
+| 1 (three shell attempts, hooks, MCP startup) | 1.986 s | 34.771 s | 32.785 s |
+| 2 (a question only turn 1's history answers) | 34.771 s | 36.257 s | **1.486 s** |
+
+Turn 2 was asked what file turn 1 had been told to create and answered `wrote-ro.txt`, from the
+same pid. **1.486 s reproduces §9.33's 1.44 s at a newer build**, so the prize is real and it is
+now measured twice, fourteen days apart, on two builds.
+
+**The linger question re-opens and closes in the vendor's favour.** `codex exec` prints its last
+line and holds the process open ~4 s (§9.33's 2026-08-16 amendment). Here there is nothing to
+settle around: turn 2's `turn/start` went out on the same millisecond `turn/completed` landed.
+The shutdown fact runs the other way and is the one worth carrying: **closing stdin does not
+reliably stop this server.** Four runs exited in 1.5–3.3 s; one was still alive 15 s later and
+had to be killed. The caller owns the kill.
+
+#### The sandbox, re-measured on its own surface
+
+`thread/start` takes a `sandbox` parameter whose enum is spelled identically to `exec`'s `-s`
+values. That spelling is a coincidence of naming, not a shared mechanism, and the results are
+not the same.
+
+| probe | result |
+|---|---|
+| `read-only`, write via **direct `cmd.exe`** | **DENIED** — `Access is denied.`, exit 1, `status:"failed"`, no file on disk |
+| `read-only`, write via the router's default `pwsh.exe` | **NO PROCESS** — `CreateProcessAsUserW failed: 5`, no `commandExecution` item at all |
+| `workspace-write`, write inside the workspace | landed, exit 0, file on disk |
+| `workspace-write`, write to `.git` (two independent turns) | **DENIED** both times, exit 1, no file |
+| `windowsSandbox/readiness` (a free request, no turn) | `{"status":"ready"}` |
+
+**The read posture enforces when a process starts.** The denied write is the strong arm, and its
+own failure mode confirms it: the second call in that turn came back with cmd.exe's *own*
+`'…' is not recognized as an internal or external command`, which a process that never started
+could not have produced. So cmd.exe ran INSIDE the sandbox and obeyed it.
+
+**And the seat still cannot be trusted to read, which is why it is unseated.** This protocol's
+tool router wraps a shell command in `"…\WindowsApps\pwsh.exe" -NoProfile -Command "…"` unless
+the model names a program itself, and pwsh cannot start under the Windows sandbox on this box —
+the identical `CreateProcessAsUserW failed: 5` that 0.146.0 failed *everything* with. #311
+measured `codex exec` retrying through cmd.exe and obeying the sandbox. On this path the retry is
+the model's own move and **it did not always make it**: in two of three read-posture arms the
+model abandoned the turn and reported it could not inspect. A read seat that cannot list a
+directory is the 0.146.0-class defect arriving on a new path, and it is the exact failure the
+`ro:enforced` badge would be sold against.
+
+**Two things are NOT measured, and they are stated rather than inferred from the `exec` path's
+answers — the whole reason this section exists is that those answers do not port:**
+
+- **Writing outside the workspace.** The one arm that tried it wrote into a directory under
+  `%TEMP%`, which `workspaceWrite` permits by default (`excludeTmpdirEnvVar` defaults false).
+  The write landed and the arm proves **nothing**. Recorded as void, never as a permit. The
+  probe could not be re-aimed: this lane's scratch boundary is inside the temp root.
+- **The `writableRoots` override on `.git`.** A per-turn `sandboxPolicy` naming `.git` was sent
+  and the model's own shell quoting broke the call before the sandbox saw it. So whether this
+  path can buy `.git` back — which `codex exec` measurably cannot on Windows (#311) — is open,
+  and it is the measurement the write posture's shape depends on.
+
+#### What this protocol carries that `codex exec --json` hides
+
+§9.33 named these and built nothing on them. They are now parsed, and still rendered nowhere.
+
+- **`thread/tokenUsage/updated`** — `total` and `last` counts, plus `modelContextWindow`
+  (258400 on this account's model). That denominator is the one §3.2 records as absent from
+  every other codex surface; it is what would make a context percentage a read rather than an
+  invention.
+- **`account/rateLimits/updated`** — `usedPercent`, `windowDurationMins`, `resetsAt` and
+  `planType`, per window, live on the socket. These are **quota** in §7.15's vocabulary — a
+  share of a window that resets — and never spend, and nothing here converts one into the other.
+- **`hook/started` / `hook/completed`** — the hook's id, event, source path, source and
+  `durationMs`. Dropped by the adapter, and deliberately: the one hook captured was the
+  operator's own `sessionStart` script, and rendering somebody's local configuration as council
+  activity is the machine-specific claim §9.33 already warned this figure must never become.
+- **Typed shell items** — `commandExecution` carries `command`, `cwd`, `processId`, `status`,
+  `exitCode`, `durationMs` and `aggregatedOutput`. Richer than the `exec` stream's item, and
+  `status:"failed"` is load-bearing here in a way it is not there: it was captured on a command
+  that never started, where there is no exit code to read.
+
+**A free read surface, which is new and worth naming.** `account/rateLimits/read`, `hooks/list`,
+`permissionProfile/list` and `windowsSandbox/readiness` are ordinary requests that answer
+**without starting a turn** — driven live, no model spend. Nothing consumes them yet.
+
+#### The trap this wire carries, measured rather than assumed away
+
+**The deltas and the completed item are the same text.** Across four `agentMessage` items over
+two turns, the concatenated `item/agentMessage/delta` payloads equal `item/completed`'s `text`
+byte for byte, every time. This is §9.6c's whole-message repeat, present on a surface nobody had
+parsed. A reader that took both would print every answer twice. The adapter consumes the deltas —
+streaming is what the column is for — and spends the completed item as a **separator only**, per
+item rather than per turn, because one turn carries several complete messages and a per-turn
+guard would pass the first and fail the second. An item that never streamed still prints its
+text, which is the safety net the ACP seat explicitly does not have.
+
+#### The fork, taken conservatively
+
+§9.36 ruled the Cursor seat's equivalent fork **WHOLESALE** under one-attempt probation, and the
+numbers there justified it: the old path was ~13 s per turn against 1.1–1.8 s, with nothing left
+to fall back to that anyone would want. **This fork is not that one**, and the difference is on
+the safety side rather than the speed side.
+
+A cutover here would move the codex seat onto a path where, at this build, a read-posture turn
+was measured **failing to inspect at all** in two of three arms. The old path does not have that
+defect — #311 measured it away the same day and paid for the badge. Trading a 5.33 s turn for a
+1.49 s turn that sometimes cannot run a command is not the trade §9.36 made; it is the inverse
+of it. And the two measurements the write posture would need — the outside-workspace boundary
+and the `.git` override — are the two this lane could not close.
+
+So: **dual, with the default seat unmoved.** The protocol, its parser, its refusals and a
+version-pinned real capture all ship. `vendors.CodexAppServer` implements `Conversational` and is
+deliberately absent from `Registry()`, with `TestTheRoomStillSeatsTheExecCodexAdapter` pinning
+that absence as a decision rather than an oversight — it is the test that fails, and is read, on
+the day somebody registers the seat.
+
+**What the flip needs, named so the follow-up does not rediscover it.** One line maps
+`model.VendorCodex` to this type; the seat then drives through `StartRPCSession` exactly as the
+Cursor seat does. What must be re-measured FIRST is the read posture's **liveness** — a turn that
+lists a directory and reads a file, under the sandbox the badge claims — because that is the
+property the badge sells and the one this path was measured failing. The write posture needs the
+two open sandbox arms above. Until then the badge rule is unchanged, and `unsandboxed` stays the
+floor wherever restriction is unverifiable.
+
+#### Verification
+
+Fixture replay through the real protocol driver, with no process anywhere near a test.
+`codexappserver_test.go` pins the handshake sequencing and the held brief it releases, the
+posture riding `thread/start` rather than argv, the write posture NOT inheriting the `exec`
+seat's Windows flag, the whole-message repeat read once and two messages not running together,
+a message that never streamed still landing, command outcomes on both branches with the
+vendor's own failure line, a `completed` status with no exit code staying Unknown, the brief and
+the model's thinking both dropped, the turn ending exactly once with no cost, an unseen stop
+status not rendered as an answer, a refused handshake being terminal, a refused resume costing
+two round trips rather than the turn, the interrupt naming both required ids, every server
+request being answered and an unrequested approval refused into the trace, `Decide` never
+claiming to have answered anything, usage and limits captured while producing no events, and
+garbage on the stream not losing the turn.
+
+`wire_test.go` replays the real capture,
+`vendors/testdata/wire/codex-app-server-0.149.1-turn.jsonl` — the sandbox arm itself, sanitized,
+so a denial arriving as a success or the vendor's `Access is denied.` going missing fails there.
+`go vet ./...` clean, full `go test ./... -count=1` green.
+
+**Spend:** eight billed turns, all cheap prompts in throwaway directories. One of them bought
+nothing: the `writableRoots` arm broke on the model's own quoting and is recorded above as owed
+rather than as an answer.
+
+**Not verified here: macOS.** Every arm ran on Windows 11. Whether `codex app-server`'s sandbox
+behaves differently there is unmeasured, and `PARITY.md` is where that belongs.

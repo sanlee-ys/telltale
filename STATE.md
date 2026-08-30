@@ -506,9 +506,20 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   govulncheck/CodeQL/SBOM/provenance (a `go 1.26.6` bump cleared 3 reachable
   stdlib CVEs), and closed a measured browser exfiltration of both listeners
   (§7.24). The
-  **Windows `danger-full-access` finding does not port to `codex app-server`**
-  — that path has its own `windowsSandbox/*` surface nobody has probed; any
-  seat move re-measures rather than inherits. **The agy statusline re-capture is
+  **`codex app-server` re-measurement is PAID (2026-08-29)** and the caution it
+  answers was right: the `exec` findings do not port, and the new path is worse
+  where it counts. At 0.149.1 its `read-only` sandbox DENIES a write when a
+  process starts, but its tool router goes through `pwsh.exe`, pwsh cannot start
+  under the Windows sandbox on this box, and in two of three read-posture arms
+  the model abandoned the turn rather than inspecting — the 0.146.0-class defect
+  #311 had just cleared off `codex exec` the same day. So the protocol ships as a
+  second `runner.Protocol` and **the seat does not move** (§9.49). Three things
+  stay open and gate the flip: the read posture's LIVENESS (a turn that lists a
+  directory and reads a file under the sandbox the badge claims), whether a write
+  outside the workspace is denied (the one arm ran under `%TEMP%`, which
+  `workspaceWrite` permits by default, so it measured nothing), and whether a
+  per-turn `sandboxPolicy.writableRoots` can buy `.git` back where `exec` on
+  Windows cannot. **The agy statusline re-capture is
   PAID (2026-08-17)** and the pin moves to 1.1.13: fifteen live payloads
   confirmed FOUR quota buckets rather than two, `agent_state` was observed live
   (including one value the documented vocabulary omits), and the payload has
