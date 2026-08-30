@@ -324,7 +324,11 @@ func (s *Session) write(line []byte) error {
 
 	// Copied before queueing: the caller owns the slice it passed and may reuse
 	// it, and the write happens on another goroutine at an unknown later moment.
-	buf := make([]byte, 0, len(line)+1)
+	// The capacity deliberately carries no arithmetic — len(line)+1 is an
+	// integer-overflow sink (CodeQL go/allocation-size-overflow, flagged
+	// 2026-08-29), and letting the newline take one growth step costs nothing
+	// on a per-protocol-line path.
+	buf := make([]byte, 0, len(line))
 	buf = append(buf, line...)
 	buf = append(buf, '\n')
 
