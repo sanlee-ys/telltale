@@ -440,6 +440,49 @@ func TestDNamesEveryRefusal(t *testing.T) {
 	}
 }
 
+// TestTheColumnKeysRefuseOverAFullFrameBody.
+//
+// `y` can follow a page, because a page IS a document (§9.22, §9.47). `D` and
+// `o` cannot: a page has no hunk and no worktree, the cursor is not on screen,
+// and `D`'s whole claim is "the hunk under ▸" — a claim a reader cannot check
+// against the screen is the one thing this room does not print.
+func TestTheColumnKeysRefuseOverAFullFrameBody(t *testing.T) {
+	log := countSpawns(t)
+	for _, tc := range []struct {
+		name string
+		open func(m *Model)
+		want string
+	}{
+		{"turn page", func(m *Model) { m.st.Page.Open = true }, "turn page"},
+		{"act ledger", func(m *Model) { m.st.Page.Open, m.st.Page.Ledger = true, true }, "act ledger"},
+		{"arena record", func(m *Model) { m.st.Record = &ArenaRecord{} }, "arena record"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := reviewModel(t)
+			tc.open(m)
+
+			m.quoteHunk()
+			if m.st.Draft != "" {
+				t.Errorf("D quoted from a column that is not on screen: %q", m.st.Draft)
+			}
+			if !strings.Contains(m.st.Notice, tc.want) {
+				t.Errorf("the refusal does not name what is open: %q", m.st.Notice)
+			}
+
+			m.askWorktree()
+			if m.worktreePending != "" {
+				t.Error("o armed the card over a full-frame body")
+			}
+			if !strings.Contains(m.st.Notice, tc.want) {
+				t.Errorf("the refusal does not name what is open: %q", m.st.Notice)
+			}
+		})
+	}
+	if log.n() != 0 {
+		t.Errorf("a refused key started %+v", log.specs)
+	}
+}
+
 // TestTheWorktreeCardCopiesThePathAndStartsNothing. `c` is the answer for the
 // operator whose editor this room cannot start, and it must not be able to
 // start one by accident.

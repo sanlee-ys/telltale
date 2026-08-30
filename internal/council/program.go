@@ -979,6 +979,13 @@ func (m *Model) worktreeGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // over yet, and inventing one from the race's naming scheme would be council
 // deriving a value it can simply wait to be told.
 func (m *Model) askWorktree() {
+	if body := m.bodyOverColumns(); body != "" {
+		// quoteHunk's refusal, for quoteHunk's reason: these keys address a
+		// COLUMN, and a full-frame body deliberately has no per-seat focus for
+		// a narrower key to aim at (§9.22).
+		m.st.Notice = "the " + body + " is open — t gives the columns back, then o opens a racer's worktree"
+		return
+	}
 	c := m.focused()
 	if c == nil {
 		m.st.Notice = "no seat is focused"
@@ -1015,6 +1022,17 @@ func (m *Model) askWorktree() {
 // nothing" and "this hunk will not fit the composer" are five different facts
 // and one sentence for all of them would be the collapse §4a.1 forbids.
 func (m *Model) quoteHunk() (tea.Model, tea.Cmd) {
+	if body := m.bodyOverColumns(); body != "" {
+		// A full-frame body has replaced the columns, so the cursor is not on
+		// screen and neither is the block it points into. `y` answers this by
+		// taking what the body IS showing (§9.22, §9.47); this key has no such
+		// answer — a page has no hunk — so it refuses rather than quoting from
+		// a column nobody can see. The claim `D` makes is "the hunk under ▸",
+		// and a claim a reader cannot check against the screen is the one thing
+		// this room does not print.
+		m.st.Notice = "the " + body + " is open — t gives the columns back, then d shows a patch"
+		return m, nil
+	}
 	c := m.focused()
 	if c == nil {
 		m.st.Notice = "no seat is focused"
@@ -1757,6 +1775,25 @@ func (m *Model) navKey(name string) bool {
 // projections, so the condition is spelled once and the keymap and the mode line
 // are asking the same question (§9.22).
 func (m *Model) pageOpen() bool { return m.st.Page.Open }
+
+// bodyOverColumns names the full-frame body that has replaced the grid, or is
+// empty when the columns are on screen.
+//
+// The name is for a NOTICE, so it is the word the mode line already uses for
+// each surface rather than a field name. It exists because the column keys
+// added by §9.49 have to refuse here: `y` can follow a page because a page IS a
+// document, and `D` and `o` cannot, because a page has no hunk and no worktree.
+func (m *Model) bodyOverColumns() string {
+	switch {
+	case m.st.Record != nil:
+		return "arena record"
+	case m.st.Page.Ledger && m.st.Page.Open:
+		return "act ledger"
+	case m.st.Page.Open:
+		return "turn page"
+	}
+	return ""
+}
 
 // toggleTurnView swaps the body between the by-seat grid and one turn read
 // across every seat.

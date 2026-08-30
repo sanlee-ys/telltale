@@ -489,6 +489,10 @@ full absolute path on the clipboard through the same mechanism `y` uses. The roo
 screen, so a terminal editor opens where you cannot see it; the notice says so rather than
 letting you find out.
 
+Both `D` and `o` address a **column**, so both refuse while a turn page, an act ledger or an
+arena record is filling the frame — those have no hunk and no worktree, and the cursor is not
+on screen to point at. `t` gives the columns back.
+
 **`u` takes the focused seat's attempt back — y/n-gated, like `c`.** A stray keystroke
 must cost a `y` before it costs an attempt: the card names exactly what happens (`y resets
 its worktree and branch to <base>`), and the reset runs inside that racer's worktree only,

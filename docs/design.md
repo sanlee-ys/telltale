@@ -15793,6 +15793,13 @@ not a collision, because that glyph already means *this is what the keys address
 exactly what it means here. It is drawn only on the FOCUSED column, since that is the column
 `D` reaches.
 
+**Both keys refuse over a full-frame body** — the turn page, the act ledger, the arena record.
+`y` can follow a page because a page IS a document (§9.22, §9.47); these two cannot, because a
+page has no hunk and no worktree, and a projection whose whole point is that the turn is the
+unit deliberately has no per-seat focus for a narrower key to aim at. `D`'s claim is *the hunk
+under `▸`*, and a claim a reader cannot check against the screen is the one thing this room
+does not print.
+
 #### `o`: the one process council starts that no vendor asked for
 
 Spawning an editor is council's loud exception and it is taken deliberately. The gauges spawn
@@ -15839,10 +15846,10 @@ frame with the reason named, `[` and `]` yielding the turn hop when no patch is 
 appearing only on the focused column and surviving `--ascii`, the footer cell following the
 body, `D` spawning nothing and starting no turn, the quote following the cursor rather than
 the column, the route seeded only into an empty draft, an over-large quote refused whole, four
-refusals each saying their own reason, the card copying the path without spawning, `y`
-starting the program the card named in the racer's own tree, an absent `$EDITOR` said rather
-than guessed, a stray key touching neither clipboard nor process table, and the three keys
-named above the help panel's fold. `arena-review.txt` and its `--ascii` twin are the frame. No
+refusals each saying their own reason, both keys refusing over each of the three full-frame
+bodies, the card copying the path without spawning, `y` starting the program the card named in
+the racer's own tree, an absent `$EDITOR` said rather than guessed, a stray key touching
+neither clipboard nor process table, and the three keys named above the help panel's fold. `arena-review.txt` and its `--ascii` twin are the frame. No
 test here spawns a vendor or an editor.
 
 **Nothing in this section is a claim about vendor behaviour, so no live vendor run is owed.**
