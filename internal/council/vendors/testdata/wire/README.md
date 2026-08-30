@@ -33,6 +33,14 @@ from the vendor's own `--version` at capture time.
 | `grok-1.0.4-turn.jsonl` | `grok` 1.0.4 (d846eb93d9) |
 | `cursor-agent-2026.08.04-aaa8809-turn.jsonl` | `cursor-agent` 2026.08.04-aaa8809 |
 | `cursor-agent-2026.08.04-aaa8809-load-not-found.jsonl` | `cursor-agent` 2026.08.04-aaa8809 |
+| `codex-app-server-0.149.1-turn.jsonl` | `codex-cli` 0.149.1 |
+
+**Two files pin one CLI, and that is not a stale entry.** `codex-0.147.0-turn.jsonl`
+is `codex exec --json` — the invocation the room seats — and
+`codex-app-server-0.149.1-turn.jsonl` is `codex app-server`, a second protocol
+that ships parsed and unseated (design.md §9.50). They are different surfaces of
+one binary, so a bump retires them independently; when the seat moves, the exec
+pin goes with it.
 
 Three of the five bumped past the version their adapter's doc comments were
 written against — Claude Code 2.1.220 → 2.1.226, codex-cli 0.146.0 → 0.147.0,
@@ -99,6 +107,21 @@ What was replaced, each by an obviously-fake value of the same type and format:
   is a fixed epoch and `overageDisabledReason` reads `sanitized`. The keys and
   types are the shape; those two values described a real billing state.
 - **grok's opaque `signature` blob**, replaced with a same-length placeholder.
+- **The app-server capture's own extras.** Its `userAgent` echoes the client
+  name and the OS build back, its `installationId` and `serverName` name this
+  machine, and its `hook/*` frames name the operator's own hook scripts by path.
+  All are replaced. Every `resetsAt`, `emittedAtMs`, `createdAt` and friend is
+  fixed to one epoch, for the same reason Claude's `resetsAt` was.
+
+**One deliberate exception in the app-server capture, stated because it is a
+real judgement call.** The `account/rateLimits/updated` frames keep their
+`usedPercent`, `windowDurationMins` and `planType` VERBATIM. Those describe a
+real account's quota state, which is the kind of value the rule above replaces —
+but they are also the measurement the file exists to pin, and a substituted
+percentage would make the fixture assert a number nobody read. The reset epochs,
+which are the part that would let a reader date the capture against an account,
+are fixed. What is left is "some account was 15% into a 300-minute window",
+which is shape.
 
 What was deliberately **left verbatim**, because it is the measurement:
 

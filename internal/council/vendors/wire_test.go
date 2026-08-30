@@ -52,6 +52,12 @@ const (
 	agyWireVersion    = "1.1.11"             // agy --version
 	grokWireVersion   = "1.0.4 (d846eb93d9)" // grok --version
 	cursorWireVersion = "2026.08.04-aaa8809" // cursor-agent --version
+	// The codex seat now has TWO pinned builds, and that is not a stale entry
+	// above: they pin different SURFACES of one CLI. `codex-0.147.0-turn.jsonl`
+	// is `codex exec --json`, the invocation the room seats; this one is
+	// `codex app-server`, a second protocol that ships parsed and unseated
+	// (design.md §9.50). When the seat moves, the exec pin goes with it.
+	codexAppServerWireVersion = "0.149.1" // codex --version -> codex-cli 0.149.1
 )
 
 // wireFixture reads one captured stream, and refuses a line that is not valid
@@ -415,5 +421,92 @@ func TestCursorACPZeroTextChunksRendersFallbackSummary(t *testing.T) {
 	}
 	if !strings.Contains(end.Text, "0 text chunks") || !strings.Contains(end.Text, "Read File") {
 		t.Errorf("end.Text = %q, want summary naming 0 text chunks and tool call Read File", end.Text)
+	}
+}
+
+// TestCodexAppServerWireIsPinnedAt_0_149_1 replays a real `codex app-server`
+// conversation.
+//
+// Like the Cursor seat and unlike the other four, this fixture is not fed to a
+// ParseEvent — it is driven through the real appServerProtocol, which answers
+// the server as it goes. The capture is the whole transcript INCLUDING the
+// handshake, taken by a probe that issued byte-for-byte the requests Opening
+// and openThread build, so the ids line up and the state machine runs
+// unmodified.
+//
+// The turn behind it is the SANDBOX ARM (design.md §9.50): a read-posture seat
+// told to write a file through cmd.exe. That is what makes it worth pinning
+// rather than a cheaper "reply with ok" — the frames it exercises are the ones
+// the room's honesty depends on. A denial arriving as a success, or the
+// vendor's own `Access is denied.` going missing, would fail here.
+func TestCodexAppServerWireIsPinnedAt_0_149_1(t *testing.T) {
+	p := newAppServerProtocol("C:/Users/dev/code/example-app", "", PostureRead)
+	p.Turn("write a file through the shell")
+	d := drive(p, wireFixture(t, "codex-app-server-"+codexAppServerWireVersion+"-turn.jsonl")...)
+
+	// THE REPEAT. The deltas and the completed item carry the same text, and a
+	// parser reading both would print every message twice. The capture holds 94
+	// deltas across two messages, so a regression here is loud. Both messages
+	// are checked, because the guard is keyed per ITEM and a per-turn version of
+	// it would pass the first and fail the second.
+	for _, once := range []string{
+		"without PowerShell wrapping", // the commentary message
+		"is not recognized as an",     // the final answer
+	} {
+		if n := strings.Count(d.body, once); n != 1 {
+			t.Errorf("%q appears %d times; every message must be read exactly once. body = %q", once, n, d.body)
+		}
+	}
+	// The brief coming back as a `userMessage` item, and the model's `reasoning`
+	// items, are both in this capture and neither belongs in the column.
+	if strings.Contains(d.body, "operating context") {
+		t.Error("the brief was rendered as though the vendor had said it")
+	}
+
+	var session, end *runner.Event
+	for i := range d.events {
+		if d.events[i].Kind == runner.KindSession {
+			session = &d.events[i]
+		}
+		if d.events[i].EndsTurn {
+			end = &d.events[i]
+		}
+	}
+	if session == nil || session.SessionID == "" {
+		t.Fatal("no thread id came out of the handshake; every follow-up turn would start a new conversation")
+	}
+	if end == nil {
+		t.Fatal("no end event; this process does not exit between turns, so nothing else would end the turn")
+	}
+	if end.Kind != runner.KindMeta {
+		t.Errorf("the turn ended as %v; the capture's turn/completed carries status completed and no error", end.Kind)
+	}
+	// codex publishes no monetary figure on EITHER surface, so this stays nil
+	// forever. Deriving one from the token counts this protocol does carry is on
+	// the rejected list.
+	if end.CostUSD != nil {
+		t.Errorf("cost = %v; this vendor reports token counts and no money", *end.CostUSD)
+	}
+
+	// THE SANDBOX DENIAL, as the room would show it. The capture's write came
+	// back exit 1 with the vendor's own line, and that is the fact the read
+	// posture's whole claim rests on.
+	var denied bool
+	for _, a := range d.acts {
+		if a.Outcome == runner.ActFailed && strings.Contains(a.Detail, "Access is denied") {
+			denied = true
+		}
+	}
+	if !denied {
+		t.Errorf("the sandbox denial did not reach the trace as a failure; acts = %+v", d.acts)
+	}
+
+	// Both figures the `exec --json` stream does not carry at all. Captured and
+	// held, rendered nowhere — see the field comments on appServerProtocol.
+	if p.usage == nil || p.usage.ModelContextWindow == 0 {
+		t.Errorf("thread/tokenUsage/updated stopped carrying a context window: %+v", p.usage)
+	}
+	if p.limits == nil || p.limits.Primary == nil || p.limits.Primary.WindowDurationMins == 0 {
+		t.Errorf("account/rateLimits/updated stopped carrying a quota window: %+v", p.limits)
 	}
 }
