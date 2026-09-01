@@ -60,6 +60,23 @@ import (
 // carries the test name and the goroutine that got there. What it must carry
 // beyond that is WHAT would have run — without the argv, the next person is
 // back to polling the process table.
+//
+// # This guard is not the only one any more
+//
+// It covers THIS PACKAGE's spawns and nothing else, and that is worth saying
+// out loud because it used to be the same thing. Since design.md §7.28
+// (2026-09-01) a council room can also run in its own process, and
+// internal/councilhost carries a TestMain of its own on the identical rule,
+// over three vars: the host's `startSession` and `startProcess`, and the
+// client's `startHost` — which starts telltale's own binary, resolvable on any
+// machine that built it, whose child then spawns real vendors two processes
+// away from whatever assertion provoked them.
+//
+// Nothing in package `council` reaches that host, so `countSpawns` below needs
+// no entry for it. **If that ever changes — if the room here grows a path that
+// starts or joins a host — the var behind it belongs in this wrap and in
+// countSpawns, in the same change.** A guard that lags the spawn it guards is
+// the state this file exists to prevent.
 func TestMain(m *testing.M) {
 	realProcess, realSession, realRPC := startProcess, startSession, startRPCSession
 	realEditor := startEditor
