@@ -119,6 +119,34 @@ Two consequences when you write a council test:
   run, not a declared intent — an opt-in marker would just become the thing a
   future test copies without meaning it.
 
+## A council test never writes the operator's own state
+
+Same file, same reason, quieter defect. `TestMain` points `HOME` and
+`USERPROFILE` at a temporary directory for the whole test binary, so
+`~/.telltale/council` resolves inside a sandbox rather than on the disk of
+whoever ran the suite.
+
+It is there because the opposite was measured. On 2026-09-01 the operator's real
+`council/room.json` carried a `workspace` naming a Go test temp directory, with
+that morning's timestamp, and the suffix changed between two reads minutes apart
+— so **every** plain `go test ./internal/council` was rewriting the file the next
+`telltale council` reattaches from, pointing it at a directory the test had
+already deleted. Five of some sixty test files redirected `HOME` by hand; the
+rest wrote the operator's disk.
+
+- **Do not add a per-test redirect for this.** `t.Setenv` still works and still
+  wins where a test wants its own home for its own reasons. It is no longer the
+  thing standing between the suite and the operator's state, because the failure
+  mode is a test that forgets.
+- **The check runs after `m.Run()`**, and it snapshots one directory —
+  `~/.telltale/council` — by name, size and modification time. Not the whole of
+  `~/.telltale`: the statusline's quota relay writes `~/.telltale/quota` on every
+  prompt of every other tool the operator has open, so the wider snapshot would
+  fail on a busy desk for a reason that is not this suite.
+- **CI cannot catch this class either**, and less visibly than with the spawn
+  guard: the runner's home is fresh per job, so the file the suite corrupts is
+  created, corrupted and discarded inside one green run.
+
 ## Commit / PR voice
 
 Lowercase, declarative, describing the **behavior change from the user's side** —
