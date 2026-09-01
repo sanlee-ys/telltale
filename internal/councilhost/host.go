@@ -121,6 +121,10 @@ type Config struct {
 // the same state that can disagree with the first.
 const defaultTick = 50 * time.Millisecond
 
+// firstConnectWindow bounds how long a host waits for the client that started
+// it. See Serve for why it exists and why it applies to the first connect only.
+const firstConnectWindow = 60 * time.Second
+
 // ErrGatedPostureNotHosted is why a gated room is refused.
 var ErrGatedPostureNotHosted = errors.New(
 	"councilhost: a gated seat blocks on a question this host cannot carry yet — " +
@@ -300,8 +304,38 @@ func (h *Host) Serve(ctx context.Context) error {
 
 	go h.fold()
 
+	// The first accept is BOUNDED, and this is a leak guard rather than a
+	// timeout for its own sake.
+	//
+	// Accept blocks in the kernel and does not watch ctx, so without this a host
+	// whose client never arrives would sit there forever holding a job object
+	// full of nothing — a process the operator has no surface to find yet, which
+	// is exactly the stale-host failure §7.28 names, arriving on the host's
+	// first second. A host is STARTED BY a client, so a client that has not
+	// connected in this long is a client that is not coming.
+	//
+	// The deadline covers a process start and two kernel objects, not a vendor
+	// launch, so it is generous by an order of magnitude. It applies ONLY to the
+	// first connect: once a client is talking, nothing here bounds the room.
+	stopAccept := make(chan struct{})
+	go func() {
+		select {
+		case <-stopAccept:
+		case <-ctx.Done():
+			ln.Close()
+		case <-time.After(firstConnectWindow):
+			ln.Close()
+		}
+	}()
+
 	conn, err := ln.Accept()
+	close(stopAccept)
 	if err != nil {
+		if errors.Is(err, ErrListenerClosed) && ctx.Err() == nil {
+			return fmt.Errorf("councilhost: no client connected within %s — "+
+				"a host is started by a client, so it does not wait for one that is not coming",
+				firstConnectWindow)
+		}
 		return err
 	}
 	defer conn.Close()
