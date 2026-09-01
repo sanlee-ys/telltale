@@ -3046,7 +3046,7 @@ func Run(opts Options) error {
 	// error out of the program, a path that never reached the update loop — has
 	// killed nothing and has nothing to report about seats; a line claiming a
 	// clean close would be the room describing an exit it did not take.
-	if mdl.closed {
+	if ended, closed := mdl.closingFacts(); closed {
 		// The path is resolved here rather than carried, and a failure is a
 		// reported state rather than a swallowed one: closingLines takes the
 		// empty string to mean "the location could not be resolved" and says
@@ -3055,7 +3055,7 @@ func Run(opts Options) error {
 		if perr != nil {
 			path = ""
 		}
-		for _, line := range closingLines(mdl.ended, mdl.st.Turn, path, mdl.st.Home) {
+		for _, line := range closingLines(ended, mdl.st.Turn, path, mdl.st.Home) {
 			fmt.Println(line)
 		}
 	}

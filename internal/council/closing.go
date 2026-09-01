@@ -22,6 +22,23 @@ package council
 // a terminal, a process or a Model. Nothing here reads the clock, the
 // filesystem or the environment: the caller in Run has all four facts already.
 
+// closingFacts reads what teardown recorded, under teardown's own lock.
+//
+// Locked rather than read directly, because teardown has TWO callers and one of
+// them is not on the update loop: the exit-signal watcher runs it on its own
+// goroutine (signals_unix.go). A `kill` landing while the user presses q would
+// otherwise have that goroutine writing m.ended while Run reads it. The window
+// is narrow and real — `defer stopSignals()` fires after these reads, not
+// before — and it is closed here rather than reasoned about.
+//
+// A no-op on Windows, where watchExitSignals installs nothing; correct
+// everywhere, which is what the lock is for.
+func (m *Model) closingFacts() (ended int, closed bool) {
+	m.teardownMu.Lock()
+	defer m.teardownMu.Unlock()
+	return m.ended, m.closed
+}
+
 // closingLines is what the room prints on the way out.
 //
 // ended is how many vendor processes teardown killed, turn is the last turn the
