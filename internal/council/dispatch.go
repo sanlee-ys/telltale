@@ -2061,6 +2061,11 @@ func (m *Model) teardown() {
 		return
 	}
 	m.teardownDone = true
+	// The room is on its way out, whatever it finds below. Set before the kill
+	// loop so the closing line is printed even by a teardown that panics past
+	// this point — a room that ended seats and said nothing is the defect
+	// §9.52 exists to close.
+	m.closed = true
 	// Written before anything is killed, so the last thing the room does with
 	// its state is preserve it. Redundant with the per-turn save in the common
 	// case and deliberately kept: it refreshes saved-at, which is what the
@@ -2070,6 +2075,10 @@ func (m *Model) teardown() {
 	for v, p := range m.procs {
 		p.sess.Kill()
 		delete(m.procs, v)
+		// Counted here rather than from len(m.procs) before the loop, so the
+		// figure the closing line prints is the number of Kill calls this
+		// teardown actually made (§9.52).
+		m.ended++
 	}
 	// The children die before the file they were pointed at is removed. The
 	// other order would leave a live seat holding a path to a deleted hooks

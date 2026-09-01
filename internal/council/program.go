@@ -204,6 +204,24 @@ type Model struct {
 	teardownMu   sync.Mutex
 	teardownDone bool
 
+	// ended is how many vendor processes teardown actually killed, and closed
+	// reports that teardown ran at all (design.md §9.52, rung 0).
+	//
+	// Two fields rather than one, for §4a.1's reason: a room that quit having
+	// spawned nothing and a room that never reached teardown are different
+	// facts, and a count of zero cannot tell them apart. Only the second is a
+	// room with nothing to say on the way out.
+	//
+	// Counted rather than derived. len(m.procs) at the moment Run returns would
+	// be zero whether teardown emptied the map or the room never filled it, and
+	// the closing line's whole job is to report what was ENDED.
+	//
+	// Written under teardownMu with the rest of teardown's state, because the
+	// exit-signal watcher reaches teardown on its own goroutine. Read in Run
+	// after p.Run() has returned, by which point both callers are done.
+	ended  int
+	closed bool
+
 	// brief is the shared operating context. Held on Model, never on State:
 	// its content is the user's private file and the renderer has no business
 	// being able to reach it.
@@ -2982,6 +3000,27 @@ func Run(opts Options) error {
 	// state from the last completed turn is still on disk.
 	if mdl.saveErr != nil {
 		fmt.Fprintln(os.Stderr, "telltale council: the room state could not be saved:", mdl.saveErr)
+	}
+	// The closing line (design.md §9.52, rung 0). AFTER the save report, because
+	// a save that failed changes what the next launch will find and the reader
+	// should meet that correction before being told where the ids are.
+	//
+	// Only when teardown actually ran. A room that returned some other way — an
+	// error out of the program, a path that never reached the update loop — has
+	// killed nothing and has nothing to report about seats; a line claiming a
+	// clean close would be the room describing an exit it did not take.
+	if mdl.closed {
+		// The path is resolved here rather than carried, and a failure is a
+		// reported state rather than a swallowed one: closingLines takes the
+		// empty string to mean "the location could not be resolved" and says
+		// exactly that instead of naming a file it did not find.
+		path, perr := RoomPath()
+		if perr != nil {
+			path = ""
+		}
+		for _, line := range closingLines(mdl.ended, mdl.st.Turn, path, mdl.st.Home) {
+			fmt.Println(line)
+		}
 	}
 	return nil
 }
