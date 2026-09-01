@@ -222,6 +222,24 @@ type Model struct {
 	ended  int
 	closed bool
 
+	// rebuild is the room-open rebuild, nil when there is none (rebuild.go,
+	// design.md §9.52 rung 2).
+	//
+	// On Model rather than on State, the boundary the brief and the
+	// reattachment already keep: the renderer reads a notice and a per-seat
+	// note, never this. A field the renderer never reads cannot drift behind
+	// what is drawn.
+	rebuild *rebuildRun
+
+	// reattachNotice is the sentence reattach() wrote, kept so the settled
+	// rebuild can be joined to it rather than replacing it.
+	//
+	// It is kept because that sentence carries clauses shown exactly once and
+	// nowhere else — the workspace that no longer exists, a posture the saved
+	// room ran under. A rebuild settling twenty-five seconds later must not be
+	// the reason the operator never sees them.
+	reattachNotice string
+
 	// brief is the shared operating context. Held on Model, never on State:
 	// its content is the user's private file and the renderer has no business
 	// being able to reach it.
@@ -425,6 +443,10 @@ func newWithBrief(opts Options, b Brief, hs GateHook, re Reattachment) *Model {
 	}
 	m.st.Briefed = b.Loaded()
 	m.reattach(re)
+	// Captured before anything else joins the notice, so the rebuild can put
+	// this sentence back beside its own without dragging a pickup-doc warning
+	// along with it (rebuild.go).
+	m.reattachNotice = m.st.Notice
 	// Pickup-doc drift is a room-open fact, same class as a reattach notice:
 	// said once when the room starts, then displaced by whatever the user does
 	// next. Joined rather than replaced, so a reattach and a stale STATE.md
@@ -727,6 +749,15 @@ func (m *Model) Init() tea.Cmd {
 		// rather than sequenced because it is independent of everything else
 		// here.
 		readQuotaCmd(),
+		// The room-open rebuild (rebuild.go, design.md §9.52). Nil when there
+		// is nothing to rebuild, so a cold room and a room whose vendors are
+		// absent both start exactly as they did.
+		//
+		// Fired from HERE and from nowhere else, and that placement is what
+		// keeps the package's spawn guard whole: no test calls Init, so a Model
+		// a test builds directly launches nothing, and main_test.go's TestMain
+		// needs no exception for this path.
+		m.rebuildCmd(),
 	)
 }
 
@@ -756,6 +787,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// carry nothing the room needs.
 		return m.paste(msg)
 
+	case rebuildMsg:
+		// The room-open rebuild, launched ON the update loop so m.procs keeps
+		// its single writer (rebuild.go).
+		return m, m.startRebuild()
+
 	case eventBatchMsg:
 		m.applyEvents(msg.events)
 		// A racer that landed in this batch may have queued a check run
@@ -779,6 +815,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// construction — council does not write the relay, so a vendor's
 			// new figure appears only after its own statusline renders again —
 			// which is what the age suffix on the reading is for.
+			//
+			// A rebuild in flight is the one case where a room with no turn
+			// must keep waiting. The seats it just launched are live processes
+			// that have not yet said which thread they loaded, so the channel
+			// is exactly the thing that will write next — the comment above
+			// ("nothing will write to it") is false while that is true.
+			if m.rebuildInFlight() {
+				return m, tea.Batch(m.waitEvents(), chk)
+			}
 			return m, tea.Batch(readQuotaCmd(), chk)
 		}
 		// A racing seat's stream activity may have armed a live stat read
@@ -831,6 +876,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.st.Busy() || m.st.ArenaSetup != "" {
 			m.st.Spinner++
 		}
+		// The tick is also the rebuild's backstop: a seat whose process died
+		// without an event is settled here, by reading the same liveness the
+		// KindDone branch trusts rather than by giving a slow vendor a deadline
+		// (rebuild.go).
+		m.settleDeadRebuilds()
 		// The tick is the throttle's second leg: arming happens on activity,
 		// but a seat armed mid-interval has to be read when the interval
 		// expires even if the vendor has gone quiet since — a burst of writes

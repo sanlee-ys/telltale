@@ -386,6 +386,12 @@ func (m *Model) dispatch() tea.Cmd {
 func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea.Cmd {
 	reg := vendors.Registry()
 
+	// The first brief retires the room-open rebuild (rebuild.go): startTurn is
+	// about to clear every per-turn field including the note the rebuild wrote,
+	// and a run left standing would go on owning events for a seat this turn is
+	// now driving.
+	m.endRebuild()
+
 	// Geometry for this turn is decided here, from the route, and stays until
 	// the next dispatch. Empty FrameOwners = equal columns (@all / everyone).
 	m.st.FrameOwners = frameOwnersFor(route, m.st)
@@ -852,6 +858,23 @@ func (m *Model) applyEvents(batch []runner.Event) {
 	for _, ev := range batch {
 		c := m.column(ev.Vendor)
 		if c == nil {
+			continue
+		}
+		// A seat the room-open rebuild is still launching owns its own events
+		// (rebuild.go, design.md §9.52). Intercepted BEFORE the switch rather
+		// than handled inside it, because every branch below is written for a
+		// turn and several of them read m.turn — an init line arriving at an
+		// idle room has no turn to belong to, and walking it through that
+		// machinery is how a process announcement becomes a column body.
+		//
+		// Ownership is narrow and it ends by itself: rebuildOwns is false the
+		// moment the seat stops launching, and false for every seat while a
+		// turn is running.
+		if m.rebuildOwns(ev.Vendor) {
+			m.applyRebuildEvent(c, ev)
+			if !m.rebuildInFlight() {
+				m.settleRebuild()
+			}
 			continue
 		}
 		switch ev.Kind {
