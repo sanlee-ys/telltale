@@ -10,6 +10,11 @@
 //	telltale council      dispatch room: one brief to several vendor CLIs at once
 //	telltale council ls   the saved room, read and never opened: a sixth READER,
 //	                      of the one file council writes (design.md §7.27)
+//	telltale council host the room in a process of its own: it owns the vendor
+//	                      processes, the pipes and the room state, and serves one
+//	                      client over a named pipe. Nobody types it; a client
+//	                      starts it. Detach is NOT exposed — the room still ends
+//	                      when the client does (design.md §7.28)
 //	telltale hook cursor  vendor hook relay: a per-turn payload on stdin, token
 //	                      counts to ~/.telltale/usage/, nothing on stdout
 //	telltale hook gate    the council gate's own PreToolUse hook: one "ask"
@@ -64,6 +69,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -79,6 +85,8 @@ import (
 	"github.com/sanlee-ys/telltale/internal/antigravity"
 	"github.com/sanlee-ys/telltale/internal/claude"
 	"github.com/sanlee-ys/telltale/internal/council"
+	"github.com/sanlee-ys/telltale/internal/council/vendors"
+	"github.com/sanlee-ys/telltale/internal/councilhost"
 	"github.com/sanlee-ys/telltale/internal/cursorhook"
 	"github.com/sanlee-ys/telltale/internal/cursorstatus"
 	"github.com/sanlee-ys/telltale/internal/democorpus"
@@ -953,6 +961,13 @@ func runCouncil(args []string) error {
 		return council.ListRooms(os.Stdout)
 	}
 
+	// The one seam this change opens in an existing command. `host` is a
+	// SUB-NOUN, matching `hook cursor`, `events view` and `otel grok`, and it is
+	// routed before the flag set so that `telltale council host --pipe …` is not
+	// read as the room being given an unknown flag.
+	if len(args) > 0 && args[0] == "host" {
+		return runCouncilHost(args[1:])
+	}
 	fs := flag.NewFlagSet("telltale council", flag.ContinueOnError)
 	dir := fs.String("cd", "", "move the room's workspace for this launch (default: where the saved room was, or cwd) — /cd inside the room does the same")
 	seats := fs.String("vendor", "", "who is in the room: a comma list ("+strings.Join(council.SeatNames(), ",")+") or all (default: who the saved room seated, or every vendor that can be driven) — a typed list overrides the saved roster and is what the room saves from then on")
@@ -1001,6 +1016,105 @@ func runCouncil(args []string) error {
 		Fresh:     *fresh,
 		TracePath: *trace,
 	})
+}
+
+// runCouncilHost runs the room in its own process (design.md §7.28).
+//
+// **Nobody types this.** A client starts it and hands it a pipe name, the same
+// way `telltale hook gate` is named by a settings file the room writes rather
+// than by a person. It is a mode rather than a flag on `telltale council` for
+// the reason every other sub-noun here is one: it does a different job, it
+// takes different arguments, and it prints nothing a person would read.
+//
+// **Detach is NOT exposed.** This host serves one client and ends when that
+// client goes away, by a shutdown frame or by a bare disconnect. A host that
+// outlived its client is the next rung, and it is withheld on purpose: the
+// ownership inversion is the risk in this change, and it is reviewed alone.
+//
+// Detection happens HERE rather than in the host, so that no resolved binary
+// path travels on argv and internal/councilhost needs no dependency on the
+// council package. The host is handed a roster and owns processes, parsing and
+// state — which is the whole of its job.
+func runCouncilHost(args []string) error {
+	fs := flag.NewFlagSet("telltale council host", flag.ContinueOnError)
+	pipe := fs.String("pipe", "", "the transport a client connects on — a client passes this; nobody types it")
+	dir := fs.String("workspace", "", "the directory turns are dispatched against")
+	seats := fs.String("vendor", "", "who is in the room: a comma list ("+strings.Join(council.SeatNames(), ",")+") or all")
+	read := fs.Bool("read", false, "open a deliberation-only room: seats answer, and none of them may touch the workspace")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	// Both are REQUIRED and neither gets a default. A host with no workspace
+	// would dispatch against whatever directory it happened to start in, which
+	// is a write posture pointed somewhere nobody chose; a host with no pipe
+	// would run a room no client could ever reach.
+	if *pipe == "" {
+		return errors.New("council host: --pipe is required (a client passes it; nobody types this command)")
+	}
+	if *dir == "" {
+		return errors.New("council host: --workspace is required — a host must never guess which directory it may write to")
+	}
+
+	room, err := council.ParseSeats(*seats)
+	if err != nil {
+		return err
+	}
+	posture := vendors.PostureWrite
+	if *read {
+		posture = vendors.PostureRead
+	}
+	// The discovery file goes beside room.json, in the directory council is
+	// already ratified to write. A machine with no home directory to resolve
+	// gets a host with no discovery file rather than a refused room: the file
+	// helps a LATER launch say what is here, and losing it degrades that
+	// surface instead of failing this one.
+	var councilDir string
+	if roomPath, err := council.RoomPath(); err == nil {
+		councilDir = filepath.Dir(roomPath)
+	}
+	h, err := councilhost.New(councilhost.Config{
+		Workspace:  *dir,
+		PipeName:   *pipe,
+		Roster:     hostRoster(council.Detect(), room),
+		Posture:    posture,
+		CouncilDir: councilDir,
+	})
+	if err != nil {
+		return err
+	}
+	return h.Serve(context.Background())
+}
+
+// hostRoster turns detection plus a --vendor request into the host's seats.
+//
+// A seat that resolved no binary is still passed through when it was NAMED,
+// because the host draws it as undrivable with the reason on its card — the
+// same bargain ParseSeats documents, where asking for a seat forces it on
+// screen so the user is owed the card explaining why it is not there. An
+// unnamed seat that resolved nothing is simply left out.
+func hostRoster(found []council.VendorInfo, room council.Seats) []councilhost.RosterEntry {
+	byVendor := map[model.VendorID]council.VendorInfo{}
+	for _, v := range found {
+		byVendor[v.Vendor] = v
+	}
+	// A typed list keeps ITS order, because position is the navigation on every
+	// council surface and re-sorting a roster somebody typed would draw a room
+	// they did not ask for.
+	if len(room.Only) > 0 {
+		out := make([]councilhost.RosterEntry, 0, len(room.Only))
+		for _, v := range room.Only {
+			out = append(out, councilhost.RosterEntry{Vendor: v, Binary: byVendor[v].Binary})
+		}
+		return out
+	}
+	out := make([]councilhost.RosterEntry, 0, len(found))
+	for _, v := range found {
+		if !room.All && v.Avail != council.AvailInstalled {
+			continue
+		}
+		out = append(out, councilhost.RosterEntry{Vendor: v.Vendor, Binary: v.Binary})
+	}
+	return out
 }
 
 func parseFilter(s string) (hud.Filter, error) {
