@@ -27,7 +27,11 @@ func Render(r Room, width int) string {
 	}
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "telltale council — hosted room, turn %d\n\n", r.Turn)
+	// The header is fitted like every other line. A title that overran the
+	// width would wrap in the terminal and push the whole room out of
+	// alignment, and it would do it on exactly the narrow terminals this render
+	// exists to be correct at.
+	fmt.Fprintf(&b, "%s\n\n", fit(fmt.Sprintf("telltale council — hosted room, turn %d", r.Turn), width))
 	fmt.Fprintf(&b, "  workspace   %s\n", fit(r.Workspace, width-14))
 	fmt.Fprintf(&b, "  posture     %s\n", r.Posture)
 	if r.Notice != "" {
@@ -41,13 +45,13 @@ func Render(r Room, width int) string {
 	}
 	for i := range r.Seats {
 		s := r.Seats[i]
-		fmt.Fprintf(&b, "  %s — %s", s.Vendor, s.Phase)
+		head := fmt.Sprintf("%s — %s", s.Vendor, s.Phase)
 		// A measured exit code and no exit code are different facts, so an
 		// absent one draws nothing rather than a zero (§4a.1).
 		if s.ExitCode != nil {
-			fmt.Fprintf(&b, " (exit %d)", *s.ExitCode)
+			head += fmt.Sprintf(" (exit %d)", *s.ExitCode)
 		}
-		b.WriteString("\n")
+		fmt.Fprintf(&b, "  %s\n", fit(head, width-2))
 		if s.Note != "" {
 			fmt.Fprintf(&b, "      %s\n", fit(s.Note, width-6))
 		}

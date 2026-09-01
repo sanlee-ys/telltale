@@ -94,6 +94,13 @@ type Config struct {
 	Roster []RosterEntry
 	// Posture is what the seats may do.
 	Posture vendors.Posture
+	// CouncilDir is where host.json goes: the directory council already writes
+	// room.json into. Passed rather than found, so that this package needs no
+	// dependency on council's own RoomPath and the two cannot drift about where
+	// the directory is. Empty writes no discovery file at all, which is what a
+	// test wants and what a host with nowhere to write must do rather than
+	// guess a path.
+	CouncilDir string
 	// Tick is how often a changed room is sent to the client. Zero uses
 	// defaultTick.
 	Tick time.Duration
@@ -260,6 +267,36 @@ func (h *Host) Serve(ctx context.Context) error {
 
 	h.roomCtx, h.roomCancel = context.WithCancel(ctx)
 	defer h.Shutdown()
+
+	// The discovery file is written AFTER the pipe exists, and it is removed on
+	// the way out. The order matters in one direction only: the file says WHAT
+	// is there and the pipe says WHETHER, so a file that appeared before the
+	// pipe would describe a host nothing could reach. A file left behind by a
+	// hard kill is the normal case and is not a fault — nothing reads it for
+	// liveness (see Liveness).
+	if h.cfg.CouncilDir != "" {
+		seats := make([]model.VendorID, 0, len(h.cfg.Roster))
+		for _, e := range h.cfg.Roster {
+			seats = append(seats, e.Vendor)
+		}
+		// Numbers and keys only: no prompt, no reply, no brief. The whole
+		// argument for this fourth council write is in HostFile's doc.
+		if err := WriteHostFile(h.cfg.CouncilDir, HostFile{
+			PID: os.Getpid(), Pipe: h.cfg.PipeName, StartedAt: time.Now(),
+			Workspace: h.cfg.Workspace, Seats: seats,
+		}); err != nil {
+			// Not fatal. A room that could not write its discovery file still
+			// works for the client that started it; what is lost is the ability
+			// of a LATER launch to say what is here, and that is worth a
+			// degraded surface rather than a refused room (§4a.1's rule that a
+			// partial read degrades a field and does not fail the row).
+			h.mu.Lock()
+			h.room.Notice = "this host could not write its discovery file: " + err.Error()
+			h.dirty = true
+			h.mu.Unlock()
+		}
+		defer func() { _ = RemoveHostFile(h.cfg.CouncilDir) }()
+	}
 
 	go h.fold()
 

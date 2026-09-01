@@ -67,6 +67,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -1047,11 +1048,21 @@ func runCouncilHost(args []string) error {
 	if *read {
 		posture = vendors.PostureRead
 	}
+	// The discovery file goes beside room.json, in the directory council is
+	// already ratified to write. A machine with no home directory to resolve
+	// gets a host with no discovery file rather than a refused room: the file
+	// helps a LATER launch say what is here, and losing it degrades that
+	// surface instead of failing this one.
+	var councilDir string
+	if roomPath, err := council.RoomPath(); err == nil {
+		councilDir = filepath.Dir(roomPath)
+	}
 	h, err := councilhost.New(councilhost.Config{
-		Workspace: *dir,
-		PipeName:  *pipe,
-		Roster:    hostRoster(council.Detect(), room),
-		Posture:   posture,
+		Workspace:  *dir,
+		PipeName:   *pipe,
+		Roster:     hostRoster(council.Detect(), room),
+		Posture:    posture,
+		CouncilDir: councilDir,
 	})
 	if err != nil {
 		return err
