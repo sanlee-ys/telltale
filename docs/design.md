@@ -7328,6 +7328,8 @@ unexposed, measured rather than asserted.
 - **Nothing here is cached.** Every run re-walks, at the cost measured above. A cache would be
   a ledger that can disagree with the files it came from, and the mode is not on a tick.
 
+<a id="s7-27"></a>
+
 ### 7.27 `telltale council ls` — the saved room, read and never opened (2026-09-01)
 
 `telltale council` is the only way to see what the saved room holds, and it is an expensive
