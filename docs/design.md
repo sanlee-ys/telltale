@@ -16301,3 +16301,181 @@ rather than as an answer.
 
 **Not verified here: macOS.** Every arm ran on Windows 11. Whether `codex app-server`'s sandbox
 behaves differently there is unmeasured, and `PARITY.md` is where that belongs.
+
+<a id="s9-51"></a>
+
+### 9.51 the columns were panes, and the operator could not size one (2026-08-31)
+
+The room drew a row of columns and gave the operator no control over how wide any of them
+was. Width came from three places, and none of them was a key. `resolveLayoutIn` divided the
+usable cells evenly. `FrameOwners` narrowed the frame from the ROUTE, which the operator sets
+by addressing a turn and not by pressing anything. `Expanded` — the `f` key — gave the focused
+column the whole frame and was a boolean with no middle position. A reader who wanted one seat
+wide and the other seats still on screen had no way to ask for it.
+
+This section names what the grid already is, then adds the one control it never had.
+
+#### The vocabulary
+
+**A pane is one drawn seat column, and the room is a single row of panes.** The word is new;
+the thing is not. `VisibleColumns` decides which seats hold a pane, `Layout.widthAt` gives each
+pane its width, and `columnsBody` paints the row. Nothing about the roster changes here.
+
+The operator now owns two facts about that row:
+
+- **which pane owns the reading width** — the SPLIT.
+- **where a boundary between two panes sits** — the SIZE.
+
+Everything else was already built, and this section restates it rather than rebuilds it. Focus
+moves between panes with `tab`, `shift+tab`, `h`, `l` and the seat numbers (§9.12, §9.29). `f`
+zooms the focused pane to the whole frame (§9.11). A second key for either act would give the
+room two spellings of one thing, which is the defect §9.31 records under its own name.
+
+#### The keys, and why they sit behind a prefix
+
+`^w` arms the pane prefix. The next key is a pane key:
+
+| Key | Act |
+|---|---|
+| `^w` `s` | split: the focused pane owns the reading width, and the other panes hold at `stripColumn` |
+| `^w` `>` | grow: move the focused pane's boundary right by one step |
+| `^w` `<` | shrink: move the focused pane's boundary left by one step |
+| `^w` `e` | even: every pane gets the same width again, and the split clears |
+| any other key | cancels the prefix, and is swallowed |
+
+**An unrecognised key is swallowed and NOT re-dispatched.** A prefix that let the second key
+fall through would read as tolerant, and it is dangerous in this keymap: `^w` then `q` would
+quit the room, and `^w` then `ctrl+c` would cancel a turn. Those are two irreversible acts
+reached by a chord the operator has already shown they did not finish. The footer says
+`any cancel` for the same reason. A footer that named `esc` alone would imply that the other
+keys still mean what they mean, and one of them is `q`.
+
+A prefix, and not four more chords, because the keymap has almost no surface left. §9.49 states
+the pressure in its own words: none of the three keys it added was new vocabulary, and each one
+had to be taught on a help row that already existed. `[` and `]` there take a third meaning
+rather than a fourth binding, and `h`, `j`, `k` and `l` are already focus and scroll. Four
+top-level bindings would spend the last of that surface on one feature. One prefix spends one
+binding and leaves the rest open.
+
+**The prefix is view mode only.** In compose mode every printable character is draft text, which
+is the contract `q`, `f`, `c` and `t` already keep. A prefix armed there would change what the
+next letter does while the operator types a brief, and the operator would learn it by losing a
+character.
+
+**An armed prefix says so.** The composer box's bottom border reads `PANES` while the room waits
+for the second key, at the rank `GATE` and `COMPOSE` already take (§9.44), and the footer names
+the four keys. §7.8 forbids a mode that changes what an unmodified key means without saying so.
+This is such a mode, for exactly one keystroke.
+
+#### The arithmetic, and the two invariants it may not break
+
+The split reuses `weightedWidths`. `framePrimary` already marks which seats own the frame, and
+`State.PaneOwner` joins `State.FrameOwners` as a second source for that mark. **The operator
+outranks the route.** A split the operator asked for is a request. `FrameOwners` is an inference
+from where a turn went. When the two disagree the request wins, and the next dispatch does not
+clear it.
+
+The split is pinned to a SEAT, by vendor, and not to whichever pane holds focus. A split that
+followed focus would reflow the whole grid on every `tab` press. `tab` moves a marker today, and
+§7.1 rule 4 does not budget for a keystroke that re-wraps two columns of prose.
+
+The size is a per-seat bias in cells, `State.PaneGrow`, applied over whatever the base
+apportionment is. One press moves one boundary: the focused pane gains a step and the pane to
+its right loses the same step. The bias therefore sums to zero, and the row still fills the
+terminal exactly. The rightmost pane takes its step from the pane to its left, because it has no
+right neighbour to take it from.
+
+Two invariants hold over every frame. `TestColumnsExactlyFillTheWidth` and
+`TestPaneWidthsHoldTheirFloors` assert them:
+
+1. **The panes plus their separators fill the terminal exactly.** A short row leaves a ragged
+   edge. A long row wraps, and the grid shears.
+2. **No pane goes below `stripColumn`.** 18 cells is the width at which a column stops being a
+   seat and renders as a strip, and §9.18 measured that a strip below it cannot say the two
+   things a strip exists to say.
+
+`normalizeBias` repairs a bias that no longer sums to zero. That occurs when a seat folds out of
+the grid between the keystroke and the frame. The repair is deterministic, and it runs inside
+`resolveLayoutIn`. A `State` that a test types out by hand therefore cannot produce a torn
+frame.
+
+#### The step is the separator's own width
+
+`paneStep` is `1 + 2*gutter`, which is five cells: one rail and its two gutters. The value is
+derived and not tuned. One press moves a boundary by exactly the gap the reader sees between two
+panes, so the move is visible on the first press. A one-cell step re-wraps nothing on most lines,
+and it reads as a key that did not work.
+
+#### The floors, and the ladder below them
+
+`minColumn` keeps its old job and gets no new one. It is the width below which the whole tier
+drops to tabs, and `tierFor` still tests it against the EVEN width, before any operator bias.
+**The operator therefore cannot size the room out of the columns tier.** A terminal too narrow
+for a grid is too narrow before a pane key is pressed, and it stays that way after.
+
+Below the columns tier the pane controls do nothing, and the room refuses to offer them: `^w`
+does not arm at the tabs tier, over a turn page, over an arena record, or in a zoomed frame.
+That refusal is the reason the footer needs no permanent pane cell at all — the four keys are
+named only while they are live, so there is never a frame that promises a key which does
+nothing. It is §9.11's rule reached by a different route: that section drops `f` and `tab`
+outright in a one-seat room, and this one never offers the keys in the first place.
+
+The composer border is also silent below the columns tier, even when the split and the bias are
+still stored. A legend describing a boundary the reader is not looking at would be the room
+describing someone else's frame.
+
+The stored split and the stored bias survive the narrow frame and return when the operator
+widens the terminal, exactly as `Expanded` does. A control that forgot on a resize would punish
+the operator for dragging a window.
+
+The full ladder, widest first: even panes, then a split pane with strips beside it, then one
+zoomed pane with a tab bar, then the tab tier, then `floorMessage`. Every rung was already built
+except the second one, and the second one is this section.
+
+#### Colour carries none of it
+
+WORDS on the composer box's bottom border carry the pane state: `^w e panes split`, `^w e panes
+sized`, or `^w e panes split, sized`. The key comes first and the state follows, which is the
+shape `a not asking` already has (§9.24). The border names the state and the key that reverses
+it, so the operator does not have to remember which press undoes a split.
+
+`^w` is ASCII, the words are ASCII, and the feature spends no glyph and no hue. The legend
+appears only while the operator has split or sized something, so the ordinary room's frame is
+byte for byte what it was.
+
+#### What this does NOT build
+
+- **A second axis.** Panes split left to right, and never top to bottom. A seat's column is one
+  transcript, and a horizontal boundary through it would cut one document into two viewports.
+  Nothing measured says a reader wants either half on its own.
+- **A pane that holds something other than a seat.** A pane is a seat's column. A pane that held
+  a file, a diff or a shell is a different product, and the arena review surface (§9.49) already
+  answers the one case that came up.
+- **A key that adds or removes a pane.** `/seat` and `/unseat` do that (§9.31), and they do it in
+  the roster, where the effect on DISPATCH is visible. A `^w` key that hid a seat while the seat
+  kept answering would put a live vendor off screen with nothing anywhere to say so, which is
+  the failure `CollapsedColumns` and the notice row exist to prevent.
+- **Mouse drag on a boundary.** §9.10 refused the mouse wheel, and its reasoning transfers
+  whole. The enum half of that section is MEASURED: there is no wheel-only mouse mode, so a
+  program cannot ask for a drag without claiming button reporting. The cost half is stated there
+  as INFERRED rather than measured — that button reporting suppresses the terminal's own text
+  selection — and it is repeated here at that same strength. Nothing new was measured for this
+  section, and a boundary drag would buy an input convenience with the room's output, which is
+  the trade §9.10 already refused on this surface.
+
+#### Verification
+
+`layout_test.go` sweeps every width from `columnsBreak` to 220 and every pane count from 2 to 4,
+over the biases the keys can produce, and it asserts the two invariants above. It sweeps a bias
+far larger than any keystroke writes, on purpose: `Render` is pure over `State`, so `State` is an
+input this package does not control, and an invariant that held only because `paneResize` was
+careful is one a hand-typed test could break by accident.
+
+`panes_test.go` drives the keys through `Model.key`. It asserts that the prefix arms, that every
+branch clears it, that an unknown key is swallowed rather than quitting the room, that no pane
+key reaches the draft in compose mode, that the split does not follow focus, that one press moves
+one boundary, that the boundary stops at the floor rather than appearing to move, and that the
+arrangement is legible with `PlainStyles` and the ASCII glyph set — which is the test that would
+catch a pane feature readable only in colour. Four goldens are new: `panes-split.txt`,
+`panes-split-ascii.txt`, `panes-sized.txt` and `panes-keys.txt`. One golden changed, `help.txt`,
+by one row, because the panel now names the prefix.

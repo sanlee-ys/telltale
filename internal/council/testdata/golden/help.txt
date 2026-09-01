@@ -7,7 +7,7 @@
                  -@codex excludes one. Unaddressed goes to claude. Leading only: "ask @claude" is prose                 
     /cd <dir>    move the room; /read /write (y); /seat /unseat; /arena races; c clears, u undoes (y); /trace <file>    
     y / Y        copy this seat's reply, or the whole turn (in turn view, both) — while a gate waits, y/n answer it     
-    tab / 1-5    focus between columns — in compose too; 1-5 goes straight to a seat, by position                       
+    tab / 1-5    focus between columns — in compose too; 1-5 straight to a seat, by position; ^w sizes the panes        
     ↑ ↓ / j k    scroll the focused column by a line, pgup/pgdn by a screenful — both in compose (space = pgdn here)    
                  g / G first turn or newest; [ ] step one turn — or one hunk, in an open patch                          
     d / D / o    d flips a racer's block to the patch; D quotes the ▸ hunk into the draft; o opens its worktree         

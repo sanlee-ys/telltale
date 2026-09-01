@@ -869,10 +869,59 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.flowWritePending {
 		return m.flowWriteGateKey(msg)
 	}
+	// The pane prefix (§9.51). It sits UNDER every gate above and OVER the mode
+	// split below, and both halves of that placement are deliberate.
+	//
+	// Under the gates because a gate is the only state in this room where
+	// something is stopped until a key is pressed, and an armed prefix must never
+	// be able to eat the `y` that unblocks a vendor. A prefix cannot survive a
+	// gate arriving either: paneKey clears it on the first key it sees, whatever
+	// that key is.
+	//
+	// Over the mode split because for exactly one keystroke the prefix IS the
+	// mode, and routing it through viewKey would put the four pane letters into
+	// that keymap's own switch, where `s` already stops a flow chain and `e` is
+	// free only by accident.
+	if m.st.PanePrefix {
+		return m.paneKey(msg)
+	}
 	if m.st.Mode == ModeComposing {
 		return m.composeKey(msg)
 	}
 	return m.viewKey(msg)
+}
+
+// paneKey answers the ONE keystroke after `^w` (§9.51).
+//
+// It clears the prefix on every branch, including the default, which is what
+// makes the mode bounded rather than sticky: the room can never be left waiting
+// on a second key that the operator has stopped expecting to give.
+//
+// An unrecognised key is SWALLOWED rather than re-dispatched. Falling through
+// would read as tolerant and would be dangerous: `^w` then `q` would quit the
+// room, and `^w` then `ctrl+c` would cancel a turn — two irreversible acts
+// reached by a chord the operator has already shown they did not finish. The
+// footer says `any cancel` for that reason, rather than naming `esc` and
+// implying the rest fall through.
+func (m *Model) paneKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	m.st.PanePrefix = false
+	switch msg.String() {
+	case "s":
+		m.paneSplit()
+	case "e":
+		m.paneEven()
+	case ">", ".":
+		m.paneResize(1)
+	case "<", ",":
+		m.paneResize(-1)
+	}
+	// `.` and `,` are the unshifted keys under `>` and `<`, bound because a
+	// resize is held down rather than tapped and reaching for shift on every
+	// press is the kind of friction that makes an operator stop using a control.
+	// They are not documented separately: the footer names `< >`, which is what
+	// the act means, and a second spelling on the panel would be a second thing
+	// to learn for no second capability.
+	return m, nil
 }
 
 // clearGateKey answers the confirmation armed by `c`.
@@ -2152,6 +2201,29 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.st.Expanded = !m.st.Expanded
+	case "ctrl+w":
+		// Arms the pane prefix (§9.51). One binding buys a namespace: `s`, `<`,
+		// `>` and `e` are all live in this room already — `s` stops a flow chain,
+		// and the other three are free only until the next feature wants them —
+		// so four top-level chords would have spent the last of a keymap that has
+		// eight free lowercase letters left in it.
+		//
+		// **Armed only when a pane key would do something.** panesLive answers
+		// that, and refusing here rather than inside each act is what keeps the
+		// promise the footer makes: an armed prefix draws a line naming four keys,
+		// and arming it on a page or at the tabs tier would name four keys that
+		// all do nothing — §7.8's surprise, delivered by the one line that exists
+		// to prevent it.
+		//
+		// View mode only, and it is view mode only by construction rather than by
+		// a test here: composeKey routes every printable key into the draft and
+		// never reaches this switch. That is the same contract `q`, `f`, `c` and
+		// `t` keep, and it is what stops an armed prefix from eating a character
+		// out of a half-typed brief.
+		if !m.panesLive() {
+			return m, nil
+		}
+		m.st.PanePrefix = true
 	case "t":
 		// The by-turn projection. One key, a toggle, because the two views are
 		// one transcript read two ways (§9.22). View mode only: in compose `t` is
@@ -2566,6 +2638,152 @@ func (m *Model) focusBy(d int) {
 		}
 	}
 	m.st.Focus = vis[((pos+d)%len(vis)+len(vis))%len(vis)]
+}
+
+// panesLive reports that pane controls would actually change the frame (§9.51).
+//
+// Three conditions, and each one is a surface with no boundary in it. A page or
+// a record is one reading area. `f` has already given one pane the whole frame.
+// And below the columns tier the room draws one column at a time, so a split or
+// a bias is stored state that paints nothing.
+//
+// It resolves the tier through layoutFor rather than testing Width against
+// columnsBreak, because layoutFor is the one function that knows how the tier is
+// decided — it drops to tabs on a narrow frame AND on a room that would shred,
+// and a second copy of that test here would be a second place for the keymap and
+// the renderer to disagree about which tier is on screen.
+func (m *Model) panesLive() bool {
+	if m.pageOpen() || m.st.Record != nil || m.st.Expanded {
+		return false
+	}
+	return layoutFor(m.st, m.glyphs).Tier == TierColumns
+}
+
+// paneSplit gives the focused pane the reading width and puts the rest at
+// stripColumn (§9.51).
+//
+// It SETS rather than toggles. `^w e` is the way back, the composer border names
+// it on every frame the split is live, and a key that also un-split would give
+// the room two ways out of one state — one of them undocumented, because the
+// border has room to name a reverse key and not to explain that the forward key
+// is also the reverse key.
+//
+// Pressing it on a second pane re-points the split rather than adding an owner.
+// The split answers "which seat am I reading", and that has one answer.
+func (m *Model) paneSplit() {
+	if !m.panesLive() {
+		return
+	}
+	c := m.focused()
+	if c == nil {
+		return
+	}
+	m.st.PaneOwner = c.Vendor
+}
+
+// paneEven returns every pane to the same width and drops the split (§9.51).
+//
+// It clears BOTH facts, and that is what makes it the single way back. An
+// operator who has split the room and then grown the owner has two pieces of
+// state they never named separately, and a reset that left one of them behind
+// would be a room that looks arranged after the key that says it is not.
+//
+// It does not touch FrameOwners. That set is the ROUTE's, replaced at the next
+// dispatch, and a layout key that quietly widened the seats a turn was sent to
+// would be this control reaching into a fact it does not own.
+func (m *Model) paneEven() {
+	m.st.PaneOwner = ""
+	m.st.PaneGrow = nil
+}
+
+// paneResize moves the focused pane's boundary by one step (§9.51).
+//
+// **It moves ONE boundary and pays for it from ONE neighbour.** dir=1 grows the
+// focused pane to the right and takes the cells from the pane on its right;
+// dir=-1 shrinks it and gives them back. The rightmost pane has no right
+// neighbour, so it trades with the pane on its left instead — which is what a
+// reader expects from the only pane whose right edge is the frame.
+//
+// The pair is what keeps State honest: every press writes +step and -step, so
+// PaneGrow sums to zero by construction and resolveLayoutIn's repair
+// (normalizeBias) never has to fire in a running room.
+//
+// **A move that a floor would swallow is not written at all.** The key asks the
+// pure renderer what the focused pane would end up at and keeps the change only
+// if the width actually moved the way it was asked to. That is the difference
+// between a boundary that stops at 18 cells and one that appears to move while
+// repairPaneFloors quietly puts it back — the second would leave State claiming
+// a size the frame does not have, and the border legend would then say `sized`
+// about a room that is not.
+func (m *Model) paneResize(dir int) {
+	if !m.panesLive() {
+		return
+	}
+	vis := m.st.VisibleColumns()
+	if len(vis) < 2 {
+		return
+	}
+	pos := -1
+	for j, idx := range vis {
+		if idx == m.st.Focus {
+			pos = j
+			break
+		}
+	}
+	if pos < 0 {
+		return
+	}
+	other := pos + 1
+	if other >= len(vis) {
+		other = pos - 1
+	}
+	if other < 0 {
+		return
+	}
+	mine := m.st.Columns[vis[pos]].Vendor
+	theirs := m.st.Columns[vis[other]].Vendor
+	if mine == theirs {
+		return
+	}
+	next := make(map[model.VendorID]int, len(m.st.PaneGrow)+2)
+	for k, v := range m.st.PaneGrow {
+		next[k] = v
+	}
+	next[mine] += dir * paneStep
+	next[theirs] -= dir * paneStep
+
+	before := m.paneWidthOf(m.st, mine)
+	trial := m.st
+	trial.PaneGrow = next
+	after := m.paneWidthOf(trial, mine)
+	if before < 0 || after < 0 || (after-before)*dir <= 0 {
+		return
+	}
+	m.st.PaneGrow = next
+}
+
+// paneWidthOf is the width the renderer would give one seat's pane, or -1 when
+// that seat has no pane on screen (§9.51).
+//
+// It goes through layoutFor, the same pure function Render calls, so the key
+// handler and the frame can never disagree about what a press achieved. Calling
+// a pure function from Update is the direction that is allowed: the rule is that
+// Render may not read the world, not that Update may not read Render's
+// arithmetic (§9.22 puts TurnView on State for the same reason).
+func (m *Model) paneWidthOf(st State, v model.VendorID) int {
+	lay := layoutFor(st, m.glyphs)
+	if lay.Tier != TierColumns {
+		return -1
+	}
+	for j, idx := range st.VisibleColumns() {
+		if j >= lay.Cols {
+			break
+		}
+		if st.Columns[idx].Vendor == v {
+			return lay.widthAt(j)
+		}
+	}
+	return -1
 }
 
 // focusSeat puts the keys on the nth VISIBLE seat, one-based, in seating order

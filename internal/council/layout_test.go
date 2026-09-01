@@ -161,3 +161,105 @@ func TestElideLeftKeepsTheTail(t *testing.T) {
 		t.Errorf("elideLeft dropped the informative tail: %q", got)
 	}
 }
+
+// TestPaneWidthsHoldTheirFloors is §9.51's half of the arithmetic
+// TestColumnsExactlyFillTheWidth pins for the unbiased frame.
+//
+// Two invariants, over every width the columns tier draws at, every pane count
+// it draws, and every bias one press of a resize key can write. They are the two
+// ways a pane splitter breaks a grid: a row that does not add up shears the
+// frame, and a pane under stripColumn cannot say the two things a strip exists
+// to say (§9.18).
+//
+// The bias is swept BEYOND what the keys will write, deliberately. Render is
+// pure over State, so State is an input this package does not control: a test
+// types one out by hand, and a stale bias survives a seat folding out of the
+// grid. An invariant that held only because paneResize was careful is one the
+// goldens could break by accident.
+func TestPaneWidthsHoldTheirFloors(t *testing.T) {
+	for w := columnsBreak; w <= 220; w++ {
+		for n := 2; n <= 4; n++ {
+			for _, step := range []int{-4 * paneStep, -paneStep, 0, paneStep, 4 * paneStep, 999} {
+				for at := 0; at < n; at++ {
+					bias := make([]int, n)
+					bias[at] = step
+					bias[(at+1)%n] = -step
+					lay := resolveLayoutIn(layoutInput{
+						Width: w, Height: 24, Cols: n, Bias: bias,
+					})
+					if lay.Tier != TierColumns {
+						continue
+					}
+					total := 2*framePad + (lay.Cols-1)*(1+2*gutter)
+					for i := 0; i < lay.Cols; i++ {
+						got := lay.widthAt(i)
+						if got < stripColumn {
+							t.Fatalf("w=%d n=%d bias=%v: pane %d is %d cells, below the %d floor",
+								w, n, bias, i, got, stripColumn)
+						}
+						total += got
+					}
+					if total != w {
+						t.Fatalf("w=%d n=%d bias=%v: panes total %d cells, want %d",
+							w, n, bias, total, w)
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestAnUnbiasedFrameIsUntouched. The pane arithmetic is applied OVER a finished
+// apportionment rather than mixed into the division, specifically so the room as
+// it was before §9.51 renders as it did — which is what makes ~89 goldens taken
+// before this feature still correct claims about the frame.
+func TestAnUnbiasedFrameIsUntouched(t *testing.T) {
+	for w := columnsBreak; w <= 220; w++ {
+		for n := 2; n <= 4; n++ {
+			for _, bias := range [][]int{nil, make([]int, n), {}} {
+				in := layoutInput{Width: w, Height: 24, Cols: n}
+				want := resolveLayoutIn(in)
+				in.Bias = bias
+				got := resolveLayoutIn(in)
+				if got.ColWidth != want.ColWidth || len(got.ColWidths) != len(want.ColWidths) {
+					t.Fatalf("w=%d n=%d bias=%v: %+v, want %+v", w, n, bias, got, want)
+				}
+				for i := 0; i < want.Cols; i++ {
+					if got.widthAt(i) != want.widthAt(i) {
+						t.Fatalf("w=%d n=%d bias=%v: pane %d is %d cells, want %d",
+							w, n, bias, i, got.widthAt(i), want.widthAt(i))
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestNormalizeBiasSumsToZero. A bias that does not sum to zero is a row that
+// overflows the terminal or leaves a ragged edge, and the keys are not the only
+// thing that can write one: a seat folding out of the grid takes half of a pair
+// with it.
+func TestNormalizeBiasSumsToZero(t *testing.T) {
+	for _, in := range [][]int{
+		{5}, {5, 0}, {5, 5, 5}, {-7, 2}, {100, -1, -1}, {0, 0, 3},
+	} {
+		b := append([]int(nil), in...)
+		if !normalizeBias(b) {
+			t.Fatalf("%v: reported no bias", in)
+		}
+		sum := 0
+		for _, v := range b {
+			sum += v
+		}
+		if sum != 0 {
+			t.Errorf("normalizeBias(%v) = %v, sums to %d", in, b, sum)
+		}
+	}
+	// An empty or all-zero bias reports false, which is what routes the frame
+	// back down the untouched path above.
+	for _, in := range [][]int{nil, {}, {0}, {0, 0, 0}} {
+		if normalizeBias(append([]int(nil), in...)) {
+			t.Errorf("normalizeBias(%v) claimed a bias", in)
+		}
+	}
+}
