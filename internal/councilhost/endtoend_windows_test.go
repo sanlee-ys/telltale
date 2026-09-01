@@ -107,9 +107,9 @@ func TestOneClientDrivesAHostedRoomEndToEnd(t *testing.T) {
 			"are different claims and a seat that has produced nothing is waiting",
 			turned.Seats[0].Phase)
 	}
-	if log.n() != 1 {
-		t.Fatalf("the dispatch produced %d spawns, expected exactly one", log.n())
-	}
+	// Waited for rather than sampled: the room's turn is bumped BEFORE any seat
+	// is spawned, so reading the count here once could land before the append.
+	log.awaitN(t, 1)
 
 	// Vendor output is injected as the runner would deliver it, so the fold
 	// under test is the real one.
@@ -214,6 +214,10 @@ func TestATurnIsNotPersistedAnywhere(t *testing.T) {
 	}
 
 	for _, root := range []string{home, work} {
+		// The searcher is proved before it is trusted. Without this the
+		// assertion below passes on a broken walk, a wrong root, or a read
+		// error — all of which look identical to "clean".
+		assertGrepTreeWorks(t, root, marker+"-canary")
 		if found := grepTree(t, root, marker); found != "" {
 			t.Fatalf("transcript content reached disk at %s. §7.28 rules that the room's "+
 				"conversation lives in host memory and dies with the host, on resume.go's "+

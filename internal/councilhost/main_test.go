@@ -69,7 +69,7 @@ func TestMain(m *testing.M) {
 		refuseRealVendor("startSession", spec)
 		return realSession(ctx, spec, out, parse)
 	}
-	startProcess = func(ctx context.Context, spec runner.Spec, out chan<- runner.Event, parse runner.ParseFunc) (*runner.Handle, error) {
+	startProcess = func(ctx context.Context, spec runner.Spec, out chan<- runner.Event, parse runner.ParseFunc) (seatProcess, error) {
 		refuseRealVendor("startProcess", spec)
 		return realProcess(ctx, spec, out, parse)
 	}

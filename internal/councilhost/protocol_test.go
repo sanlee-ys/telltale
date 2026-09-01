@@ -3,6 +3,7 @@ package councilhost
 import (
 	"bytes"
 	"io"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -108,17 +109,40 @@ func TestConcurrentWritersCannotInterleaveAFrame(t *testing.T) {
 	}
 }
 
-// syncBuffer is a bytes.Buffer safe for concurrent writers, so the test above
-// measures FrameWriter's lock rather than a data race in its own scaffolding.
+// syncBuffer is a sink that SPLITS every write into small chunks, with a
+// scheduling point between them.
+//
+// The first version of this was a mutex-guarded bytes.Buffer, and it made the
+// test above pass vacuously. FrameWriter hands its sink one whole frame in one
+// Write call, so an atomic sink keeps frames intact whether or not FrameWriter
+// holds its own lock — deleting the lock left the test green. It was measuring
+// the scaffolding.
+//
+// The hazard the lock actually guards is a sink that can interleave, which is
+// exactly what an *os.File over a pipe is: two goroutines writing at once can
+// have their bytes land intermixed. So this reproduces that. Each Write is
+// chopped into 64-byte pieces appended under the sink's own lock, with a
+// runtime.Gosched between them, which gives a competing goroutine every chance
+// to slot its bytes into the middle of a frame. With FrameWriter's lock the
+// frames stay whole; without it they do not.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
 }
 
 func (s *syncBuffer) Write(p []byte) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.buf.Write(p)
+	const chunk = 64
+	for off := 0; off < len(p); off += chunk {
+		end := off + chunk
+		if end > len(p) {
+			end = len(p)
+		}
+		s.mu.Lock()
+		s.buf.Write(p[off:end])
+		s.mu.Unlock()
+		runtime.Gosched()
+	}
+	return len(p), nil
 }
 
 func (s *syncBuffer) Bytes() []byte {

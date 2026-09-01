@@ -48,9 +48,11 @@ var ErrPeerIsAnotherUser = errors.New("councilhost: the process at the other end
 // cited: with a NULL SecurityAttributes, CreateNamedPipe grants read access to
 // the Everyone group and to the anonymous account, which for a pipe carrying
 // agent transcript content is every local account able to read the operator's
-// conversation. TestTheDefaultDescriptorIsTheLeakWeRefuse creates such a pipe
-// and asserts S-1-1-0 is in its DACL, so the claim above rests on this
-// machine's own answer and not on a documentation page (ADR-001).
+// conversation. TestTheDefaultDescriptorIsTheLeakWeRefuse creates such a pipe,
+// walks its DACL and asserts the Everyone SID is in it, so the claim above
+// rests on this machine's own answer and not on a documentation page
+// (ADR-001). It compares SIDs and never SDDL substrings — readPipeDACLSIDs
+// records what that cost to learn.
 //
 // Three entries and no more:
 //
@@ -153,19 +155,23 @@ type Listener struct {
 	name string
 	sddl string
 
-	mu      sync.Mutex
-	handle  windows.Handle
-	closed  bool
-	waking  bool
-	hasInst bool
+	mu     sync.Mutex
+	handle windows.Handle
+	closed bool
+	// accepting says an Accept is inside the kernel holding this handle. It is
+	// what makes handle ownership single: while it is set, Close cancels and
+	// leaves the closing to Accept. See Close.
+	accepting bool
+	hasInst   bool
 }
 
 // Listen creates the pipe and its first instance.
 //
-// The instance exists as soon as this returns, which is what makes "the pipe
-// opens" a truthful answer to "is a host running". §7.28 rules that liveness is
-// read off the pipe and never off host.json, because a pid is reusable and a
-// stale file is the normal case after a hard kill.
+// The instance exists as soon as this returns, so a host that has reached this
+// point is reachable. §7.28 rules that liveness is read off the pipe and never
+// off host.json — but note that a probe which CONNECTS is not a liveness check,
+// because it consumes the one instance and the host reads the close as its
+// client leaving. discovery.go's closing note records that in full.
 func Listen(name string) (*Listener, error) {
 	sddl, err := ownerOnlySDDL()
 	if err != nil {
@@ -218,7 +224,14 @@ func (l *Listener) newInstance(first bool) error {
 		&sa,
 	)
 	if err != nil {
-		if errors.Is(err, windows.ERROR_ACCESS_DENIED) && first {
+		// TWO errnos mean "this name is taken", because two mechanisms defend
+		// it and either can land first. ERROR_PIPE_BUSY is the instance count
+		// (maxInstances is 1); ERROR_ACCESS_DENIED is
+		// FILE_FLAG_FIRST_PIPE_INSTANCE refusing a name that already exists.
+		// Measured on Windows 11 Pro 10.0.26200: the busy check wins. Both get
+		// the sentence an operator can act on, because to them the two are the
+		// same fact.
+		if first && (errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_PIPE_BUSY)) {
 			return fmt.Errorf(
 				"councilhost: %s already exists and is owned by another process — "+
 					"either a host is already running for this room, or the name is squatted: %w",
@@ -246,15 +259,24 @@ func (l *Listener) Accept() (*Conn, error) {
 		l.mu.Unlock()
 		return nil, ErrListenerClosed
 	}
+	// ONE client for the lifetime of a listener, and the refusal is explicit.
+	// An earlier comment here said the listener would create a fresh instance on
+	// the next Accept — which FILE_FLAG_FIRST_PIPE_INSTANCE forbids while the
+	// name still exists, so a second Accept could only ever have failed with a
+	// generic ERROR_ACCESS_DENIED that read like a squatted name. §7.28 rules
+	// one client at a time; this says so where a caller can see it.
 	if !l.hasInst {
 		l.mu.Unlock()
-		if err := l.newInstance(false); err != nil {
-			return nil, err
-		}
-		l.mu.Lock()
+		return nil, ErrListenerClosed
 	}
 	h := l.handle
+	l.accepting = true
 	l.mu.Unlock()
+	defer func() {
+		l.mu.Lock()
+		l.accepting = false
+		l.mu.Unlock()
+	}()
 
 	if err := connectOverlapped(h); err != nil {
 		l.mu.Lock()
@@ -288,8 +310,7 @@ func (l *Listener) Accept() (*Conn, error) {
 		return nil, err
 	}
 
-	// Ownership of the handle moves to the Conn. The listener creates a fresh
-	// instance on the next Accept rather than holding two.
+	// Ownership of the handle moves to the Conn.
 	l.mu.Lock()
 	l.hasInst = false
 	l.handle = 0
@@ -325,6 +346,15 @@ func connectOverlapped(h windows.Handle) error {
 		return nil
 	case errors.Is(err, windows.ERROR_IO_PENDING):
 		if _, waitErr := windows.WaitForSingleObject(ev, windows.INFINITE); waitErr != nil {
+			// The connect is STILL PENDING here, and returning without settling
+			// it would abandon two things the kernel still owns: ov, a Go-heap
+			// pointer it will write a completion status into, and ev, which the
+			// deferred close is about to invalidate. A later client would then
+			// signal a closed handle and write into memory Go may have reused.
+			// Cancel, then wait for the cancellation to actually land.
+			_ = windows.CancelIoEx(h, ov)
+			var done uint32
+			_ = windows.GetOverlappedResult(h, ov, &done, true)
 			return waitErr
 		}
 		var done uint32
@@ -377,6 +407,22 @@ func (l *Listener) discard() {
 // only move a SYNCHRONOUS handle allowed — a blocking ConnectNamedPipe has no
 // cancel. Moving to overlapped handles (see Listener's doc) retired that hack
 // and replaced it with the operation the platform provides.
+//
+// # Close cancels; it does NOT close the handle out from under Accept
+//
+// This function used to call discard, which closes the handle — while a woken
+// Accept still held the same handle in a local and was about to use it three
+// more times: GetOverlappedResult, GetNamedPipeClientProcessId, and the Conn it
+// builds. If the close landed first and Windows reused the handle NUMBER, that
+// Accept would have read a client pid off an unrelated object and run the
+// peer check against the wrong process — the identity check passing on a handle
+// that is no longer the pipe.
+//
+// That went from theoretical to reachable the moment Serve grew a watchdog that
+// calls Close on a blocked Accept, which is exactly the path this function
+// documents. So ownership is single: whoever is inside Accept owns the handle
+// and closes it, and Close only ever sets the flag and cancels. A Close with no
+// Accept in flight still closes, because there is then nobody to hand it to.
 func (l *Listener) Close() error {
 	l.mu.Lock()
 	if l.closed {
@@ -385,12 +431,15 @@ func (l *Listener) Close() error {
 	}
 	l.closed = true
 	h := l.handle
+	accepting := l.accepting
 	l.mu.Unlock()
 
 	if h != 0 {
 		_ = windows.CancelIoEx(h, nil)
 	}
-	l.discard()
+	if !accepting {
+		l.discard()
+	}
 	return nil
 }
 

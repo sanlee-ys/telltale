@@ -3,6 +3,7 @@
 package councilhost
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -247,6 +248,22 @@ func TestAPipeNameCannotBeTakenTwice(t *testing.T) {
 		second.Close()
 		t.Fatal("a second listener took the same pipe name. FILE_FLAG_FIRST_PIPE_INSTANCE " +
 			"is what stops a second process attaching an instance to a pipe it does not own.")
+	}
+	// A SPECIFIC error, not merely some error. Listen can also fail before it
+	// reaches CreateNamedPipe at all — reading this process's own token, say —
+	// and a bare `err != nil` would accept that while measuring nothing about
+	// the name.
+	//
+	// Two errnos are accepted because two mechanisms defend the name and either
+	// one landing first is the property holding. MEASURED on Windows 11 Pro
+	// 10.0.26200: the second create comes back ERROR_PIPE_BUSY ("All pipe
+	// instances are busy"), because maxInstances is 1 and that check fires
+	// before FILE_FLAG_FIRST_PIPE_INSTANCE's, which would give
+	// ERROR_ACCESS_DENIED. Pinning only the one this box happens to produce
+	// would make the test a claim about ordering nobody argued for.
+	if !errors.Is(err, windows.ERROR_ACCESS_DENIED) && !errors.Is(err, windows.ERROR_PIPE_BUSY) {
+		t.Fatalf("the second Listen failed for the wrong reason, so this test measured "+
+			"nothing about the pipe name being defended: %v", err)
 	}
 }
 

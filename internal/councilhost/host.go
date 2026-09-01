@@ -26,6 +26,20 @@ type seatSession interface {
 	Alive() bool
 }
 
+// seatProcess is the part of runner.Handle the host uses: one method, because
+// a spawn-per-turn child is only ever killed from here.
+//
+// An interface for a sharper reason than seatSession's. runner.Handle carries
+// an unexported procGroup, so a zero value has a nil group and Handle.Kill
+// calls a method on it unconditionally — a `&runner.Handle{}` returned from a
+// test stub panics the whole test binary the first time Shutdown or interrupt
+// reaches it. Nothing outside package runner can build a safe zero Handle, so
+// the fix belongs on this side of the boundary: the var hands back an
+// interface, and a stub implements it with a no-op.
+type seatProcess interface {
+	Kill()
+}
+
 // startSession, startProcess and startHost are this package's ONLY process
 // spawns, and they are vars for one reason: the test guard.
 //
@@ -50,7 +64,17 @@ var (
 	startSession = func(ctx context.Context, spec runner.Spec, out chan<- runner.Event, parse runner.ParseFunc) (seatSession, error) {
 		return runner.StartSession(ctx, spec, out, parse)
 	}
-	startProcess = runner.Start
+	startProcess = func(ctx context.Context, spec runner.Spec, out chan<- runner.Event, parse runner.ParseFunc) (seatProcess, error) {
+		h, err := runner.Start(ctx, spec, out, parse)
+		if err != nil {
+			// Returned as a nil INTERFACE rather than a typed nil pointer. A
+			// typed nil here would be non-nil as an interface, and every caller
+			// checking `!= nil` before calling Kill would then call it on
+			// nothing.
+			return nil, err
+		}
+		return h, nil
+	}
 )
 
 // newRoomJob is behind a var for a hazard rather than for tidiness.
@@ -154,7 +178,7 @@ type Host struct {
 	// record a token that already arrived.
 	pmu      sync.Mutex
 	sessions map[model.VendorID]seatSession
-	handles  map[model.VendorID]*runner.Handle
+	handles  map[model.VendorID]seatProcess
 
 	// roomCtx bounds every seat and is cancelled only by teardown. It is
 	// deliberately NOT a turn's context: the whole value of a persistent seat
@@ -163,6 +187,25 @@ type Host struct {
 	roomCancel context.CancelFunc
 
 	interrupts int
+	// startedAt is stamped once, when the room opens, so a rewritten discovery
+	// file keeps saying when the HOST started rather than when it was last
+	// rewritten.
+	startedAt time.Time
+
+	// inFlight is true from the moment a turn is broadcast until every drivable
+	// seat has settled.
+	//
+	// It exists because a second dispatch used to start a SECOND child for a
+	// batch seat while the first was still streaming, and the first was then
+	// dropped from the handles map — unreachable by interrupt and by Shutdown,
+	// still folding text into the new turn's body, and reaped only by the room
+	// job at host death. That is the backstop being used as the ordinary route,
+	// which roomjob_windows.go says it must not be.
+	//
+	// Guarded by mu, because the answer is read off the same seat phases the
+	// room draws from: what "a turn is running" means must not be able to
+	// disagree with what the operator can see.
+	inFlight bool
 }
 
 // eventBuffer is how many events may be in flight from the seats.
@@ -195,7 +238,7 @@ func New(cfg Config) (*Host, error) {
 		tick:     tick,
 		events:   make(chan runner.Event, eventBuffer),
 		sessions: map[model.VendorID]seatSession{},
-		handles:  map[model.VendorID]*runner.Handle{},
+		handles:  map[model.VendorID]seatProcess{},
 	}
 	h.room = Room{
 		Version:   RoomVersion,
@@ -264,7 +307,9 @@ func (h *Host) Serve(ctx context.Context) error {
 
 	ln, err := Listen(h.cfg.PipeName)
 	if err != nil {
-		h.job.Close()
+		// The job is NOT closed here. No seat exists yet, and closing it would
+		// terminate this process before this error could be printed — see
+		// Shutdown. Process exit releases the handle.
 		return err
 	}
 	h.ln = ln
@@ -278,6 +323,7 @@ func (h *Host) Serve(ctx context.Context) error {
 	// pipe would describe a host nothing could reach. A file left behind by a
 	// hard kill is the normal case and is not a fault — nothing reads it for
 	// liveness (see Liveness).
+	h.startedAt = time.Now()
 	if h.cfg.CouncilDir != "" {
 		seats := make([]model.VendorID, 0, len(h.cfg.Roster))
 		for _, e := range h.cfg.Roster {
@@ -286,7 +332,7 @@ func (h *Host) Serve(ctx context.Context) error {
 		// Numbers and keys only: no prompt, no reply, no brief. The whole
 		// argument for this fourth council write is in HostFile's doc.
 		if err := WriteHostFile(h.cfg.CouncilDir, HostFile{
-			PID: os.Getpid(), Pipe: h.cfg.PipeName, StartedAt: time.Now(),
+			PID: os.Getpid(), Pipe: h.cfg.PipeName, StartedAt: h.startedAt,
 			Workspace: h.cfg.Workspace, Seats: seats,
 		}); err != nil {
 			// Not fatal. A room that could not write its discovery file still
@@ -344,17 +390,31 @@ func (h *Host) Serve(ctx context.Context) error {
 
 // Shutdown kills every seat and releases the room.
 //
-// The order is the reverse of Serve's and is just as deliberate. The seats are
-// asked to die FIRST, through the per-seat jobs, so each gets the ordinary
-// teardown. The room job's handle is closed LAST, because closing it is a
-// termination that gives a process no chance to finish a write — it is the
-// backstop for the paths that never reach here, not the ordinary route.
+// The seats are asked to die FIRST, through the per-seat jobs, so each gets the
+// ordinary teardown.
+//
+// # The room job's handle is deliberately NOT closed here
+//
+// Closing it is a TERMINATION of this process, because this process is in the
+// job and holds the only handle. An earlier version closed it at the end of
+// this function and on Serve's Listen-failure path, which made every error the
+// host could report unreachable: the process died inside Shutdown, before the
+// error returned through Serve to runCouncilHost and onto stderr. The two
+// errors an operator most needs — "this pipe name is already taken" and a
+// failed accept — were computed and then destroyed by the host's own
+// containment, leaving the client with nothing but a dial timeout.
+//
+// Nothing is lost by not closing it. The handle is released when the process
+// exits, which is the same event by a different route, and the job reaps
+// anything that outlived the kills above exactly as it would have. That is the
+// mechanism the design always described: the containment is a consequence of
+// the host dying, not an action the host takes.
 func (h *Host) Shutdown() {
 	h.pmu.Lock()
 	sessions := h.sessions
 	handles := h.handles
 	h.sessions = map[model.VendorID]seatSession{}
-	h.handles = map[model.VendorID]*runner.Handle{}
+	h.handles = map[model.VendorID]seatProcess{}
 	h.pmu.Unlock()
 	for _, s := range sessions {
 		s.Kill()
@@ -367,9 +427,6 @@ func (h *Host) Shutdown() {
 	}
 	if h.ln != nil {
 		h.ln.Close()
-	}
-	if h.job != nil {
-		h.job.Close()
 	}
 }
 
@@ -424,12 +481,15 @@ func (h *Host) serveClient(ctx context.Context, conn *Conn) error {
 		return err
 	}
 
-	stop := make(chan struct{})
-	defer close(stop)
-	go h.pump(fw, stop)
 	// The first room goes out immediately rather than on the next tick, so a
 	// client that connected to an idle room draws something at once instead of
 	// showing nothing for up to one tick.
+	//
+	// It is sent BEFORE pump starts, and the order is not cosmetic. Starting the
+	// ticker first leaves a window in which a newer room could go out and this
+	// snapshot land after it — the writer's lock stops the two frames from
+	// corrupting each other, and does nothing at all about the client then
+	// rendering the older one until the next change.
 	h.mu.Lock()
 	first := h.room.clone()
 	h.dirty = false
@@ -437,6 +497,10 @@ func (h *Host) serveClient(ctx context.Context, conn *Conn) error {
 	if err := fw.Write(Frame{Kind: KindRoom, Room: first}); err != nil {
 		return err
 	}
+
+	stop := make(chan struct{})
+	defer close(stop)
+	go h.pump(fw, stop)
 
 	for {
 		f, err := fr.Read()
@@ -453,7 +517,17 @@ func (h *Host) serveClient(ctx context.Context, conn *Conn) error {
 		}
 		switch f.Kind {
 		case KindDispatch:
-			h.dispatch(f.Prompt)
+			// On its OWN goroutine, so the read loop keeps answering while a
+			// broadcast is in progress. A dispatch builds a spec and starts a
+			// process per seat, and running that inline meant the host read
+			// nothing for its whole span — so an interrupt sent mid-broadcast,
+			// which KindInterrupt's doc calls the room's ctrl+c, was not acted
+			// on until the broadcast finished, and an adapter that blocked took
+			// the control channel with it.
+			//
+			// Safe because dispatch refuses to start a second turn while one is
+			// running, so these goroutines cannot overlap on the seats.
+			go h.dispatch(f.Prompt)
 		case KindInterrupt:
 			h.interrupt()
 		case KindShutdown:
@@ -503,6 +577,17 @@ func (h *Host) dispatch(prompt string) {
 		return
 	}
 	h.mu.Lock()
+	if h.inFlight {
+		// REFUSED, and said out loud. A room that silently swallowed the second
+		// turn would look identical to one that lost it, and a room that ran it
+		// anyway would leave the first turn's children unreachable.
+		h.room.Notice = "a turn is already running in this room — wait for it, or interrupt it"
+		h.dirty = true
+		h.mu.Unlock()
+		return
+	}
+	h.inFlight = true
+	h.room.Notice = ""
 	h.room.beginTurn()
 	h.dirty = true
 	seats := make([]Seat, len(h.room.Seats))
@@ -516,6 +601,70 @@ func (h *Host) dispatch(prompt string) {
 		}
 		if err := h.dispatchSeat(reg[s.Vendor], s, prompt); err != nil {
 			h.noteSeat(s.Vendor, PhaseFailed, err.Error())
+		}
+	}
+	go h.watchTurn()
+	h.refreshHostFile()
+}
+
+// refreshHostFile rewrites the discovery file so its turn count is not a lie.
+//
+// HostFile.Turn says "how many turns the host has dispatched", and it used to
+// be written once at startup and never again — so a room twenty turns in
+// described itself as having run none. A stale number in a file whose whole
+// purpose is to say what is there is worse than no number: a later reader
+// cannot tell it from a room that really has done nothing.
+//
+// A failure is ignored on purpose, for the same reason the first write's is:
+// this degrades a discovery surface and must never fail a turn.
+func (h *Host) refreshHostFile() {
+	if h.cfg.CouncilDir == "" {
+		return
+	}
+	h.mu.Lock()
+	turn := h.room.Turn
+	h.mu.Unlock()
+	seats := make([]model.VendorID, 0, len(h.cfg.Roster))
+	for _, e := range h.cfg.Roster {
+		seats = append(seats, e.Vendor)
+	}
+	_ = WriteHostFile(h.cfg.CouncilDir, HostFile{
+		PID: os.Getpid(), Pipe: h.cfg.PipeName, StartedAt: h.startedAt,
+		Workspace: h.cfg.Workspace, Seats: seats, Turn: turn,
+	})
+}
+
+// watchTurn clears the in-flight flag once no seat is still running.
+//
+// It polls the room's own phases rather than counting terminal events, because
+// the phases are what the operator sees: a room that said "a turn is already
+// running" while every column read `done` would be the host disagreeing with
+// its own screen. A seat that never settles holds the flag, which is the
+// honest outcome — the way out of that is the interrupt, not a timer that
+// declares a running turn over.
+func (h *Host) watchTurn() {
+	t := time.NewTicker(25 * time.Millisecond)
+	defer t.Stop()
+	for {
+		select {
+		case <-h.roomCtx.Done():
+			return
+		case <-t.C:
+			h.mu.Lock()
+			running := false
+			for i := range h.room.Seats {
+				switch h.room.Seats[i].Phase {
+				case PhaseWaiting, PhaseStreaming:
+					running = true
+				}
+			}
+			if !running {
+				h.inFlight = false
+			}
+			h.mu.Unlock()
+			if !running {
+				return
+			}
 		}
 	}
 }
@@ -605,9 +754,17 @@ func (h *Host) dispatchBatch(v vendors.Vendor, s Seat, prompt string) error {
 		return err
 	}
 	h.pmu.Lock()
-	// A previous turn's handle is replaced rather than kept. The child that
-	// produced it has already exited — a batch seat says the turn is over by
-	// dying — so holding it would only keep a dead job handle alive.
+	// The previous turn's child is KILLED before its handle is replaced, and
+	// this is a belt beside the in-flight refusal rather than a duplicate of it.
+	// A batch seat says its turn is over by dying, so ordinarily this handle is
+	// already spent — but "ordinarily" was doing load-bearing work here, and
+	// dropping a live child from this map makes it unreachable by interrupt and
+	// by Shutdown, with only the room job left to reap it at host death.
+	// Killing a dead child costs nothing; losing a live one costs an agent
+	// nobody can see.
+	if prev := h.handles[s.Vendor]; prev != nil {
+		prev.Kill()
+	}
 	h.handles[s.Vendor] = hd
 	h.pmu.Unlock()
 	return nil
@@ -632,7 +789,7 @@ func (h *Host) interrupt() {
 	for k, v := range h.sessions {
 		sessions[k] = v
 	}
-	handles := make(map[model.VendorID]*runner.Handle, len(h.handles))
+	handles := make(map[model.VendorID]seatProcess, len(h.handles))
 	for k, v := range h.handles {
 		handles[k] = v
 	}

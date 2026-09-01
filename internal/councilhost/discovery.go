@@ -3,6 +3,7 @@ package councilhost
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -32,8 +33,9 @@ import (
 // caveat rather than assuming one.
 type HostFile struct {
 	Version int `json:"version"`
-	// PID is the host process. It is NOT a liveness answer — see Liveness
-	// below.
+	// PID is the host process. It is NOT a liveness answer: a pid is reusable,
+	// and a stale host.json is the normal case after a hard kill. See the note
+	// at the bottom of this file.
 	PID int `json:"pid"`
 	// Pipe is the transport's name. Derived, and not a secret: the pipe's
 	// protection is its security descriptor.
@@ -76,7 +78,12 @@ func WriteHostFile(councilDir string, f HostFile) error {
 	// Written whole and replaced, not appended. A half-written discovery file
 	// would be read as a host that does not exist, which is the one answer this
 	// file must never give wrongly.
-	tmp := HostPath(councilDir) + ".tmp"
+	//
+	// The temp name carries this process's pid. A fixed one let two hosts
+	// sharing a council directory clobber each other's half-written file, and
+	// left a stray `.tmp` that RemoveHostFile does not clean when the rename
+	// failed.
+	tmp := fmt.Sprintf("%s.%d.tmp", HostPath(councilDir), os.Getpid())
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err
 	}
@@ -112,25 +119,24 @@ func RemoveHostFile(councilDir string) error {
 	return err
 }
 
-// Liveness answers whether a host is actually running, and it answers it from
-// the PIPE rather than from the file.
+// Liveness is NOT implemented here, and the omission is deliberate.
 //
-// The file says WHAT, the pipe says WHETHER, and the split is not fussiness. A
-// pid is reusable, and a stale host.json is the NORMAL case after a hard kill —
-// the whole point of the room job is that the host can die without getting to
-// tidy up. So a pid read back from this file could name a process that is now
-// somebody's text editor. The pipe cannot be wrong that way: a pipe that does
-// not exist is a host that is not running, with no race and no heuristic and no
-// OpenProcess plus GetProcessTimes start-time dance.
+// design.md §7.28's ruling stands: the file says WHAT, the pipe says WHETHER. A
+// pid is reusable and a stale host.json is the normal case after a hard kill,
+// so this file must never be read for liveness.
 //
-// This is design.md §4a.4's "liveness: who decides" applied to a process
-// instead of to a session.
-func Liveness(pipe string, timeout time.Duration) (running bool, hostPID int) {
-	c, err := Dial(pipe, timeout)
-	if err != nil {
-		return false, 0
-	}
-	pid := c.PeerPID()
-	c.Close()
-	return true, pid
-}
+// The obvious implementation — dial the pipe and see — is WRONG, and it was
+// written and removed rather than shipped. Dialling CONSUMES the host's single
+// pipe instance: the host's Accept returns, the probe closes, and the host
+// reads that as its client disconnecting and ends the room. A liveness check
+// that kills the room it is checking is worse than none. The other half is just
+// as bad: against a BUSY host the dial comes back ERROR_PIPE_BUSY, which the
+// removed version swallowed and reported as "not running" — a live room called
+// dead.
+//
+// A correct probe has to answer "does this name exist" without connecting, and
+// that belongs with the surface that needs it. Nothing in this change reads
+// liveness: detach is not exposed, so the only client of a host is the process
+// that started it and already knows. Rung 4 owns discovery, and it should build
+// this against a rejoin path it can measure rather than inherit a function
+// nobody exercised.
