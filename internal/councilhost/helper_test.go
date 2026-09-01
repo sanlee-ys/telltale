@@ -1,6 +1,8 @@
 package councilhost
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"time"
 )
@@ -26,6 +28,21 @@ const (
 	// helperSeat is the stand-in vendor: a process that stays alive long enough
 	// that its death can only be the job object's doing.
 	helperSeat = "seat"
+	// helperServe is a REAL host in a real process, with an EMPTY roster.
+	//
+	// Empty is what makes it safe to run: a host with no seats cannot spawn a
+	// vendor by any path, so the process boundary can be crossed for real
+	// without going near a billed turn.
+	helperServe = "serve"
+)
+
+// helperPipeEnv and helperWorkEnv carry the stand-in host's configuration.
+//
+// Environment rather than argv, because the test binary's own flag set owns
+// argv and a stray flag there is a confusing failure rather than a clear one.
+const (
+	helperPipeEnv = "TELLTALE_COUNCILHOST_TEST_PIPE"
+	helperWorkEnv = "TELLTALE_COUNCILHOST_TEST_WORKSPACE"
 )
 
 // seatLifetime is how long a stand-in seat stays up.
@@ -44,7 +61,32 @@ func runTestHelper() (int, bool) {
 		return 0, true
 	case helperHost:
 		return runStandInHost(), true
+	case helperServe:
+		return runStandInServer(), true
 	default:
 		return 0, false
 	}
+}
+
+// runStandInServer runs a REAL host, with no seats, until its client goes away.
+//
+// Every layer under it is the production one: NewRoomJob, Listen with the
+// explicit descriptor, the peer check, the handshake and the frame loop. Only
+// the roster is empty, and that is the whole safety argument — there is no seat
+// to spawn, so no path here reaches a vendor.
+func runStandInServer() int {
+	h, err := New(Config{
+		Workspace: os.Getenv(helperWorkEnv),
+		PipeName:  os.Getenv(helperPipeEnv),
+		Tick:      5 * time.Millisecond,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "stand-in server:", err)
+		return 1
+	}
+	if err := h.Serve(context.Background()); err != nil {
+		fmt.Fprintln(os.Stderr, "stand-in server:", err)
+		return 1
+	}
+	return 0
 }

@@ -120,10 +120,35 @@ func processUserSID(pid uint32) (*windows.SID, error) {
 //
 // One instance at a time is a design ruling and not a simplification: §7.28
 // refuses a second simultaneous client, because multi-client attach is tmux's
-// feature, it is not free, and it must not be acquired by accident. That ruling
-// is what lets this use a blocking ConnectNamedPipe on one goroutine and avoid
-// overlapped I/O entirely, which is the whole reason no dependency was added
-// for the transport.
+// feature, it is not free, and it must not be acquired by accident.
+//
+// # Why the handles are OVERLAPPED, against §7.28's first instinct
+//
+// §7.28's transport survey said a blocking ConnectNamedPipe on one goroutine
+// would avoid overlapped I/O entirely. That was wrong, and the correction was
+// MEASURED rather than reasoned: on Go 1.26.6, Windows 11 Pro 10.0.26200,
+// 2026-09-01, a synchronous pipe deadlocked the room on its first streamed
+// frame. The host's reader was parked in ReadFile waiting for the client's next
+// command while the host's writer sat in WriteFile with a 277-byte room frame,
+// and the client was parked reading it.
+//
+// The cause is a property of the handle, not of this code. **Windows serialises
+// every operation on a SYNCHRONOUS handle**, so a read that is waiting blocks a
+// write on the same handle until it finishes. That is survivable for a
+// request/response protocol and fatal for this one: the host PUSHES room frames
+// while it waits for commands, which is full duplex on one handle by
+// construction, and making it half duplex would mean the room could only draw
+// when the operator typed.
+//
+// So both ends are opened with FILE_FLAG_OVERLAPPED and handed to os.NewFile,
+// which associates them with the Go runtime's completion port and issues proper
+// overlapped I/O. The one place this file does overlapped work by hand is
+// ConnectNamedPipe, below, which is about ten lines — and it pays for itself
+// twice, because CancelIoEx on that pending connect is also what lets Close
+// unblock a waiting Accept without connecting to itself.
+//
+// The dependency ruling is unchanged: still no go-winio, still
+// golang.org/x/sys/windows only.
 type Listener struct {
 	name string
 	sddl string
@@ -184,7 +209,7 @@ func (l *Listener) newInstance(first bool) error {
 	}
 	h, err := windows.CreateNamedPipe(
 		namep,
-		windows.PIPE_ACCESS_DUPLEX|windows.FILE_FLAG_FIRST_PIPE_INSTANCE,
+		windows.PIPE_ACCESS_DUPLEX|windows.FILE_FLAG_FIRST_PIPE_INSTANCE|windows.FILE_FLAG_OVERLAPPED,
 		windows.PIPE_TYPE_BYTE|windows.PIPE_READMODE_BYTE|windows.PIPE_WAIT,
 		1, // one instance: §7.28's one-client rule, enforced by the OS
 		64<<10,
@@ -231,26 +256,24 @@ func (l *Listener) Accept() (*Conn, error) {
 	h := l.handle
 	l.mu.Unlock()
 
-	err := windows.ConnectNamedPipe(h, nil)
-	// ERROR_PIPE_CONNECTED means the client won the race and connected between
-	// the create and this call. It is a success, not a failure, and treating it
-	// as an error would drop exactly the fastest clients.
-	if err != nil && !errors.Is(err, windows.ERROR_PIPE_CONNECTED) {
+	if err := connectOverlapped(h); err != nil {
 		l.mu.Lock()
 		closed := l.closed
 		l.mu.Unlock()
-		if closed {
+		if closed || errors.Is(err, windows.ERROR_OPERATION_ABORTED) {
+			// CancelIoEx from Close aborted the pending connect. That is the
+			// listener shutting down, not a fault.
+			l.discard()
 			return nil, ErrListenerClosed
 		}
+		l.discard()
 		return nil, err
 	}
 
 	l.mu.Lock()
 	closed := l.closed
-	waking := l.waking
-	l.waking = false
 	l.mu.Unlock()
-	if closed || waking {
+	if closed {
 		l.discard()
 		return nil, ErrListenerClosed
 	}
@@ -271,7 +294,50 @@ func (l *Listener) Accept() (*Conn, error) {
 	l.hasInst = false
 	l.handle = 0
 	l.mu.Unlock()
-	return newConn(h, l.name, int(pid)), nil
+	return newConn(h, l.name, int(pid))
+}
+
+// connectOverlapped waits for a client on an OVERLAPPED pipe handle.
+//
+// This is the one piece of overlapped work done by hand, and it is small
+// because it waits for exactly one operation. The event is manual-reset and
+// starts unsignalled; ConnectNamedPipe returns ERROR_IO_PENDING and the wait
+// finishes when a client arrives — or when Close calls CancelIoEx, which
+// completes the operation with ERROR_OPERATION_ABORTED and is how a waiting
+// Accept is woken.
+//
+// ERROR_PIPE_CONNECTED is a SUCCESS: the client won the race and connected
+// between the create and this call. Treating it as a failure would drop exactly
+// the fastest clients.
+func connectOverlapped(h windows.Handle) error {
+	ev, err := windows.CreateEvent(nil, 1, 0, nil)
+	if err != nil {
+		return fmt.Errorf("councilhost: could not create the accept event: %w", err)
+	}
+	defer windows.CloseHandle(ev)
+
+	ov := &windows.Overlapped{HEvent: ev}
+	err = windows.ConnectNamedPipe(h, ov)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, windows.ERROR_PIPE_CONNECTED):
+		return nil
+	case errors.Is(err, windows.ERROR_IO_PENDING):
+		if _, waitErr := windows.WaitForSingleObject(ev, windows.INFINITE); waitErr != nil {
+			return waitErr
+		}
+		var done uint32
+		if err := windows.GetOverlappedResult(h, ov, &done, false); err != nil {
+			if errors.Is(err, windows.ERROR_PIPE_CONNECTED) {
+				return nil
+			}
+			return err
+		}
+		return nil
+	default:
+		return err
+	}
 }
 
 // sameUser reports whether pid runs as this process's user.
@@ -304,14 +370,13 @@ func (l *Listener) discard() {
 	}
 }
 
-// Close stops the listener and unblocks an Accept waiting in
-// ConnectNamedPipe.
+// Close stops the listener and unblocks an Accept waiting for a client.
 //
-// The wake is a connection this process makes to its own pipe. There is no
-// cancel for a blocking ConnectNamedPipe on a synchronous handle, and the
-// alternative is overlapped I/O and an IOCP — which is the dependency this
-// design declined. A self-connect is a page of checked code instead
-// (decisions/001).
+// CancelIoEx on the pending ConnectNamedPipe is what wakes it. The earlier
+// version of this connected to its own pipe to break the wait, which was the
+// only move a SYNCHRONOUS handle allowed — a blocking ConnectNamedPipe has no
+// cancel. Moving to overlapped handles (see Listener's doc) retired that hack
+// and replaced it with the operation the platform provides.
 func (l *Listener) Close() error {
 	l.mu.Lock()
 	if l.closed {
@@ -319,19 +384,11 @@ func (l *Listener) Close() error {
 		return nil
 	}
 	l.closed = true
-	l.waking = true
-	pending := l.hasInst
+	h := l.handle
 	l.mu.Unlock()
 
-	if pending {
-		namep, err := windows.UTF16PtrFromString(l.name)
-		if err == nil {
-			h, err := windows.CreateFile(namep, windows.GENERIC_READ, 0, nil,
-				windows.OPEN_EXISTING, 0, 0)
-			if err == nil {
-				windows.CloseHandle(h)
-			}
-		}
+	if h != 0 {
+		_ = windows.CancelIoEx(h, nil)
 	}
 	l.discard()
 	return nil
@@ -339,11 +396,14 @@ func (l *Listener) Close() error {
 
 // Conn is one connected client, or one connected host.
 //
-// The handle is wrapped in an os.File so that Read and Write are the ordinary
-// blocking calls and Close is the ordinary one. A byte-mode pipe created
-// without FILE_FLAG_OVERLAPPED behaves exactly like a file handle here, which
-// is the reason the byte mode was chosen over the message mode: the message
-// mode buys record boundaries this protocol already gets from a newline.
+// The handle is OVERLAPPED (see Listener's doc for the deadlock that forced
+// that), so os.NewFile can associate it with the Go runtime's completion port
+// and issue real overlapped reads and writes. That is what makes this conn
+// full-duplex: the host pushes room frames on one goroutine while it waits for
+// commands on another, and neither blocks the other.
+//
+// Byte mode rather than message mode: the message mode buys record boundaries
+// this protocol already gets from a newline.
 type Conn struct {
 	f    *os.File
 	name string
@@ -351,8 +411,17 @@ type Conn struct {
 	once sync.Once
 }
 
-func newConn(h windows.Handle, name string, pid int) *Conn {
-	return &Conn{f: os.NewFile(uintptr(h), name), name: name, pid: pid}
+// newConn takes ownership of h.
+//
+// os.NewFile is given the handle only AFTER the peer check has passed, so a
+// refused connection never reaches the runtime poller at all.
+func newConn(h windows.Handle, name string, pid int) (*Conn, error) {
+	f := os.NewFile(uintptr(h), name)
+	if f == nil {
+		windows.CloseHandle(h)
+		return nil, fmt.Errorf("councilhost: %s produced a handle os.NewFile would not take", name)
+	}
+	return &Conn{f: f, name: name, pid: pid}, nil
 }
 
 // PeerPID is the process id at the other end.
@@ -361,10 +430,11 @@ func (c *Conn) PeerPID() int { return c.pid }
 func (c *Conn) Read(p []byte) (int, error)  { return c.f.Read(p) }
 func (c *Conn) Write(p []byte) (int, error) { return c.f.Write(p) }
 
-// Close releases the handle exactly once. A double close on a pipe handle can
-// land on a handle Windows has already reused, so the guard is not defensive
-// style — it is the difference between closing this pipe and closing whatever
-// took its number.
+// Close releases the handle exactly once.
+//
+// The guard is not defensive style: a double close can land on a handle number
+// Windows has already reused, which is the difference between closing this pipe
+// and closing whatever took its number.
 func (c *Conn) Close() error {
 	var err error
 	c.once.Do(func() { err = c.f.Close() })
@@ -386,7 +456,7 @@ func Dial(name string, timeout time.Duration) (*Conn, error) {
 	for {
 		h, err := windows.CreateFile(namep,
 			windows.GENERIC_READ|windows.GENERIC_WRITE,
-			0, nil, windows.OPEN_EXISTING, 0, 0)
+			0, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OVERLAPPED, 0)
 		if err == nil {
 			var pid uint32
 			if err := windows.GetNamedPipeServerProcessId(h, &pid); err != nil {
@@ -397,7 +467,7 @@ func Dial(name string, timeout time.Duration) (*Conn, error) {
 				windows.CloseHandle(h)
 				return nil, err
 			}
-			return newConn(h, name, int(pid)), nil
+			return newConn(h, name, int(pid))
 		}
 		// ERROR_PIPE_BUSY means every instance is taken, which for this design
 		// means another client already holds the room. ERROR_FILE_NOT_FOUND

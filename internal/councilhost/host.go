@@ -53,6 +53,21 @@ var (
 	startProcess = runner.Start
 )
 
+// newRoomJob is behind a var for a hazard rather than for tidiness.
+//
+// NewRoomJob assigns the CALLING process into a job carrying
+// JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE. That is exactly right for a host and
+// exactly wrong for a test binary: an in-process test that let Serve build a
+// real one would put `go test` itself in that job, and the first Shutdown would
+// close the last handle and terminate the suite mid-run.
+//
+// So a test that runs a host IN-PROCESS stubs this, and a test that wants the
+// containment measured runs a real host in a real process instead
+// (roomjob_windows_test.go). The two are not interchangeable and the split is
+// deliberate: containment is a claim about a process dying, and a claim about a
+// process dying cannot be asserted by the process making it.
+var newRoomJob = NewRoomJob
+
 // RosterEntry is one seat the host was told to hold: which vendor, and the
 // binary detection resolved for it.
 //
@@ -230,7 +245,7 @@ func postureWord(p vendors.Posture) string {
 // Detach is NOT exposed, so this returns when the client disconnects, and the
 // caller tears the room down. A host that outlived its client is rung 4.
 func (h *Host) Serve(ctx context.Context) error {
-	job, err := NewRoomJob()
+	job, err := newRoomJob()
 	if err != nil {
 		return err
 	}
