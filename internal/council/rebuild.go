@@ -191,6 +191,9 @@ func (m *Model) startRebuild() tea.Cmd {
 			continue
 		}
 		rs.state = rebuildRunning
+		// Cleared explicitly: a rebuild that follows a failed one on the same
+		// seat must not keep the earlier failure's detail under a new title.
+		c.NoteDetail = ""
 		// Armed with the id that was asked for, exactly as a dispatch arms it
 		// (§9.43). A vendor that answers in a different conversation is then
 		// caught by adoptSession's existing check and reported in its existing
@@ -263,11 +266,13 @@ func (m *Model) applyRebuildEvent(c *Column, ev runner.Event) {
 		m.adoptSession(c, ev.SessionID)
 		if ev.SessionID == asked {
 			rs.state = rebuildDone
-			// "on a new process" is the whole point of the sentence. The
+			// "on a NEW process" is the whole point of the sentence. The
 			// reattach card above it says the thread came back, which is true;
-			// this says what did NOT come back.
+			// this says what did NOT come back. Together they state both halves,
+			// and neither alone would.
 			c.Note = "this seat was rebuilt — the saved thread came back, on a NEW process. " +
 				"the one you left was ended when the room closed."
+			c.NoteDetail = rebuildCostDetail
 			c.NoteCalm = true
 			return
 		}
@@ -333,7 +338,17 @@ func (m *Model) settleRebuild() {
 	if m.rebuild == nil {
 		return
 	}
-	m.st.Notice = joinNotice(m.reattachNotice, m.rebuildSettledNotice())
+	// REPLACES the reattach sentence rather than joining it, and that is the
+	// one place this file spends something.
+	//
+	// Joined, the settled sentence lands past a hundred columns and renders as
+	// `… 2/4 seats rebuilt in 24s — NE…`, which cuts the exact clause the rung
+	// exists to say. The reattach sentence is not lost by the swap: it was the
+	// whole notice from room open until this moment — the length of the rebuild
+	// — so its once-only clauses (a workspace that no longer exists, a posture
+	// the saved room ran under) have been on screen the entire time, and they
+	// are also readable at any moment from `telltale council ls` (§7.27).
+	m.st.Notice = m.rebuildSettledNotice()
 	// The run is kept rather than cleared, so a later reader can still tell a
 	// rebuilt room from a cold one. What is cleared is the ownership: every
 	// seat has left rebuildRunning, so rebuildOwns is already false for all of
@@ -347,10 +362,50 @@ func (m *Model) settleRebuild() {
 // standing would go on owning events for a seat the turn is now driving.
 func (m *Model) endRebuild() { m.rebuild = nil }
 
-// rebuildStartNotice is what the room says while the seats are coming back.
+// WHERE EACH HALF OF THE NEWS LIVES, and this placement is the decision the
+// first draft got wrong.
 //
-// It leads with the count and closes with the honest clause, because the count
-// is what the operator is watching and the clause is what they must not miss.
+// The notice is ONE LINE and it is truncated, not wrapped: at 120 columns the
+// reattach sentence already fills most of it, and a cost clause appended after
+// that one renders as `… — NE…`. A sentence that disappears at a hundred
+// columns is not a stated cost. The columns are the opposite shape — every note
+// wraps, every seat has one, and noteCard already carries a muted detail block
+// under its title.
+//
+// So the split follows the shape:
+//
+//   - The COLUMN carries the sentence that must never be lost — this seat was
+//     rebuilt, on a NEW process — and the measured cost under it as detail. The
+//     cost is a PER-SEAT fact ("$0.23 a seat"), so a per-seat home is also the
+//     correct one rather than merely the roomy one. That is the distinction
+//     reattachCard draws: the room fact goes in the notice once, the seat fact
+//     goes in the seat.
+//   - The NOTICE carries the room fact — how many seats, how long it took — and
+//     it is JOINED to the reattach sentence rather than replacing it, because
+//     that sentence holds clauses shown exactly once anywhere (a workspace that
+//     no longer exists, a posture the saved room ran under).
+
+// rebuildCostDetail is the measured cost, stated per seat, under the note that
+// says the seat was rebuilt.
+//
+// BOTH HALVES OR NEITHER. runner/session.go measured one one-word turn at about
+// 25 seconds and about $0.23, nearly all of it startup. The rebuild moves the
+// seconds and does not move the dollars — a process that has started has run no
+// model turn — so a line naming only the seconds would read as though the
+// reopen were free, and one naming only the dollars would read as though the
+// room had just spent them.
+//
+// Both figures carry a leading `~` and the sentence names what was measured,
+// because one turn on one seat extrapolated across a room is an estimate and
+// this repository marks estimates rather than rounding them into facts.
+const rebuildCostDetail = "its ~25s of startup is spent now instead of on your first brief, " +
+	"which still bills its ~$0.23 (measured once, on a one-word turn)."
+
+// rebuildStartNotice is the room fact while the seats are coming back.
+//
+// Deliberately short. The honest clause is not here — it is in every column,
+// where it cannot be cut — and a longer sentence would push the reattach
+// sentence it is joined to off the end of the line.
 func (m *Model) rebuildStartNotice() string {
 	n := 0
 	for _, rs := range m.rebuild.seats {
@@ -361,20 +416,14 @@ func (m *Model) rebuildStartNotice() string {
 	if n == 0 {
 		return ""
 	}
-	return "rebuilding " + itoa(n) + "/" + itoa(m.st.Seated()) + " " + plural(n, "seat") +
-		" — the seats did not survive the quit; these are NEW processes on the saved ids"
+	return "rebuilding " + itoa(n) + " " + plural(n, "seat")
 }
 
-// rebuildSettledNotice is what the room says once they have.
-//
-// THE COST CLAUSE IS SPLIT AND BOTH HALVES ARE STATED. The ~25s moved; the
-// ~$0.23 did not. A notice that named only the first would read as though the
-// reopen were free, and one that named only the second would read as though the
-// room had just spent it. Both figures wear a `~` and the clause names what was
-// measured: one one-word turn, once (runner/session.go).
+// rebuildSettledNotice is the room fact once they have.
 //
 // THE ELAPSED FIGURE IS THIS RUN'S OWN, not the measurement quoted back. It is
-// what this rebuild actually took, read once here, off the update loop.
+// what this rebuild actually took, read once here, off the update loop, so
+// Render never sees a clock.
 func (m *Model) rebuildSettledNotice() string {
 	done, failed := 0, 0
 	for _, rs := range m.rebuild.seats {
@@ -391,11 +440,9 @@ func (m *Model) rebuildSettledNotice() string {
 	out := itoa(done) + "/" + itoa(m.st.Seated()) + " seats rebuilt in " +
 		dur(time.Since(m.rebuild.started))
 	if failed > 0 {
+		// A measured partial is reported as a partial. Rounding it up to the
+		// attempted count would claim seats that are not there.
 		out += ", " + itoa(failed) + " could not be"
 	}
-	out += " — NEW processes on the saved ids, not the ones you left"
-	if done > 0 {
-		out += " · the ~25s of startup is spent now instead of on your first brief, which still bills its ~$0.23 a seat (measured once, on a one-word turn)"
-	}
-	return out
+	return out + " — NEW processes, not the ones you left"
 }
