@@ -20,9 +20,14 @@
 //     and dies with it. resume.go already ruled that for the same data, and the
 //     process holding the data changed rather than the rule.
 //
-// Detach is NOT exposed. A client starts a host, drives it, and kills it on
-// exit. §7.28's second paragraph says so, and the reason is that the ownership
-// inversion is the risk and it is reviewed alone.
+// Detach IS exposed, as of design.md §7.29, and it changed exactly one of the
+// three rules above: nothing. It adds one frame and one rule beside them.
+//
+//   - A client leaves by SAYING so (KindDetach). A closed pipe still ends the
+//     room, because a client that died is not a client that left.
+//   - A room that writes to the workspace without asking will not detach. The
+//     host refuses it, and the host is the process that must, because it is the
+//     one that would keep running.
 package councilhost
 
 import (
@@ -70,11 +75,30 @@ const (
 	// KindShutdown is the client saying it is finished. The host kills every
 	// seat and exits.
 	//
-	// This frame is what keeps detach unexposed. A client that simply
-	// disconnected would leave a host running, which is rung 4's feature and
-	// not this one's, so the client sends this and the host also treats a bare
-	// disconnect as a shutdown. Both paths end the room on purpose.
+	// A BARE DISCONNECT still means this, and design.md §7.29 keeps it that way
+	// on purpose. A client that died is not a client that left: a crash, a
+	// taskkill on the terminal and a power-off all close the pipe exactly the
+	// way a deliberate detach does, so a host that could not tell them apart
+	// would keep a room running on an inference. Two facts must not reach the
+	// same code path, which is §4a.1 applied to a process.
 	KindShutdown FrameKind = "shutdown"
+	// KindDetach is the client saying it is LEAVING and the room is to stay up.
+	//
+	// It is an explicit frame rather than a closed pipe for the reason
+	// KindShutdown's comment gives. The host answers KindDetached when it
+	// agrees and KindRefused when it does not, and a client must wait for that
+	// answer before it closes anything: a client that assumed agreement would
+	// walk away from a refusal it had provoked.
+	KindDetach FrameKind = "detach"
+	// KindDetached is the host agreeing to be left. Carries HostPID, which is
+	// what the leaving client prints so the operator can name the process they
+	// now own.
+	//
+	// The refusal case is KindRefused with a whole sentence in Reason —
+	// design.md §7.29's unwatched-write ruling — and the host keeps serving
+	// after it, because a refused detach leaves the client exactly where it
+	// was.
+	KindDetached FrameKind = "detached"
 	// KindRoom is the host's whole room state, coalesced. See Host.tick for why
 	// the whole state travels rather than a delta.
 	KindRoom FrameKind = "room"

@@ -62,6 +62,31 @@ func (l *Listener) Name() string { return l.name }
 // Accept refuses off Windows.
 func (l *Listener) Accept() (*Conn, error) { return nil, ErrNotBuiltHere }
 
+// Rearm refuses off Windows, like everything else here.
+func (l *Listener) Rearm() error { return ErrNotBuiltHere }
+
+// PipeState is what a non-connecting probe of a transport name found.
+type PipeState int
+
+const (
+	// PipeAbsent: nothing is listening on the name.
+	PipeAbsent PipeState = iota
+	// PipeFree: a host is listening and nobody is attached.
+	PipeFree
+	// PipeBusy: a host is listening and a client already holds the room.
+	PipeBusy
+)
+
+// ProbePipe reports PipeAbsent off Windows, and it does NOT report an error.
+//
+// The distinction matters to every caller. A host cannot run on this platform
+// at all (ErrNotBuiltHere), so "no host is listening" is the TRUE answer here
+// and not a failed measurement. Returning an error instead would make
+// `telltale council ls` print a fault on a Mac for a feature that is simply not
+// built there, which is the opposite of what §4a.1 asks: an absence that was
+// measured is an absence, not a degraded read.
+func ProbePipe(name string) (PipeState, error) { return PipeAbsent, nil }
+
 // Close is a no-op off Windows.
 func (l *Listener) Close() error { return nil }
 

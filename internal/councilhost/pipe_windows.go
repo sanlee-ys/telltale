@@ -246,6 +246,73 @@ func (l *Listener) newInstance(first bool) error {
 	return nil
 }
 
+// Rearm creates a fresh instance so this listener can take ANOTHER client.
+//
+// It exists for exactly one caller: a host whose client DETACHED (design.md
+// §7.29). Accept hands its instance to the Conn and leaves the listener with
+// none, which is right for §7.28's one-client-at-a-time ruling and is why a
+// second Accept refuses. Rearm does not weaken that ruling — the listener still
+// serves one client at a time, and it now serves them one AFTER another.
+//
+// # The name is released and re-taken, and the window is stated rather than hidden
+//
+// A named pipe's NAME lives as long as a server instance handle is open, and
+// FILE_FLAG_FIRST_PIPE_INSTANCE forbids creating a second instance while the
+// name exists. So the previous Conn must be closed before this runs, and there
+// is a window in which the name belongs to nobody. A same-user process could
+// take it in that window.
+//
+// That window is bounded by §7.24's own ratified boundary rather than by luck:
+// Dial's client-side peer check refuses a server that is not this user, so a
+// DIFFERENT user cannot exploit it, and a program running as this user is
+// already trusted by these listeners exactly as far as it is trusted by the
+// filesystem. The window is therefore a same-user race and not a privilege
+// boundary, which is the same answer §7.28 gives about who may connect at all.
+//
+// The retry is for the ordinary case rather than the adversarial one: the
+// client's own handle can still be closing while this runs, and a create that
+// lost that race by a millisecond is not a squatted name.
+func (l *Listener) Rearm() error {
+	l.mu.Lock()
+	if l.closed {
+		l.mu.Unlock()
+		return ErrListenerClosed
+	}
+	if l.hasInst {
+		l.mu.Unlock()
+		return nil
+	}
+	l.mu.Unlock()
+
+	deadline := time.Now().Add(rearmWindow)
+	var last error
+	for {
+		// first=false, so a taken name reports the create's own error rather
+		// than "a host is already running for this room" — which would be the
+		// wrong sentence entirely here, since the host asking is the one that
+		// was running.
+		if err := l.newInstance(false); err == nil {
+			return nil
+		} else {
+			last = err
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf(
+				"councilhost: could not re-open %s after the client detached, so this room "+
+					"cannot be rejoined: %w", displayName(l.name), last)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// rearmWindow bounds how long Rearm retries.
+//
+// It covers a handle close on another process, not a process start, so it is
+// generous by an order of magnitude for what it waits on. A host that cannot
+// re-open its own name in this long has lost the name to something, and saying
+// so beats retrying at a room nobody can reach.
+const rearmWindow = 2 * time.Second
+
 // Accept blocks until a client connects, then verifies the client runs as this
 // user before returning it.
 //
@@ -536,6 +603,72 @@ func Dial(name string, timeout time.Duration) (*Conn, error) {
 }
 
 func displayName(n string) string { return strings.TrimPrefix(n, PipePrefix) }
+
+// PipeState is what a NON-CONNECTING probe of a pipe name found.
+type PipeState int
+
+const (
+	// PipeAbsent: the name does not exist, so no host is listening on it.
+	PipeAbsent PipeState = iota
+	// PipeFree: the name exists and an instance is available. A host is
+	// running and nobody is attached to it.
+	PipeFree
+	// PipeBusy: the name exists and every instance is taken. A host is running
+	// and a client already holds the room (§7.28's one-client rule).
+	PipeBusy
+)
+
+// ProbePipe answers whether a host is listening, WITHOUT connecting to it.
+//
+// # Why this could not be a dial, and discovery.go said so before it existed
+//
+// design.md §7.28 rules that the file says WHAT and the pipe says WHETHER, and
+// then deliberately left this unbuilt, because the obvious implementation is
+// wrong in both directions. A probe that DIALS consumes the host's single pipe
+// instance: the host's Accept returns, the probe closes, and the host reads
+// that close as its client leaving — a liveness check that ends the room it is
+// checking. Against a busy host the same dial comes back ERROR_PIPE_BUSY, which
+// an earlier removed version swallowed and reported as "not running": a live
+// room called dead.
+//
+// WaitNamedPipe asks the question the surface actually has. It reports whether
+// an INSTANCE of the name is available and it opens nothing, so `telltale
+// council ls` can read liveness while staying the reader §7.27 promises it is.
+// All three of its answers are used rather than collapsed into a boolean,
+// because "no host" and "a host somebody else is in" are different facts and a
+// caller has to render them differently (§4a.1).
+//
+// **Measured at golang.org/x/sys v0.47.0: WaitNamedPipe is NOT exported.** It is
+// bound with NewLazySystemDLL here, the same call IsProcessInJob already makes
+// one file over, and the one decisions/001 sanctioned for the hand-rolled OTLP
+// reader, the byte-level SQLite reader and the hand-rolled WebSocket.
+//
+// nmpwaitNoWait rather than zero. Zero is NMPWAIT_USE_DEFAULT_WAIT, which asks
+// the SERVER's own CreateNamedPipe timeout — so a probe passing zero would
+// block for a stranger's chosen interval and would not be a probe at all.
+func ProbePipe(name string) (PipeState, error) {
+	namep, err := windows.UTF16PtrFromString(name)
+	if err != nil {
+		return PipeAbsent, err
+	}
+	r, _, callErr := procWaitNamedPipeW.Call(uintptr(unsafe.Pointer(namep)), uintptr(nmpwaitNoWait))
+	if r != 0 {
+		return PipeFree, nil
+	}
+	switch {
+	case errors.Is(callErr, windows.ERROR_FILE_NOT_FOUND):
+		return PipeAbsent, nil
+	case errors.Is(callErr, windows.ERROR_SEM_TIMEOUT), errors.Is(callErr, windows.ERROR_PIPE_BUSY):
+		return PipeBusy, nil
+	default:
+		return PipeAbsent, fmt.Errorf("councilhost: could not probe %s: %w", displayName(name), callErr)
+	}
+}
+
+// nmpwaitNoWait is NMPWAIT_NOWAIT: return at once rather than waiting at all.
+const nmpwaitNoWait = 0x00000001
+
+var procWaitNamedPipeW = modkernel32.NewProc("WaitNamedPipeW")
 
 // readPipeDACL reads an open pipe handle's DACL back as an SDDL string.
 //

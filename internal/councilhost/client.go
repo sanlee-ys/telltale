@@ -83,21 +83,77 @@ type Client struct {
 	fw   *FrameWriter
 
 	hostPID int
-	// owned is the host process this client started, or nil when it joined one
-	// somebody else started. Detach is not exposed, so today it is always set —
-	// the field exists because Close's behaviour differs and pretending it does
-	// not is how a host gets orphaned by accident.
+	// owned is the host process this client started, or nil when it JOINED one
+	// that was already running.
+	//
+	// §7.28 wrote this field before anything could set it to nil, and said so.
+	// Two things set it to nil now: Join, which never started a host, and
+	// CloseDetached, which gives one up. Both matter for the same reason —
+	// Close kills what it owns, and a client that still thought it owned a host
+	// it had just detached from would kill the room it had left.
 	owned *os.Process
 }
 
-// Open starts a host for this room and connects to it.
+// JoinConfig is what a client needs to reach a host that is ALREADY running.
 //
-// Start-then-connect rather than connect-then-start, and there is no fallback
-// to an existing host: detach is not exposed in this change, so a pipe that
-// already exists is not a room to rejoin — it is a host somebody left behind,
-// and attaching to it silently would deliver the unexposed feature by accident.
-// The create fails loudly instead, because FILE_FLAG_FIRST_PIPE_INSTANCE makes
-// a second create on the same name fail rather than share.
+// It carries a pipe name rather than a room key, because a rejoining client
+// reads the name out of host.json rather than deriving it. That is not a detail:
+// the file is the record of what the host actually created, and re-deriving the
+// name from a key would silently disagree with it the day a key ever changes.
+type JoinConfig struct {
+	// PipeName is the transport, from a discovery file.
+	PipeName string
+	// DialTimeout bounds the wait. Zero uses defaultDial. A rejoin does not
+	// wait on a process start, so it is generous here rather than tight.
+	DialTimeout time.Duration
+}
+
+// Join connects to a host that is already running and starts NOTHING.
+//
+// This is design.md §7.29's rejoin, and the difference from Open is the whole
+// point of the verb: Open starts a host and owns it, Join reaches one that
+// outlived somebody else's client and owns nothing. §9.52 reserved `rejoin` for
+// exactly this and refused to spend it on the rebuild, so that the two facts
+// could stay one word apart.
+//
+// It performs no liveness check of its own. Probe already answered that, and
+// asking twice would be two answers that can disagree; what this adds is the
+// only check a connection can make and a probe cannot — Dial's server-side peer
+// check, which refuses a pipe whose server is not this user.
+func Join(cfg JoinConfig) (*Client, error) {
+	if cfg.PipeName == "" {
+		return nil, errors.New("councilhost: a rejoin needs the host's transport name")
+	}
+	timeout := cfg.DialTimeout
+	if timeout <= 0 {
+		timeout = defaultDial
+	}
+	conn, err := Dial(cfg.PipeName, timeout)
+	if err != nil {
+		return nil, err
+	}
+	c := &Client{conn: conn, fr: NewFrameReader(conn), fw: NewFrameWriter(conn)}
+	if err := c.handshake(); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return c, nil
+}
+
+// Open STARTS a host for this room and connects to it.
+//
+// Start-then-connect, and still no fallback to an existing host — the fallback
+// is a separate function now (Join), and keeping the two apart is deliberate.
+// §7.28 refused a silent fallback because it would have delivered an unexposed
+// feature by accident; §7.29 exposes the feature and the reason survives in a
+// different form. A caller that says Open is saying "make me a room", and one
+// that says Join is saying "take me back to the one that is there". A single
+// function that guessed between them would decide, on the operator's behalf,
+// whether a room they are about to type into is a fresh one or one holding
+// somebody's half-finished turn.
+//
+// The create still fails loudly on a taken name, because
+// FILE_FLAG_FIRST_PIPE_INSTANCE makes a second create fail rather than share.
 func Open(cfg ClientConfig) (*Client, error) {
 	exe := cfg.Exe
 	if exe == "" {
@@ -183,10 +239,40 @@ func (c *Client) send(f Frame) error {
 	return nil
 }
 
-// Next blocks for the host's next room frame.
+// RequestDetach asks the host to keep the room and let this client go.
+//
+// It only SENDS. The answer — KindDetached or KindRefused — arrives on the same
+// stream as the room frames, so it is read by whoever is reading them, which is
+// NextFrame's caller. Waiting for it here would mean two readers on one
+// connection, and the loser of that race would swallow a room frame or an
+// answer at random.
+//
+// A client must not close anything until that answer arrives. design.md §7.29:
+// a client that assumed agreement would walk away from a refusal it provoked.
+func (c *Client) RequestDetach() error { return c.send(Frame{Kind: KindDetach}) }
+
+// NextFrame blocks for the host's next frame, whatever kind it is.
+//
+// This is the loop's read, and Next below is the narrower one. A run loop has to
+// see KindDetached and KindRefused, because those are answers to something it
+// asked — and Next drops the first and turns the second into a fatal error,
+// which for a refused detach would end the room the operator was just told they
+// could not leave.
 //
 // A broken pipe comes back as ErrHostExited and never as a bare io.EOF, so that
 // no caller can accidentally render a dead host the way it renders a quiet one.
+func (c *Client) NextFrame() (Frame, error) {
+	f, err := c.fr.Read()
+	if err != nil {
+		return Frame{}, ErrHostExited
+	}
+	return f, nil
+}
+
+// Next blocks for the host's next ROOM frame, dropping everything else.
+//
+// Kept for a caller that only draws. It is the wrong read for a client that can
+// detach — see NextFrame.
 func (c *Client) Next() (Room, error) {
 	for {
 		f, err := c.fr.Read()
@@ -200,6 +286,27 @@ func (c *Client) Next() (Room, error) {
 			return Room{}, fmt.Errorf("councilhost: the host refused: %s", f.Reason)
 		}
 	}
+}
+
+// CloseDetached closes the pipe and GIVES UP the host, leaving it running.
+//
+// It is the whole client half of a detach, and every line of it is the opposite
+// of Close:
+//
+//   - No shutdown frame. Close sends one; sending one here would end the room
+//     this call exists to preserve.
+//   - No Wait and no Kill on the owned process. Close does both, and doing
+//     either here would end it a second way.
+//   - owned is cleared FIRST, so that a later Close — a deferred one, say —
+//     cannot reach a host this client no longer owns. That ordering is the
+//     defect this method is most likely to grow, and it is written down rather
+//     than left to a reader to notice.
+//
+// The host has already agreed by this point: a caller reaches this only after
+// KindDetached arrived.
+func (c *Client) CloseDetached() error {
+	c.owned = nil
+	return c.conn.Close()
 }
 
 // Close ends the room.
