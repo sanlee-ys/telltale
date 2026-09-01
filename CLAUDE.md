@@ -188,7 +188,14 @@ either. `telltale history` (design.md §7.26) is a fifth reader, and the first
 that does not read the scan at all — it walks one vendor's transcripts whole,
 which is why it is a foreground mode rather than a HUD page. It holds the
 contract with the same item spare, for the same reason: it renders no quota, so
-it has none to relay. **Three** deliberate, bounded exceptions
+it has none to relay. `telltale council ls` (design.md §7.27) is a **sixth**
+reader, and it is the first that reads a file *council itself wrote* rather than
+a vendor's: it prints what `~/.telltale/council/room.json` holds — workspace,
+turn, roster, and which seats have a session id saved — and writes nothing,
+spawns no vendor, and binds nothing. It holds the contract with the same item
+spare, for the same reason as the two above it. It never says a saved thread is
+*live*: nothing it can read proves that, and only the vendor answers it, on a
+resume. **Three** deliberate, bounded exceptions
 exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
 
 - `telltale council` — spawns vendor CLIs; writes `council/room.json` (session

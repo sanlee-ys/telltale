@@ -7371,9 +7371,14 @@ were the posture of the next launch would undo that ruling in a listing.
 #### Shape
 
 Words and no colour, on `doctor`'s and `history`'s precedent. Every fact carries its own label,
-so no column alignment has to survive a narrow terminal. The mode takes no vendor argument and
-no flags beyond `--root`, which redirects the home directory the way the other readers'
-`--root` does, so a test can point it at a fixture.
+so no column alignment has to survive a narrow terminal.
+
+**It takes no flags at all, and that is a decision.** The other readers take `--root` to point
+at a corpus of *vendor* stores. This mode reads telltale's own state, so `--root` here would
+have to mean a different thing, and one flag with two meanings across two modes is worse than
+no flag. It is also a two-word mode rather than a `--list` on the room, on the `hook cursor` /
+`events view` / `otel grok` precedent: none of the room's flags apply to it, and a flag would
+have to explain why it ignored every one of them.
 
 A refused file prints the reason `LoadRoom` gives, in `LoadRoom`'s own words, and exits 0. A
 damaged file on disk is a state to report, not an error to fail on — the same ruling the room
