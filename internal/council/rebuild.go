@@ -31,11 +31,12 @@ import (
 // measurement: a one-word turn cost about 25 seconds and about $0.23, NEARLY
 // ALL OF IT STARTUP. Moving the launch earlier moves the seconds. It does not
 // move the dollars — a process that has started has run no model turn, so
-// nothing is billed until the first brief. The notice states both halves,
+// nothing is billed until the first brief. The rebuilt seat states both halves,
 // because a room that implied it had just spent a dollar per reopen would be
 // inventing a charge, and a room that implied the first brief was now free
 // would be hiding one. Both figures carry a leading `~`: one measurement, of
-// one one-word turn, extrapolated across seats.
+// one one-word turn, extrapolated across seats. Which surface carries which
+// half is decided further down, at rebuildCostDetail.
 //
 // WHAT IT DOES NOT DO. It starts no process the first brief was not going to
 // start anyway — the rebuild changes WHEN, never WHETHER — and it persists
@@ -91,6 +92,14 @@ type rebuildRun struct {
 	// never sees a clock.
 	started time.Time
 	seats   map[model.VendorID]*rebuildSeat
+	// settled reports that the closing notice has already been written.
+	//
+	// A one-shot, for the reason teardownDone is one: settleRebuild is reached
+	// from two places — every event batch that empties the running set, and the
+	// spinner's backstop — and both can fire again afterwards. Without this,
+	// the closing sentence would overwrite whatever the operator's next action
+	// put in the notice, on every tick, forever.
+	settled bool
 }
 
 // rebuildMsg starts the run. It is a message rather than a direct call so the
@@ -335,9 +344,17 @@ func (m *Model) settleDeadRebuilds() {
 // settleRebuild writes the closing notice once every seat has stopped
 // launching.
 func (m *Model) settleRebuild() {
-	if m.rebuild == nil {
+	if m.rebuild == nil || m.rebuild.settled {
 		return
 	}
+	notice := m.rebuildSettledNotice()
+	if notice == "" {
+		// Nothing settled into a reportable state, so there is nothing to say
+		// and the notice that is up stays up. Blanking it would let a rebuild
+		// that reached no conclusion erase a sentence that had one.
+		return
+	}
+	m.rebuild.settled = true
 	// REPLACES the reattach sentence rather than joining it, and that is the
 	// one place this file spends something.
 	//
@@ -348,7 +365,7 @@ func (m *Model) settleRebuild() {
 	// — so its once-only clauses (a workspace that no longer exists, a posture
 	// the saved room ran under) have been on screen the entire time, and they
 	// are also readable at any moment from `telltale council ls` (§7.27).
-	m.st.Notice = m.rebuildSettledNotice()
+	m.st.Notice = notice
 	// The run is kept rather than cleared, so a later reader can still tell a
 	// rebuilt room from a cold one. What is cleared is the ownership: every
 	// seat has left rebuildRunning, so rebuildOwns is already false for all of

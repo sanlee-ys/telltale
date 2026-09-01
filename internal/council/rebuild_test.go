@@ -187,8 +187,7 @@ func TestRebuiltSeatStatesBothHalvesOfTheMeasuredCost(t *testing.T) {
 func TestSettledRebuildKeepsItsOwnClauseWhole(t *testing.T) {
 	countSpawns(t)
 	m := rebuiltRoom(t)
-	m.reattachNotice = "reattached from ~/.telltale/council/room.json — turn 7 was the last, saved 2h ago"
-	m.st.Notice = m.reattachNotice
+	m.st.Notice = "reattached from ~/.telltale/council/room.json — turn 7 was the last, saved 2h ago"
 	m.startRebuild()
 
 	// While it runs, the reattach sentence is still the notice and the rebuild
@@ -360,8 +359,7 @@ func TestRebuildOwnershipIsNarrow(t *testing.T) {
 func TestRebuildGoldens(t *testing.T) {
 	countSpawns(t)
 	m := rebuiltRoom(t)
-	m.reattachNotice = "reattached from ~/.telltale/council/room.json — turn 7 was the last, saved 2h ago"
-	m.st.Notice = m.reattachNotice
+	m.st.Notice = "reattached from ~/.telltale/council/room.json — turn 7 was the last, saved 2h ago"
 	m.startRebuild()
 
 	st := room()
@@ -403,5 +401,32 @@ func TestRebuildGoldens(t *testing.T) {
 	}
 	if !strings.Contains(got, "2/4 seats rebuilt in") {
 		t.Error("the settled notice is cut off before it names the seats")
+	}
+}
+
+// The closing sentence is written ONCE. settleRebuild is reached from two
+// places — an event batch that empties the running set, and the spinner's
+// backstop — and both fire again afterwards. A run that re-settled would
+// overwrite whatever the operator's next action put in the notice, on every
+// tick, for the life of the room.
+func TestSettledRebuildDoesNotKeepReclaimingTheNotice(t *testing.T) {
+	countSpawns(t)
+	m := rebuiltRoom(t)
+	m.startRebuild()
+	m.applyEvents([]runner.Event{
+		{Vendor: model.VendorClaude, Kind: runner.KindSession, SessionID: "sess-claude"},
+		{Vendor: model.VendorCursor, Kind: runner.KindSession, SessionID: "sess-cursor"},
+	})
+	if !strings.Contains(m.st.Notice, "seats rebuilt") {
+		t.Fatalf("the rebuild never settled: %q", m.st.Notice)
+	}
+
+	// Whatever the operator does next owns the notice from here.
+	m.st.Notice = "a later sentence"
+	m.settleRebuild()
+	m.settleDeadRebuilds()
+
+	if m.st.Notice != "a later sentence" {
+		t.Errorf("the settled rebuild reclaimed the notice: %q", m.st.Notice)
 	}
 }

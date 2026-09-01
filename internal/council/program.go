@@ -231,15 +231,6 @@ type Model struct {
 	// what is drawn.
 	rebuild *rebuildRun
 
-	// reattachNotice is the sentence reattach() wrote, kept so the settled
-	// rebuild can be joined to it rather than replacing it.
-	//
-	// It is kept because that sentence carries clauses shown exactly once and
-	// nowhere else — the workspace that no longer exists, a posture the saved
-	// room ran under. A rebuild settling twenty-five seconds later must not be
-	// the reason the operator never sees them.
-	reattachNotice string
-
 	// brief is the shared operating context. Held on Model, never on State:
 	// its content is the user's private file and the renderer has no business
 	// being able to reach it.
@@ -443,10 +434,6 @@ func newWithBrief(opts Options, b Brief, hs GateHook, re Reattachment) *Model {
 	}
 	m.st.Briefed = b.Loaded()
 	m.reattach(re)
-	// Captured before anything else joins the notice, so the rebuild can put
-	// this sentence back beside its own without dragging a pickup-doc warning
-	// along with it (rebuild.go).
-	m.reattachNotice = m.st.Notice
 	// Pickup-doc drift is a room-open fact, same class as a reattach notice:
 	// said once when the room starts, then displaced by whatever the user does
 	// next. Joined rather than replaced, so a reattach and a stale STATE.md
