@@ -16646,16 +16646,41 @@ Both figures carry a leading `~` and both name what was measured: one one-word t
 seats is an extrapolation from one measurement, and the room says so rather than printing a
 four-seat total as though somebody had counted it.
 
-**Per-seat progress is measured at every step, and there are five states.** They are carried on
-the column's existing note, so this rung adds no field and no render path:
+**Per-seat progress is measured at every step, and there are four outcomes.** They are carried
+on the column's existing note, so this rung adds no field and no render path:
 
 | state | what was measured | what the seat says |
 |---|---|---|
-| **queued** | the room intends to rebuild this seat; nothing has launched | the room notice names the count; the column says nothing yet |
 | **rebuilding** | the spawn returned with no error | a new process is loading the saved thread |
-| **rebuilt** | the vendor announced a session id, and it is the saved one | the thread came back, on a new process |
+| **rebuilt** | the vendor announced a session id, and it is the saved one | the thread came back, on a NEW process — and the one you left was ended |
 | **forked** | the vendor announced a DIFFERENT session id | §9.43's existing sentence, unchanged |
 | **failed** | the spawn failed, or the process exited before it announced anything | the vendor's own line, and the next brief opens a new session |
+
+#### Where each half of the news lives, and why it is not the notice
+
+The first build put the whole statement in the room notice, and the notice **is one line and
+it is truncated, not wrapped**. At 120 columns the reattach sentence already fills most of it,
+so the settled rebuild rendered as `… 2/4 seats rebuilt in 0s — NE…`. A cost clause that
+disappears at a hundred columns is not a stated cost, and the clause being cut was the exact
+one the rung exists to say.
+
+The columns are the opposite shape: every note wraps, every seat has one, and `noteCard`
+already draws a muted detail block under its title. So the split follows the shape of each
+surface, and it lands where `reattachCard`'s own rule already points — the room fact in the
+notice once, the seat fact in the seat.
+
+- **The COLUMN carries the sentence that must never be lost**, and the measured cost under it
+  as detail. The cost is a *per-seat* fact (`$0.23 a seat`), so per-seat is the correct home
+  and not merely the roomy one.
+- **The NOTICE carries the room fact.** `rebuilding 2 seats`, joined to the reattach sentence
+  while the rebuild runs; then `2/4 seats rebuilt in 24s — NEW processes, not the ones you
+  left` once it settles.
+
+**The settled sentence replaces the reattach sentence rather than joining it**, and that is
+the one thing this rung spends. Joined, it is cut. The reattach sentence is not lost by the
+swap: it was the entire notice from room open until the moment the rebuild settled, so its
+once-only clauses have been on screen for the whole window — and `telltale council ls` (§7.27)
+can print them again at any time.
 
 **`rebuilding` and `rebuilt` are two states and they must not collapse.** A launched process is
 not a proven thread. `persistent.go` already refuses to claim otherwise on this exact path —
@@ -16701,6 +16726,9 @@ The rebuild is exercised with the spawn vars stubbed (`countSpawns`), which is t
 standing rule: a council test never starts a vendor. The kickoff is fired from `Init`, which no
 test calls, so a model a test builds directly launches nothing at all.
 
-Goldens pin the two rendered states apart — a room mid-rebuild and a room whose rebuild settled
-— because `rebuilt` and `survived` rendering alike is the regression this section exists to
-prevent.
+Goldens pin the two rendered states apart — `rebuilding.txt` and `rebuilt.txt` — because
+`rebuilt` and `survived` rendering alike is the regression this section exists to prevent. Both
+take their strings from the model itself rather than from text typed into the test, so a
+wording change moves the golden instead of quietly passing a stale assertion. **No footer hint
+was added**, so no existing golden moved: every golden's last line is the footer's key hints,
+and one new hint there rewrites about eighty-nine files at once.
