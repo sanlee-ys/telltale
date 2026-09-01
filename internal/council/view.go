@@ -173,14 +173,32 @@ func layoutFor(st State, g Glyphs) Layout {
 //
 // Nil means equal columns. A partial set means those seats share the wide
 // region and the rest sit at stripColumn until the next dispatch.
+//
+// Two things can set the mark, and they are ranked rather than merged (§9.51).
+// FrameOwners is an INFERENCE from where a turn was sent; PaneOwner is a
+// REQUEST, typed by the operator at `^w s`. When both are set the request wins
+// outright, and it wins as a replacement rather than as an addition: an operator
+// who splits the room to read one seat has said which seat, and folding the
+// route's owners in beside it would widen a second pane they did not ask for.
+//
+// It also outlives the turn. A dispatch replaces FrameOwners and never touches
+// PaneOwner, so a room the operator arranged stays arranged across turns — which
+// is the difference between a layout control and a side effect of routing.
 func framePrimary(st State, vis []int) []bool {
-	if st.Expanded || len(st.FrameOwners) == 0 || len(vis) < 2 {
+	if st.Expanded || len(vis) < 2 {
+		return nil
+	}
+	owners := st.FrameOwners
+	if st.PaneOwner != "" {
+		owners = []model.VendorID{st.PaneOwner}
+	}
+	if len(owners) == 0 {
 		return nil
 	}
 	out := make([]bool, len(vis))
 	n := 0
 	for j, idx := range vis {
-		for _, o := range st.FrameOwners {
+		for _, o := range owners {
 			if st.Columns[idx].Vendor == o {
 				out[j] = true
 				n++
@@ -3278,7 +3296,7 @@ func composerTop(lay Layout, sty Styles, g Glyphs) string {
 // fact a reader has to reconcile.
 func composerBottom(st State, lay Layout, sty Styles, g Glyphs) string {
 	w := boxWidth(lay.Width)
-	styled, plain := composerLabel(st, sty, g)
+	styled, plain := composerLabel(st, lay, sty, g)
 
 	// The legend gets `gutter` cells of air each side and one rule cell outboard
 	// of it — the same air every labelled rule in this room puts around its own
@@ -3309,7 +3327,12 @@ func composerBottom(st State, lay Layout, sty Styles, g Glyphs) string {
 // without it would leave the room permanently ungated with the only way back
 // undocumented on screen, which is the §9.17 defect §9.24's footer cell was added
 // to close — the cell moved, the promise did not.
-func composerLabel(st State, sty Styles, g Glyphs) (styled, plain string) {
+// The pane arrangement rides here too, and the border is the only place it is
+// stated (§9.51). It belongs on this half of the split by the same lifetime
+// rule: a split pane and a moved boundary are true of the room until a key
+// changes them, which is exactly what this border carries and exactly what the
+// line under it does not.
+func composerLabel(st State, lay Layout, sty Styles, g Glyphs) (styled, plain string) {
 	word, style := "VIEW", sty.Strong
 	switch {
 	case st.Gating():
@@ -3317,6 +3340,18 @@ func composerLabel(st State, sty Styles, g Glyphs) (styled, plain string) {
 		// where something is STOPPED until a key is pressed, so it outranks both
 		// other mode words wherever they are drawn.
 		word, style = "GATE", sty.Alert
+	case st.PanePrefix:
+		// PANES, and it ranks directly under GATE (§9.51). The room is waiting on
+		// one keystroke here, which is the same shape a gate has and the reason it
+		// outranks every word below — but it blocks nothing and costs nothing to
+		// leave, so it does not take GATE's severity style with it.
+		//
+		// The prefix arms in view mode only, so the arm below it is unreachable
+		// rather than ranked against. It is written down anyway: the word this
+		// border draws must never be able to say COMPOSE while `s` is not the
+		// letter s, and an ordering that holds by construction is cheaper to keep
+		// than one that holds because a caller was careful.
+		word, style = "PANES", sty.Strong
 	case st.Mode == ModeComposing:
 		word = "COMPOSE"
 		// Empty compose is the post-turn resting state, demoted for the reason it
@@ -3345,7 +3380,60 @@ func composerLabel(st State, sty Styles, g Glyphs) (styled, plain string) {
 		styled += sty.Muted.Render(sep) + sty.Text.Render("a") + " " + sty.Muted.Render("not asking")
 		plain += sep + "a not asking"
 	}
+	// The pane arrangement, in WORDS, and only once the operator has made one
+	// (§9.51).
+	//
+	// Gated on the COLUMNS tier because that is the only tier a boundary exists
+	// in. Below it the room draws one column at a time, the stored split and the
+	// stored bias change nothing on screen, and a legend claiming otherwise would
+	// be the room describing a frame the reader is not looking at.
+	if lay.Tier == TierColumns {
+		if a := paneArrangement(st); a != "" {
+			sep := strings.Repeat(" ", gutter) + g.Sep + strings.Repeat(" ", gutter)
+			styled += sty.Muted.Render(sep) + sty.Text.Render("^w e") + " " + sty.Muted.Render(a)
+			plain += sep + "^w e " + a
+		}
+	}
 	return styled, plain
+}
+
+// paneArrangement says what the operator has done to the panes, or nothing
+// (§9.51).
+//
+// **This is the feature's second signal, and it is the only one.** A split pane
+// is wide and its neighbours are strips; a resized pane is simply a different
+// width. Neither of those is a MARK — a reader who did not press the key sees a
+// grid that looks deliberate either way, and there is no glyph to add that would
+// not be chrome competing with the content it bounds (§9.23). So the room says
+// it in words, and the words survive --ascii and NO_COLOR because they are words:
+// nothing here is carried by a hue, a weight or a glyph.
+//
+// It leads with the KEY THAT REVERSES IT, on `a not asking`'s exact precedent
+// (§9.24): the room states a standing state and the one press that ends it
+// together, so an operator who inherited an arranged room does not have to
+// remember which key undoes it.
+//
+// Two facts, one cell. `split` and `sized` are independent — an operator can
+// grow a pane inside a split — and a second separated cell for the second fact
+// would double the legend's width to say one more word.
+func paneArrangement(st State) string {
+	split := st.PaneOwner != ""
+	sized := false
+	for _, g := range st.PaneGrow {
+		if g != 0 {
+			sized = true
+			break
+		}
+	}
+	switch {
+	case split && sized:
+		return "panes split, sized"
+	case split:
+		return "panes split"
+	case sized:
+		return "panes sized"
+	}
+	return ""
 }
 
 // composerRows is how many rows the draft wants, before the height floor.
@@ -3653,6 +3741,33 @@ func modeHints(st State, g Glyphs) []hint {
 	// including compose, where the page stays open while a brief is typed
 	// (§9.22).
 	several := len(st.VisibleColumns()) > 1 && !st.Page.Open && st.Record == nil
+	// The pane keys, while `^w` is armed and only then (§9.51).
+	//
+	// This REPLACES the line rather than adding a cell to it, and that is what
+	// keeps the footer's own hint set untouched: every key named here is live for
+	// exactly one keystroke, and every key named on the ordinary line is not. A
+	// permanent `^w panes` cell would have been the honest alternative and it
+	// costs more than it is worth — the footer already sheds cells at 80 columns
+	// (§9.20's ladder), and a cell that appears on every frame to describe a mode
+	// nobody is in would push a live key off a narrow room.
+	//
+	// It is also this control's whole footer documentation, on flowStopHint's
+	// precedent: the keys exist only in this moment, and the line names them on
+	// every frame of exactly this moment. The help panel teaches the PREFIX, which
+	// is the part a reader has to know before they can get here.
+	//
+	// `any cancel` rather than `esc cancel`, because that is what the handler
+	// does: an unrecognised key drops the prefix and is swallowed. Naming `esc`
+	// alone would promise that the other keys fall through, and one of them is
+	// `q`.
+	if st.PanePrefix {
+		return []hint{
+			{key: "s", label: "split"},
+			{key: "< >", label: "resize"},
+			{key: "e", label: "even"},
+			{key: "any", label: "cancel"},
+		}
+	}
 	if st.Mode == ModeComposing {
 		// The routing is stated before the keybindings because it is the one
 		// thing on this line that changes what enter DOES. An @typo has to read
@@ -4431,9 +4546,22 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// then this row hard-coded one anyway. The key column is padded by
 		// helpKeyCol rather than by hand, so a two-digit roster cannot
 		// shear the prose column off helpIndent.
+		//
+		// `^w` joined this row and cost the panel NO row, which is the whole
+		// reason it is here and not on one of its own (§9.51). The budget is hard
+		// (16 rows, above) and this is the row a reader is already on: focus asks
+		// which pane the keys address, and `^w` asks how wide that pane is — one
+		// question about the grid, asked twice. "goes" paid for it, on the row's
+		// own precedent above; the verb is unambiguous without it.
+		//
+		// The row teaches the PREFIX and stops there. What `s`, `<`, `>` and `e`
+		// do is on the mode line, on every frame of the one moment they are live
+		// (modeHints) — flowStopHint's precedent, and the only affordable shape:
+		// four more keys spelled out here is a row this panel does not have, and a
+		// row below the fold is no row at all (§9.20).
 		helpKeyCol("tab / 1-"+seatTop()) +
 			"focus between columns — in compose too; 1-" + seatTop() +
-			" goes straight to a seat, by position",
+			" straight to a seat, by position; ^w sizes the panes",
 		// The screenful keys merged onto the line-wise row, and the merge is the
 		// category rather than a saving — the bar this panel's budget comment
 		// sets. They are one act at two scales, which is exactly the argument
