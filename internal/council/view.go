@@ -117,6 +117,10 @@ func Render(st State, sty Styles, g Glyphs) string {
 func layoutFor(st State, g Glyphs) Layout {
 	vis := st.VisibleColumns()
 	cols, primary := len(vis), framePrimary(st, vis)
+	// The operator's own boundaries (§9.51). Resolved from vendor to position
+	// here, beside the two other per-position inputs, so resolveLayoutIn stays
+	// arithmetic over a row and never learns what a seat is.
+	bias := st.paneBias(vis)
 	if st.Page.Open || st.Record != nil {
 		// A turn page is ONE reading area at the full frame, so it plans as one
 		// column — which is the tabs tier's own arithmetic, already written and
@@ -132,7 +136,9 @@ func layoutFor(st State, g Glyphs) Layout {
 		// The arena record is the same geometry for the same reason (§9.47): one
 		// reading area at the full frame, one line per seat. A third layout path
 		// would be a third place for the frame to tear.
-		cols, primary = 1, nil
+		// The operator's boundaries go with them, and for the same reason: a
+		// boundary sits BETWEEN two panes, and these bodies have one.
+		cols, primary, bias = 1, nil, nil
 	}
 	// The band is asked for only when the body is the GRID. A turn page already
 	// renders the brief once — that is half of what it is for (§9.22) — and the
@@ -152,6 +158,7 @@ func layoutFor(st State, g Glyphs) Layout {
 		Composer: composerRows(st, g),
 		Notice:   collapsedNotice(st, g) != "",
 		Primary:  primary,
+		Bias:     bias,
 		Band:     band,
 		// Asked of the queue rather than of a drawn line, because the strip's
 		// height is one row or none by construction (needsYouRows) — and because
