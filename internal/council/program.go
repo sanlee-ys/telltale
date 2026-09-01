@@ -204,6 +204,33 @@ type Model struct {
 	teardownMu   sync.Mutex
 	teardownDone bool
 
+	// ended is how many vendor processes teardown actually killed, and closed
+	// reports that teardown ran at all (design.md §9.52, rung 0).
+	//
+	// Two fields rather than one, for §4a.1's reason: a room that quit having
+	// spawned nothing and a room that never reached teardown are different
+	// facts, and a count of zero cannot tell them apart. Only the second is a
+	// room with nothing to say on the way out.
+	//
+	// Counted rather than derived. len(m.procs) at the moment Run returns would
+	// be zero whether teardown emptied the map or the room never filled it, and
+	// the closing line's whole job is to report what was ENDED.
+	//
+	// Written under teardownMu with the rest of teardown's state, because the
+	// exit-signal watcher reaches teardown on its own goroutine. Read in Run
+	// after p.Run() has returned, by which point both callers are done.
+	ended  int
+	closed bool
+
+	// rebuild is the room-open rebuild, nil when there is none (rebuild.go,
+	// design.md §9.52 rung 2).
+	//
+	// On Model rather than on State, the boundary the brief and the
+	// reattachment already keep: the renderer reads a notice and a per-seat
+	// note, never this. A field the renderer never reads cannot drift behind
+	// what is drawn.
+	rebuild *rebuildRun
+
 	// brief is the shared operating context. Held on Model, never on State:
 	// its content is the user's private file and the renderer has no business
 	// being able to reach it.
@@ -709,6 +736,15 @@ func (m *Model) Init() tea.Cmd {
 		// rather than sequenced because it is independent of everything else
 		// here.
 		readQuotaCmd(),
+		// The room-open rebuild (rebuild.go, design.md §9.52). Nil when there
+		// is nothing to rebuild, so a cold room and a room whose vendors are
+		// absent both start exactly as they did.
+		//
+		// Fired from HERE and from nowhere else, and that placement is what
+		// keeps the package's spawn guard whole: no test calls Init, so a Model
+		// a test builds directly launches nothing, and main_test.go's TestMain
+		// needs no exception for this path.
+		m.rebuildCmd(),
 	)
 }
 
@@ -738,6 +774,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// carry nothing the room needs.
 		return m.paste(msg)
 
+	case rebuildMsg:
+		// The room-open rebuild, launched ON the update loop so m.procs keeps
+		// its single writer (rebuild.go).
+		return m, m.startRebuild()
+
 	case eventBatchMsg:
 		m.applyEvents(msg.events)
 		// A racer that landed in this batch may have queued a check run
@@ -761,6 +802,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// construction — council does not write the relay, so a vendor's
 			// new figure appears only after its own statusline renders again —
 			// which is what the age suffix on the reading is for.
+			//
+			// A rebuild in flight is the one case where a room with no turn
+			// must keep waiting. The seats it just launched are live processes
+			// that have not yet said which thread they loaded, so the channel
+			// is exactly the thing that will write next — the comment above
+			// ("nothing will write to it") is false while that is true.
+			if m.rebuildInFlight() {
+				return m, tea.Batch(m.waitEvents(), chk)
+			}
 			return m, tea.Batch(readQuotaCmd(), chk)
 		}
 		// A racing seat's stream activity may have armed a live stat read
@@ -813,6 +863,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.st.Busy() || m.st.ArenaSetup != "" {
 			m.st.Spinner++
 		}
+		// The tick is also the rebuild's backstop: a seat whose process died
+		// without an event is settled here, by reading the same liveness the
+		// KindDone branch trusts rather than by giving a slow vendor a deadline
+		// (rebuild.go).
+		m.settleDeadRebuilds()
 		// The tick is the throttle's second leg: arming happens on activity,
 		// but a seat armed mid-interval has to be read when the interval
 		// expires even if the vendor has gone quiet since — a burst of writes
@@ -2982,6 +3037,27 @@ func Run(opts Options) error {
 	// state from the last completed turn is still on disk.
 	if mdl.saveErr != nil {
 		fmt.Fprintln(os.Stderr, "telltale council: the room state could not be saved:", mdl.saveErr)
+	}
+	// The closing line (design.md §9.52, rung 0). AFTER the save report, because
+	// a save that failed changes what the next launch will find and the reader
+	// should meet that correction before being told where the ids are.
+	//
+	// Only when teardown actually ran. A room that returned some other way — an
+	// error out of the program, a path that never reached the update loop — has
+	// killed nothing and has nothing to report about seats; a line claiming a
+	// clean close would be the room describing an exit it did not take.
+	if ended, closed := mdl.closingFacts(); closed {
+		// The path is resolved here rather than carried, and a failure is a
+		// reported state rather than a swallowed one: closingLines takes the
+		// empty string to mean "the location could not be resolved" and says
+		// exactly that instead of naming a file it did not find.
+		path, perr := RoomPath()
+		if perr != nil {
+			path = ""
+		}
+		for _, line := range closingLines(ended, mdl.st.Turn, path, mdl.st.Home) {
+			fmt.Println(line)
+		}
 	}
 	return nil
 }

@@ -1,0 +1,24 @@
+  council READ  │  ~/code/telltale                                                  turn 7  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▌ ▸ 1 CC Claude Code  ────────  ○ idle  │    2 CX Codex  ─────────────  ○ idle  │    3 AG Antigravity  ───────  ○ idle  
+▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▌                                       │  this seat's thread came back. the    │                                       
+▌ this seat's thread came back. the     │  next brief continues it.             │                                       
+▌ next brief continues it.              │                                       │                                       
+▌                                       │  rebuilding this seat — a new         │  no thread came back for this seat.   
+▌ rebuilding this seat — a new process  │  process is loading the saved         │  its next brief opens a new session,  
+▌ is loading the saved thread.          │  thread.                              │  with the brief re-applied.           
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+              ⚠ reattached from ~/.telltale/council/room.json — turn 7 was the last, saved 2h ago · rebuilding 2 seats  

@@ -7303,6 +7303,88 @@ routine skip.
 - **Nothing here is cached.** Every run re-walks, at the cost measured above. A cache would be
   a ledger that can disagree with the files it came from, and the mode is not on a tick.
 
+### 7.27 `telltale council ls` — the saved room, read and never opened (2026-09-01)
+
+`telltale council` is the only way to see what the saved room holds, and it is an expensive
+way. It enters the alternate screen, it detects every vendor, and after this section's sibling
+(§9.52) it also rebuilds the seats. An operator who only wants to know *what is saved* must not
+pay for a room to find out. `telltale council ls` answers that question and does nothing else.
+
+The mode also has a job that outlives this question. §9.52's rebuild and the later host work
+both need one place that reports what is on disk. A discovery surface built under a deadline,
+beside the feature that needs it, is a surface that inherits that feature's shape. This one is
+built first and alone.
+
+#### It is the SIXTH reader, and it holds the same contract
+
+CLAUDE.md's read/write boundary lists five readers: `statusline`, `hud`, `snapshot` (§7.22),
+`mcp` (§7.25) and `history` (§7.26). This is the sixth, and it is closest to `history` — it
+reads no scan at all. It reads exactly one file, `~/.telltale/council/room.json`, through
+`LoadRoom`, the same loader the room itself uses.
+
+- It **writes nothing**. Not the file it read, not a cache, not a lock.
+- It **spawns nothing**. No vendor process starts. `exec.LookPath` is the deepest it reaches,
+  and that resolves a name against `PATH` rather than running a program.
+- It **binds nothing**. No port, no pipe, stdout only.
+- It **relays no quota**, so it holds the contract with the same one item spare that `snapshot`
+  and `history` hold it with, and for the identical reason: it renders no quota of its own,
+  so it has none to relay.
+
+The reason this is stated at the same length the other five state it is that council is the
+product's one ratified exception. A council sub-mode that read like a gauge but wrote like the
+room would be the exception growing by accident. This one is a gauge.
+
+#### The three states a seat can be in, and why two of them are not one
+
+§4a.1's rule is the whole of the per-seat output. A saved room names a set of vendors, and each
+one is in exactly one of three states:
+
+| what is true | how it renders | why it is its own state |
+|---|---|---|
+| a session id is saved, and this machine can run the vendor | `saved` | the only row a rebuild can act on |
+| a session id is saved, and this machine cannot run the vendor | `saved, not installed here` | the id is real and unreachable from this box. A room opened here will not rebuild it. |
+| no session id is saved for this seat | `no thread saved` | a measured absence: the seat was in the roster and never answered, or its thread was cleared |
+
+Collapsing rows two and three would tell an operator on a second machine that a conversation is
+gone when the id is on disk and the vendor is missing. That is the same class of error as a
+column of dashes for a vendor that could never fill it.
+
+#### What it deliberately refuses to say
+
+**It never claims a thread is alive.** Nothing this mode can read proves that a vendor still
+holds a session. Only the vendor answers that, and only when a process asks it to resume. So
+the word is `saved`, never `live` and never `resumable`. §9.52 states the same limit from the
+room's side: a launched process is not a proven thread either.
+
+**It never verifies an id against a vendor.** Verification means a spawn, a spawn means a
+vendor process, and on some seats a resume attempt is billable. A read mode that quietly spends
+money is not a read mode. The cost of the honest answer is one word: `saved`.
+
+**It prints no content, because the file holds none.** `room.json` is session ids, a workspace,
+a brief PATH and a handful of scalars (`resume.go`'s `SavedRoom` doc comment is the contract).
+This mode cannot leak a conversation because it has no conversation to leak.
+
+**It does not restore the posture it prints.** The saved posture is a record of what the room
+stood in, and `reattach` already refuses to re-apply it. A reader that printed it as though it
+were the posture of the next launch would undo that ruling in a listing.
+
+#### Shape
+
+Words and no colour, on `doctor`'s and `history`'s precedent. Every fact carries its own label,
+so no column alignment has to survive a narrow terminal.
+
+**It takes no flags at all, and that is a decision.** The other readers take `--root` to point
+at a corpus of *vendor* stores. This mode reads telltale's own state, so `--root` here would
+have to mean a different thing, and one flag with two meanings across two modes is worse than
+no flag. It is also a two-word mode rather than a `--list` on the room, on the `hook cursor` /
+`events view` / `otel grok` precedent: none of the room's flags apply to it, and a flag would
+have to explain why it ignored every one of them.
+
+A refused file prints the reason `LoadRoom` gives, in `LoadRoom`'s own words, and exits 0. A
+damaged file on disk is a state to report, not an error to fail on — the same ruling the room
+makes when it opens anyway and says why. No saved room at all prints one sentence naming the
+command that makes one.
+
 <a id="s8"></a>
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
@@ -16479,3 +16561,174 @@ arrangement is legible with `PlainStyles` and the ASCII glyph set — which is t
 catch a pane feature readable only in colour. Four goldens are new: `panes-split.txt`,
 `panes-split-ascii.txt`, `panes-sized.txt` and `panes-keys.txt`. One golden changed, `help.txt`,
 by one row, because the panel now names the prefix.
+### 9.52 the room ended every agent on the way out and never said so, and the room that came back implied they had lived (2026-09-01)
+
+Two defects, one sentence apart, and they are the same defect seen from each end of a quit.
+
+**On the way out, the room says nothing.** `q` and `ctrl+c` reach `teardown`, which kills every
+seat process, and that is correct: an agent that outlives the window that shows it is the
+invisible state this product refuses. Nothing on screen says it happened. The operator learns
+the contract by noticing, later, that a conversation is cold.
+
+**On the way back in, the room says the wrong thing.** The reattach notice reports
+`2/3 seats restored`, and the seat card reports `this seat's thread came back`. Both sentences
+are true about the THREAD. Neither says one word about the PROCESS, and the process is the half
+that died. A room that opens on four columns of restored threads reads as a room that was left
+running. It was not.
+
+This section rules both halves and it introduces one word.
+
+#### The word is `rebuild`, and `reattach` and `rejoin` are not touched
+
+`reattach` is taken. It means *resume the vendor session ids from `room.json`*, in
+`Reattachment` (`resume.go`), in the goldens (`testdata/golden/reattached.txt`) and in the demo
+script (`STATE.md`). It keeps that meaning exactly.
+
+`rejoin` is reserved and deliberately unspent. A later host lane needs a verb for *a client
+reconnects to a live process*, and spending it here on something that is not that would leave
+that lane renaming a shipped word.
+
+So the new verb is **rebuild**, and the three words name three different facts:
+
+| word | what it is a fact about | when it is true |
+|---|---|---|
+| **reattach** | the FILE | the room read `room.json` and holds the saved ids |
+| **rebuild** | the PROCESS | the room launched a NEW vendor process on a saved id |
+| **rejoin** | reserved | *(a client reaches a process that was already running — nothing does this today)* |
+
+The room performs the first two. It has never performed the third, and until something does, no
+surface may use the word.
+
+#### Rung 0 — the quit path states the contract it already keeps
+
+Nothing changes about what quitting does. What changes is that quitting says it.
+
+The room prints a closing line on stdout after the alternate screen is released. It is stdout
+rather than a card because there is no longer a frame to draw a card in — the same reasoning
+that already puts a failed save on stderr at that point.
+
+The line reports three measured facts and infers none of them:
+
+1. **How many vendor processes were ended.** Counted in `teardown`, from the seat registry it is
+   already ranging over. A room that spawned nothing reports a measured zero in its own words —
+   `no vendor process was running` — rather than `0 vendor processes ended`, because the two
+   sentences answer different questions and only the first one is true here.
+2. **What survived on disk, and what did not.** The session ids and the turn number survived, at
+   the named path. The conversation did not. Saying only the first would let `room.json` be read
+   as a transcript, which it has never been (`resume.go`'s doc comment).
+3. **What reopening costs.** Named as a rebuild, in rung 2's vocabulary, so the two ends of one
+   quit use one word.
+
+The line is not a warning and carries no mark. Ending the seats is the room working.
+
+#### Rung 2 — the rebuild happens at room open, and it says which of the two things it is
+
+Today the saved session ids are spent on the FIRST DISPATCH: `seatProcess` launches the seat's
+process with the saved id when the operator's first brief arrives. Everything that startup costs
+is therefore charged to the first brief, and the operator waits for it while looking at a room
+that appeared instantly.
+
+Rung 2 moves the launch to room open. The room rebuilds every restorable seat as soon as it
+opens, in parallel, and reports each one's progress in its own column.
+
+**What that buys is latency, and it is worth stating exactly which latency.**
+`runner/session.go` records the measurement this rests on: a one-word turn cost about 25 seconds
+and about $0.23, *nearly all of it startup*. Moving the launch earlier moves the seconds and
+does not move the dollars — a process that has started has run no model turn, so nothing is
+billed until the first brief. So the claim is split, and the room states both halves:
+
+- **The ~25 seconds are spent at room open instead of on the first brief.** That is what the
+  operator gets.
+- **The ~$0.23 a seat is still billed by the first brief.** Rung 2 does not spend it early and
+  must not appear to.
+
+Both figures carry a leading `~` and both name what was measured: one one-word turn, once. Four
+seats is an extrapolation from one measurement, and the room says so rather than printing a
+four-seat total as though somebody had counted it.
+
+**Per-seat progress is measured at every step, and there are four outcomes.** They are carried
+on the column's existing note, so this rung adds no field and no render path:
+
+| state | what was measured | what the seat says |
+|---|---|---|
+| **rebuilding** | the spawn returned with no error | a new process is loading the saved thread |
+| **rebuilt** | the vendor announced a session id, and it is the saved one | the thread came back, on a NEW process — and the one you left was ended |
+| **forked** | the vendor announced a DIFFERENT session id | §9.43's existing sentence, unchanged |
+| **failed** | the spawn failed, or the process exited before it announced anything | the vendor's own line, and the next brief opens a new session |
+
+#### Where each half of the news lives, and why it is not the notice
+
+The first build put the whole statement in the room notice, and the notice **is one line and
+it is truncated, not wrapped**. At 120 columns the reattach sentence already fills most of it,
+so the settled rebuild rendered as `… 2/4 seats rebuilt in 0s — NE…`. A cost clause that
+disappears at a hundred columns is not a stated cost, and the clause being cut was the exact
+one the rung exists to say.
+
+The columns are the opposite shape: every note wraps, every seat has one, and `noteCard`
+already draws a muted detail block under its title. So the split follows the shape of each
+surface, and it lands where `reattachCard`'s own rule already points — the room fact in the
+notice once, the seat fact in the seat.
+
+- **The COLUMN carries the sentence that must never be lost**, and the measured cost under it
+  as detail. The cost is a *per-seat* fact (`$0.23 a seat`), so per-seat is the correct home
+  and not merely the roomy one.
+- **The NOTICE carries the room fact.** `rebuilding 2 seats`, joined to the reattach sentence
+  while the rebuild runs; then `2/4 seats rebuilt in 24s — NEW processes, not the ones you
+  left` once it settles.
+
+**The settled sentence replaces the reattach sentence rather than joining it**, and that is
+the one thing this rung spends. Joined, it is cut. The reattach sentence is not lost by the
+swap: it was the entire notice from room open until the moment the rebuild settled, so its
+once-only clauses have been on screen for the whole window — and `telltale council ls` (§7.27)
+can print them again at any time.
+
+**`rebuilding` and `rebuilt` are two states and they must not collapse.** A launched process is
+not a proven thread. `persistent.go` already refuses to claim otherwise on this exact path —
+"Deliberately NOT reattached to the saved thread. Nothing has come back yet" — and the rebuild
+keeps that rule. What promotes a seat from `rebuilding` to `rebuilt` is the vendor's own init
+line arriving with a session id, which is a statement from the vendor and not a timer.
+
+**The fork case is not new machinery.** A vendor that is asked to resume and answers in a fresh
+conversation is §9.43's finding, and `adoptSession` already detects it through `forkWatch` and
+already prints the honest correction. The rebuild arms `forkWatch` with the saved id exactly as
+a dispatch does, so a fork at room open and a fork at turn 5 report identically. One mechanism,
+one sentence.
+
+**The seat card and the note say different halves, on purpose.** The existing reattach card says
+`this seat's thread came back`, which is a claim about the thread and stays true. The rebuild
+note under it says the process is new. Together they state what came back and what did not.
+Neither alone would.
+
+#### What rung 2 deliberately does not do
+
+**It persists nothing new.** No transcript, no scrollback, no vendor output. `resume.go` ruled
+this for the same data, and the ruling does not change because a process moved: duplicating any
+of it would be a second copy of a private conversation in a place the user did not choose.
+`room.json` stays session ids, a workspace, and numbers.
+
+**It starts no process the room would not have started anyway.** Every seat it launches is a
+seat the first brief was going to launch. The rebuild changes WHEN, never WHETHER. A room that
+opened and spawned a seat the operator had not seated would be spending on a roster nobody
+typed.
+
+**It launches nothing that is not restorable.** A seat with no saved id, a vendor this machine
+cannot run, and a seat that is not driven as a live process are all skipped. Each is skipped for
+a measured reason, and none of the three is reported as a failure.
+
+**It does not survive anything.** This is the sentence the whole rung is built around: the
+agents did not live through the quit. They were ended, and new ones were started on the ids they
+left behind. A room that rendered a rebuild as a continuation would be the most expensive lie
+this surface could tell, because the operator would trust a history that no process holds.
+
+#### Verification
+
+The rebuild is exercised with the spawn vars stubbed (`countSpawns`), which is the package's
+standing rule: a council test never starts a vendor. The kickoff is fired from `Init`, which no
+test calls, so a model a test builds directly launches nothing at all.
+
+Goldens pin the two rendered states apart — `rebuilding.txt` and `rebuilt.txt` — because
+`rebuilt` and `survived` rendering alike is the regression this section exists to prevent. Both
+take their strings from the model itself rather than from text typed into the test, so a
+wording change moves the golden instead of quietly passing a stale assertion. **No footer hint
+was added**, so no existing golden moved: every golden's last line is the footer's key hints,
+and one new hint there rewrites about eighty-nine files at once.
