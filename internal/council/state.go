@@ -845,6 +845,55 @@ func (s State) VisibleColumns() []int {
 	return vis
 }
 
+// paneBias is PaneGrow laid out over the panes actually DRAWN, in their order,
+// or nil when the operator has moved no boundary on this row (§9.51).
+//
+// The translation from vendor to position happens here, once, because it is the
+// only place that knows both — PaneGrow is keyed by seat so it survives a
+// renumber, and resolveLayoutIn is indexed by position so its arithmetic never
+// has to know what a vendor is.
+//
+// Nil for a row with fewer than two panes: a bias describes a BOUNDARY, and one
+// pane has none. Returning a live bias there would be a stored fact quietly
+// resizing a column against nothing.
+func (s State) paneBias(vis []int) []int {
+	if len(s.PaneGrow) == 0 || len(vis) < 2 {
+		return nil
+	}
+	out := make([]int, len(vis))
+	any := false
+	for j, idx := range vis {
+		if idx < 0 || idx >= len(s.Columns) {
+			continue
+		}
+		if g := s.PaneGrow[s.Columns[idx].Vendor]; g != 0 {
+			out[j] = g
+			any = true
+		}
+	}
+	if !any {
+		return nil
+	}
+	return out
+}
+
+// PanesArranged reports that the operator has split or sized the panes (§9.51).
+//
+// It is what the composer border asks before it spends its legend on the fact.
+// A room nobody has touched says nothing about panes, which is why every golden
+// taken before this feature is still byte for byte correct.
+func (s State) PanesArranged() bool {
+	if s.PaneOwner != "" {
+		return true
+	}
+	for _, g := range s.PaneGrow {
+		if g != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // focusedIs reports whether c is the column the keys address.
 //
 // By VENDOR rather than by index, because the renderer is handed a COPY of the
@@ -1257,6 +1306,46 @@ type State struct {
 	// path — so there is no second layout to keep in sync. Expanded outranks
 	// FrameOwners for the frames it is on.
 	Expanded bool
+
+	// PaneOwner is the seat the OPERATOR gave the reading width to (§9.51).
+	//
+	// Empty means they have not split the room, which is every frame this room
+	// drew before §9.51 and still the ordinary one.
+	//
+	// It is the operator's half of the same question FrameOwners answers from
+	// the route, and it OUTRANKS FrameOwners for the frames both are set on: a
+	// split the operator asked for is a request, and FrameOwners is an inference
+	// from where a turn was sent. A dispatch replaces FrameOwners and leaves this
+	// alone, so a room the operator arranged stays arranged across turns.
+	//
+	// A VENDOR rather than a position, and rather than "whichever pane has
+	// focus". Positions renumber when a seat folds out (SeatNumber). Focus moves
+	// on `tab`, and a split that followed it would re-wrap two columns of prose
+	// on a key that today moves a marker — the moving cell §7.1 rule 4 does not
+	// budget for.
+	PaneOwner model.VendorID
+
+	// PaneGrow is the operator's own width bias per seat, in cells (§9.51).
+	//
+	// Nil or empty means they have moved no boundary. One press of the resize
+	// key adds a step here and subtracts the same step from the pane that pays,
+	// so the map sums to zero over the panes on screen — normalizeBias repairs
+	// it when a seat folds out and takes half of a pair with it.
+	//
+	// Keyed by vendor for PaneOwner's reason, and held on State rather than on
+	// Model for TurnView's (§9.22): Render has to draw it, and Render is pure
+	// over State.
+	PaneGrow map[model.VendorID]int
+
+	// PanePrefix reports that `^w` is armed and the next key is a pane key
+	// (§9.51).
+	//
+	// A mode that lasts exactly one keystroke, and it is on State because the
+	// room has to SAY it is in one: the composer border reads PANES and the
+	// footer names the four keys while this is set. §7.8 forbids a mode that
+	// changes what an unmodified key means without saying so, and for that one
+	// keystroke `s` is not the letter s.
+	PanePrefix bool
 
 	// FrameOwners are the vendors that own column width until the NEXT
 	// dispatch. Empty means equal four-up (an @all / everyone turn).

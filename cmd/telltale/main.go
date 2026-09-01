@@ -8,6 +8,8 @@
 //	                      --vendor cursor, because it stamps no marker — §2.2)
 //	telltale hud          cross-vendor watch-mode TUI
 //	telltale council      dispatch room: one brief to several vendor CLIs at once
+//	telltale council ls   the saved room, read and never opened: a sixth READER,
+//	                      of the one file council writes (design.md §7.27)
 //	telltale council host the room in a process of its own: it owns the vendor
 //	                      processes, the pipes and the room state, and serves one
 //	                      client over a named pipe. Nobody types it; a client
@@ -946,6 +948,19 @@ func runHUD(args []string) error {
 // than reading their files. It shares no keybinding with the HUD and is not
 // reachable from it — the only way in is typing this subcommand (ADR-008).
 func runCouncil(args []string) error {
+	// `telltale council ls` is a READER of the file the room writes, not a way
+	// into the room (design.md §7.27). It is intercepted before the flag set,
+	// on the two-word shape `hook cursor`, `events view` and `otel grok`
+	// already use — a sub-noun rather than a flag, because none of the room's
+	// flags apply to it and a `--list` would have to explain why it ignored
+	// every one of them.
+	if len(args) > 0 && args[0] == "ls" {
+		if len(args) > 1 {
+			return errors.New("telltale council ls takes no arguments — it reads the one saved room")
+		}
+		return council.ListRooms(os.Stdout)
+	}
+
 	// The one seam this change opens in an existing command. `host` is a
 	// SUB-NOUN, matching `hook cursor`, `events view` and `otel grok`, and it is
 	// routed before the flag set so that `telltale council host --pipe …` is not
@@ -1236,6 +1251,11 @@ usage:
                          Cursor NEEDS the flag — it stamps no marker (§2.2).
   telltale hud           cross-vendor session HUD
   telltale council       dispatch room: one brief, several agents, side by side
+  telltale council ls    read the saved room without opening it: where it was,
+                         which turn was last, and which seats have a thread
+                         saved. Writes nothing, starts no vendor, and never
+                         claims a saved thread is still live — only the vendor
+                         answers that, and only on a resume (§7.27)
   telltale hook cursor   (wire into ~/.cursor/hooks.json as an afterAgentResponse
                          command hook) read one turn's token counts on stdin,
                          add them to this machine's running total, print nothing

@@ -204,6 +204,33 @@ type Model struct {
 	teardownMu   sync.Mutex
 	teardownDone bool
 
+	// ended is how many vendor processes teardown actually killed, and closed
+	// reports that teardown ran at all (design.md §9.52, rung 0).
+	//
+	// Two fields rather than one, for §4a.1's reason: a room that quit having
+	// spawned nothing and a room that never reached teardown are different
+	// facts, and a count of zero cannot tell them apart. Only the second is a
+	// room with nothing to say on the way out.
+	//
+	// Counted rather than derived. len(m.procs) at the moment Run returns would
+	// be zero whether teardown emptied the map or the room never filled it, and
+	// the closing line's whole job is to report what was ENDED.
+	//
+	// Written under teardownMu with the rest of teardown's state, because the
+	// exit-signal watcher reaches teardown on its own goroutine. Read in Run
+	// after p.Run() has returned, by which point both callers are done.
+	ended  int
+	closed bool
+
+	// rebuild is the room-open rebuild, nil when there is none (rebuild.go,
+	// design.md §9.52 rung 2).
+	//
+	// On Model rather than on State, the boundary the brief and the
+	// reattachment already keep: the renderer reads a notice and a per-seat
+	// note, never this. A field the renderer never reads cannot drift behind
+	// what is drawn.
+	rebuild *rebuildRun
+
 	// brief is the shared operating context. Held on Model, never on State:
 	// its content is the user's private file and the renderer has no business
 	// being able to reach it.
@@ -709,6 +736,15 @@ func (m *Model) Init() tea.Cmd {
 		// rather than sequenced because it is independent of everything else
 		// here.
 		readQuotaCmd(),
+		// The room-open rebuild (rebuild.go, design.md §9.52). Nil when there
+		// is nothing to rebuild, so a cold room and a room whose vendors are
+		// absent both start exactly as they did.
+		//
+		// Fired from HERE and from nowhere else, and that placement is what
+		// keeps the package's spawn guard whole: no test calls Init, so a Model
+		// a test builds directly launches nothing, and main_test.go's TestMain
+		// needs no exception for this path.
+		m.rebuildCmd(),
 	)
 }
 
@@ -738,6 +774,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// carry nothing the room needs.
 		return m.paste(msg)
 
+	case rebuildMsg:
+		// The room-open rebuild, launched ON the update loop so m.procs keeps
+		// its single writer (rebuild.go).
+		return m, m.startRebuild()
+
 	case eventBatchMsg:
 		m.applyEvents(msg.events)
 		// A racer that landed in this batch may have queued a check run
@@ -761,6 +802,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// construction — council does not write the relay, so a vendor's
 			// new figure appears only after its own statusline renders again —
 			// which is what the age suffix on the reading is for.
+			//
+			// A rebuild in flight is the one case where a room with no turn
+			// must keep waiting. The seats it just launched are live processes
+			// that have not yet said which thread they loaded, so the channel
+			// is exactly the thing that will write next — the comment above
+			// ("nothing will write to it") is false while that is true.
+			if m.rebuildInFlight() {
+				return m, tea.Batch(m.waitEvents(), chk)
+			}
 			return m, tea.Batch(readQuotaCmd(), chk)
 		}
 		// A racing seat's stream activity may have armed a live stat read
@@ -813,6 +863,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.st.Busy() || m.st.ArenaSetup != "" {
 			m.st.Spinner++
 		}
+		// The tick is also the rebuild's backstop: a seat whose process died
+		// without an event is settled here, by reading the same liveness the
+		// KindDone branch trusts rather than by giving a slow vendor a deadline
+		// (rebuild.go).
+		m.settleDeadRebuilds()
 		// The tick is the throttle's second leg: arming happens on activity,
 		// but a seat armed mid-interval has to be read when the interval
 		// expires even if the vendor has gone quiet since — a burst of writes
@@ -869,10 +924,59 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.flowWritePending {
 		return m.flowWriteGateKey(msg)
 	}
+	// The pane prefix (§9.51). It sits UNDER every gate above and OVER the mode
+	// split below, and both halves of that placement are deliberate.
+	//
+	// Under the gates because a gate is the only state in this room where
+	// something is stopped until a key is pressed, and an armed prefix must never
+	// be able to eat the `y` that unblocks a vendor. A prefix cannot survive a
+	// gate arriving either: paneKey clears it on the first key it sees, whatever
+	// that key is.
+	//
+	// Over the mode split because for exactly one keystroke the prefix IS the
+	// mode, and routing it through viewKey would put the four pane letters into
+	// that keymap's own switch, where `s` already stops a flow chain and `e` is
+	// free only by accident.
+	if m.st.PanePrefix {
+		return m.paneKey(msg)
+	}
 	if m.st.Mode == ModeComposing {
 		return m.composeKey(msg)
 	}
 	return m.viewKey(msg)
+}
+
+// paneKey answers the ONE keystroke after `^w` (§9.51).
+//
+// It clears the prefix on every branch, including the default, which is what
+// makes the mode bounded rather than sticky: the room can never be left waiting
+// on a second key that the operator has stopped expecting to give.
+//
+// An unrecognised key is SWALLOWED rather than re-dispatched. Falling through
+// would read as tolerant and would be dangerous: `^w` then `q` would quit the
+// room, and `^w` then `ctrl+c` would cancel a turn — two irreversible acts
+// reached by a chord the operator has already shown they did not finish. The
+// footer says `any cancel` for that reason, rather than naming `esc` and
+// implying the rest fall through.
+func (m *Model) paneKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	m.st.PanePrefix = false
+	switch msg.String() {
+	case "s":
+		m.paneSplit()
+	case "e":
+		m.paneEven()
+	case ">", ".":
+		m.paneResize(1)
+	case "<", ",":
+		m.paneResize(-1)
+	}
+	// `.` and `,` are the unshifted keys under `>` and `<`, bound because a
+	// resize is held down rather than tapped and reaching for shift on every
+	// press is the kind of friction that makes an operator stop using a control.
+	// They are not documented separately: the footer names `< >`, which is what
+	// the act means, and a second spelling on the panel would be a second thing
+	// to learn for no second capability.
+	return m, nil
 }
 
 // clearGateKey answers the confirmation armed by `c`.
@@ -2152,6 +2256,29 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.st.Expanded = !m.st.Expanded
+	case "ctrl+w":
+		// Arms the pane prefix (§9.51). One binding buys a namespace: `s`, `<`,
+		// `>` and `e` are all live in this room already — `s` stops a flow chain,
+		// and the other three are free only until the next feature wants them —
+		// so four top-level chords would have spent the last of a keymap that has
+		// eight free lowercase letters left in it.
+		//
+		// **Armed only when a pane key would do something.** panesLive answers
+		// that, and refusing here rather than inside each act is what keeps the
+		// promise the footer makes: an armed prefix draws a line naming four keys,
+		// and arming it on a page or at the tabs tier would name four keys that
+		// all do nothing — §7.8's surprise, delivered by the one line that exists
+		// to prevent it.
+		//
+		// View mode only, and it is view mode only by construction rather than by
+		// a test here: composeKey routes every printable key into the draft and
+		// never reaches this switch. That is the same contract `q`, `f`, `c` and
+		// `t` keep, and it is what stops an armed prefix from eating a character
+		// out of a half-typed brief.
+		if !m.panesLive() {
+			return m, nil
+		}
+		m.st.PanePrefix = true
 	case "t":
 		// The by-turn projection. One key, a toggle, because the two views are
 		// one transcript read two ways (§9.22). View mode only: in compose `t` is
@@ -2568,6 +2695,152 @@ func (m *Model) focusBy(d int) {
 	m.st.Focus = vis[((pos+d)%len(vis)+len(vis))%len(vis)]
 }
 
+// panesLive reports that pane controls would actually change the frame (§9.51).
+//
+// Three conditions, and each one is a surface with no boundary in it. A page or
+// a record is one reading area. `f` has already given one pane the whole frame.
+// And below the columns tier the room draws one column at a time, so a split or
+// a bias is stored state that paints nothing.
+//
+// It resolves the tier through layoutFor rather than testing Width against
+// columnsBreak, because layoutFor is the one function that knows how the tier is
+// decided — it drops to tabs on a narrow frame AND on a room that would shred,
+// and a second copy of that test here would be a second place for the keymap and
+// the renderer to disagree about which tier is on screen.
+func (m *Model) panesLive() bool {
+	if m.pageOpen() || m.st.Record != nil || m.st.Expanded {
+		return false
+	}
+	return layoutFor(m.st, m.glyphs).Tier == TierColumns
+}
+
+// paneSplit gives the focused pane the reading width and puts the rest at
+// stripColumn (§9.51).
+//
+// It SETS rather than toggles. `^w e` is the way back, the composer border names
+// it on every frame the split is live, and a key that also un-split would give
+// the room two ways out of one state — one of them undocumented, because the
+// border has room to name a reverse key and not to explain that the forward key
+// is also the reverse key.
+//
+// Pressing it on a second pane re-points the split rather than adding an owner.
+// The split answers "which seat am I reading", and that has one answer.
+func (m *Model) paneSplit() {
+	if !m.panesLive() {
+		return
+	}
+	c := m.focused()
+	if c == nil {
+		return
+	}
+	m.st.PaneOwner = c.Vendor
+}
+
+// paneEven returns every pane to the same width and drops the split (§9.51).
+//
+// It clears BOTH facts, and that is what makes it the single way back. An
+// operator who has split the room and then grown the owner has two pieces of
+// state they never named separately, and a reset that left one of them behind
+// would be a room that looks arranged after the key that says it is not.
+//
+// It does not touch FrameOwners. That set is the ROUTE's, replaced at the next
+// dispatch, and a layout key that quietly widened the seats a turn was sent to
+// would be this control reaching into a fact it does not own.
+func (m *Model) paneEven() {
+	m.st.PaneOwner = ""
+	m.st.PaneGrow = nil
+}
+
+// paneResize moves the focused pane's boundary by one step (§9.51).
+//
+// **It moves ONE boundary and pays for it from ONE neighbour.** dir=1 grows the
+// focused pane to the right and takes the cells from the pane on its right;
+// dir=-1 shrinks it and gives them back. The rightmost pane has no right
+// neighbour, so it trades with the pane on its left instead — which is what a
+// reader expects from the only pane whose right edge is the frame.
+//
+// The pair is what keeps State honest: every press writes +step and -step, so
+// PaneGrow sums to zero by construction and resolveLayoutIn's repair
+// (normalizeBias) never has to fire in a running room.
+//
+// **A move that a floor would swallow is not written at all.** The key asks the
+// pure renderer what the focused pane would end up at and keeps the change only
+// if the width actually moved the way it was asked to. That is the difference
+// between a boundary that stops at 18 cells and one that appears to move while
+// repairPaneFloors quietly puts it back — the second would leave State claiming
+// a size the frame does not have, and the border legend would then say `sized`
+// about a room that is not.
+func (m *Model) paneResize(dir int) {
+	if !m.panesLive() {
+		return
+	}
+	vis := m.st.VisibleColumns()
+	if len(vis) < 2 {
+		return
+	}
+	pos := -1
+	for j, idx := range vis {
+		if idx == m.st.Focus {
+			pos = j
+			break
+		}
+	}
+	if pos < 0 {
+		return
+	}
+	other := pos + 1
+	if other >= len(vis) {
+		other = pos - 1
+	}
+	if other < 0 {
+		return
+	}
+	mine := m.st.Columns[vis[pos]].Vendor
+	theirs := m.st.Columns[vis[other]].Vendor
+	if mine == theirs {
+		return
+	}
+	next := make(map[model.VendorID]int, len(m.st.PaneGrow)+2)
+	for k, v := range m.st.PaneGrow {
+		next[k] = v
+	}
+	next[mine] += dir * paneStep
+	next[theirs] -= dir * paneStep
+
+	before := m.paneWidthOf(m.st, mine)
+	trial := m.st
+	trial.PaneGrow = next
+	after := m.paneWidthOf(trial, mine)
+	if before < 0 || after < 0 || (after-before)*dir <= 0 {
+		return
+	}
+	m.st.PaneGrow = next
+}
+
+// paneWidthOf is the width the renderer would give one seat's pane, or -1 when
+// that seat has no pane on screen (§9.51).
+//
+// It goes through layoutFor, the same pure function Render calls, so the key
+// handler and the frame can never disagree about what a press achieved. Calling
+// a pure function from Update is the direction that is allowed: the rule is that
+// Render may not read the world, not that Update may not read Render's
+// arithmetic (§9.22 puts TurnView on State for the same reason).
+func (m *Model) paneWidthOf(st State, v model.VendorID) int {
+	lay := layoutFor(st, m.glyphs)
+	if lay.Tier != TierColumns {
+		return -1
+	}
+	for j, idx := range st.VisibleColumns() {
+		if j >= lay.Cols {
+			break
+		}
+		if st.Columns[idx].Vendor == v {
+			return lay.widthAt(j)
+		}
+	}
+	return -1
+}
+
 // focusSeat puts the keys on the nth VISIBLE seat, one-based, in seating order
 // (§9.29). It reports whether the key did anything.
 //
@@ -2764,6 +3037,27 @@ func Run(opts Options) error {
 	// state from the last completed turn is still on disk.
 	if mdl.saveErr != nil {
 		fmt.Fprintln(os.Stderr, "telltale council: the room state could not be saved:", mdl.saveErr)
+	}
+	// The closing line (design.md §9.52, rung 0). AFTER the save report, because
+	// a save that failed changes what the next launch will find and the reader
+	// should meet that correction before being told where the ids are.
+	//
+	// Only when teardown actually ran. A room that returned some other way — an
+	// error out of the program, a path that never reached the update loop — has
+	// killed nothing and has nothing to report about seats; a line claiming a
+	// clean close would be the room describing an exit it did not take.
+	if ended, closed := mdl.closingFacts(); closed {
+		// The path is resolved here rather than carried, and a failure is a
+		// reported state rather than a swallowed one: closingLines takes the
+		// empty string to mean "the location could not be resolved" and says
+		// exactly that instead of naming a file it did not find.
+		path, perr := RoomPath()
+		if perr != nil {
+			path = ""
+		}
+		for _, line := range closingLines(ended, mdl.st.Turn, path, mdl.st.Home) {
+			fmt.Println(line)
+		}
 	}
 	return nil
 }

@@ -1,0 +1,24 @@
+  council READ  │  ~/code/telltale                                                  turn 7  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▌ ▸ 1 CC Claude Code  ────────  ○ idle  │    2 CX Codex  ─────────────  ○ idle  │    3 AG Antigravity  ───────  ○ idle  
+▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▌ this seat's thread came back. the     │  this seat's thread came back. the    │                                       
+▌ next brief continues it.              │  next brief continues it.             │                                       
+▌                                       │                                       │                                       
+▌ this seat was rebuilt — the saved     │  this seat was rebuilt — the saved    │                                       
+▌ thread came back, on a NEW process.   │  thread came back, on a NEW process.  │                                       
+▌ the one you left was ended when the   │  the one you left was ended when the  │                                       
+▌ room closed.                          │  room closed.                         │                                       
+▌   its ~25s of startup is spent now    │    its ~25s of startup is spent now   │                                       
+▌   instead of on your first brief,     │    instead of on your first brief,    │                                       
+▌   which still bills its ~$0.23        │    which still bills its ~$0.23       │  no thread came back for this seat.   
+▌   (measured once, on a one-word       │    (measured once, on a one-word      │  its next brief opens a new session,  
+▌   turn).                              │    turn).                             │  with the brief re-applied.           
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+                                                      ⚠ 2/4 seats rebuilt in 0s — NEW processes, not the ones you left  

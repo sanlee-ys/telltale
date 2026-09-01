@@ -386,6 +386,12 @@ func (m *Model) dispatch() tea.Cmd {
 func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea.Cmd {
 	reg := vendors.Registry()
 
+	// The first brief retires the room-open rebuild (rebuild.go): startTurn is
+	// about to clear every per-turn field including the note the rebuild wrote,
+	// and a run left standing would go on owning events for a seat this turn is
+	// now driving.
+	m.endRebuild()
+
 	// Geometry for this turn is decided here, from the route, and stays until
 	// the next dispatch. Empty FrameOwners = equal columns (@all / everyone).
 	m.st.FrameOwners = frameOwnersFor(route, m.st)
@@ -852,6 +858,23 @@ func (m *Model) applyEvents(batch []runner.Event) {
 	for _, ev := range batch {
 		c := m.column(ev.Vendor)
 		if c == nil {
+			continue
+		}
+		// A seat the room-open rebuild is still launching owns its own events
+		// (rebuild.go, design.md §9.52). Intercepted BEFORE the switch rather
+		// than handled inside it, because every branch below is written for a
+		// turn and several of them read m.turn — an init line arriving at an
+		// idle room has no turn to belong to, and walking it through that
+		// machinery is how a process announcement becomes a column body.
+		//
+		// Ownership is narrow and it ends by itself: rebuildOwns is false the
+		// moment the seat stops launching, and false for every seat while a
+		// turn is running.
+		if m.rebuildOwns(ev.Vendor) {
+			m.applyRebuildEvent(c, ev)
+			if !m.rebuildInFlight() {
+				m.settleRebuild()
+			}
 			continue
 		}
 		switch ev.Kind {
@@ -2061,6 +2084,11 @@ func (m *Model) teardown() {
 		return
 	}
 	m.teardownDone = true
+	// The room is on its way out, whatever it finds below. Set before the kill
+	// loop so the closing line is printed even by a teardown that panics past
+	// this point — a room that ended seats and said nothing is the defect
+	// §9.52 exists to close.
+	m.closed = true
 	// Written before anything is killed, so the last thing the room does with
 	// its state is preserve it. Redundant with the per-turn save in the common
 	// case and deliberately kept: it refreshes saved-at, which is what the
@@ -2070,6 +2098,10 @@ func (m *Model) teardown() {
 	for v, p := range m.procs {
 		p.sess.Kill()
 		delete(m.procs, v)
+		// Counted here rather than from len(m.procs) before the loop, so the
+		// figure the closing line prints is the number of Kill calls this
+		// teardown actually made (§9.52).
+		m.ended++
 	}
 	// The children die before the file they were pointed at is removed. The
 	// other order would leave a live seat holding a path to a deleted hooks

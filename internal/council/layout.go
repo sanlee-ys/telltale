@@ -193,6 +193,18 @@ const (
 	// would jump back when the user hit backspace.
 	minBandBody = 8
 
+	// paneStep is how far one press of a resize key moves a pane boundary
+	// (§9.51).
+	//
+	// It is the separator's own width — one rail plus its two gutters — and it is
+	// DERIVED rather than tuned. One press slides a boundary by exactly the gap a
+	// reader already sees between two panes, so the move is visible on the first
+	// press and the number has a name instead of a provenance the next reader has
+	// to trust. A one-cell step re-wraps nothing on most lines, which reads as a
+	// key that did not work; a step of half a column overshoots every width worth
+	// stopping at.
+	paneStep = 1 + 2*gutter
+
 	// maxComposerRows is how tall the compose area may grow.
 	//
 	// Six, because a brief worth sending to four agents is a paragraph and one
@@ -272,6 +284,21 @@ type layoutInput struct {
 	// Nil, empty, or all-true means equal widths. When set, length must equal
 	// Cols; false entries get stripColumn and the rest share what remains.
 	Primary []bool
+	// Bias is the OPERATOR's own adjustment to each drawn pane's width, in
+	// cells, indexed like Primary (§9.51).
+	//
+	// Nil, or all zeros, means the operator has moved no boundary — and that is
+	// the case every frame this room drew before §9.51, so the arithmetic below
+	// must reach the same answer it always did on it. That is why the bias is a
+	// separate input applied OVER a finished apportionment rather than a term
+	// mixed into the division: the untouched path stays the untouched path, and
+	// every golden taken before this feature stays byte for byte correct.
+	//
+	// It is not required to sum to zero. The keys always move one boundary, so
+	// the state they write does sum to zero — but a seat can fold out of the
+	// grid between the keystroke and the frame, and a State a test typed out by
+	// hand is under no obligation at all. normalizeBias repairs it.
+	Bias []int
 }
 
 func tierFor(width, cols int, expanded bool) Tier {
@@ -410,10 +437,147 @@ func resolveLayoutIn(in layoutInput) Layout {
 	if widths, ok := weightedWidths(in.Width, in.Cols, in.Primary); ok {
 		l.ColWidths = widths
 		l.ColWidth = widths[0] // callers that ignore ColWidths stay sane
-		return l
+	} else {
+		l.ColWidth = (in.Width - chrome) / in.Cols
 	}
-	l.ColWidth = (in.Width - chrome) / in.Cols
+	// The operator's own boundary, applied LAST and over whichever apportionment
+	// ran above (§9.51). Both bases are legal underneath it: an even grid whose
+	// boundary the operator has moved, and a split grid whose owner they have
+	// then grown further. Applying it here rather than inside either base is what
+	// keeps the two of them the only two ways this room divides a row.
+	//
+	// It yields whole on a refusal. biasedWidths returns ok=false when the bias
+	// is empty, when it does not describe this row, or when no pane has the
+	// cells to pay for it — and in every one of those cases the frame the reader
+	// gets is the frame they would have got with no bias at all, which is a
+	// legal frame rather than a repaired one.
+	if widths, ok := biasedWidths(l.paneBase(), in.Bias); ok {
+		l.ColWidths = widths
+		l.ColWidth = widths[0]
+	}
 	return l
+}
+
+// paneBase is the per-pane width this Layout has resolved so far, as a slice.
+//
+// It reads through widthAt rather than the fields, so the equal frame's
+// remainder (extraFor) is already folded in and the biased frame cannot disagree
+// with the unbiased one about how many cells there are to move.
+func (l Layout) paneBase() []int {
+	if l.Cols <= 0 {
+		return nil
+	}
+	out := make([]int, l.Cols)
+	for i := range out {
+		out[i] = l.widthAt(i)
+	}
+	return out
+}
+
+// biasedWidths moves the operator's boundaries over a finished apportionment
+// (§9.51).
+//
+// Contract: on ok, sum(out) == sum(base) and every out[i] >= stripColumn. The
+// first half is what keeps the side-by-side join exact — the same property
+// TestColumnsExactlyFillTheWidth asserts over the whole frame. The second is
+// §9.18's floor: below 18 cells a column cannot say the two things a strip
+// exists to say, so a boundary stops there rather than shredding the pane it is
+// moving into.
+//
+// ok=false means "use the base", not "fail". An empty or all-zero bias takes
+// that path deliberately: it is the room as it was before this feature, and it
+// must render as it did.
+func biasedWidths(base, bias []int) ([]int, bool) {
+	if len(base) == 0 || len(bias) != len(base) {
+		return nil, false
+	}
+	b := append([]int(nil), bias...)
+	if !normalizeBias(b) {
+		return nil, false
+	}
+	out := append([]int(nil), base...)
+	for i := range out {
+		out[i] += b[i]
+	}
+	if !repairPaneFloors(out) {
+		return nil, false
+	}
+	return out, true
+}
+
+// normalizeBias makes a bias sum to zero, and reports whether there was any
+// bias at all.
+//
+// The keys write a bias that already sums to zero: one press gives a pane a
+// step and takes the same step off its neighbour. What breaks that is a seat
+// folding out of the grid between the keystroke and the frame — the folded
+// seat's entry leaves the row, and the entry that paid for it does not. A row
+// that no longer sums to zero would be a row that overflows the terminal or
+// leaves a ragged edge, which is the one failure the grid may not have.
+//
+// It corrects leftmost-first, one cell at a time, which is deterministic and
+// therefore golden-testable. Correctness matters here and fairness does not:
+// the state being repaired is already stale, and the operator's next press
+// writes over it.
+func normalizeBias(b []int) bool {
+	sum, any := 0, false
+	for _, v := range b {
+		sum += v
+		if v != 0 {
+			any = true
+		}
+	}
+	if !any || len(b) == 0 {
+		return false
+	}
+	for i := 0; sum != 0; i = (i + 1) % len(b) {
+		if sum > 0 {
+			b[i]--
+			sum--
+			continue
+		}
+		b[i]++
+		sum++
+	}
+	return true
+}
+
+// repairPaneFloors lifts every pane back to stripColumn, paying for it out of
+// the widest pane that can afford it, and reports whether it could.
+//
+// The keys refuse a move that would breach the floor before they write it
+// (paneResize), so in a running room this loop does nothing. It exists for the
+// State a test types out by hand and for a bias that survived a reflow: Render
+// is pure over State, so State is an INPUT this package does not control, and
+// an invariant that held only because the key handler was careful is an
+// invariant the golden tests could break by accident.
+//
+// It terminates because each pass moves one cell from a pane above the floor to
+// a pane below it, so the total deficit strictly decreases.
+func repairPaneFloors(w []int) bool {
+	for {
+		low, high := -1, -1
+		for i, v := range w {
+			if v < stripColumn && (low < 0 || v < w[low]) {
+				low = i
+			}
+		}
+		if low < 0 {
+			return true
+		}
+		for i, v := range w {
+			if v > stripColumn && (high < 0 || v > w[high]) {
+				high = i
+			}
+		}
+		if high < 0 {
+			// Nothing on the row has a cell to spare. The caller falls back to
+			// the unbiased frame, which the tier has already floored.
+			return false
+		}
+		w[low]++
+		w[high]--
+	}
 }
 
 // weightedWidths apportions usable width when some seats own the frame.
