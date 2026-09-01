@@ -12,37 +12,22 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// everyoneSID and everyoneAlias are the two spellings of the group the DEFAULT
-// named-pipe descriptor admits, and the one this design exists to keep off the
-// pipe.
+// Identities are compared as SIDs here, never as substrings of an SDDL string,
+// and that rule was learned twice at a cost.
 //
-// BOTH spellings are checked, and that is not belt-and-braces: the first
-// version of this test looked only for the raw SID and the measurement came
-// back with the alias, so the test would have reported the pipe clean while
-// Everyone was on it. Windows renders a well-known SID as its two-letter alias
-// in an SDDL string, and which one you get is the API's choice rather than the
-// object's state.
-const (
-	everyoneSID   = "S-1-1-0"
-	everyoneAlias = ";WD)"
-)
-
-// anonymousSID and anonymousAlias are ANONYMOUS LOGON, the second account the
-// default admits, in the same two spellings.
-const (
-	anonymousSID   = "S-1-5-7"
-	anonymousAlias = ";AN)"
-)
-
-// admitsEveryone reports whether a DACL string carries an entry for Everyone or
-// for the anonymous account, in either spelling.
-func admitsEveryone(dacl string) bool {
-	return strings.Contains(dacl, everyoneSID) || strings.Contains(dacl, everyoneAlias)
-}
-
-func admitsAnonymous(dacl string) bool {
-	return strings.Contains(dacl, anonymousSID) || strings.Contains(dacl, anonymousAlias)
-}
+//   - Looking for Everyone as `S-1-1-0` came back CLEAN while Everyone was on
+//     the pipe: Windows had rendered it as the alias `WD`.
+//   - Looking for the current user's literal SID FAILED on CI, where the runner
+//     is the built-in Administrator (RID 500) and Windows renders that account
+//     as `LA`. The descriptor had applied perfectly; the assertion was comparing
+//     spellings. Measured 2026-09-01 on windows-latest:
+//     `D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;LA)`.
+//
+// Both are one defect. An SDDL string is a RENDERING, and which spelling an
+// identity gets is the API's choice rather than the object's state. The first
+// failure is the dangerous direction — it reports a pipe clean that is not — so
+// readPipeDACLSIDs and windows.EqualSid do the work, and the strings below are
+// only ever logged for a human to read.
 
 // testPipeName gives each test its own pipe, so a leftover instance from a
 // failed run cannot make the next one pass or fail for the wrong reason.
@@ -57,15 +42,15 @@ func testPipeName(t *testing.T) string {
 // Microsoft's *Named Pipe Security and Access Rights* page says a pipe created
 // with a NULL lpSecurityAttributes grants read access to Everyone and to the
 // anonymous account. This repo does not take a behaviour claim off a
-// documentation page (ADR-001, design.md §4a.1). So this creates exactly such a
+// documentation page (ADR-001, design.md §4a.1), so this creates exactly such a
 // pipe and reads its DACL back.
 //
 // It is the NEGATIVE CONTROL for the test below, and without it that test is
 // much weaker than it looks: on its own,
-// TestThePipeCarriesTheExplicitDescriptor proves only that a string was
-// applied. This is what proves the string PREVENTS something — that the default
-// really would have put the operator's conversation in front of every local
-// account.
+// TestThePipeCarriesTheExplicitDescriptor proves only that a descriptor was
+// applied. This is what proves the descriptor PREVENTS something — that the
+// default really would have put the operator's conversation in front of every
+// local account.
 //
 // A skip rather than a failure if the platform ever stops doing this: the point
 // is to record what this machine does, and a future Windows that tightened the
@@ -87,35 +72,43 @@ func TestTheDefaultDescriptorIsTheLeakWeRefuse(t *testing.T) {
 	}
 	defer windows.CloseHandle(h)
 
-	dacl, err := readPipeDACL(h)
+	shown, err := readPipeDACL(h)
 	if err != nil {
 		t.Fatalf("could not read the default pipe's DACL: %v", err)
 	}
-	t.Logf("measured default named-pipe DACL on this machine: %s", dacl)
-	if !admitsEveryone(dacl) {
-		t.Skipf("this Windows build's default named-pipe DACL admits neither %s nor %s "+
-			"(%s) — design.md §7.28's claim about the default was MEASURED on a build "+
-			"that did, and a build that tightened it should be re-measured rather than "+
-			"assumed", everyoneSID, everyoneAlias, dacl)
+	t.Logf("measured default named-pipe DACL on this machine: %s", shown)
+
+	sids, err := readPipeDACLSIDs(h)
+	if err != nil {
+		t.Fatalf("could not walk the default pipe's DACL: %v", err)
 	}
-	if !admitsAnonymous(dacl) {
+	everyone, err := daclAdmits(sids, windows.WinWorldSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !everyone {
+		t.Skipf("this Windows build's default named-pipe DACL does not admit Everyone (%s) — "+
+			"design.md §7.28's claim about the default was MEASURED on a build that did, and "+
+			"a build that tightened it should be re-measured rather than assumed", shown)
+	}
+	if anon, err := daclAdmits(sids, windows.WinAnonymousSid); err == nil && !anon {
 		t.Logf("this build's default admits Everyone but NOT the anonymous account (%s). "+
-			"§7.28 names both; the Everyone half is what the refusal rests on.", dacl)
+			"§7.28 names both; the Everyone half is what the refusal rests on.", shown)
 	}
 }
 
 // TestThePipeCarriesTheExplicitDescriptor is the positive half.
 //
 // It asserts what the OBJECT carries, not what was requested. Passing a
-// SecurityAttributes proves an intention; reading the DACL back off the live
-// handle with GetSecurityInfo proves the pipe. The difference matters because a
-// descriptor that failed to apply would leave the default in place, which is
-// precisely the leak measured above.
+// SecurityAttributes proves an intention; walking the DACL off the live object
+// proves the pipe. The difference matters because a descriptor that failed to
+// apply would leave the default in place, which is precisely the leak measured
+// above.
 //
-// Three assertions, and each one is a separate thing that could go wrong:
+// Three assertions, each a separate thing that could go wrong:
 //
-//  1. The three intended SIDs are present, so the pipe is usable by the host,
-//     by an administrator debugging it, and by LocalSystem.
+//  1. The three intended identities are present, so the pipe is usable by the
+//     host, by an administrator debugging it, and by LocalSystem.
 //  2. Everyone is ABSENT. This is the one that matters. A pipe carrying agent
 //     transcript content must not be readable by every local account.
 //  3. ANONYMOUS LOGON is absent, for the same reason one step further out.
@@ -132,39 +125,81 @@ func TestThePipeCarriesTheExplicitDescriptor(t *testing.T) {
 		t.Fatalf("could not read this process's own SID: %v", err)
 	}
 
-	// The listener's handle is unexported on purpose, so the DACL is read the
-	// way any other process would read it: by name, through GetNamedSecurityInfo.
-	// That is a stronger claim than reading the creator's own handle — it is
-	// what the object presents to the world.
-	dacl, err := readNamedPipeDACL(name)
+	// Opened BY NAME rather than through the listener's own handle, so the
+	// claim is about what the object presents to any other process — which is
+	// the property that matters — and not about the creator's private view.
+	h, err := openPipeForRead(name)
 	if err != nil {
-		t.Fatalf("could not read the pipe's DACL by name: %v", err)
+		t.Fatalf("could not open the pipe to read its descriptor: %v", err)
+	}
+	defer windows.CloseHandle(h)
+
+	shown, err := readPipeDACL(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sids, err := readPipeDACLSIDs(h)
+	if err != nil {
+		t.Fatalf("could not walk the pipe's DACL: %v", err)
 	}
 	t.Logf("applied SDDL: %s", ln.SDDL())
-	t.Logf("pipe DACL as the object carries it: %s", dacl)
+	t.Logf("pipe DACL as the object carries it: %s", shown)
 
-	// Matched on the ACE's trailing SID field (";SY)") rather than on the bare
-	// token, so that a two-letter alias cannot be found by accident inside an
-	// unrelated part of the string.
-	for _, want := range []string{"SY", "BA", mine.String()} {
-		if !strings.Contains(dacl, ";"+want+")") && !strings.Contains(dacl, ";"+sidAlias(want)+")") {
-			t.Errorf("the pipe's DACL does not admit %s — a descriptor that failed to "+
-				"apply leaves the DEFAULT in place, which is the leak this test's "+
-				"negative control measures.\n  DACL: %s", want, dacl)
+	system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admins, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []struct {
+		name string
+		sid  *windows.SID
+	}{
+		{"LocalSystem", system},
+		{"Administrators", admins},
+		{"this process's own user", mine},
+	} {
+		if !daclAdmitsSID(sids, want.sid) {
+			t.Errorf("the pipe's DACL does not admit %s (%s) — a descriptor that failed to "+
+				"apply leaves the DEFAULT in place, which is the leak this test's negative "+
+				"control measures.\n  DACL: %s", want.name, want.sid.String(), shown)
 		}
 	}
-	if admitsEveryone(dacl) {
-		t.Fatalf("the pipe admits Everyone. This pipe carries agent transcript content "+
-			"and a dispatch channel, so that is every local account able to read the "+
-			"operator's conversation — the exact shape of mistake design.md §7.24 was "+
-			"written about.\n  DACL: %s", dacl)
+
+	everyone, err := daclAdmits(sids, windows.WinWorldSid)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if admitsAnonymous(dacl) {
-		t.Fatalf("the pipe admits ANONYMOUS LOGON.\n  DACL: %s", dacl)
+	if everyone {
+		t.Fatalf("the pipe admits Everyone. This pipe carries agent transcript content and a "+
+			"dispatch channel, so that is every local account able to read the operator's "+
+			"conversation — the exact shape of mistake design.md §7.24 was written about.\n"+
+			"  DACL: %s", shown)
 	}
+	anon, err := daclAdmits(sids, windows.WinAnonymousSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if anon {
+		t.Fatalf("the pipe admits ANONYMOUS LOGON.\n  DACL: %s", shown)
+	}
+
 	if !strings.HasPrefix(ln.SDDL(), "D:P") {
 		t.Errorf("the descriptor is not a PROTECTED DACL, so an inherited entry could "+
 			"widen it: %s", ln.SDDL())
+	}
+	// Three entries and no more. A fourth would be an identity nobody argued
+	// for, and the argument is the whole of §7.28's descriptor section.
+	//
+	// On a machine where the current user IS the built-in Administrator — a CI
+	// runner, for one — the three requested entries can collapse to fewer,
+	// because the account and a well-known group are then the same SID. Two is
+	// therefore legal and four is not.
+	if len(sids) < 2 || len(sids) > 3 {
+		t.Errorf("the pipe's DACL carries %d entries, expected 2 or 3 (SYSTEM, "+
+			"Administrators, this user — which can coincide).\n  DACL: %s", len(sids), shown)
 	}
 }
 
@@ -173,8 +208,8 @@ func TestThePipeCarriesTheExplicitDescriptor(t *testing.T) {
 // design.md §7.28 rules the literal SID over CREATOR OWNER, because OW is a
 // placeholder an object substitutes at creation and whether a named pipe
 // substitutes it the way a file does was never measured. A later session
-// tidying the string to OW would be re-opening a question this design declined
-// to depend on, so the refusal is pinned rather than left in prose.
+// tidying the string to OW would reopen a question this design declined to
+// depend on, so the refusal is pinned rather than left in prose.
 func TestTheDescriptorNamesThisUserLiterally(t *testing.T) {
 	sddl, err := ownerOnlySDDL()
 	if err != nil {
@@ -215,30 +250,12 @@ func TestAPipeNameCannotBeTakenTwice(t *testing.T) {
 	}
 }
 
-// sidAlias maps a two-letter SDDL alias to the SID it stands for, so the DACL
-// check passes whether Windows renders the entry as an alias or as a SID.
-func sidAlias(s string) string {
-	switch s {
-	case "SY":
-		return "S-1-5-18"
-	case "BA":
-		return "S-1-5-32-544"
-	default:
-		return s
-	}
-}
-
-// readNamedPipeDACL reads a pipe's DACL by NAME rather than through the
-// creator's handle.
-func readNamedPipeDACL(name string) (string, error) {
+// openPipeForRead opens an existing pipe with READ_CONTROL, which is the least
+// that lets its descriptor be read.
+func openPipeForRead(name string) (windows.Handle, error) {
 	namep, err := windows.UTF16PtrFromString(name)
 	if err != nil {
-		return "", err
+		return 0, err
 	}
-	h, err := windows.CreateFile(namep, windows.READ_CONTROL, 0, nil, windows.OPEN_EXISTING, 0, 0)
-	if err != nil {
-		return "", err
-	}
-	defer windows.CloseHandle(h)
-	return readPipeDACL(h)
+	return windows.CreateFile(namep, windows.READ_CONTROL, 0, nil, windows.OPEN_EXISTING, 0, 0)
 }

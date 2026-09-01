@@ -493,10 +493,90 @@ func displayName(n string) string { return strings.TrimPrefix(n, PipePrefix) }
 // It exists for the tests, and it is the only honest way to assert that the
 // descriptor was APPLIED: passing a SecurityAttributes proves what was asked
 // for, and this proves what the object carries.
+//
+// The string is for a HUMAN — a log line, a failure message. Do not make a
+// security assertion by matching on it; use readPipeDACLSIDs. See its doc.
 func readPipeDACL(h windows.Handle) (string, error) {
 	sd, err := windows.GetSecurityInfo(h, windows.SE_KERNEL_OBJECT, windows.DACL_SECURITY_INFORMATION)
 	if err != nil {
 		return "", err
 	}
 	return sd.String(), nil
+}
+
+// readPipeDACLSIDs reads the SIDs a pipe's DACL names, as SIDs.
+//
+// # Why this exists, and it is a measurement rather than a preference
+//
+// The first version of the descriptor tests matched on the SDDL STRING, and it
+// was wrong twice, in two different ways, before it was right:
+//
+//   - Looking for Everyone as `S-1-1-0` came back CLEAN while Everyone was on
+//     the pipe, because Windows had rendered it as the alias `WD`.
+//   - Looking for the current user's literal SID FAILED on CI, where the runner
+//     is the built-in Administrator (RID 500) and Windows renders that account
+//     as the alias `LA`. The descriptor had applied perfectly; the assertion was
+//     comparing spellings.
+//
+// Both are the same defect. **An SDDL string is a RENDERING of a descriptor,
+// and which spelling an identity gets is the API's choice, not the object's
+// state.** A security assertion that matches on one rendering is not an
+// assertion — it can report a pipe clean that is not, which is the worse of the
+// two directions and is exactly what happened first.
+//
+// So identities are compared as identities. This walks the ACL and returns the
+// SIDs, and callers use windows.EqualSid, which is immune to aliasing entirely.
+func readPipeDACLSIDs(h windows.Handle) ([]*windows.SID, error) {
+	sd, err := windows.GetSecurityInfo(h, windows.SE_KERNEL_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return nil, err
+	}
+	dacl, _, err := sd.DACL()
+	if err != nil {
+		return nil, err
+	}
+	if dacl == nil {
+		// A NULL DACL is not an empty one: it grants everyone everything. It
+		// must never be reported as "no entries", which is what a nil slice with
+		// no error would say.
+		return nil, errors.New("councilhost: the pipe has a NULL DACL, which grants full access to everyone")
+	}
+	out := make([]*windows.SID, 0, dacl.AceCount)
+	for i := uint32(0); i < uint32(dacl.AceCount); i++ {
+		var ace *windows.ACCESS_ALLOWED_ACE
+		if err := windows.GetAce(dacl, i, &ace); err != nil {
+			return nil, err
+		}
+		// The SID starts at the ACE's SidStart field and runs on past it. A copy
+		// is taken because the ACE points into the descriptor's buffer, which
+		// the garbage collector is free to move out from under a caller that
+		// held the pointer.
+		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
+		cp, err := sid.Copy()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, cp)
+	}
+	return out, nil
+}
+
+// daclAdmits reports whether any entry in sids is the well-known SID named by
+// wellKnown.
+func daclAdmits(sids []*windows.SID, wellKnown windows.WELL_KNOWN_SID_TYPE) (bool, error) {
+	want, err := windows.CreateWellKnownSid(wellKnown)
+	if err != nil {
+		return false, err
+	}
+	return daclAdmitsSID(sids, want), nil
+}
+
+// daclAdmitsSID reports whether any entry in sids equals want.
+func daclAdmitsSID(sids []*windows.SID, want *windows.SID) bool {
+	for _, s := range sids {
+		if windows.EqualSid(s, want) {
+			return true
+		}
+	}
+	return false
 }
