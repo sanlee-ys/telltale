@@ -720,6 +720,48 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   is a product question nobody has answered, and the reader is one root away
   from it either way.
 
+- **The PTY "live seat" is MEASURED, and it is not built (2026-09-01).** The
+  spike ran on this machine — Windows 11 build 10.0.26200.9168, go1.26.6 — and
+  its findings are recorded here because nothing else in the repo holds them.
+  **ConPTY needs no new dependency**: `golang.org/x/sys/windows` v0.47.0 already
+  exposes `CreatePseudoConsole`, `ResizePseudoConsole`, `ClosePseudoConsole` and
+  `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`, and a working host is about 160 lines.
+  **`CREATE_NO_WINDOW` is the trap.** `internal/council/runner/proc_windows.go`
+  sets it on every child today, and a ConPTY child created with it emits ZERO
+  bytes, accepts no input, and exits 0 with a nil error — a silent total failure
+  an implementer reaches by copying the existing spawn helper.
+  `DETACHED_PROCESS` fails too; `CREATE_NEW_PROCESS_GROUP` and `HideWindow` are
+  compatible. **There is no console flash**, measured with a differential
+  `EnumWindows` scan carrying a positive control; ConPTY's own conhost reports a
+  `PseudoConsoleWindow` that never paints, so a future guard test must match on
+  `ConsoleWindowClass` instead. **The repaint reputation is stale on this
+  build**: a 5000-line flood was 97.3% printable payload, scrollback replayed
+  losslessly at 5000 lines, and an idle static TUI costs 0 bytes/sec. **`os/exec`
+  cannot spawn a ConPTY child** — Go's `SysProcAttr` has no attribute-list field
+  — so the spawn half must call `windows.CreateProcess` directly; the existing
+  job object then contains it unchanged. **`fit` is not sufficient**:
+  `lipgloss.Width` counts cursor-move and erase escapes as zero cells, so an
+  emulator that consumes them is mandatory. **Only Claude Code can take a PTY
+  seat** — it is the one `vendors.Persistent` seat, via `--input-format
+  stream-json`; Codex, Antigravity and Grok exit every turn, and Cursor speaks
+  ACP with no TUI. **UNVERIFIED**: only build 26200 was tested, the Windows 10
+  1809 floor is documentation-only, alt-screen guests were not exercised, no
+  streaming agent turn was run, and the longest run was 20 seconds.
+
+- **Rung 4 is unowned, and the unwatched-write ruling is owed WITH it, never
+  before (2026-09-01).** [design.md §7.28](docs/design.md#s7-28) shipped the
+  host; detach, rejoin, the room job's `kill`, and a `ls` surface for a running
+  host are all still unbuilt, and a host dies with its client today. The ruling
+  that must land in the same change is detach plus write posture plus `--auto`:
+  the first telltale process that acts while nobody is watching. It is not owed
+  yet precisely because nobody is unwatched today.
+
+- **No vendor has ever been dispatched to THROUGH A HOST (2026-09-01).** Every
+  seat spawn in `internal/councilhost`'s suite is stubbed, by design — the spawn
+  guard exists to stop a test spending a real turn, so neither CI nor a session
+  can close this. The first live turn through a host is an operator-driven
+  check, and it is the same class of debt as the demo path's live-drive items.
+
 Cross-platform and cross-machine status has its own file: [PARITY.md](PARITY.md).
 
 The conventions a fresh session would otherwise re-derive — golden-test traps,
