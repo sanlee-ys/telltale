@@ -7290,6 +7290,31 @@ otherwise look exactly like the measured zero above), and inline `isSidechain` r
 179,614 in the live corpus, so a non-zero there is a vendor change worth seeing rather than a
 routine skip.
 
+#### Verified against the built binary, not only the suite
+
+The suite drives the host in-process and across a process boundary it starts itself, which is
+two thirds of the claim. The last third is that `telltale.exe` really does this, so the shipped
+binary was driven by a client that shares none of its code.
+
+**2026-09-01, Windows 11 Pro 10.0.26200, `telltale.exe` built from this branch.** The host was
+started as `telltale council host --pipe \\.\pipe\telltale-council-smoke --workspace <tmp>
+--vendor claude --read`, and a **PowerShell** `NamedPipeClientStream` — no Go, no telltale code
+— opened the pipe and wrote one line. What came back, whole:
+
+```
+{"kind":"welcome","protocol":1,"host_pid":15900}
+{"kind":"room","room":{"version":1,"workspace":"…\councilhost-smoke","turn":0,"posture":"read",
+ "seats":[{"vendor":"claude","binary":"…\claude.exe","phase":"idle","drivable":true}]}}
+```
+
+Four things are verified there and each was a separate way to be wrong. The descriptor admitted
+a same-user client. `host_pid` matches the process that was started, so the client-side
+`GetNamedPipeServerProcessId` check ran against the real server. The seat resolved a real binary
+and drew `idle` — **no vendor was spawned**, because nothing was dispatched, which is the "never
+start a vendor to see whether it answers" rule holding across the new process boundary. And when
+the PowerShell client disposed its stream, **the host exited on its own**, which is detach being
+unexposed, measured rather than asserted.
+
 #### Known limitations, named
 
 - **The window is complete or it says so.** A walk stopped by `--timeout` prints what it read
@@ -7386,11 +7411,32 @@ answer to the last one is an ACL the operating system enforces.
 
 **The dependency ruling: `golang.org/x/sys/windows` only, and no `go-winio`.** x/sys/windows is
 already a direct dependency and carries `CreateNamedPipe`, `ConnectNamedPipe`,
-`DisconnectNamedPipe`, `CreateFile`, `SecurityAttributes` and `SecurityDescriptorFromString`.
-Overlapped I/O is the part that would justify a dependency, and this design does not need it: a
-blocking `ConnectNamedPipe` on one goroutine, one client at a time, is enough, because a second
-simultaneous client is refused anyway. That matches this repo's recorded habit of a page of
-checked stdlib code over a dependency (`decisions/001`).
+`DisconnectNamedPipe`, `CreateFile`, `CancelIoEx`, `CreateEvent`, `GetOverlappedResult`,
+`SecurityAttributes` and `SecurityDescriptorFromString`. That matches this repo's recorded habit
+of a page of checked stdlib code over a dependency (`decisions/001`).
+
+**AMENDED 2026-09-01, the same day, and the amendment is the interesting part.** This section
+first ruled that overlapped I/O was the one thing that would justify a dependency and that the
+design did not need it — a blocking `ConnectNamedPipe` on one goroutine, one client at a time,
+because a second simultaneous client is refused anyway. **That was reasoned, and it was wrong.**
+
+A synchronous pipe DEADLOCKED the room on its first streamed frame. Measured on Go 1.26.6,
+Windows 11 Pro 10.0.26200: the host's reader was parked in `ReadFile` waiting for the client's
+next command, the host's writer was parked in `WriteFile` holding a 277-byte room frame, and the
+client was parked reading. **Windows serialises every operation on a synchronous handle**, so a
+read that is waiting blocks a write on the same handle until it finishes.
+
+The mistake was not about pipes; it was about the shape of this protocol. One client at a time
+bounds CONCURRENCY and says nothing about DIRECTION, and this host is full duplex on one handle
+by construction: it pushes room frames while it waits for commands. Half duplex would mean the
+room could only draw when the operator typed, which is not a room.
+
+So both ends open with `FILE_FLAG_OVERLAPPED` and go to `os.NewFile`, which associates them with
+the Go runtime's completion port. The only hand-rolled overlapped work is `ConnectNamedPipe`,
+about ten lines, and it pays for itself twice: `CancelIoEx` on that pending connect is how
+`Close` wakes a waiting `Accept`, which retired a self-connect hack the synchronous handle had
+forced. The dependency ruling is unchanged. **The general lesson worth keeping: "one client at a
+time" is a statement about how many peers, never about how many directions.**
 
 **The wire format is newline-delimited JSON, one frame per line.** Not for speed. The project
 already has the parsers, the framing rule (§4's JSONL framing rule), and the habit across every
@@ -7404,11 +7450,33 @@ descriptor grants read access to the Everyone group and to the anonymous account
 rule is that a claim about behaviour is measured and not read off documentation
 ([ADR-001](#adr-001)), so it was measured.
 
-`TestTheDefaultDescriptorIsTheLeakWeRefuse` (`internal/councilhost/sddl_windows_test.go`)
-creates one pipe with a NULL `SecurityAttributes`, reads its DACL back with `GetSecurityInfo`,
-and asserts that the Everyone SID `S-1-1-0` is present in it. It is the negative control for
-the test beside it. Without it, the positive test only proves that a string was applied, and
-not that the string prevents anything.
+**MEASURED 2026-09-01, Windows 11 Pro 10.0.26200.** A pipe created with a NULL
+`SecurityAttributes`, its DACL read straight back off the handle with `GetSecurityInfo`:
+
+```
+D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;S-1-5-21-...-1001)(A;;FR;;;WD)(A;;FR;;;AN)
+```
+
+`WD` is Everyone and `AN` is ANONYMOUS LOGON, each carrying `FR` — `FILE_GENERIC_READ`. The
+documentation page is confirmed on this machine. What council's pipe carries instead, read back
+the same way:
+
+```
+D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;S-1-5-21-...-1001)
+```
+
+`GA` is mapped to `FA` at creation, which is why the applied string and the object's own string
+are not byte-identical, and why a test must compare ENTRIES rather than the whole line.
+
+**The trap this measurement caught, recorded because it will recur.** The first version of
+`TestTheDefaultDescriptorIsTheLeakWeRefuse` looked for the raw SID `S-1-1-0` and came back
+CLEAN — it would have reported the pipe safe while Everyone was on it. Windows renders a
+well-known SID as its two-letter alias in an SDDL string, and which spelling you get is the
+API's choice rather than the object's state. **Both spellings are checked.** A security
+assertion that matches on one rendering of an identity is not an assertion.
+
+That test is the NEGATIVE CONTROL for the test beside it. Without it, the positive test only
+proves that a string was applied, and not that the string prevents anything.
 
 **The descriptor this design applies:**
 
@@ -7585,9 +7653,13 @@ host holds the room.
 - **Host memory is unbounded.** A room accumulates turns for as long as it lives. A turn
   ceiling is owed before detach ships, and the drop must be stated in the header rather than
   applied silently, on the retention discipline `telltale events` already has (§7.21).
-- **One client at a time.** A second simultaneous client is refused, and the refusal names the
-  other client's pid. Multi-client attach is a tmux feature, it is not free, and it must not be
-  acquired by accident.
+- **One client at a time, and the OPERATING SYSTEM refuses the second.** The pipe is created
+  with one instance, so a second open comes back `ERROR_PIPE_BUSY` and the client renders that
+  as "one client at a time". An earlier draft of this section said the refusal would name the
+  holder's pid. It does not: naming it would mean keeping a second instance open purely to
+  answer on, and a second accept path on a security-sensitive surface costs more than the pid is
+  worth. Multi-client attach is a tmux feature, it is not free, and it must not be acquired by
+  accident.
 - **A stale host is deliberately not mitigated.** A host nobody returns to keeps running and
   can keep spending. It must NOT self-terminate on idle: a detached room that dies on its own
   is precisely the failure the operator cannot see. The answer is discovery, and discovery
@@ -7597,6 +7669,20 @@ host holds the room.
   `proc_unix.go` records that on macOS a process group does not bind lifetimes, so a `kill -9`
   on a host LEAKS every seat there, while on Windows it does not. That is the reverse of the
   usual direction.
+- **A GATED room is refused, not hosted.** A gated seat blocks on a question, and carrying that
+  question and its answer over this wire is a card, a keystroke, and a reply written back down
+  the vendor's own stdin. None of that is built, so `councilhost.New` refuses
+  `PostureWriteGated` outright, and a gate arriving mid-turn puts a sentence on the seat's card.
+  A blocked seat and a slow seat must not render alike.
+- **A CONVERSATIONAL seat is drawn as undrivable.** cursor-agent's ACP server cannot be handed a
+  turn by writing a line — its turn cannot be built until the vendor has answered a request of
+  the room's own ([§9.36](#s9-36)) — so the host names it and refuses it rather than dispatching
+  into a column that would never finish.
+- **The unwatched-write ruling is still owed, and it is not owed YET.** Detach plus a write
+  posture plus `--auto` is a risk shape the docs have no ruling on: the room writes by default,
+  and three of the four seats cannot ask permission. It is not owed here because nobody is
+  unwatched — the client holds the room for the whole of its life. It must be ruled in the same
+  change that exposes detach, and never as a default that happened.
 - **The room state on the wire is the host's own projection, not `council.State`.** `State`
   carries pointers and rendered projections, and folding it onto a wire format is the work that
   makes council's own `Model` the client's renderer. That is the next slice, and it is named

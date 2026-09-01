@@ -192,7 +192,16 @@ it has none to relay. **Three** deliberate, bounded exceptions
 exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
 
 - `telltale council` — spawns vendor CLIs; writes `council/room.json` (session
-  ids and workspace, never transcript or brief content).
+  ids and workspace, never transcript or brief content). `telltale council
+  host` (design.md §7.28, added 2026-09-01) is the same grant from a second
+  process: it owns the vendor CLIs instead of the TUI owning them, and it adds
+  ONE file beside the first — `council/host.json`, holding a pid, a pipe name,
+  a start time, the workspace, the seat ids and a turn count. Four of those
+  seven are already in `room.json`; the other three are process facts, and
+  `resume.go`'s leak sentence covers the shape unchanged. **The room's
+  conversation never reaches disk from the host either** — it lives in host
+  memory and dies with the host, on `resume.go`'s own ruling for the same
+  data.
 - the **statusline's quota relay** — `quota/<vendor>.json`, the rate-limit
   windows it just rendered, written after the line is on stdout so the HUD can
   attribute account quota per vendor (design.md §7.15, amended 2026-08-07).
