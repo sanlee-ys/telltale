@@ -16341,12 +16341,21 @@ room two spellings of one thing, which is the defect §9.31 records under its ow
 | `^w` `>` | grow: move the focused pane's boundary right by one step |
 | `^w` `<` | shrink: move the focused pane's boundary left by one step |
 | `^w` `e` | even: every pane gets the same width again, and the split clears |
-| any other key | cancels the prefix and keeps its own meaning |
+| any other key | cancels the prefix, and is swallowed |
 
-A prefix, and not four more chords, because the keymap has almost no surface left. §9.49 records
-the same pressure: every lowercase letter except eight is bound, `[` and `]` already carry three
-meanings, and `h`, `j`, `k` and `l` are focus and scroll. Four top-level bindings would spend the
-last of that surface on one feature. One prefix spends one binding and leaves the rest open.
+**An unrecognised key is swallowed and NOT re-dispatched.** A prefix that let the second key
+fall through would read as tolerant, and it is dangerous in this keymap: `^w` then `q` would
+quit the room, and `^w` then `ctrl+c` would cancel a turn. Those are two irreversible acts
+reached by a chord the operator has already shown they did not finish. The footer says
+`any cancel` for the same reason. A footer that named `esc` alone would imply that the other
+keys still mean what they mean, and one of them is `q`.
+
+A prefix, and not four more chords, because the keymap has almost no surface left. §9.49 states
+the pressure in its own words: none of the three keys it added was new vocabulary, and each one
+had to be taught on a help row that already existed. `[` and `]` there take a third meaning
+rather than a fourth binding, and `h`, `j`, `k` and `l` are already focus and scroll. Four
+top-level bindings would spend the last of that surface on one feature. One prefix spends one
+binding and leaves the rest open.
 
 **The prefix is view mode only.** In compose mode every printable character is draft text, which
 is the contract `q`, `f`, `c` and `t` already keep. A prefix armed there would change what the
@@ -16404,10 +16413,20 @@ drops to tabs, and `tierFor` still tests it against the EVEN width, before any o
 **The operator therefore cannot size the room out of the columns tier.** A terminal too narrow
 for a grid is too narrow before a pane key is pressed, and it stays that way after.
 
-Below the columns tier the pane controls do nothing, and the room says so: the footer drops the
-pane cell at the tabs tier for the reason it already drops `f` and `tab` in a one-seat room
-(§9.11). The stored split and the stored bias survive the narrow frame and return when the
-operator widens the terminal, exactly as `Expanded` does.
+Below the columns tier the pane controls do nothing, and the room refuses to offer them: `^w`
+does not arm at the tabs tier, over a turn page, over an arena record, or in a zoomed frame.
+That refusal is the reason the footer needs no permanent pane cell at all — the four keys are
+named only while they are live, so there is never a frame that promises a key which does
+nothing. It is §9.11's rule reached by a different route: that section drops `f` and `tab`
+outright in a one-seat room, and this one never offers the keys in the first place.
+
+The composer border is also silent below the columns tier, even when the split and the bias are
+still stored. A legend describing a boundary the reader is not looking at would be the room
+describing someone else's frame.
+
+The stored split and the stored bias survive the narrow frame and return when the operator
+widens the terminal, exactly as `Expanded` does. A control that forgot on a resize would punish
+the operator for dragging a window.
 
 The full ladder, widest first: even panes, then a split pane with strips beside it, then one
 zoomed pane with a tab bar, then the tab tier, then `floorMessage`. Every rung was already built
@@ -16434,17 +16453,29 @@ byte for byte what it was.
   answers the one case that came up.
 - **A key that adds or removes a pane.** `/seat` and `/unseat` do that (§9.31), and they do it in
   the roster, where the effect on DISPATCH is visible. A `^w` key that hid a seat while the seat
-  kept answering would put a live vendor off screen. §4a.1 forbids that in the same words it
-  forbids a dropped column.
-- **Mouse drag on a boundary.** §9.10 rejected the mouse wheel with a measurement, and the same
-  measurement applies here: mouse reporting on the alternate screen costs the terminal its own
-  selection, and the operator reads this room with the keyboard.
+  kept answering would put a live vendor off screen with nothing anywhere to say so, which is
+  the failure `CollapsedColumns` and the notice row exist to prevent.
+- **Mouse drag on a boundary.** §9.10 refused the mouse wheel, and its reasoning transfers
+  whole. The enum half of that section is MEASURED: there is no wheel-only mouse mode, so a
+  program cannot ask for a drag without claiming button reporting. The cost half is stated there
+  as INFERRED rather than measured — that button reporting suppresses the terminal's own text
+  selection — and it is repeated here at that same strength. Nothing new was measured for this
+  section, and a boundary drag would buy an input convenience with the room's output, which is
+  the trade §9.10 already refused on this surface.
 
 #### Verification
 
 `layout_test.go` sweeps every width from `columnsBreak` to 220 and every pane count from 2 to 4,
-over the biases the keys can produce, and it asserts the two invariants above. `panes_test.go`
-drives the keys through `Model.Update`, and it asserts that the prefix arms, that it cancels, and
-that no pane key reaches the draft. Four goldens are new: `panes-split.txt`,
+over the biases the keys can produce, and it asserts the two invariants above. It sweeps a bias
+far larger than any keystroke writes, on purpose: `Render` is pure over `State`, so `State` is an
+input this package does not control, and an invariant that held only because `paneResize` was
+careful is one a hand-typed test could break by accident.
+
+`panes_test.go` drives the keys through `Model.key`. It asserts that the prefix arms, that every
+branch clears it, that an unknown key is swallowed rather than quitting the room, that no pane
+key reaches the draft in compose mode, that the split does not follow focus, that one press moves
+one boundary, that the boundary stops at the floor rather than appearing to move, and that the
+arrangement is legible with `PlainStyles` and the ASCII glyph set — which is the test that would
+catch a pane feature readable only in colour. Four goldens are new: `panes-split.txt`,
 `panes-split-ascii.txt`, `panes-sized.txt` and `panes-keys.txt`. One golden changed, `help.txt`,
 by one row, because the panel now names the prefix.
