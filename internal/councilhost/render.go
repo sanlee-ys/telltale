@@ -3,6 +3,7 @@ package councilhost
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Render draws a room as plain text at width columns.
@@ -78,6 +79,86 @@ func RenderHostExit() string {
 		"nothing was left running. the room's session ids are still in " +
 		"~/.telltale/council/room.json, so `telltale council` reattaches to the " +
 		"conversations from there."
+}
+
+// The four notices below are design.md §7.29's four states, and the reason each
+// one is its own function is §4a.1: `rebuilt`, `survived` and `died` must never
+// render alike, and detach adds a fourth that must not look like any of them.
+//
+// They are functions rather than constants because three of them name a pid or
+// a time that was MEASURED, and a notice that could be assembled by a caller is
+// a notice two callers can assemble differently.
+
+// RenderDetached is what the client that LEFT prints.
+//
+// It names the pid, because the operator now owns a process with no terminal
+// and no window, and a process they cannot name is one they cannot end. Both
+// ways out are on the second line for the same reason: this is the moment the
+// room stops being visible, so it is the moment the two commands that reach it
+// have to be on screen.
+func RenderDetached(hostPID int) string {
+	return fmt.Sprintf(
+		"detached. the host keeps the seats and the conversation, and it is pid %d.\n"+
+			"`telltale council` rejoins it. `telltale council kill` ends it, and every seat with it.",
+		hostPID)
+}
+
+// RenderRejoined is what a client prints when it reached a host that never
+// stopped.
+//
+// The second line's clause is the entire difference between this state and
+// §9.52's `rebuilt`, and it is why this is not a variation on that notice.
+// §9.52 rules that a room which rendered a rebuild as a continuation would tell
+// the most expensive lie this surface can tell — so the sentence that IS a
+// continuation has to say the opposite thing out loud, or the two collapse.
+func RenderRejoined(f HostFile) string {
+	return fmt.Sprintf(
+		"rejoined the host that was already running — pid %d, started %s.\n"+
+			"the seats kept working while you were away. nothing was rebuilt, and no session was resumed.",
+		f.PID, f.StartedAt.Format(time.RFC3339))
+}
+
+// RenderHostDied is what a client prints when the host it left is gone.
+//
+// It is a THIRD sentence and not a variation on either of the two above, and
+// §7.28's first crash mitigation is the reason: the operator cannot see a host
+// die, because it has no terminal, so the client is the only thing that can say
+// it happened.
+//
+// The last line points at §9.52's rebuild and uses §9.52's own word. A room that
+// told an operator their conversation was gone, while the session ids sit on
+// disk, would be making the error `council ls` refuses to make about a vendor
+// that is missing from one machine.
+func RenderHostDied(f HostFile, roomPath string) string {
+	return fmt.Sprintf(
+		"the host you left is gone, and the seats went with it.\n"+
+			"it was pid %d, started %s, and nothing on screen could say when it ended.\n"+
+			"the room's session ids are still in %s, so `telltale council` rebuilds those seats.",
+		f.PID, f.StartedAt.Format(time.RFC3339), roomPath)
+}
+
+// RenderDetachRefused is design.md §7.29's unwatched-write ruling, on screen.
+//
+// The strings come from the host's own constants rather than from text typed
+// here, so the sentence the operator reads and the sentence the host enforces
+// cannot drift apart. A refusal whose wording lived in two places would
+// eventually be two refusals.
+func RenderDetachRefused() string {
+	return UnwatchedWriteRefusal + "\n" + UnwatchedWriteRemedy
+}
+
+// RenderHostBusy is the refusal a client gets when a host is running and
+// somebody is already in it.
+//
+// It is a REFUSAL and never a fall-through to a local room. §7.29 states why:
+// falling through would open a second room over the same workspace on the same
+// saved session ids, which is two rooms rebuilding one conversation — worse
+// than any refusal.
+func RenderHostBusy(f HostFile) string {
+	return fmt.Sprintf(
+		"a host is running for this room, pid %d, and a client is already in it.\n"+
+			"one client at a time. close the other one, or end the room with `telltale council kill`.",
+		f.PID)
 }
 
 // fit truncates one line to n columns, marking that something was removed.
