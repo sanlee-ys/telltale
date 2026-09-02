@@ -43,6 +43,8 @@ func newCountedKill() *countedKill { return &countedKill{fired: make(chan struct
 func (s *countedKill) SendTurn([][]byte) error  { return nil }
 func (s *countedKill) SendAside([][]byte) error { return nil }
 func (s *countedKill) Alive() bool              { return true }
+func (s *countedKill) CloseInput()              {}
+func (s *countedKill) Done() <-chan struct{}    { return neverDone }
 
 func (s *countedKill) Kill() {
 	s.mu.Lock()

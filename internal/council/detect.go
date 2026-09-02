@@ -508,6 +508,20 @@ func kindOf(path string) BinaryKind {
 // file, an empty hooks section, and a temp directory that could not be created
 // — three ways to end up unscreened while the column says otherwise.
 func postureClaim(v model.VendorID, windows, write, gated, hooked bool) SandboxClaim {
+	return postureClaimFor(v, windows, write, gated, hooked, false)
+}
+
+// postureClaimFor is postureClaim with one more fact: whether the room has
+// retreated this seat from its live shape to its measured batch adapter
+// (fallback.go, vendors.LiveFallback). A fallen-back seat is the seat that was
+// measured — the exec, single and print invocations every pre-2026-09-02 badge
+// described — so its claim is that measurement, led by seatShape's fallback
+// spelling, and never the live shape's `unmeasured`. The two seats with no
+// fallback ignore the flag.
+func postureClaimFor(v model.VendorID, windows, write, gated, hooked, fellBack bool) SandboxClaim {
+	if fellBack && seatShape(v, true) != "" {
+		return fallbackClaim(v, windows, write)
+	}
 	if write && gated && canGate(v) {
 		return SandboxClaim{
 			Level:  SandboxGated,
@@ -586,10 +600,10 @@ func writeDetail(v model.VendorID, asking bool) string {
 // exactly one word, and the checklist in §9.57 is the price of flipping it.
 //
 // fellBack is whether the room retreated to the measured batch adapter after
-// the live handshake failed (vendors.LiveFallback). The room's posture badge
-// today renders the live shape only; the fallback branch is here so the badge
-// has one place to read from once the room carries that state, and so a test
-// can pin both spellings now.
+// the live handshake failed (vendors.LiveFallback, fallback.go). The room
+// carries that state per seat since the crew integration, and the posture
+// badge reads this branch through postureClaimFor: the fallback IS the
+// measured seat, and the spelling says so.
 func seatShape(v model.VendorID, fellBack bool) string {
 	switch v {
 	case model.VendorCodex:
@@ -609,6 +623,86 @@ func seatShape(v model.VendorID, fellBack bool) string {
 		return "stream-json · unasked · unmeasured at 1.1.24"
 	}
 	return ""
+}
+
+// fallbackInvocation names the batch invocation a seat retreats to, in the
+// words its live-shape detail already uses to promise it.
+func fallbackInvocation(v model.VendorID) string {
+	switch v {
+	case model.VendorCodex:
+		return "`codex exec --json`"
+	case model.VendorGrok:
+		return "`grok --single`"
+	case model.VendorAntigravity:
+		return "`agy -p`"
+	}
+	return ""
+}
+
+// fallbackClaim is the posture claim for a seat that has retreated to its batch
+// adapter. Every sentence here is the one the seat carried BEFORE it moved to
+// a live shape on 2026-09-02, because that badge described exactly this
+// invocation and rested on a measurement; the live shape's claims were built
+// from documentation and do not transfer back. One level moves with it, and
+// in the honest direction: codex off Windows reads `ro:enforced` again, since
+// the sandbox behind that word was measured through `codex exec -s read-only`
+// on macOS (the live branch's own detail says so) and this is that path.
+func fallbackClaim(v model.VendorID, windows, write bool) SandboxClaim {
+	shape := seatShape(v, true) + ": "
+	if write {
+		return SandboxClaim{
+			Level: SandboxWrite,
+			Detail: shape + "this column may edit and run things in the workspace above. " +
+				"Containment is that directory, not a flag — point council at a " +
+				"worktree if that matters. --read opens a room that only talks. " +
+				"The live shape's handshake was refused in this room, so this seat " +
+				"runs " + fallbackInvocation(v) + ", one process per turn, which " +
+				"asks about nothing",
+		}
+	}
+	switch v {
+	case model.VendorCodex:
+		if windows {
+			return SandboxClaim{
+				Level: SandboxEnforced,
+				Detail: shape + "-s read-only, applied by the vendor's own Windows sandbox — " +
+					"measured 2026-08-29 at codex-cli 0.149.1: a shell write was denied " +
+					"with no file on disk, a read ran clean, and the resume override " +
+					"enforced the same. One residual is liveness, not safety: the " +
+					"sandbox could not spawn this machine's PowerShell, and turns " +
+					"completed because the model retried through cmd.exe — a turn can " +
+					"still fail to inspect when it does not retry",
+			}
+		}
+		return SandboxClaim{
+			Level: SandboxEnforced,
+			Detail: shape + "-s read-only, applied by the vendor's own OS-level sandbox on macOS " +
+				"and Linux — a posture an operating system rather than a flag is behind",
+		}
+	case model.VendorAntigravity:
+		return SandboxClaim{
+			Level: SandboxNone,
+			Detail: shape + "treat this column as able to change your files, and that is " +
+				"MEASURED rather than assumed: asked to write a file under both " +
+				"--mode plan and --sandbox, it wrote the file, and its reported " +
+				"permission mode and tool list were identical to a run without them. " +
+				"Council no longer passes either flag: their only observed effect was " +
+				"a turn that died with an empty column when the agent reached for a " +
+				"shell. The workspace above is the containment, not a flag",
+		}
+	case model.VendorGrok:
+		return SandboxClaim{
+			Level: SandboxNone,
+			Detail: shape + "treat this column as able to change your files, and that is " +
+				"MEASURED rather than assumed: asked to write a file under " +
+				"--permission-mode plan, it wrote the file, exactly as the run " +
+				"without it did. Council passes neither that nor --sandbox — " +
+				"--sandbox silently ACCEPTS a profile name that does not exist, so " +
+				"nothing council asked of it could be observed. The workspace above " +
+				"is the containment, not a flag",
+		}
+	}
+	return SandboxClaim{}
 }
 
 // liveSeatDetail is the clause behind seatShape for a write posture: what the

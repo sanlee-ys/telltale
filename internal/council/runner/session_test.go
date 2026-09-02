@@ -265,3 +265,43 @@ func TestSendDoesNotBlockTheCaller(t *testing.T) {
 		t.Fatal("Send blocked on a child that never reads its stdin")
 	}
 }
+
+// TestCloseInputLetsTheChildExitOnItsOwn: the middle step of a graceful stop
+// (design.md §9.50). Closing stdin is what a vendor that exits on EOF needs
+// and nothing more — the scripted session ends its scanner loop and exits 0 —
+// and the room learns that the way it learns every exit, through Done and one
+// terminal event that is NOT dressed as a kill.
+func TestCloseInputLetsTheChildExitOnItsOwn(t *testing.T) {
+	ch := make(chan Event, 64)
+	s, err := StartSession(context.Background(), helperSpec(t, "session"), ch, parseSession)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Kill()
+
+	if err := s.Send(turnLine(t, "one")); err != nil {
+		t.Fatal(err)
+	}
+	if _, last := awaitTurn(t, ch); !last.EndsTurn {
+		t.Fatalf("the first turn did not end: %+v", last)
+	}
+
+	s.CloseInput()
+	s.CloseInput() // idempotent
+	select {
+	case <-s.Done():
+	case <-time.After(20 * time.Second):
+		t.Fatal("the child did not exit after its stdin closed")
+	}
+	if s.Alive() {
+		t.Error("Alive after the child exited on a closed stdin")
+	}
+	if err := s.Send(turnLine(t, "two")); err == nil {
+		t.Error("Send after CloseInput was accepted; the pipe is closed")
+	}
+	_, last := awaitTurn(t, ch)
+	if last.Kind != KindDone || last.ExitCode != 0 {
+		t.Errorf("the exit arrived as %v (exit %d, note %q); want a clean KindDone — nothing killed this child",
+			last.Kind, last.ExitCode, last.Note)
+	}
+}

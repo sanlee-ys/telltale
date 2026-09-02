@@ -26,8 +26,10 @@ func (s *killSession) record(lines [][]byte) error {
 	}
 	return nil
 }
-func (s *killSession) Kill()       { s.killed = true }
-func (s *killSession) Alive() bool { return !s.killed }
+func (s *killSession) Kill()                 { s.killed = true }
+func (s *killSession) Alive() bool           { return !s.killed }
+func (s *killSession) CloseInput()           {}
+func (s *killSession) Done() <-chan struct{} { return neverDone }
 
 // clearModel is a three-seat room where every seat holds a thread.
 //

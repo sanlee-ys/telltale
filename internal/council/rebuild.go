@@ -306,6 +306,15 @@ func (m *Model) applyRebuildEvent(c *Column, ev runner.Event) {
 			why = "the process exited before it reported a thread"
 		}
 		rs.state, rs.why = rebuildFailed, why
+		// "Gone" is the process-exit case. The two RPC protocols also land
+		// here on a refused handshake, reported as a failed turn from a
+		// process that is UP and useless — and a process merely forgotten
+		// would keep running until the room's context ended it. Stopped the
+		// way every seat is stopped (stopProc), then forgotten; the next
+		// brief's refusal is what retreats the seat (fallback.go).
+		if p, ok := m.procs[ev.Vendor]; ok && p.sess != nil && p.sess.Alive() {
+			stopProc(p)
+		}
 		m.dropProcess(ev.Vendor)
 		c.Note = "this seat could not be rebuilt: " + why +
 			" — its next brief opens a new session, with the brief re-applied."

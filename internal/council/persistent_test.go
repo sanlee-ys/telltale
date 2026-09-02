@@ -31,8 +31,10 @@ func (s *decisionSession) record(lines [][]byte) error {
 	}
 	return nil
 }
-func (*decisionSession) Kill()       {}
-func (*decisionSession) Alive() bool { return true }
+func (*decisionSession) Kill()                 {}
+func (*decisionSession) Alive() bool           { return true }
+func (*decisionSession) CloseInput()           {}
+func (*decisionSession) Done() <-chan struct{} { return neverDone }
 
 // turnModel is traceModel plus a turn in flight on a persistent seat. The turn
 // bookkeeping is the seam this file tests: a column can now be retired by four

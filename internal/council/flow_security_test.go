@@ -82,6 +82,13 @@ func (deadSession) SendTurn([][]byte) error  { return nil }
 func (deadSession) SendAside([][]byte) error { return nil }
 func (deadSession) Kill()                    {}
 func (deadSession) Alive() bool              { return true }
+func (deadSession) CloseInput()              {}
+func (deadSession) Done() <-chan struct{}    { return neverDone }
+
+// neverDone is the Done of every stub that stands for a process still up: a
+// graceful stop on one waits its grace and kills, which is the bound under
+// test rather than a stall (stopProc).
+var neverDone = make(chan struct{})
 
 // turnSession is deadSession with a memory: every line the room writes to
 // the spawn's stdin lands in the log, keyed by the spawn's index.
@@ -104,6 +111,8 @@ func (s turnSession) SendTurn(lines [][]byte) error {
 func (s turnSession) SendAside(lines [][]byte) error { return nil }
 func (s turnSession) Kill()                          {}
 func (s turnSession) Alive() bool                    { return true }
+func (s turnSession) CloseInput()                    {}
+func (s turnSession) Done() <-chan struct{}          { return neverDone }
 
 // hopPrompt is what spawn i was told, wherever its shape carries the prompt:
 // on the spec for a one-shot seat, on the lines handed to SendTurn for a

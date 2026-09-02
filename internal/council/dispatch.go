@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -68,6 +69,21 @@ type turnState struct {
 	// cancel ends the dispatch's context, the parent of every seat's own; it is
 	// what teardown pulls and what the last seat landing pulls behind it.
 	cancel context.CancelFunc
+	// ctx is that context itself, kept so a seat that RETREATS mid-dispatch
+	// (retreatSeat, vendors.LiveFallback) can mint its batch child's context
+	// under the same parent every sibling's hangs from — a retreat's process
+	// must die with the dispatch exactly as the one it replaced would have.
+	// Nil on a dispatch a test or a replay typed out by hand; the retreat then
+	// hangs the child from Background, which the room's own teardown still
+	// reaches through the seat's cancel.
+	ctx context.Context
+	// prompts holds, per seat, the prompt this dispatch handed it — the
+	// vendor's own text, before the brief was applied. It exists for one
+	// reader: a live seat whose handshake is refused AFTER the turn was
+	// handed over (the protocol queues the turn until the handshake answers)
+	// retreats to its batch adapter on the same dispatch, and the brief the
+	// operator typed has to reach that adapter unchanged.
+	prompts map[model.VendorID]string
 	// seatCancel ends one seat's context — the one its process was started on
 	// — so ctrl+c on a focused seat kills that seat's child and nobody else's.
 	// A persistent seat's process lives on roomCtx and is INTERRUPTED instead
@@ -516,7 +532,9 @@ func (m *Model) seatBusy(c *Column) string {
 // rather than when the operator pressed enter, which is the honest reading of
 // every clock this turn will render.
 func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea.Cmd {
-	reg := vendors.Registry()
+	// The registry as THIS room sees it: a seat that retreated to its batch
+	// adapter earlier in the room is that adapter here (fallback.go).
+	reg := m.registry()
 	// A fanned flow stage hands each seat its own task (launchFlowStage,
 	// §9.55). Consumed here, on the way in, so no later dispatch can inherit
 	// a prompt meant for a stage that already ran.
@@ -604,9 +622,11 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 		route:      route,
 		flow:       m.flowChain != nil,
 		cancel:     cancel,
+		ctx:        ctx,
 		seatCancel: map[model.VendorID]context.CancelFunc{},
 		live:       map[model.VendorID]bool{},
 		persistent: map[model.VendorID]bool{},
+		prompts:    map[model.VendorID]string{},
 	}
 	var failures []dispatchFailedMsg
 
@@ -827,43 +847,35 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 				}
 				ts.arenaHandles[c.Vendor] = h
 			}
-		} else if liveSeat(v) {
-			n, err := m.sendPersistentTurn(v, c, vendorPrompt)
-			if err != nil {
-				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
-				continue
-			}
-			ts.persistent[c.Vendor] = true
-			note = n
 		} else {
-			spec, resumed, err := m.specFor(v, c, vendorPrompt)
-			if err != nil {
-				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
-				continue
+			// The prompt as handed, kept for a retreat that happens after
+			// this loop has moved on (turnState.prompts).
+			ts.prompts[c.Vendor] = vendorPrompt
+			batch := v
+			if liveSeat(v) {
+				n, err := m.sendPersistentTurn(v, c, vendorPrompt)
+				switch {
+				case errors.Is(err, errFellBack):
+					// The handshake was refused before this brief could be
+					// handed over, and the seat has retreated (retreat). The
+					// same brief goes down the batch branch below, on this
+					// same press of enter: a refusal the operator has to
+					// notice and re-send would be the brief lost.
+					batch = m.fallbackFor(c.Vendor)
+					note = fallbackNote(c.Vendor)
+				case err != nil:
+					failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
+					continue
+				default:
+					ts.persistent[c.Vendor] = true
+					note = n
+					batch = nil
+				}
 			}
-			h, err := startProcess(sctx, spec, m.events, v.ParseEvent)
-			if err != nil {
-				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
-				continue
-			}
-			// Keyed by vendor, so `x` can cut THIS seat and no other on an
-			// ordinary turn (turnState.seatHandles), and since §9.54 so can the
-			// focused-seat ctrl+c; teardown walks the same map. A give-up's Kill
-			// on an already-killed handle is a no-op by Handle's own contract.
-			if ts.seatHandles == nil {
-				ts.seatHandles = map[model.VendorID]racerHandle{}
-			}
-			ts.seatHandles[c.Vendor] = h
-			// The id half of §9.43's comparison, recorded at the one moment it is
-			// known and ONLY for a seat whose vendor has been measured to fork a
-			// lost thread in silence. Gating here rather than at the comparison is
-			// deliberate: it keeps applyEvents free of vendor knowledge, and it
-			// makes the honesty rule structural — a seat that never enters this
-			// map can never raise the card, so a vendor whose resume semantics
-			// nobody has measured cannot be accused of losing a thread.
-			if resumed != "" {
-				if _, forks := v.(vendors.SilentResumeFork); forks {
-					m.forkWatch[c.Vendor] = resumed
+			if batch != nil {
+				if err := m.startBatchSeat(ts, sctx, batch, c, vendorPrompt); err != nil {
+					failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
+					continue
 				}
 			}
 		}
@@ -1101,6 +1113,47 @@ func frameOwnersFor(route Route, st State) []model.VendorID {
 // itoa is strconv.Itoa under a shorter name, kept local so the dispatch path
 // reads as prose.
 func itoa(i int) string { return strconv.Itoa(i) }
+
+// startBatchSeat spawns one seat's turn as a fresh process — the shape every
+// seat took before any of them kept a process, and the shape three of them
+// retreat to when their live handshake is refused (vendors.LiveFallback).
+//
+// It is the body sendTurn's batch branch always had, lifted out so it has TWO
+// callers rather than a copy: the dispatch loop, and a retreat that happens
+// after that loop has moved on (retreatSeat). The handle lands in
+// turnState.seatHandles so `x`, the focused-seat ctrl+c and teardown reach it
+// exactly as they reach any one-shot seat.
+func (m *Model) startBatchSeat(ts *turnState, sctx context.Context, v vendors.Vendor, c *Column, prompt string) error {
+	spec, resumed, err := m.specFor(v, c, prompt)
+	if err != nil {
+		return err
+	}
+	h, err := startProcess(sctx, spec, m.events, v.ParseEvent)
+	if err != nil {
+		return err
+	}
+	// Keyed by vendor, so `x` can cut THIS seat and no other on an
+	// ordinary turn (turnState.seatHandles), and since §9.54 so can the
+	// focused-seat ctrl+c; teardown walks the same map. A give-up's Kill
+	// on an already-killed handle is a no-op by Handle's own contract.
+	if ts.seatHandles == nil {
+		ts.seatHandles = map[model.VendorID]racerHandle{}
+	}
+	ts.seatHandles[c.Vendor] = h
+	// The id half of §9.43's comparison, recorded at the one moment it is
+	// known and ONLY for a seat whose vendor has been measured to fork a
+	// lost thread in silence. Gating here rather than at the comparison is
+	// deliberate: it keeps applyEvents free of vendor knowledge, and it
+	// makes the honesty rule structural — a seat that never enters this
+	// map can never raise the card, so a vendor whose resume semantics
+	// nobody has measured cannot be accused of losing a thread.
+	if resumed != "" {
+		if _, forks := v.(vendors.SilentResumeFork); forks {
+			m.forkWatch[c.Vendor] = resumed
+		}
+	}
+	return nil
+}
 
 // specFor builds this vendor's invocation for the current turn.
 //
@@ -1468,6 +1521,14 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			// takes it down. Either the room is quitting, or something ended it
 			// under us; both mean the seat has no process any more.
 			persistent := m.isPersistent(ev.Vendor)
+			// A live seat that died on its FIRST turn before it ever named a
+			// session could not be brought up at all — the agy stream shape's
+			// refusal, a build without the subcommand (vendors.LiveFallback).
+			// The seat retreats to its batch adapter on this same dispatch,
+			// so the brief is not lost; a later death is a real death.
+			if persistent && m.retreatOnDeath(c) {
+				continue
+			}
 			m.dropProcess(ev.Vendor)
 			c.Body += m.flush(ev.Vendor)
 			if persistent && (c.Phase == PhaseStreaming || c.Phase == PhaseWaiting) && !m.cancelling[ev.Vendor] {
@@ -1569,6 +1630,16 @@ func (m *Model) applyEvents(batch []runner.Event) {
 					// that is the end of the TURN, not of the process, so the
 					// column retires and the seat stays open for the next brief.
 					//
+					// Unless the "failure" is the handshake itself: the two RPC
+					// protocols report a refused initialize as a failed turn
+					// and mark themselves Dead, and a seat with a measured
+					// batch adapter behind it retreats to that adapter on this
+					// same dispatch rather than retiring the column
+					// (vendors.LiveFallback). The process is up and useless,
+					// and stopProc ends it on the way.
+					if m.retreatOnRefusal(c) {
+						continue
+					}
 					// An interrupt lands here too: cancelling produced a result
 					// with is_error true and terminal_reason "aborted_tools".
 					// The user's keystroke is not a vendor failure, so
@@ -1578,7 +1649,12 @@ func (m *Model) applyEvents(batch []runner.Event) {
 					}
 					m.finishColumn(c, PhaseFailed)
 				} else {
-					// The PROCESS failed. Nothing more is coming from it.
+					// The PROCESS failed. Nothing more is coming from it — and
+					// if it failed on its first turn before naming a session,
+					// it was never up (retreatOnDeath, the KindDone rule).
+					if m.retreatOnDeath(c) {
+						continue
+					}
 					m.dropProcess(ev.Vendor)
 					c.Elapsed = time.Since(c.Started)
 					m.finishColumn(c, PhaseFailed)
@@ -2619,13 +2695,24 @@ func (m *Model) teardown() {
 	// reattach card ages, so "saved 2h ago" means the room was last OPEN two
 	// hours ago rather than merely last answered then.
 	m.saveRoom()
+	// Every seat gets its last word, its stdin closed, and its grace before
+	// the kill (stopProc, vendors.GracefulStop) — and every seat's grace runs
+	// at the SAME time, so a room of three live seats waits for the longest
+	// of them rather than the sum. The wait is here, on the way out, because
+	// this is the one caller that must not return while a child may still be
+	// running: the closing line counts the agents this teardown ended, and a
+	// kill issued after the room has exited is a kill nobody made.
+	var stops []<-chan struct{}
 	for v, p := range m.procs {
-		p.sess.Kill()
+		stops = append(stops, stopProc(p))
 		delete(m.procs, v)
 		// Counted here rather than from len(m.procs) before the loop, so the
 		// figure the closing line prints is the number of Kill calls this
 		// teardown actually made (§9.52).
 		m.ended++
+	}
+	for _, done := range stops {
+		<-done
 	}
 	// The live seat is a vendor process too (§9.53), so it dies here and is
 	// counted here. Killed explicitly rather than left to the room context that

@@ -258,6 +258,8 @@ func (f *fakeSession) SendTurn([][]byte) error  { return nil }
 func (f *fakeSession) SendAside([][]byte) error { return nil }
 func (f *fakeSession) Kill()                    { f.killed = true; f.alive = false }
 func (f *fakeSession) Alive() bool              { return f.alive }
+func (f *fakeSession) CloseInput()              {}
+func (f *fakeSession) Done() <-chan struct{}    { return neverDone }
 
 // TestAMovedRoomRespawnsThePersistentSeatOnItsOwnThread is the Claude-seat
 // half of /cd. cwd is fixed at spawn — the stream-json envelope has no cwd

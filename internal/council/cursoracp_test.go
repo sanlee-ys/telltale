@@ -25,6 +25,11 @@ func (exitedSession) SendTurn([][]byte) error  { return runner.ErrSessionClosed 
 func (exitedSession) SendAside([][]byte) error { return runner.ErrSessionClosed }
 func (exitedSession) Kill()                    {}
 func (exitedSession) Alive() bool              { return false }
+func (exitedSession) CloseInput()              {}
+func (exitedSession) Done() <-chan struct{}    { return exitedDone }
+
+// exitedDone is already closed: the process this stub stands for is gone.
+var exitedDone = func() chan struct{} { ch := make(chan struct{}); close(ch); return ch }()
 
 // endCursorTurn retires the seat's column the way the protocol does: with the
 // vendor's own end-of-turn signal, which on this seat is the room's own

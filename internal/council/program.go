@@ -186,6 +186,13 @@ type Model struct {
 	// being kept alive. Empty until the first dispatch: council never starts a
 	// vendor to see whether it answers.
 	procs map[model.VendorID]*seatProc
+	// fellBack names the seats that retreated from their live shape to their
+	// measured batch adapter in THIS room (fallback.go, vendors.LiveFallback):
+	// dispatch reads the registry through it, and the posture badge reads the
+	// fallback spelling for a seat in it. Never saved — a refusal is a fact
+	// about a build on this machine today, and the next room starts every
+	// seat live again.
+	fellBack map[model.VendorID]bool
 	// roomCtx bounds those processes and is cancelled only by teardown.
 	//
 	// Deliberately NOT a turn's context. The whole value of a persistent seat is
@@ -603,6 +610,7 @@ func newModel(opts Options, st State) *Model {
 		failure:     map[model.VendorID]runner.FailureClass{},
 		redactors:   map[model.VendorID]*Redactor{},
 		procs:       map[model.VendorID]*seatProc{},
+		fellBack:    map[model.VendorID]bool{},
 		gateInputs:  map[string]map[string]any{},
 		turns:       map[model.VendorID]*turnState{},
 		cancelling:  map[model.VendorID]bool{},
