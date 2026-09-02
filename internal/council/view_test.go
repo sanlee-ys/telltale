@@ -668,6 +668,17 @@ func TestThePostureLegendDoesNotSoftenAnyClaim(t *testing.T) {
 // not a claim, and the argument behind a claim is under the same rule.
 func TestThePosturePageRendersEachSeatsOwnClaim(t *testing.T) {
 	st := postureRoom()
+	// Taller than the golden's 44 rows, and the reason is an accident this
+	// test used to pass on. The page does not scroll: what does not fit is
+	// cut behind `↓ N more below`, and at 44 rows the third seat's paragraph
+	// sits below the fold. Until 2026-09-02 the assertion still held because
+	// the LEGEND repeats Antigravity's old opening clause ("treat this column
+	// as able to change your files"), so the seat's own claim was never on
+	// screen and the test could not tell. The claim now opens with the
+	// seat's shape words (§9.54), which the legend does not carry, and the
+	// property under test — the field REACHES the screen — is asserted on a
+	// terminal tall enough to hold all of it.
+	st.Height = 80
 	got := render(st)
 
 	for _, c := range st.Columns {

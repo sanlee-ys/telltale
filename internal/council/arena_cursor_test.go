@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
+	"github.com/sanlee-ys/telltale/internal/council/vendors"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -310,14 +311,24 @@ func TestCancelAndTeardownKillTheRacer(t *testing.T) {
 // 2026-08-09): every one-shot racer's prompt opens with the same constant
 // line ahead of the operator's own words — prepended, not appended, so a long
 // brief cannot bury it — and an ordinary turn's prompt carries none of it.
-// The cursor racer's prompt rides its protocol rather than its spec (§9.36:
-// `acp` is the whole argv), so the one-shot three are the witnesses here.
+// A Conversational racer's prompt rides its protocol rather than its spec
+// (§9.36: `acp` is the whole argv; since §9.57 codex's `app-server` and grok's
+// `agent stdio` are the same shape), so the one-shot racers are the witnesses
+// here — and which seats those are is read off the registry rather than
+// counted by hand, because the count moved once already.
 func TestARaceBriefCarriesTheConductLineAndAnOrdinaryBriefDoesNot(t *testing.T) {
 	_, log, _ := arenaCursorRace(t)
 
+	reg := vendors.Registry()
+	want := 0
+	for _, v := range reg {
+		if _, conversational := v.(vendors.Conversational); !conversational {
+			want++
+		}
+	}
 	oneShots := 0
 	for _, spec := range log.specs {
-		if spec.Vendor == model.VendorCursor {
+		if _, conversational := reg[spec.Vendor].(vendors.Conversational); conversational {
 			continue
 		}
 		oneShots++
@@ -335,8 +346,8 @@ func TestARaceBriefCarriesTheConductLineAndAnOrdinaryBriefDoesNot(t *testing.T) 
 			t.Errorf("%s carries the conduct line AFTER the brief — a long brief would bury it", spec.Vendor)
 		}
 	}
-	if oneShots != 3 {
-		t.Fatalf("%d one-shot racers, want 3", oneShots)
+	if oneShots != want || want == 0 {
+		t.Fatalf("%d one-shot racers, want %d (every non-Conversational seat in the registry)", oneShots, want)
 	}
 }
 

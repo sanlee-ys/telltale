@@ -176,27 +176,36 @@ func TestTheTurnEndsWhenTheOthersLandAfterAGiveUp(t *testing.T) {
 // the ephemeral racer all survive, and their columns keep racing.
 func TestGiveUpKillsTheRightOneShotHandle(t *testing.T) {
 	m, oneShots, racer := giveUpRace(t)
-	focusSeatOn(t, m, model.VendorCodex)
+	// Derived rather than named: which seats race as one-shot processes is
+	// the registry's claim, not this test's. Codex was the witness until
+	// 2026-09-02, when it became a Conversational seat that races on a
+	// throwaway session like cursor (§9.54); the property is the same for
+	// whichever one-shot racer the room still has.
+	cut := oneOf(t, oneShots, "one-shot racer")
+	focusSeatOn(t, m, cut)
 
 	m.key(key("x"))
 	m.key(key("y"))
 
-	if !oneShots[model.VendorCodex].killed {
-		t.Fatal("codex's give-up did not kill codex's racer")
+	if !oneShots[cut].killed {
+		t.Fatalf("%s's give-up did not kill %s's racer", cut, cut)
 	}
-	for _, v := range []model.VendorID{model.VendorClaude, model.VendorAntigravity} {
-		if oneShots[v].killed {
-			t.Errorf("codex's give-up killed %s's racer", v)
+	for v, k := range oneShots {
+		if v == cut {
+			continue
+		}
+		if k.killed {
+			t.Errorf("%s's give-up killed %s's racer", cut, v)
 		}
 		if c := m.column(v); c.Phase != PhaseStreaming && c.Phase != PhaseWaiting {
 			t.Errorf("%s's column stopped racing: %v", v, c.Phase)
 		}
 	}
 	if racer.killed {
-		t.Error("codex's give-up killed the cursor seat's ephemeral racer")
+		t.Errorf("%s's give-up killed an ephemeral racer", cut)
 	}
-	if c := m.column(model.VendorCodex); c.Phase != PhaseCancelled {
-		t.Errorf("codex's column = %v, want cancelled", c.Phase)
+	if c := m.column(cut); c.Phase != PhaseCancelled {
+		t.Errorf("%s's column = %v, want cancelled", cut, c.Phase)
 	}
 }
 
@@ -376,6 +385,12 @@ func ordinaryTurn(t *testing.T) (*Model, map[model.VendorID]*recordedKill, map[m
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	log := countSpawns(t)
+	// The batch room. Since 2026-09-02 (§9.54) every registered seat keeps a
+	// process, so "an ordinary one-shot seat" has to be constructed: this is
+	// the registry after the three live seats have fallen back to their
+	// measured batch adapters, which is a production state and the one whose
+	// kill path these tests exist to witness.
+	seatFallbacks(t)
 	m := flowRoom(t, true)
 	m.st.Draft = "@all an ordinary brief"
 	m.dispatch()

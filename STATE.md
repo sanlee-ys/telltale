@@ -596,7 +596,13 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   under the Windows sandbox on this box, and in two of three read-posture arms
   the model abandoned the turn rather than inspecting — the 0.146.0-class defect
   #311 had just cleared off `codex exec` the same day. So the protocol ships as a
-  second `runner.Protocol` and **the seat does not move** (§9.50). Three things
+  second `runner.Protocol` and **the seat does not move** (§9.50). **AMENDED
+  2026-09-02: the seat MOVED without that re-measurement** (§9.57), on the crew
+  ledger rather than the sandbox one, with `codex exec` kept as the fallback,
+  the seat owning its kill, and every codex badge reading `unmeasured at
+  0.152.1`; the off-Windows read badge dropped to `ro:requested`. The three
+  things below are still open and are now the head of §9.57's checklist
+  rather than a precondition. Three things
   stay open and gate the flip: the read posture's LIVENESS (a turn that lists a
   directory and reads a file under the sandbox the badge claims), whether a write
   outside the workspace is denied (the one arm ran under `%TEMP%`, which

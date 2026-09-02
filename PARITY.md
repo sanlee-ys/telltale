@@ -34,10 +34,15 @@ weaker than a live run, it says so.
 | **Antigravity** | same as elsewhere | `unsandboxed` on every platform — it was asked to write a file under both of its own read-only flags and wrote it. Refuted, not unverified. |
 | **Grok** | **measured on both, and the platforms differ** | The seat is `unsandboxed` on both platforms. `--permission-mode plan` is REFUTED on both. grok 1.0.0 (3cd0d0cbce) wrote the file under that flag, and the control run without the flag also wrote it. Windows measured this on 2026-08-09 and macOS on 2026-08-14. The macOS run confirmed the file on disk and did not use the reply text. `--sandbox` DIVERGES. On Windows the flag is UNOBSERVABLE: given `bogus-profile-xyz`, grok printed no error and no warning, and it answered normally at exit 0. On macOS the same build validates the profile and fails closed. It prints `sandbox could not be applied`, then it prints `Refusing to start with its protections missing`, and it exits 1 with no turn. The macOS section below states what this result does and does not permit. **Re-measured on Windows at grok 1.0.4 (d846eb93d9) on 2026-08-14, and both results held.** The write landed again under `--permission-mode plan`, and `bogus-profile-xyz` again drew no error and exit 0. **The Mac was updated to 1.0.4 (d846eb93d94d) on 2026-08-17 and both probes were re-run there, with both results holding.** So this is a SAME-BUILD comparison again, on both halves, and the `--sandbox` divergence is a property of the operating system rather than of the release. See the note below. |
 
-**`codex app-server` is unverified off Windows, 2026-08-29.** The row above
-describes the SEATED path, `codex exec --json`, and it is the only codex path
-the room dispatches. A second protocol ships parsed and unseated (§9.50), and
-every one of its eight arms ran on Windows 11 against codex-cli 0.149.1. Two of
+**`codex app-server` is unverified off Windows, 2026-08-29 — and since
+2026-09-02 it is the SEATED path (§9.57).** The row above describes `codex exec
+--json`, which the room dispatched until then and keeps as the fallback. The
+app-server protocol's eight arms all ran on Windows 11 against codex-cli
+0.149.1, which is why the off-Windows read badge dropped to `ro:requested` when
+the seat moved: the macOS `ro:enforced` was `codex exec`'s measurement, and a
+seat move re-measures rather than inherits. The same holds for the other two
+seats that moved that day, `grok agent stdio` and `agy --input-format
+stream-json`: undriven on every platform, badged `unmeasured` everywhere. Two of
 its findings are Windows-shaped and are the likeliest to differ on a Mac: the
 tool router wrapping shell commands in `pwsh.exe`, which cannot start under the
 Windows sandbox and left a read-posture seat unable to inspect; and the `.git`
