@@ -2397,6 +2397,15 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.teardown()
 		return m, tea.Quit
+	case ".":
+		// The next seat that needs you (§9.54): the inbox strip's own key. The
+		// digits already reach any seat by position; this one reaches the
+		// strip's next entry without reading its number first, which is the
+		// whole use of a strip — you want the thing that finished, not seat 3.
+		// View mode only: in compose `.` is a full stop, the contract `q`, `f`
+		// and `c` keep. Offered on the footer only while the strip has an
+		// entry, so the key is never named where it does nothing (§7.8).
+		m.focusNeedsYou()
 	case "a":
 		// Same letter as the card's, deliberately. There it answers the question
 		// in front of you; here it reports and reverses. Safe with a turn in
@@ -2864,7 +2873,57 @@ func (m *Model) focusBy(d int) {
 			break
 		}
 	}
-	m.st.Focus = vis[((pos+d)%len(vis)+len(vis))%len(vis)]
+	m.setFocus(vis[((pos+d)%len(vis)+len(vis))%len(vis)])
+}
+
+// setFocus moves the keys to a column and stamps the move on both ends
+// (Column.LastFocus): the seat being left has now been looked at up to this
+// instant, and the seat being entered from it. Every keystroke that moves
+// focus comes through here, so the inbox's "since you last looked" is derived
+// from one record of one fact (§9.54). The clock is read HERE, on a keypress,
+// and never in Render.
+//
+// A move onto the column already focused still stamps it: the reader pressed a
+// key that names the seat they are on, which is a look.
+func (m *Model) setFocus(idx int) {
+	if idx < 0 || idx >= len(m.st.Columns) {
+		return
+	}
+	now := time.Now()
+	if m.st.Focus >= 0 && m.st.Focus < len(m.st.Columns) {
+		m.st.Columns[m.st.Focus].LastFocus = now
+	}
+	m.st.Columns[idx].LastFocus = now
+	m.st.Focus = idx
+}
+
+// focusNeedsYou puts the keys on the next seat the strip names (§9.54): the
+// first entry after the focused column in seating order, wrapping to the top,
+// so repeated presses walk the strip the way it reads. The strip already
+// excludes the focused seat, so the walk can never land where it started
+// unless nothing else is listed — and then there is nowhere to go, and the
+// notice says so rather than moving nothing silently.
+//
+// Page-gated the way focusSeat is: a page has one reading area and no columns
+// to move between.
+func (m *Model) focusNeedsYou() {
+	if m.pageOpen() {
+		return
+	}
+	seats := needsYou(m.st)
+	if len(seats) == 0 {
+		m.st.Notice = "nothing needs you — every seat is either idle or one you have looked at"
+		return
+	}
+	next := seats[0].idx
+	for _, e := range seats {
+		if e.idx > m.st.Focus {
+			next = e.idx
+			break
+		}
+	}
+	m.setFocus(next)
+	m.st.Notice = ""
 }
 
 // panesLive reports that pane controls would actually change the frame (§9.51).
@@ -3035,7 +3094,7 @@ func (m *Model) focusSeat(n int) bool {
 	if n < 1 || n > len(vis) {
 		return false
 	}
-	m.st.Focus = vis[n-1]
+	m.setFocus(vis[n-1])
 	return true
 }
 

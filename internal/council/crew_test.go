@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -60,6 +61,14 @@ func markCancelling(m *Model, v model.VendorID) {
 		m.cancelling = map[model.VendorID]bool{}
 	}
 	m.cancelling[v] = true
+}
+
+// landed stamps a column as having ended its turn at a moment the reader has
+// not looked at it since — the inbox's precondition (needsyou.go), typed by
+// hand so a State can carry it without a dispatch.
+func landed(c *Column, phase Phase, at time.Time) {
+	c.Phase = phase
+	c.Ended = at
 }
 
 // crewRoom is flowRoom in the shape the crew tests need: the same four
@@ -396,4 +405,147 @@ func TestABusySeatRefusalIsOnScreen(t *testing.T) {
 	st.Route = Route{Vendors: []model.VendorID{model.VendorCodex}}
 	st.Notice = "a turn is in flight on codex (turn 5) — ctrl+c on its column cancels that turn, or address another seat"
 	golden(t, "busy-seat-refused", render(st))
+}
+
+// TestTheInboxListsASeatThatLandedWhileYouWereElsewhere is the strip's golden
+// (§9.54): a seat done and a seat failed since the reader last looked, beside
+// a seat that is still working and a seat the reader IS looking at.
+func inboxRoom() State {
+	st := room()
+	st.Turn = 3
+	st.Columns = append(st.Columns, Column{
+		Vendor: model.VendorCursor, Label: "Cursor", Avail: AvailInstalled,
+		Sandbox: SandboxClaim{Level: SandboxWrite, Detail: "started with --write"},
+		Gran:    GranEvents, Phase: PhaseIdle,
+	})
+	base := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
+	st.Now = base.Add(90 * time.Second)
+	// The reader is on Claude, which is still working on turn 3.
+	st.Focus = 0
+	st.Columns[0].Phase, st.Columns[0].TurnN, st.Columns[0].Started = PhaseStreaming, 3, base
+	st.Columns[0].Body = "Reading the retry loop first."
+	// Codex landed on turn 1 after the reader last looked at it.
+	st.Columns[1].TurnN, st.Columns[1].Body = 1, "Done: the poller backs off exponentially now."
+	st.Columns[1].Elapsed = 42 * time.Second
+	st.Columns[1].LastFocus = base.Add(-time.Minute)
+	landed(&st.Columns[1], PhaseDone, base.Add(30*time.Second))
+	// Antigravity failed on turn 2, also unread.
+	st.Columns[2].TurnN, st.Columns[2].Note = 2, "exit status 1: the vendor could not be reached"
+	landed(&st.Columns[2], PhaseFailed, base.Add(40*time.Second))
+	// Cursor landed too, but the reader has been to it since.
+	st.Columns[3].TurnN, st.Columns[3].Body = 2, "Docs written."
+	landed(&st.Columns[3], PhaseDone, base.Add(20*time.Second))
+	st.Columns[3].LastFocus = base.Add(60 * time.Second)
+	return st
+}
+
+func TestTheInboxListsASeatThatLandedWhileYouWereElsewhere(t *testing.T) {
+	golden(t, "inbox-landed", render(inboxRoom()))
+	line := needsYouRowOf(t, render(inboxRoom()))
+	for _, want := range []string{"2 Codex done", "3 Antigravity failed"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the strip does not list %q: %q", want, line)
+		}
+	}
+	if strings.Contains(line, "Cursor") {
+		t.Errorf("a seat the reader visited after it landed is still listed: %q", line)
+	}
+	if strings.Contains(line, "Claude") {
+		t.Errorf("the seat the reader is on, still working, is listed: %q", line)
+	}
+	// The footer names the key, and only because the strip has an entry.
+	if !strings.Contains(render(inboxRoom()), ". needs you") {
+		t.Error("the footer does not teach the strip's key while the strip has entries")
+	}
+	if strings.Contains(render(room()), ". needs you") {
+		t.Error("the footer names the strip's key in a room with nothing on the strip")
+	}
+}
+
+func TestTheInboxSurvivesASCII(t *testing.T) {
+	st := inboxRoom()
+	st.ASCII = true
+	golden(t, "inbox-landed-ascii", Render(st, PlainStyles(), GlyphsFor(true)))
+}
+
+// TestGoingToALandedSeatIsWhatTakesItOffTheInbox: the derived rule, with the
+// stamps a real focus move writes, and the three things that do NOT clear it.
+func TestGoingToALandedSeatIsWhatTakesItOffTheInbox(t *testing.T) {
+	m := &Model{st: inboxRoom(), glyphs: GlyphsFor(false)}
+	if line := needsYouRowOf(t, render(m.st)); !strings.Contains(line, "Codex") {
+		t.Fatalf("fixture: codex is not listed: %q", line)
+	}
+	// Time passing, output arriving on another seat, a gate elsewhere: still listed.
+	m.st.Now = m.st.Now.Add(time.Hour)
+	m.st.Columns[0].Body += " Still reading."
+	if line := needsYouRowOf(t, render(m.st)); !strings.Contains(line, "Codex") {
+		t.Errorf("time or a neighbour's output cleared a landed seat: %q", line)
+	}
+	// Going to it (the digit key) and leaving again clears it, and only it.
+	m.focusSeat(2)
+	if line := needsYouRowOf(t, render(m.st)); strings.Contains(line, "Codex") {
+		t.Errorf("the focused seat is still on the strip: %q", line)
+	}
+	m.focusSeat(1)
+	line := needsYouRowOf(t, render(m.st))
+	if strings.Contains(line, "Codex") {
+		t.Errorf("a seat the reader went to and left is listed again: %q", line)
+	}
+	if !strings.Contains(line, "Antigravity") {
+		t.Errorf("visiting one seat cleared another: %q", line)
+	}
+	// It lands again later: back on the strip.
+	m.st.Columns[1].Ended = time.Now().Add(time.Minute)
+	if line := needsYouRowOf(t, render(m.st)); !strings.Contains(line, "Codex") {
+		t.Errorf("a seat that landed again after the visit is not re-listed: %q", line)
+	}
+}
+
+// TestTheNextNeedsYouKeyWalksTheStrip: `.` goes to the next listed seat after
+// the focus, wraps, and says so when there is nowhere to go.
+func TestTheNextNeedsYouKeyWalksTheStrip(t *testing.T) {
+	m := &Model{st: inboxRoom(), glyphs: GlyphsFor(false)}
+	m.st.Mode = ModeViewing
+
+	m.key(key("."))
+	if m.st.Focus != 1 {
+		t.Fatalf("`.` went to column %d, want codex (1)", m.st.Focus)
+	}
+	m.key(key("."))
+	if m.st.Focus != 2 {
+		t.Fatalf("`.` went to column %d, want antigravity (2)", m.st.Focus)
+	}
+	// Both visited: nothing is left, the key says so, and focus stays put.
+	m.key(key("."))
+	if m.st.Focus != 2 || !strings.Contains(m.st.Notice, "nothing needs you") {
+		t.Errorf("an empty strip moved the focus to %d with notice %q", m.st.Focus, m.st.Notice)
+	}
+	// In compose it is a full stop.
+	m.st.Mode = ModeComposing
+	m.key(key("."))
+	if m.st.Draft != "." {
+		t.Errorf("`.` in compose was not typed: draft %q", m.st.Draft)
+	}
+}
+
+// TestAFinishedSeatIsStampedWhereEveryRetirementPasses: the stamp the inbox
+// reads is written by finishColumn, once per turn, and reset by the next
+// dispatch.
+func TestAFinishedSeatIsStampedWhereEveryRetirementPasses(t *testing.T) {
+	m := turnModel(true)
+	c := &m.st.Columns[0]
+	m.applyEvents([]runner.Event{{Vendor: model.VendorClaude, Kind: runner.KindMeta, EndsTurn: true}})
+	if c.Ended.IsZero() {
+		t.Fatal("a seat that landed carries no Ended stamp")
+	}
+	first := c.Ended
+	// The second retirement — the process dying later — must not move it.
+	m.applyEvents([]runner.Event{{Vendor: model.VendorClaude, Kind: runner.KindDone}})
+	if !c.Ended.Equal(first) {
+		t.Error("a second retirement re-stamped the seat, so it would be re-listed after being read")
+	}
+	c.startTurn(2, "again", false)
+	if !c.Ended.IsZero() {
+		t.Error("the next dispatch did not clear the stamp")
+	}
 }

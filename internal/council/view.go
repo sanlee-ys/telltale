@@ -4019,6 +4019,13 @@ func modeHints(st State, g Glyphs) []hint {
 		hs = append(hs, hint{key: "1-" + strconv.Itoa(len(st.VisibleColumns())),
 			label: "seat", shed: true})
 	}
+	// The inbox's key (§9.54), named only while the strip has somebody on it —
+	// a footer must never advertise a key that does nothing (§7.8), and with an
+	// empty strip this one does nothing. Sheddable, after the seat range: the
+	// digits reach the same seats one number at a time.
+	if len(needsYou(st)) > 0 {
+		hs = append(hs, hint{key: ".", label: "needs you", shed: true})
+	}
 	if st.InFlight() {
 		return append(flowStopHint(hs, st), hint{key: "ctrl+c", label: cancelLabel(st)}, hint{key: "?", label: "help"})
 	}
