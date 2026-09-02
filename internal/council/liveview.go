@@ -108,6 +108,16 @@ func liveRows(l LiveSeat, w, avail int, sty Styles, g Glyphs) []string {
 			return clipRows(styleEach(
 				wrap("the live seat is starting, and has not painted yet", w), sty.Muted), avail)
 		}
+	case LiveEnded:
+		// A child that ended BADLY says so above its last screen, and it says so
+		// in the reading area rather than only in the marker row: the marker has
+		// room for a word, and "why" is a sentence. Empty on a clean exit and on
+		// a pane the room closed itself, because a process we ended did not
+		// fail — runner.go's rule for a killed Handle, applied unchanged.
+		if l.Note != "" {
+			note := clipRows(styleEach(wrap(l.Note, w), sty.Muted), avail)
+			return append(note, clipRows(l.Grid, avail-len(note))...)
+		}
 	}
 	if len(l.Grid) == 0 {
 		return nil

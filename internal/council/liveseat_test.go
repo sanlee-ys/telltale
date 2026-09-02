@@ -271,6 +271,20 @@ func TestLiveSeatStatesRenderApart(t *testing.T) {
 	if !strings.Contains(frames["ended"], "the last thing it drew") {
 		t.Error("an ended pane blanked the last screen the operator was reading")
 	}
+
+	// A child that ended badly says WHY, above its last screen. The marker row
+	// has room for a word and this is a sentence, so the two carry different
+	// halves rather than one repeating the other.
+	bad := base
+	bad.Live = LiveSeat{Seat: model.VendorClaude, Phase: LiveEnded,
+		Note: "the live seat exited with code 137", Grid: []string{"the last thing it drew"}}
+	badFrame := render(bad)
+	if !strings.Contains(badFrame, "code 137") {
+		t.Error("a live seat that exited badly did not say so anywhere on the pane")
+	}
+	if badFrame == frames["ended"] {
+		t.Error("a bad exit renders the same as a clean one")
+	}
 }
 
 // TestLiveSeatSurvivesASCIIAndPlainStyles is the CLAUDE.md rule applied here:

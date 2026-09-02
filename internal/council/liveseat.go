@@ -149,6 +149,13 @@ func (m *Model) liveCmd() tea.Cmd {
 		return nil
 	}
 	m.live = sess
+	// NewEmulator and not NewSafeEmulator, and the difference is a claim about
+	// this package rather than a preference. The mutex-guarded variant exists
+	// for a reader goroutine and a view goroutine touching one emulator; here
+	// the reader goroutine only ever writes to a channel, and every Write and
+	// every read of the grid happens on the update loop. A lock would say the
+	// emulator is shared, which would be the wrong thing for the next person to
+	// believe about it.
 	m.emu = vt.NewEmulator(provisionalCols, provisionalRows)
 	m.emu.SetScrollbackSize(liveScrollback)
 	m.liveCols, m.liveRows = provisionalCols, provisionalRows
