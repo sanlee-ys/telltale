@@ -748,19 +748,38 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   1809 floor is documentation-only, alt-screen guests were not exercised, no
   streaming agent turn was run, and the longest run was 20 seconds.
 
-- **Rung 4 is unowned, and the unwatched-write ruling is owed WITH it, never
-  before (2026-09-01).** [design.md §7.28](docs/design.md#s7-28) shipped the
-  host; detach, rejoin, the room job's `kill`, and a `ls` surface for a running
-  host are all still unbuilt, and a host dies with its client today. The ruling
-  that must land in the same change is detach plus write posture plus `--auto`:
-  the first telltale process that acts while nobody is watching. It is not owed
-  yet precisely because nobody is unwatched today.
+- **Host memory is unbounded, and nobody has measured how fast it grows
+  (2026-09-01).** [design.md §7.28](docs/design.md#s7-28) named a turn ceiling
+  as owed before detach shipped, and [§7.29](docs/design.md#s7-29) shipped
+  detach without it and says so. A number picked now would be a guess presented
+  as a limit: nothing has measured what a room accumulates per turn, so the
+  measurement comes first. What the ceiling must then do is settled — the drop
+  is stated in the header rather than applied silently, on the retention
+  discipline `telltale events` already has (§7.21).
+
+- **The hosted room draws with the plain client, not council's own `Model`
+  (2026-09-01).** §7.28's last limitation, unpaid and named again in §7.29.
+  `telltale council --host` and a rejoin both render with
+  `councilhost.Render` — words, no colour, no keys — so a hosted room looks
+  different from the TUI room and the client's banner says so out loud. Folding
+  `council.State` onto the wire is what makes `Model` the client's renderer, and
+  it is the next slice. Until it lands there is no key to detach with and no
+  help-panel hint for one, because the TUI room has no host to leave.
 
 - **No vendor has ever been dispatched to THROUGH A HOST (2026-09-01).** Every
   seat spawn in `internal/councilhost`'s suite is stubbed, by design — the spawn
   guard exists to stop a test spending a real turn, so neither CI nor a session
   can close this. The first live turn through a host is an operator-driven
   check, and it is the same class of debt as the demo path's live-drive items.
+  **Detach did not change this and could not.** §7.29's suite measures the
+  process facts with real processes — a real client detaches and exits, the host
+  outlives it, a second client rejoins it, and a `taskkill /F` on the detached
+  host reaps a real seat — but every one of those seats is this test binary
+  re-executed, and the host's roster is empty by construction. So `--host`,
+  `/detach`, the rejoin, `kill` and `ls`'s live section have never been driven
+  against a real vendor answering a real brief. One `telltale council --host
+  --read`, one brief, one `/detach`, one `telltale council` and one `telltale
+  council kill` pays the whole path.
 
 Cross-platform and cross-machine status has its own file: [PARITY.md](PARITY.md).
 

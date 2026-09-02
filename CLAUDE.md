@@ -223,7 +223,12 @@ turn, roster, and which seats have a session id saved — and writes nothing,
 spawns no vendor, and binds nothing. It holds the contract with the same item
 spare, for the same reason as the two above it. It never says a saved thread is
 *live*: nothing it can read proves that, and only the vendor answers it, on a
-resume. **Three** deliberate, bounded exceptions
+resume. Since design.md §7.29 (2026-09-01) it also reports whether a **host** is
+running, and it holds every clause above unchanged — the liveness probe asks
+whether a pipe NAME exists (`WaitNamedPipe`) and never opens it, so the listing
+cannot end the room it is listing, and a **stale `host.json` is reported and
+never removed**, because a reader that tidied would be a writer. The room
+removes that file; `ls` only says it is there. **Three** deliberate, bounded exceptions
 exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
 
 - `telltale council` — spawns vendor CLIs; writes `council/room.json` (session
@@ -236,7 +241,10 @@ exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
   `resume.go`'s leak sentence covers the shape unchanged. **The room's
   conversation never reaches disk from the host either** — it lives in host
   memory and dies with the host, on `resume.go`'s own ruling for the same
-  data.
+  data. §7.29 (2026-09-01) exposed detach and added NO file and no field: a
+  rejoining client is handed the host's current projection over the wire, not a
+  replay from disk, and a room that outlives its terminal is still a room whose
+  conversation dies with its process.
 - the **statusline's quota relay** — `quota/<vendor>.json`, the rate-limit
   windows it just rendered, written after the line is on stdout so the HUD can
   attribute account quota per vendor (design.md §7.15, amended 2026-08-07).
