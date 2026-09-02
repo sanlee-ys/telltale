@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sanlee-ys/telltale/internal/councilhost"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -70,7 +71,12 @@ func ListRooms(w io.Writer) error {
 	}
 
 	home, _ := os.UserHomeDir()
-	for _, line := range listRoomLines(re, availability(), home, time.Now()) {
+	// The live-host reading is taken HERE, beside the saved room's, so that
+	// listRoomLines stays pure over its arguments. Same rule availability()
+	// follows: the function that decides the WORDS must not also decide the
+	// FACTS. probeHost connects to nothing and writes nothing — hostLines' doc
+	// carries why that had to be true for this mode to stay a reader (§7.27).
+	for _, line := range listRoomLines(re, availability(), probeHost(), home, time.Now()) {
 		if _, werr := fmt.Fprintln(w, line); werr != nil {
 			return werr
 		}
@@ -92,9 +98,19 @@ func availability() map[model.VendorID]Availability {
 	return out
 }
 
-// listRoomLines is the whole rendering, pure over its four arguments.
-func listRoomLines(re Reattachment, avail map[model.VendorID]Availability, home string, now time.Time) []string {
+// listRoomLines is the whole rendering, pure over its five arguments.
+//
+// The LIVE HOST is one of the five (design.md §7.29), and it is printed in every
+// branch below rather than only in the branch with a saved room. The two facts
+// are independent: a host can be running over a room nothing has saved yet, and
+// a saved room can outlive every host that ever held it. Printing the host only
+// when a room is saved would hide a running process behind an unrelated absence,
+// which is the one thing this mode exists to stop.
+func listRoomLines(re Reattachment, avail map[model.VendorID]Availability,
+	host councilhost.HostReport, home string, now time.Time) []string {
 	out := []string{"telltale council ls — the saved room, read and not opened", ""}
+	out = append(out, hostLines(host, now)...)
+	out = append(out, "")
 
 	switch {
 	case re.Ignored != "":

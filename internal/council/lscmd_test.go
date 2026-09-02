@@ -37,7 +37,7 @@ func TestCouncilLsReportsWhatIsSaved(t *testing.T) {
 		model.VendorClaude: AvailInstalled,
 		model.VendorCodex:  AvailInstalled,
 	}
-	out := strings.Join(listRoomLines(re, avail, "/home/dev",
+	out := strings.Join(listRoomLines(re, avail, noHostFixture(), "/home/dev",
 		time.Date(2026, 9, 1, 8, 4, 0, 0, time.UTC)), "\n")
 
 	for _, want := range []string{
@@ -102,7 +102,7 @@ func TestCouncilLsNeverClaimsAThreadIsLive(t *testing.T) {
 	re := Reattachment{Path: "/home/dev/.telltale/council/room.json", Room: savedRoomFixture()}
 	out := strings.Join(listRoomLines(re, map[model.VendorID]Availability{
 		model.VendorClaude: AvailInstalled,
-	}, "/home/dev", time.Now()), "\n")
+	}, noHostFixture(), "/home/dev", time.Now()), "\n")
 
 	for _, forbidden := range []string{"resumable", "still live —", "is live"} {
 		if strings.Contains(out, forbidden) {
@@ -118,7 +118,7 @@ func TestCouncilLsNeverClaimsAThreadIsLive(t *testing.T) {
 // listing that printed it bare would undo that by implication.
 func TestCouncilLsSaysThePostureIsNotRestored(t *testing.T) {
 	re := Reattachment{Path: "/home/dev/.telltale/council/room.json", Room: savedRoomFixture()}
-	out := strings.Join(listRoomLines(re, nil, "/home/dev", time.Now()), "\n")
+	out := strings.Join(listRoomLines(re, nil, noHostFixture(), "/home/dev", time.Now()), "\n")
 
 	if !strings.Contains(out, "write-gated") {
 		t.Errorf("council ls drops the recorded posture:\n%s", out)
@@ -132,7 +132,7 @@ func TestCouncilLsSaysThePostureIsNotRestored(t *testing.T) {
 // nobody reads the line as the room having stored a private file.
 func TestCouncilLsNamesTheBriefPathAndNotItsContent(t *testing.T) {
 	re := Reattachment{Path: "/home/dev/.telltale/council/room.json", Room: savedRoomFixture()}
-	out := strings.Join(listRoomLines(re, nil, "/home/dev", time.Now()), "\n")
+	out := strings.Join(listRoomLines(re, nil, noHostFixture(), "/home/dev", time.Now()), "\n")
 
 	if !strings.Contains(out, "~/desk/brief.md") {
 		t.Errorf("council ls drops the brief path:\n%s", out)
@@ -148,7 +148,7 @@ func TestCouncilLsNamesTheBriefPathAndNotItsContent(t *testing.T) {
 func TestCouncilLsReportsARefusedFileWithoutFailing(t *testing.T) {
 	re := Reattachment{Path: "/home/dev/.telltale/council/room.json",
 		Ignored: "the saved room file is not readable json"}
-	out := strings.Join(listRoomLines(re, nil, "/home/dev", time.Now()), "\n")
+	out := strings.Join(listRoomLines(re, nil, noHostFixture(), "/home/dev", time.Now()), "\n")
 
 	if !strings.Contains(out, "the saved room file is not readable json") {
 		t.Errorf("council ls swallows LoadRoom's reason:\n%s", out)
@@ -159,7 +159,7 @@ func TestCouncilLsReportsARefusedFileWithoutFailing(t *testing.T) {
 }
 
 func TestCouncilLsSaysWhenNothingIsSaved(t *testing.T) {
-	out := strings.Join(listRoomLines(Reattachment{}, nil, "/home/dev", time.Now()), "\n")
+	out := strings.Join(listRoomLines(Reattachment{}, nil, noHostFixture(), "/home/dev", time.Now()), "\n")
 
 	if !strings.Contains(out, "no room is saved yet") {
 		t.Errorf("council ls does not report an empty state:\n%s", out)
@@ -224,7 +224,7 @@ func TestCouncilLsWritesNothing(t *testing.T) {
 // precedent — words and no colour — and it lands in pipes.
 func TestCouncilLsCarriesNoEscapes(t *testing.T) {
 	re := Reattachment{Path: "/home/dev/.telltale/council/room.json", Room: savedRoomFixture()}
-	for _, line := range listRoomLines(re, nil, "/home/dev", time.Now()) {
+	for _, line := range listRoomLines(re, nil, noHostFixture(), "/home/dev", time.Now()) {
 		if strings.ContainsRune(line, '\x1b') {
 			t.Errorf("council ls carries an ANSI escape: %q", line)
 		}

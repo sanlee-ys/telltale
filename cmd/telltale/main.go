@@ -12,9 +12,11 @@
 //	                      of the one file council writes (design.md §7.27)
 //	telltale council host the room in a process of its own: it owns the vendor
 //	                      processes, the pipes and the room state, and serves one
-//	                      client over a named pipe. Nobody types it; a client
-//	                      starts it. Detach is NOT exposed — the room still ends
-//	                      when the client does (design.md §7.28)
+//	                      client at a time over a named pipe. Nobody types it; a
+//	                      client starts it (design.md §7.28)
+//	telltale council kill end the host a detached room left running, and every
+//	                      seat with it. The word is honest: this terminates agent
+//	                      processes holding live sessions (design.md §7.29)
 //	telltale hook cursor  vendor hook relay: a per-turn payload on stdin, token
 //	                      counts to ~/.telltale/usage/, nothing on stdout
 //	telltale hook gate    the council gate's own PreToolUse hook: one "ask"
@@ -961,6 +963,22 @@ func runCouncil(args []string) error {
 		return council.ListRooms(os.Stdout)
 	}
 
+	// `telltale council kill` ends a detached host and every seat with it
+	// (design.md §7.29). A sub-noun before the flag set, matching `ls` and
+	// `host`, and it takes no arguments for §7.27's reason: none of the room's
+	// flags apply to it, and a flag would have to explain why it ignored every
+	// one of them.
+	//
+	// `kill` over `stop`, and the word is the ruling. This terminates agent
+	// processes that hold live sessions and spend quota; `stop` would understate
+	// what the operator is about to do.
+	if len(args) > 0 && args[0] == "kill" {
+		if len(args) > 1 {
+			return errors.New("telltale council kill takes no arguments — there is one room and one host")
+		}
+		return council.KillHostedRoom(os.Stdout)
+	}
+
 	// The one seam this change opens in an existing command. `host` is a
 	// SUB-NOUN, matching `hook cursor`, `events view` and `otel grok`, and it is
 	// routed before the flag set so that `telltale council host --pipe …` is not
@@ -991,6 +1009,13 @@ func runCouncil(args []string) error {
 	resume := fs.Bool("resume", false, "reattach to the saved room (this is the default; the flag is kept for muscle memory)")
 	fresh := fs.Bool("fresh", false, "start a new room instead of reattaching to the saved one")
 	trace := fs.String("trace", "", "append each turn's measured clock — spawn, wait, stream — to this file")
+	// The way into a hosted room, and it is an OPT-IN flag rather than a change
+	// to the daily command (design.md §7.29). `telltale council` runs the
+	// single-process room and always has, so there is no host for a key in that
+	// TUI to detach from — and a help-panel hint for a key that does nothing
+	// would be the honest-gauge failure this project exists to prevent, spent on
+	// its own surface.
+	host := fs.Bool("host", false, "open the room in a HOST process you can leave running: `/detach` walks away and the seats keep working, `telltale council` comes back (a read room only — a room that writes without asking will not detach)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1004,7 +1029,7 @@ func runCouncil(args []string) error {
 		return err
 	}
 
-	return council.Run(council.Options{
+	opts := council.Options{
 		Dir:       *dir,
 		Seats:     room,
 		ASCII:     *ascii || os.Getenv("TELLTALE_ASCII") != "",
@@ -1015,7 +1040,37 @@ func runCouncil(args []string) error {
 		Resume:    *resume,
 		Fresh:     *fresh,
 		TracePath: *trace,
-	})
+	}
+
+	if *host {
+		return council.StartHosted(opts, os.Stdin, os.Stdout)
+	}
+
+	// A live host is consulted BEFORE the ordinary room opens (design.md
+	// §7.29). Four answers, and only one of them lets this fall through:
+	//
+	//   - no host: the single-process TUI room, unchanged, which is the daily
+	//     path on a machine that has never opened a hosted one;
+	//   - a live host, free: rejoined, and this returns without opening a second
+	//     room;
+	//   - a live host somebody is in: REFUSED. The sentence is already printed,
+	//     so ErrRoomHeld only carries the exit code — falling through would open
+	//     a second room over the same workspace on the same saved session ids;
+	//   - a discovery file whose host is gone: the died notice, then the
+	//     ordinary room, which rebuilds those seats (§9.52).
+	//
+	// It runs AFTER the flags are parsed, so a misspelled --vendor is still a
+	// line on stderr rather than a surprise inside a rejoined room.
+	switch outcome, err := council.Rejoin(os.Stdin, os.Stdout); {
+	case errors.Is(err, council.ErrRoomHeld):
+		os.Exit(1)
+	case err != nil:
+		return err
+	case outcome == council.HostedHandled:
+		return nil
+	}
+
+	return council.Run(opts)
 }
 
 // runCouncilHost runs the room in its own process (design.md §7.28).
@@ -1075,7 +1130,7 @@ func runCouncilHost(args []string) error {
 	h, err := councilhost.New(councilhost.Config{
 		Workspace:  *dir,
 		PipeName:   *pipe,
-		Roster:     hostRoster(council.Detect(), room),
+		Roster:     council.HostRoster(council.Detect(), room),
 		Posture:    posture,
 		CouncilDir: councilDir,
 	})
@@ -1083,38 +1138,6 @@ func runCouncilHost(args []string) error {
 		return err
 	}
 	return h.Serve(context.Background())
-}
-
-// hostRoster turns detection plus a --vendor request into the host's seats.
-//
-// A seat that resolved no binary is still passed through when it was NAMED,
-// because the host draws it as undrivable with the reason on its card — the
-// same bargain ParseSeats documents, where asking for a seat forces it on
-// screen so the user is owed the card explaining why it is not there. An
-// unnamed seat that resolved nothing is simply left out.
-func hostRoster(found []council.VendorInfo, room council.Seats) []councilhost.RosterEntry {
-	byVendor := map[model.VendorID]council.VendorInfo{}
-	for _, v := range found {
-		byVendor[v.Vendor] = v
-	}
-	// A typed list keeps ITS order, because position is the navigation on every
-	// council surface and re-sorting a roster somebody typed would draw a room
-	// they did not ask for.
-	if len(room.Only) > 0 {
-		out := make([]councilhost.RosterEntry, 0, len(room.Only))
-		for _, v := range room.Only {
-			out = append(out, councilhost.RosterEntry{Vendor: v, Binary: byVendor[v].Binary})
-		}
-		return out
-	}
-	out := make([]councilhost.RosterEntry, 0, len(found))
-	for _, v := range found {
-		if !room.All && v.Avail != council.AvailInstalled {
-			continue
-		}
-		out = append(out, councilhost.RosterEntry{Vendor: v.Vendor, Binary: v.Binary})
-	}
-	return out
 }
 
 func parseFilter(s string) (hud.Filter, error) {
@@ -1252,10 +1275,16 @@ usage:
   telltale hud           cross-vendor session HUD
   telltale council       dispatch room: one brief, several agents, side by side
   telltale council ls    read the saved room without opening it: where it was,
-                         which turn was last, and which seats have a thread
-                         saved. Writes nothing, starts no vendor, and never
-                         claims a saved thread is still live — only the vendor
-                         answers that, and only on a resume (§7.27)
+                         which turn was last, which seats have a thread saved,
+                         and whether a host is running right now. Writes
+                         nothing, starts no vendor, connects to nothing, and
+                         never claims a saved thread is still live — only the
+                         vendor answers that, and only on a resume (§7.27)
+  telltale council kill  end a host you left running, and every seat with it.
+                         Only for a room you detached from; a room you are
+                         sitting in ends with /quit. It refuses to act on a
+                         stale file rather than terminating whatever process
+                         took that number (§7.29)
   telltale hook cursor   (wire into ~/.cursor/hooks.json as an afterAgentResponse
                          command hook) read one turn's token counts on stdin,
                          add them to this machine's running total, print nothing
@@ -1520,6 +1549,24 @@ telltale council flags:
                               watching; it is the one setting that leaves
                               nothing in the room asking permission for
                               anything.
+  --host                      open the room in a HOST process of its own, so it
+                              outlives this terminal. Type /detach and the host
+                              keeps every seat and the whole conversation; a
+                              later telltale council rejoins that live process,
+                              and telltale council kill ends it. The seats stay
+                              inside the host's job object, so a taskkill /F on
+                              the host still reaps every one of them.
+                              A HOSTED ROOM THAT WRITES WILL NOT DETACH. The
+                              host carries no approval card, so a hosted write
+                              room runs every tool call as though --auto were
+                              typed, and telltale never leaves an agent working
+                              while nobody is watching. Pair it with --read to
+                              get a room you can walk away from.
+                              It draws with the host's plain client rather than
+                              the council TUI: the room lives in another process
+                              and this one only prints it. Type a brief and
+                              press enter to dispatch; /detach, /interrupt and
+                              /quit are the controls (§7.29).
                               The a key does the same from inside the room, and
                               it is on the approval CARD rather than in the
                               composer because that is where you form the

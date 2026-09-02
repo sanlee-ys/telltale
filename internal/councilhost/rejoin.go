@@ -1,10 +1,13 @@
 package councilhost
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // HostState is what a discovery probe found, and it has FIVE values rather than
@@ -155,6 +158,31 @@ func KillHost(councilDir string) (string, error) {
 		"ended the host, pid %d, and every seat it was holding.\n"+
 			"the room's conversation is gone with it; the session ids are still in the saved room, so "+
 			"`telltale council` rebuilds those seats.", pid), nil
+}
+
+// RoomKey names the room a workspace belongs to, for PipeName.
+//
+// # A hash, and the workspace is deliberately not readable in it
+//
+// A pipe name is visible to every process on the machine that cares to
+// enumerate `\\.\pipe\`, and it is not protected by anything — the pipe's
+// protection is its security descriptor, which PipeName's own doc states. So
+// putting a path in the name would publish which directory the operator is
+// working in to any local process, for no gain: the name only has to be stable
+// and unique per workspace.
+//
+// SHA-256 truncated to sixteen hex characters. Truncated because a pipe name
+// has a length ceiling and a full digest buys nothing here — the failure a
+// collision causes is two workspaces sharing one room name, which the FIRST
+// PIPE INSTANCE create then refuses out loud rather than silently merging.
+//
+// Cleaned and case-folded first, because Windows paths that differ only in
+// separator or case are the same directory, and two names for one room would
+// let an operator start a second host over a room they already have.
+func RoomKey(workspace string) string {
+	norm := strings.ToLower(filepath.Clean(workspace))
+	sum := sha256.Sum256([]byte(norm))
+	return hex.EncodeToString(sum[:])[:16]
 }
 
 // selfImageBase is this executable's own file name.
