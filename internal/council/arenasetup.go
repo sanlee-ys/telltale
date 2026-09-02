@@ -299,7 +299,10 @@ func (m *Model) applyArenaSetup(msg arenaSetupMsg) tea.Cmd {
 		return nil
 	}
 	cmd := m.sendTurn(p.route, p.prompt, res)
-	if cmd == nil && m.turn == nil {
+	// race() is the read here, where this asked m.turn == nil: the pump's Cmd
+	// can be nil for a dispatch that DID start (waitEvents hands out one
+	// reader), so the state is the test rather than the command (§9.54).
+	if m.race() == nil {
 		// The setup succeeded and the dispatch still produced nothing — every
 		// racer's worktree failed on its own, so there was nobody left to send
 		// to. Each seat says why on its column; what belongs here is the brief,

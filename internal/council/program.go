@@ -98,11 +98,61 @@ type Model struct {
 	// stalls the vendors rather than losing their output (see dispatch.go).
 	events chan runner.Event
 
-	// turn is the dispatch in flight, or nil when the room is idle.
-	turn *turnState
-	// cancelling distinguishes "the user stopped this" from "the vendor
-	// failed", which are different words on a column card.
-	cancelling bool
+	// turns is every SEAT in flight, keyed by vendor, each pointing at the
+	// dispatch it is answering (design.md §9.54). Empty when the room is idle.
+	//
+	// This used to be one field — `turn *turnState`, the dispatch in flight or
+	// nil — and that single pointer was the wall between a committee and a
+	// crew: dispatch refused a second brief while it was set, so the room could
+	// run several seats inside ONE turn and never two turns at once. You could
+	// not hand codex a refactor and, while it ran, hand grok the docs. The
+	// owner's ruling was that the room is a crew, and a crew's seats are busy
+	// or idle one at a time.
+	//
+	// A map keyed by SEAT rather than a list of dispatches, because every
+	// question the update loop asks is about a seat: is codex busy, whose exit
+	// is this, which racer does `x` kill. Two seats addressed by one brief
+	// share one *turnState, which is what keeps the arena's all-or-nothing
+	// bookkeeping (its trees, its rank order, its live-stat slots) in one
+	// record. turnOf, anyInFlight and race are the three reads; every former
+	// `m.turn` site now goes through one of them, and each says which.
+	turns map[model.VendorID]*turnState
+	// cancelling names the seats the operator is stopping, so "the user stopped
+	// this" and "the vendor failed" stay different words on the column card.
+	//
+	// Per SEAT since §9.54, where it was one bool for the room: ctrl+c now
+	// cancels the focused seat alone while its neighbours work on, so the word
+	// a column lands with has to be decided per seat. An entry is cleared when
+	// that seat's column retires (turnColumnFinished) and again at its next
+	// dispatch, so a cancellation can never re-label a later turn.
+	cancelling map[model.VendorID]bool
+	// givenUp names the seats the operator cut with `x` and whose stop is still
+	// echoing (giveUpSeat).
+	//
+	// It lived on turnState until §9.54, where "the turn" was the whole room's
+	// and the fact could die with it, because every seat's process had gone
+	// quiet by then. Per-seat turns retire a cut seat the moment its column
+	// lands, while its process is still draining buffered stdout and — on the
+	// persistent seat — still answering the interrupt with a failed `result`.
+	// Those events arrive at a seat with no turn, and applyEvents would let
+	// them overwrite the give-up's own note with the vendor's abort error. So
+	// the fact outlives the seat's turn and is cleared at the seat's NEXT
+	// dispatch, beside threadLost and failure, on their lifetime and for their
+	// reason: it is a fact about one dispatch.
+	givenUp map[model.VendorID]bool
+	// eventsArmed reports that a waitEvents goroutine is parked on the channel.
+	//
+	// One reader at a time, and this flag is what enforces it. Two dispatches in
+	// flight each want the pump running, and two goroutines reading one channel
+	// would hand batches to Update out of order — a KindText landing after the
+	// KindDone that retired its column. Touched only on the update loop: set
+	// when the Cmd is built, cleared when its batch is applied.
+	eventsArmed bool
+	// dispatchEnded is set by turnColumnFinished when a whole dispatch's seats
+	// have landed and read by Update, which is where a Cmd can be returned:
+	// the quota relay is re-read at that moment (§9.21's amendment), and the
+	// function that knows a dispatch ended cannot return a Cmd itself.
+	dispatchEnded bool
 
 	// procs holds the long-lived vendor processes, one per seat that supports
 	// being kept alive. Empty until the first dispatch: council never starts a
@@ -464,6 +514,9 @@ func newWithBrief(opts Options, b Brief, hs GateHook, re Reattachment) *Model {
 		redactors:  map[model.VendorID]*Redactor{},
 		procs:      map[model.VendorID]*seatProc{},
 		gateInputs: map[string]map[string]any{},
+		turns:      map[model.VendorID]*turnState{},
+		cancelling: map[model.VendorID]bool{},
+		givenUp:    map[model.VendorID]bool{},
 		roomCtx:    ctx,
 		roomCancel: cancel,
 		brief:      b,
@@ -859,44 +912,55 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.waitPTY()
 
 	case eventBatchMsg:
+		// The one parked reader has delivered; the pump is free to be re-armed
+		// by whatever below decides the room still needs it (waitEvents).
+		m.eventsArmed = false
 		m.applyEvents(msg.events)
 		// A racer that landed in this batch may have queued a check run
 		// (arenacheck.go). Drained before the branch below, because that branch
 		// returns on the turn ending — and the batch that retires the LAST
 		// racer is exactly the one that ends the turn, so a drain after it
 		// would strand the final seat's check until the next tick.
-		chk := m.dueArenaChecks()
-		if m.turn == nil {
-			if m.flowAdvancePending {
-				m.flowAdvancePending = false
-				return m, m.dispatch()
-			}
-			// The turn is over. Stop waiting on the channel: re-arming would
-			// park a goroutine on a channel nothing will write to until the
-			// next dispatch.
-			//
-			// It is also the moment the relay is worth re-reading: a turn just
-			// consumed some of every addressed account, and the next draft is
-			// composed against whatever this returns. The read lands late by
-			// construction — council does not write the relay, so a vendor's
-			// new figure appears only after its own statusline renders again —
-			// which is what the age suffix on the reading is for.
-			//
-			// A rebuild in flight is the one case where a room with no turn
-			// must keep waiting. The seats it just launched are live processes
-			// that have not yet said which thread they loaded, so the channel
-			// is exactly the thing that will write next — the comment above
-			// ("nothing will write to it") is false while that is true.
-			if m.rebuildInFlight() {
-				return m, tea.Batch(m.waitEvents(), chk)
-			}
-			return m, tea.Batch(readQuotaCmd(), chk)
+		cmds := []tea.Cmd{m.dueArenaChecks()}
+		if m.flowAdvancePending {
+			// The hop's seat landed and handed off. The next hop goes now,
+			// whatever the rest of the room is doing (§9.54): it waits on its
+			// own seat, not on the room. dispatch arms the pump itself when it
+			// starts something.
+			m.flowAdvancePending = false
+			cmds = append(cmds, m.dispatch())
 		}
-		// A racing seat's stream activity may have armed a live stat read
-		// (arenalive.go); launch what is due alongside the next wait. Batched
-		// rather than sequenced — the read is independent of the event
-		// channel, and waitEvents blocks.
-		return m, tea.Batch(m.waitEvents(), m.dueArenaRefreshes(), chk)
+		if m.dispatchEnded {
+			// A dispatch landed in this batch. That is the moment the relay is
+			// worth re-reading: a turn just consumed some of every addressed
+			// account, and the next draft is composed against whatever this
+			// returns. The read lands late by construction — council does not
+			// write the relay, so a vendor's new figure appears only after its
+			// own statusline renders again — which is what the age suffix on
+			// the reading is for. Per DISPATCH rather than per idle room, so a
+			// crew whose seats overlap still refreshes the figure as each
+			// brief lands.
+			m.dispatchEnded = false
+			cmds = append(cmds, readQuotaCmd())
+		}
+		if m.anyInFlight() || m.rebuildInFlight() {
+			// Something will write next, so keep reading. anyInFlight is the
+			// room-wide read here (where this asked m.turn == nil): the pump
+			// serves every seat, so it runs while ANY seat is answering. A
+			// rebuild in flight is the one case where a room with no turn must
+			// keep waiting: the seats it just launched are live processes that
+			// have not yet said which thread they loaded.
+			//
+			// A racing seat's stream activity may have armed a live stat read
+			// (arenalive.go); launch what is due alongside the next wait.
+			// Batched rather than sequenced — the read is independent of the
+			// event channel, and waitEvents blocks.
+			cmds = append(cmds, m.waitEvents(), m.dueArenaRefreshes())
+		}
+		// Otherwise the room is idle. Stop waiting on the channel: re-arming
+		// would park a goroutine on a channel nothing will write to until the
+		// next dispatch.
+		return m, tea.Batch(cmds...)
 
 	case arenaSetupMsg:
 		// One step of a race's worktree setup beginning, or the whole setup
@@ -1392,13 +1456,16 @@ func (m *Model) writeGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // being handed a card whose y does nothing, which would teach that the key is
 // unreliable rather than that the seat is empty.
 func (m *Model) askClearSeat() {
-	if m.turn != nil {
-		m.st.Notice = "a turn is in flight — c clears a seat between turns"
-		return
-	}
 	c := m.focused()
 	if c == nil {
 		m.st.Notice = "no seat is focused"
+		return
+	}
+	if busy := m.seatBusy(c); busy != "" {
+		// Per SEAT (seatBusy reads turnOf, where this read m.turn): the thread
+		// being dropped is this seat's, and a neighbour's turn has no stake in
+		// it (§9.54).
+		m.st.Notice = busy + " — c clears a seat between its turns"
 		return
 	}
 	if !m.seatHasThread(c.Vendor) {
@@ -1473,13 +1540,17 @@ func (m *Model) clearSeat(v model.VendorID) {
 // is not a way to make it more undone). Collapsing any two would be the
 // degraded-vs-zero bug applied to a keystroke.
 func (m *Model) askUndoSeat() {
-	if m.turn != nil {
-		m.st.Notice = "a turn is in flight — u undoes a race attempt between turns"
-		return
-	}
 	c := m.focused()
 	if c == nil {
 		m.st.Notice = "no seat is focused"
+		return
+	}
+	if busy := m.seatBusy(c); busy != "" {
+		// Per SEAT (seatBusy reads turnOf, where this read m.turn): the tree
+		// being reset is this racer's, and a race refuses every other brief
+		// while it runs, so a busy neighbour can only be on an ordinary turn of
+		// its own (§9.54).
+		m.st.Notice = busy + " — u undoes a race attempt between its turns"
 		return
 	}
 	if c.Arena == nil {
@@ -1585,12 +1656,8 @@ func (m *Model) undoSeat(v model.VendorID) {
 // refusals and by §9.37's amendments, the same way /adopt and /arena drop are
 // taught by theirs. ctrl+c is untouched and stays the whole-turn act.
 func (m *Model) askGiveUpSeat() {
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		m.st.Notice = "no turn is in flight — x gives up on one live seat mid-turn"
-		return
-	}
-	if m.cancelling {
-		m.st.Notice = "ctrl+c is already cancelling this turn — every seat is stopping"
 		return
 	}
 	c := m.focused()
@@ -1598,12 +1665,21 @@ func (m *Model) askGiveUpSeat() {
 		m.st.Notice = "no seat is focused"
 		return
 	}
-	if !m.turn.live[c.Vendor] {
+	// The focused seat's own turn (turnOf, where this read m.turn.live): a
+	// seat that has landed, or never took the brief, has nothing running.
+	ts := m.turnOf(c.Vendor)
+	if ts == nil {
 		m.st.Notice = c.Label + " already landed — there is nothing running to give up on"
 		return
 	}
+	if m.cancelling[c.Vendor] {
+		// Per seat since §9.54: ctrl+c may be stopping this seat alone, and a
+		// give-up on a seat that is already going would only re-label it.
+		m.st.Notice = "ctrl+c is already cancelling " + c.Label + "'s turn — it is stopping"
+		return
+	}
 	m.giveUpPending = c.Vendor
-	m.st.Notice = "give up on " + c.Label + "? " + giveUpCost(m.turn, c.Vendor)
+	m.st.Notice = "give up on " + c.Label + "? " + giveUpCost(ts, c.Vendor)
 }
 
 // giveUpCost is the second half of the y/n card: what pressing y actually costs
@@ -1616,7 +1692,7 @@ func (m *Model) askGiveUpSeat() {
 // streamed is all there is. The persistent seat is INTERRUPTED rather than
 // killed, so the sentence has to say the conversation lives — the whole reason
 // the interrupt exists is that killing it would throw away the session-init
-// cost and make the next brief expensive (cancelTurn's own argument).
+// cost and make the next brief expensive (cancelSeat's own argument).
 func giveUpCost(ts *turnState, v model.VendorID) string {
 	switch {
 	case ts.arena:
@@ -1668,7 +1744,7 @@ func (m *Model) giveUpGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 //   - The PERSISTENT seat is INTERRUPTED, never killed. Killing it would work,
 //     and it would also throw away the conversation and the session-init cost
 //     that bought it, so cutting one turn would silently make the next one
-//     expensive — cancelTurn's argument, unchanged, applied per seat. The next
+//     expensive — cancelSeat's argument, unchanged, applied per seat. The next
 //     brief resumes the seat, and the column's note says so.
 //
 // The events the stopped seat already queued arrive later and land inert, and
@@ -1681,28 +1757,29 @@ func (m *Model) giveUpSeat(v model.VendorID) {
 	c := m.column(v)
 	// Re-checked, not trusted: events drain between the card arming and the y,
 	// so the seat can land — or the whole turn end — while the question is up.
-	// A give-up that ran anyway would re-finish a settled column.
-	if m.turn == nil || c == nil || !m.turn.live[v] {
+	// A give-up that ran anyway would re-finish a settled column. turnOf is the
+	// per-seat read of what was m.turn.live[v].
+	ts := m.turnOf(v)
+	if ts == nil || c == nil {
 		m.st.Notice = "the seat landed while the question was up — nothing was stopped"
 		return
 	}
 	// Recorded first, so that nothing the stop itself provokes can arrive at
-	// applyEvents ahead of the fact that explains it.
-	if m.turn.givenUp == nil {
-		m.turn.givenUp = map[model.VendorID]bool{}
-	}
-	m.turn.givenUp[v] = true
+	// applyEvents ahead of the fact that explains it. On the Model rather than
+	// the turn since §9.54, because the seat's turn ends below, at
+	// finishColumn, and the stop's echoes arrive after that (Model.givenUp).
+	m.givenUp[v] = true
 
-	persistent := m.turn.persistent[v]
+	persistent := ts.persistent[v]
 	switch {
 	case persistent:
 		m.interruptSeat(v)
 	default:
-		if es, ok := m.turn.arenaEphemeral[v]; ok {
+		if es, ok := ts.arenaEphemeral[v]; ok {
 			es.Kill()
-		} else if h, ok := m.turn.arenaHandles[v]; ok {
+		} else if h, ok := ts.arenaHandles[v]; ok {
 			h.Kill()
-		} else if h, ok := m.turn.seatHandles[v]; ok {
+		} else if h, ok := ts.seatHandles[v]; ok {
 			h.Kill()
 		}
 	}
@@ -1716,9 +1793,9 @@ func (m *Model) giveUpSeat(v model.VendorID) {
 	// turn's live set.
 	c.Body += m.flush(v)
 	c.Elapsed = time.Since(c.Started)
-	c.Note = giveUpNote(m.turn, v, c)
+	c.Note = giveUpNote(ts, v, c)
 	m.finishColumn(c, PhaseCancelled)
-	m.st.Notice = "gave up on " + c.Label + " — " + giveUpOutcome(m.turn, v)
+	m.st.Notice = "gave up on " + c.Label + " — " + giveUpOutcome(ts, v)
 }
 
 // giveUpNote is the sentence the cut column keeps, and it exists to keep FOUR
@@ -2283,12 +2360,26 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "ctrl+c":
-		// Cancels the turn in flight; quits when there is none. Two meanings
-		// for one key is a compromise, but the alternative is a quit key that
-		// silently abandons three running agents, and the mode line states
-		// which meaning is live on every frame.
-		if m.turn != nil {
-			m.cancelTurn()
+		// Cancels the FOCUSED seat's turn when it has one; cancels everything
+		// in flight when the focused seat is idle and something else is
+		// running; quits when nothing is (§9.54). Three meanings for one key
+		// is a compromise, but the alternative is a quit key that silently
+		// abandons three running agents, and the mode line states which
+		// meaning is live on every frame (modeHints' cancel cell names the
+		// seat, or says `all`).
+		//
+		// Focused-first, because with several seats answering different briefs
+		// the key has to be able to stop ONE of them: the operator who handed
+		// codex a refactor and grok the docs, and wants codex to stop, is
+		// looking at codex. The whole-room act is still one keystroke away —
+		// focus an idle column — and the footer says which act the key is.
+		if c := m.focused(); c != nil && m.turnOf(c.Vendor) != nil {
+			m.cancelSeat(c.Vendor)
+			m.st.Notice = "cancelling " + c.Label + "…"
+			return m, nil
+		}
+		if m.anyInFlight() {
+			m.cancelAll()
 			return m, nil
 		}
 		// teardown even with no turn in flight. A persistent seat's process
@@ -2298,8 +2389,10 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.teardown()
 		return m, tea.Quit
 	case "q":
-		if m.turn != nil {
-			m.st.Notice = "a turn is in flight — ctrl+c cancels it first"
+		if m.anyInFlight() {
+			// Room-wide (anyInFlight, where this read m.turn): quitting ends
+			// every seat, so one busy seat is enough to refuse it.
+			m.st.Notice = m.busySeats() + " — ctrl+c cancels a seat's turn first"
 			return m, nil
 		}
 		m.teardown()

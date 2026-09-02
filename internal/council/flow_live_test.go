@@ -87,11 +87,11 @@ func pump(t *testing.T, m *Model, cmd tea.Cmd, deadline time.Time) {
 	for cmd != nil {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out: notice=%q flowHop=%d advance=%v turn=%v",
-				m.st.Notice, m.st.FlowHop, m.flowAdvancePending, m.turn != nil)
+				m.st.Notice, m.st.FlowHop, m.flowAdvancePending, m.anyInFlight())
 		}
 		msg := cmd()
 		if msg == nil {
-			if m.turn != nil {
+			if m.anyInFlight() {
 				cmd = m.waitEvents()
 				continue
 			}

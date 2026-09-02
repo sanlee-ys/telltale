@@ -412,6 +412,30 @@ type Column struct {
 	// Started is when this column's current turn was dispatched. Zero when it
 	// has never run.
 	Started time.Time
+	// Ended is when this column's current turn was retired — the moment its
+	// seat stopped holding a turn, on the room's clock (finishColumn). Zero
+	// while the turn is live and on a seat that has never taken one.
+	//
+	// It exists for the inbox (needsyou.go, §9.54): a seat whose turn ended
+	// while the reader was looking elsewhere is listed until they go to it, and
+	// "ended since you last looked" is a comparison between this stamp and
+	// LastFocus. Both are measured events on the Model's clock and neither is
+	// read inside Render, so the strip stays pure over State. Reset by startTurn
+	// like every other per-turn fact.
+	Ended time.Time
+	// LastFocus is when the reader last had the keys on this column — stamped
+	// when focus ENTERS it and again when focus LEAVES it (setFocus), so it
+	// marks the end of the last look rather than its start. A turn that ended
+	// while the reader was on the column is therefore older than this stamp
+	// the moment they move on, and the inbox does not re-list a seat whose
+	// answer they watched land.
+	//
+	// NOT a per-turn fact: startTurn leaves it alone, because whether the
+	// reader has looked is about the reader. Zero on a column the keys have
+	// never moved to by a keypress, which includes the default focus NewState
+	// seats — that column is excluded from the strip by being focused, and its
+	// first departure stamps it.
+	LastFocus time.Time
 	// Elapsed is how long the LAST completed turn took, kept after the turn
 	// ends so a finished column can still say how long it made you wait.
 	//
@@ -632,6 +656,7 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	c.CostUSD = nil
 	c.CostSession = false
 	c.Started = time.Time{}
+	c.Ended = time.Time{}
 	c.Elapsed = 0
 	// Back to UNMEASURED, not to zero. The record above owns the old turn's
 	// figure, and a new turn that has raised no card has not made the operator
@@ -1498,6 +1523,54 @@ func (s State) Asking() bool { return !s.GateOff }
 func (s State) Busy() bool {
 	for _, c := range s.Columns {
 		if c.Phase == PhaseWaiting || c.Phase == PhaseStreaming {
+			return true
+		}
+	}
+	return false
+}
+
+// inFlight reports that this column's turn is still open: it is working, or it
+// has answered and its process has not exited (Settling). The per-column half
+// of State.InFlight, and the one the header's count and the frame geometry
+// read (§9.54).
+func (c Column) inFlight() bool {
+	return c.Phase == PhaseWaiting || c.Phase == PhaseStreaming || c.Settling
+}
+
+// SeatsInFlight counts the columns whose turn is still open — a MEASURED
+// figure over the columns, which is what lets the header print it (§9.54).
+//
+// It is the same predicate InFlight draws its yes/no from, so the two can
+// never disagree about whether anything is running; and it carries InFlight's
+// own documented gap unchanged — a column left terminal inside a live turn by
+// a path that set no Settling is invisible to both. That is a reason to keep
+// every retirement path feeding Settling, not a reason to count something
+// State cannot see.
+func (s State) SeatsInFlight() int {
+	n := 0
+	for _, c := range s.Columns {
+		if c.inFlight() {
+			n++
+		}
+	}
+	return n
+}
+
+// inFlightBeyond reports that some column in flight is answering a dispatch
+// other than n — the header's test for whether its route cell, which names
+// dispatch n, leaves a working seat unaccounted for (§9.54). Read off
+// Column.TurnN, which dispatch stamps on every seat it addresses, so it is a
+// fact State holds rather than one it infers.
+//
+// A column with NO turn number is not counted as being on another dispatch.
+// Zero means the seat has never been dispatched to (Column.TurnN), so a live
+// column carrying it cannot say which turn it is on, let alone that it is a
+// different one — and the count is a claim about exactly that. Production
+// never builds such a column; a State typed out by hand can, and the honest
+// answer for it is the one the cell gave before there was a count.
+func (s State) inFlightBeyond(n int) bool {
+	for _, c := range s.Columns {
+		if c.inFlight() && c.TurnN > 0 && c.TurnN != n {
 			return true
 		}
 	}

@@ -71,7 +71,7 @@ func drop(t *testing.T, m *Model, spec string) {
 	if cmd := m.dispatch(); cmd != nil {
 		t.Fatalf("/arena drop %s returned a dispatch command — a drop must never spawn", spec)
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Fatalf("/arena drop %s started a turn", spec)
 	}
 }
@@ -509,7 +509,7 @@ func TestAdoptRefusalsNameTheMissingPiece(t *testing.T) {
 	}
 
 	// And mid-turn, the standing rule: between turns, like /cd.
-	m.turn = &turnState{}
+	occupy(m)
 	m.setDraft("/adopt codex")
 	m.roomCommand()
 	if !strings.Contains(m.st.Notice, "in flight") {
@@ -700,7 +700,7 @@ func TestDropVocabulary(t *testing.T) {
 	}
 
 	// Mid-turn: worktrees in use, same standing refusal as every mutation.
-	m.turn = &turnState{}
+	occupy(m)
 	m.setDraft("/arena drop codex")
 	m.arenaDrop("codex", false)
 	if !strings.Contains(m.st.Notice, "in flight") {

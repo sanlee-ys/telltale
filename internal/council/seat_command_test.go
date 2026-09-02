@@ -183,7 +183,7 @@ func TestSeatWarnsWhenItUnseatsTheDefaultRoute(t *testing.T) {
 func TestSeatRefusesMidTurn(t *testing.T) {
 	m := seatModel()
 	was := seatedNow(m)
-	m.turn = &turnState{}
+	occupy(m)
 
 	m.setDraft("/seat codex")
 	if !m.roomCommand() {

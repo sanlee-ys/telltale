@@ -47,7 +47,7 @@ func arenaCursorRace(t *testing.T) (*Model, *spawnLog, *killSession) {
 	// raceNow rather than dispatch: the worktree setup runs off the loop now, so
 	// the turn is born after its messages land (arenasetup_test.go).
 	raceNow(t, m)
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("the race did not dispatch")
 	}
 	return m, log, racer
@@ -71,7 +71,7 @@ func TestArenaRacesTheCursorSeatOnAThrowawayACPSession(t *testing.T) {
 		t.Error("the racer landed in m.procs — the next ordinary brief would be handed to a worktree session")
 	}
 
-	tree := m.turn.arenaTrees[model.VendorCursor]
+	tree := m.race().arenaTrees[model.VendorCursor]
 	var cursorSpecs int
 	for i, spec := range log.specs {
 		if spec.Vendor != model.VendorCursor {
@@ -170,7 +170,7 @@ func TestTheRacerIsKilledAtItsOwnFinishLine(t *testing.T) {
 	if c.Arena.Rank != rank {
 		t.Errorf("the kill's own exit re-ranked the race: %d -> %d", rank, c.Arena.Rank)
 	}
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Error("the exit echo tore down a turn three seats are still racing")
 	}
 }
@@ -197,7 +197,7 @@ func TestTheRacerIsKilledOnAProtocolReportedFailure(t *testing.T) {
 	if !strings.Contains(c.Note, "handshake") {
 		t.Errorf("the failure lost its reason: %q", c.Note)
 	}
-	if m.turn.live[model.VendorCursor] {
+	if m.turnOf(model.VendorCursor) != nil {
 		t.Error("the failed racer never left the turn — the race cannot end")
 	}
 }
@@ -243,7 +243,7 @@ func TestARacerDeathWithoutATurnEndFailsTheColumn(t *testing.T) {
 	if !strings.Contains(c.Note, "before its turn") {
 		t.Errorf("the death is not named: %q", c.Note)
 	}
-	if m.turn.live[model.VendorCursor] {
+	if m.turnOf(model.VendorCursor) != nil {
 		t.Error("the dead racer never left the turn")
 	}
 	if _, ok := m.procs[model.VendorCursor]; !ok {
@@ -271,7 +271,7 @@ func TestABackgroundRoomSeatDeathDoesNotFailTheRace(t *testing.T) {
 	if _, ok := m.procs[model.VendorCursor]; ok {
 		t.Error("the dead room process is still registered; the next ordinary brief would write into it")
 	}
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Error("a background death ended the turn")
 	}
 }
@@ -289,15 +289,15 @@ func TestCancelAndTeardownKillTheRacer(t *testing.T) {
 	// exactly the racer for these two paths to reap or orphan.
 	t.Run("cancel", func(t *testing.T) {
 		m, _, racer := arenaCursorRace(t)
-		m.turn.handles = nil
-		m.cancelTurn()
+		m.race().arenaHandles = nil
+		m.cancelAll()
 		if !racer.killed {
 			t.Error("ctrl+c left the racer running")
 		}
 	})
 	t.Run("teardown", func(t *testing.T) {
 		m, _, racer := arenaCursorRace(t)
-		m.turn.handles = nil
+		m.race().arenaHandles = nil
 		m.teardown()
 		if !racer.killed {
 			t.Error("quitting the room left the racer running")
@@ -348,7 +348,7 @@ func TestAnOrdinaryBriefStaysVerbatim(t *testing.T) {
 	m := flowRoom(t, true)
 	m.st.Draft = "@all add a marker file"
 	m.dispatch()
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("the turn did not dispatch")
 	}
 	if log.n() == 0 {

@@ -194,7 +194,7 @@ func TestASeatWhoseWireRefusesIsKilledRatherThanKeptAndRetried(t *testing.T) {
 		`{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"not signed in"}}`))
 	m.applyEvents(prefix(evs, model.VendorCursor))
 
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Error("the turn survived a handshake that will never answer it")
 	}
 
@@ -254,7 +254,7 @@ func TestAStaleExitDoesNotFailTheLiveCursorSeat(t *testing.T) {
 	if c := m.column(model.VendorCursor); c.Phase == PhaseFailed || c.Phase == PhaseDone {
 		t.Errorf("phase = %v — a stale exit retired the live turn", c.Phase)
 	}
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Error("a stale exit ended the turn")
 	}
 }

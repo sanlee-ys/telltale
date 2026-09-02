@@ -122,10 +122,12 @@ type arenaRace struct {
 // own remedy, per §9.17's tell that a refusal must name an in-room way
 // forward.
 func (m *Model) adoptCommand(arg string) bool {
-	if m.turn != nil {
+	if m.anyInFlight() {
 		// The race's own trees are being written mid-turn, and a merge under a
-		// running turn would race the racers. /cd's refusal, for /cd's reason.
-		m.st.Notice = "a turn is in flight — /adopt merges between turns"
+		// running turn would race the racers. /cd's refusal, for /cd's reason,
+		// and room-wide (anyInFlight, where this read m.turn): the merge lands
+		// in the room's repo, which every busy seat is acting in.
+		m.st.Notice = m.busySeats() + " — /adopt merges between turns"
 		return true
 	}
 	race := m.lastRace
@@ -1128,11 +1130,12 @@ func parseArenaDrop(brief string) (seat string, force, ok bool) {
 // /adopt keeps the y/n shape because its act is additive (a merge, revertible
 // with git's own tools); drop deletes work with no ref left pointing at it.
 func (m *Model) arenaDrop(word string, force bool) {
-	if m.turn != nil {
+	if m.anyInFlight() {
 		// An arena turn in flight is WRITING to these trees; an ordinary turn
 		// still holds the room's dispatch state. Between turns, like every
-		// other mutation typed at the room.
-		m.st.Notice = "a turn is in flight — /arena drop removes worktrees between turns"
+		// other mutation typed at the room, and room-wide (anyInFlight, where
+		// this read m.turn).
+		m.st.Notice = m.busySeats() + " — /arena drop removes worktrees between turns"
 		return
 	}
 	race := m.lastRace

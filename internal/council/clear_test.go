@@ -46,9 +46,12 @@ func clearModel() *Model {
 			model.VendorCodex:       "codex-thread",
 			model.VendorAntigravity: "agy-thread",
 		},
-		resumeIDs: map[model.VendorID]string{},
-		unproven:  map[model.VendorID]bool{},
-		procs:     map[model.VendorID]*seatProc{},
+		resumeIDs:  map[model.VendorID]string{},
+		unproven:   map[model.VendorID]bool{},
+		procs:      map[model.VendorID]*seatProc{},
+		turns:      map[model.VendorID]*turnState{},
+		cancelling: map[model.VendorID]bool{},
+		givenUp:    map[model.VendorID]bool{},
 	}
 }
 
@@ -172,7 +175,7 @@ func TestClearedMarkerRetiresOnTheNextTurn(t *testing.T) {
 
 func TestAskClearSeatRefusesWhileATurnIsInFlight(t *testing.T) {
 	m := clearModel()
-	m.turn = &turnState{}
+	occupy(m)
 
 	m.askClearSeat()
 

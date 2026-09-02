@@ -99,21 +99,25 @@ func teardownRoom(t *testing.T) (*Model, map[model.VendorID]*countedKill, *count
 		failure:    map[model.VendorID]runner.FailureClass{},
 		redactors:  map[model.VendorID]*Redactor{},
 		procs:      procs,
+		turns:      map[model.VendorID]*turnState{},
+		cancelling: map[model.VendorID]bool{},
+		givenUp:    map[model.VendorID]bool{},
 		gateInputs: map[string]map[string]any{},
 		events:     make(chan runner.Event, 8),
 		roomCtx:    ctx,
 		roomCancel: cancel,
-		turn: &turnState{
-			// The flat handles list is left empty on purpose: runner.Handle is a
-			// concrete type whose Kill needs a process nothing here spawned, and
-			// the runner's own tests already pin it. The racer below is the
-			// fakeable member of the same sweep.
-			cancel:         func() { cancels++ },
-			live:           map[model.VendorID]bool{},
-			persistent:     map[model.VendorID]bool{},
-			arenaEphemeral: map[model.VendorID]seatSession{model.VendorCursor: racer},
-		},
 	}
+	// One dispatch in flight, on the cursor seat that the racer wears. The
+	// keyed handle maps are left empty on purpose: runner.Handle is a concrete
+	// type whose Kill needs a process nothing here spawned, and the runner's
+	// own tests already pin it. The racer is the fakeable member of the same
+	// sweep.
+	m.holdTurn(&turnState{
+		cancel:         func() { cancels++ },
+		live:           map[model.VendorID]bool{model.VendorCursor: true},
+		persistent:     map[model.VendorID]bool{},
+		arenaEphemeral: map[model.VendorID]seatSession{model.VendorCursor: racer},
+	})
 	return m, seats, racer, &cancels
 }
 
@@ -122,8 +126,8 @@ func teardownRoom(t *testing.T) (*Model, map[model.VendorID]*countedKill, *count
 // because it is the one this file got wrong first.
 //
 // Sequentially, teardown was already once-only before the guard landed, by
-// accident of how it is written: it drains m.procs as it walks it and sets
-// m.turn to nil at the end, so a second call finds nothing to do. The guard did
+// accident of how it is written: it drains m.procs as it walks it and empties
+// m.turns at the end, so a second call finds nothing to do. The guard did
 // not fix that and must not break it. What the guard fixes is the concurrent
 // case below.
 func TestTeardownActsOnceHoweverOftenItIsCalled(t *testing.T) {
@@ -147,7 +151,7 @@ func TestTeardownActsOnceHoweverOftenItIsCalled(t *testing.T) {
 	if len(m.procs) != 0 {
 		t.Errorf("%d seat processes are still registered after teardown", len(m.procs))
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Error("the turn survived teardown")
 	}
 	if m.roomCtx.Err() == nil {

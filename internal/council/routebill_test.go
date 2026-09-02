@@ -126,10 +126,10 @@ func TestTheLiveRouteIsSetAtDispatchAndRetiredWithTheTurn(t *testing.T) {
 	m := &Model{st: room(), glyphs: GlyphsFor(false)}
 	sent := Route{Vendors: []model.VendorID{model.VendorCodex}}
 	m.st.TurnRoute = &sent
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		cancel: func() {},
 		live:   map[model.VendorID]bool{model.VendorCodex: true},
-	}
+	})
 	m.turnColumnFinished(model.VendorCodex)
 	if m.st.TurnRoute != nil {
 		t.Errorf("the last column landed and the header still claims %q", m.st.TurnRoute.label())

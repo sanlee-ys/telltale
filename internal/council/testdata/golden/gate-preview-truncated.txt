@@ -21,4 +21,4 @@
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  ›                                                                                                               │  
   ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  GATE  ─╯  
-                  Edit: internal/council/gate.go  │  y approve  │  n deny  │  a stop asking  │  ctrl+c cancel the turn  
+                    Edit: internal/council/gate.go  │  y approve  │  n deny  │  a stop asking  │  ctrl+c cancel claude  

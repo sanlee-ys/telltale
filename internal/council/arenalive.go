@@ -148,10 +148,13 @@ func refreshArenaCmd(v model.VendorID, turnN int, tree, base string) tea.Cmd {
 // that mean the vendor is DOING something (text, tool calls) — a session id or
 // a cost figure arriving is not evidence the tree moved.
 func (m *Model) armArenaRefresh(v model.VendorID) {
-	if m.turn == nil || !m.turn.arena {
+	// The race in flight (race), where this read m.turn: a race is the only
+	// dispatch while it runs, so its record is the one every racer shares.
+	ts := m.race()
+	if ts == nil {
 		return
 	}
-	if ls := m.turn.arenaLive[v]; ls != nil {
+	if ls := ts.arenaLive[v]; ls != nil {
 		ls.armed = true
 	}
 }
@@ -169,11 +172,12 @@ func (m *Model) armArenaRefresh(v model.VendorID) {
 // a decision about state, and reading a wall clock here would make it the one
 // piece of this feature a test cannot pin.
 func (m *Model) dueArenaRefreshes() tea.Cmd {
-	if m.turn == nil || !m.turn.arena {
+	ts := m.race()
+	if ts == nil {
 		return nil
 	}
 	var cmds []tea.Cmd
-	for v, ls := range m.turn.arenaLive {
+	for v, ls := range ts.arenaLive {
 		if !ls.armed || ls.inFlight || ls.stopped {
 			continue
 		}
@@ -181,7 +185,7 @@ func (m *Model) dueArenaRefreshes() tea.Cmd {
 		// block, and a read launched now would arrive as a stale message built
 		// to be dropped. live is the same set turn teardown drains, so "the
 		// turn ended" and "this seat finished" are one check.
-		if !m.turn.live[v] {
+		if !ts.live[v] {
 			continue
 		}
 		if !ls.lastRead.IsZero() && m.st.Now.Sub(ls.lastRead) < arenaRefreshInterval {
@@ -192,7 +196,7 @@ func (m *Model) dueArenaRefreshes() tea.Cmd {
 			continue
 		}
 		ls.armed, ls.inFlight, ls.lastRead = false, true, m.st.Now
-		cmds = append(cmds, refreshArenaCmd(v, c.TurnN, m.turn.arenaTrees[v], m.turn.arenaBase))
+		cmds = append(cmds, refreshArenaCmd(v, c.TurnN, ts.arenaTrees[v], ts.arenaBase))
 	}
 	if len(cmds) == 0 {
 		return nil
@@ -206,10 +210,11 @@ func (m *Model) dueArenaRefreshes() tea.Cmd {
 // the final REPLACES the interim, and a stale goroutine must never write over
 // either the next turn or the settled result.
 func (m *Model) applyArenaStat(msg arenaStatMsg) {
-	if m.turn == nil || !m.turn.arena {
+	ts := m.race()
+	if ts == nil {
 		return
 	}
-	ls := m.turn.arenaLive[msg.vendor]
+	ls := ts.arenaLive[msg.vendor]
 	if ls == nil {
 		return
 	}
@@ -222,7 +227,7 @@ func (m *Model) applyArenaStat(msg arenaStatMsg) {
 	}
 	if msg.err != "" {
 		ls.fails++
-		in := &ArenaInterim{Err: msg.err, Base: m.turn.arenaBase}
+		in := &ArenaInterim{Err: msg.err, Base: ts.arenaBase}
 		if ls.fails >= arenaRefreshMaxFails {
 			// Give up on THIS seat's live stat and say so on the column. The
 			// race is untouched: the vendor is still running and the
@@ -234,5 +239,5 @@ func (m *Model) applyArenaStat(msg arenaStatMsg) {
 		return
 	}
 	ls.fails = 0
-	c.ArenaInterim = &ArenaInterim{Stat: msg.stat, Base: m.turn.arenaBase}
+	c.ArenaInterim = &ArenaInterim{Stat: msg.stat, Base: ts.arenaBase}
 }

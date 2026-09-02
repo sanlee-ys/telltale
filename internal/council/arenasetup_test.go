@@ -74,7 +74,7 @@ func TestARaceLeavesTheRoomDrawingAndReadingKeys(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("dispatch returned no command — nothing would ever read the setup")
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Fatal("a seat spawned before its worktree existed")
 	}
 	if m.arenaPrep == nil {
@@ -102,16 +102,16 @@ func TestARaceLeavesTheRoomDrawingAndReadingKeys(t *testing.T) {
 	}
 
 	pumpArenaSetup(t, m, cmd)
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("the setup finished and no turn started")
 	}
-	if !m.turn.arena {
+	if m.race() == nil {
 		t.Error("the turn that started is not a race")
 	}
 	if m.st.ArenaSetup != "" {
 		t.Errorf("the step line outlived the setup: %q", m.st.ArenaSetup)
 	}
-	if len(m.turn.arenaTrees) == 0 {
+	if len(m.race().arenaTrees) == 0 {
 		t.Error("the race started with no worktree — nothing was prepared")
 	}
 }
@@ -262,7 +262,7 @@ func TestAFailedSetupHandsTheRoomBack(t *testing.T) {
 
 	pumpArenaSetup(t, m, m.dispatch())
 
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Fatal("a seat spawned for a setup that failed")
 	}
 	if m.arenaPrep != nil {
@@ -287,7 +287,7 @@ func TestAFailedSetupHandsTheRoomBack(t *testing.T) {
 		t.Errorf("mode = %v, want composing — the operator has to be able to act", m.st.Mode)
 	}
 	// And the room really can act: the same brief dispatches again.
-	if cmd := m.dispatch(); cmd == nil && m.arenaPrep == nil && m.turn == nil {
+	if cmd := m.dispatch(); cmd == nil && m.arenaPrep == nil && !m.anyInFlight() {
 		t.Error("the room refused the retry — it was handed back in name only")
 	}
 }
@@ -317,7 +317,7 @@ func TestASetupNobodyCouldRaceStillReturnsTheBrief(t *testing.T) {
 
 	pumpArenaSetup(t, m, m.dispatch())
 
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Fatal("a turn started with no racer")
 	}
 	if m.st.Draft != "/arena add a marker file" {
@@ -387,7 +387,7 @@ func TestAStoppedSetupsMessagesAreDropped(t *testing.T) {
 	if cmd := m.applyArenaSetup(arenaSetupMsg{prep: stale, done: &arenaSetupResult{}}); cmd != nil {
 		t.Error("a stopped setup's result started a turn")
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Fatal("a turn started from a setup the operator stopped")
 	}
 }

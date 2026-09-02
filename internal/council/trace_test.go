@@ -263,7 +263,7 @@ func TestTraceCommandEnablesAndReportsTheWindow(t *testing.T) {
 func TestTraceDoesNotRefuseMidTurn(t *testing.T) {
 	dir := t.TempDir()
 	m := roomAt(t, dir)
-	m.turn = &turnState{}
+	occupy(m)
 
 	m.st.Draft = "/trace turns.log"
 	m.roomCommand()

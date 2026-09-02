@@ -107,7 +107,7 @@ func TestCdUnknownDirectoryKeepsTheDraft(t *testing.T) {
 
 func TestCdRefusedMidTurn(t *testing.T) {
 	m, a, _ := cdRoom(t)
-	m.turn = &turnState{cancel: func() {}, live: map[model.VendorID]bool{}}
+	occupy(m)
 	m.setDraft("/cd kb-agent")
 	m.roomCommand()
 	if !sameDir(m.st.Workspace, a) {
@@ -214,7 +214,7 @@ func TestARefusedCdWritesNothing(t *testing.T) {
 	})
 	t.Run("a turn in flight", func(t *testing.T) {
 		m, _, b := dispatchedCdRoom(t)
-		m.turn = &turnState{cancel: func() {}, live: map[model.VendorID]bool{}}
+		occupy(m)
 		m.setDraft("/cd " + b)
 		m.roomCommand()
 		nothingWasSaved(t)
@@ -324,11 +324,11 @@ func TestAStaleExitDoesNotFailTheLiveSeat(t *testing.T) {
 		Vendor: model.VendorClaude, Label: "Claude Code",
 		Avail: AvailInstalled, Phase: PhaseStreaming, Body: "half an answer",
 	}}
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		cancel:     func() {},
 		live:       map[model.VendorID]bool{model.VendorClaude: true},
 		persistent: map[model.VendorID]bool{model.VendorClaude: true},
-	}
+	})
 
 	// The predecessor's exit, and a stale process-level error for good measure.
 	m.applyEvents([]runner.Event{
@@ -347,7 +347,7 @@ func TestAStaleExitDoesNotFailTheLiveSeat(t *testing.T) {
 	if m.sessions[model.VendorClaude] != "claude-sess-1" {
 		t.Error("a stale exit cost the seat its earned thread")
 	}
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Error("a stale exit ended the turn")
 	}
 
@@ -540,7 +540,7 @@ func TestRetryRefusesWhenEverySeatAnswered(t *testing.T) {
 // later.
 func TestRetryRefusedMidTurnKeepsTheDraft(t *testing.T) {
 	m := retryRoom(t)
-	m.turn = &turnState{cancel: func() {}, live: map[model.VendorID]bool{}}
+	occupy(m)
 	m.setDraft("/retry")
 	m.roomCommand()
 
@@ -630,7 +630,7 @@ func TestTheReSendSpawnsOnlyForTheSeatsThatOweAnAnswer(t *testing.T) {
 			Vendor: v, Kind: runner.KindMeta, EndsTurn: true, Text: "an answer",
 		}})
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Fatal("fixture: the turn never ended, so there is no finished turn to re-send")
 	}
 

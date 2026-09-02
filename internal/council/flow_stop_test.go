@@ -181,7 +181,7 @@ func TestCancelMidChainEndsTheChainAndTheNextBriefDispatches(t *testing.T) {
 
 	// persistent_test.go's cancel emulation: the flag ctrl+c sets, then the
 	// column retiring as its killed process would.
-	m.cancelling = true
+	markCancelling(m, model.VendorCursor)
 	cursor := m.column(model.VendorCursor)
 	cursor.Body = "partial output"
 	m.finishColumn(cursor, PhaseFailed)

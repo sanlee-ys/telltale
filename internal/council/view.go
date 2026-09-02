@@ -321,10 +321,33 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	// seat (§9.16) and the cell immediately to the right already says which.
 	// The route is attached to the turn number and BEFORE the hop cell, so the
 	// arrow can never read as pointing at the hop.
+	//
+	// With several seats answering different briefs (§9.54) the cell still
+	// names ONE route — the most recent dispatch's, which is the turn the
+	// number beside it counts — and says how many seats are in flight when
+	// some of them are NOT on that turn: `turn 5 → codex · 3 in flight`. The
+	// count is measured over the columns (SeatsInFlight), never inferred from
+	// the route. It is printed only when it adds a fact the cell does not
+	// already hold: an @all turn with its three seats streaming reads `turn 3
+	// → everyone`, and `· 3 in flight` beside it would be the route restated
+	// as a number; a `turn 5 → codex` while claude is still on turn 4 is the
+	// case the count exists for, because the route names one seat and two are
+	// working. The test is the columns' own turn numbers (inFlightBeyond) —
+	// State knows which dispatch each column is answering, so this too is a
+	// measurement. It sheds with the route, on the route's own rule below: a
+	// fact with a home elsewhere yields, and every in-flight seat's column
+	// says so on its own header.
+	inFlight := ""
+	if n := st.SeatsInFlight(); n > 1 && st.inFlightBeyond(st.Turn) {
+		inFlight = " · " + strconv.Itoa(n) + " in flight"
+	}
 	rightZone := func(withRoute bool) string {
 		r := round
 		if withRoute && st.TurnRoute != nil && st.FlowSteps == 0 {
 			r += " → " + st.TurnRoute.label()
+		}
+		if withRoute {
+			r += inFlight
 		}
 		return sty.Muted.Render(r + hop + "  " + g.Sep + "  " + seated + "  " + g.Sep + "  " + brief)
 	}
@@ -3997,10 +4020,30 @@ func modeHints(st State, g Glyphs) []hint {
 			label: "seat", shed: true})
 	}
 	if st.InFlight() {
-		return append(flowStopHint(hs, st), hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
+		return append(flowStopHint(hs, st), hint{key: "ctrl+c", label: cancelLabel(st)}, hint{key: "?", label: "help"})
 	}
 	return append(hs, hint{key: "i", label: "compose"},
 		hint{key: "?", label: "help"}, hint{key: "q", label: "quit"})
+}
+
+// cancelLabel is what ctrl+c will do, in the footer's words, now that the key
+// addresses the focused seat first (§9.54).
+//
+// `cancel` alone while one seat is in flight, because there is nothing to
+// choose between and every frame this room drew before §9.54 read that way.
+// From two upward the label says which: `cancel codex` when the focused seat is
+// one of them, `cancel all` when it is not — the mode line is the contract that
+// a key means what it says on every frame (§7.8), and a key with three
+// meanings owes the reader the one that is live. The vendor id rather than the
+// label, because that is the word the reader typed to address it.
+func cancelLabel(st State) string {
+	if st.SeatsInFlight() < 2 {
+		return "cancel"
+	}
+	if st.Focus >= 0 && st.Focus < len(st.Columns) && st.Columns[st.Focus].inFlight() {
+		return "cancel " + string(st.Columns[st.Focus].Vendor)
+	}
+	return "cancel all"
 }
 
 // hopUnit names what `[` and `]` step, in the body that is on screen (§9.49).
@@ -4061,7 +4104,12 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 				// a key that silences the room's only guard in the one place a
 				// scrolled column can hide.
 				{key: "a", label: "stop asking"},
-				{key: "ctrl+c", label: "cancel the turn"},
+				// The same three-way label the view line carries (cancelLabel):
+				// the key reaches viewKey through gateKey's fall-through, so it
+				// means here exactly what it means there, and a line reading
+				// `cancel the turn` over a key that stops one seat would be the
+				// contract breaking in the one mode it exists for (§9.54).
+				{key: "ctrl+c", label: cancelLabel(st)},
 			},
 			lay, sty, g)
 	}

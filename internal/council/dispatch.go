@@ -33,9 +33,47 @@ const eventBuffer = 512
 // that cancels the turn has to stay responsive while three agents talk.
 const drainMax = 64
 
+// turnState is ONE DISPATCH: the seats one press of enter sent a brief to, and
+// everything those seats share while they answer it.
+//
+// Until §9.54 there was at most one of these, held in Model.turn, and its
+// existence was the room's whole notion of "busy". Now the room holds one per
+// dispatch still in flight, reached per SEAT through Model.turns — a brief to
+// @codex and a later brief to @grok are two records, and a brief to @all is one
+// record three seats point at. What stays shared at this level is exactly what
+// a dispatch decides once for everyone it addresses: the turn number, the route
+// the header names, and the arena's all-or-nothing bookkeeping. What moved down
+// to the seat — the process handle, the cancel, the give-up — is everything the
+// operator can now do to one seat while its neighbours work on.
 type turnState struct {
-	cancel  context.CancelFunc
-	handles []*runner.Handle
+	// n is the dispatch's number, the same value every seat it addressed
+	// carries as Column.TurnN. The room keeps ONE sequence across concurrent
+	// dispatches rather than a counter per seat, and that is a ruling rather
+	// than a leftover: every surface that already prints a turn number — the
+	// separators, the by-turn page (PageTurns), `/retry`, room.json, the
+	// reattach card — reads this one coordinate, and a per-seat count would
+	// have two seats both on "their turn 4" while the page could open only one
+	// of them. So a turn number is a DISPATCH number: "turn 5" is the fifth
+	// brief the room sent, whoever it went to, and a seat's own history is the
+	// subset of those numbers it took part in.
+	n int
+	// route is where this dispatch went, kept so the header can name the most
+	// recent dispatch's destination (§9.21) and retire it when THAT dispatch
+	// lands rather than when the room goes quiet.
+	route Route
+	// flow marks a /flow hop's dispatch. The chain's teardown-on-death runs
+	// when the hop's dispatch ends, and only then: an unrelated brief landing
+	// while a hop streams must not be read as the hop dying (turnColumnFinished).
+	flow bool
+	// cancel ends the dispatch's context, the parent of every seat's own; it is
+	// what teardown pulls and what the last seat landing pulls behind it.
+	cancel context.CancelFunc
+	// seatCancel ends one seat's context — the one its process was started on
+	// — so ctrl+c on a focused seat kills that seat's child and nobody else's.
+	// A persistent seat's process lives on roomCtx and is INTERRUPTED instead
+	// (cancelSeat), so its entry here ends nothing but is kept for symmetry:
+	// every seat that entered live has one.
+	seatCancel map[model.VendorID]context.CancelFunc
 	// live is the set of columns that have not reached a terminal phase yet, so
 	// the turn knows when it is over without polling.
 	//
@@ -59,22 +97,11 @@ type turnState struct {
 	// Added 2026-08-17, when the owner reversed §9.37's "an ordinary turn's seats
 	// share one fate by design" line: that line was written for the four-seat
 	// room, and in the five-seat room the most probable live failure is one
-	// stalled vendor on an @all turn. The flat handles list still stays: its two
-	// consumers, cancelTurn and teardown, are all-or-nothing acts that never
-	// address a single process.
+	// stalled vendor on an @all turn. The flat `handles` list that used to sit
+	// beside this went with §9.54: its two consumers, cancel and teardown, were
+	// all-or-nothing acts, and neither is any more — ctrl+c addresses one seat
+	// and teardown walks the seats — so the keyed maps are the only record.
 	seatHandles map[model.VendorID]racerHandle
-	// givenUp names the seats the operator cut with `x` this turn (giveUpSeat).
-	//
-	// A cut seat's column is already terminal, and its process keeps talking for
-	// a moment either way: a killed child drains its buffered stdout, and an
-	// INTERRUPTED persistent seat answers the interrupt with its own failed
-	// `result` line. Both arrive as events addressed to a column whose fate the
-	// operator has already decided, and applyEvents would otherwise let them
-	// overwrite the give-up's own note with the vendor's abort error, or stamp
-	// "[Turn completed with 0 text chunks streamed]" onto a seat that never
-	// answered — a cut seat claiming a measured zero. Membership is the whole
-	// guard; it dies with the turn, so nothing has to remember to clear it.
-	givenUp map[model.VendorID]bool
 
 	// arena marks a /arena turn: every racing seat is a FRESH one-shot session
 	// in its own worktree (arena.go). The flag gates two things — the session-id
@@ -104,11 +131,11 @@ type turnState struct {
 	arenaEphemeral map[model.VendorID]seatSession
 	// arenaHandles keys this race's ONE-SHOT racer processes by vendor, for the
 	// give-up key (`x`, program.go — §9.37, amended 2026-08-09). handles above
-	// stays the flat list on purpose: its two consumers, cancelTurn and
-	// teardown, are all-or-nothing acts that never address a single process,
-	// and re-keying them would put a map where a list says exactly what those
-	// paths do. The give-up is the first act that kills ONE racer while the
-	// others run, and it needs to land on the right process — the second live
+	// stayed a flat list until §9.54 on the argument that its two consumers,
+	// cancel and teardown, were all-or-nothing acts; neither is now, and the
+	// list is gone (see seatHandles). The give-up was the first act that
+	// killed ONE racer while the others ran, and it had to land on the right
+	// process — the second live
 	// race measured why: one stuck seat held a decided race hostage for ~20
 	// minutes because ctrl+c was the only exit and it cancels everything.
 	// Arena turns only; the non-arena paths keep no per-vendor record because
@@ -158,9 +185,22 @@ type dispatchFailedMsg struct {
 // answer attached. Later turns resume each vendor's OWN session, so a vendor
 // still only ever sees its own history — the independence guarantee is
 // structural rather than a formatting convention (ADR-008 §4).
+//
+// This function used to open with `if m.turn != nil` and the notice "a turn is
+// already in flight — ctrl+c cancels it". That line was the wall between a
+// committee and a crew (§9.54): seats were concurrent inside one turn and the
+// room was serial across turns. It is gone. What replaces it is narrower and
+// per seat — a brief to a seat that is still answering is refused for THAT
+// seat, inside sendTurn, and the idle seats it also named still go. The two
+// room-wide refusals that remain are both about the arena, and each says why.
 func (m *Model) dispatch() tea.Cmd {
-	if m.turn != nil {
-		m.st.Notice = "a turn is already in flight — ctrl+c cancels it"
+	if race := m.race(); race != nil {
+		// A race owns every worktree and every seat for as long as it runs: an
+		// ordinary brief sent under it would hand a seat whose racer is writing
+		// into a worktree a second prompt about the room's own tree. All or
+		// nothing is the race's contract (§9.37), and this is that contract
+		// read from the other side.
+		m.st.Notice = "race t" + itoa(race.arenaRaceN) + " is in flight and owns every seat — ctrl+c cancels it, x gives up on one racer"
 		return nil
 	}
 	if m.arenaPrep != nil {
@@ -267,6 +307,24 @@ func (m *Model) dispatch() tea.Cmd {
 				return nil
 			}
 		}
+		// A hop goes to ONE seat and waits on that seat alone (§9.54): the next
+		// hop is dispatched the moment the previous hop's seat lands, whatever
+		// the rest of the room is doing. What a hop cannot do is take a seat
+		// that is still answering something else — an ordinary brief the
+		// operator sent to it while the earlier hop ran. That is refused here,
+		// before Start would mark the step running, and it ends the chain
+		// rather than queueing behind the seat: a chain that dispatched itself
+		// later, when a seat happened to free up, would be the room acting on
+		// its own at a moment nobody chose, which is the exact thing the hop
+		// marker on the header exists to prevent (§9.16). The refusal names the
+		// seat and the turn it is on, and the whole chain is retired so the
+		// next enter is the operator's brief and not the corpse's (§9.35).
+		if ts := m.turnOf(curr.Vendor); ts != nil {
+			m.st.Notice = fmt.Sprintf("flow stopped at hop %d/%d: @%s is still on turn %d — ctrl+c on its column cancels that, then send the chain again",
+				m.flowChain.CurrentIndex+1, len(m.flowChain.Steps), curr.Vendor, ts.n)
+			m.endFlowChain()
+			return nil
+		}
 		if err := m.flowChain.Start(m.st.Workspace); err != nil {
 			m.st.Notice = "flow start error: " + err.Error()
 			// The whole chain, marker included — this used to nil the chain by
@@ -361,6 +419,16 @@ func (m *Model) dispatch() tea.Cmd {
 	}
 
 	if arenaMode {
+		// A race is one turn across every seat, all or nothing (§9.37), so it
+		// needs the whole room idle — the one place §9.54's per-seat rule does
+		// not apply. A race that skipped a busy seat would not be a comparison,
+		// and a race that took one would hand a seat two prompts at once. The
+		// refusal names who is busy and on what, so the operator knows whether
+		// to wait or to cancel.
+		if busy := m.busySeats(); len(busy) > 0 {
+			m.st.Notice = busy + " — a race needs every seat idle; ctrl+c on a column cancels that seat's turn"
+			return nil
+		}
 		// A race cuts one worktree per seat before anything spawns, and that
 		// work runs OFF this loop (arenasetup.go, §9.37 amended 2026-08-17):
 		// dispatch stops here, the room keeps drawing and reading keys while
@@ -370,6 +438,40 @@ func (m *Model) dispatch() tea.Cmd {
 		return m.beginArenaSetup(route, prompt)
 	}
 	return m.sendTurn(route, prompt, nil)
+}
+
+// busySeats names every seat still answering, with the turn it is on, in the
+// words a room-wide refusal opens with: "a turn is in flight on codex (turn 4),
+// grok (turn 5)". Seating order, so the sentence reads the way the grid does.
+// Empty when the room is idle.
+//
+// The turn number is the dispatch the seat is answering — the number the
+// reader can find at the top of that column and on its separator. Before
+// §9.54 every one of these refusals said "a turn is in flight" and stopped,
+// because there was one turn and it was the room's; now there can be several
+// and the reader is owed WHICH seats are holding the room, so they know
+// whether to wait or to cancel one.
+func (m *Model) busySeats() string {
+	var parts []string
+	for _, c := range m.st.Columns {
+		if ts := m.turnOf(c.Vendor); ts != nil {
+			parts = append(parts, string(c.Vendor)+" (turn "+itoa(ts.n)+")")
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "a turn is in flight on " + strings.Join(parts, ", ")
+}
+
+// seatBusy is busySeats for ONE seat, in the words a per-seat refusal opens
+// with: "a turn is in flight on Claude Code (turn 4)". Empty when it is idle.
+func (m *Model) seatBusy(c *Column) string {
+	ts := m.turnOf(c.Vendor)
+	if ts == nil {
+		return ""
+	}
+	return "a turn is in flight on " + c.Label + " (turn " + itoa(ts.n) + ")"
 }
 
 // sendTurn is the half of a dispatch that actually spawns: the turn's geometry
@@ -386,6 +488,38 @@ func (m *Model) dispatch() tea.Cmd {
 func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea.Cmd {
 	reg := vendors.Registry()
 
+	// The seats this brief names that are still answering an earlier one
+	// (§9.54). Decided BEFORE anything below moves, because every one of the
+	// refusals here has to leave the room exactly as it found it: a brief that
+	// reaches only busy seats keeps its draft and dispatches nothing, and the
+	// rebuild, the geometry and the columns are all untouched by a press of
+	// enter that sent nothing.
+	//
+	// Per seat and never per room. A busy seat is refused and named; an idle
+	// seat the same brief names still goes. A persistent seat is exactly the
+	// case that makes this a rule rather than a courtesy: the stream-json and
+	// ACP processes hold ONE turn open at a time, and a second prompt written
+	// into a process mid-turn is the failure the old room-wide wall was standing
+	// in front of. The wall is gone; this is what stood behind it.
+	var busy []string
+	for _, c := range m.st.Columns {
+		if !m.st.seats(c) || !route.addresses(c.Vendor) {
+			continue
+		}
+		if ts := m.turnOf(c.Vendor); ts != nil {
+			busy = append(busy, string(c.Vendor)+" (turn "+itoa(ts.n)+")")
+		}
+	}
+	if len(busy) > 0 && len(busy) == m.seatedIn(route) {
+		// Every seat the brief reached is busy, so there is nothing to send and
+		// the draft stays where it was typed. The remedy is per seat, and it is
+		// the focused-seat ctrl+c rather than the room's: naming the whole-room
+		// cancel here would tell an operator who wanted grok to stop codex.
+		m.st.Notice = "a turn is in flight on " + strings.Join(busy, ", ") +
+			" — ctrl+c on its column cancels that turn, or address another seat"
+		return nil
+	}
+
 	// The first brief retires the room-open rebuild (rebuild.go): startTurn is
 	// about to clear every per-turn field including the note the rebuild wrote,
 	// and a run left standing would go on owning events for a seat this turn is
@@ -394,6 +528,14 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 
 	// Geometry for this turn is decided here, from the route, and stays until
 	// the next dispatch. Empty FrameOwners = equal columns (@all / everyone).
+	//
+	// Since §9.54 the owners are the route's seats AND the seats still
+	// answering an earlier brief (frameOwnersFor reads both off State). The
+	// no-mid-stream-reflow rule is about the room moving because a VENDOR did
+	// something; a dispatch is the operator's own act, and a brief to grok
+	// while codex streams is a statement that both answers are wanted at
+	// reading width — narrowing the seat that is mid-answer to make room would
+	// be reflowing prose under the reader on a key that says nothing about it.
 	m.st.FrameOwners = frameOwnersFor(route, m.st)
 
 	// Turn 1 is blind no matter what is armed: the whole value of the room is
@@ -407,11 +549,27 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 	quoting := m.st.Quote && m.st.Turn > 0
 	// Snapshotted BEFORE any column is reset, because the loop below clears the
 	// bodies it would otherwise be quoting.
-	priorReplies := append([]Column(nil), m.st.Columns...)
+	//
+	// The snapshot is taken at THIS dispatch, per seat it addresses (§9.54): a
+	// rebuttal quotes the others' last answers as they stood the moment this
+	// seat's turn was sent. A neighbour that is still answering has no last
+	// answer to quote yet — its body is a partial reply, and quoting a reply
+	// the vendor has not finished would put half an argument in front of
+	// another model as though it were whole. So a busy seat contributes its
+	// last FILED turn instead (settledReply), which is the most recent thing it
+	// actually said, and nothing at all if it has never finished a turn.
+	priorReplies := make([]Column, 0, len(m.st.Columns))
+	for _, c := range m.st.Columns {
+		priorReplies = append(priorReplies, m.settledReply(c))
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ts := &turnState{
+		n:          m.st.Turn + 1,
+		route:      route,
+		flow:       m.flowChain != nil,
 		cancel:     cancel,
+		seatCancel: map[model.VendorID]context.CancelFunc{},
 		live:       map[model.VendorID]bool{},
 		persistent: map[model.VendorID]bool{},
 	}
@@ -422,7 +580,7 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 	// asked about — through the one sanitize choke point everything else on
 	// State goes through. Not redacted: see promptEcho.
 	echo := sanitize(prompt)
-	next := m.st.Turn + 1
+	next := ts.n
 
 	// Worktrees were added BEFORE any seat spawns, and the base SHA read once so
 	// all attempts race from the same commit — all of it already done by the
@@ -467,6 +625,15 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 		if !m.st.seats(*c) {
 			continue
 		}
+		if m.turnOf(c.Vendor) != nil {
+			// Still answering an earlier brief. Untouched, whether or not this
+			// brief named it: every per-turn field on its column and every
+			// per-seat map below describes the turn it is on, and its refusal
+			// — if it was addressed — was already worded above. Not even the
+			// "not addressed" note: that note is about a turn the seat sat out,
+			// and a seat mid-answer is not sitting anything out.
+			continue
+		}
 		// Cleared for every column the loop reaches, BEFORE any of the paths
 		// below can skip one. A refused thread belongs to the turn that refused
 		// it, and a flag left set on a seat that is merely unaddressed — or that
@@ -479,6 +646,11 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 		// perfectly ordinary new conversation be compared against an id nobody
 		// asked for on it.
 		delete(m.forkWatch, c.Vendor)
+		// The give-up and the cancel outlive the seat's turn on purpose
+		// (Model.givenUp) and end here, at the seat's next dispatch, so an
+		// echo from the stopped process can never re-label the turn being sent.
+		delete(m.givenUp, c.Vendor)
+		delete(m.cancelling, c.Vendor)
 		if !route.addresses(c.Vendor) {
 			// Not in this turn. Its previous reply stays on screen, because
 			// that is still the last thing this vendor said — but the note
@@ -521,6 +693,12 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 		// note is carried past the column reset below, because that reset is
 		// what clears the PREVIOUS turn's note and this one is about THIS turn.
 		note := ""
+		// One context per SEAT, a child of the dispatch's, so cancelling this
+		// seat (ctrl+c on its column, §9.54) kills this seat's child and no
+		// neighbour's. Minted before the spawn because runner.Start kills on it,
+		// and recorded on the turn so the seat's retirement can pull it.
+		sctx, scancel := context.WithCancel(ctx)
+		ts.seatCancel[c.Vendor] = scancel
 		if ts.arena {
 			// Every racing seat — the persistent one included — is a fresh
 			// one-shot session in its worktree, through the same FirstTurn every
@@ -562,7 +740,7 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 				// one process, one session, one prompt, killed when the column
 				// lands. §9.36's own machinery pointed at a throwaway session,
 				// not a second protocol.
-				sess, err := m.startEphemeralRacer(ctx, cv, c, tree, vendorPrompt, raceTag)
+				sess, err := m.startEphemeralRacer(sctx, cv, c, tree, vendorPrompt, raceTag)
 				if err != nil {
 					failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 					continue
@@ -578,17 +756,16 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 					continue
 				}
 				spec.Race = raceTag
-				h, err := startProcess(ctx, spec, m.events, v.ParseEvent)
+				h, err := startProcess(sctx, spec, m.events, v.ParseEvent)
 				if err != nil {
 					failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 					continue
 				}
-				ts.handles = append(ts.handles, h)
-				// The same handle, keyed by vendor, so `x` can kill THIS racer
-				// and no other (turnState.arenaHandles). The flat append above
-				// stays: cancelTurn and teardown still sweep the list, and a
-				// give-up's second Kill on an already-killed handle is a no-op
-				// by Handle's own contract.
+				// Keyed by vendor, so `x` can kill THIS racer and no other
+				// (turnState.arenaHandles) — and since §9.54 so can ctrl+c on
+				// the focused seat, and teardown walks the same map. A second
+				// Kill on an already-killed handle is a no-op by Handle's own
+				// contract.
 				if ts.arenaHandles == nil {
 					ts.arenaHandles = map[model.VendorID]racerHandle{}
 				}
@@ -608,17 +785,15 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 				continue
 			}
-			h, err := startProcess(ctx, spec, m.events, v.ParseEvent)
+			h, err := startProcess(sctx, spec, m.events, v.ParseEvent)
 			if err != nil {
 				failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 				continue
 			}
-			ts.handles = append(ts.handles, h)
-			// The same handle, keyed by vendor, so `x` can cut THIS seat and no
-			// other on an ordinary turn (turnState.seatHandles). Kept beside the
-			// flat append for arenaHandles' reason: the list is what cancelTurn
-			// and teardown sweep, and a give-up's Kill on an already-killed
-			// handle is a no-op by Handle's own contract.
+			// Keyed by vendor, so `x` can cut THIS seat and no other on an
+			// ordinary turn (turnState.seatHandles), and since §9.54 so can the
+			// focused-seat ctrl+c; teardown walks the same map. A give-up's Kill
+			// on an already-killed handle is a no-op by Handle's own contract.
 			if ts.seatHandles == nil {
 				ts.seatHandles = map[model.VendorID]racerHandle{}
 			}
@@ -674,6 +849,9 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 			c.startTurn(next, echo, quoting)
 			c.Phase = PhaseFailed
 			c.Note = f.note
+			// Terminal without ever being live, so this is the one retirement
+			// finishColumn does not stamp: the inbox (needsyou.go) reads it.
+			c.Ended = now
 			// No process was ever started, so the vendor was never asked about
 			// the conversation. That is the pre-flight class in its strongest
 			// form — one step earlier than the stderr cases, which at least got
@@ -692,11 +870,18 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 	if len(ts.live) == 0 {
 		cancel()
 		m.st.Notice = "no vendor could be dispatched to — see the columns"
+		if len(busy) > 0 {
+			m.st.Notice = "a turn is in flight on " + strings.Join(busy, ", ") + " — and no other seat could be dispatched to; see the columns"
+		}
 		return nil
 	}
 
-	m.turn = ts
-	// The header carries this until the last column lands (§9.21). Set HERE and
+	// Every seat that entered live now points at this dispatch (Model.turns).
+	// This is the line that used to read `m.turn = ts`.
+	m.holdTurn(ts)
+	// The header carries this until the last column of THIS dispatch lands
+	// (§9.21, as amended by §9.54: the cell names the most recent dispatch, and
+	// an older one still in flight is counted rather than named). Set HERE and
 	// not beside FrameOwners, even though both are the turn's intent captured at
 	// the one moment it is known: everything above this line can still refuse
 	// the dispatch, and a route on the header of a turn that never started would
@@ -705,7 +890,7 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 	// under a reader, the route is retired the moment the turn ends.
 	sent := route
 	m.st.TurnRoute = &sent
-	m.st.Turn++
+	m.st.Turn = ts.n
 	if m.st.Page.Open {
 		// Dispatching from the by-turn page lands on the turn just sent.
 		//
@@ -726,7 +911,58 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 		m.setDraft("")
 	}
 	m.st.Notice = ""
+	if len(busy) > 0 {
+		// A partial send says so: who took the brief and who was skipped, and
+		// why. Measured, both halves — the seats in ts.live and the seats whose
+		// turn refused them — and the remedy is the per-seat one.
+		var sent []string
+		for _, c := range m.st.Columns {
+			if ts.live[c.Vendor] {
+				sent = append(sent, string(c.Vendor))
+			}
+		}
+		m.st.Notice = "sent to " + strings.Join(sent, ", ") + " — skipped: " + strings.Join(busy, ", ") +
+			", still on a turn; ctrl+c on its column cancels it"
+	}
 	return m.waitEvents()
+}
+
+// holdTurn registers a dispatch on every seat it put in flight. It is the one
+// writer of Model.turns besides the seat's own retirement, and the shape tests
+// build a turn in flight with — which is why it tolerates a nil map: a Model a
+// test types out as a literal has none, and the constructor is the only other
+// place the map is made.
+func (m *Model) holdTurn(ts *turnState) {
+	if m.turns == nil {
+		m.turns = map[model.VendorID]*turnState{}
+	}
+	for v := range ts.live {
+		m.turns[v] = ts
+	}
+}
+
+// settledReply is what a rebuttal may quote from this column at THIS moment
+// (§9.54): the column itself when its last turn has ended, its last filed turn
+// while a new one is still arriving, and an unquotable blank when it has never
+// finished one.
+//
+// A seat mid-answer has a body, and that body is exactly what must not be
+// quoted — it is a reply the vendor has not finished, and another model reading
+// it as "what participant A said" would be rebutting half an argument. The
+// filed record is the seat's most recent COMPLETE answer, which is the claim the
+// quote makes. A column with no record and a live turn contributes a blank that
+// quotable() refuses, so its participant letter is still assigned (the labels
+// are positional and must not shuffle) and nothing is said in its name.
+func (m *Model) settledReply(c Column) Column {
+	if m.turnOf(c.Vendor) == nil {
+		return c
+	}
+	out := Column{Vendor: c.Vendor, Label: c.Label, Avail: c.Avail}
+	if n := len(c.History); n > 0 {
+		last := c.History[n-1]
+		out.Body, out.Phase, out.TurnN = last.Body, last.Phase, last.N
+	}
+	return out
 }
 
 // posture is what the room is currently asking vendors for.
@@ -780,6 +1016,12 @@ func (m *Model) seatedIn(route Route) int { return m.st.SeatsIn(route) }
 // frameOwnersFor lists the visible seated vendors that own column width for
 // this turn. Empty means equal four-up — @all, everyone, or a route that
 // happens to address every seat still on screen.
+//
+// A seat still answering an earlier brief owns width too (§9.54). Read off the
+// column's own phase rather than off Model.turns, so this stays a function of
+// State: a column that is Busy or Settling is one whose answer is arriving,
+// and a dispatch that narrowed it to make room for the new seat would reflow
+// a reply under the reader on a key that said nothing about that column.
 func frameOwnersFor(route Route, st State) []model.VendorID {
 	if route.Mixed {
 		return nil
@@ -787,7 +1029,7 @@ func frameOwnersFor(route Route, st State) []model.VendorID {
 	var out []model.VendorID
 	for _, idx := range st.VisibleColumns() {
 		c := st.Columns[idx]
-		if route.addresses(c.Vendor) {
+		if route.addresses(c.Vendor) || c.inFlight() {
 			out = append(out, c.Vendor)
 		}
 	}
@@ -831,7 +1073,18 @@ func (m *Model) specFor(v vendors.Vendor, c *Column, prompt string) (runner.Spec
 
 // waitEvents blocks on one event, then drains what is already queued into a
 // single batch. One redraw per batch instead of one per token.
+//
+// ONE reader at a time (Model.eventsArmed). Every dispatch and every batch
+// re-arms the pump, and with two dispatches in flight (§9.54) that is two
+// callers wanting a goroutine on one channel; two readers would deliver batches
+// to Update in whichever order the scheduler woke them, and an exit could land
+// before the text it followed. The second caller gets nil, which tea.Batch
+// ignores, and the one parked goroutine serves every seat.
 func (m *Model) waitEvents() tea.Cmd {
+	if m.eventsArmed {
+		return nil
+	}
+	m.eventsArmed = true
 	ch := m.events
 	return func() tea.Msg {
 		ev, ok := <-ch
@@ -908,7 +1161,9 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			// land here would replace the room's saved thread with a session that
 			// lives in a worktree and dies with the race — the user would quit,
 			// reattach, and find every conversation swapped for a discarded one.
-			if ev.SessionID != "" && !(m.turn != nil && m.turn.arena) {
+			// Read off the SEAT's turn (racing), where it read m.turn.arena: a
+			// race owns every seat, so the two are the same fact per seat.
+			if ev.SessionID != "" && !m.racing(ev.Vendor) {
 				m.adoptSession(c, ev.SessionID)
 			}
 
@@ -916,7 +1171,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			m.queueGate(c, ev.Gate)
 
 		case runner.KindMeta:
-			if ev.SessionID != "" && !(m.turn != nil && m.turn.arena) {
+			if ev.SessionID != "" && !m.racing(ev.Vendor) {
 				m.adoptSession(c, ev.SessionID)
 			}
 			if ev.CostUSD != nil {
@@ -975,7 +1230,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 					c.Body = "[Turn completed with 0 text chunks streamed]"
 				}
 				m.finishColumn(c, PhaseDone)
-			} else if ev.EndsTurn && m.turn != nil && m.turn.live[ev.Vendor] &&
+			} else if ev.EndsTurn && m.turnOf(ev.Vendor) != nil &&
 				(c.Phase == PhaseStreaming || c.Phase == PhaseWaiting) {
 				// A SPAWN-PER-TURN seat that names its own end of turn, which
 				// until now nothing did: the batch CLIs ended a turn by dying and
@@ -987,7 +1242,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				//
 				// So the PHASE settles here and the RETIREMENT does not. The
 				// column stops claiming to work, stamps the elapsed it actually
-				// earned, and stays in m.turn.live — which is the whole point of
+				// earned, and stays in its dispatch's live set — the point of
 				// splitting them. turnColumnFinished is what cancels the turn's
 				// context, and that context is what runner.Start kills the child
 				// on, so retiring here would kill a process that is still winding
@@ -1019,9 +1274,10 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				// An unguarded placeholder would then overwrite a cancelled
 				// column's note-bearing body with "[Turn completed …]", i.e. a
 				// cancelled seat asserting that its turn completed. The liveness
-				// half (m.turn.live) covers the same line arriving after the turn
-				// boundary entirely, where it could otherwise settle a FRESH
-				// turn's column on the strength of the previous turn's answer.
+				// half (turnOf, which read m.turn.live before §9.54) covers the
+				// same line arriving after the turn boundary entirely, where it
+				// could otherwise settle a FRESH turn's column on the strength of
+				// the previous turn's answer.
 				if strings.TrimSpace(c.Body) == "" {
 					c.Body = "[Turn completed with 0 text chunks streamed]"
 				}
@@ -1097,7 +1353,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				// refused here.
 				c.Body += m.flush(ev.Vendor)
 				c.Elapsed = time.Since(c.Started)
-				if !m.cancelling {
+				if !m.cancelling[ev.Vendor] {
 					c.Note = "the racer's process ended before its turn did — no answer arrived; anything it wrote is in the diff"
 				}
 				m.finishColumn(c, PhaseFailed)
@@ -1152,7 +1408,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			persistent := m.isPersistent(ev.Vendor)
 			m.dropProcess(ev.Vendor)
 			c.Body += m.flush(ev.Vendor)
-			if persistent && (c.Phase == PhaseStreaming || c.Phase == PhaseWaiting) && !m.cancelling {
+			if persistent && (c.Phase == PhaseStreaming || c.Phase == PhaseWaiting) && !m.cancelling[ev.Vendor] {
 				// Mid-turn death. Said as a failure rather than a clean finish,
 				// because the answer the user was waiting for is not coming and
 				// a column that simply stopped would look like one that finished.
@@ -1255,7 +1511,7 @@ func (m *Model) applyEvents(batch []runner.Event) {
 					// with is_error true and terminal_reason "aborted_tools".
 					// The user's keystroke is not a vendor failure, so
 					// finishColumn's cancellation check re-labels it.
-					if m.cancelling {
+					if m.cancelling[ev.Vendor] {
 						c.Note = ""
 					}
 					m.finishColumn(c, PhaseFailed)
@@ -1293,7 +1549,8 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			// killed process drains its buffered stdout onto a column that is
 			// already terminal, and a line can arrive after the turn boundary
 			// entirely.
-			live := m.turn != nil && m.turn.live[ev.Vendor] &&
+			// turnOf is the per-seat read of what was m.turn.live[ev.Vendor].
+			live := m.turnOf(ev.Vendor) != nil &&
 				(c.Phase == PhaseStreaming || c.Phase == PhaseWaiting)
 			c.Phase = PhaseFailed
 			// A vendor-reported failure arrives BEFORE the process exits, so
@@ -1367,10 +1624,23 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 	}
 	if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
 		c.Phase = phase
-		if m.cancelling {
+		if m.cancelling[c.Vendor] {
 			c.Phase = PhaseCancelled
 			c.Note = "cancelled — the output above is partial"
 		}
+	}
+	// The seat's turn, read once for the block below and for the stamp. The
+	// dispatch this seat is answering, where the code read m.turn (§9.54).
+	ts := m.turnOf(c.Vendor)
+	if ts != nil {
+		// When this seat's turn ENDED, on the room's clock, for the inbox
+		// (needsyou.go): a seat that landed while the reader was elsewhere is
+		// listed until they go to it. Stamped only while the seat still holds a
+		// turn, because retirement is reached twice for some seats — a
+		// persistent seat's end-of-turn line and then its exit, an ACP racer's
+		// response and then the exit of the process it killed — and a second
+		// stamp would re-list a seat the reader has already read.
+		c.Ended = time.Now()
 	}
 
 	// The race's deliverable is the diff, so it is read the moment this seat
@@ -1380,8 +1650,8 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 	// async path would add a message type for a stall nobody has measured. If a
 	// monorepo ever makes this visible, that measurement is the trigger to move
 	// it onto a Cmd.
-	if m.turn != nil && m.turn.arena {
-		if es, ok := m.turn.arenaEphemeral[c.Vendor]; ok {
+	if ts != nil && ts.arena {
+		if es, ok := ts.arenaEphemeral[c.Vendor]; ok {
 			// The racer dies AT ITS OWN finish line, not the turn's. Kill, and
 			// never a polite wait: §9.33 measured this vendor's process
 			// lingering ~2.5s after answering, and a racer has nothing to say
@@ -1394,15 +1664,15 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 			// cleared mid-race at all — askClearSeat refuses while a turn is in
 			// flight.
 			es.Kill()
-			delete(m.turn.arenaEphemeral, c.Vendor)
+			delete(ts.arenaEphemeral, c.Vendor)
 		}
-		if tree, ok := m.turn.arenaTrees[c.Vendor]; ok && c.Arena == nil {
+		if tree, ok := ts.arenaTrees[c.Vendor]; ok && c.Arena == nil {
 			// c.Arena == nil makes collection once-only. A racer driven by a
 			// live protocol retires twice — its end-of-turn response, then the
 			// exit of the process that response got killed — and a second pass
 			// here would re-rank the race on an echo.
-			r := collectArena(tree, m.turn.arenaBase)
-			if ls := m.turn.arenaLive[c.Vendor]; ls != nil {
+			r := collectArena(tree, ts.arenaBase)
+			if ls := ts.arenaLive[c.Vendor]; ls != nil {
 				// This seat's live stat is over either way — the final owns
 				// the block from here, and a read launched after this line
 				// would only ever arrive to be dropped.
@@ -1417,15 +1687,15 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 					// holding would be the refresh degrading the authoritative
 					// read it exists to complement. One retry, not a loop: a
 					// second failure is a real one and is reported as such.
-					r = collectArena(tree, m.turn.arenaBase)
+					r = collectArena(tree, ts.arenaBase)
 				}
 			}
 			// Named with the RACE's recorded number, never c.TurnN: the race
 			// numbers itself past older rooms' leftovers (arenaRaceNumber),
 			// so the turn and the race can legitimately disagree — and the
 			// branch the receipt claims must be the branch setup created.
-			r.Branch = arenaBranch(m.turn.arenaRaceN, c.Vendor)
-			r.RaceN = m.turn.arenaRaceN
+			r.Branch = arenaBranch(ts.arenaRaceN, c.Vendor)
+			r.RaceN = ts.arenaRaceN
 			// Commit-per-turn (§9.37, amended 2026-08-09): once the diff is
 			// read, the attempt is parked on its arena branch, so every race
 			// survives the worktree it happened in — diffable, adoptable,
@@ -1439,7 +1709,7 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 			// other racers and the room's repo are not this seat's blast
 			// radius.
 			if r.Err == "" && strings.TrimSpace(r.Stat) != "" {
-				sha, cerr := commitArena(tree, m.turn.arenaBase, arenaCommitMsg(m.turn.arenaRaceN, c.Prompt))
+				sha, cerr := commitArena(tree, ts.arenaBase, arenaCommitMsg(ts.arenaRaceN, c.Prompt))
 				if cerr != nil {
 					r.CommitErr = "not committed: " + cerr.Error()
 				} else {
@@ -1449,13 +1719,13 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 			// The seed receipt was measured at setup; the column that states
 			// it exists now. nil when the room repo has no .worktreeinclude —
 			// the render draws nothing for nil, per zero-vs-absent.
-			r.Seed = m.turn.arenaSeeds[c.Vendor]
+			r.Seed = ts.arenaSeeds[c.Vendor]
 			// Rank is the order the room OBSERVED seats land, stamped here on
 			// the host's clock. Every racer gets one — a DNF finished too, just
 			// not well, and the render pairs the rank with the phase word so
 			// "2nd" on a failed attempt cannot read as a result.
-			m.turn.arenaFinished++
-			r.Rank, r.Of = m.turn.arenaFinished, len(m.turn.arenaTrees)
+			ts.arenaFinished++
+			r.Rank, r.Of = ts.arenaFinished, len(ts.arenaTrees)
 			// The check runs LAST, and the order is a ruling (§9.48): the diff
 			// is read and the attempt is committed above, so nothing the check
 			// writes into the tree can reach this seat's stat or its receipt.
@@ -1871,18 +2141,32 @@ func (c *Column) recordAct(a runner.ActCall, clean func(string) string) {
 // line and then again by its process dying, and the turn must not end early
 // because one column reported twice.
 func (m *Model) turnColumnFinished(v model.VendorID) {
-	if m.turn == nil {
+	ts := m.turnOf(v)
+	if ts == nil {
 		return
 	}
-	if !m.turn.live[v] {
+	// The SEAT retires here, whatever its dispatch's other seats are doing
+	// (§9.54): its entry leaves Model.turns, so the next brief can address it,
+	// and its own context is pulled, which is what kills a child still winding
+	// down — the dispatch-level cancel below used to do that for everyone at
+	// once. The cancellation word dies with the seat's turn too; a later echo
+	// from the stopped process meets the give-up guard instead (Model.givenUp).
+	// cancelled is read before the flag goes, because it is the difference
+	// between two words on the chain's death notice below.
+	cancelled := m.cancelling[v]
+	delete(m.turns, v)
+	delete(m.cancelling, v)
+	if scancel := ts.seatCancel[v]; scancel != nil {
+		scancel()
+	}
+	delete(ts.live, v)
+	if len(ts.live) > 0 {
 		return
 	}
-	delete(m.turn.live, v)
-	if len(m.turn.live) > 0 {
-		return
-	}
-	m.turn.cancel()
-	m.turn = nil
+	ts.cancel()
+	// The whole dispatch has landed. Everything from here is a fact about the
+	// dispatch, not the room: the room may still hold other seats in flight.
+	m.dispatchEnded = true
 	// A live chain that did not hand off by the time its turn tore down is over:
 	// the hop was cancelled, its vendor failed, or it returned nothing
 	// finishFlowHop could carry — none of which reach finishFlowHop's own
@@ -1894,12 +2178,16 @@ func (m *Model) turnColumnFinished(v model.VendorID) {
 	// cancelled and failed are different facts, and a stopped chain must never
 	// read as a finished one (§4a.1). Checked before cancelling is reset, since
 	// that flag is the difference between the two words.
-	if m.flowChain != nil && !m.flowAdvancePending {
+	//
+	// Only the HOP's own dispatch may bury the chain (ts.flow): an unrelated
+	// brief landing while a hop streams is not the hop dying, and reading it
+	// as one would end a chain that is still working.
+	if ts.flow && m.flowChain != nil && !m.flowAdvancePending {
 		curr := m.flowChain.Current()
 		if curr != nil && curr.State != FlowStateReturned && curr.State != FlowStatePublished {
 			hop, total := m.flowChain.CurrentIndex+1, len(m.flowChain.Steps)
 			verb := "stopped"
-			if m.cancelling {
+			if cancelled {
 				verb = "cancelled"
 			}
 			note := fmt.Sprintf("flow %s at hop %d/%d (@%s %s)", verb, hop, total, curr.Vendor, curr.Verb)
@@ -1910,12 +2198,15 @@ func (m *Model) turnColumnFinished(v model.VendorID) {
 		}
 		m.endFlowChain()
 	}
-	m.cancelling = false
 	// The route stops being live news the instant the turn is over: each column
 	// has recorded its own participation by now, so a header that went on naming
 	// it would be repeating history in the one cell that describes the present
-	// (§9.21).
-	m.st.TurnRoute = nil
+	// (§9.21). Since §9.54 the header names the MOST RECENT dispatch, so only
+	// that one retires the cell — an older dispatch landing after a newer one
+	// was sent must not blank a route that is still true.
+	if ts.n == m.st.Turn {
+		m.st.TurnRoute = nil
+	}
 	m.st.Mode = ModeComposing
 	// The turn is over, so the ids it produced are worth keeping. Saved HERE
 	// rather than only on the way out, because the failure this exists to
@@ -1973,26 +2264,75 @@ func (m *Model) saveRoom() {
 	}
 }
 
+// turnOf is the dispatch this seat is answering, or nil when the seat is idle
+// (§9.54). It is THE read of Model.turns: every site that used to ask `m.turn
+// != nil` about a seat asks this, and the answer is about that seat alone.
+func (m *Model) turnOf(v model.VendorID) *turnState { return m.turns[v] }
+
+// anyInFlight reports that at least one seat is still answering — the
+// room-wide question, kept for the few acts that genuinely need the whole room
+// idle (quit, /cd, /seat, a race) and deliberately NOT the test dispatch uses.
+func (m *Model) anyInFlight() bool { return len(m.turns) > 0 }
+
+// dispatches is every distinct dispatch still in flight — the walk teardown
+// makes. Deduplicated by pointer, because a brief to @all is one record three
+// seats point at. Read off the map rather than off the columns, so a seat that
+// is in flight without a column (a fixture; or a seat unseated mid-turn, which
+// /unseat refuses but a future path might not) is still reaped.
+func (m *Model) dispatches() []*turnState {
+	var out []*turnState
+	seen := map[*turnState]bool{}
+	for _, ts := range m.turns {
+		if !seen[ts] {
+			seen[ts] = true
+			out = append(out, ts)
+		}
+	}
+	return out
+}
+
+// race is the arena dispatch in flight, or nil. A race refuses to start over a
+// busy seat and refuses every brief while it runs, so at most one exists and
+// it is the only dispatch — which is what lets the arena's shared bookkeeping
+// (its trees, its rank, its live-stat slots) be read from any of its seats.
+func (m *Model) race() *turnState {
+	for _, ts := range m.turns {
+		if ts.arena {
+			return ts
+		}
+	}
+	return nil
+}
+
+// racing reports that this seat's own turn is an arena attempt — the per-seat
+// spelling of what `m.turn != nil && m.turn.arena` used to say for the room.
+func (m *Model) racing(v model.VendorID) bool {
+	ts := m.turnOf(v)
+	return ts != nil && ts.arena
+}
+
 // isPersistent reports whether this seat's turn is running on a long-lived
-// process. Read from the turn rather than from the registry, so a seat that
-// fell back to a spawn is treated as what it actually is.
+// process. Read from the seat's turn rather than from the registry, so a seat
+// that fell back to a spawn is treated as what it actually is.
 func (m *Model) isPersistent(v model.VendorID) bool {
-	return m.turn != nil && m.turn.persistent[v]
+	ts := m.turnOf(v)
+	return ts != nil && ts.persistent[v]
 }
 
 // ephemeralRacer returns the throwaway session racing this vendor in the
 // current turn, or nil on every other kind of turn.
 //
-// Read from the turn for isPersistent's reason, and one more of its own: this
-// is the fact applyEvents attributes a vendor's events by while TWO processes
-// wear one vendor id (the room's idle seat and the racer), and a lookup that
-// outlived the turn would go on attributing exits to a racer that has already
-// been reaped.
+// Read from the seat's turn for isPersistent's reason, and one more of its own:
+// this is the fact applyEvents attributes a vendor's events by while TWO
+// processes wear one vendor id (the room's idle seat and the racer), and a
+// lookup that outlived the turn would go on attributing exits to a racer that
+// has already been reaped.
 func (m *Model) ephemeralRacer(v model.VendorID) seatSession {
-	if m.turn == nil {
+	ts := m.turnOf(v)
+	if ts == nil {
 		return nil
 	}
-	return m.turn.arenaEphemeral[v]
+	return ts.arenaEphemeral[v]
 }
 
 // arenaRacing reports whether this vendor is racing on a ONE-SHOT process this
@@ -2006,29 +2346,28 @@ func (m *Model) ephemeralRacer(v model.VendorID) seatSession {
 // exactly the case: the process has already exited, and the map is what says
 // whose exit it was.
 func (m *Model) arenaRacing(v model.VendorID) bool {
-	if m.turn == nil {
+	ts := m.turnOf(v)
+	if ts == nil {
 		return false
 	}
-	_, racing := m.turn.arenaHandles[v]
+	_, racing := ts.arenaHandles[v]
 	return racing
 }
 
-// wasGivenUp reports whether the operator cut this seat with `x` during the
-// turn that is in flight now (turnState.givenUp).
+// wasGivenUp reports whether the operator cut this seat with `x` and the cut
+// has not been superseded by a new dispatch to it (Model.givenUp).
 //
-// Read from the turn, like every other per-turn attribution here, and that is
-// also what bounds the guard: the fact is true only until the turn ends, so a
-// seat cut in turn 4 is an ordinary seat again in turn 5 with nothing to reset.
-func (m *Model) wasGivenUp(v model.VendorID) bool {
-	if m.turn == nil {
-		return false
-	}
-	return m.turn.givenUp[v]
-}
+// It used to read the turn, and the turn's lifetime bounded it. Per-seat turns
+// end the moment the cut column lands (§9.54), while the stopped process is
+// still draining — so the fact lives on the Model and is retired by the seat's
+// next dispatch instead: a seat cut in turn 4 is an ordinary seat again the
+// moment turn 5 reaches it, which is the same boundary drawn one event later.
+func (m *Model) wasGivenUp(v model.VendorID) bool { return m.givenUp[v] }
 
-// cancelTurn stops everything in flight. The columns keep whatever they already
-// received: that output was really produced, and the card says it is partial
-// rather than implying the turn completed.
+// cancelSeat stops ONE seat's turn (§9.54). The column keeps whatever it
+// already received: that output was really produced, and the card says it is
+// partial rather than implying the turn completed. Its neighbours — on the same
+// dispatch or another — are not touched.
 //
 // A persistent seat is INTERRUPTED rather than killed. Killing it would work,
 // and it would also throw away the conversation and the session-init cost that
@@ -2037,28 +2376,54 @@ func (m *Model) wasGivenUp(v model.VendorID) bool {
 // answering afterwards; if the message cannot be delivered the seat is killed
 // instead, which is the old behaviour and is stated in the column rather than
 // hidden.
-func (m *Model) cancelTurn() {
-	if m.turn == nil {
+//
+// An ephemeral racer is KILLED, not interrupted, and the asymmetry is the
+// point: an interrupt exists to spare a conversation and its session-init cost,
+// and a throwaway race session has neither — nothing resumes it, nothing is
+// saved from it. A cancel that waited politely would be waiting on the ~2.5s
+// post-answer linger §9.33 measured, for a process whose next act is the bin
+// either way.
+//
+// It reports whether there was a turn to cancel, so the key can tell "stopped
+// the focused seat" from "nothing was running there".
+func (m *Model) cancelSeat(v model.VendorID) bool {
+	ts := m.turnOf(v)
+	if ts == nil {
+		return false
+	}
+	m.cancelling[v] = true
+	switch {
+	case ts.persistent[v]:
+		m.interruptSeat(v)
+	default:
+		if es, ok := ts.arenaEphemeral[v]; ok {
+			es.Kill()
+		} else if h, ok := ts.arenaHandles[v]; ok {
+			h.Kill()
+		} else if h, ok := ts.seatHandles[v]; ok {
+			h.Kill()
+		}
+	}
+	// The seat's own context, which is what runner.Start kills the child on.
+	// The dispatch-level context is left alone: it is the parent of every
+	// sibling's, and pulling it would cancel the seats this act is sparing.
+	if scancel := ts.seatCancel[v]; scancel != nil {
+		scancel()
+	}
+	return true
+}
+
+// cancelAll stops every seat in flight, on every dispatch — the whole-room act
+// ctrl+c performs when the focused seat has nothing running (§9.54), and what
+// the key did unconditionally before that.
+func (m *Model) cancelAll() {
+	if !m.anyInFlight() {
 		return
 	}
-	m.cancelling = true
 	m.st.Notice = "cancelling…"
-	for _, h := range m.turn.handles {
-		h.Kill()
+	for _, c := range m.st.Columns {
+		m.cancelSeat(c.Vendor)
 	}
-	for v := range m.turn.persistent {
-		m.interruptSeat(v)
-	}
-	// An ephemeral racer is KILLED, not interrupted, and the asymmetry against
-	// the loop above is the point: an interrupt exists to spare a conversation
-	// and its session-init cost, and a throwaway race session has neither —
-	// nothing resumes it, nothing is saved from it. A cancel that waited
-	// politely here would be waiting on the ~2.5s post-answer linger §9.33
-	// measured, for a process whose next act is the bin either way.
-	for _, es := range m.turn.arenaEphemeral {
-		es.Kill()
-	}
-	m.turn.cancel()
 }
 
 // teardown kills every child on the way out.
@@ -2128,24 +2493,30 @@ func (m *Model) teardown() {
 	if m.roomCancel != nil {
 		m.roomCancel()
 	}
-	if m.turn == nil {
-		return
-	}
-	for _, h := range m.turn.handles {
-		h.Kill()
-	}
-	// The racers too — they are exactly the process the paragraph above warns
-	// about: not in procs (by design, see turnState.arenaEphemeral), so the
-	// loop over procs never sees them, and a quit mid-race would otherwise
+	// Every dispatch still in flight, each walked once however many seats point
+	// at it (dispatches). This is where the room used to read m.turn; with
+	// several dispatches live at once (§9.54) every one of them is reaped, and
+	// every process each one holds — the one-shot children by their handles,
+	// the racers too. The racers are exactly the process the paragraph above
+	// warns about: not in procs (by design, see turnState.arenaEphemeral), so
+	// the loop over procs never sees them, and a quit mid-race would otherwise
 	// leave a vendor's ACP server running in a worktree with nothing on screen
-	// to say so. The turn context cancelled below kills the real ones again;
-	// the explicit kill is what makes the property hold synchronously and
-	// under test.
-	for _, es := range m.turn.arenaEphemeral {
-		es.Kill()
+	// to say so. The contexts cancelled below kill the real ones again; the
+	// explicit kills are what make the property hold synchronously and under
+	// test.
+	for _, ts := range m.dispatches() {
+		for _, h := range ts.seatHandles {
+			h.Kill()
+		}
+		for _, h := range ts.arenaHandles {
+			h.Kill()
+		}
+		for _, es := range ts.arenaEphemeral {
+			es.Kill()
+		}
+		ts.cancel()
 	}
-	m.turn.cancel()
-	m.turn = nil
+	m.turns = map[model.VendorID]*turnState{}
 }
 
 func (m *Model) column(v model.VendorID) *Column {

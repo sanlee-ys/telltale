@@ -202,6 +202,9 @@ func flowRoom(t *testing.T, write bool) *Model {
 		failure:    map[model.VendorID]runner.FailureClass{},
 		redactors:  map[model.VendorID]*Redactor{},
 		procs:      map[model.VendorID]*seatProc{},
+		turns:      map[model.VendorID]*turnState{},
+		cancelling: map[model.VendorID]bool{},
+		givenUp:    map[model.VendorID]bool{},
 		gateInputs: map[string]map[string]any{},
 		events:     make(chan runner.Event, 64),
 		roomCtx:    ctx,
@@ -231,7 +234,7 @@ func TestWriteHopSpawnsNothingBeforeTheUserSaysYes(t *testing.T) {
 	if got := m.flowChain.Current().State; got != FlowStateBlocked {
 		t.Errorf("step state = %s, want blocked", got)
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Error("a turn is in flight for a write hop nobody authorized")
 	}
 
@@ -261,7 +264,7 @@ func TestWriteHopCancelledWithNSpawnsNothing(t *testing.T) {
 	if m.flowWritePending || m.flowWriteArmed {
 		t.Error("the gate is still armed or pending after n")
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Error("a turn is in flight after a cancelled write hop")
 	}
 }
@@ -279,8 +282,8 @@ func TestFlowHopDispatchesOnlyToItsOwnSeat(t *testing.T) {
 	if log.n() != 1 {
 		t.Fatalf("%d spawns for a one-seat hop: %+v", log.n(), log.specs)
 	}
-	if len(m.turn.live) != 1 || !m.turn.live[model.VendorCodex] {
-		t.Fatalf("live seats = %v, want only codex", m.turn.live)
+	if len(m.turns) != 1 || m.turnOf(model.VendorCodex) == nil {
+		t.Fatalf("live seats = %v, want only codex", m.turns)
 	}
 	for _, c := range m.st.Columns {
 		if c.Vendor == model.VendorCodex {
@@ -479,7 +482,7 @@ func TestWriteHopInAReadRoomBlocksWithoutDispatch(t *testing.T) {
 	if m.flowWritePending {
 		t.Error("a y/n gate was offered for a hop no keystroke can legalize")
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Error("a turn is in flight for a blocked write hop")
 	}
 	if m.st.Write {
@@ -610,7 +613,7 @@ func TestAFlowReadHopRespawnsAWriteSpawnedSeat(t *testing.T) {
 	}
 
 	// Now a flow READ hop to the same seat.
-	m.turn = nil
+	idle(m)
 	m.st.Draft = "/flow @claude review security -> @codex check"
 	m.dispatch()
 
