@@ -390,6 +390,16 @@ func TestTheCheckRunsAfterTheDiffAndTheCommit(t *testing.T) {
 	for _, msg := range drainChecks(t, m) {
 		m.applyArenaCheck(msg)
 	}
+	// The sentence is asserted, not its row. The arena block names the
+	// worktree by its full path, and under macOS's per-user temp root
+	// (`/var/folders/<xx>/<hash>/T/...`) that path wraps to four rows of a
+	// 39-column seat; the crew's needs-you strip (§9.54) spends one more, and
+	// at the 24-row default the sentence was below `↓ 4 more below`, rendered
+	// and off screen (measured on the first darwin CI run, 2026-09-02, and
+	// reproduced on linux with a temp root of the same length). A taller
+	// frame keeps the assertion about the sentence rather than about the
+	// length of a temp path.
+	m.st.Height = 40
 
 	shown, _ := gitOut(tree, "show", "--name-only", "--format=%s", "HEAD")
 	if strings.Contains(shown, "built.bin") {
