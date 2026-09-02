@@ -629,7 +629,13 @@ watched finish on its own; that half still stands on its offline tests, and
 (launch-time override of the room's workspace — the daily path never needs it),
 `--vendor <list>`, `--brief <file>`, `--read`, `--auto`, `--trace <file>`, `--resume`
 (accepted, and redundant — reattaching is the default), `--write` (accepted, and does
-nothing — writing is the default), `--ascii`, `--no-title`.
+nothing — writing is the default), `--ascii`, `--no-title`, `--host` (open the room in a
+host process of its own that outlives this terminal: `/detach` walks away, `telltale
+council` rejoins, `telltale council kill` ends it — a read room only, because a room that
+writes without asking will not detach; [design.md §7.29](design.md), and §7.30 for macOS
+and Linux), `--live claude` (seat a pane showing claude's own terminal screen beside the
+measured seats; display only, and nothing on it is read as a number; [design.md
+§9.53](design.md)).
 
 `--vendor <list>` decides who is in the room: `all` keeps every detected seat on screen
 including the ones that cannot be driven, and a comma list (`--vendor claude,codex`) seats
