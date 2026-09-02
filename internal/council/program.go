@@ -476,6 +476,12 @@ type Model struct {
 	// seatPrepN numbers seat preps, arenaPrepN's rule: unique over the room's
 	// whole life, never reset.
 	seatPrepN int
+	// adoptSrc and adoptDonorSrc are what the pending adoption merges FROM:
+	// a racer's arena branch or a seat's own branch (lifecycle.go, §9.55),
+	// resolved when the card arms and carried to y for adoptOnto's reason —
+	// the card named a branch, and y must merge that one.
+	adoptSrc      adoptSource
+	adoptDonorSrc adoptSource
 	// checkCmd is the command `/arena check` named, verbatim, and checkArgv is
 	// the same command split for exec — argv, never a shell (§9.48). Empty
 	// means no check, which is ABSENT on every racer's block rather than a
