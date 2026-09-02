@@ -803,6 +803,18 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   through a hosted room — a real vendor answering, streaming into a detached
   host, and still being there on the rejoin.
 
+  **MEASURED 2026-09-02, by the owner, on the built binary:** one brief ran
+  through `telltale council --host --read`, then `/detach`, a closed window,
+  and a `telltale council` rejoin. The two batch seats settled to `done (exit
+  0)`. The claude seat answered in full and STAYED `streaming`, through the
+  detach and the rejoin, with the identical text. The host dropped the
+  persistent seat's own end-of-turn line, so the seat never settled and the
+  turn guard refused every later brief. The fix and the test that pins it are
+  in `internal/councilhost/room.go` and `persistent_done_test.go`. The drive
+  paid the first half of the debt above: a vendor answered through a host and
+  was still there on the rejoin. A second live brief on the fixed binary is
+  the check that closes it.
+
 Cross-platform and cross-machine status has its own file: [PARITY.md](PARITY.md).
 
 The conventions a fresh session would otherwise re-derive — golden-test traps,
