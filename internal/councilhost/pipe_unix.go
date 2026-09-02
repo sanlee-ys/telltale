@@ -476,6 +476,17 @@ func (c *Conn) Close() error {
 // its socket to appear.
 func Dial(name string, timeout time.Duration) (*Conn, error) {
 	deadline := time.Now().Add(timeout)
+	// A room read as HELD is refused, but not on the first read. The host
+	// releases `.held` when it notices its client's socket close, which is a
+	// moment AFTER the detach answer reached that client — and the ordinary
+	// rejoin is exactly the client that just detached, dialling back. Under a
+	// loaded `go test ./...` that moment was measured long enough for the
+	// rejoin to arrive inside it once in a full run and never in twenty
+	// isolated runs (2026-09-02, the integration of §7.30 with §9.54). A
+	// bounded grace turns that window into a wait: a room somebody else is
+	// actually holding stays held past it and is refused as before, and the
+	// refusal keeps its sentence.
+	busyUntil := time.Now().Add(min(timeout, 500*time.Millisecond))
 	for {
 		st, err := ProbePipe(name)
 		if err != nil {
@@ -489,6 +500,10 @@ func Dial(name string, timeout time.Duration) (*Conn, error) {
 			}
 			return nil, fmt.Errorf("councilhost: could not open %s: nothing is listening on it", name)
 		case PipeBusy:
+			if time.Now().Before(busyUntil) {
+				time.Sleep(20 * time.Millisecond)
+				continue
+			}
 			return nil, fmt.Errorf(
 				"councilhost: %s is serving another client — one client at a time (design.md §7.28)",
 				displayName(name))
