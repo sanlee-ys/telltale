@@ -778,7 +778,8 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   it is the next slice. Until it lands there is no key to detach with and no
   help-panel hint for one, because the TUI room has no host to leave.
 
-- **No vendor has ever been dispatched to THROUGH A HOST (2026-09-01).** Every
+- **The first brief through a hosted room is PAID (2026-09-02). Two defects and
+  one demo gap came out of it, recorded below.** Until that drive, every
   seat spawn in `internal/councilhost`'s suite is stubbed, by design — the spawn
   guard exists to stop a test spending a real turn, so neither CI nor a session
   can close this. The first live turn through a host is an operator-driven
@@ -802,6 +803,26 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   §9.36 refusal) without a vendor existing. What is still owed is one brief
   through a hosted room — a real vendor answering, streaming into a detached
   host, and still being there on the rejoin.
+
+  **PAID 2026-09-02 (~22:05 ET), by the owner, on the installed binary:**
+  `telltale council --host --read`, one brief ("say your seat name, one line"),
+  `/detach`, the terminal window closed, a new terminal, `telltale council` —
+  which printed the §7.29 notice verbatim, *rejoined the host that was already
+  running — pid 9084 … nothing was rebuilt, and no session was resumed* — with
+  turn 1's answers from claude, agy and grok still on screen. That is the
+  detach beat, proven once, in the plain client. Two defects the suite could
+  not reach, both routed to their own sessions rather than fixed here:
+  the **host never marks the claude seat `done`** — it stayed `streaming` with
+  its complete answer, across the detach and the rejoin, while the
+  single-process room shows the same seat `✓ done` (the persistent seat's
+  terminal event is not folded by the host: a hypothesis, not a diagnosis); and
+  the **codex seat exits 1 with no output in both rooms and both postures** —
+  the installed codex is 0.151.0 and §9.2 measured the seat at 0.149.1, so
+  version drift is the first thing to test. And the demo gap the owner named on
+  sight: **the hosted room has no columns.** It draws through §7.28's plain
+  client, so today the operator gets the panes or the detach, never both. The
+  TUI as the host's client is the next slice §7.28 already names, and it is the
+  single build that turns this proof into the demo.
 
 Cross-platform and cross-machine status has its own file: [PARITY.md](PARITY.md).
 
