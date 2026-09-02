@@ -73,6 +73,22 @@ type Options struct {
 	// nothing and changes no pixel; it just no longer throws the numbers away.
 	TracePath string
 
+	// RecordPath names the file the room's event stream is written to as it
+	// happens (recording.go, design.md §9.56): every runner.Event the room
+	// applies, every dispatch, every gate decision, each with a monotonic
+	// timestamp. Empty records nothing, which is every room that did not ask.
+	//
+	// THIS FILE CARRIES THE CONVERSATION, and that is why it is a path the
+	// operator names and never a location under ~/.telltale: see recording.go
+	// for the boundary it is written under and how it is contained.
+	RecordPath string
+	// ReplayPath names a RecordPath file to play back instead of opening a
+	// live room (replay.go). Nothing is spawned, nothing is dispatched, and
+	// every frame says REPLAY.
+	ReplayPath string
+	// ReplaySpeed multiplies the recording's own timing on playback. One is
+	// the original pace; zero is treated as one.
+	ReplaySpeed float64
 	// Live names the seat whose pane draws a real terminal screen instead of a
 	// parsed transcript (design.md §9.53). Empty is the ordinary room.
 	//
@@ -341,6 +357,16 @@ type Model struct {
 	flowChain *FlowChain
 	// flowDraft is the draft string that produced flowChain (reuse after write gate).
 	flowDraft string
+	// rec is the --record file, or nil (recording.go). Every method on it is
+	// nil-safe, so the hooks that feed it cost the ordinary room one branch.
+	// Written only from the update loop, which is the one goroutine that sees
+	// the events in the order the room applied them.
+	rec *recorder
+	// replay is the recording being played back, or nil for a live room
+	// (replay.go). Its presence is what turns the spawn paths off: Init
+	// starts the feed instead of the rebuild and the live seat, enter is
+	// refused, and saveRoom writes nothing.
+	replay *replayRun
 	// trace is the room's turn-clock sink: a bounded ring of recent records, plus
 	// a file once /trace or --trace opens one. Never nil while the room runs.
 	//
@@ -502,10 +528,32 @@ func New(opts Options) *Model {
 }
 
 func newWithBrief(opts Options, b Brief, hs GateHook, re Reattachment) *Model {
+	m := newModel(opts, stateWith(opts, hs.Wired()))
+	m.brief, m.hooks = b, hs
+	m.st.Briefed = b.Loaded()
+	m.reattach(re)
+	// Pickup-doc drift is a room-open fact, same class as a reattach notice:
+	// said once when the room starts, then displaced by whatever the user does
+	// next. Joined rather than replaced, so a reattach and a stale STATE.md
+	// both land — either alone would hide the other (§4a.1 applied to notices).
+	m.st.Notice = joinNotice(m.st.Notice, stateMDStaleNotice(m.st.Workspace))
+	return m
+}
+
+// newModel is the constructor's other half: every map, channel and context a
+// Model needs before it can take a message, over a State the caller built.
+//
+// Split out of newWithBrief for the replay (replay.go), whose State comes from
+// a file rather than from detection, and which must not run the room-open
+// reads the live constructor makes — a STATE.md measurement is a git call in
+// whatever directory the replay was started from, about a repository the
+// recording never mentions. One literal for both callers, so a field added
+// here is initialised for a replayed room the same day it is for a live one.
+func newModel(opts Options, st State) *Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &Model{
 		opts:       opts,
-		st:         stateWith(opts, hs.Wired()),
+		st:         st,
 		styles:     NewStyles(true), // assume dark until the terminal answers
 		glyphs:     GlyphsFor(opts.ASCII),
 		events:     make(chan runner.Event, eventBuffer),
@@ -523,21 +571,12 @@ func newWithBrief(opts Options, b Brief, hs GateHook, re Reattachment) *Model {
 		givenUp:    map[model.VendorID]bool{},
 		roomCtx:    ctx,
 		roomCancel: cancel,
-		brief:      b,
-		hooks:      hs,
 		// Never nil, so /trace has something to answer with in a model a test
 		// built directly. Run replaces it with the sink it installed into the
 		// runner, because there must be exactly one ring and the runner has to be
 		// writing into the same one /trace reads.
 		trace: newTraceSink(),
 	}
-	m.st.Briefed = b.Loaded()
-	m.reattach(re)
-	// Pickup-doc drift is a room-open fact, same class as a reattach notice:
-	// said once when the room starts, then displaced by whatever the user does
-	// next. Joined rather than replaced, so a reattach and a stale STATE.md
-	// both land — either alone would hide the other (§4a.1 applied to notices).
-	m.st.Notice = joinNotice(m.st.Notice, stateMDStaleNotice(m.st.Workspace))
 	return m
 }
 
@@ -824,6 +863,18 @@ func isDir(path string) bool {
 type spinMsg time.Time
 
 func (m *Model) Init() tea.Cmd {
+	if m.replay != nil {
+		// A replay's only sources are the tick and the file (replay.go). No
+		// relay read — a live reading on a replayed frame would be two rooms'
+		// facts on one screen — no rebuild and no live seat, which is what
+		// keeps the spawn guard's "no test calls Init" argument true from the
+		// other side: this Init spawns nothing even when called.
+		return tea.Batch(
+			func() tea.Msg { return tea.RequestBackgroundColor() },
+			spin(),
+			m.replayNext(),
+		)
+	}
 	return tea.Batch(
 		// RequestBackgroundColor is a Msg in v2, not a Cmd: it is a request the
 		// runtime turns into an OSC query, so it has to be lifted into a Cmd
@@ -920,6 +971,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The one parked reader has delivered; the pump is free to be re-armed
 		// by whatever below decides the room still needs it (waitEvents).
 		m.eventsArmed = false
+		// The --record file sees exactly the batch applyEvents is about to see
+		// (recording.go): same events, same order, before any of them has
+		// changed the room. A nil recorder is a no-op.
+		m.rec.events(msg.events)
 		m.applyEvents(msg.events)
 		// A racer that landed in this batch may have queued a check run
 		// (arenacheck.go). Drained before the branch below, because that branch
@@ -945,8 +1000,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the reading is for. Per DISPATCH rather than per idle room, so a
 			// crew whose seats overlap still refreshes the figure as each
 			// brief lands.
+			//
+			// Never in a replay: this machine's relay says nothing about the
+			// accounts the recording spent (replay.go).
 			m.dispatchEnded = false
-			cmds = append(cmds, readQuotaCmd())
+			if m.replay == nil {
+				cmds = append(cmds, readQuotaCmd())
+			}
 		}
 		if m.anyInFlight() || m.rebuildInFlight() {
 			// Something will write next, so keep reading. anyInFlight is the
@@ -989,6 +1049,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyArenaCheck(msg)
 		return m, nil
 
+	case replayMsg:
+		// One record of the recording landing, on its own time (replay.go).
+		// The handler returns the wait for the next one, or nil at the end.
+		return m, m.applyReplay(msg)
+
 	case quotaMsg:
 		// One read of the quota relay landing. No follow-up command: the next
 		// read is launched when a turn ends, because the file only changes when
@@ -1000,7 +1065,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinMsg:
 		// Now is stamped here, on the tick, so Render never reads a clock and
 		// the elapsed counters advance on the same schedule as the spinner.
+		//
+		// A replay's Now is the RECORDING's clock, mapped from this tick
+		// (replay.go): the elapsed counters then count the seconds the vendor
+		// actually took, at the pace --replay-speed asked for, and a record
+		// that lands stamps the same clock the ticks between records advance.
 		m.st.Now = time.Time(msg)
+		if m.replay != nil {
+			m.st.Now = m.replay.clock(time.Time(msg))
+		}
 		// The spinner only advances while a column is genuinely working — or
 		// while a race's worktrees are being cut, which is the same claim about
 		// a different worker: git is running off the loop and the moving cell is
@@ -1047,6 +1120,14 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.arenaPrep != nil && msg.String() == "ctrl+c" {
 		m.stopArenaSetup()
 		return m, nil
+	}
+	// A replay answers the keys that would act on a live room before any
+	// gate or mode does (replay.go): enter, the card's y/n/a, the per-seat
+	// verbs. Reading is untouched — scroll, focus, the pages, the help.
+	if m.replay != nil {
+		if handled, cmd := m.replayKey(msg); handled {
+			return m, cmd
+		}
 	}
 	if m.st.Gating() {
 		return m.gateKey(msg)
@@ -1910,9 +1991,13 @@ func (m *Model) toggleFlowStop() {
 func (m *Model) gateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y":
+		// Recorded before it is decided, so the --record file holds the card
+		// as the operator saw it (recording.go). Same on the two keys below.
+		m.recordGate(true)
 		m.decideGate(true)
 		return m, nil
 	case "n":
+		m.recordGate(false)
 		m.decideGate(false)
 		return m, nil
 	case "a":
@@ -1924,6 +2009,10 @@ func (m *Model) gateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// It approves the card in front of you as well as the ones after it.
 		// An `a` that turned asking off and left the current request pending
 		// would answer the general question and not the one on screen.
+		for range m.st.Gates {
+			// Each card up, in the order stopAsking answers them.
+			m.recordGate(true)
+		}
 		m.stopAsking()
 		return m, nil
 	case "i", "enter":
@@ -3154,6 +3243,13 @@ type roomProgram interface{ Kill() }
 // observation surfaces — statusline and hud — keep their read-only guarantee
 // unchanged, and nothing here is reachable from either of them (ADR-008).
 func Run(opts Options) error {
+	if opts.ReplayPath != "" {
+		// A replay is not a room with the vendors turned off; it is a reader
+		// of one file, and it takes the reader's path before any of the
+		// live room's own reads — the saved room, the brief, the trace, the
+		// relay — can happen (replay.go).
+		return runReplay(opts)
+	}
 	// --live is normalized and refused HERE, before the alternate screen, for
 	// the reason --brief and --trace are: a seat that cannot be live must be a
 	// line on stderr rather than a card behind a TUI the user has to quit to
@@ -3197,6 +3293,25 @@ func Run(opts Options) error {
 		if _, terr := trace.open(opts.TracePath); terr != nil {
 			return terr
 		}
+	}
+	// --record is opened here for the same reason, and refused here for one
+	// more: a path under ~/.telltale is refused before anything is written,
+	// because that directory is the gauges' numbers-and-keys store and this
+	// file carries the conversation (recording.go).
+	var rec *recorder
+	if opts.RecordPath != "" {
+		rec, err = openRecorder(opts.RecordPath)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			// The first write error surfaces here, after the alternate screen
+			// is gone: a recording that is silently short is a capture the
+			// owner would review and commit as whole.
+			if cerr := rec.close(); cerr != nil {
+				fmt.Fprintln(os.Stderr, "telltale council: the recording is incomplete:", cerr)
+			}
+		}()
 	}
 
 	// The room is the persistent object, so reattaching is the DEFAULT: a
@@ -3271,6 +3386,12 @@ func Run(opts Options) error {
 	// sink is discarded here rather than never made, so a Model built by a test
 	// still has one and /trace never dereferences nil.
 	mdl.trace = trace
+	// The recording opens with the room as it stands before the first key:
+	// which seats, which posture, which workspace — what a replay needs to
+	// draw the first frame (recording.go). Nil-safe when --record was not
+	// typed.
+	mdl.rec = rec
+	rec.room(mdl.st)
 	p := tea.NewProgram(mdl)
 	// Installed before the program runs, and it is the ONLY thing standing
 	// between an abnormal exit and five orphaned agents on macOS and Linux. The

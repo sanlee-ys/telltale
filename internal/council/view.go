@@ -259,7 +259,14 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	// way. The two headers now share a shape as well as a palette: product name,
 	// separator, subject, then the counts right-anchored.
 	left := sty.Strong.Render("council")
-	if st.Write {
+	if st.Replay {
+		// A replay is neither posture. Nothing here can write and nothing
+		// here can be asked, because nothing here is running — so the cell
+		// that names what the room may do names the one thing it is doing,
+		// on every frame, in the slot a reader already checks for WRITE
+		// (replay.go). Severity, not critical: no tree is at risk.
+		left += " " + sty.SevWarn.Render(g.Warn+" REPLAY")
+	} else if st.Write {
 		// Persistent, not a one-off notice. A notice scrolls away and a badge
 		// can be missed while reading a column; the state it describes lasts
 		// the whole session, so its marker does too.
@@ -2915,9 +2922,22 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 		return ""
 	}
 	if w <= stripWidth {
+		if st.Replay {
+			// At strip width the row holds one word, and in a replay that
+			// word is REPLAY: the recorded posture is a claim about a room
+			// that is over, and the claim a reader needs on THIS column is
+			// that it is not live (replay.go).
+			return sty.SevWarn.Render("REPLAY")
+		}
 		return stripBadges(c, w, sty)
 	}
 	var plain, styled []string
+	if st.Replay {
+		// First on the row, ahead of the recorded posture, so a column read
+		// on its own says what it is before it says what its seat could do.
+		plain = append(plain, "REPLAY")
+		styled = append(styled, sty.SevWarn.Render("REPLAY"))
+	}
 	if b := c.Sandbox.Badge(); b != "" {
 		plain = append(plain, b)
 		styled = append(styled, sty.ForSandbox(c.Sandbox.Level).Render(b))
@@ -3804,6 +3824,21 @@ func modeHints(st State, g Glyphs) []hint {
 			{key: "any", label: "cancel"},
 		}
 	}
+	if st.Replay && st.Mode == ModeComposing {
+		// No route and no enter: the composer is here because the mode is,
+		// and what enter does in a replay is say so (replayKey). The cell
+		// promises exactly that, on §7.8's rule, and the alarm weight is the
+		// header's REPLAY mark repeated where the keys are read. Scroll and
+		// tab stay, because reading is what a replay is for.
+		hs := []hint{
+			{key: g.Warn + " REPLAY", label: "nothing here is live", alarm: true},
+			{key: g.Up + g.Down, label: "scroll"},
+		}
+		if several {
+			hs = append(hs, hint{key: "tab", label: "focus"})
+		}
+		return hs
+	}
 	if st.Mode == ModeComposing {
 		// The routing is stated before the keybindings because it is the one
 		// thing on this line that changes what enter DOES. An @typo has to read
@@ -4048,6 +4083,10 @@ func modeHints(st State, g Glyphs) []hint {
 // meanings owes the reader the one that is live. The vendor id rather than the
 // label, because that is the word the reader typed to address it.
 func cancelLabel(st State) string {
+	if st.Replay {
+		// Nothing is running to cancel; ctrl+c leaves the replay (replayKey).
+		return "quit"
+	}
 	if st.SeatsInFlight() < 2 {
 		return "cancel"
 	}

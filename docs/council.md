@@ -695,13 +695,48 @@ throwaway racer has been spawned, streamed and killed live — twice now — but
 watched finish on its own; that half still stands on its offline tests, and
 [design.md §9.37](design.md) says so beside its payment blocks.
 
+## Record and replay
+
+The room cannot be seen without five paid CLI logins, and a frame worth showing is a frame
+somebody spent quota on. `telltale council --record <file>` keeps a real run: every event the
+room applied (each seat's output, tool lines, session ids, costs, gate cards), each dispatch,
+and each answer you gave a card, with the clock each one landed on. `telltale council --replay
+<file>` opens a room fed from that file instead of from vendors, at the original pace
+(`--replay-speed N` multiplies it), and draws it with the same renderer: the columns stream,
+the card goes up and comes down when you answered it, the elapsed figures count the seconds
+the vendor actually took.
+
+**A replay is labelled on every frame.** `⚠ REPLAY` sits in the header where `WRITE` or `READ`
+sits, `REPLAY` leads every column's badge row ahead of the recorded posture, and the compose
+footer reads `⚠ REPLAY nothing here is live` where the routing cell and `enter dispatch` would
+be. Enter says `this room is a replay; nothing here is live`; so do the card's `y`, `n` and
+`a`, and the per-seat verbs. `ctrl+c` and `q` leave. Reading is untouched: scroll, focus, the
+digits, the by-turn page, the ledger, the help panel. A replay starts no vendor, dispatches
+nothing, reads no quota relay, and neither reads nor writes the saved room; its seats, their
+postures and its workspace all come from the file, so it draws the room that was recorded on
+a machine with nothing installed.
+
+**The recording is yours, at a path you name.** Everything else council writes is numbers and
+keys; this file carries the conversation verbatim, unredacted (a redacting recorder would be
+a second truth; the replay runs the same redactor over the same bytes, so the screen matches),
+and so it is never anything under `~/.telltale`: a `--record` path there is refused, an
+existing file is refused rather than overwritten or extended, and no key inside the room
+starts one. Before a capture goes anywhere, `telltale council replay-check <file>` prints what
+a review needs to see: the workspace, the seats, every session id, every tool line and gate
+card (each may name a path), how much prose is in it, and a reminder that it did not read the
+prose. That is the README's frame review, given a tool. What a recording does not hold: your
+cancels and give-ups (a column you cancelled live replays as the vendor's own exit), focus
+and scrolling, and the `--brief` file's text.
+
 ## Flags
 
 `telltale council` flags: `--fresh` (start over instead of reattaching), `--cd <dir>`
 (launch-time override of the room's workspace — the daily path never needs it),
 `--vendor <list>`, `--brief <file>`, `--read`, `--auto`, `--trace <file>`, `--resume`
 (accepted, and redundant — reattaching is the default), `--write` (accepted, and does
-nothing — writing is the default), `--ascii`, `--no-title`.
+nothing — writing is the default), `--headroom-warn N` (the routing cell's threshold, default
+90), `--record <file>` and `--replay <file>` with `--replay-speed N` (above), `--ascii`,
+`--no-title`. `telltale council replay-check <file>` reviews a recording without opening it.
 
 `--vendor <list>` decides who is in the room: `all` keeps every detected seat on screen
 including the ones that cannot be driven, and a comma list (`--vendor claude,codex`) seats

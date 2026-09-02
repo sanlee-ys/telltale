@@ -1427,6 +1427,17 @@ type State struct {
 	// where a straight substitution does not work.
 	ASCII bool
 
+	// Replay reports that this room is a RECORDING being played back
+	// (replay.go, design.md §9.56): the columns are fed from a --record file,
+	// no vendor is running, and nothing typed here reaches one.
+	//
+	// On State because every frame has to say so — the header, each column's
+	// badge row and the footer all read it — and Render is pure over State.
+	// A replayed frame that could be mistaken for a live one would be the
+	// README's "invented recording" in a new form: a real run, shown as
+	// though it were happening now.
+	Replay bool
+
 	// Live is the seat whose pane draws a real terminal screen (§9.53).
 	//
 	// Its zero value is a room with no live seat, which is every room that did
