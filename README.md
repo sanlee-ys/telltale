@@ -1,7 +1,10 @@
 # telltale
 
-A dispatch room for five vendor CLIs. One brief, answered side by side
-by Claude Code, Codex, Antigravity, Cursor, and Grok.
+A crew of five vendor CLIs in one terminal: Claude Code, Codex,
+Antigravity, Cursor, and Grok, each in its own column. Address `@all`
+and one brief is answered side by side; address one seat and it takes
+that brief while the others keep working. Each writing seat works in its
+own git worktree, and the room is the integrator (`/adopt`).
 A statusline and a HUD sit under the room.
 Every number comes from measured tool output.
 
@@ -39,9 +42,14 @@ Every number comes from measured tool output.
      repository today. -->
 
 **v0.2.0** (2026-08-14). Windows is verified on every commit.
-Apple Silicon macOS runs the suite and the binary smokes on every commit too,
-on a runner with no vendor CLI installed. Intel macOS is smoke-checked by hand.
-`linux_amd64` is built, not run.
+The crew work after the tag (per-seat turns, worktrees, `@auto`,
+`--record`/`--replay`, the Unix host, three long-lived seats) is built and
+tested offline; the live runs it owes are listed in [STATE.md](STATE.md).
+A `darwin` CI job on Apple Silicon is written and runs the suite and the
+binary smokes on a runner with no vendor CLI once it runs; it has not run
+yet. Intel macOS is smoke-checked by hand. `linux_amd64` is built, and a
+source build was driven by hand on Linux with no vendor (`doctor`,
+`council ls`, `replay-check`); the archive is not run.
 No binary is signed. Check `checksums.txt` on the release.
 Detail: [SECURITY.md](SECURITY.md). The v1 cut gates are in [docs/design.md §1](docs/design.md#s1).
 
@@ -203,7 +211,8 @@ with no colour and no alternate screen, for exactly that reason.
 
 ## What it is
 
-- **`telltale council`:** one brief, five vendor columns. This is the product.
+- **`telltale council`:** five vendor seats working as a crew, one column
+  each. This is the product.
 - **`telltale statusline`:** model, context, session cost, and quota pacing
   from the JSON the vendor sends on stdin. No network. No credential read.
 - **`telltale hud`:** a watch TUI over Claude Code, Codex, Gemini CLI,
@@ -230,7 +239,7 @@ The Cursor store holds tokens in the same SQLite file as session state.
 The adapter does not read them. [SECURITY.md](SECURITY.md) states the
 boundary.
 
-## The dispatch room
+## The crew room
 
 ```
 telltale.exe council
@@ -238,12 +247,48 @@ telltale.exe council
 
 An unaddressed brief goes to Claude. `@codex`, `@agy`, `@cursor`,
 `@grok`, and `@all` route a turn. `-@claude` addresses every seat but
-that one. `--read` opens a room that only talks. `--cd` sets the
-workspace. A plain `telltale council` can write, and the header says so.
+that one. A seat takes its brief while the other seats are still
+answering theirs; a busy seat is refused by name, and `ctrl+c` cancels
+the seat you are looking at. `--read` opens a room that only talks.
+`--cd` sets the workspace. A plain `telltale council` can write, and the
+header says so.
+
+In a writing room every seat works in its own git worktree, cut once
+beside the workspace on `seat/<vendor>`. The room is the integrator:
+`/adopt codex` merges that branch behind a y/n card, `/hand claude codex`
+puts one seat's patch into another seat's brief, and `/flow … & @seat …`
+fans a stage across seats and waits on all of them. `--shared-tree` is
+the older room.
+
+Every seat is a live process. Claude asks before every tool call,
+measured, and wears `gated`. Codex and Grok can carry an approval request
+into the same card on their live shapes, which were read from vendor
+documentation and not yet driven: their badges say `unmeasured` until a
+run on the reference box says otherwise. A live shape whose handshake is
+refused falls back to the batch invocation that was measured, and the
+column says so.
+
+The strip under the header is the inbox: `⚠ NEEDS YOU` names the seats
+stopped on a card and the seats whose turn ended while you were reading
+another column; `.` goes to the next one. `@auto` routes a brief to the
+seated idle seat with the most measured headroom in its shortest quota
+window, from the same relay the badges read, and refuses when no seat has
+a reading.
+
+`--record <file>` keeps a real run, every seat's output and every card
+with its timing; `--replay <file>` plays it back with the same renderer
+on a machine with nothing installed, labelled `REPLAY` on every frame;
+`telltale council replay-check <file>` lists what the file carries
+before it is shared. No recording of a real five-seat room exists yet.
+
+`--host` opens a read room in a process that outlives the terminal, on
+Windows, macOS, and Linux; `/detach` walks away, `telltale council`
+rejoins, `telltale council kill` ends it. Measured on Windows and Linux;
+built for the Mac.
 
 [docs/council.md](docs/council.md) is the room guide: badges, routing,
 keys, and flags. [docs/design.md §9](docs/design.md#s9) is the measured
-record per vendor.
+record per vendor, and §9.54 through §9.57 and §7.30 are the crew.
 
 ## `telltale snapshot`
 
