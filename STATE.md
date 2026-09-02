@@ -47,7 +47,98 @@ under it. Cutting v1 as gauges only was the standing alternative and it was
 rejected. `README.md` and [docs/design.md §1](docs/design.md) hold the binding
 copies, the gates and the argument; this file does not restate any of them.
 
+**Amended 2026-09-02: the room is a crew, built offline, and the live runs it
+owes are one list.** Between the tag and the next minor the room moved from a
+committee to a crew — per-seat turns and an inbox (design.md §9.54), a worktree
+per writing seat with the room as integrator (§9.55), routing by measured
+headroom and a record/replay pair (§9.56), three long-lived seats with a
+measured fallback behind each (§9.57), a host that outlives the terminal on
+macOS and Linux (§7.30), and a Homebrew tap with an Apple Silicon CI job. Six
+lanes built it apart and it was integrated on one branch; every behaviour is
+pinned over stubbed processes and no lane and no integration ran a vendor. So
+the next minor's precondition is not more code: it is the checklist at the head
+of *In flight*, run on the reference box and the Mac, each line retiring one
+`unmeasured` badge, one "owed" sentence, or one "has not run" claim. The outward
+chain above is unchanged by this; the demo path's eight beats still stand, and
+a demo of the crew is a demo of measured claims only after that list is paid.
+
 ## In flight
+
+- **The crew's live measurements, ONE checklist (2026-09-02).** Consolidated
+  from the six lane memos so nobody reassembles it from five design sections.
+  Each line is one action on the reference box (the Mac where it says so) and
+  the badge, sentence or claim it retires. Record the result in the design.md
+  section the line names, then delete the line here; the section's own
+  checklist is the durable copy.
+
+  1. `@codex <brief>`, then `@grok <brief>` while codex streams; `ctrl+c` on
+     codex's column; then `@codex` again — retires §9.54's "a persistent seat
+     taking its next brief cleanly after a per-seat cancel".
+  2. `@all` in a five-seat room at 170x54: the header `turn N → … · K in
+     flight` and the footer's `cancel <seat>` / `cancel all` at real widths —
+     retires §9.54's width note.
+  3. `/flow @codex … -> @claude …` while `@grok` is mid-answer — retires
+     §9.54's "a hop landing beside an unrelated seat, artifact intact".
+  4. A write brief to `@claude` and `@codex` at once in a git workspace: two
+     `wt: seat/<v>` badges, the persistent seat's "now works in its own
+     worktree" note with its thread resumed there, then `/adopt codex` and
+     `/adopt claude` — retires §9.55's tree, respawn and adopt items.
+  5. `/flow @codex write:a.md … & @grok write:b.md … -> @claude …` — retires
+     §9.55's fanned stage and join.
+  6. A write brief in a directory that is not a git repo: `⚠ shared tree ·
+     not a git repo` at real widths — retires §9.55's badge item.
+  7. `telltale council --record demo.jsonl` over a real five-seat room, then
+     `telltale council replay-check demo.jsonl` and `--replay demo.jsonl` —
+     retires §9.56's "no real recording exists" and the README's sentence.
+  8. The routing cell against the live quota relay, and `@auto` with Claude's
+     5h window beside agy's weekly bucket — retires §9.56's routing items.
+  9. Codex read liveness: `telltale council --read`, brief "list this
+     directory and read README.md", three trials, every trial must inspect —
+     retires the Windows detail's "two of three read turns" (§9.57 item 1).
+  10. Codex approvals: a write room, a brief that writes `%TEMP%\outside.txt`
+      and runs `curl example.com`, `y` and `n` on separate trials, the disk
+      checked — retires `app-server · asks · unmeasured` (§9.57 item 2).
+  11. Codex interrupt and stop: `ctrl+c` mid-turn, then `q`; `turn/completed`'s
+      status, and seconds from stdin close to exit over five runs against the
+      4 s grace — retires §9.57 item 3 and the integration's stop timing.
+  12. Codex fallback: the seat against a build without `app-server`, or logged
+      out; the column's "fell back to `codex exec --json`" note and the
+      postures page's `exec · unasked · fallback` — retires §9.57 item 5 and
+      `fallback.go`'s offline-only standing.
+  13. Item 9 on the Mac, into PARITY.md — retires the off-Windows
+      `ro:requested` (§9.57 item 4).
+  14. Grok handshake and a turn: `grok agent stdio` fed the seat's `initialize`
+      and `session/new`; record `agentCapabilities`, `modes`, a fenced brief
+      streaming back, and a brief beginning `/` — retires half of `acp · asks
+      · unmeasured` (§9.57 item 6).
+  15. Grok permissions: a write brief "run `mkdir zzz` and create probe.txt";
+      whether `session/request_permission` arrives, its option ids and kinds,
+      what each does — retires the other half (§9.57 item 7).
+  16. Grok cost and `session/load`: every frame of item 14 read for
+      `total_cost_usd`; a saved id in a new process if `loadSession` is
+      advertised — retires the absent-cost note and the resume claim (§9.57
+      items 8 and 9).
+  17. Antigravity stream: two `{"event":"user",…}` lines down one stdin; same
+      pid, same `conversation_id`, the second turn recalling the first; the
+      exit timed after stdin close against 3 s — retires `stream-json ·
+      unasked · unmeasured` (§9.57 item 10).
+  18. Antigravity `--conversation <id>` and `--print-timeout 30m` under stream
+      input — retires §9.57 items 11 and 12.
+  19. Antigravity without `--input-format`: the exit code and stderr line —
+      confirms the retreat's trigger (§9.57 item 13).
+  20. On the Mac: `telltale council --host --read`, `/detach`, `telltale
+      council ls`, rejoin, `/quit`; then a host left up, `telltale council
+      kill`; then `kill -9` on a host and `ls` — retires §7.30's "macOS is
+      NOT measured" and PARITY's "expected to match".
+  21. Open the integration PR and read the `darwin` job's first run — retires
+      the README's "has not run yet" and SECURITY's "once it runs".
+  22. Tag a release and publish the draft; on the MacBook `brew tap
+      sanlee-ys/telltale https://github.com/sanlee-ys/telltale`, `brew install
+      telltale`, `brew test telltale`; record it in PARITY — retires "not yet
+      exercised by a `brew install`".
+  23. Unpack the `darwin_arm64` archive by hand and run `telltale doctor` —
+      retires PARITY's "not walked at all".
+
 
 - **The 3-minute demo path is DEFINED (owner's ruling, 2026-08-15).** It is link
   1 of the outward chain above, and both later links consume it. Eight beats, in

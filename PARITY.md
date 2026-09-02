@@ -326,6 +326,21 @@ That is the reason `auth` and `network` stay `not checked`.
 Treat a wrong-looking doctor row on the Mac as unverified rather than broken, and
 record what you find here.
 
+**Linux ran it on 2026-09-02** — a source build of the crew integration, on the
+Linux box the integration was done on, with `HOME` pointed at an empty
+directory. One vendor was installed there: `claude` at `/opt/node22/bin/claude`
+on PATH, `2.1.258 (Claude Code)`, `drivable ok` as a native executable. codex,
+agy, cursor-agent and grok were absent and reported `binary FAILED`, naming the
+known install locations under the sandboxed home they also looked in. The tally
+was `3 checks passed, 4 failed, 18 not checked, over 5 seats`, exit 0; `auth`
+and `network` read `not checked` on every seat; nothing was written under that
+home. The same build's `telltale council ls` printed `host none is running` and
+`no room is saved yet` at exit 0 and wrote nothing, and `telltale council
+replay-check` over the checked-in fixture listed its three seats, two session
+ids, three tool lines with the gate's verdict and the counts, exit 0. That is
+what the README means by the `linux_amd64` source build having been driven by
+hand; the `linux_amd64` archive a release attaches is still not run.
+
 ## The macOS arrival of a released archive
 
 **Measured 2026-08-17.** Every macOS run recorded above used a binary built on
