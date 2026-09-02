@@ -217,9 +217,12 @@ func runHostedClient(c *councilhost.Client, in io.Reader, out io.Writer) error {
 		fmt.Fprintf(out, "\n%s\n", councilhost.RenderHostExit())
 		return nil
 	default:
-		// Ended, or input closed. Both killed the seats, and Close already
-		// waited for the host to finish doing it.
-		_ = c.Close()
+		// Ended, or input closed. RunClient has ALREADY closed on both of those
+		// paths, and it has to — Close is what sends the shutdown frame and then
+		// waits for the host to finish killing the seats, and that has to happen
+		// before RunClient returns or the outcome would be reported before it
+		// was true. A second Close here would write a frame down a closed pipe
+		// and wait a second time on a process already reaped, so there is none.
 		return err
 	}
 }
