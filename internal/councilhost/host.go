@@ -327,6 +327,11 @@ func New(cfg Config) (*Host, error) {
 				s.Drivable, s.Phase = false, PhaseUndrivable
 				s.Note = "this seat speaks a request/response protocol the host does not drive yet"
 			}
+			// Read off the adapter's interface, which is the same test
+			// dispatchSeat makes when it chooses between a session and a
+			// child. The fold needs the answer too, because it decides which
+			// event ends this seat's turn (Seat.Persistent).
+			_, s.Persistent = reg[e.Vendor].(vendors.Persistent)
 		}
 		h.room.Seats = append(h.room.Seats, s)
 	}
