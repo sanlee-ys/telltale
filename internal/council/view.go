@@ -259,7 +259,14 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	// way. The two headers now share a shape as well as a palette: product name,
 	// separator, subject, then the counts right-anchored.
 	left := sty.Strong.Render("council")
-	if st.Write {
+	if st.Replay {
+		// A replay is neither posture. Nothing here can write and nothing
+		// here can be asked, because nothing here is running — so the cell
+		// that names what the room may do names the one thing it is doing,
+		// on every frame, in the slot a reader already checks for WRITE
+		// (replay.go). Severity, not critical: no tree is at risk.
+		left += " " + sty.SevWarn.Render(g.Warn+" REPLAY")
+	} else if st.Write {
 		// Persistent, not a one-off notice. A notice scrolls away and a badge
 		// can be missed while reading a column; the state it describes lasts
 		// the whole session, so its marker does too.
@@ -282,7 +289,13 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	// typed is otherwise indistinguishable from the room acting on its own.
 	hop := ""
 	if st.FlowSteps > 0 {
-		hop = "  " + g.Sep + "  hop " + strconv.Itoa(st.FlowHop) + "/" + strconv.Itoa(st.FlowSteps) + " @" + string(st.FlowVendor)
+		// A stage that fans to several seats names them all (State.FlowSeats,
+		// §9.55); a one-seat hop names its seat as it always has.
+		who := "@" + string(st.FlowVendor)
+		if st.FlowSeats != "" {
+			who = st.FlowSeats
+		}
+		hop = "  " + g.Sep + "  hop " + strconv.Itoa(st.FlowHop) + "/" + strconv.Itoa(st.FlowSteps) + " " + who
 		// `s` armed: the chain ends after this hop, and the promise lives on the
 		// marker rather than only in the notice that announced it — a notice
 		// scrolls away while the armed state persists, the WRITE badge's own
@@ -321,10 +334,33 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	// seat (§9.16) and the cell immediately to the right already says which.
 	// The route is attached to the turn number and BEFORE the hop cell, so the
 	// arrow can never read as pointing at the hop.
+	//
+	// With several seats answering different briefs (§9.54) the cell still
+	// names ONE route — the most recent dispatch's, which is the turn the
+	// number beside it counts — and says how many seats are in flight when
+	// some of them are NOT on that turn: `turn 5 → codex · 3 in flight`. The
+	// count is measured over the columns (SeatsInFlight), never inferred from
+	// the route. It is printed only when it adds a fact the cell does not
+	// already hold: an @all turn with its three seats streaming reads `turn 3
+	// → everyone`, and `· 3 in flight` beside it would be the route restated
+	// as a number; a `turn 5 → codex` while claude is still on turn 4 is the
+	// case the count exists for, because the route names one seat and two are
+	// working. The test is the columns' own turn numbers (inFlightBeyond) —
+	// State knows which dispatch each column is answering, so this too is a
+	// measurement. It sheds with the route, on the route's own rule below: a
+	// fact with a home elsewhere yields, and every in-flight seat's column
+	// says so on its own header.
+	inFlight := ""
+	if n := st.SeatsInFlight(); n > 1 && st.inFlightBeyond(st.Turn) {
+		inFlight = " · " + strconv.Itoa(n) + " in flight"
+	}
 	rightZone := func(withRoute bool) string {
 		r := round
 		if withRoute && st.TurnRoute != nil && st.FlowSteps == 0 {
 			r += " → " + st.TurnRoute.label()
+		}
+		if withRoute {
+			r += inFlight
 		}
 		return sty.Muted.Render(r + hop + "  " + g.Sep + "  " + seated + "  " + g.Sep + "  " + brief)
 	}
@@ -2892,16 +2928,79 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 		return ""
 	}
 	if w <= stripWidth {
+		if st.Replay {
+			// At strip width the row holds one word, and in a replay that
+			// word is REPLAY: the recorded posture is a claim about a room
+			// that is over, and the claim a reader needs on THIS column is
+			// that it is not live (replay.go).
+			return sty.SevWarn.Render("REPLAY")
+		}
 		return stripBadges(c, w, sty)
 	}
 	var plain, styled []string
+	if st.Replay {
+		// First on the row, ahead of the recorded posture, so a column read
+		// on its own says what it is before it says what its seat could do.
+		plain = append(plain, "REPLAY")
+		styled = append(styled, sty.SevWarn.Render("REPLAY"))
+	}
 	if b := c.Sandbox.Badge(); b != "" {
 		plain = append(plain, b)
 		styled = append(styled, sty.ForSandbox(c.Sandbox.Level).Render(b))
 	}
-	if s := c.Gran.String(); s != "" {
-		plain = append(plain, s)
-		styled = append(styled, sty.Muted.Render(s))
+	// Where the seat's process actually runs (§9.55): its own worktree, or
+	// the shared tree — and, when the room would have cut a worktree and
+	// could not, why. Beside the posture badge because it is the other half
+	// of the same claim: WRITES says the seat may edit, this says WHICH tree
+	// it edits. A fallback the operator did not choose wears the warning hue
+	// AND the warning mark, because a writing seat in the shared tree is the
+	// hazard §9.55 exists to remove; a chosen shared tree and a seat tree are
+	// muted chrome. Nothing is drawn before the first dispatch: no process,
+	// no directory, no claim.
+	//
+	// THE REASON SHEDS BEFORE THE WORD, and the mark is what survives it. At
+	// the reference width a three-seat column is 37 cells, and `WRITES  shared
+	// tree · not a git repo  final only` is fifty: the row would clip, and a
+	// clipped word is not a word (§9.11). So the granularity word leaves
+	// first (stripBadges' own order — it is restated on the header one row
+	// up), then the reason, leaving `⚠ shared tree`: the mark says a reason
+	// exists, the notice said it when the fallback happened, and the `?`
+	// postures page carries it in full. The mark is g.Warn, so --ascii keeps
+	// it as `!`, and it leads the word the way `⚠ unavailable` does.
+	contain := c.Containment.Badge(st.ASCII)
+	containS := ""
+	if contain != "" {
+		style := sty.Muted
+		if c.Containment.Level == ContainShared && c.Containment.Why != "" {
+			style = sty.SevWarn
+			contain = g.Warn + " " + contain
+		}
+		containS = style.Render(contain)
+	}
+	gran := c.Gran.String()
+	row := func(extra ...string) int {
+		n := 0
+		for _, s := range append(append([]string{}, plain...), extra...) {
+			if s != "" {
+				n += lipgloss.Width(s) + 2
+			}
+		}
+		return n
+	}
+	if contain != "" && gran != "" && row(contain, gran) > w {
+		gran = ""
+	}
+	if contain != "" && c.Containment.Why != "" && row(contain, gran) > w {
+		contain = g.Warn + " " + ContainClaim{Level: ContainShared}.Badge(st.ASCII)
+		containS = sty.SevWarn.Render(contain)
+	}
+	if contain != "" {
+		plain = append(plain, contain)
+		styled = append(styled, containS)
+	}
+	if gran != "" {
+		plain = append(plain, gran)
+		styled = append(styled, sty.Muted.Render(gran))
 	}
 
 	left := strings.Join(plain, "  ")
@@ -3781,6 +3880,21 @@ func modeHints(st State, g Glyphs) []hint {
 			{key: "any", label: "cancel"},
 		}
 	}
+	if st.Replay && st.Mode == ModeComposing {
+		// No route and no enter: the composer is here because the mode is,
+		// and what enter does in a replay is say so (replayKey). The cell
+		// promises exactly that, on §7.8's rule, and the alarm weight is the
+		// header's REPLAY mark repeated where the keys are read. Scroll and
+		// tab stay, because reading is what a replay is for.
+		hs := []hint{
+			{key: g.Warn + " REPLAY", label: "nothing here is live", alarm: true},
+			{key: g.Up + g.Down, label: "scroll"},
+		}
+		if several {
+			hs = append(hs, hint{key: "tab", label: "focus"})
+		}
+		return hs
+	}
 	if st.Mode == ModeComposing {
 		// The routing is stated before the keybindings because it is the one
 		// thing on this line that changes what enter DOES. An @typo has to read
@@ -3810,7 +3924,11 @@ func modeHints(st State, g Glyphs) []hint {
 		// The rebuttal tag moves to its own cell so the count can sit against
 		// the route it prices. It still answers the same question — what is
 		// actually about to be sent — one separator further along.
-		hs := []hint{{key: "→ " + routeLabel(st), label: seatBill(st)}}
+		// routeCell is routeLabel plus the quota hint the route earns: a
+		// window near its limit on an addressed seat, or what `@auto` resolved
+		// to on this frame (quota.go). Same cell, because both qualify where
+		// enter sends the brief.
+		hs := []hint{{key: routeCell(st), label: seatBill(st)}}
 		// The quota alarm sits immediately against the route, in front of the
 		// rebuttal tag, because it qualifies the route rather than the content:
 		// the route says where this goes, the count says how many that is, and
@@ -3996,11 +4114,42 @@ func modeHints(st State, g Glyphs) []hint {
 		hs = append(hs, hint{key: "1-" + strconv.Itoa(len(st.VisibleColumns())),
 			label: "seat", shed: true})
 	}
+	// The inbox's key (§9.54), named only while the strip has somebody on it —
+	// a footer must never advertise a key that does nothing (§7.8), and with an
+	// empty strip this one does nothing. Sheddable, after the seat range: the
+	// digits reach the same seats one number at a time.
+	if len(needsYou(st)) > 0 {
+		hs = append(hs, hint{key: ".", label: "needs you", shed: true})
+	}
 	if st.InFlight() {
-		return append(flowStopHint(hs, st), hint{key: "ctrl+c", label: "cancel"}, hint{key: "?", label: "help"})
+		return append(flowStopHint(hs, st), hint{key: "ctrl+c", label: cancelLabel(st)}, hint{key: "?", label: "help"})
 	}
 	return append(hs, hint{key: "i", label: "compose"},
 		hint{key: "?", label: "help"}, hint{key: "q", label: "quit"})
+}
+
+// cancelLabel is what ctrl+c will do, in the footer's words, now that the key
+// addresses the focused seat first (§9.54).
+//
+// `cancel` alone while one seat is in flight, because there is nothing to
+// choose between and every frame this room drew before §9.54 read that way.
+// From two upward the label says which: `cancel codex` when the focused seat is
+// one of them, `cancel all` when it is not — the mode line is the contract that
+// a key means what it says on every frame (§7.8), and a key with three
+// meanings owes the reader the one that is live. The vendor id rather than the
+// label, because that is the word the reader typed to address it.
+func cancelLabel(st State) string {
+	if st.Replay {
+		// Nothing is running to cancel; ctrl+c leaves the replay (replayKey).
+		return "quit"
+	}
+	if st.SeatsInFlight() < 2 {
+		return "cancel"
+	}
+	if st.Focus >= 0 && st.Focus < len(st.Columns) && st.Columns[st.Focus].inFlight() {
+		return "cancel " + string(st.Columns[st.Focus].Vendor)
+	}
+	return "cancel all"
 }
 
 // hopUnit names what `[` and `]` step, in the body that is on screen (§9.49).
@@ -4061,7 +4210,12 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 				// a key that silences the room's only guard in the one place a
 				// scrolled column can hide.
 				{key: "a", label: "stop asking"},
-				{key: "ctrl+c", label: "cancel the turn"},
+				// The same three-way label the view line carries (cancelLabel):
+				// the key reaches viewKey through gateKey's fall-through, so it
+				// means here exactly what it means there, and a line reading
+				// `cancel the turn` over a key that stops one seat would be the
+				// contract breaking in the one mode it exists for (§9.54).
+				{key: "ctrl+c", label: cancelLabel(st)},
 			},
 			lay, sty, g)
 	}
@@ -4105,6 +4259,21 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 		}
 		hs = append(hs,
 			hint{key: phaseMark(PhaseWaiting, st, g), label: "arena: " + st.ArenaSetup + g.Ellipsis, shed: st.Notice != ""},
+			hint{key: "ctrl+c", label: "stop"})
+		return statusLine(left, hs, lay, sty, g)
+	}
+
+	if st.TreeSetup != "" {
+		// A seat's own worktree being cut before a writing brief (seattree.go,
+		// §9.55): the arena branch above, word for word, under the word that
+		// says which setup this is. `worktree:` rather than `arena:` because a
+		// reader waiting on a brief must not be told a race is being prepared.
+		var hs []hint
+		if st.Notice != "" {
+			hs = append(hs, hint{key: g.Warn, label: st.Notice, alarm: true})
+		}
+		hs = append(hs,
+			hint{key: phaseMark(PhaseWaiting, st, g), label: "worktree: " + st.TreeSetup + g.Ellipsis, shed: st.Notice != ""},
 			hint{key: "ctrl+c", label: "stop"})
 		return statusLine(left, hs, lay, sty, g)
 	}
@@ -4851,6 +5020,14 @@ func helpPostures(st State, lay Layout, sty Styles, g Glyphs) []string {
 		body := maxInt(20, lay.Width-2*framePad-helpIndent)
 		for _, l := range wrap(c.Sandbox.Detail, body) {
 			seats = append(seats, sty.Muted.Render(helpHang+l))
+		}
+		// Where the seat runs, in full (§9.55): the badge row sheds the
+		// reason for a fallback at column width, and this page is where the
+		// whole sentence lives.
+		if s := containDetail(c.Containment); s != "" {
+			for _, l := range wrap(s, body) {
+				seats = append(seats, sty.Muted.Render(helpHang+l))
+			}
 		}
 		// The other half of that seat's badge line, and the reason this section
 		// grew: §9.14 took the granularity explanation out of the body of every

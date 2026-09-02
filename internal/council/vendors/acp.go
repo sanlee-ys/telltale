@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 )
@@ -56,6 +57,19 @@ import (
 //     and there is no repeat and no such field anywhere in ACP traffic. So the
 //     dedup rule is not carried over; it was a fact about a surface this seat no
 //     longer uses.
+//
+// SINCE 2026-09-02 THIS FILE IS THE SHARED ACP CLIENT, and the rename from
+// cursoracp.go records that. Two seats drive it: the Cursor seat (cursor.go),
+// against which every measurement above was taken, and the Grok seat
+// (grokagent.go), which speaks the same protocol from a server nobody here has
+// driven. What differs between them is held in acpDialect and nothing else —
+// the mode a read posture asks for, how a permission answer is spelled, and
+// whether `session/load` may be sent without the server advertising it. The
+// state machine, the replay guard, the terminal handshake state and every
+// refusal are one implementation, so a fix on one seat is a fix on the other
+// and a divergence between them has exactly one place to hide. Everything a
+// dialect field says about grok is UNMEASURED and labelled so at its
+// definition; design.md §9.57 lists the runs that would change that.
 
 // acpProtocol is one ACP conversation, for the life of one process.
 //
@@ -68,6 +82,9 @@ type acpProtocol struct {
 	// resumeID is a thread from a saved room, or empty for a new conversation.
 	resumeID string
 	posture  Posture
+	// dialect is the one vendor-shaped thing about this conversation. See
+	// acpDialect for what it may vary and why nothing else is allowed to.
+	dialect acpDialect
 
 	mu     sync.Mutex
 	nextID int
@@ -109,17 +126,31 @@ type acpProtocol struct {
 	// answers. See Inbound.
 	replaying bool
 	// perms maps the key the room decides by to the RAW JSON id the vendor wants
-	// echoed. Raw, and in its own namespace, because the vendor numbers its
-	// requests from 0 independently of ours — "id 0" inbound is a question and
-	// "id 0" outbound is an answer to one — and because JSON-RPC permits an id to
-	// be a string as easily as a number.
-	perms   map[string]json.RawMessage
+	// echoed, and to the two option ids that answer it. Raw, and in its own
+	// namespace, because the vendor numbers its requests from 0 independently of
+	// ours — "id 0" inbound is a question and "id 0" outbound is an answer to
+	// one — and because JSON-RPC permits an id to be a string as easily as a
+	// number.
+	perms   map[string]acpPending
 	permSeq int
+	// loadSession is what the server's initialize response advertised under
+	// agentCapabilities.loadSession, and it is only consulted by a dialect that
+	// asks for it. The ACP schema (agentclientprotocol.com/protocol/schema, read
+	// 2026-09-02) declares the field optional, so a server that sent nothing
+	// leaves this false — and a dialect that gates session/load on it then opens
+	// a fresh conversation rather than sending a method the server never
+	// offered.
+	loadSession bool
 
 	// turnTextChunks and turnActs track turn activity to build a fallback
 	// summary when an ACP stream returns 0 text chunks before ending.
 	turnTextChunks int
 	turnActs       []string
+	// turnOpen is a `session/prompt` having been sent and not yet answered.
+	// It is what Closing reads to decide whether a cancel is owed at teardown;
+	// Interrupt predates it and keeps its own test (a session and no held
+	// brief), because that test was measured and this flag was not.
+	turnOpen bool
 }
 
 var _ runner.Protocol = (*acpProtocol)(nil)
@@ -302,14 +333,99 @@ func (p acpPermission) pick(kind string) string {
 	return ""
 }
 
-// newACPProtocol builds the driver for one process.
+// acpPending is one permission request the vendor is blocked on, held until
+// the room answers it.
+//
+// The two option ids are chosen when the request ARRIVES, not when it is
+// answered, so that Decide and Interrupt have nothing to look up in the request
+// beyond this record. An empty id means the vendor offered no option of that
+// kind, and the answer is then the protocol's own `cancelled` outcome rather
+// than an id invented for it — see acpDecisionFor.
+type acpPending struct {
+	id     json.RawMessage
+	allow  string
+	reject string
+}
+
+// acpDialect is everything about this client that is allowed to differ per
+// vendor.
+//
+// Three fields, each one a decision that a live capture settled for cursor-agent
+// and that nothing has settled for grok. Anything NOT in this struct is shared
+// by construction: the state machine, the queue, the replay guard, the terminal
+// handshake state and the refusal of every unanswered request are one
+// implementation, so a divergence between the two seats has exactly one place
+// to hide and a reader can see the whole of it here.
+type acpDialect struct {
+	// seat names the vendor in error text and nowhere else.
+	seat string
+	// readModeID is the `session/set_mode` id a read posture asks for, or ""
+	// when this seat asks for no mode at all. See acpMode for the cursor
+	// measurement behind "plan"; an empty value here is not "the same mode
+	// under another name", it is the seat declining to request a mode nobody
+	// has seen its server honour.
+	readModeID string
+	// fixedOptions answers a permission request with the option ids the vendor
+	// was MEASURED offering (acpDecision), rather than with an id picked by kind
+	// from the request itself. Cursor keeps the measured spelling on purpose:
+	// a request whose option list changed shape would then be answered with an
+	// id the vendor refuses, visibly, rather than with a remembered one that
+	// still parses. A seat nobody has captured has no measured spelling to
+	// keep, so it picks by kind — the field the protocol defines — and answers
+	// `cancelled` when the kind it wants was not offered.
+	fixedOptions bool
+	// loadNeedsCapability gates `session/load` on the server having advertised
+	// `agentCapabilities.loadSession: true`. The ACP schema requires a client
+	// to check it; cursor-agent's capture carried it true on every handshake,
+	// so the cursor seat never needed the gate and does not get one now, which
+	// keeps its measured behaviour byte-identical. A seat whose server has not
+	// been captured gets the gate, because sending a method the server never
+	// offered is the one shape of handshake failure a client can avoid by
+	// reading what it was told.
+	loadNeedsCapability bool
+}
+
+// cursorDialect is the measured seat: every value here is the one the thirteen
+// arms of 2026-08-08 drove (design.md §9.36).
+var cursorDialect = acpDialect{seat: "cursor", readModeID: "plan", fixedOptions: true}
+
+// grokDialect is the UNMEASURED seat, and each zero value is a claim withheld
+// rather than a default accepted. READ FROM DOCS, NOT FROM A RUN: Grok Build
+// 1.0.13's `grok agent stdio` is described as an ACP server over stdin/stdout
+// (docs.x.ai/build/cli/headless-scripting and zed.dev/acp/agent/grok-build,
+// both read 2026-09-02), and nothing in either page names a mode id, a
+// permission option id, or whether session/load is advertised. So: no mode is
+// requested in the read posture (the room refuses that posture's permission
+// requests itself, which is the containment the badge claims and no more),
+// options are picked by kind from each request, and session/load is sent only
+// when the server says it may be. design.md §9.57 lists the runs owed.
+var grokDialect = acpDialect{seat: "grok", loadNeedsCapability: true}
+
+// mode is the session mode this posture asks for under this dialect, or ""
+// when nothing is requested. See acpMode for the cursor measurement.
+func (d acpDialect) mode(p Posture) string {
+	if p == PostureRead {
+		return d.readModeID
+	}
+	return ""
+}
+
+// newACPProtocol builds the cursor seat's driver for one process. Kept under
+// its original name because it is the measured one and every cursor test and
+// fixture replay names it.
 func newACPProtocol(workspace, resumeID string, p Posture) *acpProtocol {
+	return newACPProtocolWith(cursorDialect, workspace, resumeID, p)
+}
+
+// newACPProtocolWith builds the driver for one process under one dialect.
+func newACPProtocolWith(d acpDialect, workspace, resumeID string, p Posture) *acpProtocol {
 	return &acpProtocol{
 		workspace: workspace,
 		resumeID:  resumeID,
 		posture:   p,
+		dialect:   d,
 		awaiting:  map[int]string{},
-		perms:     map[string]json.RawMessage{},
+		perms:     map[string]acpPending{},
 	}
 }
 
@@ -371,6 +487,15 @@ func (a *acpProtocol) openSession() []byte {
 		// the Claude adapter passes --strict-mcp-config in BOTH postures.
 		"mcpServers": []any{},
 	}
+	if a.resumeID != "" && a.dialect.loadNeedsCapability && !a.loadSession {
+		// The server did not say it can load a session, so the saved id is
+		// spent without being sent: a `session/load` here would be a method the
+		// server never offered, and the schema says a client checks first. The
+		// one-attempt rule is unchanged — the id is gone, a fresh conversation
+		// opens, and settleRestoredThread hears about it through the ordinary
+		// turn exactly as it does when a load is refused.
+		a.resumeID = ""
+	}
 	if a.resumeID != "" {
 		params["sessionId"] = a.resumeID
 		a.replaying = true
@@ -379,7 +504,10 @@ func (a *acpProtocol) openSession() []byte {
 	return a.request("session/new", params)
 }
 
-// acpMode is the session mode this posture asks for.
+// acpMode is the session mode this posture asks for ON THE CURSOR SEAT. It is
+// the value cursorDialect.readModeID carries, kept as a function so the
+// measurement below stays beside the word it justifies; the grok dialect asks
+// for no mode, and that is a withheld claim rather than a different answer.
 //
 // MEASURED, one trial each, and the two results are not equally strong:
 //
@@ -408,7 +536,7 @@ func acpMode(p Posture) string {
 // the only recovery there is, since the usual cause is an auth or version
 // problem the user may have fixed in the meantime.
 var ErrACPHandshakeFailed = errors.New(
-	"vendors: this cursor seat's ACP handshake failed; its process cannot take a turn")
+	"vendors: this seat's ACP handshake failed; its process cannot take a turn")
 
 // ErrACPTurnNotStarted is returned by Interrupt when there is no outstanding
 // prompt for the vendor to abandon.
@@ -422,7 +550,7 @@ var ErrACPHandshakeFailed = errors.New(
 // believe they stopped. Nothing is lost by killing here — there is no
 // conversation yet, or none this turn reached.
 var ErrACPTurnNotStarted = errors.New(
-	"vendors: this cursor seat has no turn in flight to interrupt")
+	"vendors: this ACP seat has no turn in flight to interrupt")
 
 // Turn takes one turn, queueing it until the handshake is finished.
 func (a *acpProtocol) Turn(prompt string) ([][]byte, error) {
@@ -444,6 +572,7 @@ func (a *acpProtocol) Turn(prompt string) ([][]byte, error) {
 }
 
 func (a *acpProtocol) promptLine(prompt string) []byte {
+	a.turnOpen = true
 	return a.request("session/prompt", map[string]any{
 		"sessionId": a.sessionID,
 		// A content-block ARRAY, not a string. The prompt is arbitrary user text
@@ -495,13 +624,65 @@ func (a *acpProtocol) Interrupt(string) ([][]byte, error) {
 	//
 	// Rejecting is also what ctrl+c MEANS for a call the user was being asked
 	// about. Approving it on the way out would run the thing they just stopped.
-	var lines [][]byte
-	for key, raw := range a.perms {
-		lines = append(lines, acpDecision(raw, false))
-		delete(a.perms, key)
-	}
+	lines := a.refuseHeld()
 	return append(lines, acpNotify("session/cancel",
 		map[string]any{"sessionId": a.sessionID})), nil
+}
+
+// refuseHeld answers every permission request still open with a rejection and
+// forgets it. The caller must hold the mutex.
+func (a *acpProtocol) refuseHeld() [][]byte {
+	var lines [][]byte
+	for key, pending := range a.perms {
+		lines = append(lines, acpDecisionFor(pending, false))
+		delete(a.perms, key)
+	}
+	return lines
+}
+
+// Closing is what the room writes before it closes this process's stdin at
+// teardown (vendors.GracefulStop).
+//
+// The same two moves Interrupt makes, in the same order and for the same
+// reason: a vendor blocked on a question is refused first so the cancel reaches
+// a server that is listening, and the open `session/prompt` is then cancelled
+// so the process is idle when the pipe closes. Nothing is written when no turn
+// is in flight — an idle server has nothing to abandon, and a cancel for a
+// prompt that was never sent is the exact quiet no-op §9.36 warned about.
+//
+// UNMEASURED on either seat as a teardown sequence: the cursor capture measured
+// `session/cancel` resolving a prompt in 23 ms and the process taking a further
+// turn, never a stdin close after it. What a server does once its input pipe
+// closes is the grace period's question, and Grace bounds it.
+func (a *acpProtocol) Closing() [][]byte {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.queued = nil
+	if a.sessionID == "" {
+		return nil
+	}
+	lines := a.refuseHeld()
+	if a.turnOpen {
+		lines = append(lines, acpNotify("session/cancel",
+			map[string]any{"sessionId": a.sessionID}))
+	}
+	return lines
+}
+
+// Grace is how long the room waits after closing stdin before it kills the
+// process. Two seconds, and the figure is a bound rather than a measurement:
+// no ACP server here has been watched exiting on a closed pipe, and the kill
+// behind it is what actually ends the process. A number that was measured
+// would be quoted with its capture; this one is quoted with its absence.
+func (a *acpProtocol) Grace() time.Duration { return 2 * time.Second }
+
+// Dead reports the terminal handshake state, for the room's fallback decision
+// (vendors.LiveFallback). It is the same flag Turn refuses on; exposing it lets
+// a caller ask BEFORE spending a brief on a process that cannot take one.
+func (a *acpProtocol) Dead() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.dead
 }
 
 // ErrACPUnknownRequest is returned when a decision names a request this protocol
@@ -524,15 +705,15 @@ var ErrACPUnknownRequest = errors.New("vendors: no such permission request is ou
 func (a *acpProtocol) Decide(requestID string, allow bool, _ string, _ map[string]any) ([][]byte, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	raw, ok := a.perms[requestID]
+	pending, ok := a.perms[requestID]
 	if !ok {
 		return nil, ErrACPUnknownRequest
 	}
 	delete(a.perms, requestID)
-	return [][]byte{acpDecision(raw, allow)}, nil
+	return [][]byte{acpDecisionFor(pending, allow)}, nil
 }
 
-// acpDecision is the response the vendor is blocked on.
+// acpDecision is the response the CURSOR vendor is blocked on.
 //
 // The option ids are the ones this vendor offered on every captured request, and
 // they are hardcoded HERE rather than remembered per request because the
@@ -546,6 +727,37 @@ func acpDecision(id json.RawMessage, allow bool) []byte {
 		// allow-ONCE, never allow-always. See acpPermission.
 		option = "allow-once"
 	}
+	return acpSelected(id, option)
+}
+
+// acpDecisionFor answers one held request with the option chosen for it when it
+// arrived, or with the protocol's own `cancelled` outcome when the vendor
+// offered no option of the kind the room wants.
+//
+// `cancelled` is a SCHEMA READ (agentclientprotocol.com/protocol/schema,
+// 2026-09-02: RequestPermissionOutcome is `selected` with an optionId, or
+// `cancelled`) and has never been sent to a live server from here. It is the
+// answer for a request this client cannot honestly select on — a vendor that
+// offers only `allow_always`, say — and it is chosen over inventing an id
+// because a cancelled prompt is a call that does not run, which is the failure
+// direction this room accepts.
+func acpDecisionFor(p acpPending, allow bool) []byte {
+	option := p.reject
+	if allow {
+		option = p.allow
+	}
+	if option == "" {
+		line, _ := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      p.id,
+			"result":  map[string]any{"outcome": map[string]any{"outcome": "cancelled"}},
+		})
+		return line
+	}
+	return acpSelected(p.id, option)
+}
+
+func acpSelected(id json.RawMessage, option string) []byte {
 	line, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      id,
@@ -554,6 +766,21 @@ func acpDecision(id json.RawMessage, allow bool) []byte {
 		},
 	})
 	return line
+}
+
+// pendingFor decides, when a request ARRIVES, which option id will answer each
+// branch. Under a fixed-options dialect the ids are the measured spelling;
+// otherwise they are looked up by KIND on the request — `allow_once` and
+// `reject_once`, the protocol's names — and `allow_always` is never a
+// candidate under either, for the reason acpPermission states.
+func (a *acpProtocol) pendingFor(id json.RawMessage, perm acpPermission) acpPending {
+	p := acpPending{id: append(json.RawMessage(nil), id...)}
+	if a.dialect.fixedOptions {
+		p.allow, p.reject = "allow-once", "reject-once"
+		return p
+	}
+	p.allow, p.reject = perm.pick("allow_once"), perm.pick("reject_once")
+	return p
 }
 
 // Inbound is the whole state machine: one line in, events for the room out, and
@@ -596,15 +823,20 @@ func (a *acpProtocol) serverRequest(msg acpLine) ([]runner.Event, [][]byte) {
 
 	var perm acpPermission
 	if err := json.Unmarshal(msg.Params, &perm); err != nil {
-		return nil, [][]byte{acpDecision(msg.ID, false)}
+		// Unreadable, and still answered: a request the room cannot parse is
+		// still a vendor blocked on it. Refused with whatever this dialect
+		// refuses with, which for a by-kind seat with no options to read is the
+		// protocol's own `cancelled`.
+		return nil, [][]byte{acpDecisionFor(a.pendingFor(msg.ID, acpPermission{}), false)}
 	}
 
 	a.mu.Lock()
 	read := a.posture == PostureRead
 	a.permSeq++
 	key := "acp-perm-" + strconv.Itoa(a.permSeq)
+	pending := a.pendingFor(msg.ID, perm)
 	if !read {
-		a.perms[key] = append(json.RawMessage(nil), msg.ID...)
+		a.perms[key] = pending
 	}
 	a.mu.Unlock()
 
@@ -625,7 +857,7 @@ func (a *acpProtocol) serverRequest(msg acpLine) ([]runner.Event, [][]byte) {
 				Outcome: runner.ActFailed,
 				Detail:  "refused: this seat is read-only",
 			}},
-		}}, [][]byte{acpDecision(msg.ID, false)}
+		}}, [][]byte{acpDecisionFor(pending, false)}
 	}
 
 	// Handed to the room, which answers through Decide. Nothing is written back
@@ -872,6 +1104,17 @@ func (a *acpProtocol) response(msg acpLine) ([]runner.Event, [][]byte) {
 			a.mu.Unlock()
 			return ev, nil
 		}
+		// What the server advertised, read for exactly one decision (see
+		// loadSession). The rest of the capability block is not modelled,
+		// on claude.go's Capabilities rule: an advertisement is not what a
+		// behaviour claim rests on.
+		var caps struct {
+			AgentCapabilities struct {
+				LoadSession bool `json:"loadSession"`
+			} `json:"agentCapabilities"`
+		}
+		_ = json.Unmarshal(msg.Result, &caps)
+		a.loadSession = caps.AgentCapabilities.LoadSession
 		out := a.openSession()
 		a.mu.Unlock()
 		return nil, [][]byte{out}
@@ -934,6 +1177,7 @@ func (a *acpProtocol) response(msg acpLine) ([]runner.Event, [][]byte) {
 		return nil, lines
 
 	case "session/prompt":
+		a.turnOpen = false
 		textChunks := a.turnTextChunks
 		acts := append([]string(nil), a.turnActs...)
 		a.mu.Unlock()
@@ -948,7 +1192,7 @@ func (a *acpProtocol) response(msg acpLine) ([]runner.Event, [][]byte) {
 func (a *acpProtocol) sessionOpened(id string, _ acpLine) ([]runner.Event, [][]byte) {
 	a.sessionID = id
 	ev := []runner.Event{{Kind: runner.KindSession, SessionID: id}}
-	if mode := acpMode(a.posture); mode != "" {
+	if mode := a.dialect.mode(a.posture); mode != "" {
 		out := a.request("session/set_mode", map[string]any{
 			"sessionId": id, "modeId": mode,
 		})

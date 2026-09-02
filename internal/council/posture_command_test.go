@@ -191,7 +191,7 @@ func TestBareWordOnly(t *testing.T) {
 func TestPostureRefusesMidTurn(t *testing.T) {
 	for _, draft := range []string{"/read", "/write"} {
 		m := postureModel(false)
-		m.turn = &turnState{}
+		occupy(m)
 
 		m.setDraft(draft)
 		if !m.roomCommand() {

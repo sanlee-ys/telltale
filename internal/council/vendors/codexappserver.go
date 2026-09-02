@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -71,16 +73,33 @@ import (
 // equal `item/completed`'s `text` byte for byte, every time. A parser that read
 // both would print every answer twice.
 //
-// WHY THIS SEAT IS NOT REGISTERED. The room still dispatches codex through
-// `codex exec --json` (vendors/codex.go). The measurement that decided it is on
-// appServerSandbox: on this path the shell tool routes through `pwsh.exe`,
-// pwsh cannot start under the Windows sandbox on this box, and the model
-// abandoned the turn rather than retrying in two of three read-posture arms.
-// That is a seat that cannot inspect — the exact 0.146.0-class defect the
-// codex badge history is built around, arriving on a NEW path after #311
-// cleared it off the old one. The protocol, its parser and its tests ship;
-// the seat does not move until that is measured away. See design.md §9.50's
-// "the fork, taken conservatively".
+// WHY THIS SEAT IS REGISTERED NOW, AND WHAT IS STILL OWED. From 2026-08-29 to
+// 2026-09-02 the room dispatched codex through `codex exec --json`
+// (vendors/codex.go) and this protocol shipped unseated, on the measurement
+// appServerSandbox records: the shell router goes through `pwsh.exe`, pwsh
+// cannot start under the Windows sandbox on this box, and the model abandoned
+// the turn rather than retrying in two of three read-posture arms. That
+// measurement has NOT been repeated. What changed is the ledger's other side
+// (design.md §9.57): a crew tool needs seats that stay up between briefs and a
+// gate that can ask more than one vendor, and this protocol is the only codex
+// surface with either — a warm turn measured at 1.486 s against exec's whole
+// fixed cost, and a server-initiated approval request the room can answer. So
+// the seat moved, with three things holding the honesty line:
+//
+//   - The exec adapter stays beside it as the FALLBACK (vendors.LiveFallback):
+//     a refused handshake hands the brief to the measured invocation instead
+//     of reporting the same refusal every turn.
+//   - The seat OWNS THE KILL. §9.50 measured stdin close not reliably ending
+//     this server (four runs exited in 1.5–3.3 s, one was alive 15 s later),
+//     so teardown says `turn/interrupt` for a turn still open, closes stdin,
+//     waits a bounded grace, and then kills (vendors.GracefulStop; Closing and
+//     Grace below).
+//   - The badge says UNMEASURED. The installed build is 0.152.1 and nothing in
+//     this file was driven against it; the approval flow was never driven at
+//     all. detect.go's codex badges carry the version and the word, and §9.57
+//     lists the runs that would let them drop it — the read posture's liveness
+//     first, because that is the property the read badge sells and the one
+//     this path was measured failing.
 
 // appServerProtocol is one `codex app-server` conversation, for the life of one
 // process.
@@ -145,10 +164,15 @@ type appServerProtocol struct {
 	// that stops streaming.
 	seenDeltas map[string]bool
 
-	// approvalSeq numbers the approvals this seat refused, so each one lands as
-	// its own trace entry rather than overwriting the last. It is a counter and
-	// not a map, because this seat holds NOTHING open: see Decide.
+	// approvalSeq numbers the approvals this seat has seen, so each one lands as
+	// its own trace entry or its own card rather than overwriting the last.
 	approvalSeq int
+	// pending holds the approvals a write posture has handed to the room and
+	// not yet answered, keyed by the id the room decides by. The value carries
+	// the vendor's raw JSON-RPC id and which generation of the approval
+	// vocabulary answers it (see appServerDecision). A read posture never adds
+	// to it: those requests are refused on arrival.
+	pending map[string]appServerPending
 
 	// usage and limits are the last figures the vendor reported.
 	//
@@ -317,7 +341,20 @@ func newAppServerProtocol(workspace, resumeID string, p Posture) *appServerProto
 		posture:    p,
 		awaiting:   map[int]string{},
 		seenDeltas: map[string]bool{},
+		pending:    map[string]appServerPending{},
 	}
+}
+
+// appServerPending is one approval the vendor is blocked on, held until the
+// room answers it.
+type appServerPending struct {
+	id json.RawMessage
+	// v2 is the `item/*/requestApproval` generation, answered with
+	// accept/decline/cancel; false is the legacy `execCommandApproval` /
+	// `applyPatchApproval` pair, answered with approved/denied. Decided when
+	// the request arrives, off its method name, so the answer never has to
+	// re-derive it.
+	v2 bool
 }
 
 // request builds one JSON-RPC request and remembers what it was for.
@@ -443,9 +480,49 @@ func appServerSandbox(p Posture) string {
 	// equivalent override on THIS path is unmeasured (see above), so choosing
 	// danger-full-access here would be inheriting a finding from the other
 	// surface, which is exactly what STATE.md rules against. The narrower
-	// request is the one that can be defended at this build, and the seat is
-	// not registered, so nothing renders a badge off it yet.
+	// request is the one that can be defended at this build. Now that the seat
+	// IS registered (2026-09-02), the consequence is stated rather than hidden:
+	// a write-posture codex seat on Windows may be able to edit and not commit
+	// until the `.git` override is measured on this path — and when it asks to
+	// escalate, the room's approval card is where that shows up.
 	return writeSandboxMode
+}
+
+// appServerApprovalPolicy is the `approvalPolicy` this posture asks
+// `thread/start` for.
+//
+// SCHEMA READ, NOT DRIVEN. The values are the v2 `AskForApproval` enum read
+// from codex-rs/app-server-protocol/src/protocol/v2/shared.rs on the main
+// branch on 2026-09-02 (`#[serde(rename_all = "kebab-case")]`, with
+// `UnlessTrusted` renamed to `untrusted`): `untrusted`, `on-request`, `never`,
+// and an experimental `granular`. The measured arms of 2026-08-29 sent NO
+// approvalPolicy at all and produced no approval request; nothing below has
+// been observed changing that.
+//
+//   - Read posture: `never`. Nobody is there to ask, a read seat asking to
+//     change something is already answered (serverRequest refuses one anyway),
+//     and `codex exec` — the measured fallback — runs non-interactively under
+//     the same word.
+//   - Write postures: `on-request`, "the model decides when to ask". This is
+//     the codex default for an interactive session and the narrower of the two
+//     asking policies: the workspace-write sandbox stays the containment, and
+//     the vendor asks when it wants MORE than the sandbox allows — a path
+//     outside the workspace, the network — which is exactly the question the
+//     room's card should carry. `untrusted` was considered and NOT chosen: it
+//     asks about every command off the vendor's trusted list, and the docs
+//     read for this file do not say whether a command approved under it then
+//     runs outside the sandbox. A policy that might trade the sandbox for a
+//     keystroke is not one to adopt unmeasured.
+//
+// The gated posture never reaches this function as itself: the room collapses
+// PostureWriteGated to PostureWrite at spawn for every Conversational seat
+// (persistent.go's spawnPosture), because whether a request becomes a card or
+// an automatic yes is the room's decision when one arrives.
+func appServerApprovalPolicy(p Posture) string {
+	if p == PostureRead {
+		return "never"
+	}
+	return "on-request"
 }
 
 // ErrAppServerHandshakeFailed is returned by Turn once the handshake has failed.
@@ -527,56 +604,163 @@ func (a *appServerProtocol) Interrupt(string) ([][]byte, error) {
 	if a.threadID == "" || a.turnID == "" || held {
 		return nil, ErrAppServerTurnNotStarted
 	}
-	return [][]byte{a.request("turn/interrupt", map[string]any{
+	// Anything the vendor is BLOCKED on is answered first, and the ordering is
+	// acpProtocol's, for its reason: a pending approval holds the vendor still
+	// until it is answered, and an interrupt that reached a server waiting on
+	// a question nobody will now answer is an interrupt nobody has measured
+	// landing. The answer is the v2 `cancel` — the decision the schema
+	// describes as declining AND interrupting the turn — so on that
+	// generation the cancel and the interrupt say the same thing twice, which
+	// is cheaper than saying it once to the wrong listener.
+	lines := a.cancelHeld()
+	return append(lines, a.request("turn/interrupt", map[string]any{
 		"threadId": a.threadID,
 		"turnId":   a.turnID,
-	})}, nil
+	})), nil
 }
 
-// Decide always refuses, because this seat never holds an approval open.
+// cancelHeld answers every approval still open with a cancel and forgets it.
+// The caller must hold the mutex.
+func (a *appServerProtocol) cancelHeld() [][]byte {
+	var lines [][]byte
+	for key, p := range a.pending {
+		lines = append(lines, appServerDecision(p, appServerCancel))
+		delete(a.pending, key)
+	}
+	return lines
+}
+
+// Closing is what the room writes before it closes this process's stdin at
+// teardown (vendors.GracefulStop), and it is the first of the three steps that
+// make this seat own its own kill.
 //
-// That is the honest shape of an UNMEASURED surface rather than a stub. The
-// approval requests are a SCHEMA READ at codex-cli 0.149.1 and no arm produced
-// one: the seat sends no `approvalPolicy`, so the vendor was never asked to
-// ask. serverRequest therefore answers every approval itself, immediately, and
-// nothing is ever left outstanding for the room to decide — so there is no
-// request id this method could be handed that means anything.
+// THE MEASUREMENT IT ANSWERS is §9.50's: closing stdin did not reliably stop
+// this server at 0.149.1 — four runs exited in 1.5–3.3 s and one was still
+// alive 15 s later. So teardown is: this (an interrupt for a turn still open,
+// a cancel for any approval still held), then the pipe closes, then Grace
+// passes, then the runner's kill — the same job-object kill every seat gets,
+// reused rather than rewritten. Nothing is written for an idle thread: an
+// interrupt names a turn id, and there is none to name.
 //
-// Returning an error rather than doing nothing matters at the call site: a
-// caller that reads a clean return as "the vendor was told yes" would leave a
-// card on screen over a vendor that had already moved on.
+// Whether `turn/interrupt` before the close shortens the exit is UNMEASURED;
+// the interrupt itself is a schema read (see Interrupt). What is measured is
+// only that the kill is needed, and the kill is still there.
+func (a *appServerProtocol) Closing() [][]byte {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.queued = nil
+	if a.threadID == "" {
+		return nil
+	}
+	lines := a.cancelHeld()
+	if a.turnID != "" {
+		lines = append(lines, a.request("turn/interrupt", map[string]any{
+			"threadId": a.threadID,
+			"turnId":   a.turnID,
+		}))
+	}
+	return lines
+}
+
+// Grace is how long the room waits after closing stdin before the kill.
 //
-// The follow-up is named rather than left implied. Offering PostureWriteGated
-// on this seat needs three things measured first, in this order: that a posture
-// sending `approvalPolicy` actually produces a request, what its params carry,
-// and that the vendor BLOCKS until answered on both branches. Until then a gate
-// card here would promise authority nobody has seen the vendor honour.
+// Four seconds, and the number comes from the capture rather than from taste:
+// the four runs that DID exit on a closed pipe took 1.5–3.3 s (§9.50), so a
+// bound just past that lets the ordinary case end on its own and spends the
+// kill on the case that was measured needing it — the one still alive at 15 s.
+func (a *appServerProtocol) Grace() time.Duration { return 4 * time.Second }
+
+// Dead reports the terminal handshake state, for the room's fallback decision
+// (vendors.LiveFallback). It is the flag Turn refuses on; exposing it lets the
+// room ask before it spends a brief on a process that cannot take one.
+func (a *appServerProtocol) Dead() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.dead
+}
+
+// Decide answers one approval the room was handed.
+//
+// UNMEASURED IN BOTH DIRECTIONS. No arm has produced an approval request on
+// this path — the measured arms sent no approvalPolicy — so nothing here is a
+// claim that the vendor blocks until answered, runs on accept, or stops on
+// decline. What IS pinned is the wire: the response is `{"decision": …}` with
+// the v2 enum, read from the app-server README and from v2/item.rs on
+// 2026-09-02 (see appServerDecision), and the request is forgotten once
+// answered so a later keystroke cannot answer it twice.
 //
 // input and reason are unused, and the asymmetry is worth naming because it is a
 // real difference in what seats can promise. Claude's protocol requires the
 // tool's whole argument blob echoed back on an approval, and its denial carries
 // council's own sentence to the model. This schema's approval response is a
-// `decision` string and nothing else, so this seat could neither echo nor
-// explain even once it can ask.
-func (a *appServerProtocol) Decide(string, bool, string, map[string]any) ([][]byte, error) {
-	return nil, ErrAppServerUnknownRequest
+// `decision` string and nothing else, so this seat can neither echo nor
+// explain — a declined command is declined without the model being told who
+// said no, which is the retry-a-variation risk denialText exists to close on
+// the Claude seat and cannot close here.
+func (a *appServerProtocol) Decide(requestID string, allow bool, _ string, _ map[string]any) ([][]byte, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	p, ok := a.pending[requestID]
+	if !ok {
+		return nil, ErrAppServerUnknownRequest
+	}
+	delete(a.pending, requestID)
+	verdict := appServerDecline
+	if allow {
+		verdict = appServerAccept
+	}
+	return [][]byte{appServerDecision(p, verdict)}, nil
 }
+
+// The three answers this seat gives, and the two vocabularies it gives them
+// in.
+//
+// v2 (`item/commandExecution/requestApproval`, `item/fileChange/requestApproval`,
+// `item/permissions/requestApproval`): `accept`, `decline`, `cancel` — READ
+// from codex-rs/app-server-protocol/src/protocol/v2/item.rs on 2026-09-02
+// (`CommandExecutionApprovalDecision` and `FileChangeApprovalDecision`, both
+// `rename_all = "camelCase"`) and from the app-server README's approval
+// sections, which show `{ "decision": "accept" }`, `"decline"` and
+// `"cancel"` verbatim. `acceptForSession` exists and is NEVER sent, for the
+// reason the ACP seat never sends `allow-always`: it widens what the agent may
+// do without being asked again, and the room asks per call.
+//
+// v1 (`execCommandApproval`, `applyPatchApproval`): `approved`, `denied` — the
+// schema read at 0.149.1 this file has carried since 2026-08-29. Kept because
+// the method names are still in the schema and a request under one of them is
+// still a vendor blocked on it.
+type appServerVerdict uint8
+
+const (
+	appServerAccept appServerVerdict = iota
+	appServerDecline
+	appServerCancel
+)
 
 // appServerDecision is the response the vendor is blocked on.
 //
-// The two words are the schema's own enum at this build. They are written here
-// rather than remembered per request for acpDecision's reason: a shape that
-// changed would leave the room echoing a value it did not understand, and a
-// wrong value is refused visibly where a remembered-but-stale one is answered
-// as though it meant something.
-func appServerDecision(id json.RawMessage, allow bool) []byte {
-	decision := "denied"
-	if allow {
+// The words are written here rather than remembered per request for
+// acpDecision's reason: a shape that changed would leave the room echoing a
+// value it did not understand, and a wrong value is refused visibly where a
+// remembered-but-stale one is answered as though it meant something.
+func appServerDecision(p appServerPending, v appServerVerdict) []byte {
+	var decision string
+	switch {
+	case p.v2 && v == appServerAccept:
+		decision = "accept"
+	case p.v2 && v == appServerDecline:
+		decision = "decline"
+	case p.v2:
+		decision = "cancel"
+	case v == appServerAccept:
 		decision = "approved"
+	default:
+		// v1 has no cancel; a denial is the nearest thing that stops the call.
+		decision = "denied"
 	}
 	line, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
-		"id":      append(json.RawMessage(nil), id...),
+		"id":      append(json.RawMessage(nil), p.id...),
 		"result":  map[string]any{"decision": decision},
 	})
 	return line
@@ -614,20 +798,44 @@ func (a *appServerProtocol) Inbound(line []byte) ([]runner.Event, [][]byte) {
 	return nil, nil
 }
 
-// appServerApprovals are the server requests that ask the room to decide.
+// appServerApprovals are the server requests that ask the room to decide, and
+// which vocabulary answers each (see appServerVerdict).
 //
-// SCHEMA READ at codex-cli 0.149.1 from `ServerRequest.json`; none was observed
-// live. Listed by name rather than matched by prefix because the same file
-// declares requests that are not approvals at all — `attestation/generate`,
-// `mcpServer/elicitation/request`, `item/tool/call` — and answering one of
-// those with a decision would be council inventing a side of a protocol it has
-// not read.
+// SCHEMA READ — the v1 pair at codex-cli 0.149.1 from `ServerRequest.json`,
+// the v2 trio re-read from the app-server README on 2026-09-02 — and none was
+// observed live. Listed by name rather than matched by prefix because the same
+// schema declares requests that are not approvals at all —
+// `attestation/generate`, `mcpServer/elicitation/request`, `item/tool/call`,
+// `item/tool/requestUserInput` — and answering one of those with a decision
+// would be council inventing a side of a protocol it has not read.
 var appServerApprovals = map[string]bool{
-	"execCommandApproval":                   true,
-	"applyPatchApproval":                    true,
+	"execCommandApproval":                   false,
+	"applyPatchApproval":                    false,
 	"item/commandExecution/requestApproval": true,
 	"item/fileChange/requestApproval":       true,
 	"item/permissions/requestApproval":      true,
+}
+
+// appServerApproval is the ALLOWLIST of what council reads out of an approval
+// request, in the internal/cursorhook sense: encoding/json drops every field
+// with no destination, and these are the only destinations.
+//
+// Field names are the v2 params read from v2/item.rs on 2026-09-02
+// (`CommandExecutionRequestApprovalParams`: threadId, turnId, itemId, kind,
+// approvalId, environmentId, reason, command, cwd, …;
+// `FileChangeRequestApprovalParams`: threadId, turnId, itemId, reason,
+// grantRoot). `command` and `reason` are the two that name the action for a
+// card; everything else the request carries — `commandActions`,
+// `additionalPermissions`, `networkApprovalContext`, the v1 shapes' own
+// fields — has no field here and never reaches memory the room can render.
+// The v1 pair is read through the same struct on a best-effort basis: its
+// `command` was an array in the 0.149.1 schema and unmarshals to nothing here,
+// so a v1 card names the method and no argument, which is less than it could
+// say and nothing it cannot back.
+type appServerApproval struct {
+	ItemID  string `json:"itemId"`
+	Command string `json:"command"`
+	Reason  string `json:"reason"`
 }
 
 // serverRequest answers a question the vendor is blocked on.
@@ -639,32 +847,91 @@ var appServerApprovals = map[string]bool{
 // of the turn. An empty object is the smallest well-formed thing that unblocks a
 // request whose result shape is unknown.
 //
-// An approval is DENIED rather than raised as a gate card, and that is the
-// conservative reading of an unmeasured surface rather than a policy about what
-// this seat may do. The room never asks for approvals — no posture here sends
-// `approvalPolicy` — so a request arriving at all means the vendor decided to
-// ask about something the room did not offer it authority over. Raising a card
-// would offer that authority; denying withholds it, and the attempt is still
-// reported so a seat that tried and was stopped does not read as one that never
-// tried.
+// An approval goes one of two ways, on the posture, exactly as acpProtocol's
+// does:
+//
+//   - A READ posture declines it on arrival and records the attempt in the
+//     trace. A read-posture seat asking to change something is not a question
+//     for the user; it is already answered, and raising a card would offer
+//     authority this posture withheld. It asked for `never` anyway
+//     (appServerApprovalPolicy), so a request arriving at all is the vendor
+//     asking about something the room offered it no authority over.
+//   - A WRITE posture holds it open and hands the room a Gate. The vendor is
+//     BLOCKED until Decide answers, which is the whole value of the card, and
+//     the reason nothing is written back here.
+//
+// Both branches are UNMEASURED on this path — no arm produced a request — and
+// the write branch is the one that has to be watched first on a live run: a
+// vendor that did not actually block would run the command while the card was
+// still up.
 func (a *appServerProtocol) serverRequest(msg appServerLine) ([]runner.Event, [][]byte) {
-	if !appServerApprovals[msg.Method] {
+	v2, isApproval := appServerApprovals[msg.Method]
+	if !isApproval {
 		return nil, [][]byte{appServerEmptyResult(msg.ID)}
 	}
+	var req appServerApproval
+	_ = json.Unmarshal(msg.Params, &req)
+	pending := appServerPending{id: append(json.RawMessage(nil), msg.ID...), v2: v2}
+
 	a.mu.Lock()
+	read := a.posture == PostureRead
 	a.approvalSeq++
 	key := "app-server-approval-" + strconv.Itoa(a.approvalSeq)
+	if !read {
+		a.pending[key] = pending
+	}
 	a.mu.Unlock()
 
+	tool, text := appServerApprovalText(msg.Method, req)
+	if read {
+		return []runner.Event{{
+			Kind: runner.KindActivity,
+			Acts: []runner.ActCall{{
+				ID:      key,
+				Text:    text,
+				Outcome: runner.ActFailed,
+				Detail:  "refused: this seat is read-only",
+			}},
+		}}, [][]byte{appServerDecision(pending, appServerDecline)}
+	}
 	return []runner.Event{{
-		Kind: runner.KindActivity,
-		Acts: []runner.ActCall{{
-			ID:      key,
-			Text:    clipArg(msg.Method),
-			Outcome: runner.ActFailed,
-			Detail:  "refused: this seat asked for no approvals",
-		}},
-	}}, [][]byte{appServerDecision(msg.ID, false)}
+		Kind: runner.KindGate,
+		Gate: &runner.Gate{
+			RequestID: key,
+			ToolUseID: req.ItemID,
+			Tool:      tool,
+			Text:      text,
+			// Nil, and it must stay nil, for the ACP seat's reason: the answer
+			// here is a decision word, and carrying an argument blob nothing
+			// sends back would be a copy of the request held for no purpose.
+			// OldContent/NewContent are empty too, and the consequence is
+			// stated: a fileChange card names the reason the vendor gave and
+			// draws NO before/after preview (§9.41). The request carries no
+			// halves of an edit — the diff is on the `item/started` that
+			// precedes it, which this adapter does not hold — so there is
+			// nothing measured to draw.
+		},
+	}}, nil
+}
+
+// appServerApprovalText names one approval for a card and for the trace, in
+// the grammar every seat uses: the kind of thing, then ": " and the one
+// argument that identifies it. The kind is the method's own middle segment
+// (`commandExecution`, `fileChange`, `permissions`) or, for the v1 pair, the
+// whole method name.
+func appServerApprovalText(method string, req appServerApproval) (tool, text string) {
+	tool = method
+	if parts := strings.Split(method, "/"); len(parts) == 3 {
+		tool = parts[1]
+	}
+	arg := req.Command
+	if arg == "" {
+		arg = req.Reason
+	}
+	if arg = strings.TrimSpace(arg); arg != "" {
+		return tool, tool + ": " + clipArg(arg)
+	}
+	return tool, tool
 }
 
 // notification handles the vendor's streaming surface.
@@ -906,6 +1173,15 @@ func (a *appServerProtocol) turnCompleted(msg appServerLine) ([]runner.Event, []
 		// reason: a turn that produced a whole reply and then resolved without
 		// saying why is not evidence of a failure.
 		return []runner.Event{{Kind: runner.KindMeta, EndsTurn: true}}, nil
+	case "interrupted":
+		// DOC READ, 2026-09-02, app-server README: "the turn finishes with
+		// status: "interrupted"" after `turn/interrupt`, and `turn.status` is
+		// one of `completed`, `interrupted`, `failed`. It is the user's own
+		// keystroke coming back, on the ACP seat's `cancelled` precedent, and
+		// finishColumn's cancellation check is what words it. Never observed
+		// here, which is why the word is matched exactly and nothing near it
+		// is.
+		return []runner.Event{{Kind: runner.KindMeta, EndsTurn: true}}, nil
 	}
 	// The schema declares more values than any arm produced. Reported as a
 	// failure in the vendor's own word rather than rendered as a normal answer,
@@ -989,7 +1265,8 @@ func (a *appServerProtocol) response(msg appServerLine) ([]runner.Event, [][]byt
 // must hold the mutex.
 func (a *appServerProtocol) openThread() []byte {
 	params := map[string]any{
-		"sandbox": appServerSandbox(a.posture),
+		"sandbox":        appServerSandbox(a.posture),
+		"approvalPolicy": appServerApprovalPolicy(a.posture),
 	}
 	if a.workspace != "" {
 		// `cwd` is a THREAD parameter here, where `codex exec` takes it as a
@@ -1059,36 +1336,40 @@ func (a *appServerProtocol) fail(note string) []runner.Event {
 	return []runner.Event{{Kind: runner.KindError, EndsTurn: true, Note: note}}
 }
 
-// CodexAppServer drives the Codex CLI as ONE LIVE `codex app-server` process.
+// CodexAppServer drives the Codex CLI as ONE LIVE `codex app-server` process,
+// and since 2026-09-02 it is the seat Registry() maps `model.VendorCodex` to.
 //
-// It is a SECOND adapter for the same vendor id, and it is deliberately NOT in
-// Registry(): the room still seats `Codex` (`codex exec --json`). The reason is
-// on appServerSandbox and it is a measurement, not caution — this path's shell
-// router goes through pwsh, pwsh cannot start under the Windows sandbox on this
-// box, and a read-posture seat abandoned its turn rather than inspecting on two
-// of three arms.
-//
-// Registering it is a ONE-LINE change once that is measured away, and the line
-// is worth naming so the follow-up does not have to rediscover it: this type
-// implements Conversational, so it belongs wherever `model.VendorCodex` is
-// mapped today, and the seat then drives through StartRPCSession exactly as the
-// Cursor seat does. What must be re-measured first is the read posture's
-// LIVENESS — a turn that lists a directory and reads a file, on the sandbox the
-// badge claims — because that is the property the badge sells and the one this
-// path was measured failing.
-//
-// Do NOT delete this type on the grounds that nothing constructs it. Being
-// wired and unseated is the state this PR ships on purpose, the same way the
-// token relay's reader is wired and unrendered; the tests beside it are what
-// keep the protocol honest against the next codex bump.
+// It was a second, unseated adapter from 2026-08-29 to 2026-09-02, on the
+// measurement appServerSandbox records — a read-posture seat that abandoned its
+// turn rather than inspecting on two of three arms. The file header says what
+// moved it and what the move still owes; the short form is that the exec
+// adapter is now the FALLBACK rather than the seat, the seat owns its own kill,
+// and every badge on this column says "unmeasured at 0.152.1" until the read
+// posture's liveness has been driven on this path at that build.
 type CodexAppServer struct{}
 
 var (
 	_ Vendor         = CodexAppServer{}
 	_ Conversational = CodexAppServer{}
+	_ LiveFallback   = CodexAppServer{}
+	_ GracefulStop   = (*appServerProtocol)(nil)
 )
 
 func (CodexAppServer) ID() model.VendorID { return model.VendorCodex }
+
+// Fallback is the measured seat: `codex exec --json`, one process per turn,
+// with the sandbox and resume behaviour codex.go records.
+//
+// WHEN the room should take it is the room's decision, made from what it can
+// see; the shapes that mean "this protocol cannot be brought up" are all
+// terminal in appServerProtocol and reported by Dead(): `initialize` refused
+// (an error response, which is what an unauthenticated CLI or a build that
+// refuses this client's version would send), `thread/start` refused (an error
+// response — JSON-RPC's `-32601` for a method the build does not know arrives
+// this way), or a thread opened with no id. A process that exits before
+// answering `initialize` at all — a build without the subcommand — is a
+// process death the room already sees, before any session id.
+func (CodexAppServer) Fallback() Vendor { return Codex{} }
 
 // ErrCodexAppServerIsLiveOnly is what the batch entry points return.
 //
@@ -1116,8 +1397,11 @@ func (CodexAppServer) ParseEvent([]byte) (runner.Event, bool) { return runner.Ev
 // `app-server` and nothing else. Every flag the `exec` invocation carries —
 // `--json`, `-s`, `--skip-git-repo-check`, `--cd`, the trailing `-` that puts
 // the prompt on stdin — belongs to a surface this seat does not use. The
-// posture arrives as `thread/start`'s `sandbox`, the workspace as its `cwd`,
-// and the brief as a JSON string no shell and no argv parser ever sees.
+// posture arrives as `thread/start`'s `sandbox` and `approvalPolicy`, the
+// workspace as its `cwd`, and the brief as a JSON string no shell and no argv
+// parser ever sees. That last clause is also why the `codex.cmd` shim codex.go
+// routes around is no concern here: runner.Start's refusal guards prompt text
+// in argv, and there is none.
 //
 // `--skip-git-repo-check` has no counterpart and needs none: `thread/start`
 // opened a thread in a throwaway directory outside any repository on every arm,

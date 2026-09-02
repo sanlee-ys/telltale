@@ -43,6 +43,10 @@ type Options struct {
 	// Seats is who is in the room, from --vendor. The zero value collapses the
 	// seats that cannot be driven and keeps the rest.
 	Seats Seats
+	// Headroom is the used-percentage from which the routing cell names a
+	// seat's quota window before enter (quota.go, --headroom-warn). Zero means
+	// the default.
+	Headroom int
 	// Resume is accepted and redundant: reattaching to the one saved room is
 	// what a zero-argument launch does now. Kept so the muscle memory and the
 	// scripts that grew around it keep working, and so an explicit --resume
@@ -69,6 +73,22 @@ type Options struct {
 	// nothing and changes no pixel; it just no longer throws the numbers away.
 	TracePath string
 
+	// RecordPath names the file the room's event stream is written to as it
+	// happens (recording.go, design.md §9.56): every runner.Event the room
+	// applies, every dispatch, every gate decision, each with a monotonic
+	// timestamp. Empty records nothing, which is every room that did not ask.
+	//
+	// THIS FILE CARRIES THE CONVERSATION, and that is why it is a path the
+	// operator names and never a location under ~/.telltale: see recording.go
+	// for the boundary it is written under and how it is contained.
+	RecordPath string
+	// ReplayPath names a RecordPath file to play back instead of opening a
+	// live room (replay.go). Nothing is spawned, nothing is dispatched, and
+	// every frame says REPLAY.
+	ReplayPath string
+	// ReplaySpeed multiplies the recording's own timing on playback. One is
+	// the original pace; zero is treated as one.
+	ReplaySpeed float64
 	// Live names the seat whose pane draws a real terminal screen instead of a
 	// parsed transcript (design.md §9.53). Empty is the ordinary room.
 	//
@@ -83,6 +103,14 @@ type Options struct {
 	// on a keystroke that can be pressed by accident. cmd/telltale hands over a
 	// string; ParseLive answers which seats can take it.
 	Live model.VendorID
+
+	// SharedTree opts OUT of the worktree a writing seat is given by default
+	// (seattree.go, design.md §9.55): every seat runs in the workspace, the
+	// room §9.54 shipped. A flag rather than a room word, deliberately — it
+	// decides where five processes will WRITE, which is the same class of
+	// fact as the workspace itself, and the badge on every column says which
+	// holds so the choice is never off screen.
+	SharedTree bool
 }
 
 // Model is the Bubble Tea model. It owns State plus the things Render must not
@@ -98,16 +126,73 @@ type Model struct {
 	// stalls the vendors rather than losing their output (see dispatch.go).
 	events chan runner.Event
 
-	// turn is the dispatch in flight, or nil when the room is idle.
-	turn *turnState
-	// cancelling distinguishes "the user stopped this" from "the vendor
-	// failed", which are different words on a column card.
-	cancelling bool
+	// turns is every SEAT in flight, keyed by vendor, each pointing at the
+	// dispatch it is answering (design.md §9.54). Empty when the room is idle.
+	//
+	// This used to be one field — `turn *turnState`, the dispatch in flight or
+	// nil — and that single pointer was the wall between a committee and a
+	// crew: dispatch refused a second brief while it was set, so the room could
+	// run several seats inside ONE turn and never two turns at once. You could
+	// not hand codex a refactor and, while it ran, hand grok the docs. The
+	// owner's ruling was that the room is a crew, and a crew's seats are busy
+	// or idle one at a time.
+	//
+	// A map keyed by SEAT rather than a list of dispatches, because every
+	// question the update loop asks is about a seat: is codex busy, whose exit
+	// is this, which racer does `x` kill. Two seats addressed by one brief
+	// share one *turnState, which is what keeps the arena's all-or-nothing
+	// bookkeeping (its trees, its rank order, its live-stat slots) in one
+	// record. turnOf, anyInFlight and race are the three reads; every former
+	// `m.turn` site now goes through one of them, and each says which.
+	turns map[model.VendorID]*turnState
+	// cancelling names the seats the operator is stopping, so "the user stopped
+	// this" and "the vendor failed" stay different words on the column card.
+	//
+	// Per SEAT since §9.54, where it was one bool for the room: ctrl+c now
+	// cancels the focused seat alone while its neighbours work on, so the word
+	// a column lands with has to be decided per seat. An entry is cleared when
+	// that seat's column retires (turnColumnFinished) and again at its next
+	// dispatch, so a cancellation can never re-label a later turn.
+	cancelling map[model.VendorID]bool
+	// givenUp names the seats the operator cut with `x` and whose stop is still
+	// echoing (giveUpSeat).
+	//
+	// It lived on turnState until §9.54, where "the turn" was the whole room's
+	// and the fact could die with it, because every seat's process had gone
+	// quiet by then. Per-seat turns retire a cut seat the moment its column
+	// lands, while its process is still draining buffered stdout and — on the
+	// persistent seat — still answering the interrupt with a failed `result`.
+	// Those events arrive at a seat with no turn, and applyEvents would let
+	// them overwrite the give-up's own note with the vendor's abort error. So
+	// the fact outlives the seat's turn and is cleared at the seat's NEXT
+	// dispatch, beside threadLost and failure, on their lifetime and for their
+	// reason: it is a fact about one dispatch.
+	givenUp map[model.VendorID]bool
+	// eventsArmed reports that a waitEvents goroutine is parked on the channel.
+	//
+	// One reader at a time, and this flag is what enforces it. Two dispatches in
+	// flight each want the pump running, and two goroutines reading one channel
+	// would hand batches to Update out of order — a KindText landing after the
+	// KindDone that retired its column. Touched only on the update loop: set
+	// when the Cmd is built, cleared when its batch is applied.
+	eventsArmed bool
+	// dispatchEnded is set by turnColumnFinished when a whole dispatch's seats
+	// have landed and read by Update, which is where a Cmd can be returned:
+	// the quota relay is re-read at that moment (§9.21's amendment), and the
+	// function that knows a dispatch ended cannot return a Cmd itself.
+	dispatchEnded bool
 
 	// procs holds the long-lived vendor processes, one per seat that supports
 	// being kept alive. Empty until the first dispatch: council never starts a
 	// vendor to see whether it answers.
 	procs map[model.VendorID]*seatProc
+	// fellBack names the seats that retreated from their live shape to their
+	// measured batch adapter in THIS room (fallback.go, vendors.LiveFallback):
+	// dispatch reads the registry through it, and the posture badge reads the
+	// fallback spelling for a seat in it. Never saved — a refusal is a fact
+	// about a build on this machine today, and the next room starts every
+	// seat live again.
+	fellBack map[model.VendorID]bool
 	// roomCtx bounds those processes and is cancelled only by teardown.
 	//
 	// Deliberately NOT a turn's context. The whole value of a persistent seat is
@@ -287,6 +372,16 @@ type Model struct {
 	flowChain *FlowChain
 	// flowDraft is the draft string that produced flowChain (reuse after write gate).
 	flowDraft string
+	// rec is the --record file, or nil (recording.go). Every method on it is
+	// nil-safe, so the hooks that feed it cost the ordinary room one branch.
+	// Written only from the update loop, which is the one goroutine that sees
+	// the events in the order the room applied them.
+	rec *recorder
+	// replay is the recording being played back, or nil for a live room
+	// (replay.go). Its presence is what turns the spawn paths off: Init
+	// starts the feed instead of the rebuild and the live seat, enter is
+	// refused, and saveRoom writes nothing.
+	replay *replayRun
 	// trace is the room's turn-clock sink: a bounded ring of recent records, plus
 	// a file once /trace or --trace opens one. Never nil while the room runs.
 	//
@@ -398,6 +493,32 @@ type Model struct {
 	// stopped can be dropped by comparison. Never reset: an id has to be unique
 	// over the room's whole life, not over the current setup.
 	arenaPrepN int
+	// seatTrees is every seat's own worktree the room has cut or found, keyed
+	// by seat (seattree.go, §9.55). Held on Model for lastRace's reason: the
+	// renderer reads the badge stamped on the column, never this, and the
+	// trees outlive every turn the way arena trees do.
+	seatTrees map[model.VendorID]seatTree
+	// seatRefused records, per seat, that its worktree could not be cut for
+	// the current workspace — so the next dispatch spawns into the shared
+	// tree at once, badge and all, instead of paying the same git call to hear
+	// the same refusal. A /cd elsewhere gets a fresh attempt: the entry names
+	// its workspace and is ignored for any other.
+	seatRefused map[model.VendorID]seatRefusal
+	// seatPrep is the seat-worktree setup standing in front of a dispatch
+	// right now, arenaPrep's twin, and nil the rest of the time. Its own field
+	// because the two setups end differently — a race that could not be
+	// prepared is refused, a seat that could not be given a tree falls back —
+	// and one prep type answering both would carry two contracts.
+	seatPrep *seatPrep
+	// seatPrepN numbers seat preps, arenaPrepN's rule: unique over the room's
+	// whole life, never reset.
+	seatPrepN int
+	// adoptSrc and adoptDonorSrc are what the pending adoption merges FROM:
+	// a racer's arena branch or a seat's own branch (lifecycle.go, §9.55),
+	// resolved when the card arms and carried to y for adoptOnto's reason —
+	// the card named a branch, and y must merge that one.
+	adoptSrc      adoptSource
+	adoptDonorSrc adoptSource
 	// checkCmd is the command `/arena check` named, verbatim, and checkArgv is
 	// the same command split for exec — argv, never a shell (§9.48). Empty
 	// means no check, which is ABSENT on every racer's block rather than a
@@ -436,6 +557,10 @@ type Model struct {
 	// flowAdvancePending asks Update to dispatch the next hop after the current
 	// turn has fully retired. Dispatching earlier would trip the in-flight guard.
 	flowAdvancePending bool
+	// fanPrompts is each seat's own task for a fanned flow stage, set by
+	// launchFlowStage and consumed by the sendTurn it calls (§9.55). Nil the
+	// rest of the time, which is every ordinary dispatch.
+	fanPrompts map[model.VendorID]string
 }
 
 // New builds the model. Nothing renders until the first WindowSizeMsg arrives:
@@ -448,32 +573,8 @@ func New(opts Options) *Model {
 }
 
 func newWithBrief(opts Options, b Brief, hs GateHook, re Reattachment) *Model {
-	ctx, cancel := context.WithCancel(context.Background())
-	m := &Model{
-		opts:       opts,
-		st:         stateWith(opts, hs.Wired()),
-		styles:     NewStyles(true), // assume dark until the terminal answers
-		glyphs:     GlyphsFor(opts.ASCII),
-		events:     make(chan runner.Event, eventBuffer),
-		sessions:   map[model.VendorID]string{},
-		resumeIDs:  map[model.VendorID]string{},
-		unproven:   map[model.VendorID]bool{},
-		threadLost: map[model.VendorID]bool{},
-		forkWatch:  map[model.VendorID]string{},
-		failure:    map[model.VendorID]runner.FailureClass{},
-		redactors:  map[model.VendorID]*Redactor{},
-		procs:      map[model.VendorID]*seatProc{},
-		gateInputs: map[string]map[string]any{},
-		roomCtx:    ctx,
-		roomCancel: cancel,
-		brief:      b,
-		hooks:      hs,
-		// Never nil, so /trace has something to answer with in a model a test
-		// built directly. Run replaces it with the sink it installed into the
-		// runner, because there must be exactly one ring and the runner has to be
-		// writing into the same one /trace reads.
-		trace: newTraceSink(),
-	}
+	m := newModel(opts, stateWith(opts, hs.Wired()))
+	m.brief, m.hooks = b, hs
 	m.st.Briefed = b.Loaded()
 	m.reattach(re)
 	// Pickup-doc drift is a room-open fact, same class as a reattach notice:
@@ -481,6 +582,49 @@ func newWithBrief(opts Options, b Brief, hs GateHook, re Reattachment) *Model {
 	// next. Joined rather than replaced, so a reattach and a stale STATE.md
 	// both land — either alone would hide the other (§4a.1 applied to notices).
 	m.st.Notice = joinNotice(m.st.Notice, stateMDStaleNotice(m.st.Workspace))
+	return m
+}
+
+// newModel is the constructor's other half: every map, channel and context a
+// Model needs before it can take a message, over a State the caller built.
+//
+// Split out of newWithBrief for the replay (replay.go), whose State comes from
+// a file rather than from detection, and which must not run the room-open
+// reads the live constructor makes — a STATE.md measurement is a git call in
+// whatever directory the replay was started from, about a repository the
+// recording never mentions. One literal for both callers, so a field added
+// here is initialised for a replayed room the same day it is for a live one.
+func newModel(opts Options, st State) *Model {
+	ctx, cancel := context.WithCancel(context.Background())
+	m := &Model{
+		opts:        opts,
+		st:          st,
+		styles:      NewStyles(true), // assume dark until the terminal answers
+		glyphs:      GlyphsFor(opts.ASCII),
+		events:      make(chan runner.Event, eventBuffer),
+		sessions:    map[model.VendorID]string{},
+		resumeIDs:   map[model.VendorID]string{},
+		unproven:    map[model.VendorID]bool{},
+		threadLost:  map[model.VendorID]bool{},
+		forkWatch:   map[model.VendorID]string{},
+		failure:     map[model.VendorID]runner.FailureClass{},
+		redactors:   map[model.VendorID]*Redactor{},
+		procs:       map[model.VendorID]*seatProc{},
+		fellBack:    map[model.VendorID]bool{},
+		gateInputs:  map[string]map[string]any{},
+		turns:       map[model.VendorID]*turnState{},
+		cancelling:  map[model.VendorID]bool{},
+		givenUp:     map[model.VendorID]bool{},
+		seatTrees:   map[model.VendorID]seatTree{},
+		seatRefused: map[model.VendorID]seatRefusal{},
+		roomCtx:     ctx,
+		roomCancel:  cancel,
+		// Never nil, so /trace has something to answer with in a model a test
+		// built directly. Run replaces it with the sink it installed into the
+		// runner, because there must be exactly one ring and the runner has to be
+		// writing into the same one /trace reads.
+		trace: newTraceSink(),
+	}
 	return m
 }
 
@@ -656,6 +800,7 @@ func stateWith(opts Options, hooked bool) State {
 	st.Write = opts.Write
 	st.GateOff = opts.Auto
 	st.Seats = opts.Seats
+	st.HeadroomWarn = opts.Headroom
 	st.Now = time.Now()
 
 	// Resolved once, here, so the render path never reads the environment.
@@ -766,6 +911,18 @@ func isDir(path string) bool {
 type spinMsg time.Time
 
 func (m *Model) Init() tea.Cmd {
+	if m.replay != nil {
+		// A replay's only sources are the tick and the file (replay.go). No
+		// relay read — a live reading on a replayed frame would be two rooms'
+		// facts on one screen — no rebuild and no live seat, which is what
+		// keeps the spawn guard's "no test calls Init" argument true from the
+		// other side: this Init spawns nothing even when called.
+		return tea.Batch(
+			func() tea.Msg { return tea.RequestBackgroundColor() },
+			spin(),
+			m.replayNext(),
+		)
+	}
 	return tea.Batch(
 		// RequestBackgroundColor is a Msg in v2, not a Cmd: it is a request the
 		// runtime turns into an OSC query, so it has to be lifted into a Cmd
@@ -859,44 +1016,64 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.waitPTY()
 
 	case eventBatchMsg:
+		// The one parked reader has delivered; the pump is free to be re-armed
+		// by whatever below decides the room still needs it (waitEvents).
+		m.eventsArmed = false
+		// The --record file sees exactly the batch applyEvents is about to see
+		// (recording.go): same events, same order, before any of them has
+		// changed the room. A nil recorder is a no-op.
+		m.rec.events(msg.events)
 		m.applyEvents(msg.events)
 		// A racer that landed in this batch may have queued a check run
 		// (arenacheck.go). Drained before the branch below, because that branch
 		// returns on the turn ending — and the batch that retires the LAST
 		// racer is exactly the one that ends the turn, so a drain after it
 		// would strand the final seat's check until the next tick.
-		chk := m.dueArenaChecks()
-		if m.turn == nil {
-			if m.flowAdvancePending {
-				m.flowAdvancePending = false
-				return m, m.dispatch()
-			}
-			// The turn is over. Stop waiting on the channel: re-arming would
-			// park a goroutine on a channel nothing will write to until the
-			// next dispatch.
-			//
-			// It is also the moment the relay is worth re-reading: a turn just
-			// consumed some of every addressed account, and the next draft is
-			// composed against whatever this returns. The read lands late by
-			// construction — council does not write the relay, so a vendor's
-			// new figure appears only after its own statusline renders again —
-			// which is what the age suffix on the reading is for.
-			//
-			// A rebuild in flight is the one case where a room with no turn
-			// must keep waiting. The seats it just launched are live processes
-			// that have not yet said which thread they loaded, so the channel
-			// is exactly the thing that will write next — the comment above
-			// ("nothing will write to it") is false while that is true.
-			if m.rebuildInFlight() {
-				return m, tea.Batch(m.waitEvents(), chk)
-			}
-			return m, tea.Batch(readQuotaCmd(), chk)
+		cmds := []tea.Cmd{m.dueArenaChecks()}
+		if m.flowAdvancePending {
+			// The hop's seat landed and handed off. The next hop goes now,
+			// whatever the rest of the room is doing (§9.54): it waits on its
+			// own seat, not on the room. dispatch arms the pump itself when it
+			// starts something.
+			m.flowAdvancePending = false
+			cmds = append(cmds, m.dispatch())
 		}
-		// A racing seat's stream activity may have armed a live stat read
-		// (arenalive.go); launch what is due alongside the next wait. Batched
-		// rather than sequenced — the read is independent of the event
-		// channel, and waitEvents blocks.
-		return m, tea.Batch(m.waitEvents(), m.dueArenaRefreshes(), chk)
+		if m.dispatchEnded {
+			// A dispatch landed in this batch. That is the moment the relay is
+			// worth re-reading: a turn just consumed some of every addressed
+			// account, and the next draft is composed against whatever this
+			// returns. The read lands late by construction — council does not
+			// write the relay, so a vendor's new figure appears only after its
+			// own statusline renders again — which is what the age suffix on
+			// the reading is for. Per DISPATCH rather than per idle room, so a
+			// crew whose seats overlap still refreshes the figure as each
+			// brief lands.
+			//
+			// Never in a replay: this machine's relay says nothing about the
+			// accounts the recording spent (replay.go).
+			m.dispatchEnded = false
+			if m.replay == nil {
+				cmds = append(cmds, readQuotaCmd())
+			}
+		}
+		if m.anyInFlight() || m.rebuildInFlight() {
+			// Something will write next, so keep reading. anyInFlight is the
+			// room-wide read here (where this asked m.turn == nil): the pump
+			// serves every seat, so it runs while ANY seat is answering. A
+			// rebuild in flight is the one case where a room with no turn must
+			// keep waiting: the seats it just launched are live processes that
+			// have not yet said which thread they loaded.
+			//
+			// A racing seat's stream activity may have armed a live stat read
+			// (arenalive.go); launch what is due alongside the next wait.
+			// Batched rather than sequenced — the read is independent of the
+			// event channel, and waitEvents blocks.
+			cmds = append(cmds, m.waitEvents(), m.dueArenaRefreshes())
+		}
+		// Otherwise the room is idle. Stop waiting on the channel: re-arming
+		// would park a goroutine on a channel nothing will write to until the
+		// next dispatch.
+		return m, tea.Batch(cmds...)
 
 	case arenaSetupMsg:
 		// One step of a race's worktree setup beginning, or the whole setup
@@ -904,6 +1081,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the turn it was preparing, or report why it stopped — is decided by
 		// the handler and returned as the next command (arenasetup.go).
 		return m, m.applyArenaSetup(msg)
+
+	case seatSetupMsg:
+		// The same shape for a SEAT's worktree being cut before an ordinary
+		// writing dispatch (seattree.go, §9.55): a step, or the setup landing
+		// and launching the brief it stood in front of.
+		return m, m.applySeatSetup(msg)
 
 	case arenaStatMsg:
 		// One interim read landing (or being dropped as stale — the drop
@@ -920,6 +1103,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyArenaCheck(msg)
 		return m, nil
 
+	case replayMsg:
+		// One record of the recording landing, on its own time (replay.go).
+		// The handler returns the wait for the next one, or nil at the end.
+		return m, m.applyReplay(msg)
+
 	case quotaMsg:
 		// One read of the quota relay landing. No follow-up command: the next
 		// read is launched when a turn ends, because the file only changes when
@@ -931,7 +1119,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinMsg:
 		// Now is stamped here, on the tick, so Render never reads a clock and
 		// the elapsed counters advance on the same schedule as the spinner.
+		//
+		// A replay's Now is the RECORDING's clock, mapped from this tick
+		// (replay.go): the elapsed counters then count the seconds the vendor
+		// actually took, at the pace --replay-speed asked for, and a record
+		// that lands stamps the same clock the ticks between records advance.
 		m.st.Now = time.Time(msg)
+		if m.replay != nil {
+			m.st.Now = m.replay.clock(time.Time(msg))
+		}
 		// The spinner only advances while a column is genuinely working — or
 		// while a race's worktrees are being cut, which is the same claim about
 		// a different worker: git is running off the loop and the moving cell is
@@ -939,7 +1135,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// where nothing is happening, and that was the exact lie a frozen setup
 		// used to tell. §7.1's budget of one moving cell is untouched: no column
 		// can be spinning during a setup, because nothing has been dispatched.
-		if m.st.Busy() || m.st.ArenaSetup != "" {
+		if m.st.Busy() || m.st.ArenaSetup != "" || m.st.TreeSetup != "" {
 			m.st.Spinner++
 		}
 		// The tick is also the rebuild's backstop: a seat whose process died
@@ -977,6 +1173,21 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// second ctrl+c means what it always means.
 	if m.arenaPrep != nil && msg.String() == "ctrl+c" {
 		m.stopArenaSetup()
+		return m, nil
+	}
+	// A replay answers the keys that would act on a live room before any
+	// gate or mode does (replay.go): enter, the card's y/n/a, the per-seat
+	// verbs. Reading is untouched — scroll, focus, the pages, the help.
+	if m.replay != nil {
+		if handled, cmd := m.replayKey(msg); handled {
+			return m, cmd
+		}
+	}
+	// The same key, the same reason, for a seat's worktree being cut before a
+	// writing brief (seattree.go, §9.55): the git command is the thing the
+	// operator needs to be able to end, and nothing below can end it.
+	if m.seatPrep != nil && msg.String() == "ctrl+c" {
+		m.stopSeatSetup()
 		return m, nil
 	}
 	if m.st.Gating() {
@@ -1392,13 +1603,16 @@ func (m *Model) writeGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // being handed a card whose y does nothing, which would teach that the key is
 // unreliable rather than that the seat is empty.
 func (m *Model) askClearSeat() {
-	if m.turn != nil {
-		m.st.Notice = "a turn is in flight — c clears a seat between turns"
-		return
-	}
 	c := m.focused()
 	if c == nil {
 		m.st.Notice = "no seat is focused"
+		return
+	}
+	if busy := m.seatBusy(c); busy != "" {
+		// Per SEAT (seatBusy reads turnOf, where this read m.turn): the thread
+		// being dropped is this seat's, and a neighbour's turn has no stake in
+		// it (§9.54).
+		m.st.Notice = busy + " — c clears a seat between its turns"
 		return
 	}
 	if !m.seatHasThread(c.Vendor) {
@@ -1473,13 +1687,17 @@ func (m *Model) clearSeat(v model.VendorID) {
 // is not a way to make it more undone). Collapsing any two would be the
 // degraded-vs-zero bug applied to a keystroke.
 func (m *Model) askUndoSeat() {
-	if m.turn != nil {
-		m.st.Notice = "a turn is in flight — u undoes a race attempt between turns"
-		return
-	}
 	c := m.focused()
 	if c == nil {
 		m.st.Notice = "no seat is focused"
+		return
+	}
+	if busy := m.seatBusy(c); busy != "" {
+		// Per SEAT (seatBusy reads turnOf, where this read m.turn): the tree
+		// being reset is this racer's, and a race refuses every other brief
+		// while it runs, so a busy neighbour can only be on an ordinary turn of
+		// its own (§9.54).
+		m.st.Notice = busy + " — u undoes a race attempt between its turns"
 		return
 	}
 	if c.Arena == nil {
@@ -1585,12 +1803,8 @@ func (m *Model) undoSeat(v model.VendorID) {
 // refusals and by §9.37's amendments, the same way /adopt and /arena drop are
 // taught by theirs. ctrl+c is untouched and stays the whole-turn act.
 func (m *Model) askGiveUpSeat() {
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		m.st.Notice = "no turn is in flight — x gives up on one live seat mid-turn"
-		return
-	}
-	if m.cancelling {
-		m.st.Notice = "ctrl+c is already cancelling this turn — every seat is stopping"
 		return
 	}
 	c := m.focused()
@@ -1598,12 +1812,21 @@ func (m *Model) askGiveUpSeat() {
 		m.st.Notice = "no seat is focused"
 		return
 	}
-	if !m.turn.live[c.Vendor] {
+	// The focused seat's own turn (turnOf, where this read m.turn.live): a
+	// seat that has landed, or never took the brief, has nothing running.
+	ts := m.turnOf(c.Vendor)
+	if ts == nil {
 		m.st.Notice = c.Label + " already landed — there is nothing running to give up on"
 		return
 	}
+	if m.cancelling[c.Vendor] {
+		// Per seat since §9.54: ctrl+c may be stopping this seat alone, and a
+		// give-up on a seat that is already going would only re-label it.
+		m.st.Notice = "ctrl+c is already cancelling " + c.Label + "'s turn — it is stopping"
+		return
+	}
 	m.giveUpPending = c.Vendor
-	m.st.Notice = "give up on " + c.Label + "? " + giveUpCost(m.turn, c.Vendor)
+	m.st.Notice = "give up on " + c.Label + "? " + giveUpCost(ts, c.Vendor)
 }
 
 // giveUpCost is the second half of the y/n card: what pressing y actually costs
@@ -1616,7 +1839,7 @@ func (m *Model) askGiveUpSeat() {
 // streamed is all there is. The persistent seat is INTERRUPTED rather than
 // killed, so the sentence has to say the conversation lives — the whole reason
 // the interrupt exists is that killing it would throw away the session-init
-// cost and make the next brief expensive (cancelTurn's own argument).
+// cost and make the next brief expensive (cancelSeat's own argument).
 func giveUpCost(ts *turnState, v model.VendorID) string {
 	switch {
 	case ts.arena:
@@ -1668,7 +1891,7 @@ func (m *Model) giveUpGateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 //   - The PERSISTENT seat is INTERRUPTED, never killed. Killing it would work,
 //     and it would also throw away the conversation and the session-init cost
 //     that bought it, so cutting one turn would silently make the next one
-//     expensive — cancelTurn's argument, unchanged, applied per seat. The next
+//     expensive — cancelSeat's argument, unchanged, applied per seat. The next
 //     brief resumes the seat, and the column's note says so.
 //
 // The events the stopped seat already queued arrive later and land inert, and
@@ -1681,28 +1904,29 @@ func (m *Model) giveUpSeat(v model.VendorID) {
 	c := m.column(v)
 	// Re-checked, not trusted: events drain between the card arming and the y,
 	// so the seat can land — or the whole turn end — while the question is up.
-	// A give-up that ran anyway would re-finish a settled column.
-	if m.turn == nil || c == nil || !m.turn.live[v] {
+	// A give-up that ran anyway would re-finish a settled column. turnOf is the
+	// per-seat read of what was m.turn.live[v].
+	ts := m.turnOf(v)
+	if ts == nil || c == nil {
 		m.st.Notice = "the seat landed while the question was up — nothing was stopped"
 		return
 	}
 	// Recorded first, so that nothing the stop itself provokes can arrive at
-	// applyEvents ahead of the fact that explains it.
-	if m.turn.givenUp == nil {
-		m.turn.givenUp = map[model.VendorID]bool{}
-	}
-	m.turn.givenUp[v] = true
+	// applyEvents ahead of the fact that explains it. On the Model rather than
+	// the turn since §9.54, because the seat's turn ends below, at
+	// finishColumn, and the stop's echoes arrive after that (Model.givenUp).
+	m.givenUp[v] = true
 
-	persistent := m.turn.persistent[v]
+	persistent := ts.persistent[v]
 	switch {
 	case persistent:
 		m.interruptSeat(v)
 	default:
-		if es, ok := m.turn.arenaEphemeral[v]; ok {
+		if es, ok := ts.arenaEphemeral[v]; ok {
 			es.Kill()
-		} else if h, ok := m.turn.arenaHandles[v]; ok {
+		} else if h, ok := ts.arenaHandles[v]; ok {
 			h.Kill()
-		} else if h, ok := m.turn.seatHandles[v]; ok {
+		} else if h, ok := ts.seatHandles[v]; ok {
 			h.Kill()
 		}
 	}
@@ -1716,9 +1940,9 @@ func (m *Model) giveUpSeat(v model.VendorID) {
 	// turn's live set.
 	c.Body += m.flush(v)
 	c.Elapsed = time.Since(c.Started)
-	c.Note = giveUpNote(m.turn, v, c)
+	c.Note = giveUpNote(ts, v, c)
 	m.finishColumn(c, PhaseCancelled)
-	m.st.Notice = "gave up on " + c.Label + " — " + giveUpOutcome(m.turn, v)
+	m.st.Notice = "gave up on " + c.Label + " — " + giveUpOutcome(ts, v)
 }
 
 // giveUpNote is the sentence the cut column keeps, and it exists to keep FOUR
@@ -1828,9 +2052,13 @@ func (m *Model) toggleFlowStop() {
 func (m *Model) gateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y":
+		// Recorded before it is decided, so the --record file holds the card
+		// as the operator saw it (recording.go). Same on the two keys below.
+		m.recordGate(true)
 		m.decideGate(true)
 		return m, nil
 	case "n":
+		m.recordGate(false)
 		m.decideGate(false)
 		return m, nil
 	case "a":
@@ -1842,6 +2070,10 @@ func (m *Model) gateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// It approves the card in front of you as well as the ones after it.
 		// An `a` that turned asking off and left the current request pending
 		// would answer the general question and not the one on screen.
+		for range m.st.Gates {
+			// Each card up, in the order stopAsking answers them.
+			m.recordGate(true)
+		}
 		m.stopAsking()
 		return m, nil
 	case "i", "enter":
@@ -1890,6 +2122,11 @@ func (m *Model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// never reaches a vendor. Everything else dispatches.
 		if m.roomCommand() {
 			return m, nil
+		}
+		// `@auto` picks its seat here, against the State the footer just
+		// drew, and hands dispatch a named route (quota.go).
+		if cmd, handled := m.dispatchAuto(); handled {
+			return m, cmd
 		}
 		return m, m.dispatch()
 	case "backspace":
@@ -2283,12 +2520,26 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "ctrl+c":
-		// Cancels the turn in flight; quits when there is none. Two meanings
-		// for one key is a compromise, but the alternative is a quit key that
-		// silently abandons three running agents, and the mode line states
-		// which meaning is live on every frame.
-		if m.turn != nil {
-			m.cancelTurn()
+		// Cancels the FOCUSED seat's turn when it has one; cancels everything
+		// in flight when the focused seat is idle and something else is
+		// running; quits when nothing is (§9.54). Three meanings for one key
+		// is a compromise, but the alternative is a quit key that silently
+		// abandons three running agents, and the mode line states which
+		// meaning is live on every frame (modeHints' cancel cell names the
+		// seat, or says `all`).
+		//
+		// Focused-first, because with several seats answering different briefs
+		// the key has to be able to stop ONE of them: the operator who handed
+		// codex a refactor and grok the docs, and wants codex to stop, is
+		// looking at codex. The whole-room act is still one keystroke away —
+		// focus an idle column — and the footer says which act the key is.
+		if c := m.focused(); c != nil && m.turnOf(c.Vendor) != nil {
+			m.cancelSeat(c.Vendor)
+			m.st.Notice = "cancelling " + c.Label + "…"
+			return m, nil
+		}
+		if m.anyInFlight() {
+			m.cancelAll()
 			return m, nil
 		}
 		// teardown even with no turn in flight. A persistent seat's process
@@ -2298,12 +2549,23 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.teardown()
 		return m, tea.Quit
 	case "q":
-		if m.turn != nil {
-			m.st.Notice = "a turn is in flight — ctrl+c cancels it first"
+		if m.anyInFlight() {
+			// Room-wide (anyInFlight, where this read m.turn): quitting ends
+			// every seat, so one busy seat is enough to refuse it.
+			m.st.Notice = m.busySeats() + " — ctrl+c cancels a seat's turn first"
 			return m, nil
 		}
 		m.teardown()
 		return m, tea.Quit
+	case ".":
+		// The next seat that needs you (§9.54): the inbox strip's own key. The
+		// digits already reach any seat by position; this one reaches the
+		// strip's next entry without reading its number first, which is the
+		// whole use of a strip — you want the thing that finished, not seat 3.
+		// View mode only: in compose `.` is a full stop, the contract `q`, `f`
+		// and `c` keep. Offered on the footer only while the strip has an
+		// entry, so the key is never named where it does nothing (§7.8).
+		m.focusNeedsYou()
 	case "a":
 		// Same letter as the card's, deliberately. There it answers the question
 		// in front of you; here it reports and reverses. Safe with a turn in
@@ -2771,7 +3033,57 @@ func (m *Model) focusBy(d int) {
 			break
 		}
 	}
-	m.st.Focus = vis[((pos+d)%len(vis)+len(vis))%len(vis)]
+	m.setFocus(vis[((pos+d)%len(vis)+len(vis))%len(vis)])
+}
+
+// setFocus moves the keys to a column and stamps the move on both ends
+// (Column.LastFocus): the seat being left has now been looked at up to this
+// instant, and the seat being entered from it. Every keystroke that moves
+// focus comes through here, so the inbox's "since you last looked" is derived
+// from one record of one fact (§9.54). The clock is read HERE, on a keypress,
+// and never in Render.
+//
+// A move onto the column already focused still stamps it: the reader pressed a
+// key that names the seat they are on, which is a look.
+func (m *Model) setFocus(idx int) {
+	if idx < 0 || idx >= len(m.st.Columns) {
+		return
+	}
+	now := time.Now()
+	if m.st.Focus >= 0 && m.st.Focus < len(m.st.Columns) {
+		m.st.Columns[m.st.Focus].LastFocus = now
+	}
+	m.st.Columns[idx].LastFocus = now
+	m.st.Focus = idx
+}
+
+// focusNeedsYou puts the keys on the next seat the strip names (§9.54): the
+// first entry after the focused column in seating order, wrapping to the top,
+// so repeated presses walk the strip the way it reads. The strip already
+// excludes the focused seat, so the walk can never land where it started
+// unless nothing else is listed — and then there is nowhere to go, and the
+// notice says so rather than moving nothing silently.
+//
+// Page-gated the way focusSeat is: a page has one reading area and no columns
+// to move between.
+func (m *Model) focusNeedsYou() {
+	if m.pageOpen() {
+		return
+	}
+	seats := needsYou(m.st)
+	if len(seats) == 0 {
+		m.st.Notice = "nothing needs you — every seat is either idle or one you have looked at"
+		return
+	}
+	next := seats[0].idx
+	for _, e := range seats {
+		if e.idx > m.st.Focus {
+			next = e.idx
+			break
+		}
+	}
+	m.setFocus(next)
+	m.st.Notice = ""
 }
 
 // panesLive reports that pane controls would actually change the frame (§9.51).
@@ -2942,7 +3254,7 @@ func (m *Model) focusSeat(n int) bool {
 	if n < 1 || n > len(vis) {
 		return false
 	}
-	m.st.Focus = vis[n-1]
+	m.setFocus(vis[n-1])
 	return true
 }
 
@@ -2992,6 +3304,13 @@ type roomProgram interface{ Kill() }
 // observation surfaces — statusline and hud — keep their read-only guarantee
 // unchanged, and nothing here is reachable from either of them (ADR-008).
 func Run(opts Options) error {
+	if opts.ReplayPath != "" {
+		// A replay is not a room with the vendors turned off; it is a reader
+		// of one file, and it takes the reader's path before any of the
+		// live room's own reads — the saved room, the brief, the trace, the
+		// relay — can happen (replay.go).
+		return runReplay(opts)
+	}
 	// --live is normalized and refused HERE, before the alternate screen, for
 	// the reason --brief and --trace are: a seat that cannot be live must be a
 	// line on stderr rather than a card behind a TUI the user has to quit to
@@ -3035,6 +3354,25 @@ func Run(opts Options) error {
 		if _, terr := trace.open(opts.TracePath); terr != nil {
 			return terr
 		}
+	}
+	// --record is opened here for the same reason, and refused here for one
+	// more: a path under ~/.telltale is refused before anything is written,
+	// because that directory is the gauges' numbers-and-keys store and this
+	// file carries the conversation (recording.go).
+	var rec *recorder
+	if opts.RecordPath != "" {
+		rec, err = openRecorder(opts.RecordPath)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			// The first write error surfaces here, after the alternate screen
+			// is gone: a recording that is silently short is a capture the
+			// owner would review and commit as whole.
+			if cerr := rec.close(); cerr != nil {
+				fmt.Fprintln(os.Stderr, "telltale council: the recording is incomplete:", cerr)
+			}
+		}()
 	}
 
 	// The room is the persistent object, so reattaching is the DEFAULT: a
@@ -3109,6 +3447,12 @@ func Run(opts Options) error {
 	// sink is discarded here rather than never made, so a Model built by a test
 	// still has one and /trace never dereferences nil.
 	mdl.trace = trace
+	// The recording opens with the room as it stands before the first key:
+	// which seats, which posture, which workspace — what a replay needs to
+	// draw the first frame (recording.go). Nil-safe when --record was not
+	// typed.
+	mdl.rec = rec
+	rec.room(mdl.st)
 	p := tea.NewProgram(mdl)
 	// Installed before the program runs, and it is the ONLY thing standing
 	// between an abnormal exit and five orphaned agents on macOS and Linux. The

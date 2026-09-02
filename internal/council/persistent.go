@@ -67,6 +67,89 @@ type seatSession interface {
 	SendAside(lines [][]byte) error
 	Kill()
 	Alive() bool
+	// CloseInput and Done are the graceful stop's two extra verbs (stopProc):
+	// close the pipe after the seat's last word, then wait — bounded — for the
+	// exit before the kill that still follows.
+	CloseInput()
+	Done() <-chan struct{}
+}
+
+// errFellBack is what handTurnToSeat returns when the seat's live process could
+// not be brought up and the room has retreated to the seat's measured batch
+// adapter (vendors.LiveFallback). It is not a failure of the turn: sendTurn
+// reads it as "send this same brief down the batch branch instead", so the
+// brief the operator typed reaches the vendor on the same press of enter.
+var errFellBack = errors.New("council: this seat fell back to its batch adapter")
+
+// deadWire asks a seat's protocol whether its handshake failed for good. Only
+// the two RPC protocols answer (Dead); a stream-json wire has no handshake and
+// reports false, which is the right answer for it — its failure shape is a
+// process death, read elsewhere (retreatOnDeath).
+func deadWire(w seatWire) bool {
+	d, ok := w.(interface{ Dead() bool })
+	return ok && d.Dead()
+}
+
+// gracefulOf finds the seat's last word, wherever the seat keeps it: on the
+// protocol for a Conversational seat, on the adapter behind streamWire for a
+// Persistent one. Those are the two things the room holds per process, and
+// vendors.GracefulStop's own comment says which implements it for which.
+func gracefulOf(w seatWire) (vendors.GracefulStop, bool) {
+	if g, ok := w.(vendors.GracefulStop); ok {
+		return g, true
+	}
+	if sw, ok := w.(streamWire); ok {
+		g, ok := sw.v.(vendors.GracefulStop)
+		return g, ok
+	}
+	return nil, false
+}
+
+// stopProc ends one seat's process the way the seat asked to be ended, and
+// returns a channel that closes once the kill has been issued.
+//
+// Three steps for a seat that implements vendors.GracefulStop — write its
+// closing lines (an interrupt for a turn in flight, a refusal for any held
+// approval, nothing for an idle process), close its stdin, wait its Grace —
+// and then the kill, ALWAYS. The kill is not a fallback for a rude vendor; it
+// is the step that was measured necessary. At codex-cli 0.149.1 (design.md
+// §9.50) four `codex app-server` runs exited 1.5–3.3 s after stdin closed and
+// one was still alive 15 s later, so a stop that ended at the close would
+// have left that process holding a session and spending quota with nothing on
+// screen to say so — the exact invisible state this product refuses. Grace is
+// what lets the four ordinary runs end on their own; the kill is what ends the
+// fifth.
+//
+// A seat with no last word is killed at once, as every seat was before this
+// existed; the returned channel is already closed. The wait runs off the
+// update loop, so a respawn or a cancel does not freeze the room for a grace
+// period — teardown is the one caller that waits, and it waits on every seat
+// at once (teardown).
+func stopProc(p *seatProc) <-chan struct{} {
+	done := make(chan struct{})
+	g, ok := gracefulOf(p.wire)
+	if !ok {
+		p.sess.Kill()
+		close(done)
+		return done
+	}
+	// A closing line that cannot be queued is not a reason to skip the
+	// close: the pipe is still there to shut, and the kill still follows.
+	if lines := g.Closing(); len(lines) > 0 {
+		_ = p.sess.SendAside(lines)
+	}
+	p.sess.CloseInput()
+	grace := g.Grace()
+	sess := p.sess
+	go func() {
+		defer close(done)
+		select {
+		case <-sess.Done():
+		case <-time.After(grace):
+		}
+		sess.Kill()
+	}()
+	return done
 }
 
 // seatWire is how the room says something to a live seat.
@@ -209,8 +292,19 @@ func (m *Model) handTurnToSeat(v vendors.Vendor, c *Column, prompt string) (stri
 		// live process is exactly what the stale-exit guard reads as "this seat is
 		// fine", so leaving it registered would hand it every subsequent brief and
 		// hang on each one.
-		p.sess.Kill()
+		refused := deadWire(p.wire)
+		stopProc(p)
 		m.dropProcess(c.Vendor)
+		// A refused handshake on a seat that has a measured batch adapter
+		// behind it is not the end of this brief. The seat retreats to that
+		// adapter for the rest of the room (vendors.LiveFallback) and sendTurn
+		// re-enters the batch branch with the SAME prompt — the one this call
+		// was handed, before the brief was applied, because specFor applies it
+		// again on the batch seat's own first turn.
+		if _, ok := v.(vendors.LiveFallback); ok && refused {
+			m.retreat(c)
+			return "", errFellBack
+		}
 		return "", err
 	}
 	// SendTurn rather than a write per line, and it starts the clock even when
@@ -267,10 +361,15 @@ func spawnPosture(v vendors.Vendor, p vendors.Posture) vendors.Posture {
 func (m *Model) seatProcess(v vendors.Vendor, c *Column) (*seatProc, string, error) {
 	existing, had := m.procs[c.Vendor]
 	want := spawnPosture(v, m.seatPosture())
+	// The directory this seat works in for THIS dispatch: its own worktree in
+	// a writing room, the workspace otherwise (seatDir, §9.55). A process
+	// pinned to the other one cannot serve the turn, for the same measured
+	// reason a /cd cannot redirect one — cwd is fixed at spawn.
+	dir := m.seatDir(c.Vendor)
 	moved := false
 	repostured := false
 	if had && existing.sess.Alive() {
-		if sameDir(existing.dir, m.st.Workspace) && existing.posture == want {
+		if sameDir(existing.dir, dir) && existing.posture == want {
 			return existing, "", nil
 		}
 		// Two reasons a live process cannot serve this turn, and one remedy.
@@ -288,9 +387,13 @@ func (m *Model) seatProcess(v vendors.Vendor, c *Column) (*seatProc, string, err
 		// forbid: the column would say READ while the live process still held
 		// the write flags it was launched with. Respawning costs one process and
 		// carries the thread across on the same measured --resume composition.
-		moved = !sameDir(existing.dir, m.st.Workspace)
+		moved = !sameDir(existing.dir, dir)
 		repostured = !moved
-		existing.sess.Kill()
+		// The replaced process gets its last word and its grace off the loop
+		// (stopProc); the new one below does not wait on it. Its exit arrives
+		// later as a stale event, which the guards in applyEvents attribute to
+		// a predecessor by the liveness test they already trust.
+		stopProc(existing)
 		m.dropProcess(c.Vendor)
 		if id := m.sessions[c.Vendor]; id != "" && m.resumeIDs[c.Vendor] == "" {
 			m.resumeIDs[c.Vendor] = id
@@ -318,7 +421,7 @@ func (m *Model) seatProcess(v vendors.Vendor, c *Column) (*seatProc, string, err
 	if err != nil {
 		return nil, "", err
 	}
-	p := &seatProc{sess: sess, wire: wire, resumed: resumed, dir: m.st.Workspace, posture: want}
+	p := &seatProc{sess: sess, wire: wire, resumed: resumed, dir: dir, posture: want}
 	m.procs[c.Vendor] = p
 
 	if resumed {
@@ -337,6 +440,17 @@ func (m *Model) seatProcess(v vendors.Vendor, c *Column) (*seatProc, string, err
 		return p, "this hop needs a different posture — this seat is starting a new session for it", nil
 	}
 	if moved {
+		// Three moves, three sentences, because they are three facts (§4a.1).
+		// A seat that stepped into its own worktree, or back out of it into
+		// the shared tree (a /read, or --shared-tree's absence on a relaunch),
+		// did not move because the ROOM moved, and a note saying the room had
+		// would send the operator looking for a /cd nobody typed.
+		if st, ok := m.seatTrees[c.Vendor]; ok && sameDir(st.tree, dir) {
+			return p, "this seat now works in its own worktree, " + st.branch + " — starting a new session there", nil
+		}
+		if st, ok := m.seatTrees[c.Vendor]; ok && sameDir(dir, m.st.Workspace) && sameDir(st.tree, existing.dir) {
+			return p, "this seat is back in the shared tree — starting a new session there", nil
+		}
 		// The move itself was announced by /cd; what needs saying is that THIS
 		// seat had no thread to carry across, so its history starts here.
 		return p, "the room moved — this seat is starting a new session there", nil
@@ -361,8 +475,12 @@ func (m *Model) spawnSeat(v vendors.Vendor, c *Column, resumeID string, want ven
 	// The ROOM's context, never the turn's. A turn that is cancelled must not
 	// take this process with it — that is the entire point of keeping it — so
 	// only quitting the room cancels this.
+	// Where the process runs: the seat's own worktree in a writing room, the
+	// workspace otherwise (seatDir, §9.55) — the one read every spawn path
+	// shares, so the badge and the argv cannot name different directories.
+	dir := m.seatDir(c.Vendor)
 	if cv, ok := v.(vendors.Conversational); ok {
-		spec, proto, err := cv.Open(m.st.Workspace, c.Binary, resumeID, want)
+		spec, proto, err := cv.Open(dir, c.Binary, resumeID, want)
 		if err != nil {
 			return nil, nil, false, err
 		}
@@ -394,13 +512,13 @@ func (m *Model) spawnSeat(v vendors.Vendor, c *Column, resumeID string, want ven
 	// already re-briefed for that reason — and a replacement that came back
 	// unscreened while the badge still said the guard was wired would be the
 	// quietest false claim in the room.
-	spec, err := pv.Session(m.st.Workspace, c.Binary, m.hooks.Path, want)
+	spec, err := pv.Session(dir, c.Binary, m.hooks.Path, want)
 	if err != nil {
 		return nil, nil, false, err
 	}
 	resumed := false
 	if resumeID != "" {
-		if rs, rerr := pv.SessionResume(m.st.Workspace, c.Binary, m.hooks.Path,
+		if rs, rerr := pv.SessionResume(dir, c.Binary, m.hooks.Path,
 			resumeID, want); rerr == nil {
 			spec = rs
 			resumed = true
@@ -517,7 +635,10 @@ func (m *Model) interruptSeat(v model.VendorID) {
 	if err == nil && p.sess.SendAside(lines) == nil {
 		return
 	}
-	p.sess.Kill()
+	// The cancel that has to become a kill still gets the seat's closing
+	// sequence first (stopProc): the pipe is closed and the grace runs off the
+	// loop, and the kill follows either way.
+	stopProc(p)
 	m.dropProcess(v)
 }
 

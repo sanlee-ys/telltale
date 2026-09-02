@@ -52,7 +52,7 @@ func TestCtrlUClearsAPastedDraftAndSaysHowMuch(t *testing.T) {
 	if m.st.Mode != ModeComposing {
 		t.Error("ctrl+u changed the mode away from compose")
 	}
-	if log.n() != 0 || m.turn != nil {
+	if log.n() != 0 || m.anyInFlight() {
 		t.Errorf("ctrl+u put work in flight: %d spawn(s)", log.n())
 	}
 	// The routing indicator falls with the draft it describes: "@codex" is

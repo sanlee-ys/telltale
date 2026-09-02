@@ -44,6 +44,14 @@ type Session struct {
 	killed bool
 	closed bool
 
+	// closeIn is closed by CloseInput and wakes the writer goroutine, which
+	// owns the stdin pipe and closes it on its way out. A separate channel
+	// rather than closing sendQ: write checks `closed` and then queues on
+	// sendQ outside the lock, so a queue closed between those two steps
+	// would panic the caller instead of refusing it.
+	closeIn   chan struct{}
+	closeOnce sync.Once
+
 	done chan struct{}
 }
 
@@ -138,11 +146,12 @@ func startSession(ctx context.Context, spec Spec, out chan<- Event, handle handl
 	ck.launched()
 
 	s := &Session{
-		cmd:   cmd,
-		group: group,
-		sendQ: make(chan []byte, sendQueue),
-		clock: ck,
-		done:  make(chan struct{}),
+		cmd:     cmd,
+		group:   group,
+		sendQ:   make(chan []byte, sendQueue),
+		clock:   ck,
+		closeIn: make(chan struct{}),
+		done:    make(chan struct{}),
 	}
 
 	// One goroutine owns stdin. Writes are serialised here rather than under the
@@ -162,6 +171,8 @@ func startSession(ctx context.Context, spec Spec, out chan<- Event, handle handl
 					s.markClosed()
 					return
 				}
+			case <-s.closeIn:
+				return
 			case <-s.done:
 				return
 			}
@@ -350,6 +361,29 @@ func (s *Session) Kill() {
 	s.closed = true
 	s.mu.Unlock()
 	s.group.kill()
+}
+
+// CloseInput closes the child's stdin without killing it, and refuses every
+// later Send.
+//
+// It is the middle step of a live seat's graceful stop (vendors.GracefulStop):
+// the seat's closing lines go out first, then the pipe closes, then the room
+// waits a bounded grace and calls Kill. The kill still follows because a
+// stdin close alone was MEASURED not to end the process it was meant to end:
+// at codex-cli 0.149.1 (design.md §9.50) four `codex app-server` runs exited
+// 1.5–3.3 s after their stdin closed and one was still alive 15 s later. So
+// this method is what lets the ordinary case end on its own terms; it is not
+// what guarantees the process ends.
+//
+// The pipe is closed by the writer goroutine rather than here, because that
+// goroutine owns it: a line already queued is written before the close, and
+// a close from a second goroutine would race the write it was meant to
+// follow. Idempotent, and a no-op after Kill.
+func (s *Session) CloseInput() {
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
+	s.closeOnce.Do(func() { close(s.closeIn) })
 }
 
 // Alive reports whether the process is still able to take a turn.

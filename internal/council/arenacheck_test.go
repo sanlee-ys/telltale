@@ -74,12 +74,12 @@ func raceRoom(t *testing.T, seats ...model.VendorID) (*Model, map[model.VendorID
 		c.TurnN = 6
 		c.Prompt = "make the retry loop back off"
 	}
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		live:       live,
 		persistent: map[model.VendorID]bool{},
 		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
-	}
+	})
 	return m, trees
 }
 
@@ -154,7 +154,7 @@ func TestTheCheckVerbNamesTheCommandSaysItAndTakesItBack(t *testing.T) {
 	}
 	m.st.Write = true
 
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Error("naming a check dispatched a turn")
 	}
 	if log.n() != 0 {
@@ -188,7 +188,7 @@ func TestTheCheckVerbRefusesRatherThanSwallowingABrief(t *testing.T) {
 	if m.checkCmd != "" {
 		t.Errorf("a brief became a check command: %q", m.checkCmd)
 	}
-	if m.turn != nil || m.arenaPrep != nil {
+	if m.anyInFlight() || m.arenaPrep != nil {
 		t.Fatal("the refused draft raced anyway")
 	}
 	if log.n() != 0 {
@@ -321,7 +321,7 @@ func TestACancelledTurnRunsNoCheck(t *testing.T) {
 	}
 
 	// Then ctrl+c takes the rest of the turn.
-	m.cancelling = true
+	markCancelling(m, model.VendorCodex)
 	m.finishColumn(m.column(model.VendorCodex), PhaseDone)
 	if ck := m.column(model.VendorCodex).Arena.Check; ck != nil {
 		t.Errorf("a cancelled turn queued %+v", ck)
@@ -390,6 +390,16 @@ func TestTheCheckRunsAfterTheDiffAndTheCommit(t *testing.T) {
 	for _, msg := range drainChecks(t, m) {
 		m.applyArenaCheck(msg)
 	}
+	// The sentence is asserted, not its row. The arena block names the
+	// worktree by its full path, and under macOS's per-user temp root
+	// (`/var/folders/<xx>/<hash>/T/...`) that path wraps to four rows of a
+	// 39-column seat; the crew's needs-you strip (§9.54) spends one more, and
+	// at the 24-row default the sentence was below `↓ 4 more below`, rendered
+	// and off screen (measured on the first darwin CI run, 2026-09-02, and
+	// reproduced on linux with a temp root of the same length). A taller
+	// frame keeps the assertion about the sentence rather than about the
+	// length of a temp path.
+	m.st.Height = 40
 
 	shown, _ := gitOut(tree, "show", "--name-only", "--format=%s", "HEAD")
 	if strings.Contains(shown, "built.bin") {

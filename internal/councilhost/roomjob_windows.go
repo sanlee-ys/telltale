@@ -4,6 +4,7 @@ package councilhost
 
 import (
 	"fmt"
+	"os"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -86,6 +87,12 @@ func (j *RoomJob) Handle() windows.Handle {
 	}
 	return j.job
 }
+
+// Signalled is the channel the Unix job delivers a caught SIGTERM on, and it
+// is nil here: the room job needs no handler, because kill-on-job-close fires
+// on the host's death by any route. A receive from a nil channel blocks
+// forever, which is exactly what Serve's watcher should do on this platform.
+func (j *RoomJob) Signalled() <-chan os.Signal { return nil }
 
 // Kill terminates every process in the job, the host included.
 //

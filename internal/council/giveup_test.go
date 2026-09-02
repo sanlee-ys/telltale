@@ -37,10 +37,11 @@ func giveUpRace(t *testing.T) (*Model, map[model.VendorID]*recordedKill, *killSe
 	t.Helper()
 	m, _, racer := arenaCursorRace(t)
 	oneShots := map[model.VendorID]*recordedKill{}
-	for v := range m.turn.arenaHandles {
+	race := m.race()
+	for v := range race.arenaHandles {
 		k := &recordedKill{}
 		oneShots[v] = k
-		m.turn.arenaHandles[v] = k
+		race.arenaHandles[v] = k
 	}
 	return m, oneShots, racer
 }
@@ -64,7 +65,7 @@ func focusSeatOn(t *testing.T, m *Model, v model.VendorID) {
 // committed onto the arena branch as the attempt's durable receipt.
 func TestGiveUpKillsTheEphemeralRacerAndLandsTheColumnCancelled(t *testing.T) {
 	m, _, racer := giveUpRace(t)
-	tree := m.turn.arenaTrees[model.VendorCursor]
+	tree := m.race().arenaTrees[model.VendorCursor]
 	if err := os.WriteFile(filepath.Join(tree, "half.txt"), []byte("partial\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -108,10 +109,10 @@ func TestGiveUpKillsTheEphemeralRacerAndLandsTheColumnCancelled(t *testing.T) {
 	if c.ArenaInterim != nil {
 		t.Error("the interim stat survived the landing — two answers on one column")
 	}
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("giving up on one seat ended a turn three seats are still racing")
 	}
-	if m.turn.live[model.VendorCursor] {
+	if m.turnOf(model.VendorCursor) != nil {
 		t.Error("the given-up seat never left the turn's live set — the turn cannot end")
 	}
 }
@@ -155,14 +156,14 @@ func TestTheTurnEndsWhenTheOthersLandAfterAGiveUp(t *testing.T) {
 
 	m.key(key("x"))
 	m.key(key("y"))
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("the give-up itself ended the turn")
 	}
 	for _, v := range []model.VendorID{model.VendorClaude, model.VendorCodex, model.VendorAntigravity} {
 		m.applyEvents([]runner.Event{{Vendor: v, Kind: runner.KindDone}})
 	}
 
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Fatal("every seat has landed and the turn is still in flight — the hostage the key exists to free")
 	}
 	if m.st.Mode != ModeComposing {
@@ -175,27 +176,36 @@ func TestTheTurnEndsWhenTheOthersLandAfterAGiveUp(t *testing.T) {
 // the ephemeral racer all survive, and their columns keep racing.
 func TestGiveUpKillsTheRightOneShotHandle(t *testing.T) {
 	m, oneShots, racer := giveUpRace(t)
-	focusSeatOn(t, m, model.VendorCodex)
+	// Derived rather than named: which seats race as one-shot processes is
+	// the registry's claim, not this test's. Codex was the witness until
+	// 2026-09-02, when it became a Conversational seat that races on a
+	// throwaway session like cursor (§9.54); the property is the same for
+	// whichever one-shot racer the room still has.
+	cut := oneOf(t, oneShots, "one-shot racer")
+	focusSeatOn(t, m, cut)
 
 	m.key(key("x"))
 	m.key(key("y"))
 
-	if !oneShots[model.VendorCodex].killed {
-		t.Fatal("codex's give-up did not kill codex's racer")
+	if !oneShots[cut].killed {
+		t.Fatalf("%s's give-up did not kill %s's racer", cut, cut)
 	}
-	for _, v := range []model.VendorID{model.VendorClaude, model.VendorAntigravity} {
-		if oneShots[v].killed {
-			t.Errorf("codex's give-up killed %s's racer", v)
+	for v, k := range oneShots {
+		if v == cut {
+			continue
+		}
+		if k.killed {
+			t.Errorf("%s's give-up killed %s's racer", cut, v)
 		}
 		if c := m.column(v); c.Phase != PhaseStreaming && c.Phase != PhaseWaiting {
 			t.Errorf("%s's column stopped racing: %v", v, c.Phase)
 		}
 	}
 	if racer.killed {
-		t.Error("codex's give-up killed the cursor seat's ephemeral racer")
+		t.Errorf("%s's give-up killed an ephemeral racer", cut)
 	}
-	if c := m.column(model.VendorCodex); c.Phase != PhaseCancelled {
-		t.Errorf("codex's column = %v, want cancelled", c.Phase)
+	if c := m.column(cut); c.Phase != PhaseCancelled {
+		t.Errorf("%s's column = %v, want cancelled", cut, c.Phase)
 	}
 }
 
@@ -229,7 +239,7 @@ func TestARacerGiveUpLeavesTheRoomProcessAlive(t *testing.T) {
 	if m.column(model.VendorCursor).Arena.Rank != rank {
 		t.Error("the kill's own exit re-ranked the race")
 	}
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Error("the exit echo tore down a turn three seats are still racing")
 	}
 	if roomProc.killed {
@@ -259,12 +269,12 @@ func TestGiveUpRefusalsEachNameTheirReason(t *testing.T) {
 	t.Run("ctrl+c is already stopping every seat", func(t *testing.T) {
 		m, _, _ := giveUpRace(t)
 		focusSeatOn(t, m, model.VendorCursor)
-		m.cancelling = true
+		markCancelling(m, model.VendorCursor)
 		m.key(key("x"))
 		if m.giveUpPending != "" {
 			t.Fatal("x armed a per-seat act over a whole-turn cancel already in progress")
 		}
-		if !strings.Contains(m.st.Notice, "ctrl+c") || !strings.Contains(m.st.Notice, "every seat") {
+		if !strings.Contains(m.st.Notice, "ctrl+c") || !strings.Contains(m.st.Notice, "stopping") {
 			t.Errorf("the refusal does not name the act already running: %q", m.st.Notice)
 		}
 	})
@@ -308,7 +318,7 @@ func TestGiveUpGateKeepsAndCancels(t *testing.T) {
 			if racer.killed {
 				t.Error("a declined give-up killed the racer anyway")
 			}
-			if !m.turn.live[model.VendorCursor] {
+			if m.turnOf(model.VendorCursor) == nil {
 				t.Error("a declined give-up retired the seat")
 			}
 			if !strings.Contains(m.st.Notice, tc.notice) {
@@ -375,26 +385,33 @@ func ordinaryTurn(t *testing.T) (*Model, map[model.VendorID]*recordedKill, map[m
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	log := countSpawns(t)
+	// The batch room. Since 2026-09-02 (§9.54) every registered seat keeps a
+	// process, so "an ordinary one-shot seat" has to be constructed: this is
+	// the registry after the three live seats have fallen back to their
+	// measured batch adapters, which is a production state and the one whose
+	// kill path these tests exist to witness.
+	seatFallbacks(t)
 	m := flowRoom(t, true)
 	m.st.Draft = "@all an ordinary brief"
 	m.dispatch()
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatalf("fixture: no turn in flight (%d spawns)", log.n())
 	}
-	if m.turn.arena {
+	if m.race() != nil {
 		t.Fatal("fixture: the brief raced — this file's ordinary half needs an ordinary turn")
 	}
+	ts := m.dispatches()[0]
 	oneShots := map[model.VendorID]*recordedKill{}
-	for v := range m.turn.seatHandles {
+	for v := range ts.seatHandles {
 		k := &recordedKill{}
 		oneShots[v] = k
-		m.turn.seatHandles[v] = k
+		ts.seatHandles[v] = k
 	}
 	if len(oneShots) == 0 {
 		t.Fatal("fixture: no seat handle was keyed — x has nothing to address on an ordinary turn")
 	}
 	live := map[model.VendorID]*killSession{}
-	for v := range m.turn.persistent {
+	for v := range ts.persistent {
 		s := &killSession{}
 		live[v] = s
 		m.procs[v].sess = s
@@ -456,10 +473,10 @@ func TestGiveUpOnAnOrdinaryBatchSeatKillsItAndLeavesTheTurnRunning(t *testing.T)
 	if c.Arena != nil {
 		t.Error("an ordinary give-up produced an arena receipt")
 	}
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("giving up on one seat ended a turn the others are still taking")
 	}
-	if m.turn.live[cut] {
+	if m.turnOf(cut) != nil {
 		t.Error("the cut seat never left the turn's live set — the turn cannot end")
 	}
 	for v, k := range oneShots {
@@ -588,7 +605,7 @@ func TestACutSeatThatStreamedNothingIsNotAMeasuredZero(t *testing.T) {
 	// that this seat was cut. The placeholder's own guard is what holds here:
 	// it is a claim about a turn that completed, so only a column still in a
 	// live phase may acquire it.
-	m.turn = nil
+	idle(m)
 	m.applyEvents([]runner.Event{{Vendor: cut, Kind: runner.KindDone}})
 	if c.Body != "" {
 		t.Errorf("an exit past the turn boundary claimed a measured zero on a cut column: body = %q", c.Body)
@@ -609,11 +626,11 @@ func TestTheOrdinaryTurnEndsWhenTheRemainingSeatsLand(t *testing.T) {
 
 	m.key(key("x"))
 	m.key(key("y"))
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("the give-up itself ended the turn")
 	}
 	var rest []model.VendorID
-	for v := range m.turn.live {
+	for v := range m.turns {
 		rest = append(rest, v)
 	}
 	for _, v := range rest {
@@ -621,7 +638,7 @@ func TestTheOrdinaryTurnEndsWhenTheRemainingSeatsLand(t *testing.T) {
 		m.applyEvents([]runner.Event{{Vendor: v, Kind: runner.KindDone}})
 	}
 
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Fatal("every remaining seat has landed and the turn is still in flight — the hostage the key exists to free")
 	}
 	if m.st.Mode != ModeComposing {

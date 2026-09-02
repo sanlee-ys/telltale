@@ -50,7 +50,7 @@ func TestAMistypedCommandSpawnsNothing(t *testing.T) {
 		if m.st.Turn != 0 {
 			t.Errorf("%q was counted as turn %d", draft, m.st.Turn)
 		}
-		if m.turn != nil {
+		if m.anyInFlight() {
 			t.Errorf("%q started a turn", draft)
 		}
 		if m.st.Draft != draft {
@@ -58,7 +58,7 @@ func TestAMistypedCommandSpawnsNothing(t *testing.T) {
 			// line the user is about to edit must not have to be retyped.
 			t.Errorf("%q was thrown away rather than handed back: %q", draft, m.st.Draft)
 		}
-		if !strings.Contains(m.st.Notice, "no room command") {
+		if !strings.Contains(m.st.Notice, "no command") {
 			t.Errorf("%q was refused without saying so: %q", draft, m.st.Notice)
 		}
 	}
@@ -209,7 +209,7 @@ func TestAKnownCommandIsStillACommand(t *testing.T) {
 		m.setDraft(rc.verb)
 
 		handled := m.roomCommand()
-		if strings.Contains(m.st.Notice, "no room command") {
+		if strings.Contains(m.st.Notice, "no command") {
 			t.Errorf("%s was refused by the table that lists it: %q", rc.verb, m.st.Notice)
 		}
 		if rc.run == nil {
@@ -356,7 +356,7 @@ func TestUnseatWillNotEmptyTheRoom(t *testing.T) {
 func TestUnseatRefusesMidTurn(t *testing.T) {
 	m := seatModel()
 	was := seatedNow(m)
-	m.turn = &turnState{}
+	occupy(m)
 
 	m.setDraft("/unseat codex")
 	if !m.roomCommand() {

@@ -1,0 +1,44 @@
+  council READ  │  ~/code/telltale                                             no turn yet  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  council  ──────────────────────────────────────────────────────────────────────  what the badge on each column means  
+    Each column states its own posture; there is no room-wide claim.                                                    
+                                                                                                                        
+    ro:tools     the write tools are ABSENT from that session — checked                                                 
+                 against what the session reported about itself, not a flag                                             
+    ro:enforced  the vendor's own OS-level sandbox does it — codex, every OS                                            
+    ro:requested a flag was passed and accepted; what it actually enforces                                              
+                 was never observed. Weaker than the two above, and says so                                             
+    unsandboxed  nothing restricts this vendor at the OS level. MEASURED,                                               
+                 not assumed — treat this column as able to change your files                                           
+    WRITES       the DEFAULT: this column may edit and run. --read opts out                                             
+    gated        as WRITES, and this seat asks first — y approves, n denies                                             
+                                                                                                                        
+    What contains this room is the WORKSPACE above, not any of these words.                                             
+    Point council at a throwaway worktree when that matters.                                                            
+                                                                                                                        
+    this room, seat by seat:                                                                                            
+                                                                                                                        
+    ro:tools     Claude Code                                                                                            
+                 this seat has no write or shell tools in its session, so it cannot edit your files. Verified by        
+                 reading what the session reported about itself, not by trusting a flag: the named write/exec tools     
+                 are denied and MCP servers are dropped. The residual is that a deny list cannot cover a tool a future  
+                 release adds                                                                                           
+                 "tokens" — text arrives as the vendor writes it, so you are watching it land rather than waiting for   
+                 it                                                                                                     
+                                                                                                                        
+    ro:enforced  Codex                                                                                                  
+                 exec · unasked · fallback, measured at 0.149.1: -s read-only, applied by the vendor's own Windows      
+                 sandbox — measured 2026-08-29 at codex-cli 0.149.1: a shell write was denied with no file on disk, a   
+                 read ran clean, and the resume override enforced the same. One residual is liveness, not safety: the   
+                 sandbox could not spawn this machine's PowerShell, and turns completed because the model retried       
+                 through cmd.exe — a turn can still fail to inspect when it does not retry                              
+                 "final only" — MEASURED: this vendor sends nothing at all until its turn is done, so a quiet column    
+                 here is a working one and not a stalled one                                                            
+                                                                                                                        
+    unsandboxed  Antigravity                                                                                            
+  ↓ 9 more below                                                                                                        
+    ?            close                                                                                                  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+                                                                                      ? close  │  i compose  │  q quit  

@@ -34,10 +34,15 @@ weaker than a live run, it says so.
 | **Antigravity** | same as elsewhere | `unsandboxed` on every platform — it was asked to write a file under both of its own read-only flags and wrote it. Refuted, not unverified. |
 | **Grok** | **measured on both, and the platforms differ** | The seat is `unsandboxed` on both platforms. `--permission-mode plan` is REFUTED on both. grok 1.0.0 (3cd0d0cbce) wrote the file under that flag, and the control run without the flag also wrote it. Windows measured this on 2026-08-09 and macOS on 2026-08-14. The macOS run confirmed the file on disk and did not use the reply text. `--sandbox` DIVERGES. On Windows the flag is UNOBSERVABLE: given `bogus-profile-xyz`, grok printed no error and no warning, and it answered normally at exit 0. On macOS the same build validates the profile and fails closed. It prints `sandbox could not be applied`, then it prints `Refusing to start with its protections missing`, and it exits 1 with no turn. The macOS section below states what this result does and does not permit. **Re-measured on Windows at grok 1.0.4 (d846eb93d9) on 2026-08-14, and both results held.** The write landed again under `--permission-mode plan`, and `bogus-profile-xyz` again drew no error and exit 0. **The Mac was updated to 1.0.4 (d846eb93d94d) on 2026-08-17 and both probes were re-run there, with both results holding.** So this is a SAME-BUILD comparison again, on both halves, and the `--sandbox` divergence is a property of the operating system rather than of the release. See the note below. |
 
-**`codex app-server` is unverified off Windows, 2026-08-29.** The row above
-describes the SEATED path, `codex exec --json`, and it is the only codex path
-the room dispatches. A second protocol ships parsed and unseated (§9.50), and
-every one of its eight arms ran on Windows 11 against codex-cli 0.149.1. Two of
+**`codex app-server` is unverified off Windows, 2026-08-29 — and since
+2026-09-02 it is the SEATED path (§9.57).** The row above describes `codex exec
+--json`, which the room dispatched until then and keeps as the fallback. The
+app-server protocol's eight arms all ran on Windows 11 against codex-cli
+0.149.1, which is why the off-Windows read badge dropped to `ro:requested` when
+the seat moved: the macOS `ro:enforced` was `codex exec`'s measurement, and a
+seat move re-measures rather than inherits. The same holds for the other two
+seats that moved that day, `grok agent stdio` and `agy --input-format
+stream-json`: undriven on every platform, badged `unmeasured` everywhere. Two of
 its findings are Windows-shaped and are the likeliest to differ on a Mac: the
 tool router wrapping shell commands in `pwsh.exe`, which cannot start under the
 Windows sandbox and left a read-posture seat unable to inspect; and the `.git`
@@ -208,6 +213,7 @@ of them is a lifetime:
 |---|---|---|
 | Windows | Job Object, `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | **yes, always** — the handle closes with the process and Windows reaps the tree, on every way out including the ones no handler can catch |
 | macOS, Linux | process group, `Setpgid` | **no** — a group is a name for a set of processes, not a lifetime. It dies when something signals it and at no other moment |
+| macOS, Linux — the council **host** (`--host`, design.md §7.30) | the host's **session** (`Setsid`) over the per-seat groups, plus the host's own SIGTERM/SIGINT handler, plus `telltale council kill`'s session sweep | **not by the host's death; yes by the command.** SIGTERM or SIGINT on the host reaps every seat through its handler. `telltale council kill` SIGTERMs the host and every process carrying its session id, then sweeps with SIGKILL after a bounded grace, and on a dead host's stale `host.json` it sweeps the dead session and prints how many it ended. **`kill -9` the host alone and the seats keep running** until that next `kill`. **The difference from the Job Object, precisely:** a session is membership inherited at fork and lost only by a child calling `setsid(2)` itself — such a child escapes and nothing here sees it go, where a Job Object child cannot leave. **Measured on Linux only, 2026-09-02** (the CI race job runs the tests; the built binary was driven through host/detach/ls/rejoin/kill by hand). **macOS: suites measured, hand cycle owed (2026-09-02).** The `darwin` CI job ran this package's unix test suites in-process on an Apple Silicon runner (run 33657422294: host, detach, rejoin, refusal, kill, stale file all passed, so `LOCAL_PEERPID` is exercised on every dial), after its first run found the socket path past macOS's 104-byte bound and `PipeName` learned to retreat. The built binary has not been driven through host/detach/ls/rejoin/kill by hand on a Mac, and `p_comm`'s sixteen-byte name under a real `kill` sweep is the reading still to watch. |
 
 So on unix the kill has to be MADE on the way out, and until this was measured
 nothing made it on any signal. `runner/proc_unix.go` claimed the "same guarantee
@@ -251,7 +257,8 @@ reaped the child on all three.
   through it too.
 - **The unix behaviour is measured on macOS only.** Linux shares the
   `Setpgid` code path and the same Bubble Tea build, so it is expected to match
-  and has not been shown to. Record a Linux run here.
+  and has not been shown to. Record a Linux run here. *The council host's row
+  above is the mirror image: measured on Linux only, expected on macOS.*
 
 ## HUD adapters
 
@@ -318,6 +325,21 @@ That is the reason `auth` and `network` stay `not checked`.
 
 Treat a wrong-looking doctor row on the Mac as unverified rather than broken, and
 record what you find here.
+
+**Linux ran it on 2026-09-02** — a source build of the crew integration, on the
+Linux box the integration was done on, with `HOME` pointed at an empty
+directory. One vendor was installed there: `claude` at `/opt/node22/bin/claude`
+on PATH, `2.1.258 (Claude Code)`, `drivable ok` as a native executable. codex,
+agy, cursor-agent and grok were absent and reported `binary FAILED`, naming the
+known install locations under the sandboxed home they also looked in. The tally
+was `3 checks passed, 4 failed, 18 not checked, over 5 seats`, exit 0; `auth`
+and `network` read `not checked` on every seat; nothing was written under that
+home. The same build's `telltale council ls` printed `host none is running` and
+`no room is saved yet` at exit 0 and wrote nothing, and `telltale council
+replay-check` over the checked-in fixture listed its three seats, two session
+ids, three tool lines with the gate's verdict and the counts, exit 0. That is
+what the README means by the `linux_amd64` source build having been driven by
+hand; the `linux_amd64` archive a release attaches is still not run.
 
 ## The macOS arrival of a released archive
 
@@ -387,8 +409,11 @@ clean directory on the same day, and every line exited 0.
 - **The System Settings > Privacy & Security "Open Anyway" path.** Only the
   `xattr -d` remedy was exercised. Whether that pane offers an entry for a
   killed command-line binary, and whether the entry works, is unmeasured.
-- **The `darwin_arm64` archive.** It was not walked at all, which leaves its
-  "built, not verified" label exactly where it was.
+- **The `darwin_arm64` archive.** It was not walked at all. Since 2026-09-02
+  `ci.yml`'s `darwin` job runs a binary built from each commit on an Apple
+  Silicon runner, which retires "built, not run" for the platform; the archive
+  goreleaser attaches is still the thing nobody has unpacked and run there,
+  and the Homebrew tap that hands a user that archive has not been exercised.
 
 Windows and SmartScreen belong to the other machine. `SECURITY.md` still records
 that prompt as unmeasured, and nothing here changes it.

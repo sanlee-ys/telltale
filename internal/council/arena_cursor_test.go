@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
+	"github.com/sanlee-ys/telltale/internal/council/vendors"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -47,7 +48,7 @@ func arenaCursorRace(t *testing.T) (*Model, *spawnLog, *killSession) {
 	// raceNow rather than dispatch: the worktree setup runs off the loop now, so
 	// the turn is born after its messages land (arenasetup_test.go).
 	raceNow(t, m)
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("the race did not dispatch")
 	}
 	return m, log, racer
@@ -71,7 +72,7 @@ func TestArenaRacesTheCursorSeatOnAThrowawayACPSession(t *testing.T) {
 		t.Error("the racer landed in m.procs — the next ordinary brief would be handed to a worktree session")
 	}
 
-	tree := m.turn.arenaTrees[model.VendorCursor]
+	tree := m.race().arenaTrees[model.VendorCursor]
 	var cursorSpecs int
 	for i, spec := range log.specs {
 		if spec.Vendor != model.VendorCursor {
@@ -170,7 +171,7 @@ func TestTheRacerIsKilledAtItsOwnFinishLine(t *testing.T) {
 	if c.Arena.Rank != rank {
 		t.Errorf("the kill's own exit re-ranked the race: %d -> %d", rank, c.Arena.Rank)
 	}
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Error("the exit echo tore down a turn three seats are still racing")
 	}
 }
@@ -197,7 +198,7 @@ func TestTheRacerIsKilledOnAProtocolReportedFailure(t *testing.T) {
 	if !strings.Contains(c.Note, "handshake") {
 		t.Errorf("the failure lost its reason: %q", c.Note)
 	}
-	if m.turn.live[model.VendorCursor] {
+	if m.turnOf(model.VendorCursor) != nil {
 		t.Error("the failed racer never left the turn — the race cannot end")
 	}
 }
@@ -243,7 +244,7 @@ func TestARacerDeathWithoutATurnEndFailsTheColumn(t *testing.T) {
 	if !strings.Contains(c.Note, "before its turn") {
 		t.Errorf("the death is not named: %q", c.Note)
 	}
-	if m.turn.live[model.VendorCursor] {
+	if m.turnOf(model.VendorCursor) != nil {
 		t.Error("the dead racer never left the turn")
 	}
 	if _, ok := m.procs[model.VendorCursor]; !ok {
@@ -271,7 +272,7 @@ func TestABackgroundRoomSeatDeathDoesNotFailTheRace(t *testing.T) {
 	if _, ok := m.procs[model.VendorCursor]; ok {
 		t.Error("the dead room process is still registered; the next ordinary brief would write into it")
 	}
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Error("a background death ended the turn")
 	}
 }
@@ -289,15 +290,15 @@ func TestCancelAndTeardownKillTheRacer(t *testing.T) {
 	// exactly the racer for these two paths to reap or orphan.
 	t.Run("cancel", func(t *testing.T) {
 		m, _, racer := arenaCursorRace(t)
-		m.turn.handles = nil
-		m.cancelTurn()
+		m.race().arenaHandles = nil
+		m.cancelAll()
 		if !racer.killed {
 			t.Error("ctrl+c left the racer running")
 		}
 	})
 	t.Run("teardown", func(t *testing.T) {
 		m, _, racer := arenaCursorRace(t)
-		m.turn.handles = nil
+		m.race().arenaHandles = nil
 		m.teardown()
 		if !racer.killed {
 			t.Error("quitting the room left the racer running")
@@ -310,14 +311,28 @@ func TestCancelAndTeardownKillTheRacer(t *testing.T) {
 // 2026-08-09): every one-shot racer's prompt opens with the same constant
 // line ahead of the operator's own words — prepended, not appended, so a long
 // brief cannot bury it — and an ordinary turn's prompt carries none of it.
-// The cursor racer's prompt rides its protocol rather than its spec (§9.36:
-// `acp` is the whole argv), so the one-shot three are the witnesses here.
+// A Conversational racer's prompt rides its protocol rather than its spec
+// (§9.36: `acp` is the whole argv; since §9.57 codex's `app-server` and grok's
+// `agent stdio` are the same shape), so the one-shot racers are the witnesses
+// here — and which seats those are is read off the registry rather than
+// counted by hand, because the count moved once already.
 func TestARaceBriefCarriesTheConductLineAndAnOrdinaryBriefDoesNot(t *testing.T) {
-	_, log, _ := arenaCursorRace(t)
+	m, log, _ := arenaCursorRace(t)
 
+	// Counted over the seats IN THIS ROOM, not over the registry: the room
+	// seats four of the five vendors, and which of them race one-shot is a
+	// property of the registry the room was built under (flowRoom pins the
+	// batch one since §9.57), so the expectation is read off both together.
+	reg := vendors.Registry()
+	want := 0
+	for _, c := range m.st.Columns {
+		if _, conversational := reg[c.Vendor].(vendors.Conversational); !conversational {
+			want++
+		}
+	}
 	oneShots := 0
 	for _, spec := range log.specs {
-		if spec.Vendor == model.VendorCursor {
+		if _, conversational := reg[spec.Vendor].(vendors.Conversational); conversational {
 			continue
 		}
 		oneShots++
@@ -335,8 +350,8 @@ func TestARaceBriefCarriesTheConductLineAndAnOrdinaryBriefDoesNot(t *testing.T) 
 			t.Errorf("%s carries the conduct line AFTER the brief — a long brief would bury it", spec.Vendor)
 		}
 	}
-	if oneShots != 3 {
-		t.Fatalf("%d one-shot racers, want 3", oneShots)
+	if oneShots != want || want == 0 {
+		t.Fatalf("%d one-shot racers, want %d (every non-Conversational seat in the registry)", oneShots, want)
 	}
 }
 
@@ -348,7 +363,7 @@ func TestAnOrdinaryBriefStaysVerbatim(t *testing.T) {
 	m := flowRoom(t, true)
 	m.st.Draft = "@all add a marker file"
 	m.dispatch()
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("the turn did not dispatch")
 	}
 	if log.n() == 0 {

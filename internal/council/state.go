@@ -412,6 +412,30 @@ type Column struct {
 	// Started is when this column's current turn was dispatched. Zero when it
 	// has never run.
 	Started time.Time
+	// Ended is when this column's current turn was retired — the moment its
+	// seat stopped holding a turn, on the room's clock (finishColumn). Zero
+	// while the turn is live and on a seat that has never taken one.
+	//
+	// It exists for the inbox (needsyou.go, §9.54): a seat whose turn ended
+	// while the reader was looking elsewhere is listed until they go to it, and
+	// "ended since you last looked" is a comparison between this stamp and
+	// LastFocus. Both are measured events on the Model's clock and neither is
+	// read inside Render, so the strip stays pure over State. Reset by startTurn
+	// like every other per-turn fact.
+	Ended time.Time
+	// LastFocus is when the reader last had the keys on this column — stamped
+	// when focus ENTERS it and again when focus LEAVES it (setFocus), so it
+	// marks the end of the last look rather than its start. A turn that ended
+	// while the reader was on the column is therefore older than this stamp
+	// the moment they move on, and the inbox does not re-list a seat whose
+	// answer they watched land.
+	//
+	// NOT a per-turn fact: startTurn leaves it alone, because whether the
+	// reader has looked is about the reader. Zero on a column the keys have
+	// never moved to by a keypress, which includes the default focus NewState
+	// seats — that column is excluded from the strip by being focused, and its
+	// first departure stamps it.
+	LastFocus time.Time
 	// Elapsed is how long the LAST completed turn took, kept after the turn
 	// ends so a finished column can still say how long it made you wait.
 	//
@@ -553,6 +577,17 @@ type Column struct {
 	// Its age is measured from SeatQuota.WrittenAt against State.Now, so Render
 	// stays pure over State — the read itself runs as a Cmd.
 	Quota *SeatQuota
+
+	// Containment is where this seat's process runs, as the badge row states
+	// it (seattree.go, §9.55): its own worktree, the shared tree, or the shared
+	// tree with the reason the room could not give it its own. Stamped at
+	// dispatch for every seat the brief reaches, and NOT a per-turn fact:
+	// startTurn leaves it alone, because the directory a seat works in
+	// outlives any one brief and the next dispatch re-stamps it. The zero
+	// value is no claim — a seat never dispatched is in no directory at all —
+	// and renders nothing, which is what keeps every golden built before
+	// §9.55 exactly as it was.
+	Containment ContainClaim
 }
 
 // startTurn moves a column onto a new turn.
@@ -632,6 +667,7 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	c.CostUSD = nil
 	c.CostSession = false
 	c.Started = time.Time{}
+	c.Ended = time.Time{}
 	c.Elapsed = 0
 	// Back to UNMEASURED, not to zero. The record above owns the old turn's
 	// figure, and a new turn that has raised no card has not made the operator
@@ -1187,6 +1223,12 @@ type State struct {
 	// One parse, one source of truth, displayed and acted on.
 	Route Route
 
+	// HeadroomWarn is the used-percentage at or above which the routing cell
+	// names a seat's quota window before enter (quota.go, routeCell), from
+	// --headroom-warn. Zero means the flag's default, so a State a test types
+	// out by hand gets the same threshold a room opened with no flag gets.
+	HeadroomWarn int
+
 	// Turn counts dispatched turns, so the header can say which round this is.
 	// Turn 0 means nothing has been sent.
 	//
@@ -1285,6 +1327,13 @@ type State struct {
 	// badge's argument (§9.35). The header's hop cell renders it; clearFlowMarker
 	// retires it with the marker, so it can never outlive the chain it stops.
 	FlowStop bool
+
+	// FlowSeats is the hop cell's label when the current stage FANS to more
+	// than one seat (`@codex & @grok`, §9.55). Empty for a one-seat hop, where
+	// FlowVendor names it as it always has. A label rather than a list,
+	// because the header is the only reader and it prints the words; a list
+	// would be a second spelling of a fact the chain already holds.
+	FlowSeats string
 
 	// Gates are the tool calls waiting on a decision, OLDEST FIRST.
 	//
@@ -1389,12 +1438,31 @@ type State struct {
 	// The setup itself is Model.arenaPrep, which the renderer cannot reach.
 	ArenaSetup string
 
+	// TreeSetup is ArenaSetup's twin for a SEAT's worktree being cut before an
+	// ordinary writing dispatch (seattree.go, §9.55): the step in words, empty
+	// when no setup is running. Its own field rather than a second meaning for
+	// ArenaSetup, because the footer names which kind of setup it is drawing —
+	// a race and a brief are different things to be waiting on — and one
+	// string cannot say both.
+	TreeSetup string
+
 	// Spinner advances only while something is genuinely in flight.
 	Spinner int
 
 	// ASCII mirrors the glyph set, so Render can pick a different affordance
 	// where a straight substitution does not work.
 	ASCII bool
+
+	// Replay reports that this room is a RECORDING being played back
+	// (replay.go, design.md §9.56): the columns are fed from a --record file,
+	// no vendor is running, and nothing typed here reaches one.
+	//
+	// On State because every frame has to say so — the header, each column's
+	// badge row and the footer all read it — and Render is pure over State.
+	// A replayed frame that could be mistaken for a live one would be the
+	// README's "invented recording" in a new form: a real run, shown as
+	// though it were happening now.
+	Replay bool
 
 	// Live is the seat whose pane draws a real terminal screen (§9.53).
 	//
@@ -1498,6 +1566,54 @@ func (s State) Asking() bool { return !s.GateOff }
 func (s State) Busy() bool {
 	for _, c := range s.Columns {
 		if c.Phase == PhaseWaiting || c.Phase == PhaseStreaming {
+			return true
+		}
+	}
+	return false
+}
+
+// inFlight reports that this column's turn is still open: it is working, or it
+// has answered and its process has not exited (Settling). The per-column half
+// of State.InFlight, and the one the header's count and the frame geometry
+// read (§9.54).
+func (c Column) inFlight() bool {
+	return c.Phase == PhaseWaiting || c.Phase == PhaseStreaming || c.Settling
+}
+
+// SeatsInFlight counts the columns whose turn is still open — a MEASURED
+// figure over the columns, which is what lets the header print it (§9.54).
+//
+// It is the same predicate InFlight draws its yes/no from, so the two can
+// never disagree about whether anything is running; and it carries InFlight's
+// own documented gap unchanged — a column left terminal inside a live turn by
+// a path that set no Settling is invisible to both. That is a reason to keep
+// every retirement path feeding Settling, not a reason to count something
+// State cannot see.
+func (s State) SeatsInFlight() int {
+	n := 0
+	for _, c := range s.Columns {
+		if c.inFlight() {
+			n++
+		}
+	}
+	return n
+}
+
+// inFlightBeyond reports that some column in flight is answering a dispatch
+// other than n — the header's test for whether its route cell, which names
+// dispatch n, leaves a working seat unaccounted for (§9.54). Read off
+// Column.TurnN, which dispatch stamps on every seat it addresses, so it is a
+// fact State holds rather than one it infers.
+//
+// A column with NO turn number is not counted as being on another dispatch.
+// Zero means the seat has never been dispatched to (Column.TurnN), so a live
+// column carrying it cannot say which turn it is on, let alone that it is a
+// different one — and the count is a claim about exactly that. Production
+// never builds such a column; a State typed out by hand can, and the honest
+// answer for it is the one the cell gave before there was a count.
+func (s State) inFlightBeyond(n int) bool {
+	for _, c := range s.Columns {
+		if c.inFlight() && c.TurnN > 0 && c.TurnN != n {
 			return true
 		}
 	}

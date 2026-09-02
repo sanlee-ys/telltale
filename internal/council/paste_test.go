@@ -45,7 +45,7 @@ func TestAPasteLandsWholeAndSendsNothing(t *testing.T) {
 	if log.n() != 0 {
 		t.Fatalf("a paste spawned %d process(es): %+v", log.n(), log.specs)
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Error("a paste put a turn in flight")
 	}
 	if m.st.Mode != ModeComposing {

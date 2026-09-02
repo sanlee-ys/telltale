@@ -34,7 +34,7 @@ import (
 func TestArenaSpecsCarryTheRaceIntoTheTrace(t *testing.T) {
 	m, log, _ := arenaCursorRace(t)
 
-	want := arenaRaceTag(m.turn.arenaRaceN)
+	want := arenaRaceTag(m.race().arenaRaceN)
 	if want == "" {
 		t.Fatal("the race minted no tag")
 	}
@@ -43,7 +43,7 @@ func TestArenaSpecsCarryTheRaceIntoTheTrace(t *testing.T) {
 	// would assert against a process that does not exist.
 	raced := 0
 	for _, spec := range log.specs {
-		if _, isRacer := m.turn.arenaTrees[spec.Vendor]; !isRacer {
+		if _, isRacer := m.race().arenaTrees[spec.Vendor]; !isRacer {
 			continue
 		}
 		raced++
@@ -55,7 +55,7 @@ func TestArenaSpecsCarryTheRaceIntoTheTrace(t *testing.T) {
 	if raced == 0 {
 		t.Fatal("no racer spawned — the assertion above proved nothing")
 	}
-	if _, cursorRaced := m.turn.arenaTrees[model.VendorCursor]; cursorRaced {
+	if _, cursorRaced := m.race().arenaTrees[model.VendorCursor]; cursorRaced {
 		// Named explicitly: the ephemeral path builds its spec inside
 		// startEphemeralRacer, not in dispatch's arena branch, so it is the
 		// half a fix applied at the obvious call site would miss.
@@ -80,10 +80,10 @@ func TestOrdinaryTurnsCarryNoRace(t *testing.T) {
 	m := flowRoom(t, true)
 	m.st.Draft = "an ordinary brief"
 	m.dispatch()
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("the turn did not dispatch")
 	}
-	if m.turn.arena {
+	if m.race() != nil {
 		t.Fatal("an ordinary brief dispatched as a race")
 	}
 	if log.n() == 0 {

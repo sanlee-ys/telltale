@@ -508,6 +508,20 @@ func kindOf(path string) BinaryKind {
 // file, an empty hooks section, and a temp directory that could not be created
 // — three ways to end up unscreened while the column says otherwise.
 func postureClaim(v model.VendorID, windows, write, gated, hooked bool) SandboxClaim {
+	return postureClaimFor(v, windows, write, gated, hooked, false)
+}
+
+// postureClaimFor is postureClaim with one more fact: whether the room has
+// retreated this seat from its live shape to its measured batch adapter
+// (fallback.go, vendors.LiveFallback). A fallen-back seat is the seat that was
+// measured — the exec, single and print invocations every pre-2026-09-02 badge
+// described — so its claim is that measurement, led by seatShape's fallback
+// spelling, and never the live shape's `unmeasured`. The two seats with no
+// fallback ignore the flag.
+func postureClaimFor(v model.VendorID, windows, write, gated, hooked, fellBack bool) SandboxClaim {
+	if fellBack && seatShape(v, true) != "" {
+		return fallbackClaim(v, windows, write)
+	}
 	if write && gated && canGate(v) {
 		return SandboxClaim{
 			Level:  SandboxGated,
@@ -546,19 +560,200 @@ func writeDetail(v model.VendorID, asking bool) string {
 	const shared = "this column may edit and run things in the workspace above. " +
 		"Containment is that directory, not a flag — point council at a " +
 		"worktree if that matters. --read opens a room that only talks"
-	if v != model.VendorCursor {
-		return shared
+	switch v {
+	case model.VendorCursor:
+		const limit = " It does NOT ask about file edits — measured twice, it wrote a file " +
+			"with no card, in a directory it had never been told to trust. The boundary " +
+			"is still the directory, not the cards"
+		if asking {
+			return shared + ". This seat sometimes asks first, and the room answers: its " +
+				"ACP server raises an approval card for a shell command its own allowlist " +
+				"does not cover." + limit
+		}
+		return shared + ". This seat's ACP server does ask about some shell commands, and " +
+			"with asking off the room answers yes for you without drawing a card." + limit
+	case model.VendorCodex, model.VendorGrok, model.VendorAntigravity:
+		// The three seats that moved to long-lived processes on 2026-09-02
+		// (design.md §9.57), each on a documentation read rather than a live
+		// run. The shape words come first, in the vocabulary the column
+		// header already speaks, and "unmeasured" is in them by construction:
+		// seatShape refuses to spell the word "measured" for a seat nobody has
+		// driven, so a badge cannot claim a gate it has not seen.
+		return seatShape(v, false) + ": " + shared + ". " + liveSeatDetail(v, asking)
 	}
-	const limit = " It does NOT ask about file edits — measured twice, it wrote a file " +
-		"with no card, in a directory it had never been told to trust. The boundary " +
-		"is still the directory, not the cards"
-	if asking {
-		return shared + ". This seat sometimes asks first, and the room answers: its " +
-			"ACP server raises an approval card for a shell command its own allowlist " +
-			"does not cover." + limit
+	return shared
+}
+
+// seatShape is the badge's account of WHICH process shape a seat is running
+// as, and whether that shape has been driven live.
+//
+// Three words, dot-separated, in the header's existing vocabulary: the
+// protocol (`app-server`, `acp`, `stream-json`, or the batch invocation it
+// fell back to), whether the seat can be asked (`asks` / `unasked`), and the
+// evidence class with the version it was read or measured at. The evidence
+// word is the load-bearing one and it is chosen by CONSTRUCTION rather than by
+// hand: the live shapes were built from vendor documentation on 2026-09-02
+// (design.md §9.57) and nothing here has watched one run, so every live entry
+// says `unmeasured at <version>`; the fallback entries name the batch
+// invocation each seat was measured driving and the build it was measured
+// at. A later change that drives a live shape on the reference box may flip
+// exactly one word, and the checklist in §9.57 is the price of flipping it.
+//
+// fellBack is whether the room retreated to the measured batch adapter after
+// the live handshake failed (vendors.LiveFallback, fallback.go). The room
+// carries that state per seat since the crew integration, and the posture
+// badge reads this branch through postureClaimFor: the fallback IS the
+// measured seat, and the spelling says so.
+func seatShape(v model.VendorID, fellBack bool) string {
+	switch v {
+	case model.VendorCodex:
+		if fellBack {
+			return "exec · unasked · fallback, measured at 0.149.1"
+		}
+		return "app-server · asks · unmeasured at 0.152.1"
+	case model.VendorGrok:
+		if fellBack {
+			return "single · unasked · fallback, measured at 1.0.4"
+		}
+		return "acp · asks · unmeasured at 1.0.13"
+	case model.VendorAntigravity:
+		if fellBack {
+			return "print · unasked · fallback, measured at 1.1.13"
+		}
+		return "stream-json · unasked · unmeasured at 1.1.24"
 	}
-	return shared + ". This seat's ACP server does ask about some shell commands, and " +
-		"with asking off the room answers yes for you without drawing a card." + limit
+	return ""
+}
+
+// fallbackInvocation names the batch invocation a seat retreats to, in the
+// words its live-shape detail already uses to promise it.
+func fallbackInvocation(v model.VendorID) string {
+	switch v {
+	case model.VendorCodex:
+		return "`codex exec --json`"
+	case model.VendorGrok:
+		return "`grok --single`"
+	case model.VendorAntigravity:
+		return "`agy -p`"
+	}
+	return ""
+}
+
+// fallbackClaim is the posture claim for a seat that has retreated to its batch
+// adapter. Every sentence here is the one the seat carried BEFORE it moved to
+// a live shape on 2026-09-02, because that badge described exactly this
+// invocation and rested on a measurement; the live shape's claims were built
+// from documentation and do not transfer back. One level moves with it, and
+// in the honest direction: codex off Windows reads `ro:enforced` again, since
+// the sandbox behind that word was measured through `codex exec -s read-only`
+// on macOS (the live branch's own detail says so) and this is that path.
+func fallbackClaim(v model.VendorID, windows, write bool) SandboxClaim {
+	shape := seatShape(v, true) + ": "
+	if write {
+		return SandboxClaim{
+			Level: SandboxWrite,
+			Detail: shape + "this column may edit and run things in the workspace above. " +
+				"Containment is that directory, not a flag — point council at a " +
+				"worktree if that matters. --read opens a room that only talks. " +
+				"The live shape's handshake was refused in this room, so this seat " +
+				"runs " + fallbackInvocation(v) + ", one process per turn, which " +
+				"asks about nothing",
+		}
+	}
+	switch v {
+	case model.VendorCodex:
+		if windows {
+			return SandboxClaim{
+				Level: SandboxEnforced,
+				Detail: shape + "-s read-only, applied by the vendor's own Windows sandbox — " +
+					"measured 2026-08-29 at codex-cli 0.149.1: a shell write was denied " +
+					"with no file on disk, a read ran clean, and the resume override " +
+					"enforced the same. One residual is liveness, not safety: the " +
+					"sandbox could not spawn this machine's PowerShell, and turns " +
+					"completed because the model retried through cmd.exe — a turn can " +
+					"still fail to inspect when it does not retry",
+			}
+		}
+		return SandboxClaim{
+			Level: SandboxEnforced,
+			Detail: shape + "-s read-only, applied by the vendor's own OS-level sandbox on macOS " +
+				"and Linux — a posture an operating system rather than a flag is behind",
+		}
+	case model.VendorAntigravity:
+		return SandboxClaim{
+			Level: SandboxNone,
+			Detail: shape + "treat this column as able to change your files, and that is " +
+				"MEASURED rather than assumed: asked to write a file under both " +
+				"--mode plan and --sandbox, it wrote the file, and its reported " +
+				"permission mode and tool list were identical to a run without them. " +
+				"Council no longer passes either flag: their only observed effect was " +
+				"a turn that died with an empty column when the agent reached for a " +
+				"shell. The workspace above is the containment, not a flag",
+		}
+	case model.VendorGrok:
+		return SandboxClaim{
+			Level: SandboxNone,
+			Detail: shape + "treat this column as able to change your files, and that is " +
+				"MEASURED rather than assumed: asked to write a file under " +
+				"--permission-mode plan, it wrote the file, exactly as the run " +
+				"without it did. Council passes neither that nor --sandbox — " +
+				"--sandbox silently ACCEPTS a profile name that does not exist, so " +
+				"nothing council asked of it could be observed. The workspace above " +
+				"is the containment, not a flag",
+		}
+	}
+	return SandboxClaim{}
+}
+
+// liveSeatDetail is the clause behind seatShape for a write posture: what the
+// seat's live shape can ask, what it cannot, and that none of it has been
+// watched. The asking argument matters for the two seats that can be asked,
+// for the reason writeDetail states above: promising cards to the one user who
+// has switched them off would be a false claim in the branch where it matters
+// most.
+func liveSeatDetail(v model.VendorID, asking bool) string {
+	const boundary = " The boundary is still the directory, not the cards, and nothing " +
+		"on this shape has been watched running: read from the vendor's docs, " +
+		"not from a live turn"
+	switch v {
+	case model.VendorCodex:
+		const shape = "This seat is one live `codex app-server` process, opened with " +
+			"approvalPolicy on-request, so the vendor asks when it wants more than " +
+			"the workspace-write sandbox allows"
+		if asking {
+			return shape + " — and that request is an approval card here, answered down " +
+				"the same pipe. It does not ask about a write inside the workspace." + boundary +
+				". If the app-server handshake is refused the seat falls back to " +
+				"`codex exec --json`, which asks about nothing"
+		}
+		return shape + ", and with asking off the room answers yes for you without " +
+			"drawing a card. It does not ask about a write inside the workspace." + boundary +
+			". If the app-server handshake is refused the seat falls back to " +
+			"`codex exec --json`, which asks about nothing"
+	case model.VendorGrok:
+		const shape = "This seat is one live `grok agent stdio` ACP process"
+		if asking {
+			return shape + ", and a permission request it raises is an approval card " +
+				"here, answered down the same pipe. Whether it raises one before a " +
+				"write at all is unknown: on the measured invocation (`--single`) it " +
+				"wrote with no request under every flag tried." + boundary +
+				". If the ACP handshake is refused the seat falls back to `--single`, " +
+				"which asks about nothing and is where its cost figure comes from"
+		}
+		return shape + ", and with asking off the room answers yes to any permission " +
+			"request without drawing a card. Whether it raises one before a write " +
+			"at all is unknown." + boundary +
+			". If the ACP handshake is refused the seat falls back to `--single`, " +
+			"which asks about nothing and is where its cost figure comes from"
+	case model.VendorAntigravity:
+		return "This seat is one live `agy --input-format stream-json` process that " +
+			"stays open across turns, and NOTHING on that channel asks: the envelope " +
+			"carries prompts, a hook that answers `ask` has nobody in print mode to " +
+			"answer it, and every write is unasked. The workspace above is the " +
+			"containment, exactly as on the measured `-p` invocation it falls back " +
+			"to." + boundary
+	}
+	return ""
 }
 
 // gatedDetail is what the gated column defends, and the two branches differ in
@@ -624,6 +819,18 @@ func gatedDetail(hooked bool) string {
 //
 // A list rather than an interface assertion, therefore, because what qualifies a
 // seat here is a MEASUREMENT of its coverage and not a property of its type.
+//
+// Two more seats can now be ASKED and neither is here, on the same rule
+// (2026-09-02, design.md §9.57). The codex app-server seat routes
+// `item/*/requestApproval` through the room's card and the grok ACP seat
+// routes `session/request_permission` the same way — so "the gate can ask"
+// both, in the sense that a request the vendor raises reaches a person. What
+// neither has is a coverage measurement: no live run on either path has
+// produced a request at all, let alone shown one raised before every write.
+// Their write badges say `asks · unmeasured` where the argument lives, and
+// stay `WRITES`. The day a capture shows one of them asking before every
+// change, this list is the one line to change and §9.57 is the record to
+// update.
 func canGate(v model.VendorID) bool {
 	return v == model.VendorClaude
 }
@@ -676,22 +883,43 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 				// so the badge may say so. vendors/codex.go carries the full
 				// capture, including the caveat the detail below names.
 				Level: SandboxEnforced,
-				Detail: "-s read-only, applied by the vendor's own Windows sandbox — " +
-					"measured 2026-08-29 at codex-cli 0.149.1: a shell write was denied " +
-					"with no file on disk, a read ran clean, and the resume override " +
-					"enforced the same. One residual is liveness, not safety: the " +
-					"sandbox could not spawn this machine's PowerShell, and turns " +
-					"completed because the model retried through cmd.exe — a turn can " +
-					"still fail to inspect when it does not retry",
+				// The seat moved to `codex app-server` on 2026-09-02 (§9.57)
+				// and the level HOLDS on this branch because the same 0.149.1
+				// session measured the sandbox on that path too (§9.50): a
+				// read-only thread's shell write through cmd.exe came back
+				// "Access is denied." at exit 1 with no file on disk, and
+				// cmd.exe's own error on the next call proved it ran INSIDE
+				// the sandbox. The liveness residual is SHARPER there, and the
+				// detail says so rather than carrying the exec seat's milder
+				// sentence: the router's pwsh could not start and the model
+				// abandoned two of three read turns. The installed build is
+				// 0.152.1 and neither path has been driven at it.
+				Detail: seatShape(model.VendorCodex, false) + ": sandbox read-only on the " +
+					"app-server thread, applied by the vendor's own Windows sandbox — " +
+					"measured 2026-08-29 at codex-cli 0.149.1 on that path: a shell write " +
+					"was denied with no file on disk. The residual is liveness, not " +
+					"safety, and it is worse here than on the `codex exec` fallback: the " +
+					"sandbox could not spawn this machine's PowerShell, and in two of " +
+					"three read turns the model gave up rather than retrying through " +
+					"cmd.exe. Nothing has been driven at 0.152.1",
 			}
 		}
 		return SandboxClaim{
-			Level: SandboxEnforced,
-			// Stated as what it is and no further: this branch's measurement is
-			// the macOS one, so it does not borrow the Windows capture's dates
-			// or its caveat.
-			Detail: "-s read-only, applied by the vendor's own OS-level sandbox on macOS " +
-				"and Linux — a posture an operating system rather than a flag is behind",
+			// REQUESTED, not enforced, since 2026-09-02 — and this is the one
+			// badge the seat move LOWERED. The macOS measurement behind the old
+			// `ro:enforced` was `codex exec -s read-only` (2026-08-05, 0.146.0),
+			// and every app-server arm ran on Windows (§9.50, PARITY.md). The
+			// seatbelt is the same codex core either way, but "the same
+			// mechanism" is an inference and §9.50's rule is that a seat move
+			// re-measures rather than inherits. The fallback still earns the
+			// old word; this shape has not.
+			Level: SandboxRequested,
+			Detail: seatShape(model.VendorCodex, false) + ": sandbox read-only requested " +
+				"on the app-server thread. The OS-level sandbox behind that word was " +
+				"measured on macOS through `codex exec -s read-only` and never through " +
+				"app-server, which has only ever been driven on Windows — so this " +
+				"column asks for the posture and cannot yet say it saw it held. The " +
+				"`codex exec` fallback keeps the measured enforcement",
 		}
 	case model.VendorAntigravity:
 		return SandboxClaim{
@@ -707,13 +935,17 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 			// it has stopped asking for would be a false claim about this
 			// tool's own behaviour, which is the one kind this file has no
 			// excuse for.
-			Detail: "treat this column as able to change your files, and that is " +
+			Detail: seatShape(model.VendorAntigravity, false) + ": treat this column as " +
+				"able to change your files, and that is " +
 				"MEASURED rather than assumed: asked to write a file under both " +
 				"--mode plan and --sandbox, it wrote the file, and its reported " +
 				"permission mode and tool list were identical to a run without them. " +
 				"Council no longer passes either flag: their only observed effect was " +
 				"a turn that died with an empty column when the agent reached for a " +
-				"shell. The workspace above is the containment, not a flag",
+				"shell. The workspace above is the containment, not a flag. Since " +
+				"2026-09-02 the seat is one `agy --input-format stream-json` process " +
+				"kept open across turns, read from the 1.1.24 docs and not yet driven; " +
+				"nothing on that channel restricts it either",
 		}
 	case model.VendorCursor:
 		// Re-measured end to end on 2026-08-08 against the ACP server (§9.36),
@@ -778,13 +1010,17 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 			// errored nor warned, so council has no way to tell a real profile
 			// from a typo, and asks for nothing rather than putting a word in
 			// this badge that the CLI may never have read.
-			Detail: "treat this column as able to change your files, and that is " +
+			Detail: seatShape(model.VendorGrok, false) + ": treat this column as able " +
+				"to change your files, and that is " +
 				"MEASURED rather than assumed: asked to write a file under " +
 				"--permission-mode plan, it wrote the file, exactly as the run " +
 				"without it did. Council passes neither that nor --sandbox — " +
 				"--sandbox silently ACCEPTS a profile name that does not exist, so " +
 				"nothing council asked of it could be observed. The workspace above " +
-				"is the containment, not a flag",
+				"is the containment, not a flag. Since 2026-09-02 the seat is one " +
+				"`grok agent stdio` ACP process, read from the 1.0.13 docs and not yet " +
+				"driven; a permission request it raises in this posture is refused by " +
+				"the room itself, and whether it raises one before a write is unknown",
 		}
 	default:
 		return SandboxClaim{}

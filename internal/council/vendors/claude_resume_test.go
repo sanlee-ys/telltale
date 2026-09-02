@@ -101,25 +101,35 @@ func TestSessionResumeKeepsThePosture(t *testing.T) {
 	}
 }
 
-// TestOnlyClaudeCanResumeASession keeps the interface honest about the room's
-// actual shape: three of the four vendors are batch programs with no persistent
-// session to resume, and the compiler is what enforces that rather than a note.
-func TestOnlyClaudeCanResumeASession(t *testing.T) {
-	persistent := 0
+// TestThePersistentSeatsRefuseAnEmptyResume keeps the interface honest about
+// the room's actual shape.
+//
+// Until 2026-09-02 this test was TestOnlyClaudeCanResumeASession and pinned
+// exactly one Persistent seat, because the other vendors were batch programs.
+// Antigravity's `--input-format stream-json` seat (agystream.go, §9.57) is the
+// second, and it is the ONLY second: codex and grok moved to Conversational
+// shapes, whose resume is a protocol method rather than argv. The two
+// stream-json seats are named here rather than counted, so a third one
+// arriving fails this test and is read.
+func TestThePersistentSeatsRefuseAnEmptyResume(t *testing.T) {
+	want := map[model.VendorID]bool{model.VendorClaude: true, model.VendorAntigravity: true}
+	seen := map[model.VendorID]bool{}
 	for id, v := range Registry() {
 		p, ok := v.(Persistent)
 		if !ok {
 			continue
 		}
-		persistent++
-		if id != model.VendorClaude {
-			t.Errorf("%s implements Persistent; the ADR says only claude can", id)
+		seen[id] = true
+		if !want[id] {
+			t.Errorf("%s implements Persistent; only the two stream-json seats do", id)
 		}
 		if _, err := p.SessionResume("/ws", "bin", "", "", PostureRead); err != ErrNoResume {
 			t.Errorf("%s does not refuse an empty resume id", id)
 		}
 	}
-	if persistent != 1 {
-		t.Errorf("%d persistent vendors, want exactly 1", persistent)
+	for id := range want {
+		if !seen[id] {
+			t.Errorf("%s is no longer a Persistent seat", id)
+		}
 	}
 }

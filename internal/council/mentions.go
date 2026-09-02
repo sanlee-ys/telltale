@@ -28,6 +28,21 @@ type Route struct {
 	Vendors []model.VendorID
 	Negated bool
 	Mixed   bool
+
+	// Auto is `@auto`: the brief goes to ONE seat, and the room picks it from
+	// the quota readings it holds (quota.go, autoPick). It is a route word
+	// rather than a fifth shape, and it is UNRESOLVED here on purpose: parsing
+	// happens on every keystroke and the pick depends on State (which seats
+	// are idle, which have a measured window), so the parse records the
+	// intent and the footer and the dispatch resolve it against the same
+	// State. An unresolved Auto addresses nobody, so a caller that forgot to
+	// resolve it dispatches to nothing rather than to everyone.
+	//
+	// Auto beside any named seat or exclusion is refused as Mixed: `@auto`
+	// says "you choose" and `@codex` says "I chose", and a line saying both
+	// states two theories of who is in the room — ParseRoute's own argument
+	// for refusing `@` with `-@`.
+	Auto bool
 }
 
 // defaultRoute is where an unaddressed brief goes: Claude alone.
@@ -123,6 +138,11 @@ func SeatNames() []string {
 // committee now that silence goes to Claude alone (see defaultRoute).
 var allAliases = map[string]bool{"all": true, "everyone": true, "council": true}
 
+// autoAliases hand the seat choice to the room (Route.Auto). One spelling,
+// because the word is the flag's own: what the footer prints as `auto:` is
+// what the user typed.
+var autoAliases = map[string]bool{"auto": true}
+
 // ParseRoute splits a draft into its leading @mentions and the brief itself.
 //
 // Only LEADING mentions count. "@claude @codex compare these" addresses two
@@ -166,6 +186,7 @@ func ParseRoute(draft string) (Route, string) {
 	seenPos := map[model.VendorID]bool{}
 	seenNeg := map[model.VendorID]bool{}
 	all := false
+	auto := false
 
 	for {
 		trimmed := strings.TrimLeft(rest, " \t")
@@ -184,12 +205,19 @@ func ParseRoute(draft string) (Route, string) {
 		name = strings.TrimRight(name, ",;:")
 
 		v, isVendor := aliases[name]
-		if !isVendor && !allAliases[name] {
+		if !isVendor && !allAliases[name] && !autoAliases[name] {
 			// Not a vendor. Stop here and leave it in the brief.
+			break
+		}
+		if autoAliases[name] && negate {
+			// `-@auto` names nothing to exclude. It is prose, like any other
+			// @token that does not resolve, and it stays in the brief.
 			break
 		}
 
 		switch {
+		case autoAliases[name]:
+			auto = true
 		case !isVendor && !negate:
 			all = true
 		case !isVendor:
@@ -220,6 +248,15 @@ func ParseRoute(draft string) (Route, string) {
 
 	brief := strings.TrimLeft(rest, " \t")
 
+	if auto && (len(pos) > 0 || len(neg) > 0 || all) {
+		// `@auto` beside a named seat, an exclusion or `@all`: two theories of
+		// who chooses, refused for the reason the two forms below are. Auto is
+		// kept on the refusal so the footer can say WHICH mixture this is.
+		return Route{Mixed: true, Auto: true}, draft
+	}
+	if auto {
+		return Route{Auto: true}, brief
+	}
 	if len(pos) > 0 && len(neg) > 0 {
 		// The draft is returned UNSTRIPPED. Nothing was routed, so nothing was
 		// addressing — and the user is about to retype the line anyway. Handing
@@ -246,11 +283,17 @@ func ParseRoute(draft string) (Route, string) {
 // addresses reports whether a route includes a vendor. The zero route includes
 // everyone.
 func (r Route) addresses(v model.VendorID) bool {
-	if r.Mixed {
+	if r.Mixed || r.Auto {
 		// A refused route addresses nobody. Defined rather than left to fall
 		// through: dispatch stops before this is reached, and a caller that
 		// forgets the check should narrow to nothing rather than broadcast to
 		// four quotas on a line the room said it could not read.
+		//
+		// An UNRESOLVED @auto addresses nobody for the same reason: the pick
+		// is made against State (autoPick), and the dispatch path replaces the
+		// route with the seat it chose before anything reads this. A caller
+		// that reaches here with Auto still set has skipped the pick, and
+		// narrowing to nothing is the safe way to be wrong.
 		return false
 	}
 	for _, id := range r.Vendors {
@@ -272,6 +315,15 @@ func (r Route) addresses(v model.VendorID) bool {
 // "but".
 func (r Route) label() string {
 	switch {
+	case r.Mixed && r.Auto:
+		// Which mixture, in the words that fix it. The footer's routing cell
+		// is the one place this is read, while the line can still be edited.
+		return "@auto picks the seat; drop the other mentions"
+	case r.Auto:
+		// The bare word. The footer's own cell (routeCell, quota.go) says what
+		// auto resolved to on this frame; this label is what the header would
+		// print, and the header never sees an unresolved auto.
+		return "auto"
 	case r.Mixed:
 		// Not "nobody", which would describe the outcome and hide the cause.
 		// This cell is read while the line is still being typed, so it has to

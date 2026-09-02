@@ -289,12 +289,12 @@ func TestCollectArenaZeroAndErrorAreDifferent(t *testing.T) {
 func TestArenaTurnNeverTouchesSavedThreads(t *testing.T) {
 	m := clearModel()
 	m.st.Columns[1].Phase = PhaseStreaming
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
 		arena:      true,
 		arenaTrees: map[model.VendorID]string{},
-	}
+	})
 
 	m.applyEvents([]runner.Event{{Vendor: model.VendorCodex, Kind: runner.KindSession, SessionID: "throwaway-race-id"}})
 
@@ -304,7 +304,7 @@ func TestArenaTurnNeverTouchesSavedThreads(t *testing.T) {
 
 	// The inverse guards the guard: an ordinary turn must still record ids, or
 	// this test passes while resume quietly dies everywhere.
-	m.turn.arena = false
+	m.turnOf(model.VendorCodex).arena = false
 	m.applyEvents([]runner.Event{{Vendor: model.VendorCodex, Kind: runner.KindSession, SessionID: "real-new-id"}})
 	if got := m.sessions[model.VendorCodex]; got != "real-new-id" {
 		t.Errorf("an ordinary turn stopped recording ids: %q", got)
@@ -367,7 +367,7 @@ func TestArenaCommandRefusals(t *testing.T) {
 	m.st.Write = false
 	m.st.Draft = "/arena fix the bug"
 	m.dispatch()
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Fatal("a read room dispatched a write race")
 	}
 	if !strings.Contains(m.st.Notice, "/write") {
@@ -377,7 +377,7 @@ func TestArenaCommandRefusals(t *testing.T) {
 	m.st.Write = true
 	m.st.Draft = "/arena   "
 	m.dispatch()
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Fatal("an empty brief dispatched")
 	}
 	if !strings.Contains(m.st.Notice, "needs a brief") {
@@ -406,7 +406,7 @@ func TestArenaRanksAreHostObserved(t *testing.T) {
 	m.st.Columns[0].TurnN = 4
 	m.st.Columns[1].Phase = PhaseStreaming
 	m.st.Columns[1].TurnN = 4
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		live:       map[model.VendorID]bool{model.VendorClaude: true, model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
 		arena:      true,
@@ -414,7 +414,7 @@ func TestArenaRanksAreHostObserved(t *testing.T) {
 		arenaBase:  base,
 		arenaTrees: trees,
 		cancel:     func() {},
-	}
+	})
 
 	// Codex lands first, failed; Claude second, done. The order of these calls
 	// IS the measurement.
@@ -560,12 +560,12 @@ func TestArenaCommitMakesTheAttemptDurable(t *testing.T) {
 	c.Phase = PhaseStreaming
 	c.TurnN = 5
 	c.Prompt = "fix the flaky poller retry loop so CI stops going red on Tuesdays"
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
 		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
-	}
+	})
 	m.finishColumn(c, PhaseDone)
 
 	r := c.Arena
@@ -700,12 +700,12 @@ func TestArenaCommitFailureDegradesTheSeatAlone(t *testing.T) {
 		m.st.Columns[i].TurnN = 3
 		m.st.Columns[i].Prompt = "try it"
 	}
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		live:       map[model.VendorID]bool{model.VendorClaude: true, model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
 		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
-	}
+	})
 	m.finishColumn(&m.st.Columns[0], PhaseDone)
 	m.finishColumn(&m.st.Columns[1], PhaseDone)
 
@@ -755,12 +755,12 @@ func TestArenaZeroDiffCommitsNothing(t *testing.T) {
 	c := &m.st.Columns[1]
 	c.Phase = PhaseStreaming
 	c.TurnN = 2
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
 		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
-	}
+	})
 	m.finishColumn(c, PhaseDone)
 
 	r := c.Arena
@@ -805,12 +805,12 @@ func TestArenaSelfCommittedAttemptKeepsItsOwnTip(t *testing.T) {
 	c := &m.st.Columns[1]
 	c.Phase = PhaseStreaming
 	c.TurnN = 6
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
 		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
-	}
+	})
 	m.finishColumn(c, PhaseDone)
 
 	r := c.Arena
@@ -855,12 +855,12 @@ func TestUndoTakesTheWholeTurnBack(t *testing.T) {
 	c.Phase = PhaseStreaming
 	c.TurnN = 7
 	c.Prompt = "race it"
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
 		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
-	}
+	})
 	m.finishColumn(c, PhaseDone)
 	if c.Arena.Commit == "" {
 		t.Fatalf("fixture: the attempt was not committed: %+v", c.Arena)
@@ -927,12 +927,12 @@ func TestUndoRefusalsEachNameTheirReason(t *testing.T) {
 	m.st.Focus = 0
 	c := &m.st.Columns[0]
 
-	m.turn = &turnState{}
+	occupy(m)
 	m.askUndoSeat()
 	if m.undoPending != "" || !strings.Contains(m.st.Notice, "in flight") {
 		t.Errorf("mid-turn refusal: pending=%q notice=%q", m.undoPending, m.st.Notice)
 	}
-	m.turn = nil
+	idle(m)
 
 	m.askUndoSeat()
 	if m.undoPending != "" || !strings.Contains(m.st.Notice, "no race") {
@@ -974,12 +974,12 @@ func TestUndoResetFailureSurfacesGitsOwnSentence(t *testing.T) {
 	c := &m.st.Columns[1]
 	c.Phase = PhaseStreaming
 	c.TurnN = 8
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
 		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
-	}
+	})
 	m.finishColumn(c, PhaseDone)
 
 	// The tree vanishes between the race and the undo — a user deleted it by
@@ -1119,12 +1119,12 @@ func TestARaceThatOutranItsTurnStillCommitsAndUndoes(t *testing.T) {
 	c.Phase = PhaseStreaming
 	c.TurnN = 3 // the room's own turn — deliberately NOT the race number
 	c.Prompt = "race past the leftovers"
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
 		arena:      true, arenaRaceN: raceN, arenaBase: base, arenaTrees: trees,
 		cancel: func() {},
-	}
+	})
 	m.finishColumn(c, PhaseDone)
 
 	r := c.Arena
@@ -1199,7 +1199,7 @@ func TestAWarmSeatsRacerRetiresOnItsOwnExit(t *testing.T) {
 	c.TurnN = 4
 	c.Body = "done."
 	handle := &oneShotRacer{}
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		live:         map[model.VendorID]bool{model.VendorClaude: true},
 		persistent:   map[model.VendorID]bool{},
 		arena:        true,
@@ -1208,7 +1208,7 @@ func TestAWarmSeatsRacerRetiresOnItsOwnExit(t *testing.T) {
 		arenaTrees:   trees,
 		arenaHandles: map[model.VendorID]racerHandle{model.VendorClaude: handle},
 		cancel:       func() {},
-	}
+	})
 	// The room's own seat, ALIVE, wearing the same vendor id — the whole
 	// precondition. deadSession reports Alive() true.
 	m.procs[model.VendorClaude] = &seatProc{sess: deadSession{}, dir: ws}
@@ -1224,7 +1224,7 @@ func TestAWarmSeatsRacerRetiresOnItsOwnExit(t *testing.T) {
 	if _, ok := m.procs[model.VendorClaude]; !ok {
 		t.Error("the racer's exit took the ROOM's live process with it — it is still running and now invisible")
 	}
-	if m.turn != nil && m.turn.live[model.VendorClaude] {
+	if m.turnOf(model.VendorClaude) != nil {
 		t.Error("the landed racer never left the turn's live set, so the turn cannot end")
 	}
 }
@@ -1237,11 +1237,11 @@ func TestABackgroundRoomSeatDeathDoesNotRetireAOneShotRace(t *testing.T) {
 	m := clearModel()
 	c := m.column(model.VendorClaude)
 	c.Phase = PhaseStreaming
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		live:       map[model.VendorID]bool{model.VendorClaude: true},
 		persistent: map[model.VendorID]bool{model.VendorClaude: true},
 		cancel:     func() {},
-	}
+	})
 	m.procs[model.VendorClaude] = &seatProc{sess: deadSession{}}
 
 	m.applyEvents([]runner.Event{{Vendor: model.VendorClaude, Kind: runner.KindDone}})

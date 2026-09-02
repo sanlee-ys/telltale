@@ -31,8 +31,10 @@ func (s *decisionSession) record(lines [][]byte) error {
 	}
 	return nil
 }
-func (*decisionSession) Kill()       {}
-func (*decisionSession) Alive() bool { return true }
+func (*decisionSession) Kill()                 {}
+func (*decisionSession) Alive() bool           { return true }
+func (*decisionSession) CloseInput()           {}
+func (*decisionSession) Done() <-chan struct{} { return neverDone }
 
 // turnModel is traceModel plus a turn in flight on a persistent seat. The turn
 // bookkeeping is the seam this file tests: a column can now be retired by four
@@ -54,18 +56,24 @@ func turnModel(persistent bool) *Model {
 		failure:    map[model.VendorID]runner.FailureClass{},
 		redactors:  map[model.VendorID]*Redactor{},
 		procs:      map[model.VendorID]*seatProc{},
+		turns:      map[model.VendorID]*turnState{},
+		cancelling: map[model.VendorID]bool{},
+		givenUp:    map[model.VendorID]bool{},
 		gateInputs: map[string]map[string]any{},
 		roomCtx:    ctx,
 		roomCancel: cancel,
 	}
-	m.turn = &turnState{
+	ts := &turnState{
+		n:          1,
 		cancel:     func() {},
+		seatCancel: map[model.VendorID]context.CancelFunc{},
 		live:       map[model.VendorID]bool{model.VendorClaude: true},
 		persistent: map[model.VendorID]bool{},
 	}
 	if persistent {
-		m.turn.persistent[model.VendorClaude] = true
+		ts.persistent[model.VendorClaude] = true
 	}
+	m.holdTurn(ts)
 	return m
 }
 
@@ -85,7 +93,7 @@ func TestPersistentTurnEndsOnTheVendorsOwnLine(t *testing.T) {
 	if got := m.st.Columns[0].Phase; got != PhaseDone {
 		t.Errorf("phase = %v, want done", got)
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Error("the turn is still in flight after its only end signal")
 	}
 	if m.st.Mode != ModeComposing {
@@ -137,7 +145,7 @@ func TestSpawnPerTurnSettlesOnTheLineAndRetiresOnTheExit(t *testing.T) {
 		Vendor: model.VendorClaude, Kind: runner.KindMeta,
 		Text: "done", EndsTurn: true,
 	}})
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("the end-of-turn line retired the column; the turn's cancel would kill a process that is still winding down")
 	}
 	c := m.st.Columns[0]
@@ -162,7 +170,7 @@ func TestSpawnPerTurnSettlesOnTheLineAndRetiresOnTheExit(t *testing.T) {
 	settled := c.Elapsed
 
 	m.applyEvents([]runner.Event{{Vendor: model.VendorClaude, Kind: runner.KindDone}})
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Error("the process exit did not end the turn")
 	}
 	c = m.st.Columns[0]
@@ -203,7 +211,7 @@ func TestSettlingSurvivesUntilTheProcessDoes(t *testing.T) {
 		if !m.st.Settling() {
 			t.Fatalf("frame %d: the room stopped saying the seat was still exiting", i)
 		}
-		if m.turn == nil {
+		if !m.anyInFlight() {
 			t.Fatalf("frame %d: the turn ended before the process did", i)
 		}
 	}
@@ -253,7 +261,7 @@ func TestALateEndOfTurnLineCannotSettleATerminalColumn(t *testing.T) {
 // turn is already streaming — must not settle the NEW turn's column.
 func TestAnEndOfTurnLineAfterTheTurnIsIgnored(t *testing.T) {
 	m := turnModel(false)
-	m.turn = nil
+	idle(m)
 
 	m.applyEvents([]runner.Event{{
 		Vendor: model.VendorClaude, Kind: runner.KindMeta, EndsTurn: true,
@@ -316,7 +324,7 @@ func TestPersistentProcessDeathMidTurnFailsTheColumn(t *testing.T) {
 	if c.Note == "" {
 		t.Error("a column that lost its process said nothing about why")
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Error("the turn never ended after the process died")
 	}
 	if _, ok := m.procs[model.VendorClaude]; ok {
@@ -329,7 +337,7 @@ func TestPersistentProcessDeathMidTurnFailsTheColumn(t *testing.T) {
 // finished column red.
 func TestPersistentProcessDeathBetweenTurnsIsNotAFailure(t *testing.T) {
 	m := turnModel(true)
-	m.turn = nil
+	idle(m)
 	m.st.Columns[0].Phase = PhaseDone
 	m.procs[model.VendorClaude] = &seatProc{wire: claudeWire()}
 
@@ -351,17 +359,20 @@ func TestRetiringAColumnTwiceDoesNotEndTheTurnEarly(t *testing.T) {
 		Vendor: model.VendorCodex, Label: "Codex",
 		Avail: AvailInstalled, Phase: PhaseWaiting,
 	})
-	m.turn.live[model.VendorCodex] = true
+	// The same dispatch, now also on Codex — what an @all brief builds.
+	ts := m.turnOf(model.VendorClaude)
+	ts.live[model.VendorCodex] = true
+	m.turns[model.VendorCodex] = ts
 
 	m.applyEvents([]runner.Event{
 		{Vendor: model.VendorClaude, Kind: runner.KindMeta, EndsTurn: true},
 		{Vendor: model.VendorClaude, Kind: runner.KindDone},
 	})
 
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("the turn ended while Codex was still working")
 	}
-	if !m.turn.live[model.VendorCodex] {
+	if m.turnOf(model.VendorCodex) == nil {
 		t.Error("Codex was retired by another column's events")
 	}
 }
@@ -373,7 +384,7 @@ func TestRetiringAColumnTwiceDoesNotEndTheTurnEarly(t *testing.T) {
 // over, and blaming it for one is a false claim on screen.
 func TestCancelledPersistentTurnIsNotAVendorFailure(t *testing.T) {
 	m := turnModel(true)
-	m.cancelling = true
+	markCancelling(m, model.VendorClaude)
 
 	m.applyEvents([]runner.Event{{
 		Vendor: model.VendorClaude, Kind: runner.KindError,
@@ -601,7 +612,7 @@ func TestEndingATurnClearsItsGates(t *testing.T) {
 		t.Fatal("the gate was not queued")
 	}
 
-	m.cancelling = true
+	markCancelling(m, model.VendorClaude)
 	m.applyEvents([]runner.Event{{
 		Vendor: model.VendorClaude, Kind: runner.KindError, EndsTurn: true,
 	}})

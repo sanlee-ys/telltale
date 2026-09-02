@@ -305,8 +305,8 @@ func TestDQuotesIntoTheDraftAndSpawnsNothing(t *testing.T) {
 	if log.n() != 0 {
 		t.Errorf("D spawned %d process(es): %+v", log.n(), log.specs)
 	}
-	if m.st.Turn != 0 || m.turn != nil {
-		t.Errorf("D started a turn (Turn=%d, turn=%v)", m.st.Turn, m.turn)
+	if m.st.Turn != 0 || m.anyInFlight() {
+		t.Errorf("D started a turn (Turn=%d, turns=%v)", m.st.Turn, m.turns)
 	}
 	if m.st.Mode != ModeComposing {
 		t.Error("D did not leave the operator in the composer, where the draft is editable")

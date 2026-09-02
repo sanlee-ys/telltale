@@ -1048,12 +1048,15 @@ func agyForkModel(asked string) *Model {
 		failure:    map[model.VendorID]runner.FailureClass{},
 		redactors:  map[model.VendorID]*Redactor{},
 		procs:      map[model.VendorID]*seatProc{},
+		turns:      map[model.VendorID]*turnState{},
+		cancelling: map[model.VendorID]bool{},
+		givenUp:    map[model.VendorID]bool{},
 	}
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		cancel:     func() {},
 		live:       map[model.VendorID]bool{model.VendorAntigravity: true},
 		persistent: map[model.VendorID]bool{},
-	}
+	})
 	if asked != "" {
 		m.forkWatch[model.VendorAntigravity] = asked
 	}
@@ -1215,11 +1218,11 @@ func TestAThreadThatAnsweredIsNeverThrownAway(t *testing.T) {
 	}
 
 	// A second turn, and this time the process dies mid-flight.
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		cancel:     func() {},
 		live:       map[model.VendorID]bool{model.VendorClaude: true},
 		persistent: map[model.VendorID]bool{model.VendorClaude: true},
-	}
+	})
 	m.st.Columns[0].Phase = PhaseStreaming
 	m.applyEvents([]runner.Event{{Vendor: model.VendorClaude, Kind: runner.KindDone}})
 
@@ -1238,7 +1241,7 @@ func TestACancelledTurnKeepsTheThreadOnProbation(t *testing.T) {
 	m := turnModel(true)
 	m.sessions[model.VendorClaude] = "claude-sess-1"
 	m.unproven[model.VendorClaude] = true
-	m.cancelling = true
+	markCancelling(m, model.VendorClaude)
 
 	m.finishColumn(&m.st.Columns[0], PhaseFailed)
 
@@ -1275,11 +1278,11 @@ func TestAStaleIdOnASpawnPerTurnSeatIsDroppedAfterOneTurn(t *testing.T) {
 		Avail: AvailInstalled, Phase: PhaseWaiting, Binary: "codex",
 	}}
 	m.st.Columns[0].Restored = true
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		cancel:     func() {},
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
-	}
+	})
 
 	// The vendor could not find the conversation, so the process died.
 	m.applyEvents([]runner.Event{{
@@ -1406,7 +1409,9 @@ func TestTheMeasured503DoesNotForfeitARestoredThread(t *testing.T) {
 	m.st.Columns[0].Vendor = model.VendorAntigravity
 	m.st.Columns[0].Label = "Antigravity"
 	m.st.Columns[0].Restored = true
-	m.turn.live = map[model.VendorID]bool{model.VendorAntigravity: true}
+	ts := m.turnOf(model.VendorClaude)
+	ts.live = map[model.VendorID]bool{model.VendorAntigravity: true}
+	m.turns = map[model.VendorID]*turnState{model.VendorAntigravity: ts}
 	m.sessions[model.VendorAntigravity] = "agy-conv-1"
 	m.unproven[model.VendorAntigravity] = true
 
@@ -1451,11 +1456,11 @@ func TestAnUnclassifiedFailureAfterATransientOneStillDropsTheThread(t *testing.T
 	delete(m.failure, model.VendorClaude)
 	delete(m.threadLost, model.VendorClaude)
 	m.st.Columns[0].Phase = PhaseStreaming
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		cancel:     func() {},
 		live:       map[model.VendorID]bool{model.VendorClaude: true},
 		persistent: map[model.VendorID]bool{},
-	}
+	})
 	m.applyEvents([]runner.Event{{
 		Vendor: model.VendorClaude, Kind: runner.KindError,
 		Note: "exit status 1", ExitCode: 1,
@@ -1485,7 +1490,7 @@ func TestAStaleClassificationCannotSpareTheNextTurnsThread(t *testing.T) {
 	// process to exist.
 	countSpawns(t)
 	m := turnModel(false)
-	m.turn = nil
+	idle(m)
 	m.st.Columns[0].Phase = PhaseIdle
 	m.st.Columns = append(m.st.Columns, Column{
 		Vendor: model.VendorCodex, Label: "Codex",

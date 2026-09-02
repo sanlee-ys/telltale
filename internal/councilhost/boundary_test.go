@@ -1,7 +1,12 @@
 package councilhost
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -65,30 +70,105 @@ func TestNoGaugeReachesTheCouncilHost(t *testing.T) {
 // loopback listener, and this socket carries transcript content and accepts
 // dispatch commands, so it is a strictly worse surface to leave addressable. The
 // whole force of that refusal is that a browser has no URL scheme for
-// `\\.\pipe\...` — which stops being true the moment this package grows a
-// net.Listen.
+// `\\.\pipe\...` — and none for a filesystem path either, which is what the
+// Unix transport (design.md §7.30) is.
 //
-// DIRECT imports, which is the exact claim: this package must not open a socket
-// itself. A transitive assertion would be the wrong test and would fail on
-// something harmless, the same distinction ADR-002's fast-path gate rests on.
+// So the gate asks the precise question rather than the proxy it used to ask.
+// It used to forbid importing `net` at all; the Unix transport reaches `net`
+// for Unix domain sockets, so the gate now walks this package's own source —
+// every file, on every platform's build tags, because the claim is about what
+// this package CAN do and not about what it does on the machine running the
+// suite — and lists every selector on the `net` import. Anything outside the
+// allowlist fails: net.Listen, net.Dial, net.ListenTCP, a net/http import, all
+// of it. The old `go list` reading is kept on Windows, where nothing here may
+// reach net at all.
+//
+// DIRECT imports and this package's own selectors, which is the exact claim:
+// this package must not open an addressable socket itself. A transitive
+// assertion would be the wrong test and would fail on something harmless.
 func TestTheHostBindsNoPort(t *testing.T) {
-	out, err := exec.Command("go", "list", "-f", "{{join .Imports \"\\n\"}}", hostPkg).Output()
-	if err != nil {
-		t.Fatalf("go list %s: %v", hostPkg, err)
-	}
-	imports := strings.Fields(string(out))
-	if len(imports) == 0 {
-		t.Fatalf("go list returned no imports for %s; the gate would pass vacuously", hostPkg)
-	}
-	for _, imp := range imports {
-		if imp == "net" || strings.HasPrefix(imp, "net/") {
-			t.Errorf("the council host imports %s.\n"+
-				"§7.28 refuses loopback TCP on §7.24's measurement, and the force of that\n"+
-				"refusal is that a browser cannot address a named pipe AT ALL — which makes\n"+
-				"internal/localonly's check unnecessary here rather than merely satisfied. A\n"+
-				"socket in this package gives that class of sender a way back in, on a surface\n"+
-				"that carries transcript content and accepts dispatch commands.", imp)
+	if runtime.GOOS == "windows" {
+		out, err := exec.Command("go", "list", "-f", "{{join .Imports \"\\n\"}}", hostPkg).Output()
+		if err != nil {
+			t.Fatalf("go list %s: %v", hostPkg, err)
 		}
+		imports := strings.Fields(string(out))
+		if len(imports) == 0 {
+			t.Fatalf("go list returned no imports for %s; the gate would pass vacuously", hostPkg)
+		}
+		for _, imp := range imports {
+			if imp == "net" || strings.HasPrefix(imp, "net/") {
+				t.Errorf("the council host imports %s on Windows, where the named pipe is the "+
+					"whole transport and no socket of any kind is built", imp)
+			}
+		}
+	}
+
+	// The allowlist: the Unix domain socket, by name. A new entry here is a
+	// new transport and needs a design.md section before it needs a test edit.
+	allowed := map[string]bool{
+		"ListenUnix": true, "DialUnix": true, "UnixAddr": true,
+		"UnixConn": true, "UnixListener": true,
+	}
+	fset := token.NewFileSet()
+	files, err := filepath.Glob("*.go")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no source files found for the gate to read (%v)", err)
+	}
+	seen := 0
+	for _, path := range files {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly|parser.ParseComments)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		local := ""
+		for _, imp := range f.Imports {
+			p := strings.Trim(imp.Path.Value, "\"")
+			if strings.HasPrefix(p, "net/") {
+				t.Errorf("%s imports %s. The host reaches net for Unix domain sockets and for "+
+					"nothing else (§7.30); a net/ subpackage is a second transport", path, p)
+			}
+			if p == "net" {
+				local = "net"
+				if imp.Name != nil {
+					local = imp.Name.Name
+				}
+			}
+		}
+		if local == "" {
+			continue
+		}
+		full, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		ast.Inspect(full, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			id, ok := sel.X.(*ast.Ident)
+			if !ok || id.Name != local {
+				return true
+			}
+			seen++
+			if !allowed[sel.Sel.Name] {
+				t.Errorf("%s reaches net.%s.\n"+
+					"§7.28 refuses loopback TCP on §7.24's measurement, and the force of that\n"+
+					"refusal is that a browser cannot address a named pipe or a filesystem path.\n"+
+					"Only the Unix domain socket calls are admitted here, by name; anything a\n"+
+					"browser can reach is a way back in on a surface that carries transcript\n"+
+					"content and accepts dispatch commands.", path, sel.Sel.Name)
+			}
+			return true
+		})
+	}
+	if seen == 0 {
+		t.Fatal("the gate found no use of net in any file; the Unix transport reaches it, so a " +
+			"reading of zero means the walker is broken and every negative above is worthless")
 	}
 }
 

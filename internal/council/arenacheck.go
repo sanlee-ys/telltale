@@ -268,11 +268,14 @@ type arenaCheckMsg struct {
 // Two refusals live here, and each is a fact rather than a policy:
 //
 //   - No command is named: there is nothing to run and nothing to report.
-//   - The whole turn is being cancelled: the operator pressed ctrl+c, and a
-//     room that answered that by starting five subprocesses would be ignoring
-//     the one act it exists to obey. A seat cut on its own with `x` is NOT
-//     this case — §9.37's give-up ruling says a given-up seat lands like any
-//     other finisher, and its partial work is as worth checking as its diff.
+//   - This racer is being cancelled: the operator pressed ctrl+c on it, or on
+//     the whole room, and a room that answered that by starting a subprocess
+//     would be ignoring the one act it exists to obey. Per seat since §9.54
+//     (m.cancelling is keyed by vendor, where it was one bool for the room) —
+//     the cancel-all case sets every racer's entry, so the old reading holds
+//     inside the new one. A seat cut on its own with `x` is NOT this case —
+//     §9.37's give-up ruling says a given-up seat lands like any other
+//     finisher, and its partial work is as worth checking as its diff.
 //
 // A third is the CALLER's and is not restated here: collection is once-only
 // behind finishColumn's `c.Arena == nil` guard, so a racer that retires twice
@@ -281,7 +284,7 @@ func (m *Model) armArenaCheck(v model.VendorID, turnN int, tree string) *ArenaCh
 	if m.checkCmd == "" || len(m.checkArgv) == 0 {
 		return nil
 	}
-	if m.cancelling {
+	if m.cancelling[v] {
 		return nil
 	}
 	argv := append([]string(nil), m.checkArgv...)
