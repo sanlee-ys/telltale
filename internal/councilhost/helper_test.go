@@ -34,6 +34,22 @@ const (
 	// vendor by any path, so the process boundary can be crossed for real
 	// without going near a billed turn.
 	helperServe = "serve"
+	// helperDetachServe is a real host, with an empty roster, holding ONE
+	// stand-in seat with no per-seat job of its own.
+	//
+	// The empty roster is the same safety argument helperServe makes: no vendor
+	// can be spawned by any path. The seat is this test binary re-executed, and
+	// it exists so the containment claim can be measured AFTER a detach, when
+	// the host is the only process left (design.md §7.29).
+	helperDetachServe = "detach-serve"
+	// helperDetachClient is a client in a process of its own that detaches and
+	// EXITS.
+	//
+	// A separate process is the whole claim it supports. The socket half of a
+	// detach is easy to test in one process; the PROCESS half cannot be asserted
+	// by a client that never exits, and it is the half that would silently
+	// regress.
+	helperDetachClient = "detach-client"
 )
 
 // helperPipeEnv and helperWorkEnv carry the stand-in host's configuration.
@@ -63,6 +79,10 @@ func runTestHelper() (int, bool) {
 		return runStandInHost(), true
 	case helperServe:
 		return runStandInServer(), true
+	case helperDetachServe:
+		return runDetachHost(), true
+	case helperDetachClient:
+		return runDetachClient(), true
 	default:
 		return 0, false
 	}

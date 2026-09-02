@@ -2,6 +2,7 @@ package council
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/council/vendors"
+	"github.com/sanlee-ys/telltale/internal/councilhost"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -42,6 +44,12 @@ type spawnLog struct {
 	// measured PASS (exited, code 0); a test that wants a FAIL, or a run that
 	// could not happen, sets this before the race lands.
 	checkOut checkResult
+	// hosts records every reach for a council host (design.md §7.29): one this
+	// package would have STARTED, or one it would have JOINED. Kept apart from
+	// specs for checks' reason and a sharper one — a host is a process that
+	// spawns seats of its own, so a test asserting "no vendor spawned" must not
+	// be answered by a host that spawned four, two processes away.
+	hosts []hostRun
 }
 
 // checkRun is one stubbed check: where it would have run, and what it would
@@ -118,14 +126,51 @@ func countSpawns(t *testing.T) *spawnLog {
 		log.specs = append(log.specs, spec)
 		return deadPTY{}, nil
 	}
+	// The SEVENTH and EIGHTH, added with design.md §7.29. A host is not a seat —
+	// it is a process that spawns seats of its own, two processes away from
+	// whatever assertion provoked it — so they are logged apart from specs and
+	// a test asserting "no vendor spawned" cannot be answered by a host that
+	// spawned four.
+	//
+	// Both return an ERROR rather than a fake client. councilhost.Client wraps a
+	// real pipe handle and has no interface to fake, and a struct with a dead
+	// conn in it would fail on the first frame at a place that says nothing
+	// about what went wrong. A test that wants a host end to end runs a real one
+	// over a real pipe, which is what internal/councilhost's own suite does.
+	origStartHost, origJoinHost := startHostedRoom, joinHostedRoom
+	startHostedRoom = func(cfg councilhost.ClientConfig) (*councilhost.Client, error) {
+		log.hosts = append(log.hosts, hostRun{started: true, workspace: cfg.Workspace, key: cfg.RoomKey})
+		return nil, errStubbedHost
+	}
+	joinHostedRoom = func(cfg councilhost.JoinConfig) (*councilhost.Client, error) {
+		log.hosts = append(log.hosts, hostRun{started: false, pipe: cfg.PipeName})
+		return nil, errStubbedHost
+	}
 	t.Cleanup(func() {
 		startProcess, startSession, startRPCSession = origProcess, origSession, origRPC
 		startCheck = origCheck
 		startEditor = origEditor
 		startPTYSession = origPTY
+		startHostedRoom, joinHostedRoom = origStartHost, origJoinHost
 	})
 	return log
 }
+
+// hostRun is one stubbed reach for a host: which kind, and enough to say what
+// it would have opened.
+type hostRun struct {
+	// started is true for a host this package would have STARTED and false for
+	// one it would have JOINED. They are different acts with different costs and
+	// the log keeps them apart, on the same rule that keeps hosts apart from
+	// seats.
+	started   bool
+	workspace string
+	key       string
+	pipe      string
+}
+
+// errStubbedHost is what a stubbed reach for a host reports.
+var errStubbedHost = errors.New("council: the host path is stubbed in this test")
 
 func (l *spawnLog) n() int { return len(l.specs) }
 

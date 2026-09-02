@@ -7772,6 +7772,347 @@ host holds the room.
   makes council's own `Model` the client's renderer. That is the next slice, and it is named
   here so that nobody reads this rung as having paid for it.
 
+<a id="s7-29"></a>
+
+### 7.29 detach, rejoin and kill — the room outlives the terminal (2026-09-01)
+
+**What this section rules.** [§7.28](#s7-28) built a host and withheld the feature that needs
+it. This section exposes detach: a client leaves and the host keeps the seats, a later client
+rejoins the same live process, and `telltale council kill` ends it on purpose. It also carries
+the unwatched-write ruling §7.28 said was owed with it and never before.
+
+**What a reader must not read into it.** No key in the room's TUI detaches anything, and no
+golden file moved. The reason is stated at the bottom under *the TUI has no host to leave*, and
+it is a fact about what §7.28 built rather than a shortcut taken here.
+
+#### The four verbs, and the one that was reserved
+
+§9.52 reserved `rejoin` and spent nothing on it. This section spends it, and the three words
+still name three different facts:
+
+| word | what it is a fact about | when it is true |
+|---|---|---|
+| **reattach** | the FILE | the room read `room.json` and holds the saved ids |
+| **rebuild** | the PROCESS | the room launched a NEW vendor process on a saved id |
+| **rejoin** | the PROCESS THAT NEVER STOPPED | a client reached a host that was already running |
+
+`kill` is the fourth and it is not one of that family: it is a verb about the host, not about a
+thread. `stop` was refused because it understates what happens — this terminates agent
+processes that hold live sessions and spend quota.
+
+#### Detach is an explicit FRAME, and a bare disconnect still ends the room
+
+The tempting version reads a closed pipe as a detach. It is refused, and the refusal is the
+whole safety argument of this section.
+
+**A client that died is not a client that left.** A crash, a `taskkill` on the terminal, a
+power-off — every one of those closes the pipe exactly the way a deliberate detach does. A host
+that could not tell them apart would keep a room running on an INFERENCE, and the room it kept
+running would be one nobody chose to leave. That is the state this product refuses everywhere
+else: §4a.1 rules that two facts render two ways, and here two facts must not even reach the
+same code path.
+
+So the wire grows one frame, `KindDetach`, and the rule is:
+
+| what the client does | what the host does |
+|---|---|
+| sends `KindShutdown` | kills every seat and exits — unchanged from §7.28 |
+| sends `KindDetach` | keeps every seat, re-arms the pipe, waits for the next client |
+| closes the pipe with neither | kills every seat and exits — unchanged from §7.28 |
+
+The third row is the one worth reading twice. **A bare disconnect keeps the meaning §7.28 gave
+it**, so nothing about a crashed client changed when detach arrived. That is what makes this
+change additive rather than a re-definition of the existing behaviour.
+
+#### The host survives the client's PROCESS, and the mechanism was already there
+
+Two properties have to hold, and only one of them is new code.
+
+**The socket close is handled by the frame above.** That is the new part.
+
+**The process exit needed nothing**, and this is the measured half. `spawn_windows.go` starts
+the host with `CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW`, and both flags already do the work
+a detach needs. `CREATE_NO_WINDOW` gives a console application **its own** console with no
+window, rather than attaching it to the client's — so closing the operator's terminal sends
+that terminal's `CTRL_CLOSE_EVENT` to the processes on ITS console, and the host is not one of
+them. `CREATE_NEW_PROCESS_GROUP` keeps the client's ctrl+c out of the host for the same reason
+one process group down. Windows does not end a child when a parent exits, so nothing else was
+holding the host to its client except the shutdown-on-disconnect rule above.
+
+**`DETACHED_PROCESS` is still NOT used, and §7.28's deferral is now a decision.** §7.28 named it
+as what a host "wants" and refused to reach for an unmeasured flag. It stays unused, because the
+property it would buy — no console at all — is one `CREATE_NO_WINDOW` already delivers for this
+purpose, and the two flags are mutually exclusive. Swapping a measured flag for an unmeasured
+one to buy a property already held would be the guess [ADR-001](#adr-001) refuses.
+
+`TestADetachedHostOutlivesItsClientProcessAndStillReapsEverySeat` measures the claim rather than restating it: a real
+host in a real process, a real client that detaches and then EXITS, and the host still answering
+a second client afterwards.
+
+#### The containment property is not weakened by detach, and that is measured too
+
+§7.28's table says a hard-killed host reaps every seat, and
+`TestAHardKilledHostReapsEverySeat` runs it. A detached host is the case that table was written
+for and never covered: the host is now the only process left, so if detach cost the room job
+anything, nothing at all would reap the seats.
+
+**The same test carries both halves, and that is deliberate rather than tidy.** They are one
+story — a host that outlived its client is exactly the host whose containment has nobody left to
+check it — and splitting them would have meant two stand-in hosts measuring one process's life.
+So the second half runs on the first half's host: a stand-in process runs a REAL `Host.Serve`
+(real `NewRoomJob`, real `Listen`, real handshake) and starts a stand-in seat with **no per-seat
+job of its own**, so the room job is the only thing that can reap it. The client process
+detaches and exits, a second client rejoins from the test, and only then does the test call
+`TerminateProcess` on the host the way `taskkill /F` does and assert the seat is gone.
+
+**The seat is asserted ALIVE before the kill, and that assertion is the control.** A reap test
+whose subject had already died would pass while measuring nothing, which is the failure mode a
+containment test can least afford.
+
+The no-per-seat-job detail is what makes it a measurement rather than a ceremony, and it is
+carried over from §7.28's own test for the same reason: the per-seat job also carries
+`KILL_ON_JOB_CLOSE` and its handle also dies with the host, so a seat wrapped in one would be
+reaped by the mechanism that already existed.
+
+#### Rejoin: the file says WHAT, the pipe says WHETHER, and the PID says WHO
+
+§7.28 ruled that `host.json` is never read for liveness and left the probe unbuilt, because
+nothing needed it and the obvious implementation was wrong. That ruling stands and the probe is
+built here, on three readings that are three different questions:
+
+1. **WHAT would I be rejoining?** `host.json`: pid, pipe name, start time, workspace, seats,
+   turn. Numbers and keys, and the file is unchanged from §7.28.
+2. **WHETHER a host is running.** `WaitNamedPipe` with a zero timeout, which asks whether the
+   NAME exists and **does not connect**. That distinction is the whole reason discovery.go
+   refused to build this before: a probe that dials CONSUMES the host's single pipe instance,
+   and the host reads the close as its client leaving. Three answers, and all three are used —
+   `ERROR_FILE_NOT_FOUND` means no host, success means a host with nobody attached, and
+   `ERROR_SEM_TIMEOUT` means a host whose one client seat is already taken.
+3. **WHO that pid is.** A pid is reusable, so the pid alone answers nothing. The probe opens the
+   process, reads its image name with `QueryFullProcessImageName`, and requires the same
+   executable name this binary runs under; then it reads the process creation time with
+   `GetProcessTimes` and requires it to be no LATER than the `started_at` the file claims. A
+   recycled pid fails the first check; a different telltale that took the number fails the
+   second.
+
+**`WaitNamedPipe`, `QueryFullProcessImageName` and `GetProcessTimes`, measured at
+`golang.org/x/sys` v0.47.0:** the last two are exported and are called directly. `WaitNamedPipe`
+is **not** exported, so it is bound with `NewLazySystemDLL` — the same call `IsProcessInJob` in
+`roomjob_windows.go` already makes, and the one `decisions/001` sanctioned for the hand-rolled
+OTLP reader, the byte-level SQLite reader and the hand-rolled WebSocket. A page of checked code
+rather than a dependency.
+
+**All three readings must agree before a client rejoins.** A file with no pipe is a host that
+died. A pipe with a pid that is not telltale is a name somebody else took, and `Dial`'s existing
+server-side peer check is the second arm on that. Neither of those is an error to fail on; both
+are states to render.
+
+#### The four states this feature can leave an operator in, and none of them render alike
+
+§4a.1's rule is the whole of this subsection. `rebuilt`, `survived` and `died` must never render
+alike, and detach adds a fourth that must not look like any of them.
+
+**You left** — printed by the client that detached:
+
+```
+detached. the host keeps the seats and the conversation, and it is pid %d.
+`telltale council` rejoins it. `telltale council kill` ends it, and every seat with it.
+```
+
+**You came back and it was still there** — the `rejoin` case, and the only one of the four in
+which a vendor process was never restarted:
+
+```
+rejoined the host that was already running — pid %d, started %s.
+the seats kept working while you were away. nothing was rebuilt, and no session was resumed.
+```
+
+**You came back and it was gone** — the `died` case:
+
+```
+the host you left is gone, and the seats went with it.
+it was pid %d, started %s, and nothing on screen could say when it ended.
+the room's session ids are still in %s, so `telltale council` rebuilds those seats.
+```
+
+The third line points at §9.52's rebuild, and it uses §9.52's own word. A room that told an
+operator their conversation was gone when the ids are on disk would be the same error `council
+ls` refuses to make about a vendor that is missing from one machine.
+
+**You asked to leave and the room refused** — the unwatched-write ruling, below.
+
+The `rejoin` sentence carries the clause `nothing was rebuilt, and no session was resumed`
+because that clause is the entire difference between this state and §9.52's `rebuilt`. Without
+it the two are one sentence apart and an operator would read a rebuild as a survival, which
+§9.52 calls the most expensive lie this surface can tell.
+
+#### THE UNWATCHED-WRITE RULING (owed by §7.28, paid here)
+
+**A room that writes to the workspace without asking does not detach. The host refuses it, and
+it says why.**
+
+The risk shape §7.28 named is detach plus a write posture plus `--auto`. On a hosted room those
+three collapse into one condition, and the collapse is worth stating rather than leaving a
+reader to derive:
+
+- §7.28 already refuses `PostureWriteGated` outright — a gated seat blocks on a question this
+  host cannot carry. So a hosted room is never gated.
+- A hosted room that is not read-only is therefore an **ungated** write room: every tool call
+  runs with nobody to ask. That is exactly what `--auto` means on the room's own surface
+  (`dispatch.go`'s `seatPosture`: write plus not-asking is `PostureWrite`).
+
+So the condition is one word — the room's posture — and the refusal is keyed on it.
+
+| posture | detach |
+|---|---|
+| read | allowed |
+| gated write | allowed by this ruling, and **unreachable**: §7.28 refuses to host a gated room at all |
+| write (ungated, which is `--auto`) | **REFUSED** |
+
+The refusal sentence, verbatim, and it is one sentence on purpose:
+
+```
+this room writes to the workspace without asking, so it will not detach: telltale never leaves an agent working while nobody is watching.
+```
+
+The remedy is a second line rather than a longer sentence, because §9.17's tell is that a
+refusal without a remedy is this room's stated defect and a run-on sentence is not a remedy:
+
+```
+the room is still here and still yours. open it with `telltale council --host --read` to get a room you can leave.
+```
+
+**Three things this ruling is NOT.**
+
+It is **not** a claim that the write posture is unsafe. The room writes by default and that
+ruling stands ([§7.28](#s7-28)'s parent, and the `--read` opt-out's own reasoning). What changes
+is only whether the operator may walk away from it.
+
+It is **not** a supervisor. Nothing watches the room for the operator, nothing re-approves
+anything, and nothing self-terminates. The refusal is a refusal.
+
+It is **not** the option the costing recommended. The scope ladder that produced this rung
+recommended allowing the detach and reporting afterwards what happened while nobody watched —
+turns dispatched, tool calls approved, files touched. **That was reasoned and it is overruled by
+the owner** (2026-09-01). The report it proposes is a record of an act that already happened,
+and the product's whole claim is that it does not act unwatched; a receipt is not consent given
+in advance. The recommendation is recorded here so a later session does not re-derive it as new.
+
+**Enforced in the HOST, never in the client.** The host is the process that would keep running,
+so it is the process that must refuse. A check in the client alone would be a check a second
+client could simply not make. `TestAWritingRoomRefusesToDetach` pins it against the host, and
+`TestAReadRoomDetaches` is its positive control — without that pair, a refusal that refused
+everything would pass.
+
+#### `telltale council kill` — the fifth surface, and it is the room's own executioner
+
+Sub-noun before the flag set, matching `ls` and `host` and matching `hook cursor` / `events
+view` / `otel grok`. It takes no arguments, for §7.27's reason: none of the room's flags apply.
+
+It reads `host.json`, runs the same three-part probe rejoin runs, and then calls
+`TerminateProcess` on the pid. **That is deliberately the blunt instrument and not a shutdown
+frame.** Three reasons:
+
+1. It is the mechanism §7.28 already MEASURED. The room job carries `KILL_ON_JOB_CLOSE`, the
+   host holds the only handle, and `TerminateProcess` is what `taskkill /F` does — so `kill`
+   leans on the property `TestAHardKilledHostReapsEverySeat` proves rather than on a second
+   path that would need its own proof.
+2. A shutdown frame needs the pipe, and the pipe may be held by a client. A `kill` that could
+   not end a room BECAUSE somebody was in it would be useless for the case it exists for.
+3. The word says so. `kill` is honest about ending agent processes mid-turn.
+
+It **refuses** rather than guessing when the probe disagrees with the file: a pid that is not a
+telltale process is reported and not terminated, and a stale `host.json` is removed with a
+sentence rather than acted on. Killing a pid the file names and the probe cannot confirm is the
+one failure this command could make that nothing could undo.
+
+#### `telltale council ls` gains a live-host section and stays the SIXTH READER
+
+§7.27's contract is unchanged and is re-stated here because the temptation to break it is
+exactly what a new section invites.
+
+- It **still writes nothing** — including no cleanup of a stale `host.json`. A reader that
+  tidied would be a writer. **The ROOM removes that file instead**, on the died path, and the
+  asymmetry is the point: council is already the ratified writer of that directory, and
+  `host.json` is a file this same feature added, so a room that removes a record of a process it
+  has just proved is gone is tidying its own state. `TestCouncilLsLeavesAStaleHostFileAlone`
+  pins the reader's half.
+- It **still binds nothing and connects to nothing.** The liveness probe asks whether a NAME
+  exists; it does not open the pipe. That is why the probe had to be built the way it was:
+  a dialling probe would have made `ls` capable of ending the room it was listing.
+- It **still spawns nothing.**
+- It **still relays no quota**, so it holds the boundary with the same one item spare.
+
+What it prints is what the probe measured, and the three states stay apart in the same way the
+seat states do: a live host, a `host.json` whose process is gone (named as stale, with the
+remedy), and no file at all.
+
+#### The TUI has no host to leave, so no key was added and no golden moved
+
+**`telltale council` runs the single-process room, and it always has.** §7.28 built the host
+beside it and wired no daily path to it, so there is no host for a key in the TUI to detach
+from. A `d` in that room would have to either do nothing or lie, and a hint on the help panel
+for a key that does nothing is the honest-gauge failure this project exists to prevent, spent on
+its own surface.
+
+So the way into a hosted room is **`telltale council --host`**, and it is an opt-in flag rather
+than a change to the daily command:
+
+| command | what happens |
+|---|---|
+| `telltale council` with no live host | the single-process TUI room, unchanged |
+| `telltale council --host` | a hosted room, drawn by §7.28's plain client, which you can leave |
+| `telltale council` with a live host | **rejoins it** — §7.28's plain client again, with the rejoin notice |
+| `telltale council` with a dead host's file | prints the died notice, then opens the ordinary TUI room, which rebuilds from `room.json` (§9.52) |
+| `telltale council` with a live host somebody else is in | **refused**, naming `telltale council kill` |
+
+The last row is a refusal rather than a fall-through, and that is the load-bearing one. Falling
+through would open a SECOND room over the same workspace on the same saved session ids, which is
+two rooms rebuilding one conversation — worse than any refusal.
+
+**The renderer is §7.28's plain-text `Render`, and that is stated rather than hidden.** §7.28
+calls it "a legible proof that the wire carries a whole room — not a second council TUI", and
+making council's own `Model` the client's renderer is still the next slice. So a rejoined room
+looks different from the TUI room, and the client's banner says so in its own words rather than
+letting the operator discover it.
+
+**The client is line-oriented, deliberately.** A blank-prompt line dispatches a turn; `/detach`
+leaves; `/quit` ends the room; `/interrupt` abandons the turn in flight. Keys would need the TUI,
+the TUI needs `Model` on the wire, and that is the slice this rung is not.
+
+#### What this rung deliberately does not do
+
+**It persists no transcript.** Unchanged, and it is the rule this whole area is built around. A
+rejoining client is handed the host's CURRENT projection over the wire, not a replay from disk.
+The host holds the conversation in memory and it dies with the host. `resume.go` ruled this for
+the same data, §7.28 restated it, and a second client arriving does not make a second copy any
+more acceptable.
+
+**It does not bound host memory.** §7.28 named this and said a turn ceiling was owed before
+detach shipped. It is **not paid here**, and saying so is better than a ceiling picked without a
+measurement: nothing has yet measured what a room accumulates per turn, so a number here would
+be a guess presented as a limit. A detached room that runs for a week grows, and the honest
+statement is that nobody has measured how fast.
+
+**It adds no auto-start, no service and no supervisor.** §7.28's third mitigation is unchanged
+and this rung is where it would have been tempting. The operator starts the host and the
+operator ends it.
+
+**It does not make a stale host self-terminate.** §7.28 refuses that outright — a detached room
+that dies on its own is precisely the failure the operator cannot see — and detach is the rung
+that makes the refusal cost something. What answers a stale host is discovery, and discovery
+shipped first, on purpose.
+
+**It is Windows-only, like the host it extends.** The Unix equivalent carries the asymmetry
+`PARITY.md` already owes: on macOS a process group does not bind lifetimes, so a `kill -9` on a
+host LEAKS every seat there. A detached host makes that asymmetry worse rather than equal, which
+is a reason to measure it before building rather than to build and label.
+
+**No vendor has been dispatched to through a host, detached or not.** Every seat spawn in this
+package's suite is stubbed, by design — the spawn guard exists to stop a test spending a real
+turn — so neither CI nor a session can close that debt. It is the operator's to pay, and
+`STATE.md` carries it.
+
 <a id="s8"></a>
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)

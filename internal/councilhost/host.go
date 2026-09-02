@@ -154,6 +154,65 @@ var ErrGatedPostureNotHosted = errors.New(
 	"councilhost: a gated seat blocks on a question this host cannot carry yet — " +
 		"run that room with `telltale council`")
 
+// UnwatchedWriteRefusal is design.md §7.29's unwatched-write ruling, in the one
+// sentence the operator reads.
+//
+// # The ruling, and why it is one condition rather than three
+//
+// §7.28 named the risk shape as detach plus a write posture plus `--auto`, and
+// said the ruling was owed with detach and never before. On a hosted room those
+// three collapse into one condition:
+//
+//   - §7.28 refuses PostureWriteGated outright, in New. A gated seat blocks on a
+//     question this host cannot carry, so a hosted room is NEVER gated.
+//   - A hosted room that is not read-only is therefore an UNGATED write room:
+//     every tool call runs with nobody to ask. That is precisely what `--auto`
+//     means on the room's own surface — dispatch.go's seatPosture returns
+//     PostureWrite for write-and-not-asking.
+//
+// So the condition is the posture, and the refusal is keyed on it. Read
+// detaches. Write does not.
+//
+// # What this is not
+//
+// It is not a claim that the write posture is unsafe: the room writes by default
+// and that ruling stands. What it refuses is walking AWAY from one. It is not a
+// supervisor either — nothing watches the room, nothing re-approves anything,
+// and nothing self-terminates.
+//
+// It is also not the option the costing recommended. That recommended allowing
+// the detach and reporting afterwards what happened while nobody watched. The
+// owner overruled it on 2026-09-01: a report is a record of an act that already
+// happened, and a receipt is not consent given in advance.
+//
+// # Enforced HERE, in the host, and never in the client
+//
+// The host is the process that would keep running, so it is the process that
+// must refuse. A check in the client alone is a check a second client could
+// simply not make. TestAWritingRoomRefusesToDetach pins it against the host and
+// TestAReadRoomDetaches is its positive control — without the pair, a refusal
+// that refused everything would pass.
+const UnwatchedWriteRefusal = "this room writes to the workspace without asking, so it will not " +
+	"detach: telltale never leaves an agent working while nobody is watching."
+
+// UnwatchedWriteRemedy is the way out, and it is a SECOND LINE rather than a
+// longer sentence.
+//
+// §9.17's tell is that a refusal with no remedy is this room's stated defect. A
+// run-on sentence is not a remedy, so the sentence above stays one sentence and
+// this stands beside it.
+const UnwatchedWriteRemedy = "the room is still here and still yours. open it with " +
+	"`telltale council --host --read` to get a room you can leave."
+
+// errClientDetached is Serve's own signal that a client LEFT rather than ended
+// the room.
+//
+// Unexported and never returned to a caller: it is the one thing that
+// distinguishes "go back to Accept" from "tear the room down", and it travels
+// exactly one function up. A caller that could see it would be able to treat a
+// detach as an error, which is the opposite of what it means.
+var errClientDetached = errors.New("councilhost: the client detached")
+
 // Host owns the vendor processes, the pipes and the room state.
 type Host struct {
 	cfg  Config
@@ -296,8 +355,11 @@ func postureWord(p vendors.Posture) string {
 //     true after the containment is in place.
 //  3. Only then is a client accepted.
 //
-// Detach is NOT exposed, so this returns when the client disconnects, and the
-// caller tears the room down. A host that outlived its client is rung 4.
+// Detach IS exposed (design.md §7.29), so this no longer returns on every
+// client that goes away. It returns when a client ENDS the room — by a shutdown
+// frame, or by a bare disconnect, which still means the same thing it meant in
+// §7.28. A client that DETACHES sends a frame saying so, and this loops back to
+// Accept with every seat still running.
 func (h *Host) Serve(ctx context.Context) error {
 	job, err := newRoomJob()
 	if err != nil {
@@ -350,7 +412,7 @@ func (h *Host) Serve(ctx context.Context) error {
 
 	go h.fold()
 
-	// The first accept is BOUNDED, and this is a leak guard rather than a
+	// The FIRST accept is BOUNDED, and this is a leak guard rather than a
 	// timeout for its own sake.
 	//
 	// Accept blocks in the kernel and does not watch ctx, so without this a host
@@ -361,31 +423,76 @@ func (h *Host) Serve(ctx context.Context) error {
 	// connected in this long is a client that is not coming.
 	//
 	// The deadline covers a process start and two kernel objects, not a vendor
-	// launch, so it is generous by an order of magnitude. It applies ONLY to the
-	// first connect: once a client is talking, nothing here bounds the room.
+	// launch, so it is generous by an order of magnitude.
+	//
+	// # It applies to the first connect ONLY, and after a detach it must NOT
+	//
+	// Every later accept waits without a deadline, and that is a ruling rather
+	// than an oversight. §7.28 refuses to let a stale host self-terminate on
+	// idle — a detached room that dies on its own is precisely the failure the
+	// operator cannot see — and a deadline on the rejoin accept would be that
+	// self-termination wearing a different name. What answers a stale host is
+	// discovery and `telltale council kill`, both of which shipped before this.
+	first := true
+	for {
+		conn, err := h.accept(ctx, first)
+		if err != nil {
+			return err
+		}
+		err = h.serveClient(ctx, conn)
+		conn.Close()
+		if !errors.Is(err, errClientDetached) {
+			// A shutdown frame, a bare disconnect, or a real failure. All three
+			// end the room, and the deferred Shutdown above is what ends it.
+			return err
+		}
+		// The client left and the seats are still running. The listener handed
+		// its instance to that Conn, so a fresh one is needed before anybody can
+		// come back — Rearm's doc carries the window that opens and why §7.24's
+		// boundary bounds it.
+		if err := h.ln.Rearm(); err != nil {
+			return err
+		}
+		first = false
+	}
+}
+
+// accept takes one client, bounding the wait only on the FIRST one.
+//
+// Split out of Serve because the loop needs it twice and the two calls differ by
+// one bit that carries a ruling: a bounded first connect is a leak guard, and a
+// bounded LATER connect would be the idle self-termination §7.28 refuses.
+func (h *Host) accept(ctx context.Context, bounded bool) (*Conn, error) {
 	stopAccept := make(chan struct{})
 	go func() {
+		if bounded {
+			select {
+			case <-stopAccept:
+			case <-ctx.Done():
+				h.ln.Close()
+			case <-time.After(firstConnectWindow):
+				h.ln.Close()
+			}
+			return
+		}
 		select {
 		case <-stopAccept:
 		case <-ctx.Done():
-			ln.Close()
-		case <-time.After(firstConnectWindow):
-			ln.Close()
+			h.ln.Close()
 		}
 	}()
 
-	conn, err := ln.Accept()
+	conn, err := h.ln.Accept()
 	close(stopAccept)
 	if err != nil {
-		if errors.Is(err, ErrListenerClosed) && ctx.Err() == nil {
-			return fmt.Errorf("councilhost: no client connected within %s — "+
+		if bounded && errors.Is(err, ErrListenerClosed) && ctx.Err() == nil {
+			return nil, fmt.Errorf("councilhost: no client connected within %s — "+
 				"a host is started by a client, so it does not wait for one that is not coming",
 				firstConnectWindow)
 		}
-		return err
+		return nil, err
 	}
-	defer conn.Close()
-	return h.serveClient(ctx, conn)
+	return conn, nil
 }
 
 // Shutdown kills every seat and releases the room.
@@ -516,6 +623,17 @@ func (h *Host) serveClient(ctx context.Context, conn *Conn) error {
 		default:
 		}
 		switch f.Kind {
+		case KindDetach:
+			// The refusal is answered on THIS connection and the loop carries
+			// on, because a refused detach leaves the client exactly where it
+			// was. Returning here would end the room the operator was told they
+			// could not leave, which is the one outcome worse than either.
+			if err := h.detachAllowed(); err != nil {
+				_ = fw.Write(Frame{Kind: KindRefused, Reason: err.Error()})
+				continue
+			}
+			_ = fw.Write(Frame{Kind: KindDetached, HostPID: os.Getpid()})
+			return errClientDetached
 		case KindDispatch:
 			// On its OWN goroutine, so the read loop keeps answering while a
 			// broadcast is in progress. A dispatch builds a spec and starts a
@@ -538,6 +656,24 @@ func (h *Host) serveClient(ctx context.Context, conn *Conn) error {
 			// instead of failing the turn on a shape it has not seen.
 		}
 	}
+}
+
+// detachAllowed is design.md §7.29's unwatched-write ruling, asked of this
+// room's posture.
+//
+// One condition, and UnwatchedWriteRefusal's doc has the whole argument for why
+// three conditions collapse into it: the host never runs a gated room, so a
+// hosted room that is not read-only is an ungated write room, which is exactly
+// what `--auto` means on the room's own surface.
+//
+// The error carries BOTH lines — the refusal and its remedy — because this is
+// the only place they travel together, and a client that had to reassemble them
+// could drop the half that says what to do instead.
+func (h *Host) detachAllowed() error {
+	if h.cfg.Posture == vendors.PostureRead {
+		return nil
+	}
+	return errors.New(UnwatchedWriteRefusal + "\n" + UnwatchedWriteRemedy)
 }
 
 // pump sends the room whenever it has changed, at most once per tick.

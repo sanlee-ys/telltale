@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
+	"github.com/sanlee-ys/telltale/internal/councilhost"
 )
 
 // TestMain makes the package's spawn vars FAIL-CLOSED for the whole test
@@ -101,11 +102,22 @@ import (
 // machine that built it, whose child then spawns real vendors two processes
 // away from whatever assertion provoked them.
 //
-// Nothing in package `council` reaches that host, so `countSpawns` below needs
-// no entry for it. **If that ever changes — if the room here grows a path that
-// starts or joins a host — the var behind it belongs in this wrap and in
-// countSpawns, in the same change.** A guard that lags the spawn it guards is
-// the state this file exists to prevent.
+// **That change arrived on 2026-09-01 with design.md §7.29**, and this file's
+// previous note asked for exactly what follows: package `council` now starts a
+// host (`telltale council --host`) and JOINS one (`telltale council` finding a
+// live room), so the two vars behind those paths — `startHostedRoom` and
+// `joinHostedRoom` in hostcmd.go — are wrapped below and stubbed in
+// `countSpawns`. The hole they close is two processes deep: `councilhost`'s own
+// guard wraps ITS test binary's vars, and `startHost` is unexported, so nothing
+// there covers a spawn made from here.
+//
+// Joining is guarded although it starts nothing, and the reason is that it
+// reaches a host ALREADY holding vendor processes — a test that joined and
+// dispatched would be billed by seats this package never started. The rule is
+// the same question the operating system is about to ask, phrased for a pipe: a
+// name that does not exist is let through to fail, and a name that DOES exist is
+// a live room about to take a turn. A guard that lags the spawn it guards is the
+// state this file exists to prevent.
 func TestMain(m *testing.M) {
 	operatorHome, _ = os.UserHomeDir()
 	stateBefore := councilStateSnapshot(operatorHome)
@@ -180,6 +192,48 @@ func TestMain(m *testing.M) {
 	startPTYSession = func(ctx context.Context, spec runner.Spec, cols, rows int, out chan<- runner.PTYChunk) (runner.PTYSession, error) {
 		refuseRealVendor("startPTYSession", spec)
 		return realPTY(ctx, spec, cols, rows, out)
+	}
+
+	// The SEVENTH and EIGHTH, added with design.md §7.29 and explained at length
+	// above. Starting a host starts telltale's own binary, which resolves on any
+	// machine that BUILT it — so unlike a vendor there is no machine where this
+	// one is harmlessly absent, and the process it starts spawns real vendors two
+	// processes further on.
+	//
+	// This one panics UNCONDITIONALLY, and that is the "resolves" rule rather
+	// than an exception to it: councilhost.Open starts os.Executable(), which is
+	// the test binary itself, so the answer to "can this machine run it" is
+	// always yes. There is no harmlessly-absent case to preserve.
+	realJoinHost := joinHostedRoom
+	startHostedRoom = func(cfg councilhost.ClientConfig) (*councilhost.Client, error) {
+		panic(fmt.Sprintf(
+			"council test started a REAL council host — that process spawns live vendor "+
+				"CLIs of its own, against the operator's account and quota, two processes "+
+				"away from this test.\n"+
+				"  workspace: %s\n"+
+				"  room key:  %s\n"+
+				"  seats:     %v\n"+
+				"Stub the spawn vars in this test — countSpawns(t) in "+
+				"flow_security_test.go does all eight.",
+			cfg.Workspace, cfg.RoomKey, cfg.Seats))
+	}
+	joinHostedRoom = func(cfg councilhost.JoinConfig) (*councilhost.Client, error) {
+		// A pipe name nothing is listening on reaches nothing and costs nothing,
+		// so it is let through to the real call and fails there — the same
+		// bargain refuseRealVendor strikes with a binary exec cannot find. A name
+		// that ANSWERS is a live room, and joining one is a turn away from
+		// somebody's quota.
+		if st, err := councilhost.ProbePipe(cfg.PipeName); err == nil && st != councilhost.PipeAbsent {
+			panic(fmt.Sprintf(
+				"council test JOINED a live council host — that host is already holding "+
+					"vendor processes, and a turn dispatched through it is billed by seats "+
+					"this package never started.\n"+
+					"  pipe: %s\n"+
+					"Stub the spawn vars in this test — countSpawns(t) in "+
+					"flow_security_test.go does all eight.",
+				cfg.PipeName))
+		}
+		return realJoinHost(cfg)
 	}
 
 	code := m.Run()

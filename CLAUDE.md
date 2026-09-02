@@ -98,7 +98,19 @@ mechanically rather than by convention. `internal/council/main_test.go`'s
 `startSession`, `startRPCSession`, `startPTYSession`) so that reaching one with a
 binary this machine can actually resolve **panics**, naming the call site and the
 full argv. `startEditor` and `startCheck` are wrapped there too, on the same rule
-for programs that are not vendors, which makes six in all.
+for programs that are not vendors, and `startHostedRoom` and `joinHostedRoom`
+(design.md §7.29) are wrapped there too, which makes **eight** in all.
+
+The last two are not vendor spawns and they are the sharpest of the eight.
+`telltale council --host` starts a HOST — telltale's own binary, which resolves
+on any machine that built it — and that process then spawns real vendors two
+processes away from whatever assertion provoked it. `telltale council` finding a
+live room JOINS one, which starts nothing and reaches a host that is *already*
+holding vendor processes, so a turn dispatched through it is billed by seats
+this package never started. `internal/councilhost` has a `TestMain` of its own
+over three vars, and it covers ITS test binary only: `go test ./internal/council`
+is a different binary and `startHost` is unexported there, so nothing in that
+guard reaches a spawn made from here.
 
 `startPTYSession` is the live seat (design.md §9.53) and it is guarded with no
 softening. Its output is display only — the pane draws a screen and no gauge
@@ -117,7 +129,7 @@ A green pipeline over a local-only defect is exactly what a guard is for.
 Two consequences when you write a council test:
 
 - **Dispatching for real means stubbing.** Call `countSpawns(t)`
-  (`flow_security_test.go`) — it stubs all six vars and restores them in
+  (`flow_security_test.go`) — it stubs all eight vars and restores them in
   `t.Cleanup`. Anything that builds an `AvailInstalled` column with a real
   binary name and then reaches `dispatch()` needs it.
 - **A deliberately unspawnable binary is still allowed through.** Several tests
@@ -231,7 +243,12 @@ turn, roster, and which seats have a session id saved — and writes nothing,
 spawns no vendor, and binds nothing. It holds the contract with the same item
 spare, for the same reason as the two above it. It never says a saved thread is
 *live*: nothing it can read proves that, and only the vendor answers it, on a
-resume. **Three** deliberate, bounded exceptions
+resume. Since design.md §7.29 (2026-09-01) it also reports whether a **host** is
+running, and it holds every clause above unchanged — the liveness probe asks
+whether a pipe NAME exists (`WaitNamedPipe`) and never opens it, so the listing
+cannot end the room it is listing, and a **stale `host.json` is reported and
+never removed**, because a reader that tidied would be a writer. The room
+removes that file; `ls` only says it is there. **Three** deliberate, bounded exceptions
 exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
 
 - `telltale council` — spawns vendor CLIs; writes `council/room.json` (session
@@ -244,7 +261,10 @@ exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
   `resume.go`'s leak sentence covers the shape unchanged. **The room's
   conversation never reaches disk from the host either** — it lives in host
   memory and dies with the host, on `resume.go`'s own ruling for the same
-  data.
+  data. §7.29 (2026-09-01) exposed detach and added NO file and no field: a
+  rejoining client is handed the host's current projection over the wire, not a
+  replay from disk, and a room that outlives its terminal is still a room whose
+  conversation dies with its process.
 - the **statusline's quota relay** — `quota/<vendor>.json`, the rate-limit
   windows it just rendered, written after the line is on stdout so the HUD can
   attribute account quota per vendor (design.md §7.15, amended 2026-08-07).
