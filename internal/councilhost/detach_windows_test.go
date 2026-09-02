@@ -221,14 +221,49 @@ func TestADetachedHostOutlivesItsClientProcessAndStillReapsEverySeat(t *testing.
 	if _, err := readRoom(t, fr); err != nil {
 		t.Fatalf("the rejoined host sent no room: %v", err)
 	}
+
+	// The rejoined client LEAVES the way the first one did, and this is not
+	// tidiness — an earlier version of this test closed the pipe bare here and
+	// was measuring the wrong thing. A bare disconnect ENDS the room (§7.29's
+	// central rule), so the host tore itself down and the TerminateProcess
+	// below came back "Access is denied" on a process that was already gone.
+	// It passed for a while on a race the fast path happened to win.
+	//
+	// So the host under the kill is a host nobody has ever ended, which is
+	// exactly the state the containment claim is about.
+	if err := fw.Write(Frame{Kind: KindDetach}); err != nil {
+		t.Fatalf("could not ask to detach a second time: %v", err)
+	}
+	for {
+		f, err := fr.Read()
+		if err != nil {
+			t.Fatalf("the host went away during the second detach: %v", err)
+		}
+		if f.Kind == KindDetached {
+			break
+		}
+		if f.Kind == KindRefused {
+			t.Fatalf("a read room refused the second detach: %s", f.Reason)
+		}
+	}
 	conn.Close()
 
-	// A hard kill of the DETACHED host must still reap the seat.
-	hostHandle, err := windows.OpenProcess(windows.PROCESS_TERMINATE, false, uint32(host.Pid))
+	// The host is asserted ALIVE before the kill. Without this the failure
+	// above arrives as an opaque "Access is denied" from TerminateProcess,
+	// which is what Windows says about a process that has already exited.
+	hostHandle, err := windows.OpenProcess(
+		windows.PROCESS_TERMINATE|windows.SYNCHRONIZE, false, uint32(host.Pid))
 	if err != nil {
 		t.Fatalf("could not open the host %d: %v", host.Pid, err)
 	}
 	defer windows.CloseHandle(hostHandle)
+	if ev, werr := windows.WaitForSingleObject(hostHandle, 0); werr == nil && ev == windows.WAIT_OBJECT_0 {
+		t.Fatal("the host exited after a client DETACHED from it. Detach and shutdown are " +
+			"two frames and two outcomes, and a detach that ended the room would be the " +
+			"feature not existing.")
+	}
+
+	// A hard kill of the DETACHED host must still reap the seat.
 	if err := windows.TerminateProcess(hostHandle, 1); err != nil {
 		t.Fatalf("could not hard-kill the detached host: %v", err)
 	}
