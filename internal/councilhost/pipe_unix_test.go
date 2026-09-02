@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -33,4 +35,30 @@ func testPipeName(t *testing.T) string {
 // to a client that read no lock and checked no peer.
 func dialUnixRaw(name string) (*net.UnixConn, error) {
 	return net.DialUnix("unix", nil, &net.UnixAddr{Name: name, Net: "unix"})
+}
+
+// TestAHomeTooLongForASocketPathRetreatsToTheShortDirectory pins PipeName's
+// retreat: a council directory whose path would not fit in sun_path yields a
+// name that does, and the same key yields the same name twice, which is what
+// lets a host and its clients meet without a discovery file.
+func TestAHomeTooLongForASocketPathRetreatsToTheShortDirectory(t *testing.T) {
+	long := filepath.Join(t.TempDir(), strings.Repeat("h", 90))
+	t.Setenv("HOME", long)
+	name := PipeName("k")
+	if len(name) > sunPathMax {
+		t.Fatalf("PipeName retreated to a path that still does not fit: %d bytes, %s", len(name), name)
+	}
+	if !strings.HasPrefix(name, shortSocketDir()) {
+		t.Fatalf("the retreat went somewhere other than the short directory: %s", name)
+	}
+	if again := PipeName("k"); again != name {
+		t.Fatalf("PipeName is not deterministic across calls: %s vs %s", name, again)
+	}
+	// A literal rather than t.TempDir(): this test's own name puts a temp
+	// directory past the bound, which is the case above, not this one.
+	// PipeName reads no disk, so the home need not exist.
+	t.Setenv("HOME", "/tmp/short-home")
+	if short := PipeName("k"); strings.HasPrefix(short, shortSocketDir()) {
+		t.Fatalf("a home that fits retreated anyway: %s", short)
+	}
 }

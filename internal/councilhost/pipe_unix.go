@@ -96,7 +96,36 @@ import (
 // temp root rather than a refused room, on the same degraded-not-failed rule
 // Serve applies to a discovery file it could not write.
 func PipeName(key string) string {
-	return filepath.Join(socketDir(), "telltale-council-"+key+".sock")
+	name := filepath.Join(socketDir(), "telltale-council-"+key+".sock")
+	if len(name) <= sunPathMax {
+		return name
+	}
+	// The kernel bounds a socket path, and the bound is the FULL path: 104
+	// bytes on darwin and 108 on linux, NUL included. A home under macOS's
+	// per-user temp root (`/var/folders/<xx>/<hash>/T/...`, which is where a
+	// test suite's sandboxed HOME lands) put this path at 105 bytes and the
+	// first darwin CI run answered "nothing is listening" after ten seconds,
+	// because Listen refused and the client only ever probes (measured
+	// 2026-09-02, ci.yml's darwin job at §7.30's first macOS run). The retreat
+	// is deterministic in the key alone, so the host and every client derive
+	// the same name: a per-uid directory under /tmp, which is short on both
+	// kernels (macOS's /tmp is /private/tmp), owner-only by mode and by
+	// ownerOnlyDir at Listen, with the peer check as the second arm. The
+	// doc comment above already grants this degraded-not-refused shape to a
+	// host with no home directory; a home whose path is too long is the same
+	// case with a different cause.
+	return filepath.Join(shortSocketDir(), "tc-"+key+".sock")
+}
+
+// sunPathMax is the longest socket path both kernels accept, NUL excluded:
+// darwin's sun_path is 104 bytes and linux's 108, and one number has to hold
+// on both because a name is derived on whichever the operator runs.
+const sunPathMax = 103
+
+// shortSocketDir is the per-uid fallback directory PipeName retreats to when
+// the council directory's path would not fit in sun_path.
+func shortSocketDir() string {
+	return filepath.Join("/tmp", fmt.Sprintf("telltale-%d", os.Getuid()))
 }
 
 func socketDir() string {

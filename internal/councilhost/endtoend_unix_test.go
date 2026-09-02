@@ -174,8 +174,25 @@ func TestATurnIsNotPersistedAnywhere(t *testing.T) {
 	// real host writes into, and Listen's owner-only check runs against a
 	// directory it created itself.
 	name := PipeName("test")
-	if !strings.HasPrefix(name, home) {
-		t.Fatalf("PipeName resolved %s outside the redirected home %s", name, home)
+	if underHome := filepath.Join(home, ".telltale", "council", "telltale-council-test.sock"); len(underHome) <= sunPathMax {
+		if !strings.HasPrefix(name, home) {
+			t.Fatalf("PipeName resolved %s outside the redirected home %s", name, home)
+		}
+	} else {
+		// macOS's per-user temp root (`/var/folders/<xx>/<hash>/T/`) puts even
+		// this "short" home past sun_path, which the first darwin CI run
+		// measured (2026-09-02). PipeName's retreat is what a real host does
+		// there, so the test follows it rather than asserting a path the
+		// kernel would refuse, and it removes the nodes it leaves in the
+		// shared retreat directory; host.json is the host's own to remove.
+		if !strings.HasPrefix(name, shortSocketDir()) {
+			t.Fatalf("PipeName resolved %s, neither under the home %s nor in the retreat %s", name, home, shortSocketDir())
+		}
+		t.Cleanup(func() {
+			for _, p := range []string{name, lockPath(name), heldPath(name)} {
+				_ = os.Remove(p)
+			}
+		})
 	}
 	h, err := New(Config{
 		Workspace: work,
