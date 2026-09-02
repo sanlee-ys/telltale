@@ -1016,6 +1016,7 @@ func runCouncil(args []string) error {
 	// would be the honest-gauge failure this project exists to prevent, spent on
 	// its own surface.
 	host := fs.Bool("host", false, "open the room in a HOST process you can leave running: `/detach` walks away and the seats keep working, `telltale council` comes back (a read room only — a room that writes without asking will not detach)")
+	live := fs.String("live", "", "seat a pane showing this vendor's own terminal screen: display only, and a second process (claude)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1025,6 +1026,13 @@ func runCouncil(args []string) error {
 	// misspelled vendor name must be a line on stderr, not a card behind a TUI
 	// the user has to quit to read.
 	room, err := council.ParseSeats(*seats)
+	if err != nil {
+		return err
+	}
+	// Same discipline for --live (design.md §9.53): the pane is display only,
+	// and only a vendor that keeps one process across turns can hold one, so a
+	// seat that cannot be live is refused here as a line on stderr.
+	liveSeat, err := council.ParseLive(*live)
 	if err != nil {
 		return err
 	}
@@ -1040,6 +1048,7 @@ func runCouncil(args []string) error {
 		Resume:    *resume,
 		Fresh:     *fresh,
 		TracePath: *trace,
+		Live:      liveSeat,
 	}
 
 	if *host {
@@ -1549,6 +1558,13 @@ telltale council flags:
                               watching; it is the one setting that leaves
                               nothing in the room asking permission for
                               anything.
+  --live claude               seat a pane that shows claude's OWN terminal screen
+                              beside the measured seats. Display only: every
+                              gauge, badge and cost on that seat still comes
+                              from the adapter, and nothing on the screen is
+                              read as a number. A second claude process, in its
+                              interactive mode; only a vendor that keeps one
+                              process across turns can take it.
   --host                      open the room in a HOST process of its own, so it
                               outlives this terminal. Type /detach and the host
                               keeps every seat and the whole conversation; a
