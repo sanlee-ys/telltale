@@ -1212,6 +1212,12 @@ type State struct {
 	// One parse, one source of truth, displayed and acted on.
 	Route Route
 
+	// HeadroomWarn is the used-percentage at or above which the routing cell
+	// names a seat's quota window before enter (quota.go, routeCell), from
+	// --headroom-warn. Zero means the flag's default, so a State a test types
+	// out by hand gets the same threshold a room opened with no flag gets.
+	HeadroomWarn int
+
 	// Turn counts dispatched turns, so the header can say which round this is.
 	// Turn 0 means nothing has been sent.
 	//

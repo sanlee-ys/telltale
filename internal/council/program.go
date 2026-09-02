@@ -43,6 +43,10 @@ type Options struct {
 	// Seats is who is in the room, from --vendor. The zero value collapses the
 	// seats that cannot be driven and keeps the rest.
 	Seats Seats
+	// Headroom is the used-percentage from which the routing cell names a
+	// seat's quota window before enter (quota.go, --headroom-warn). Zero means
+	// the default.
+	Headroom int
 	// Resume is accepted and redundant: reattaching to the one saved room is
 	// what a zero-argument launch does now. Kept so the muscle memory and the
 	// scripts that grew around it keep working, and so an explicit --resume
@@ -709,6 +713,7 @@ func stateWith(opts Options, hooked bool) State {
 	st.Write = opts.Write
 	st.GateOff = opts.Auto
 	st.Seats = opts.Seats
+	st.HeadroomWarn = opts.Headroom
 	st.Now = time.Now()
 
 	// Resolved once, here, so the render path never reads the environment.
@@ -1967,6 +1972,11 @@ func (m *Model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// never reaches a vendor. Everything else dispatches.
 		if m.roomCommand() {
 			return m, nil
+		}
+		// `@auto` picks its seat here, against the State the footer just
+		// drew, and hands dispatch a named route (quota.go).
+		if cmd, handled := m.dispatchAuto(); handled {
+			return m, cmd
 		}
 		return m, m.dispatch()
 	case "backspace":

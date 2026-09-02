@@ -1009,6 +1009,10 @@ func runCouncil(args []string) error {
 	resume := fs.Bool("resume", false, "reattach to the saved room (this is the default; the flag is kept for muscle memory)")
 	fresh := fs.Bool("fresh", false, "start a new room instead of reattaching to the saved one")
 	trace := fs.String("trace", "", "append each turn's measured clock — spawn, wait, stream — to this file")
+	// The routing cell's threshold (design.md §9.56). A percent the operator
+	// moves, because the default is council's own pick and not a vendor's
+	// statement; the cell prints the vendor's figure beside it either way.
+	headroom := fs.Int("headroom-warn", council.HeadroomWarnDefault, "the routing cell names a seat's quota window before enter once its reading is at or above this percent used")
 	// The way into a hosted room, and it is an OPT-IN flag rather than a change
 	// to the daily command (design.md §7.29). `telltale council` runs the
 	// single-process room and always has, so there is no host for a key in that
@@ -1029,6 +1033,9 @@ func runCouncil(args []string) error {
 	if err != nil {
 		return err
 	}
+	if *headroom < 1 || *headroom > 100 {
+		return fmt.Errorf("--headroom-warn %d: a percent between 1 and 100", *headroom)
+	}
 	// Same discipline for --live (design.md §9.53): the pane is display only,
 	// and only a vendor that keeps one process across turns can hold one, so a
 	// seat that cannot be live is refused here as a line on stderr.
@@ -1044,6 +1051,7 @@ func runCouncil(args []string) error {
 		NoTitle:   *noTitle,
 		Write:     !*read,
 		Auto:      *auto,
+		Headroom:  *headroom,
 		BriefPath: *brief,
 		Resume:    *resume,
 		Fresh:     *fresh,
@@ -1558,6 +1566,15 @@ telltale council flags:
                               watching; it is the one setting that leaves
                               nothing in the room asking permission for
                               anything.
+  --headroom-warn N           the routing cell names a seat's quota window
+                              before enter once its reading is at or above N
+                              percent used (default 90): "-> codex · 5h 94%
+                              used". Only a window the statusline relayed; a
+                              seat with no reading gets no number. @auto as a
+                              route word picks, among seated idle seats with a
+                              reading, the one with the most headroom in its
+                              shortest window, says which, and refuses when no
+                              seated seat has a reading.
   --live claude               seat a pane that shows claude's OWN terminal screen
                               beside the measured seats. Display only: every
                               gauge, badge and cost on that seat still comes

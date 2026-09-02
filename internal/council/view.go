@@ -3833,7 +3833,11 @@ func modeHints(st State, g Glyphs) []hint {
 		// The rebuttal tag moves to its own cell so the count can sit against
 		// the route it prices. It still answers the same question — what is
 		// actually about to be sent — one separator further along.
-		hs := []hint{{key: "→ " + routeLabel(st), label: seatBill(st)}}
+		// routeCell is routeLabel plus the quota hint the route earns: a
+		// window near its limit on an addressed seat, or what `@auto` resolved
+		// to on this frame (quota.go). Same cell, because both qualify where
+		// enter sends the brief.
+		hs := []hint{{key: routeCell(st), label: seatBill(st)}}
 		// The quota alarm sits immediately against the route, in front of the
 		// rebuttal tag, because it qualifies the route rather than the content:
 		// the route says where this goes, the count says how many that is, and
