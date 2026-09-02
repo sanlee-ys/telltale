@@ -45,9 +45,11 @@ Every number comes from measured tool output.
 The crew work after the tag (per-seat turns, worktrees, `@auto`,
 `--record`/`--replay`, the Unix host, three long-lived seats) is built and
 tested offline; the live runs it owes are listed in [STATE.md](STATE.md).
-A `darwin` CI job on Apple Silicon is written and runs the suite and the
-binary smokes on a runner with no vendor CLI once it runs; it has not run
-yet. Intel macOS is smoke-checked by hand. `linux_amd64` is built, and a
+A `darwin` CI job on Apple Silicon runs the suite and the binary smokes on
+a runner with no vendor CLI; its first run (2026-09-02, on the crew PR) found
+a socket path past macOS's 104-byte bound and a test that read a sentence
+off screen, both fixed, and it is green since. Intel macOS is smoke-checked
+by hand. `linux_amd64` is built, and a
 source build was driven by hand on Linux with no vendor (`doctor`,
 `council ls`, `replay-check`); the archive is not run.
 No binary is signed. Check `checksums.txt` on the release.

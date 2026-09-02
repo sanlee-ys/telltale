@@ -130,13 +130,11 @@ a demo of the crew is a demo of measured claims only after that list is paid.
       council ls`, rejoin, `/quit`; then a host left up, `telltale council
       kill`; then `kill -9` on a host and `ls` — retires §7.30's "macOS is
       NOT measured" and PARITY's "expected to match".
-  21. Open the integration PR and read the `darwin` job's first run — retires
-      the README's "has not run yet" and SECURITY's "once it runs".
-  22. Tag a release and publish the draft; on the MacBook `brew tap
+  21. Tag a release and publish the draft; on the MacBook `brew tap
       sanlee-ys/telltale https://github.com/sanlee-ys/telltale`, `brew install
       telltale`, `brew test telltale`; record it in PARITY — retires "not yet
       exercised by a `brew install`".
-  23. Unpack the `darwin_arm64` archive by hand and run `telltale doctor` —
+  22. Unpack the `darwin_arm64` archive by hand and run `telltale doctor` —
       retires PARITY's "not walked at all".
 
 

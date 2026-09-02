@@ -8247,12 +8247,19 @@ hand on Linux on 2026-09-02 — `--host --read` with `/detach` on stdin, `ls`, a
 a `kill -9`'d host reported stale by `ls` and left alone — and the host's `ps` line read
 `SID == PID`, `PPID 1`, no TTY.
 
-**macOS is NOT measured.** `peer_darwin.go` and `identity_darwin.go` compile under
-`GOOS=darwin` for both architectures, and every call they make exists in x/sys v0.47.0, but no
-macOS run of the host is recorded. The darwin CI job from another lane is what measures it, and
-until it does `PARITY.md`'s row says "expected to match, not shown to". The two readings most
-worth a Mac's attention are the ones that are darwin-specific: `LOCAL_PEERPID` on the peer check,
-and `p_comm`'s sixteen-byte truncation against a binary named `telltale`.
+**macOS is measured by the test suite, and not yet by hand (amended 2026-09-02).**
+`peer_darwin.go` and `identity_darwin.go` compile under `GOOS=darwin` for both architectures, and
+every call they make exists in x/sys v0.47.0. The `darwin` CI job's first run on Apple Silicon
+(the crew PR, run 33657422294) ran this package's `_unix_test.go` suites in-process on the
+runner: host, client, detach, rejoin, one-client refusal, kill and the stale-file path all
+passed there, which exercises `LOCAL_PEERPID` on every dial. What that first run also found: a
+sandboxed home under `/var/folders/<xx>/<hash>/T/` put the socket path at 105 bytes, past
+macOS's 104-byte `sun_path`, and the host refused while the client heard nothing for ten
+seconds; `PipeName` now retreats to a short per-uid directory when the council directory's path
+would not fit (pipe_unix.go). Still owed: the built binary driven by hand on a Mac through
+`--host`, `/detach`, `ls`, rejoin and `kill`, and `p_comm`'s sixteen-byte truncation against a
+binary named `telltale` under a real `kill` sweep; until then `PARITY.md`'s row says "suites
+measured, hand cycle owed".
 
 #### What this rung deliberately does not do
 
