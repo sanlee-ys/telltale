@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -244,15 +245,31 @@ func TestAppServerTurnEndsOnTheNotificationAndCarriesNoCost(t *testing.T) {
 func TestAppServerUnknownStopStatusIsNotRenderedAsAnAnswer(t *testing.T) {
 	p := appServerDriver(PostureRead)
 	d := drive(p, appServerInitOK, appServerThread,
-		`{"method":"turn/completed","params":{"turn":{"id":"t1","status":"interrupted","error":null}}}`)
+		`{"method":"turn/completed","params":{"turn":{"id":"t1","status":"somethingNobodyHasSeen","error":null}}}`)
 	last := d.events[len(d.events)-1]
 	if last.Kind != runner.KindError || !last.EndsTurn {
 		t.Fatalf("an unseen stop status must end the turn as a failure, got %+v", last)
 	}
 	// Quoted rather than translated: this adapter has never seen one and has no
 	// business paraphrasing it.
-	if !strings.Contains(last.Note, "interrupted") {
+	if !strings.Contains(last.Note, "somethingNobodyHasSeen") {
 		t.Fatalf("the vendor's own word must survive, got %q", last.Note)
+	}
+}
+
+func TestAppServerInterruptedTurnIsTheUsersOwnKeystrokeComingBack(t *testing.T) {
+	// DOC READ (app-server README, 2026-09-02): after `turn/interrupt` "the
+	// turn finishes with status: "interrupted"". Until this landed the word
+	// was the unseen-status example above and rendered as a failure — which
+	// on a column the user just cancelled is the wrong word in the direction
+	// this repo minds most. It ends the turn as meta, on the ACP seat's
+	// `cancelled` precedent, and finishColumn's cancellation check words it.
+	p := appServerDriver(PostureRead)
+	d := drive(p, appServerInitOK, appServerThread,
+		`{"method":"turn/completed","params":{"turn":{"id":"t1","status":"interrupted","error":null}}}`)
+	last := d.events[len(d.events)-1]
+	if last.Kind != runner.KindMeta || !last.EndsTurn {
+		t.Fatalf("an interrupted turn is not a failure, got %+v", last)
 	}
 }
 
@@ -360,53 +377,307 @@ func TestAppServerInterruptOfAHeldTurnDropsItAndAsksToBeKilled(t *testing.T) {
 	}
 }
 
-func TestAppServerAnswersEveryServerRequestItCannotLeaveBlocked(t *testing.T) {
-	// The ACP seat's hardest-won lesson, carried across: a request left
-	// unanswered blocks the vendor forever, which on a persistent seat is a
-	// column that never finishes and a room that cannot even be quit.
-	p := appServerDriver(PostureWrite)
-	d := drive(p, appServerInitOK, appServerThread,
-		`{"jsonrpc":"2.0","id":0,"method":"item/commandExecution/requestApproval","params":{"threadId":"t","command":"rm -rf ."}}`,
-		`{"jsonrpc":"2.0","id":1,"method":"mcpServer/elicitation/request","params":{}}`,
-	)
-	var answered int
-	var decided string
+// The approval lines, synthesized in the v2 shape the app-server README and
+// v2/item.rs describe (read 2026-09-02) and the v1 shape the 0.149.1 schema
+// declared. None has been captured live.
+const (
+	appServerCmdApproval  = `{"jsonrpc":"2.0","id":0,"method":"item/commandExecution/requestApproval","params":{"threadId":"22222222-2222-7222-8222-222222222222","turnId":"44444444-4444-7444-a444-444444444444","itemId":"exec-7","kind":"command","command":"rm -rf build","cwd":"C:\\Users\\dev\\code\\example-app","reason":"clean the tree","commandActions":[{"type":"unknown"}],"additionalPermissions":{"network":{"enabled":true}}}}`
+	appServerFileApproval = `{"jsonrpc":"2.0","id":1,"method":"item/fileChange/requestApproval","params":{"threadId":"22222222-2222-7222-8222-222222222222","turnId":"44444444-4444-7444-a444-444444444444","itemId":"patch-3","reason":"write outside the workspace","grantRoot":"C:\\Users\\dev"}}`
+	appServerV1Approval   = `{"jsonrpc":"2.0","id":2,"method":"execCommandApproval","params":{"conversationId":"c","callId":"k","command":["cmd.exe","/c","dir"],"cwd":"C:\\ws"}}`
+)
+
+// decisions reads every `{"decision": …}` the driver wrote back, in order.
+func decisions(d *driven) []string {
+	var out []string
 	for _, r := range d.replies {
 		var m map[string]any
 		if json.Unmarshal(r, &m) != nil || m["method"] != nil {
 			continue
 		}
-		answered++
 		if res, ok := m["result"].(map[string]any); ok {
 			if v, ok := res["decision"].(string); ok {
-				decided = v
+				out = append(out, v)
 			}
+		}
+	}
+	return out
+}
+
+func TestAppServerAnswersEveryServerRequestItCannotLeaveBlocked(t *testing.T) {
+	// The ACP seat's hardest-won lesson, carried across: a request left
+	// unanswered blocks the vendor forever, which on a persistent seat is a
+	// column that never finishes and a room that cannot even be quit.
+	//
+	// READ posture: the approval is declined on arrival — it asked for
+	// `never` and a read seat asking to change something is already answered
+	// — and the unknown request gets the smallest well-formed thing.
+	p := appServerDriver(PostureRead)
+	d := drive(p, appServerInitOK, appServerThread,
+		appServerCmdApproval,
+		`{"jsonrpc":"2.0","id":1,"method":"mcpServer/elicitation/request","params":{}}`,
+	)
+	var answered int
+	for _, r := range d.replies {
+		var m map[string]any
+		if json.Unmarshal(r, &m) == nil && m["method"] == nil {
+			answered++
 		}
 	}
 	if answered != 2 {
 		t.Fatalf("both server requests must be answered, got %d", answered)
 	}
-	// DENIED, because the room never asked for approvals — no posture here sends
-	// approvalPolicy — so a request arriving at all means the vendor asked about
-	// something the room offered it no authority over.
-	if decided != "denied" {
-		t.Fatalf("an unrequested approval is refused, got %q", decided)
+	if got := decisions(d); len(got) != 1 || got[0] != "decline" {
+		t.Fatalf("a read-posture approval is declined in the v2 vocabulary, got %v", got)
 	}
 	// The attempt is still reported: a seat that tried and was stopped must not
-	// read as one that never tried.
+	// read as one that never tried — and the trace names the command.
 	if len(d.acts) != 1 || d.acts[0].Outcome != runner.ActFailed {
 		t.Fatalf("the refusal must land in the trace, got %+v", d.acts)
 	}
+	if d.acts[0].Text != "commandExecution: rm -rf build" {
+		t.Fatalf("the trace must name the call, got %q", d.acts[0].Text)
+	}
+	if _, err := p.Decide("app-server-approval-1", true, "", nil); !errors.Is(err, ErrAppServerUnknownRequest) {
+		t.Fatalf("a read-posture refusal is not held open for the room, got %v", err)
+	}
 }
 
-func TestAppServerDecideNeverClaimsToHaveAnsweredAnything(t *testing.T) {
-	// This seat holds nothing open, so there is no request id Decide could be
-	// handed that means anything. An error rather than a silent success, because
-	// a caller reading a clean return as "the vendor was told yes" would leave a
-	// card on screen over a vendor that had already moved on.
+func TestAppServerWritePostureHandsAnApprovalToTheRoomAndWritesNothingBack(t *testing.T) {
+	// The vendor is BLOCKED until the room answers, which is the whole value
+	// of the card — so the request produces a Gate and no reply. UNMEASURED:
+	// no arm has produced an approval on this path; what this pins is that
+	// the room is offered the decision rather than the seat making it.
+	p := appServerDriver(PostureWrite)
+	d := drive(p, appServerInitOK, appServerThread, appServerCmdApproval, appServerFileApproval)
+	if got := decisions(d); len(got) != 0 {
+		t.Fatalf("a write-posture approval must wait for the room, but the seat answered %v", got)
+	}
+	var gates []*runner.Gate
+	for _, ev := range d.events {
+		if ev.Kind == runner.KindGate {
+			gates = append(gates, ev.Gate)
+		}
+	}
+	if len(gates) != 2 {
+		t.Fatalf("want a card per approval, got %d", len(gates))
+	}
+	cmd, file := gates[0], gates[1]
+	if cmd.Tool != "commandExecution" || cmd.Text != "commandExecution: rm -rf build" || cmd.ToolUseID != "exec-7" {
+		t.Fatalf("the command card is mis-named: %+v", cmd)
+	}
+	if file.Tool != "fileChange" || file.Text != "fileChange: write outside the workspace" || file.ToolUseID != "patch-3" {
+		t.Fatalf("the file card is mis-named: %+v", file)
+	}
+	// The ALLOWLIST: nothing the request carried beyond the command and the
+	// reason reaches the card. `additionalPermissions`, `commandActions` and
+	// `grantRoot` are on the wire above and have no destination.
+	for _, g := range gates {
+		if g.Input != nil || g.OldContent != "" || g.NewContent != "" {
+			t.Fatalf("a codex card carries no argument blob and no preview, got %+v", g)
+		}
+	}
+	if cmd.RequestID == file.RequestID {
+		t.Fatal("two approvals must be decidable separately")
+	}
+}
+
+func TestAppServerDecideAnswersEachWayInTheVendorsOwnWords(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		request string
+		allow   bool
+		want    string
+	}{
+		{"v2 command accepted", appServerCmdApproval, true, "accept"},
+		{"v2 command declined", appServerCmdApproval, false, "decline"},
+		{"v2 file change accepted", appServerFileApproval, true, "accept"},
+		{"v2 file change declined", appServerFileApproval, false, "decline"},
+		// The legacy pair keeps the 0.149.1 schema's spelling.
+		{"v1 exec approved", appServerV1Approval, true, "approved"},
+		{"v1 exec denied", appServerV1Approval, false, "denied"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := appServerDriver(PostureWrite)
+			d := drive(p, appServerInitOK, appServerThread, tc.request)
+			var g *runner.Gate
+			for _, ev := range d.events {
+				if ev.Kind == runner.KindGate {
+					g = ev.Gate
+				}
+			}
+			if g == nil {
+				t.Fatal("no card was raised")
+			}
+			lines, err := p.Decide(g.RequestID, tc.allow, "denied by the person running this room", nil)
+			if err != nil || len(lines) != 1 {
+				t.Fatalf("Decide = %v, %v", lines, err)
+			}
+			var m map[string]any
+			if err := json.Unmarshal(lines[0], &m); err != nil {
+				t.Fatal(err)
+			}
+			res, _ := m["result"].(map[string]any)
+			if res["decision"] != tc.want {
+				t.Fatalf("decision = %v, want %q", res["decision"], tc.want)
+			}
+			// The vendor's own id, echoed raw. acceptForSession is never sent:
+			// it widens what the agent may do without being asked again.
+			if strings.Contains(string(lines[0]), "acceptForSession") {
+				t.Fatal("the room approves per call, never for the session")
+			}
+			// Answered once. A second keystroke on the same card decides nothing.
+			if _, err := p.Decide(g.RequestID, tc.allow, "", nil); !errors.Is(err, ErrAppServerUnknownRequest) {
+				t.Fatalf("an answered request is still answerable: %v", err)
+			}
+		})
+	}
+}
+
+func TestAppServerDecideRefusesARequestItIsNotHolding(t *testing.T) {
+	// An error rather than a silent success, because a caller reading a clean
+	// return as "the vendor was told yes" would leave a card on screen over a
+	// vendor that had already moved on.
 	p := appServerDriver(PostureWrite)
 	if _, err := p.Decide("app-server-approval-1", true, "", nil); !errors.Is(err, ErrAppServerUnknownRequest) {
 		t.Fatalf("Decide must refuse, got %v", err)
+	}
+}
+
+func TestAppServerInterruptCancelsWhatTheVendorIsBlockedOnFirst(t *testing.T) {
+	// acpProtocol's ordering: a pending approval holds the vendor still, so
+	// it is answered — with the v2 `cancel`, the decision the schema says also
+	// interrupts — before the interrupt is sent to a server that is listening.
+	p := appServerDriver(PostureWrite)
+	drive(p, appServerInitOK, appServerThread,
+		`{"method":"turn/started","params":{"threadId":"22222222-2222-7222-8222-222222222222","turn":{"id":"44444444-4444-7444-a444-444444444444","status":"inProgress"}}}`,
+		appServerCmdApproval)
+	lines, err := p.Interrupt("x")
+	if err != nil || len(lines) != 2 {
+		t.Fatalf("want a cancel and then the interrupt, got %s %v", lines, err)
+	}
+	if !strings.Contains(string(lines[0]), `"decision":"cancel"`) {
+		t.Fatalf("the blocked call was not cancelled first: %s", lines[0])
+	}
+	if !strings.Contains(string(lines[1]), `"turn/interrupt"`) {
+		t.Fatalf("the turn was not interrupted after the vendor was unblocked: %s", lines[1])
+	}
+	if _, err := p.Decide("app-server-approval-1", true, "", nil); !errors.Is(err, ErrAppServerUnknownRequest) {
+		t.Fatalf("the cancelled request is still answerable: %v", err)
+	}
+}
+
+func TestAppServerClosingOwnsTheKillInOrder(t *testing.T) {
+	// §9.50 measured stdin close not reliably stopping this server, so the
+	// seat says goodbye in order: cancel anything held, interrupt a turn still
+	// open, and then the room closes the pipe, waits Grace, and kills.
+	t.Run("a turn in flight with an approval held", func(t *testing.T) {
+		p := appServerDriver(PostureWrite)
+		drive(p, appServerInitOK, appServerThread,
+			`{"method":"turn/started","params":{"threadId":"22222222-2222-7222-8222-222222222222","turn":{"id":"44444444-4444-7444-a444-444444444444","status":"inProgress"}}}`,
+			appServerFileApproval)
+		lines := p.Closing()
+		if len(lines) != 2 {
+			t.Fatalf("want a cancel then an interrupt, got %s", lines)
+		}
+		if !strings.Contains(string(lines[0]), `"decision":"cancel"`) || !strings.Contains(string(lines[1]), `"turn/interrupt"`) {
+			t.Fatalf("closing is out of order: %s", lines)
+		}
+	})
+	t.Run("an idle thread says nothing", func(t *testing.T) {
+		p := appServerDriver(PostureRead)
+		drive(p, appServerInitOK, appServerThread, appServerTurnOK, appServerDone)
+		if lines := p.Closing(); len(lines) != 0 {
+			t.Fatalf("an idle thread has no turn to interrupt, got %s", lines)
+		}
+	})
+	t.Run("a held brief is dropped rather than sent behind the user's back", func(t *testing.T) {
+		p := appServerDriver(PostureRead)
+		if _, err := p.Turn("the brief"); err != nil {
+			t.Fatal(err)
+		}
+		if lines := p.Closing(); len(lines) != 0 {
+			t.Fatalf("nothing to say before the thread exists, got %s", lines)
+		}
+		d := drive(p, appServerInitOK, appServerThread)
+		if d.sent("turn/start") {
+			t.Fatal("a brief held at teardown went out anyway")
+		}
+	})
+	// The bound sits just past the measured exits (1.5–3.3 s) and well under
+	// the one that had to be killed (alive at 15 s).
+	if g := appServerDriver(PostureRead).Grace(); g < 3300*time.Millisecond || g > 10*time.Second {
+		t.Fatalf("grace = %v, want a bound past the measured exits and short of the outlier", g)
+	}
+}
+
+func TestAppServerNamesItsFallbackTriggers(t *testing.T) {
+	// Every shape that means "this protocol cannot be brought up" is terminal
+	// and reported by Dead(), so the room can retreat to the measured exec
+	// seat (vendors.LiveFallback) before spending a brief on it.
+	for _, tc := range []struct {
+		name  string
+		lines []string
+	}{
+		{"initialize refused", []string{`{"id":1,"error":{"code":-32600,"message":"not authenticated"}}`}},
+		{"initialize refused for this client's version", []string{`{"id":1,"error":{"code":-32602,"message":"unsupported client version"}}`}},
+		{"thread/start is not a method this build knows", []string{appServerInitOK, `{"id":2,"error":{"code":-32601,"message":"Method not found"}}`}},
+		{"a thread with no id", []string{appServerInitOK, `{"id":2,"result":{"thread":{"id":""}}}`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := appServerDriver(PostureRead)
+			if p.Dead() {
+				t.Fatal("a fresh protocol is not dead")
+			}
+			d := drive(p, tc.lines...)
+			if !p.Dead() {
+				t.Fatal("the failure must be terminal and visible to the room")
+			}
+			last := d.events[len(d.events)-1]
+			if last.Kind != runner.KindError || !last.EndsTurn {
+				t.Fatalf("the failure must end the turn it was dispatched for, got %+v", last)
+			}
+			if _, err := p.Turn("another brief"); !errors.Is(err, ErrAppServerHandshakeFailed) {
+				t.Fatalf("a dead protocol must refuse a turn, got %v", err)
+			}
+		})
+	}
+	// And a healthy handshake is not.
+	p := appServerDriver(PostureRead)
+	drive(p, appServerInitOK, appServerThread)
+	if p.Dead() {
+		t.Fatal("a seated thread reported dead")
+	}
+	if _, ok := (CodexAppServer{}).Fallback().(Codex); !ok {
+		t.Fatalf("the fallback must be the measured exec seat, got %T", CodexAppServer{}.Fallback())
+	}
+}
+
+func TestAppServerAsksForAnApprovalPolicyPerPosture(t *testing.T) {
+	// SCHEMA READ (v2/shared.rs, 2026-09-02): `never`, `on-request`,
+	// `untrusted`. The read posture asks for nobody; the write postures ask
+	// for the narrower of the two asking policies, and the gated posture
+	// never reaches the seat as itself (spawnPosture collapses it).
+	for _, tc := range []struct {
+		posture Posture
+		want    string
+	}{
+		{PostureRead, "never"},
+		{PostureWrite, "on-request"},
+		{PostureWriteGated, "on-request"},
+	} {
+		p := appServerDriver(tc.posture)
+		d := drive(p, appServerInitOK)
+		start := d.find("thread/start")
+		if start == nil {
+			t.Fatalf("posture %v sent no thread/start", tc.posture)
+		}
+		params, _ := start["params"].(map[string]any)
+		if got := params["approvalPolicy"]; got != tc.want {
+			t.Fatalf("posture %v asked for approvalPolicy %v, want %q", tc.posture, got, tc.want)
+		}
+		if got := params["approvalPolicy"]; got == "untrusted" {
+			t.Fatal("untrusted is not adopted unmeasured; see appServerApprovalPolicy")
+		}
 	}
 }
 
@@ -451,7 +722,7 @@ func TestAppServerSurvivesGarbageOnTheStream(t *testing.T) {
 }
 
 func TestCodexAppServerInvokesTheSubcommandAndNothingElse(t *testing.T) {
-	spec, proto, err := CodexAppServer{}.Open("C:\\ws", "codex.cmd", "", PostureRead)
+	spec, proto, err := (CodexAppServer{}).Open("C:\\ws", "codex.cmd", "", PostureRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,17 +754,23 @@ func TestCodexAppServerHasNoBatchInvocation(t *testing.T) {
 	}
 }
 
-func TestTheRoomStillSeatsTheExecCodexAdapter(t *testing.T) {
-	// The deliberate absence, pinned so it is a decision rather than an
-	// oversight. design.md §9.50 records why: on this path the shell router goes
-	// through pwsh, pwsh cannot start under the Windows sandbox on this box, and
-	// a read-posture seat abandoned its turn rather than inspecting on two of
-	// three arms. Registering this type is the one-line follow-up once that is
-	// measured away — and this test is what will fail and be read on that day.
-	if _, ok := Registry()[model.VendorCodex].(CodexAppServer); ok {
-		t.Fatal("the codex seat moved to app-server; §9.50's read-posture liveness must be re-measured and its record updated first")
+func TestTheRoomSeatsTheAppServerAndKeepsExecAsTheFallback(t *testing.T) {
+	// This test's predecessor pinned the ABSENCE: from 2026-08-29 the seat
+	// stayed on `codex exec` because §9.50 measured a read-posture app-server
+	// turn failing to inspect on two of three arms, and the follow-up was to
+	// re-measure that first. On 2026-09-02 the seat moved WITHOUT that
+	// re-measurement (design.md §9.54 says why and what it owes), so what is
+	// pinned now is the shape of the honesty around the move: the measured
+	// exec adapter is one step away as the fallback, and the badge says
+	// unmeasured (seatshape_test.go in package council pins the words).
+	seat, ok := Registry()[model.VendorCodex].(CodexAppServer)
+	if !ok {
+		t.Fatalf("the codex seat must be the app-server adapter, got %T", Registry()[model.VendorCodex])
 	}
-	if _, ok := Registry()[model.VendorCodex].(Codex); !ok {
-		t.Fatalf("the codex seat must still be the exec adapter, got %T", Registry()[model.VendorCodex])
+	if _, ok := seat.Fallback().(Codex); !ok {
+		t.Fatalf("the fallback must be the measured exec adapter, got %T", seat.Fallback())
+	}
+	if _, ok := FallbackRegistry()[model.VendorCodex].(Codex); !ok {
+		t.Fatalf("the fallback registry must seat exec, got %T", FallbackRegistry()[model.VendorCodex])
 	}
 }

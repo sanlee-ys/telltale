@@ -344,9 +344,18 @@ func TestParseLiveTakesOnlyAPersistentSeat(t *testing.T) {
 	if v, err := ParseLive("claude"); err != nil || v != model.VendorClaude {
 		t.Errorf(`ParseLive("claude") = (%q, %v), want the claude seat`, v, err)
 	}
-	for _, seat := range []string{"codex", "agy", "cursor", "grok"} {
+	// Antigravity became Persistent on 2026-09-02 (§9.54: one `agy
+	// --input-format stream-json` process across turns), and liveVendor reads
+	// the registry rather than a list precisely so this eligibility keeps up
+	// on its own. The seat it would open is `agy` in its interactive mode,
+	// which is a real vendor process on the operator's account and is guarded
+	// like every other.
+	if v, err := ParseLive("agy"); err != nil || v != model.VendorAntigravity {
+		t.Errorf(`ParseLive("agy") = (%q, %v), want the antigravity seat — it keeps a process now`, v, err)
+	}
+	for _, seat := range []string{"codex", "cursor", "grok"} {
 		if _, err := ParseLive(seat); err == nil {
-			t.Errorf("%s took a live seat, and it does not keep a process across turns", seat)
+			t.Errorf("%s took a live seat, and it speaks JSON-RPC rather than drawing a terminal", seat)
 		}
 	}
 	if _, err := ParseLive("nonesuch"); err == nil {

@@ -622,8 +622,12 @@ func TestNoVendorClaimsUnverifiedEnforcement(t *testing.T) {
 	if d := sandboxFor(model.VendorCodex, true).Detail; !strings.Contains(d, "0.149.1") {
 		t.Errorf("the windows codex detail does not cite the build it was measured on: %q", d)
 	}
-	if got := sandboxFor(model.VendorCodex, false).Level; got != SandboxEnforced {
-		t.Errorf("codex on unix claims %v, want SandboxEnforced", got)
+	// Off Windows the codex badge is REQUESTED since 2026-09-02: the seat moved
+	// to `codex app-server`, every arm of which ran on Windows, and the macOS
+	// enforcement was measured through `codex exec`. A seat move re-measures
+	// rather than inherits (§9.50, §9.54); seatshape_test.go pins the detail.
+	if got := sandboxFor(model.VendorCodex, false).Level; got != SandboxRequested {
+		t.Errorf("codex on unix claims %v, want SandboxRequested — app-server is unmeasured there", got)
 	}
 	// Antigravity is the strong case: not "unverified" but REFUTED. Asked to
 	// write a file under --mode plan --sandbox, it wrote the file. Anything

@@ -153,8 +153,15 @@ func TestTheDeclaredCapabilityMatchesTheRoomsOwnMeasurements(t *testing.T) {
 	if got := declaredCapability(model.VendorCursor, reg); !strings.Contains(got, "live process") {
 		t.Errorf("the cursor seat does not report as a live process: %q", got)
 	}
-	if got := declaredCapability(model.VendorGrok, reg); !strings.Contains(got, "batch") {
-		t.Errorf("grok is a batch program per turn and does not say so: %q", got)
+	// Since 2026-09-02 the grok seat is a live ACP process too (§9.54), and
+	// its batch shape is the fallback: the declaration is read off the
+	// registry the room is running, so the same function says "batch" for
+	// the fallback room and "live" for the default one.
+	if got := declaredCapability(model.VendorGrok, reg); !strings.Contains(got, "live process") {
+		t.Errorf("grok is a live ACP seat and does not say so: %q", got)
+	}
+	if got := declaredCapability(model.VendorGrok, vendors.FallbackRegistry()); !strings.Contains(got, "batch") {
+		t.Errorf("grok's fallback is a batch program per turn and does not say so: %q", got)
 	}
 }
 

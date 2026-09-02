@@ -284,3 +284,46 @@ func TestCodexWritePostureCanReachDotGit(t *testing.T) {
 		t.Errorf("override is not anchored to the workspace: %q", got)
 	}
 }
+
+// TestLiveSeatsKeepPromptTextOffArgvInEveryPosture: the shim safety rule,
+// re-asked against the three shapes that moved to long-lived processes on
+// 2026-09-02. None of them puts a prompt anywhere at launch — the brief is a
+// JSON line on the pipe — so the `codex.cmd` shim codex.go routes around, the
+// `--single=` hazard grok.go documents and the ~32K Windows argv ceiling
+// agy.go lives with are all retired on the live shapes. Pinned per posture,
+// because the batch seats' history is a posture that drifted.
+func TestLiveSeatsKeepPromptTextOffArgvInEveryPosture(t *testing.T) {
+	for _, p := range []Posture{PostureRead, PostureWrite, PostureWriteGated} {
+		codex, _, err := CodexAppServer{}.Open(`C:\ws`, "codex.cmd", "", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		grok, _, err := GrokAgent{}.Open(`C:\ws`, "grok.exe", "", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		agy, err := AntigravityStream{}.Session(`C:\ws`, "agy.exe", "", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, spec := range map[string]struct {
+			args   []string
+			prompt string
+		}{"codex": {codex.Args, codex.StdinPrompt}, "grok": {grok.Args, grok.StdinPrompt}, "agy": {agy.Args, agy.StdinPrompt}} {
+			if spec.prompt != "" {
+				t.Errorf("%s posture %v launches with a prompt on stdin; a live seat takes every turn later", name, p)
+			}
+			for _, a := range spec.args {
+				if strings.Contains(a, "brief") || a == "-p" || strings.HasPrefix(a, "--single") || a == "-" {
+					t.Errorf("%s posture %v carries a prompt channel on argv: %v", name, p, spec.args)
+				}
+			}
+		}
+		// And the posture does not change the argv on any of the three: it
+		// rides the protocol (codex, grok) or is unused (agy), so a respawn
+		// on a posture change is the room's rule rather than the process's.
+		if !slices.Equal(codex.Args, []string{"app-server"}) || !slices.Equal(grok.Args, []string{"agent", "stdio"}) {
+			t.Errorf("posture %v changed a live seat's argv: codex %v grok %v", p, codex.Args, grok.Args)
+		}
+	}
+}
