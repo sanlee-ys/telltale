@@ -1569,9 +1569,13 @@ telltale council flags:
                               outlives this terminal. Type /detach and the host
                               keeps every seat and the whole conversation; a
                               later telltale council rejoins that live process,
-                              and telltale council kill ends it. The seats stay
-                              inside the host's job object, so a taskkill /F on
-                              the host still reaps every one of them.
+                              and telltale council kill ends it. On Windows the
+                              seats stay inside the host's job object, so a
+                              taskkill /F on the host still reaps every one of
+                              them; on macOS and Linux they share the host's
+                              session, and telltale council kill sweeps it
+                              (a kill -9 on the host alone leaves them running
+                              until the next kill does).
                               A HOSTED ROOM THAT WRITES WILL NOT DETACH. The
                               host carries no approval card, so a hosted write
                               room runs every tool call as though --auto were

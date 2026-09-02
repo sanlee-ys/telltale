@@ -7752,7 +7752,8 @@ host holds the room.
   0700, and it is stdlib. It carries an asymmetry that must be measured into `PARITY.md` first:
   `proc_unix.go` records that on macOS a process group does not bind lifetimes, so a `kill -9`
   on a host LEAKS every seat there, while on Windows it does not. That is the reverse of the
-  usual direction.
+  usual direction. *Amended 2026-09-02: built, and the asymmetry is in `PARITY.md` —
+  [§7.30](#s7-30).*
 - **A GATED room is refused, not hosted.** A gated seat blocks on a question, and carrying that
   question and its answer over this wire is a card, a keystroke, and a reply written back down
   the vendor's own stdin. None of that is built, so `councilhost.New` refuses
@@ -8106,12 +8107,170 @@ shipped first, on purpose.
 **It is Windows-only, like the host it extends.** The Unix equivalent carries the asymmetry
 `PARITY.md` already owes: on macOS a process group does not bind lifetimes, so a `kill -9` on a
 host LEAKS every seat there. A detached host makes that asymmetry worse rather than equal, which
-is a reason to measure it before building rather than to build and label.
+is a reason to measure it before building rather than to build and label. *Amended 2026-09-02:
+no longer Windows-only — [§7.30](#s7-30) builds the Unix transport, measures the asymmetry on
+Linux, and records it in `PARITY.md`.*
 
 **No vendor has been dispatched to through a host, detached or not.** Every seat spawn in this
 package's suite is stubbed, by design — the spawn guard exists to stop a test spending a real
 turn — so neither CI nor a session can close that debt. It is the operator's to pay, and
 `STATE.md` carries it.
+
+<a id="s7-30"></a>
+
+### 7.30 the room outlives the terminal on macOS and Linux too (2026-09-02)
+
+**What this section rules.** [§7.28](#s7-28) built the host on a Windows named pipe and a Job
+Object and withheld the Unix side until one measured asymmetry reached `PARITY.md`. [§7.29](#s7-29)
+exposed detach on the same terms. This section builds the Unix transport and the Unix containment,
+so that `telltale council --host`, `/detach`, rejoin, `telltale council ls` and `telltale council
+kill` do on macOS and Linux what they do on Windows — and it states, rather than labels, the one
+thing they do differently. The owner's daily machine is a MacBook, so before this the crew tool's
+central feature refused on the machine it was for, and `council ls` there printed `telltale
+council --host opens a room in one` as the remedy for an absence: a true absence with a false
+remedy. That sentence is unchanged and is now true on every platform; the fix was the transport,
+not the words.
+
+**What a reader must not read into it.** No frame was added to the protocol, no field to
+`host.json`, and nothing about what reaches disk changed: the room's conversation still lives in
+host memory and dies with the host. `protocol.go` is untouched. The seats' own containment
+(`runner/proc_unix.go`, a process group per seat) is untouched too, and the reason is the next
+heading.
+
+#### The containment is the host's SESSION, and it is not a Job Object
+
+The Windows room job has one property no Unix primitive has: `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`
+binds every seat's **lifetime** to the host's last handle, so a host that dies by any route takes
+its seats with it, and a child cannot leave the job by anything it does. `runner/proc_unix.go`
+measured the Unix side on 2026-08-17: a process group NAMES a set of processes and does not bind
+their lifetimes — SIGINT, SIGTERM, SIGHUP and SIGKILL on the parent, and the `Setpgid` child
+survived all four.
+
+So the Unix containment is built from the two facts that do hold, and `roomjob_unix.go` states
+the difference in as many words:
+
+- **Membership is inherited and cannot be lost by accident.** The client starts the host with
+  `Setsid`, so the host leads a session of its own with no controlling terminal; every seat, and
+  every shell a seat starts, is born carrying that session id, and it changes only when something
+  in the tree calls `setsid(2)` itself. **That is the one escape, and it is the measured
+  difference: a child that calls `setsid` leaves the session and nothing here can see it go. A
+  Job Object child cannot leave.** Nothing council dispatches is known to do this; a vendor that
+  daemonised its tool calls would be a `PARITY.md` finding.
+- **Lifetime is not bound, so the host reaps.** `NewRoomJob` installs a SIGTERM/SIGINT handler
+  and ignores SIGHUP; `Serve` turns a caught signal into `Shutdown`, which kills every registered
+  seat through its per-seat group and exits on the ordinary path, removing `host.json`.
+  `telltale council kill` sends SIGTERM to the host, SIGTERM to every other process in the host's
+  session at the same time, waits a bounded grace for the host, and then sweeps the session with
+  SIGKILL — so a host that could not run its handler still has its seats ended by the command
+  that ends it. On a **dead** host's stale file, `kill` sweeps the dead session too and prints
+  how many processes it ended, because a dead leader's session id still names its orphans and
+  the kernel does not hand that pid out again while any of them carries it.
+
+**Why the session and not the host's process group.** A room-level container must hold every
+seat; a per-seat container must kill ONE seat's whole tree on an interrupt or an eviction without
+touching the others. `runner/proc_unix.go` builds the second from a process group per seat, and
+it is the containment the ordinary room measured and relies on. Seats that joined the host's own
+group would give that up: `kill -TERM -pgid` on one seat would signal every seat. A session sits
+one level above the process groups and holds all of them — the same nesting the Windows side has,
+the room job over the per-seat jobs, in the platform's own hierarchy.
+
+**What is left uncovered, stated once here and once in `PARITY.md`:** `kill -9` the host and walk
+away, and the seats keep running — holding sessions and spending quota — until the next
+`telltale council kill` sweeps the dead session. `TestASigkilledHostLeaksItsSeatAndKillSweepsIt`
+pins BOTH halves: the leak, so the asymmetry cannot be forgotten, and the sweep that answers it.
+
+#### The transport: a socket in the council directory, and two locks beside it
+
+The socket is `~/.telltale/council/telltale-council-<key>.sock`, in the directory council already
+writes, and `Listen` refuses a directory whose mode admits another account (`chmod 700` is the
+named remedy). The node is 0600, and both connect directions read the peer's uid and pid from the
+kernel — `SO_PEERCRED` on Linux, `LOCAL_PEERCRED` plus `LOCAL_PEERPID` on macOS — so the program on
+the other end is trusted exactly as far as the filesystem trusts it, which is §7.24's boundary
+unchanged. A browser has no URL scheme for a filesystem path any more than for `\\.\pipe\...`, so
+§7.28's transport ruling stands; the gate that enforces it (`TestTheHostBindsNoPort`) moved from
+"this package does not import `net`" to "this package reaches `net` for Unix domain sockets, by
+name, and for nothing else", and it walks every source file on every platform's build tags.
+
+**One client at a time is enforced by the host here, not by the kernel.** A pipe with one
+instance refuses a second open; a Unix socket accepts into a backlog whether or not anybody will
+ever `accept`. So the listener runs its own accept loop for its whole life, hands a connection to
+`Accept` only when `Accept` is waiting, and answers everything else with `KindRefused` at once,
+naming the pid that holds the room. A second client is told "one client at a time" instead of
+sitting in a backlog until the first one leaves.
+
+**The probe cannot connect, and the socket alone cannot answer it.** `WaitNamedPipe` asks "is an
+instance available" and opens nothing. A socket path answers only "does a node exist", and a node
+outlives a hard-killed host; a probe that CONNECTED would be accepted the moment the host was
+free, read as a client with no handshake, and would end the room it was listing. So two facts are
+carried by `flock(2)` on two zero-byte files beside the socket, and a probe reads each by trying a
+SHARED lock without waiting — it fails at once if the host holds the exclusive one:
+
+- `<name>.lock`, held for the listener's whole life: somebody is listening. A second `Listen`
+  fails on it with the sentence `FILE_FLAG_FIRST_PIPE_INSTANCE` earns, and a stale socket node
+  whose lock is free is unlinked safely.
+- `<name>.held`, held while a client is attached: the room is held. `Dial` reads it before
+  connecting, so a client never connects into a held room; the host's refusal is the second arm.
+
+A flock is released when the process exits by any route, SIGKILL included, so a dead host never
+reads as listening. That is the property a pid in a file cannot have, and it is why the file says
+WHAT and the lock says WHETHER.
+
+**flock, and not fcntl record locks — measured.** The first cut used `F_SETLK` byte ranges on one
+file, two facts on one node, and every in-process test failed: fcntl locks belong to a PROCESS,
+so a probe inside the host's own process read its own lock as free, and closing the probe's
+descriptor released the listener's locks with it. flock belongs to an open file description, so a
+second open in the same process conflicts exactly as another process would. The cost is a second
+zero-byte node.
+
+**The pid says WHO, in four readings.** `kill(pid, 0)` alone answers "is there a process I may
+signal" and nothing else, and a pid is reusable. `verifyHostProcess` asks four things: the pid is
+alive and this user's; it leads its own session (`getsid(pid) == pid`, which every host does);
+its image name is this binary's (`/proc/<pid>/exe` on Linux, `kern.proc.pid`'s `p_comm` on macOS,
+sixteen bytes and compared as a prefix); and it started no later than `host.json` says
+(`/proc/<pid>/stat` field 22 against `btime`; `p_starttime` on macOS). A recycled pid fails on the
+second, third or fourth, and an identity that cannot be read is "not a host", never "gone".
+
+#### What is measured, and where
+
+**Linux, in this repository's own CI.** The `race` job runs the whole suite on `ubuntu-latest`,
+and every claim above is a test there: `TestOneClientDrivesAHostedRoomEndToEnd` and
+`TestAHostAcrossAProcessBoundaryTakesAClient` (the transport, the peer check, the one-client
+refusal by both arms, a bare disconnect ending the room);
+`TestADetachedHostOutlivesItsClientProcessAndKillReapsEverySeat` (a client process detaches and
+exits, the host survives, a second client rejoins and receives the projection, and `kill` reaps a
+seat reachable only through the session); `TestAProbeDoesNotConsumeTheHostsSocket` (five probes,
+then a connect, then `PipeBusy` with a client attached); `TestAStaleHostFileIsNeverMistakenForALiveHost`
+(a pid that ran and exited, reported dead by `Probe` and left on disk, removed by `kill`);
+`TestASigkilledHostLeaksItsSeatAndKillSweepsIt` and `TestTheIdentityCheckRefusesARecycledPID`
+(the containment and the identity, on stand-in processes). The built binary was also driven by
+hand on Linux on 2026-09-02 — `--host --read` with `/detach` on stdin, `ls`, a rejoin, `kill`, and
+a `kill -9`'d host reported stale by `ls` and left alone — and the host's `ps` line read
+`SID == PID`, `PPID 1`, no TTY.
+
+**macOS is NOT measured.** `peer_darwin.go` and `identity_darwin.go` compile under
+`GOOS=darwin` for both architectures, and every call they make exists in x/sys v0.47.0, but no
+macOS run of the host is recorded. The darwin CI job from another lane is what measures it, and
+until it does `PARITY.md`'s row says "expected to match, not shown to". The two readings most
+worth a Mac's attention are the ones that are darwin-specific: `LOCAL_PEERPID` on the peer check,
+and `p_comm`'s sixteen-byte truncation against a binary named `telltale`.
+
+#### What this rung deliberately does not do
+
+**It does not put the seats in the host's process group.** The heading above says why, and
+`PARITY.md`'s row names the consequence: `council kill` reaps through the session, and a host
+signalled by anything else reaps through its handler.
+
+**It does not make the host survive its own SIGKILL.** Nothing on this platform can, and the
+sentence that says so is in three places on purpose — `roomjob_unix.go`, `PARITY.md`, and the
+test that pins the leak.
+
+**It does not add a field to `host.json`.** The socket path goes where the pipe name went. The
+two lock files and the socket node carry no content; `TestATurnIsNotPersistedAnywhere` asserts
+the lock files are zero bytes and walks the directory they live in.
+
+**It does not change the protocol or the client.** `Client`, `RunClient`, `Rejoin`, `StartHosted`,
+`KillHostedRoom` and `ls`'s words are the same code on every platform; the platform split is
+entirely below `Listen`, `Dial`, `ProbePipe`, `verifyHostProcess` and `killProcess`.
 
 <a id="s8"></a>
 

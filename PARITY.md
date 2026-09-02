@@ -208,6 +208,7 @@ of them is a lifetime:
 |---|---|---|
 | Windows | Job Object, `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | **yes, always** — the handle closes with the process and Windows reaps the tree, on every way out including the ones no handler can catch |
 | macOS, Linux | process group, `Setpgid` | **no** — a group is a name for a set of processes, not a lifetime. It dies when something signals it and at no other moment |
+| macOS, Linux — the council **host** (`--host`, design.md §7.30) | the host's **session** (`Setsid`) over the per-seat groups, plus the host's own SIGTERM/SIGINT handler, plus `telltale council kill`'s session sweep | **not by the host's death; yes by the command.** SIGTERM or SIGINT on the host reaps every seat through its handler. `telltale council kill` SIGTERMs the host and every process carrying its session id, then sweeps with SIGKILL after a bounded grace, and on a dead host's stale `host.json` it sweeps the dead session and prints how many it ended. **`kill -9` the host alone and the seats keep running** until that next `kill`. **The difference from the Job Object, precisely:** a session is membership inherited at fork and lost only by a child calling `setsid(2)` itself — such a child escapes and nothing here sees it go, where a Job Object child cannot leave. **Measured on Linux only, 2026-09-02** (the CI race job runs the tests; the built binary was driven through host/detach/ls/rejoin/kill by hand). macOS builds and is expected to match and has not been shown to; the darwin CI job from another lane is what measures it, and `LOCAL_PEERPID` plus `p_comm`'s sixteen-byte name are the two readings to watch there. |
 
 So on unix the kill has to be MADE on the way out, and until this was measured
 nothing made it on any signal. `runner/proc_unix.go` claimed the "same guarantee
@@ -251,7 +252,8 @@ reaped the child on all three.
   through it too.
 - **The unix behaviour is measured on macOS only.** Linux shares the
   `Setpgid` code path and the same Bubble Tea build, so it is expected to match
-  and has not been shown to. Record a Linux run here.
+  and has not been shown to. Record a Linux run here. *The council host's row
+  above is the mirror image: measured on Linux only, expected on macOS.*
 
 ## HUD adapters
 
