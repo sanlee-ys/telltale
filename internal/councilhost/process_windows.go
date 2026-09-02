@@ -135,8 +135,9 @@ func processCreationTime(h windows.Handle) (time.Time, error) {
 // the room job carries JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, the host holds the
 // only handle, so the host's death closes it and Windows reaps every seat.
 // TestAHardKilledHostReapsEverySeat runs exactly this call against a stand-in
-// host, and TestADetachedHostStillReapsEverySeatOnAHardKill runs it after a
-// detach.
+// host, and
+// TestADetachedHostOutlivesItsClientProcessAndStillReapsEverySeat runs it
+// against a host a client has already left.
 //
 // A shutdown frame would have needed the pipe, and the pipe can be held by a
 // client — a kill that could not end a room because somebody was in it would be
@@ -156,3 +157,11 @@ func killProcess(pid int) error {
 	_, _ = windows.WaitForSingleObject(h, 10000)
 	return nil
 }
+
+// foldWorkspace lower-cases a workspace path for RoomKey.
+//
+// Windows compares both file paths and pipe names case-insensitively, so
+// `C:\code\telltale` and `c:\CODE\Telltale` are one directory and must be one
+// room. Folding here is what stops a second host being started over a room the
+// operator already has.
+func foldWorkspace(path string) string { return strings.ToLower(path) }

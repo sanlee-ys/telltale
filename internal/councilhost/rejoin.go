@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // HostState is what a discovery probe found, and it has FIVE values rather than
@@ -176,12 +175,14 @@ func KillHost(councilDir string) (string, error) {
 // collision causes is two workspaces sharing one room name, which the FIRST
 // PIPE INSTANCE create then refuses out loud rather than silently merging.
 //
-// Cleaned and case-folded first, because Windows paths that differ only in
-// separator or case are the same directory, and two names for one room would
-// let an operator start a second host over a room they already have.
+// Cleaned and then folded by the PLATFORM's own rule, because two spellings of
+// one directory must produce one room name — otherwise an operator can start a
+// second host over a room they already have. Windows treats paths and pipe
+// names case-insensitively and foldWorkspace lower-cases there; every other
+// platform treats `/a/B` and `/a/b` as two directories, and folding them would
+// be the same defect in the other direction.
 func RoomKey(workspace string) string {
-	norm := strings.ToLower(filepath.Clean(workspace))
-	sum := sha256.Sum256([]byte(norm))
+	sum := sha256.Sum256([]byte(foldWorkspace(filepath.Clean(workspace))))
 	return hex.EncodeToString(sum[:])[:16]
 }
 

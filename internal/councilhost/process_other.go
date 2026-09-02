@@ -29,3 +29,11 @@ func verifyHostProcess(pid int, startedAt time.Time) error { return ErrNotBuiltH
 // would LEAK every seat rather than reap it. A kill that left the agents running
 // would be the worst possible spelling of this command.
 func killProcess(pid int) error { return ErrNotBuiltHere }
+
+// foldWorkspace leaves a workspace path alone off Windows.
+//
+// The identity function is the CORRECT answer here rather than a stub: every
+// platform but Windows treats `/a/B` and `/a/b` as two directories, so folding
+// them would merge two rooms into one — the same defect Windows folding
+// prevents, pointed the other way.
+func foldWorkspace(path string) string { return path }

@@ -7845,7 +7845,7 @@ property it would buy — no console at all — is one `CREATE_NO_WINDOW` alread
 purpose, and the two flags are mutually exclusive. Swapping a measured flag for an unmeasured
 one to buy a property already held would be the guess [ADR-001](#adr-001) refuses.
 
-`TestADetachedHostOutlivesItsClientProcess` measures the claim rather than restating it: a real
+`TestADetachedHostOutlivesItsClientProcessAndStillReapsEverySeat` measures the claim rather than restating it: a real
 host in a real process, a real client that detaches and then EXITS, and the host still answering
 a second client afterwards.
 
@@ -7856,12 +7856,18 @@ a second client afterwards.
 for and never covered: the host is now the only process left, so if detach cost the room job
 anything, nothing at all would reap the seats.
 
-`TestADetachedHostStillReapsEverySeatOnAHardKill` is the same measurement taken after a detach.
-A stand-in process runs a REAL `Host.Serve` — real `NewRoomJob`, real `Listen`, real handshake
-— and starts a stand-in seat with **no per-seat job of its own**, so the room job is the only
-thing that can reap it. A client connects, sends `KindDetach`, and closes. The test then asserts
-the host is still alive and the seat is still alive, calls `TerminateProcess` on the host the
-way `taskkill /F` does, and asserts the seat is gone.
+**The same test carries both halves, and that is deliberate rather than tidy.** They are one
+story — a host that outlived its client is exactly the host whose containment has nobody left to
+check it — and splitting them would have meant two stand-in hosts measuring one process's life.
+So the second half runs on the first half's host: a stand-in process runs a REAL `Host.Serve`
+(real `NewRoomJob`, real `Listen`, real handshake) and starts a stand-in seat with **no per-seat
+job of its own**, so the room job is the only thing that can reap it. The client process
+detaches and exits, a second client rejoins from the test, and only then does the test call
+`TerminateProcess` on the host the way `taskkill /F` does and assert the seat is gone.
+
+**The seat is asserted ALIVE before the kill, and that assertion is the control.** A reap test
+whose subject had already died would pass while measuring nothing, which is the failure mode a
+containment test can least afford.
 
 The no-per-seat-job detail is what makes it a measurement rather than a ceremony, and it is
 carried over from §7.28's own test for the same reason: the per-seat job also carries
@@ -8026,7 +8032,11 @@ one failure this command could make that nothing could undo.
 exactly what a new section invites.
 
 - It **still writes nothing** — including no cleanup of a stale `host.json`. A reader that
-  tidied would be a writer.
+  tidied would be a writer. **The ROOM removes that file instead**, on the died path, and the
+  asymmetry is the point: council is already the ratified writer of that directory, and
+  `host.json` is a file this same feature added, so a room that removes a record of a process it
+  has just proved is gone is tidying its own state. `TestCouncilLsLeavesAStaleHostFileAlone`
+  pins the reader's half.
 - It **still binds nothing and connects to nothing.** The liveness probe asks whether a NAME
   exists; it does not open the pipe. That is why the probe had to be built the way it was:
   a dialling probe would have made `ls` capable of ending the room it was listing.

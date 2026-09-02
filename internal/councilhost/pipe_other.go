@@ -107,3 +107,10 @@ func (c *Conn) Close() error { return c.rw.Close() }
 
 // Dial refuses off Windows.
 func Dial(name string, timeout time.Duration) (*Conn, error) { return nil, ErrNotBuiltHere }
+
+// displayName is the transport's name as a person reads it.
+//
+// Off Windows there is no `\.\pipe\` prefix to strip, so the name IS the
+// display name. It exists here because Probe (rejoin.go) is platform-neutral
+// and names the transport in the sentence it reports for a dead host.
+func displayName(n string) string { return n }

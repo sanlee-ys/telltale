@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -218,20 +219,34 @@ func TestTheJoinGuardLetsADeadPipeThrough(t *testing.T) {
 // is visible to every local process that enumerates \\.\pipe\, and publishing
 // which directory somebody is working in buys nothing.
 func TestRoomKeyIsStableAndHidesTheWorkspace(t *testing.T) {
-	a := councilhost.RoomKey(`C:\Users\dev\code\telltale`)
-	b := councilhost.RoomKey(`C:\Users\dev\code\telltale\`)
-	c := councilhost.RoomKey(`c:\users\dev\code\TELLTALE`)
-	if a != b {
+	// Built with filepath rather than typed, because this test runs on the
+	// Linux -race job too and a backslash is an ordinary character there.
+	ws := filepath.Join("home", "dev", "code", "telltale")
+	a := councilhost.RoomKey(ws)
+	if b := councilhost.RoomKey(ws + string(filepath.Separator)); a != b {
 		t.Errorf("a trailing separator changed the room key: %q vs %q", a, b)
 	}
-	if a != c {
-		t.Errorf("case changed the room key: %q vs %q", a, c)
+	if b := councilhost.RoomKey(filepath.Join(ws, "sub", "..")); a != b {
+		t.Errorf("an unclean path changed the room key: %q vs %q", a, b)
 	}
-	if strings.Contains(strings.ToLower(councilhost.PipeName(a)), "telltale\\") ||
-		strings.Contains(strings.ToLower(a), "dev") {
+	if strings.Contains(a, "dev") || strings.Contains(a, "telltale") {
 		t.Errorf("the room key carries the workspace path: %q", a)
 	}
-	if councilhost.RoomKey(`C:\Users\dev\code\other`) == a {
+	if councilhost.RoomKey(filepath.Join("home", "dev", "code", "other")) == a {
 		t.Error("two different workspaces share one room key")
+	}
+
+	// The CASE claim is Windows-only, and it is a claim about the platform
+	// rather than about this function. Windows compares paths and pipe names
+	// case-insensitively, so two spellings are one room; every other platform
+	// treats them as two directories, and folding there would merge two rooms
+	// into one.
+	folded := councilhost.RoomKey(strings.ToUpper(ws))
+	if runtime.GOOS == "windows" && folded != a {
+		t.Errorf("case changed the room key on Windows, where it must not: %q vs %q", a, folded)
+	}
+	if runtime.GOOS != "windows" && folded == a {
+		t.Errorf("case did NOT change the room key on %s, where two cases are two "+
+			"directories: %q", runtime.GOOS, a)
 	}
 }
