@@ -157,6 +157,18 @@ func TestMain(m *testing.M) {
 		return realEditor(name, args, dir)
 	}
 
+	// The arena check (arenacheck.go) is the fifth thing this package can
+	// spawn, and it is guarded on the same rule for a wider reason than the
+	// three above: what it runs is a command the OPERATOR named, so on the
+	// machine running this suite it is by definition a program somebody meant
+	// to have. A test that reached the model's check path unstubbed would run
+	// that person's build or test suite from inside `go test`.
+	realCheck := startCheck
+	startCheck = func(ctx context.Context, tree string, argv []string) checkResult {
+		refuseRealCheck(tree, argv)
+		return realCheck(ctx, tree, argv)
+	}
+
 	// The live seat (design.md §9.53) is the SIXTH spawn, and it is guarded on
 	// the same rule as the three above with no softening. Its output is display
 	// only — the pane renders a screen and no gauge reads it — and that is a
@@ -168,18 +180,6 @@ func TestMain(m *testing.M) {
 	startPTYSession = func(ctx context.Context, spec runner.Spec, cols, rows int, out chan<- runner.PTYChunk) (runner.PTYSession, error) {
 		refuseRealVendor("startPTYSession", spec)
 		return realPTY(ctx, spec, cols, rows, out)
-	}
-
-	// The arena check (arenacheck.go) is the fifth thing this package can
-	// spawn, and it is guarded on the same rule for a wider reason than the
-	// three above: what it runs is a command the OPERATOR named, so on the
-	// machine running this suite it is by definition a program somebody meant
-	// to have. A test that reached the model's check path unstubbed would run
-	// that person's build or test suite from inside `go test`.
-	realCheck := startCheck
-	startCheck = func(ctx context.Context, tree string, argv []string) checkResult {
-		refuseRealCheck(tree, argv)
-		return realCheck(ctx, tree, argv)
 	}
 
 	code := m.Run()
