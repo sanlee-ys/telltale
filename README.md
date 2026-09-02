@@ -39,7 +39,9 @@ Every number comes from measured tool output.
      repository today. -->
 
 **v0.2.0** (2026-08-14). Windows is verified on every commit.
-Intel macOS is smoke-checked. `darwin_arm64` and `linux_amd64` are built, not run.
+Apple Silicon macOS runs the suite and the binary smokes on every commit too,
+on a runner with no vendor CLI installed. Intel macOS is smoke-checked by hand.
+`linux_amd64` is built, not run.
 No binary is signed. Check `checksums.txt` on the release.
 Detail: [SECURITY.md](SECURITY.md). The v1 cut gates are in [docs/design.md §1](docs/design.md#s1).
 
@@ -73,11 +75,26 @@ scoop bucket add telltale https://github.com/sanlee-ys/telltale
 scoop install telltale
 ```
 
-**Direct download.** Each release attaches `windows_amd64`, `darwin_amd64`,
-`darwin_arm64`, and `linux_amd64`, plus `checksums.txt`. Unpack one archive
-and put `telltale` on `PATH`.
+**macOS, Homebrew** (the tap lives in this repository; not yet exercised by
+a `brew install`, and the first one is owed)
 
-Measured on Intel macOS against `v0.2.0` (2026-08-17):
+```
+brew tap sanlee-ys/telltale https://github.com/sanlee-ys/telltale
+brew install telltale
+telltale doctor
+```
+
+Homebrew fetches the release archive into its own cache and sets no
+`com.apple.quarantine` mark, so Gatekeeper is never asked about the binary.
+The binary is still **not signed**: the tap changes how it arrives, not what
+it is. Apple Silicon gets `darwin_arm64`, Intel gets `darwin_amd64`, and
+Linux gets `linux_amd64`. goreleaser rewrites
+[Formula/telltale.rb](Formula/telltale.rb) at each tag; the one checked in
+names `v0.2.0` with the sha256 values from that release's `checksums.txt`.
+
+**macOS, curl** (measured on Intel macOS against `v0.2.0`, 2026-08-17; on
+Apple Silicon write `darwin_arm64` for `darwin_amd64`, a substitution nobody
+has walked by hand)
 
 ```
 curl -fLO https://github.com/sanlee-ys/telltale/releases/download/v0.2.0/telltale_0.2.0_darwin_amd64.tar.gz
@@ -87,10 +104,22 @@ tar -xzf telltale_0.2.0_darwin_amd64.tar.gz
 ./telltale doctor
 ```
 
-A browser download on macOS sets `com.apple.quarantine`. After the checksum
-passes, run `xattr -d com.apple.quarantine telltale`. Do not add that line
-to the `curl` block: `curl` does not set the mark, and the command then
-exits 1. The measured walk is in [SECURITY.md](SECURITY.md).
+There is no `xattr` line because `curl` writes no `com.apple.quarantine`
+attribute and a browser does, and Gatekeeper acts on that attribute alone.
+After a browser download, run `xattr -d com.apple.quarantine telltale` once
+the checksum passes; inside the `curl` block that same line exits 1 because
+there is nothing to remove. The measured walk is in [SECURITY.md](SECURITY.md).
+
+**macOS, from source**
+
+```
+go build -o telltale ./cmd/telltale
+./telltale doctor
+```
+
+**Direct download.** Each release attaches `windows_amd64`, `darwin_amd64`,
+`darwin_arm64`, and `linux_amd64`, plus `checksums.txt`. Unpack one archive
+and put `telltale` on `PATH`. The `curl` block above is that walk, measured.
 
 **Windows, winget.** Not submitted. Use the one paste above, scoop, or a
 source build. Draft: [packaging/](packaging/).
@@ -164,7 +193,7 @@ keyed to a line `doctor` actually prints.
 | `drivable FAILED` under a `binary ok` | The binary is here and council will not seat it. "Is it there" and "can it be driven" have different fixes, so `doctor` refuses to collapse them. | Read the reason on that row. It names the entry point and why: usually a shell shim that takes its prompt as an argument, which council will not put through `cmd.exe`. |
 | `auth  not checked` and `network  not checked`, on every seat, always | Not a failure and not a soft pass. This report probes neither. | Nothing. A seat that is installed and signed out reports its own auth failure on its column the first time you dispatch to it. |
 | `re-measure §3.x before trusting the fields this adapter sources` | Your vendor runs a version other than the one telltale surveyed. | Nothing on this machine. It is a staleness fact about telltale: no check failed, the tally is unchanged, and the command still exits 0. |
-| `telltale version` says `dev`, or an older tag, after the install | Another `telltale.exe` is earlier on `PATH`. The install script appends its directory rather than jumping the queue. | Run `Get-Command telltale`. It names the one that runs. Remove the other one, or set `TELLTALE_INSTALL_DIR` to the directory it already lives in. |
+| `telltale version` says `dev`, or an older tag, after the install | Another `telltale.exe` is earlier on `PATH`. The install script appends its directory rather than jumping the queue. | Run `Get-Command telltale` (`which -a telltale` on macOS). It names the one that runs. Remove the other one, or set `TELLTALE_INSTALL_DIR` to the directory it already lives in. |
 | A column in the room stays empty after a dispatch | The seat answered nothing, or the vendor refused the turn. | The column carries the reason. [docs/council.md](docs/council.md) reads the badges and the phase words. |
 | Windows warns before the first run | The binary is unsigned. No telltale release carries an Authenticode signature ([docs/design.md §8](docs/design.md#s8), item 8). | Verify the archive against `checksums.txt`, which is the whole verification this release offers. [SECURITY.md](SECURITY.md) states what that does and does not prove. |
 | The statusline shows nothing, or `bad statusline input: unexpected end of JSON input` | The statusline is wired, not run. The vendor calls it and hands it JSON on stdin, so by hand it gets no payload. | Paste the `statusLine.command` block above, then start a session. |

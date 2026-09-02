@@ -25,26 +25,30 @@ That is the whole of it. `.github/workflows/release.yml` fires on the `v*` tag
 and does the rest:
 
 1. runs **the repo's own gate** — `.github/workflows/ci.yml`, called rather
-   than copied: vet, the suite, the build, and three binary-level smokes on
-   `windows-latest`. A red gate stops the release here.
+   than copied: vet, the suite, the build, and the binary-level smokes on
+   `windows-latest`; the race detector on `ubuntu-latest`; and the suite plus
+   the smokes again on `macos-latest`, which is Apple Silicon. A red gate on
+   any of the three stops the release here.
 2. runs goreleaser, which cross-compiles the four targets with CGO off, stamps
    `main.version` with the tag, archives them (zip on Windows, tar.gz
    elsewhere) with `checksums.txt`, and creates a **draft** GitHub release
    carrying the platform-label table.
-3. commits the scoop manifest to `bucket/telltale.json` on `main`.
+3. commits the scoop manifest to `bucket/telltale.json` and the Homebrew
+   formula to `Formula/telltale.rb` on `main`, as two commits authored
+   `goreleaser`.
 
 Then, by hand:
 
 4. **Publish the draft.** Review the notes, press publish. This is the step
    that is deliberately not automated — publishing is outward-facing, and it
-   is also what makes the download URLs in the scoop manifest resolve. Step 3
-   lands the manifest a few minutes ahead of that, so publish promptly: in the
-   window between, `scoop install telltale` would 404. It fails cleanly and
-   installs nothing, but it is a real window and the fix is to not leave the
-   draft sitting.
+   is also what makes the download URLs in the scoop manifest and the formula
+   resolve. Step 3 lands both a few minutes ahead of that, so publish
+   promptly: in the window between, `scoop install telltale` and
+   `brew install telltale` would 404. Each fails cleanly and installs nothing,
+   but it is a real window and the fix is to not leave the draft sitting.
 5. **Submit to winget** (below), if you want that channel for this release.
 
-Verify the result the way a user would:
+Verify the result the way a user would, on each machine:
 
 ```
 scoop bucket add telltale https://github.com/sanlee-ys/telltale
@@ -53,17 +57,41 @@ telltale version
 telltale council
 ```
 
+```
+brew tap sanlee-ys/telltale https://github.com/sanlee-ys/telltale
+brew install telltale
+brew test telltale
+telltale version
+telltale council
+```
+
+`brew test` runs the formula's own check: `telltale version` must print the
+formula's version, which a source build (`dev`) never does.
+
 ## Verifying the release config without tagging
 
 `--snapshot` builds everything and publishes nothing. `skip_upload: auto` in
-`.goreleaser.yaml` means the scoop publisher sits out a snapshot, so this
-cannot touch `main`:
+`.goreleaser.yaml` means the scoop and Homebrew publishers both sit out a
+snapshot, so this cannot touch `main`:
 
 ```
 goreleaser check
 goreleaser release --snapshot --clean
 ./dist/telltale_windows_amd64_v1/telltale.exe version
+cat dist/homebrew/Formula/telltale.rb
 ```
+
+**`goreleaser check` exits 2 since the tap landed, and the reason is one
+line.** goreleaser v2.17.1 (the version `release.yml` pins) deprecates
+`brews` in favour of `homebrew_casks`, and `check` fails on any deprecated
+key. Measured 2026-09-02: the output is exactly one `DEPRECATED: brews`
+notice followed by `configuration is valid, but uses deprecated properties`,
+and `goreleaser release --snapshot --clean` prints the same notice and
+finishes at exit 0 with the formula written under `dist/homebrew/`. Read
+`check` as green when that notice is the only thing it reports; anything else
+is a real problem. The formula stays a formula on purpose, and
+`.goreleaser.yaml`'s comment above the `brews` block says why a cask would
+make a claim SECURITY.md does not.
 
 `dist/` is gitignored; delete it when you are done. goreleaser installs
 user-local with `go install github.com/goreleaser/goreleaser/v2@latest`, which
@@ -122,6 +150,49 @@ pipeline, or install on `windows/arm64`. The first two are the owner's decision
 ([docs/design.md §8](../docs/design.md), item 8). The third has no binary to
 install, so the script refuses that machine by name.
 
+## The Homebrew tap
+
+`Formula/telltale.rb` is the tap, and this repository is its remote. A user
+runs:
+
+```
+brew tap sanlee-ys/telltale https://github.com/sanlee-ys/telltale
+brew install telltale
+```
+
+`brew tap <user>/<name> <url>` accepts any git repository with a `Formula/`
+directory, so the tap needs no `homebrew-telltale` repository; the URL is what
+makes the short name resolve. The formula picks `darwin_arm64` on Apple
+Silicon, `darwin_amd64` on Intel, and `linux_amd64` on Linux, verifies each
+against the sha256 goreleaser wrote into it, and installs the one binary. It
+is a formula rather than a cask because Homebrew fetches a formula's archive
+with curl and writes no `com.apple.quarantine`, so the unsigned binary runs
+as installed; a cask arrives quarantined and needs an `xattr` hook to run at
+all (`.goreleaser.yaml`, the comment above `brews`).
+
+**The next release is what makes the tap move.** The runbook is one
+paragraph. Tag (`git tag vX.Y.Z && git push origin vX.Y.Z`). `release.yml`
+fires, runs `ci.yml` as its gate (Windows, the race job, and the darwin job
+on Apple Silicon), then runs goreleaser, which builds the archives, stages the
+draft release, and commits `Formula/telltale.rb` to `main` with the new
+version, URLs and sha256 values using the workflow's own `GITHUB_TOKEN`, the
+same way it commits `bucket/telltale.json`. Publish the draft promptly; until
+it is published the URLs in the fresh formula 404. Then, on a Mac,
+`brew update && brew upgrade telltale && brew test telltale`. Nothing about
+the tap is done by hand at a release, and nothing about it needs a secret
+beyond the token the release already holds.
+
+**The checked-in formula predates the first automated one.** It names
+`v0.2.0`, with the four sha256 values taken from that release's
+`checksums.txt` on 2026-09-02, in the shape goreleaser v2.17.1 writes
+(verified against a `--snapshot` run's output). goreleaser overwrites it
+whole at the next tag. Nobody has run `brew install telltale` against it yet;
+the first install is owed and belongs in PARITY.md when it happens.
+
+**An `-rc` tag leaves the formula alone.** `skip_upload: auto` skips the
+publisher on a prerelease, the same rule the scoop bucket follows, so a
+rehearsal tag never moves the formula users installed from.
+
 ## winget
 
 The three manifests in `winget/` are a **draft**. They are not submitted, and
@@ -168,8 +239,29 @@ release, and the version cadence here does not need it.
 
 `.goreleaser.yaml` carries the full list in a comment at the bottom; the short
 form is that each omission is the packaging version of the honest-gauge rule.
-No Homebrew tap (macOS is smoke-verified on Intel only, and a tap would resolve
-just as happily on Apple Silicon, which is `built, not verified`). No `.deb` or
-`.rpm` (a distro package is a support claim Linux has not earned here). No npm
-(the bare name is taken by an unrelated package, and design.md §6.5 already
-recorded npm as optional for a Go binary — so it is skipped, not renamed).
+The Homebrew tap above is packaged as of 2026-09-02; the entry that used to
+refuse it (macOS smoke-verified on Intel only, Apple Silicon `built, not
+verified`) was retired by `ci.yml`'s darwin job running the binary on Apple
+Silicon on every commit, which is the measurement that entry was waiting for.
+What is still not done, each with its reason:
+
+- **homebrew-core.** Not submitted. Its acceptance rules ask for a notable
+  project, with 75 GitHub stars among the signals it lists, and nothing here
+  measures that number (README's badge rule says why nothing renders it
+  either). The tap is the channel until then, and the formula is already in
+  the shape a core submission starts from.
+- **winget.** Drafted, not submitted (above). Submission is a pull request to
+  a Microsoft-owned repository and stays a human action.
+- **Signing and notarization.** Not built, and the decision is the owner's
+  (design.md §8, item 8): both need a credential the owner holds, Apple's
+  costs a yearly fee, and no arrangement of the workflow produces a signature
+  without one. The tap does not change this. It changes how the binary
+  arrives, and SECURITY.md says what that does and does not buy.
+- **A Homebrew cask.** A cask arrives quarantined, and the only way to make an
+  unsigned cask run is a post-install `xattr` hook that goreleaser's own
+  documentation labels a Gatekeeper bypass. The formula never sets the mark.
+- **`.deb` or `.rpm`.** A distro package is a support claim Linux has not
+  earned here; `linux_amd64` is still `built, not run`.
+- **npm.** The bare name is taken by an unrelated package, and design.md §6.5
+  already recorded npm as optional for a Go binary, so it is skipped, not
+  renamed.

@@ -387,8 +387,11 @@ clean directory on the same day, and every line exited 0.
 - **The System Settings > Privacy & Security "Open Anyway" path.** Only the
   `xattr -d` remedy was exercised. Whether that pane offers an entry for a
   killed command-line binary, and whether the entry works, is unmeasured.
-- **The `darwin_arm64` archive.** It was not walked at all, which leaves its
-  "built, not verified" label exactly where it was.
+- **The `darwin_arm64` archive.** It was not walked at all. Since 2026-09-02
+  `ci.yml`'s `darwin` job runs a binary built from each commit on an Apple
+  Silicon runner, which retires "built, not run" for the platform; the archive
+  goreleaser attaches is still the thing nobody has unpacked and run there,
+  and the Homebrew tap that hands a user that archive has not been exercised.
 
 Windows and SmartScreen belong to the other machine. `SECURITY.md` still records
 that prompt as unmeasured, and nothing here changes it.

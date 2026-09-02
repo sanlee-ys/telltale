@@ -8283,6 +8283,24 @@ that file is the procedure, and neither restates the other.
    draft (schema 1.12.0, `zip` + nested `portable`, `windows_amd64` only) and the
    submission flow are in [packaging/winget/](../packaging/winget/).
 
+   **Amended 2026-09-02: the tap ships.** What the refusal above was waiting for
+   was a measurement on Apple Silicon, and `ci.yml`'s `darwin` job is one: it
+   builds the binary on `macos-latest` (arm64) on every commit and runs the suite,
+   `doctor`, the statusline smokes and `council ls` there, with the Windows job's
+   honesty assertions. The tap lives in `Formula/` of this repository, on (3)'s
+   credential argument for the scoop bucket, and goreleaser rewrites the formula at
+   each tag. It is a **formula and not a cask**: Homebrew fetches a formula's
+   archive with curl and writes no `com.apple.quarantine`, so the unsigned binary
+   runs as installed, while a cask arrives quarantined and goreleaser's cask
+   documentation answers that with an `xattr` post-install hook it labels a
+   Gatekeeper bypass. goreleaser v2.17.1 deprecates `brews` in favour of casks, and
+   `goreleaser check` now exits 2 naming that one key; the pin is exact, deprecated
+   keys are removed only at a major version, and `.goreleaser.yaml` carries the
+   measurement. Still not done, each with its reason: **homebrew-core**, whose
+   acceptance rules ask for a notable project (75 GitHub stars among the signals)
+   and nothing here measures that number; **winget**, per this item; **signing and
+   notarization**, per (8). packaging/README.md is the runbook.
+
 8. **Not signed, and the decision is the owner's** (recorded 2026-08-16). No
    artifact carries a signature. `.goreleaser.yaml` declares no `signs` block and
    `release.yml` holds no signing secret, so the claim is checkable from the two
@@ -8322,7 +8340,7 @@ notarization stay owner decisions, and no contributor builds that pipeline.
 
 | Check | Fires on | Runner | Fails on |
 |---|---|---|---|
-| `ci.yml` | push to main, pull request, release | windows-latest, ubuntu-latest | vet, the suite, the build, the binary smokes, the schema gate, the install-script gate (added 2026-08-18) |
+| `ci.yml` | push to main, pull request, release | windows-latest, ubuntu-latest, macos-latest (Apple Silicon, added 2026-09-02) | vet, the suite, the build, the binary smokes, the schema gate, the install-script gate (added 2026-08-18) |
 | `govulncheck.yml` | push to main, pull request, Monday 07:00 UTC | windows-latest | a reachable known vulnerability |
 | `codeql.yml` | push to main, pull request, Monday 07:30 UTC | ubuntu-latest | a default-suite alert |
 | `dependabot.yml` | weekly | none | nothing. It opens a pull request |
@@ -8539,7 +8557,8 @@ gate reported three bytes and failed.
 
 **No other channel is reshaped by this.** No Homebrew tap, no npm, no winget
 automation. Items 2 and 7 rule each one, and a one-paste installer is not an
-argument to revisit any of them. macOS and Linux keep the measured `curl` and
+argument to revisit any of them. (The tap arrived on 2026-09-02 by item 7's own
+amendment, on a measurement rather than on this installer.) macOS and Linux keep the measured `curl` and
 `shasum` walk in the README, which is the same verification without a script.
 
 #### The listing and launch cadence, recorded and not executed (added 2026-08-18)

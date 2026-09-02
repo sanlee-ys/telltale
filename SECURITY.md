@@ -106,6 +106,34 @@ The consequences, per platform:
   `com.apple.quarantine` attribute by hand to reproduce what a browser marks, so
   the gate and the remedy are measured and the download itself is reproduced. A
   real browser download is still owed, and `PARITY.md` records it as owed.
+
+  **What CI measures on Apple Silicon (added 2026-09-02).** `ci.yml`'s `darwin`
+  job builds telltale from the commit under test on `macos-latest`, which
+  GitHub hosts on Apple Silicon, and runs it there: `go test ./...`,
+  `telltale version`, `telltale doctor`, the statusline fixture smokes and
+  `telltale council ls`, with the honesty assertions the Windows job makes.
+  That runner has no vendor CLI, so it measures the honest states and never a
+  live seat, and it runs a binary it built rather than an archive a release
+  attaches. `darwin_arm64` is therefore "run", no longer "built, not run"; the
+  archive itself has still not been unpacked and executed by hand on that
+  platform.
+
+  **The Homebrew tap sets no quarantine.** `brew install telltale` from
+  `Formula/telltale.rb` fetches the release archive with `curl` into
+  Homebrew's cache, and `curl` writes no `com.apple.quarantine` attribute
+  (measured 2026-08-17 with `xattr -l`, above), so Gatekeeper is never
+  consulted and the binary runs as installed. That is a property of the
+  transport and not a signature: the archive the tap installs is the same
+  unsigned, un-notarized one, and the formula is chosen over a cask precisely
+  because a cask arrives quarantined and would need an `xattr` hook to run
+  (`.goreleaser.yaml` records that choice). One difference between the two
+  darwin archives comes from a source read rather than a run: Go's linker
+  writes an ad-hoc code signature into darwin/arm64 output and into nothing
+  else (`cmd/link/internal/ld/lib.go`, `NeedCodeSign`, Go 1.26.6), which is
+  why the Intel walk saw `code object is not signed at all`. An ad-hoc
+  signature names no developer and is not notarization. What Gatekeeper does
+  with a quarantined `darwin_arm64` archive is unmeasured, because nobody has
+  walked that archive by hand.
 - **Linux.** The archive is unsigned. Linux applies no equivalent gate, so the
   archive runs after you unpack it.
 

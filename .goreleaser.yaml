@@ -1,8 +1,9 @@
 # goreleaser — the whole of tag day.
 #
 # `git tag v0.2.0 && git push origin v0.2.0` is the only command a release
-# takes; `.github/workflows/release.yml` runs the repo's own gate on
-# windows-latest and then runs this file. Nothing here fires on a merge to
+# takes; `.github/workflows/release.yml` runs the repo's own gate (ci.yml:
+# windows-latest, the race job on ubuntu-latest, and the darwin job on
+# macos-latest) and then runs this file. Nothing here fires on a merge to
 # main: the workflow's only trigger is a v* tag, so this config is inert until
 # one exists.
 #
@@ -165,8 +166,8 @@ release:
     | Download | Verification |
     |---|---|
     | `windows_amd64` | **Windows is the continuously verified target.** Every commit runs vet, the suite, the build and binary-level smokes on `windows-latest` (ADR-002), and this release ran that same gate before these artifacts were built. |
-    | `darwin_amd64` | **Smoke-verified on Intel macOS — Windows is the continuously verified target.** Point-in-time: the suite, the build, the statusline smokes, a 53-session live Claude Code read and the HUD all ran on Intel macOS at `052a9d6` (ADR-005, second amendment). CI has never run on macOS, and four of the five adapters have still never met a live macOS corpus. |
-    | `darwin_arm64` | **Built, not verified.** Cross-compiled and never run on Apple Silicon by this project. Shipped rather than withheld because a labelled binary is more useful than no binary — but the label is the claim, and it is the whole claim. |
+    | `darwin_amd64` | **Smoke-verified on Intel macOS — Windows is the continuously verified target.** Point-in-time: the suite, the build, the statusline smokes, a 53-session live Claude Code read and the HUD all ran on Intel macOS at `052a9d6` (ADR-005, second amendment), and the published `v0.2.0` archive was walked by hand on 2026-08-17 (PARITY.md). CI runs macOS on Apple Silicon only, so nothing runs this Intel binary on every commit, and four of the five adapters have still never met a live macOS corpus. |
+    | `darwin_arm64` | **Run in CI on Apple Silicon — Windows is the continuously verified target.** Every commit runs vet, the suite, the build and the binary-level smokes on `macos-latest` (arm64), and this release ran that same gate before these artifacts were built. What that runner cannot measure: it has none of the five vendor CLIs, so no adapter has met a live macOS corpus there and no council turn has been dispatched there. The archive itself has not been unpacked and run by hand on Apple Silicon; CI runs a binary it built from the same commit. |
     | `linux_amd64` | **Built, not verified.** Cross-compiled and never run on Linux by this project. Same label, same reason. |
 
     Verify a download against `checksums.txt` before running it.
@@ -178,6 +179,14 @@ release:
     ```
     scoop bucket add telltale https://github.com/sanlee-ys/telltale
     scoop install telltale
+    telltale council
+    ```
+
+    macOS (and Linux), via the Homebrew tap in this repository:
+
+    ```
+    brew tap sanlee-ys/telltale https://github.com/sanlee-ys/telltale
+    brew install telltale
     telltale council
     ```
 
@@ -226,12 +235,83 @@ scoops:
     # installed from.
     skip_upload: auto
 
+# The Homebrew tap lives in THIS repo too, under Formula/, on the scoop
+# bucket's argument: the workflow's own GITHUB_TOKEN can commit here, and a
+# second repo (sanlee-ys/homebrew-telltale) would need a cross-repo PAT held
+# as a release secret. `brew tap sanlee-ys/telltale <this repo's URL>` takes
+# any git repository with a Formula/ directory, so the user-facing command is
+# one line either way.
+#
+# A FORMULA, not a cask, and the choice is the honesty claim (added 2026-09-02).
+# Homebrew fetches a formula's URL with curl into its own cache and never
+# writes `com.apple.quarantine`, so Gatekeeper is not consulted and the
+# unsigned binary runs as installed. A cask is downloaded WITH the quarantine
+# attribute, and goreleaser's cask documentation answers that with a
+# post-install hook that runs `xattr -dr com.apple.quarantine` on the staged
+# binary — a step its own docs label a Gatekeeper bypass that Apple may close
+# "without notice". A tap whose install step silently strips the mark is the
+# opposite of what SECURITY.md's macOS section says a user should expect.
+#
+# The cost, measured with goreleaser v2.17.1 (the version release.yml pins):
+# `brews` is deprecated there in favour of `homebrew_casks`, and
+# `goreleaser check` exits 2 on this file with exactly one line —
+# `DEPRECATED: brews should not be used anymore` — while
+# `goreleaser release --snapshot --clean` prints the same notice and finishes.
+# Deprecated keys are removed only at a major version (goreleaser's
+# deprecations page), and the version is pinned, so the formula keeps being
+# written until somebody raises the pin on purpose. packaging/README.md
+# records how to read `check` now.
+#
+# Nothing here signs or notarizes. The tap changes nothing about that:
+# SECURITY.md's statement stands, and design.md §8 item 8 still holds the
+# decision with the owner.
+brews:
+  - name: telltale
+    ids: [telltale]
+    repository:
+      owner: sanlee-ys
+      name: telltale
+      branch: main
+      token: "{{ .Env.GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/sanlee-ys/telltale
+    # Shorter than the scoop description, and shaped for `brew audit`: no
+    # leading article, no product name, under 80 characters. The tap is not
+    # audited on install; the shape is kept anyway so a homebrew-core
+    # submission (design.md §8, once the stars threshold is met) starts from
+    # the formula that already ships.
+    description: Dispatch room for several coding-agent CLIs, with an honest gauge underneath
+    license: MIT
+    install: |
+      bin.install "telltale"
+    # `telltale version` prints the tag the binary was built from, so the
+    # formula's own version is the thing to assert. A source build says `dev`
+    # and would fail this, which is the point: `brew test` proves the archive
+    # the formula names is a release, not a checkout.
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/telltale version")
+    commit_msg_template: "dist: homebrew formula for {{ .ProjectName }} {{ .Tag }}"
+    commit_author:
+      name: goreleaser
+      email: noreply@github.com
+    # auto = skip on snapshots and prereleases, for the scoop bucket's reason:
+    # a `--snapshot` verification run must never touch main, and an `-rc` tag
+    # must never move the formula users installed from.
+    skip_upload: auto
+
 # Deliberately NOT configured, each for the same reason the gauges refuse a
 # derived number — the package would claim a posture nothing measured:
 #
-#   - homebrews / a brew tap. Homebrew installs by platform, and macOS is
-#     smoke-verified on Intel only. A tap that resolves happily on Apple
-#     Silicon would launder "built, not verified" into "supported".
+#   - homebrew_casks. See the formula comment above: a cask arrives
+#     quarantined, and the only way to make an unsigned cask run is a hook
+#     that strips the mark. The formula never sets it. (The old entry here
+#     refused a tap altogether because darwin_arm64 was "built, not verified";
+#     ci.yml's darwin job runs the binary on Apple Silicon on every commit
+#     now, which is the measurement that entry was waiting for.)
+#   - homebrew-core. A tap is not a core submission. homebrew-core's own
+#     acceptance rules ask for a notable project (75 GitHub stars among the
+#     signals it lists), and nothing here measures that number — the README's
+#     badge rule says why nothing will render it either.
 #   - nfpms (.deb/.rpm). A distro package is a support claim, and Linux is
 #     "built, not verified". The tarball carries the label; a package would not.
 #   - npm. The bare name `telltale` is taken on the registry by an unrelated
