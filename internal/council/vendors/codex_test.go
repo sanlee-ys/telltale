@@ -404,6 +404,9 @@ func TestCodexUnknownEventsAreIgnoredNotFatal(t *testing.T) {
 		[]byte(`not json at all`),
 		[]byte(``),
 		[]byte(`2026-08-04T01:25:25Z ERROR codex_core::exec: exec error`), // stderr-shaped noise
+		// The 0.151.0 `error` line: it rides beside turn.failed and is not the
+		// verdict (TestCodexErrorLineIsNotAVerdict).
+		[]byte(`{"type":"error","message":"You've hit your usage limit."}`),
 	}
 	var c Codex
 	for _, l := range lines {
@@ -444,4 +447,54 @@ func mustCodexNext(t *testing.T, prompt, sess string) runner.Spec {
 		t.Fatal(err)
 	}
 	return s
+}
+
+// TestCodexTurnFailedCarriesTheVendorsSentence pins the frame codex-cli 0.151.0
+// grew: a failed turn now says why on STDOUT, and the adapter hands the room
+// that sentence rather than leaving it to an exit code with an empty stderr
+// behind it. The line is the 2026-09-01 capture with nothing changed.
+func TestCodexTurnFailedCarriesTheVendorsSentence(t *testing.T) {
+	line := `{"type":"turn.failed","error":{"message":"You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 11:45 PM."}}`
+	ev, ok := Codex{}.ParseEvent([]byte(line))
+	if !ok {
+		t.Fatal("turn.failed was dropped; the room would show a bare exit status")
+	}
+	if ev.Kind != runner.KindError {
+		t.Fatalf("kind = %v, want KindError", ev.Kind)
+	}
+	if !strings.HasPrefix(ev.Note, "You've hit your usage limit.") {
+		t.Errorf("note = %q, want the vendor's own sentence", ev.Note)
+	}
+	// agy's shape, on purpose (see the case in ParseEvent): the process has not
+	// exited, so this event claims no exit code, no error and no end of turn.
+	if ev.EndsTurn || ev.ExitCode != 0 || ev.Err != nil {
+		t.Errorf("endsTurn=%v exit=%d err=%v — a stream failure must not claim the exit", ev.EndsTurn, ev.ExitCode, ev.Err)
+	}
+	if ev.Failure != runner.FailureUnclassified {
+		t.Errorf("failure = %v, want Unclassified: nothing captured says the thread is dead OR alive", ev.Failure)
+	}
+}
+
+// TestCodexTurnFailedWithoutAMessageStillFails: a turn.failed whose payload
+// carries no sentence is still the vendor's verdict, so the column fails with
+// the generic note rather than being dropped and left to the exit code.
+func TestCodexTurnFailedWithoutAMessageStillFails(t *testing.T) {
+	ev, ok := Codex{}.ParseEvent([]byte(`{"type":"turn.failed"}`))
+	if !ok || ev.Kind != runner.KindError {
+		t.Fatalf("got (%+v, %v), want a KindError", ev, ok)
+	}
+	if ev.Note != "the vendor reported the turn failed" {
+		t.Errorf("note = %q", ev.Note)
+	}
+}
+
+// TestCodexErrorLineIsNotAVerdict: the `error` line that rode beside
+// turn.failed in the 0.151.0 capture is dropped. Whether a lone one ends the
+// turn is unmeasured, and a column failed on a line that might be a
+// recoverable hiccup would be the room inventing the verdict.
+func TestCodexErrorLineIsNotAVerdict(t *testing.T) {
+	var c Codex
+	if ev, ok := c.ParseEvent([]byte(`{"type":"error","message":"You've hit your usage limit."}`)); ok {
+		t.Errorf("error produced %v; only turn.failed is the verdict", ev.Kind)
+	}
 }

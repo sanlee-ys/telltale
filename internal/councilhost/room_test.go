@@ -1,6 +1,7 @@
 package councilhost
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -214,5 +215,44 @@ func TestACloneSharesNoSliceWithTheRoom(t *testing.T) {
 	}
 	if *c.Seats[0].ExitCode != 7 {
 		t.Fatalf("the clone shares its ExitCode pointer with the room: %d", *c.Seats[0].ExitCode)
+	}
+}
+
+// TestAProcessExitKeepsTheVendorsFailureSentence is the hosted room's half of
+// council's dispatch rule: a seat the vendor already failed in its own stream
+// keeps that sentence when the process exit lands behind it. Measured
+// 2026-09-01 at codex-cli 0.151.0, where a failed turn puts `turn.failed` on
+// stdout with an EMPTY stderr and then exits 1 — before this, the exit's
+// `exit status 1` replaced the sentence and the hosted room drew
+// `codex — failed (exit 1)` with nothing under it.
+func TestAProcessExitKeepsTheVendorsFailureSentence(t *testing.T) {
+	r := oneSeatRoom()
+	r.Seats[0].Vendor = model.VendorCodex
+	r.beginTurn()
+	r.Apply(runner.Event{Vendor: model.VendorCodex, Kind: runner.KindError, Note: "You've hit your usage limit."})
+	if r.Seats[0].Note != "You've hit your usage limit." {
+		t.Fatalf("the vendor's sentence did not reach the seat: %+v", r.Seats[0])
+	}
+	if r.Seats[0].ExitCode != nil {
+		t.Fatal("a stream failure claimed an exit code before anything exited")
+	}
+	exit := errors.New("exit status 1")
+	r.Apply(runner.Event{Vendor: model.VendorCodex, Kind: runner.KindError, Err: exit, Note: exit.Error(), ExitCode: 1})
+	s := r.Seats[0]
+	if s.Note != "You've hit your usage limit." {
+		t.Errorf("note = %q after the exit; the process's three words replaced the vendor's sentence", s.Note)
+	}
+	if s.ExitCode == nil || *s.ExitCode != 1 {
+		t.Errorf("the exit code was lost with the note kept: %+v", s)
+	}
+	if s.Phase != PhaseFailed {
+		t.Errorf("phase = %q, want failed", s.Phase)
+	}
+	// And the exit still names itself on a seat nobody had failed yet.
+	r2 := oneSeatRoom()
+	r2.beginTurn()
+	r2.Apply(runner.Event{Vendor: model.VendorClaude, Kind: runner.KindError, Err: exit, Note: "exit status 1: something on stderr", ExitCode: 1})
+	if r2.Seats[0].Note != "exit status 1: something on stderr" {
+		t.Errorf("a bare exit lost its own note: %q", r2.Seats[0].Note)
 	}
 }

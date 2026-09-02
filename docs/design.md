@@ -9014,6 +9014,14 @@ one. `vendors/codex.go` carries the capture on its constants; `TestCodexPostureI
 both halves of the split, and `TestNoVendorClaimsUnverifiedEnforcement` now requires the
 Windows claim to cite the build it was measured on. macOS and Linux are untouched.
 
+**Amended 2026-09-01 — the installed build moved to codex-cli 0.151.0, and the sandbox claims
+above were NOT re-measured on it.** A chip traced the seat's `failed (exit 1)` ([§9.58](#s9-58))
+and re-ran the three seat argv shapes at 0.151.0 from a scratch directory. All three parsed and
+produced `thread.started`, so the flags this section rests on are still accepted. The four
+sandbox probes could not run: every turn that day died at the account's usage limit before a
+tool was asked for. So the table above is pinned at 0.149.1 on a machine that runs 0.151.0.
+[STATE.md](../STATE.md) carries the owed re-measurement.
+
 `TestSandboxBadgesAreNeverBlanket` fails the build if a bare claim reappears, and asserts the
 badges stay distinct — convergence on one string is how a per-vendor claim quietly becomes
 a blanket one again.
@@ -13342,6 +13350,11 @@ does so today: codex and grok have no structured error frame, so their failure I
 `ExitCode != 0` leg already retires them; Claude runs persistent; the Cursor seat is ACP. The fix
 is written on the shape rather than on the vendor id, and a seat that adopts the same shape later
 is covered without an amendment.
+
+*(Amended 2026-09-01: codex adopted the shape. codex-cli 0.151.0 puts a `turn.failed` frame on
+stdout, and the adapter now parses it into exactly this event. The amendment is not free: a
+spawn-per-turn failure now produces TWO events, the vendor's sentence and then the exit, and the
+exit must not overwrite the sentence. [§9.58](#s9-58) records that rule.)*
 
 <a id="s9-34"></a>
 
@@ -18440,3 +18453,98 @@ Antigravity stream's argv, envelope, `result` ending the turn, the fork fixture 
 refusals. `internal/council/seatshape_test.go` pins every badge word and the fallback registry.
 `go vet ./...`, `GOOS=windows GOARCH=amd64 go build ./...` and `GOOS=darwin GOARCH=arm64 go build
 ./...` are clean. The `help-postures` golden moved by exactly the codex detail's new sentences.
+
+<a id="s9-58"></a>
+
+### 9.58 the codex seat failed in both rooms and said only `exit status 1` (2026-09-01)
+
+Two live drives on 2026-09-01 and 2026-09-02 showed the same seat in the same state. The
+hosted read room drew `codex — failed (exit 1)`. The gated write room drew `Codex ✗ failed 12s`
+with `⚠ exit status 1` under it. Neither room showed a sentence, and neither room showed an
+answer. The failure was in both postures and in both rooms, so it was not a posture defect and
+it was not a host defect.
+
+#### The measurement
+
+The seat was last measured at codex-cli 0.149.1 ([§9.2](#s9-2)'s 2026-08-29 amendment). The
+machine ran codex-cli 0.151.0. A chip re-ran the seat's exact argv outside council, from a
+scratch directory, with the prompt on stdin, three times: the read seat's first turn, the write
+seat's first turn, and the resume shape. Every run ended the same way:
+
+```
+{"type":"thread.started","thread_id":"..."}
+{"type":"turn.started"}
+{"type":"error","message":"You've hit your usage limit. ... try again at 11:45 PM."}
+{"type":"turn.failed","error":{"message":"You've hit your usage limit. ... try again at 11:45 PM."}}
+exit 1, stderr empty
+```
+
+Two facts follow from the capture, and they are different facts.
+
+**The turn failed because the account had no quota.** That is the vendor's condition and council
+cannot change it. The three argv shapes parsed and each produced `thread.started`, so no flag
+moved between 0.149.1 and 0.151.0. The sandbox probes could not run on a turn that never
+reached a tool, so §9.2's claims stay pinned at 0.149.1 and [STATE.md](../STATE.md) carries the
+re-measurement as owed.
+
+**The room lost the sentence because the vendor moved it.** Through codex-cli 0.147.0 a failed
+turn wrote its reason to stderr and put zero bytes on stdout, and `codex.go` recorded that as
+the reason it modelled no error frame: the runner's exit event carried the stderr tail, and that
+was the whole failure signal. At 0.151.0 the reason rides stdout as a `turn.failed` frame and
+stderr is empty. The adapter dropped the frame as an unknown type, on the rule that an unlisted
+type is dropped rather than guessed at, and the exit event arrived with `exit status 1` and an
+empty tail. Both rooms rendered exactly what they were handed.
+
+**Which path this is, after [§9.57](#s9-57).** The drives above ran on a build that seated
+`codex exec --json`. On the same day this section landed, §9.57 seated `codex app-server`
+first and kept `codex exec --json` as the measured fallback. The app-server path reports a
+failed turn on its own `turn/completed` with `status: "failed"`, as a `KindError` that ends the
+turn, so the sentence reaches the room there already. The adapter change below is the fallback
+path's, and the exit guard below is what the fallback needed: a spawn-per-turn seat is the one
+whose failure sentence a process exit can overwrite.
+
+#### What changed
+
+**`turn.failed` is parsed, and its sentence is the card's note.** The event takes agy's shape
+(`vendors/agy.go`): a `KindError` with exit code 0, no error and no `EndsTurn`, because the
+process has not exited. That puts it on the branch [§9.33](#s9-33) built and
+`failedturn_test.go` pins. The column settles at the vendor's sentence and the exit retires it.
+
+**The `error` line is not parsed.** In the capture it always paired with a `turn.failed` that
+carried the same text. Whether a lone `error` line ends the turn is unmeasured. A column failed
+on a line that may be a recoverable hiccup would be the room inventing the verdict, and
+`turn.failed` IS the verdict.
+
+**The exit no longer overwrites the sentence, in either room.** A spawn-per-turn failure now
+produces two events: the vendor's sentence, then the process exit. The second arrived last and
+replaced the note, in `dispatch.go` and in `councilhost/room.go` alike. Both now hold one rule.
+A process exit that lands on a column already failed with a note keeps that note, because only
+the runner's exit event carries `Err`, and the only way a column is failed with a note before
+its exit lands is a failure the vendor reported in its own stream. In the single-process room
+the exit's own sentence moves to the note's detail line, so the card reads the vendor's reason
+as its title and `exit status 1` as its body, and nothing the exit said is dropped. In the
+hosted room the exit code was already on the head line, so the seat keeps its note and gains
+`(exit 1)` beside the phase. A bare exit on a column nobody had failed is unchanged: it still
+names itself.
+
+**The failure stays `Unclassified`.** `runner.FailureClass` is grounded in strings captured off
+a run that positively never reached the conversation. A usage-limit refusal says nothing either
+way about the thread: the resume shape produced `thread.started` with the requested id and then
+died the same way. Whether the room may keep a restored thread across that is a ruling under
+[ADR-008](#adr-008)'s sixteenth amendment, and this section does not make it.
+
+#### Verification
+
+`go vet ./...`, `go build`, `go test ./internal/council -timeout 20m`, `go test ./internal/councilhost`.
+The capture is pinned as `vendors/testdata/wire/codex-0.151.0-turn-failed.jsonl`, sanitized to
+its thread id only, and `TestCodexFailedTurnWireIsPinnedAt_0_151_0` replays it. The adapter's
+three new tests pin the verdict, the empty-payload verdict, and the dropped `error` line. The
+dispatch test feeds the real adapter's event and then the runner's exit shape, and asserts the
+note, the detail, the settle and the retirement. The hosted-room test does the same over
+`Room.Apply`.
+
+**Not verified here: a live turn that answers.** Every turn the chip ran died at the usage
+limit, so the fix was checked against the captured failure and never against a codex turn that
+succeeded at 0.151.0. The 0.147.0 fixture still replays green, which is the evidence that the
+success path did not move in the parser. The first live turn after the account has quota is the
+check, and it is the operator's.

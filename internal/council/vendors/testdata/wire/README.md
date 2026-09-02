@@ -34,6 +34,15 @@ from the vendor's own `--version` at capture time.
 | `cursor-agent-2026.08.04-aaa8809-turn.jsonl` | `cursor-agent` 2026.08.04-aaa8809 |
 | `cursor-agent-2026.08.04-aaa8809-load-not-found.jsonl` | `cursor-agent` 2026.08.04-aaa8809 |
 | `codex-app-server-0.149.1-turn.jsonl` | `codex-cli` 0.149.1 |
+| `codex-0.151.0-turn-failed.jsonl` | `codex-cli` 0.151.0 |
+
+**Three files pin one CLI, and that is not a stale entry.** The third,
+`codex-0.151.0-turn-failed.jsonl`, is `codex exec --json` again, on a turn that
+FAILED. It is pinned apart from the 0.147.0 turn because the build is the fact:
+through 0.147.0 a failed turn put zero bytes on stdout (the bullet below), and
+at 0.151.0 it puts a `turn.failed` line there. The sentence in that capture is
+the account's usage limit, which is why the turn failed and is not the point;
+the point is the frame. Only the thread id was sanitized.
 
 **Two files pin one CLI, and that is not a stale entry.** `codex-0.147.0-turn.jsonl`
 is `codex exec --json` — the invocation the room seated until 2026-09-02 and
@@ -138,12 +147,16 @@ What was deliberately **left verbatim**, because it is the measurement:
 **Nothing in this directory is written from documentation.** A frame that no run
 produced is recorded here as absent, not invented.
 
-- **Codex has no structured error frame.** Re-measured at 0.147.0: a resume
-  against a thread id it does not hold writes `Error: thread/resume: … no
-  rollout found … (code -32600)` to **stderr**, exits 1, and puts **zero bytes**
-  on stdout. `codex.go` says this and it is still true — the exit code and the
-  stderr tail are the whole of the failure signal, so there is no stdout shape to
-  pin.
+- **Codex had no structured error frame through 0.147.0, and has one at
+  0.151.0.** Re-measured at 0.147.0: a resume against a thread id it does not
+  hold writes `Error: thread/resume: … no rollout found … (code -32600)` to
+  **stderr**, exits 1, and puts **zero bytes** on stdout. That was the whole of
+  the failure signal at that build. At 0.151.0 (2026-09-01, Windows 11) a
+  failed turn put `{"type":"error",...}` and `{"type":"turn.failed",...}` on
+  **stdout** with an EMPTY stderr, and exited 1. The capture is
+  `codex-0.151.0-turn-failed.jsonl`, and `codex.go` parses the `turn.failed`
+  line. Whether the 0.147.0 resume-not-found path still goes to stderr at
+  0.151.0 was not re-measured; the usage limit blocked every turn that day.
 - **Grok has no structured error frame either.** Same probe, same result at
   1.0.0: a bad `--resume` id exits 1 with an empty stdout and
   `Error: Failed to restore session from remote: … 404 Not Found` on stderr.

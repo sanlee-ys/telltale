@@ -246,8 +246,20 @@ func (r *Room) Apply(ev runner.Event) bool {
 		s.Phase = PhaseDone
 		return true
 	case runner.KindError:
+		// A process exit landing on a seat the vendor already failed keeps the
+		// vendor's sentence. Only the runner's exit event carries Err, and a
+		// seat that is already failed with a note when it lands got that note
+		// from the vendor's own stream (codex's `turn.failed` at 0.151.0, agy's
+		// `status: "ERROR"`). The exit code is drawn on the head line by
+		// Render, so nothing the exit said is lost. This is the same rule as
+		// council's dispatch.go KindError branch, and the same measurement:
+		// before it, a hosted room showed `codex — failed (exit 1)` under a
+		// stream that had said "You've hit your usage limit".
+		spoke := !ev.EndsTurn && ev.Err != nil && s.Phase == PhaseFailed && s.Note != ""
 		s.Phase = PhaseFailed
-		if ev.Note != "" {
+		if spoke {
+			// keep s.Note
+		} else if ev.Note != "" {
 			s.Note = ev.Note
 		} else if ev.Err != nil {
 			s.Note = ev.Err.Error()

@@ -442,6 +442,19 @@ Nothing open. The last one here was the 44 seconds, and it was measured
 
 ## Known gaps, not yet owned
 
+- **The codex sandbox claims are pinned at 0.149.1 and the installed build
+  is 0.151.0 (2026-09-01).** The chip that traced the seat's `failed (exit 1)`
+  re-ran the three seat argv shapes at 0.151.0 and all parsed, so no flag
+  moved. It could NOT re-run the sandbox probes of [design.md
+  §9.2](docs/design.md#s9-2)'s 2026-08-29 amendment: every turn that day
+  died at the account's usage limit before a tool ran. The `ro:enforced`
+  badge on Windows therefore rests on a build two minors behind the one
+  installed. Re-run the four probes (read-only read, read-only write,
+  workspace-write `.git`, resume override) once the account has quota; the
+  commands are on the constants in `internal/council/vendors/codex.go`. The
+  0.147.0 resume-not-found stderr path is unmeasured at 0.151.0 for the same
+  reason (`vendors/testdata/wire/README.md`).
+
 - **The launch playbook's outward half is OWNER WORK and is unowned
   (2026-08-18).** [design.md §8](docs/design.md#s8)'s 2026-08-18 amendment
   records the cadence; recording it is all a session may do. Three pieces wait

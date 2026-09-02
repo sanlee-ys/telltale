@@ -1,6 +1,7 @@
 package council
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
@@ -78,9 +79,12 @@ func agyFailureEvent(t *testing.T) runner.Event {
 // settle branch was written to close for codex.
 //
 // This is the SHAPE rather than one vendor's bug: any spawn-per-turn seat whose
-// adapter reports a turn failure in-stream reaches the same branch. agy is the
-// only seat that does so today — codex and grok have no structured error frame
-// at all (vendors/testdata/wire/README.md), so their failure IS the exit.
+// adapter reports a turn failure in-stream reaches the same branch. agy was the
+// only seat that did so when this file was written; codex joined it at
+// codex-cli 0.151.0, whose `turn.failed` line the adapter now parses
+// (TestACodexFailureSentenceOutlivesTheProcessExit below). grok still has no
+// structured error frame (vendors/testdata/wire/README.md), so its failure IS
+// the exit.
 func TestAVendorReportedFailureLeavesTheRoomInFlight(t *testing.T) {
 	m := agyTurnModel(t)
 	m.applyEvents([]runner.Event{agyFailureEvent(t)})
@@ -186,4 +190,115 @@ func hintKeys(hs []hint) map[string]bool {
 		keys[h.key] = true
 	}
 	return keys
+}
+
+// codexFailedTurn is codex's own verdict on a turn that FAILED, in the shape
+// vendors/testdata/wire/codex-0.151.0-turn-failed.jsonl pins off the 2026-09-01
+// capture (codex-cli 0.151.0, Windows 11): an `error` object whose `message` is
+// the vendor's sentence, and nothing else on the line. The sentence is the
+// account's usage limit, which is why that turn failed and is not the point.
+const codexFailedTurn = `{"type":"turn.failed","error":{"message":"You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 11:45 PM."}}`
+
+// codexTurnModel is agyTurnModel with the codex seat in the chair, for the
+// same reason that helper exists: built from turnModel so the turn bookkeeping
+// cannot drift between the two files that test it.
+func codexTurnModel(t *testing.T) *Model {
+	t.Helper()
+	m := turnModel(false)
+	m.st.Mode = ModeViewing
+	m.st.Columns[0].Vendor = model.VendorCodex
+	m.st.Columns[0].Label = "Codex"
+	ts := m.turnOf(model.VendorClaude)
+	delete(ts.live, model.VendorClaude)
+	delete(m.turns, model.VendorClaude)
+	ts.live[model.VendorCodex] = true
+	m.turns[model.VendorCodex] = ts
+	return m
+}
+
+// TestACodexFailureSentenceOutlivesTheProcessExit is the defect a hosted read
+// room and a gated write room both showed on 2026-09-01: `codex — failed
+// (exit 1)` and no sentence, on a seat whose stream had said exactly what was
+// wrong.
+//
+// At codex-cli 0.151.0 a failed turn produces TWO events on a spawn-per-turn
+// seat. The vendor's `turn.failed` arrives first, as the KindError agy's shape
+// already earns (exit code 0, no error, the sentence in Note). The process
+// exit arrives second, as the runner's KindError carrying `exit status 1` and
+// an EMPTY stderr, because the vendor put its sentence on stdout. Before this
+// test the second replaced the first, so the card said `exit status 1` and the
+// diagnosis the vendor had given was gone.
+//
+// The line is parsed by the real adapter, as agyFailureEvent does, so this
+// asserts the room's handling of codex's own bytes rather than of a belief
+// about them.
+func TestACodexFailureSentenceOutlivesTheProcessExit(t *testing.T) {
+	m := codexTurnModel(t)
+	ev, ok := vendors.Codex{}.ParseEvent([]byte(codexFailedTurn))
+	if !ok || ev.Kind != runner.KindError {
+		t.Fatalf("got (%+v, %v), want a KindError", ev, ok)
+	}
+	if ev.EndsTurn || ev.ExitCode != 0 || ev.Err != nil {
+		t.Fatalf("endsTurn=%v exit=%d err=%v — the case is a failure the PROCESS has not reported", ev.EndsTurn, ev.ExitCode, ev.Err)
+	}
+	ev.Vendor = model.VendorCodex
+	m.applyEvents([]runner.Event{ev})
+
+	c := m.st.Columns[0]
+	if c.Phase != PhaseFailed {
+		t.Fatalf("phase = %v, want failed: the vendor said the turn failed", c.Phase)
+	}
+	if !c.Settling {
+		t.Error("the failed column does not say its process is still exiting")
+	}
+	want := "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 11:45 PM."
+	if c.Note != want {
+		t.Fatalf("note = %q, want the vendor's own words", c.Note)
+	}
+
+	// The exit, exactly as runner.Start builds it for a child that died 1 with
+	// nothing on stderr: failureNote returns err.Error() alone, so Note and
+	// Err carry the same three words.
+	exit := errors.New("exit status 1")
+	m.applyEvents([]runner.Event{{
+		Vendor: model.VendorCodex, Kind: runner.KindError,
+		Err: exit, Note: exit.Error(), ExitCode: 1,
+	}})
+
+	c = m.st.Columns[0]
+	if c.Note != want {
+		t.Errorf("note = %q after the exit; the process's three words replaced the vendor's sentence", c.Note)
+	}
+	if c.NoteDetail != "exit status 1" {
+		t.Errorf("detail = %q, want the exit demoted to the note's body rather than dropped", c.NoteDetail)
+	}
+	if c.Phase != PhaseFailed {
+		t.Errorf("phase = %v after the exit, want failed", c.Phase)
+	}
+	if c.Settling {
+		t.Error("a retired column still claims to be exiting")
+	}
+	if m.anyInFlight() {
+		t.Error("the process exit did not end the turn; `q` would stay refused forever")
+	}
+}
+
+// TestAProcessExitStillNamesItselfWhenTheVendorSaidNothing is the other side of
+// the guard: a seat that fails WITHOUT a vendor sentence still gets the exit's
+// own words on the card. The guard keys on a column that is already failed with
+// a note, so a bare exit on a working column is unchanged.
+func TestAProcessExitStillNamesItselfWhenTheVendorSaidNothing(t *testing.T) {
+	m := codexTurnModel(t)
+	exit := errors.New("exit status 1")
+	m.applyEvents([]runner.Event{{
+		Vendor: model.VendorCodex, Kind: runner.KindError,
+		Err: exit, Note: "exit status 1: Error: thread/resume: no rollout found", ExitCode: 1,
+	}})
+	c := m.st.Columns[0]
+	if c.Note != "exit status 1: Error: thread/resume: no rollout found" {
+		t.Errorf("note = %q, want the exit's own sentence when nothing preceded it", c.Note)
+	}
+	if c.NoteDetail != "" {
+		t.Errorf("detail = %q, want nothing: there was no vendor sentence to demote the exit under", c.NoteDetail)
+	}
 }
