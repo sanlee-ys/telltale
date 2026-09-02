@@ -17750,3 +17750,151 @@ exactly the pane's rectangle, and that the display-only marker is a word rather 
 the session that wrote this. The spawn guard makes that impossible from inside the suite by
 design, and it is the same class of debt as the host's first live turn ([STATE.md](../STATE.md)):
 an operator-driven check, owed and named rather than implied.
+
+<a id="s9-54"></a>
+
+### 9.54 three seats stay up between briefs, on a reading rather than a run (2026-09-02)
+
+Until this change the room kept exactly two processes alive across turns: the Claude seat
+(`claude -p --input-format stream-json`, §9.8, measured) and the Cursor seat (`cursor-agent acp`,
+§9.36, measured). Codex, Antigravity and Grok each paid a whole process per brief — `codex exec
+--json`, `agy -p`, `grok --single=` — and two of those cold starts were measured on the reference
+box at **5.6 s** (Cursor, before §9.36) and **6.4 s** (Antigravity). A crew tool that dispatches a
+brief every few minutes spends most of a seat's wall clock on startup that way, and a seat that
+starts fresh every turn has no channel on which to be asked anything. This section records the
+move of all three to long-lived processes, what each was built from, and — the part that matters
+more — the fact that **none of the three shapes has been driven from this repository.** Every
+badge on those columns says `unmeasured` and names the version it was read at, and the checklist
+at the end is the price of removing the word.
+
+**This is a departure from §9.50's ruling and says so.** §9.50 left the codex app-server protocol
+unseated because a read-posture turn on it was measured failing to inspect in two of three arms,
+and named the read posture's liveness as the measurement owed before any flip. That measurement
+has not been made. The seat moved anyway, on the crew ledger above, with three things holding the
+honesty line: the measured batch invocation stays one step away as the fallback, the seat owns
+its own kill, and the badge says what nobody has watched. The owed measurement is now the FIRST
+item of the checklist rather than a precondition, and that ordering is a decision, recorded here
+so nobody reads the registry and assumes the debt was paid.
+
+#### What was built, and from which pages
+
+| seat | live shape | fallback (measured) | built from |
+|---|---|---|---|
+| Codex | `codex app-server`, one process, `thread/start{cwd, sandbox, approvalPolicy}`, `turn/start` per turn, `item/*/requestApproval` answered through the room's card | `codex exec --json` (codex.go, 0.149.1) | the protocol capture of §9.50 at **0.149.1**; the app-server README on `openai/codex` main and `app-server-protocol/src/protocol/v2/{shared,item}.rs`, read 2026-09-02, for the `approvalPolicy` enum (`untrusted`, `on-request`, `never`), the v2 decision enum (`accept`, `acceptForSession`, `decline`, `cancel`), the approval params (`itemId`, `command`, `cwd`, `reason`, `grantRoot`), and `turn.status: "interrupted"`. Installed build **0.152.1**, undriven |
+| Grok | `grok agent stdio`, the ACP client of §9.36 under a second dialect, `session/new{cwd}`, `session/prompt` per turn, `session/request_permission` answered by kind through the room's card | `grok --single=` (grok.go, 1.0.4) | docs.x.ai/build/cli/headless-scripting and zed.dev/acp/agent/grok-build, read 2026-09-02, for the subcommand and the `--cwd` / `--resume` flags this seat deliberately does not pass; agentclientprotocol.com/protocol/schema for `loadSession`, the option `kind` values and the `cancelled` outcome. Grok Build **1.0.13**, undriven |
+| Antigravity | `agy --input-format stream-json --output-format stream-json`, one process, `{"event":"user","message":{"content":…}}` per turn, `result` ends the turn | `agy -p` (agy.go, 1.1.13) | antigravity.google/docs/cli/headless and the changelog entry for **1.1.15** (2026-08-19), read 2026-09-02, for the flag, the envelope, "one turn per message in a single conversation", and "close stdin … the process exits after the input pipe is closed and the current turn completes". Installed build **1.1.24**, undriven |
+
+Three shapes in the package carry the move:
+
+- **`vendors.LiveFallback`** names the measured batch adapter behind each live seat.
+  `FallbackRegistry()` is the whole room after a retreat, and it exists so that state can be
+  constructed rather than scripted — the give-up and re-send suites build "an ordinary one-shot
+  seat" from it, because the default registry no longer drives one. `Registry` became a var for
+  that reason, on the spawn vars' precedent.
+- **`vendors.GracefulStop`** is the seat owning its kill. §9.50 measured a closed stdin NOT
+  reliably ending `codex app-server` (four exits in 1.5–3.3 s, one alive at 15 s), so the
+  app-server protocol's `Closing()` cancels any held approval and interrupts an open turn,
+  `Grace()` bounds the wait at 4 s, and the runner's job-object kill is unchanged behind both.
+  The ACP client and the Antigravity seat implement the same pair.
+- **`acpDialect`** is everything the shared ACP client may vary per vendor, and it is three
+  fields: the read-posture mode id (cursor: `plan`, measured; grok: none), whether permission
+  answers use the measured option spelling or pick by kind from the request (cursor: fixed; grok:
+  by kind, `cancelled` when the kind is not offered), and whether `session/load` waits for the
+  server to advertise it (grok only). `cursoracp.go` is `acp.go` now, with every measured
+  sentence intact.
+
+**Codex's approval policy is a choice, and the alternative is named.** Read posture asks for
+`never`; write postures ask for `on-request`, the vendor's own interactive default, under the
+`workspace-write` sandbox — so the vendor asks when it wants more than the sandbox allows and the
+room cards that. `untrusted` would ask about every command off the vendor's trusted list, and the
+pages read for this do not say whether a command approved under it then runs outside the sandbox.
+A policy that might trade the sandbox for a keystroke is not one to adopt unmeasured. The gated
+posture never reaches the seat as itself: `spawnPosture` collapses it to write for every
+Conversational seat, and whether a request becomes a card or an automatic yes is the room's
+decision when one arrives.
+
+**Two things the codex badge did, in opposite directions.** On Windows the read level HOLDS at
+`ro:enforced`, because the same 0.149.1 session measured the sandbox on the app-server path — a
+write through cmd.exe denied with no file on disk — and the detail now carries that path's
+sharper liveness residual. Off Windows the level DROPS to `ro:requested`: the macOS enforcement
+was `codex exec`'s (2026-08-05, 0.146.0), every app-server arm ran on Windows, and a seat move
+re-measures rather than inherits. That is the one badge this change lowered.
+
+**What is unchanged, stated so it is not inferred.** `canGate` still names one seat. Two more can
+now be ASKED — a request the vendor raises reaches a person — and neither has a coverage
+measurement, so both stay `WRITES` with `asks · unmeasured` where the argument lives. Grok's cost
+figure comes only from the `--single` fallback: the ACP prompt response is `{stopReason, _meta?}`
+and nothing read says what grok puts in `_meta`, so on the ACP seat cost renders **absent**,
+never zero. Antigravity's `--conversation` on the stream argv is unmeasured for composition, and
+the §9.43 fork tell is what makes sending it safe: the seat implements `SilentResumeFork`, so the
+room compares the id it asked for against the id `init` reports.
+
+**What the core does not do yet, and the patch that would.** Nothing in `persistent.go` or
+`dispatch.go` reads `LiveFallback` or `GracefulStop` today: a refused handshake ends the turn
+visibly and the next brief respawns the same shape, and teardown is still one `Kill`. The
+research memo for this change carries the unified diff — a `fellBack` set on the model, a
+`liveSeat` that consults it, `handTurnToSeat` retreating on `Dead()`, a `CloseInput` on
+`runner.Session` so the grace period has a pipe to close, and the badge reading
+`seatShape(v, fellBack)`. It was written as a patch rather than applied because those files were
+being refactored in a sibling lane at the time.
+
+#### The live measurements owed, as a checklist
+
+Each item names the command to run on the reference box and the sentence it would let the badge
+change. Capture the wire under `vendors/testdata/wire/<vendor>-<version>-<arm>.jsonl` per the
+README there; a claim that is not captured is not made.
+
+- [ ] **Codex, read liveness (the §9.50 debt).** `codex --version`; then, through the seat's own
+  argv (`telltale council --read` with only codex seated, or a driver issuing `initialize`,
+  `thread/start{sandbox:"read-only",approvalPolicy:"never"}`), a brief that lists the workspace
+  and reads one file. Three trials. Passes when every trial inspects. Until then the Windows
+  detail keeps "two of three read turns".
+- [ ] **Codex, the approval flow, both branches.** A write-posture thread (`workspace-write`,
+  `on-request`) asked to write OUTSIDE the workspace and to reach the network: does
+  `item/commandExecution/requestApproval` or `item/fileChange/requestApproval` arrive, does the
+  vendor BLOCK until answered, does `accept` run it and `decline` stop it, and does the file
+  land or not. This is what lets `asks · unmeasured` become `asks · measured`.
+- [ ] **Codex, `turn/interrupt` and teardown order.** Interrupt a running turn: does
+  `turn/completed` arrive with `status: "interrupted"`; then `Closing()` + stdin close: how long
+  until exit, across five runs, against the 4 s grace.
+- [ ] **Codex, macOS.** The read sandbox on the app-server path, on the Mac, before the
+  off-Windows badge may return to `ro:enforced`. Record in PARITY.md.
+- [ ] **Codex, the exec fallback trigger.** Run the seat against a build without `app-server`
+  (or an unauthenticated one) and watch what the room shows; this is the arm the core patch is
+  for.
+- [ ] **Grok, the handshake and a turn.** `grok --version`; `grok agent stdio` driven with the
+  seat's own `initialize` and `session/new{cwd}`: what `agentCapabilities` advertises
+  (`loadSession` above all), whether `modes` names a plan mode, and a fenced brief streaming
+  back. Also whether a brief beginning `/` is eaten on this path as it is on `--single`.
+- [ ] **Grok, a permission request.** A write-posture session asked to run a command off the
+  allowlist and to write a file: does `session/request_permission` arrive for either, what
+  `optionId`s and `kind`s it offers, and do `allow_once` and `reject_once` do what they say.
+- [ ] **Grok, cost.** Whether anything on the ACP wire — the prompt response's `_meta`, a
+  `session/update` variant — carries `total_cost_usd`. Until it does, the ACP seat shows no cost
+  and the badge says why.
+- [ ] **Grok, `session/load`.** A saved id reloaded in a new process, if `loadSession` is
+  advertised; the refusal shape if it is not held.
+- [ ] **Antigravity, the stream handshake.** `agy --version`; two turns down one stdin with the
+  seat's own argv: same pid, same `conversation_id` on both `result` events, and the second turn
+  answering a question only the first could. Then close stdin and time the exit against the 3 s
+  grace.
+- [ ] **Antigravity, `--conversation` under stream input.** Resume a saved id: same id back
+  (resumed), a different id back (the §9.43 fork, on this path), or a refusal.
+- [ ] **Antigravity, `--print-timeout` under stream input.** Whether 30m bounds each turn or the
+  whole process. A per-process bound ends the seat half an hour into a room.
+- [ ] **Antigravity, the fallback trigger.** The exact exit code and stderr line a build without
+  `--input-format` produces, so the core patch can match it rather than infer it.
+
+#### Verification
+
+No vendor was started. `go test ./internal/council/vendors -count=1` and the same with `-race`
+pass over synthesized fixtures: the app-server handshake, both approval methods answered each way
+in both vocabularies, the interrupt cancelling held approvals first, `Closing()` in order and
+silent when idle, every fallback trigger reported by `Dead()`, the approval policy per posture;
+the grok dialect's handshake, its `loadSession` gate against the cursor dialect's measured
+behaviour, a permission answered by kind and cancelled when the kind is absent, the read
+posture's own refusal, interrupt and closing order, no cost on the prompt response; the
+Antigravity stream's argv, envelope, `result` ending the turn, the fork fixture replayed, and its
+refusals. `internal/council/seatshape_test.go` pins every badge word and the fallback registry.
+`go vet ./...`, `GOOS=windows GOARCH=amd64 go build ./...` and `GOOS=darwin GOARCH=arm64 go build
+./...` are clean. The `help-postures` golden moved by exactly the codex detail's new sentences.
