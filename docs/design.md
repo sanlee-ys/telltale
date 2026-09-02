@@ -17383,6 +17383,13 @@ would have to be taught on the help panel and would be a second way to spend a s
 that the operator has not asked for; the flag is a decision made once, at the point where the
 room is opened, and that is the right place for a control that doubles a bill.
 
+**Nothing types into the pane either.** `PTYSession.Write` exists because the pseudoconsole's
+input pipe exists whether or not anybody writes to it, and no council code calls it. So the
+first cut is a WINDOW, not a terminal: the operator watches the agent's own screen and answers
+it, when it asks something, in the seat's structured column beside it. Sending keystrokes needs
+a key encoding, a focus rule and an answer to what `q` means while a pane has the keyboard, and
+none of those is a display question. Owed, and named here rather than half-built.
+
 #### Verification
 
 `go vet ./...` clean, `go build`, and `go test ./internal/council -timeout 20m`. The live seat's
