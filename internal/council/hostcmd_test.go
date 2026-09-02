@@ -167,6 +167,49 @@ func TestCouncilLsLeavesAStaleHostFileAlone(t *testing.T) {
 	}
 }
 
+// TestTheHostSpawnGuardIsArmed proves the wrap actually fires.
+//
+// It is the same assertion internal/councilhost makes about its own guard, and
+// it earns its place for the same reason: a wrap that silently stopped panicking
+// would leave every future test free to start a process that spawns billed
+// vendor turns, and nothing would say so. CI cannot notice — CI has no vendors,
+// so the host it started would dispatch to nobody and the run would go green.
+//
+// countSpawns is NOT called here. That is the point: this is the unstubbed path.
+func TestTheHostSpawnGuardIsArmed(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("startHostedRoom did NOT panic. That call starts telltale's own binary, " +
+				"which resolves on any machine that built it, and the process it starts " +
+				"spawns real vendor CLIs two processes away from this test.")
+		}
+		if msg, _ := r.(string); !strings.Contains(msg, "REAL council host") {
+			t.Fatalf("the guard panicked with something else: %v", r)
+		}
+	}()
+	_, _ = startHostedRoom(councilhost.ClientConfig{Workspace: t.TempDir(), RoomKey: "guard-probe"})
+}
+
+// TestTheJoinGuardLetsADeadPipeThrough is the guard's other half, and it is the
+// half that keeps the rule honest.
+//
+// A pipe name nothing is listening on reaches nothing and costs nothing, so it
+// is let through to the real call and fails there — exactly the bargain
+// refuseRealVendor strikes with a binary exec cannot find. Without this, the
+// join guard would be an unconditional refusal wearing a rule's clothes, and the
+// tests that want to exercise the could-not-join branch would have nowhere to
+// stand.
+func TestTheJoinGuardLetsADeadPipeThrough(t *testing.T) {
+	_, err := joinHostedRoom(councilhost.JoinConfig{
+		PipeName:    councilhost.PipeName("telltale-guard-probe-nothing-listens-here"),
+		DialTimeout: 10 * time.Millisecond,
+	})
+	if err == nil {
+		t.Fatal("joining a pipe nothing is listening on succeeded")
+	}
+}
+
 // TestRoomKeyIsStableAndHidesTheWorkspace.
 //
 // Two claims, and both are load-bearing. STABLE, because two spellings of one

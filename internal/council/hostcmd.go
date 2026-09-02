@@ -28,6 +28,38 @@ import (
 // direction §7.28's last limitation says the next slice travels in, when
 // council's own Model becomes the client's renderer.
 
+// startHostedRoom and joinHostedRoom are this package's route to a host, and
+// they are vars for one reason: the test guard.
+//
+// # main_test.go's own note asked for exactly this
+//
+// council's TestMain says, of internal/councilhost's guard: "Nothing in package
+// `council` reaches that host, so `countSpawns` below needs no entry for it. If
+// that ever changes — if the room here grows a path that starts or joins a host
+// — the var behind it belongs in this wrap and in countSpawns, in the same
+// change." design.md §7.29 is that change, so these are those vars.
+//
+// The hole they close is real and it is two processes deep.
+// internal/councilhost's TestMain wraps `startHost` for THAT package's test
+// binary. `go test ./internal/council` is a different binary, `startHost` is
+// unexported, and nothing there wraps it — so a council test that reached
+// StartHosted would start a real `telltale.exe council host`, which resolves on
+// any machine that built it, and that process would then spawn real vendor CLIs
+// against the operator's account. CI cannot catch it: CI has no vendors, so the
+// host it started would sit there dispatching to nobody and the run would go
+// green.
+//
+// JOINING is guarded too, and it is not a spawn. It reaches a host that is
+// ALREADY holding vendor processes, and every turn a test then dispatched would
+// be billed by seats this package never started. The guard's rule is the same
+// question the operating system is about to ask, phrased for a pipe: a name
+// that does not exist reaches nothing and is let through to fail, and a name
+// that DOES exist is a live room about to take a turn.
+var (
+	startHostedRoom = councilhost.Open
+	joinHostedRoom  = councilhost.Join
+)
+
 // ErrRoomHeld is returned when a host is running and another client is in it.
 //
 // A SENTINEL rather than a message, because the caller has already printed the
@@ -112,7 +144,7 @@ func Rejoin(in io.Reader, out io.Writer) (HostedOutcome, error) {
 		return HostedNotTaken, nil
 	}
 
-	c, err := councilhost.Join(councilhost.JoinConfig{PipeName: rep.File.Pipe})
+	c, err := joinHostedRoom(councilhost.JoinConfig{PipeName: rep.File.Pipe})
 	if err != nil {
 		// The probe said live and the connection says otherwise. That window is
 		// real — a host can end between the two — and it is reported as what it
@@ -159,7 +191,7 @@ func StartHosted(opts Options, in io.Reader, out io.Writer) error {
 		fmt.Fprintln(out)
 	}
 
-	c, err := councilhost.Open(councilhost.ClientConfig{
+	c, err := startHostedRoom(councilhost.ClientConfig{
 		Workspace: ws,
 		RoomKey:   councilhost.RoomKey(ws),
 		Seats:     hostSeatVendors(Detect(), seats),
