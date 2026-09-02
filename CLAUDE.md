@@ -94,9 +94,29 @@ Traps, in order of how often they bite:
 
 `go test ./internal/council` must not start a vendor CLI, and this is enforced
 mechanically rather than by convention. `internal/council/main_test.go`'s
-`TestMain` wraps the package's three spawn vars (`startProcess`, `startSession`,
-`startRPCSession`) so that reaching one with a binary this machine can actually
-resolve **panics**, naming the call site and the full argv.
+`TestMain` wraps the package's four vendor spawn vars (`startProcess`,
+`startSession`, `startRPCSession`, `startPTYSession`) so that reaching one with a
+binary this machine can actually resolve **panics**, naming the call site and the
+full argv. `startEditor` and `startCheck` are wrapped there too, on the same rule
+for programs that are not vendors, and `startHostedRoom` and `joinHostedRoom`
+(design.md §7.29) are wrapped there too, which makes **eight** in all.
+
+The last two are not vendor spawns and they are the sharpest of the eight.
+`telltale council --host` starts a HOST — telltale's own binary, which resolves
+on any machine that built it — and that process then spawns real vendors two
+processes away from whatever assertion provoked it. `telltale council` finding a
+live room JOINS one, which starts nothing and reaches a host that is *already*
+holding vendor processes, so a turn dispatched through it is billed by seats
+this package never started. `internal/councilhost` has a `TestMain` of its own
+over three vars, and it covers ITS test binary only: `go test ./internal/council`
+is a different binary and `startHost` is unexported there, so nothing in that
+guard reaches a spawn made from here.
+
+`startPTYSession` is the live seat (design.md §9.53) and it is guarded with no
+softening. Its output is display only — the pane draws a screen and no gauge
+reads it — and that is a claim about what the room may DRAW, not about what the
+process costs. A pseudoconsole child is `claude` running interactively on the
+operator's own account.
 
 The rule exists because the opposite default was measured costing real money. A
 plain suite run on a Windows box with Codex installed was starting
@@ -109,7 +129,7 @@ A green pipeline over a local-only defect is exactly what a guard is for.
 Two consequences when you write a council test:
 
 - **Dispatching for real means stubbing.** Call `countSpawns(t)`
-  (`flow_security_test.go`) — it stubs all three vars and restores them in
+  (`flow_security_test.go`) — it stubs all eight vars and restores them in
   `t.Cleanup`. Anything that builds an `AvailInstalled` column with a real
   binary name and then reaches `dispatch()` needs it.
 - **A deliberately unspawnable binary is still allowed through.** Several tests

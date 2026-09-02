@@ -181,7 +181,20 @@ func TestMain(m *testing.M) {
 		return realCheck(ctx, tree, argv)
 	}
 
-	// The sixth and seventh, added with design.md §7.29 and explained at length
+	// The live seat (design.md §9.53) is the SIXTH spawn, and it is guarded on
+	// the same rule as the three above with no softening. Its output is display
+	// only — the pane renders a screen and no gauge reads it — and that is a
+	// claim about what the room may DRAW, not about what the process costs. A
+	// pseudoconsole child is `claude` running interactively on the operator's
+	// own account, and a spawn that escaped this wrap would let a suite run
+	// start one.
+	realPTY := startPTYSession
+	startPTYSession = func(ctx context.Context, spec runner.Spec, cols, rows int, out chan<- runner.PTYChunk) (runner.PTYSession, error) {
+		refuseRealVendor("startPTYSession", spec)
+		return realPTY(ctx, spec, cols, rows, out)
+	}
+
+	// The SEVENTH and EIGHTH, added with design.md §7.29 and explained at length
 	// above. Starting a host starts telltale's own binary, which resolves on any
 	// machine that BUILT it — so unlike a vendor there is no machine where this
 	// one is harmlessly absent, and the process it starts spawns real vendors two
@@ -201,7 +214,7 @@ func TestMain(m *testing.M) {
 				"  room key:  %s\n"+
 				"  seats:     %v\n"+
 				"Stub the spawn vars in this test — countSpawns(t) in "+
-				"flow_security_test.go does all seven.",
+				"flow_security_test.go does all eight.",
 			cfg.Workspace, cfg.RoomKey, cfg.Seats))
 	}
 	joinHostedRoom = func(cfg councilhost.JoinConfig) (*councilhost.Client, error) {
@@ -217,7 +230,7 @@ func TestMain(m *testing.M) {
 					"this package never started.\n"+
 					"  pipe: %s\n"+
 					"Stub the spawn vars in this test — countSpawns(t) in "+
-					"flow_security_test.go does all seven.",
+					"flow_security_test.go does all eight.",
 				cfg.PipeName))
 		}
 		return realJoinHost(cfg)
@@ -353,7 +366,7 @@ func refuseRealCheck(tree string, argv []string) {
 			"  args: %q\n"+
 			"  dir:  %s\n"+
 			"Stub the spawn vars in this test — countSpawns(t) in "+
-			"flow_security_test.go does all four.",
+			"flow_security_test.go does all of them.",
 		argv, tree))
 }
 
@@ -374,6 +387,6 @@ func refuseRealVendor(site string, spec runner.Spec) {
 			"  args:   %q\n"+
 			"  dir:    %s\n"+
 			"Stub the spawn vars in this test — countSpawns(t) in "+
-			"flow_security_test.go does all three.",
+			"flow_security_test.go does all of them.",
 		site, spec.Binary, spec.Args, spec.Dir))
 }

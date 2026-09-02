@@ -670,6 +670,19 @@ func columnCell(st State, c Column, f seatFocus, hint []string, w, h int, sty St
 		chrome = chrome[:h]
 	}
 
+	// A live seat's BODY is another program's screen, and it has its own render
+	// path (§9.53, liveview.go). The chrome above is untouched and that is the
+	// display-only contract seen from here: the name, the posture badges and the
+	// gate card are still the adapter's claims, and nothing in the grid below
+	// can reach them.
+	//
+	// It branches after the chrome rather than before it so there is exactly one
+	// place a column's top is built. A second copy of that block for the live
+	// pane is how a badge stops appearing on one seat and nobody notices.
+	if st.Live.On(c.Vendor) {
+		return liveCell(st, chrome, w, h, sty, g)
+	}
+
 	// The CHROME above renders with the room's own set and the body with the
 	// seat's, which is the whole shape of §9.27's demotion. A posture badge, a
 	// gate card and a seat's name are claims about the seat rather than reading
