@@ -43,15 +43,22 @@ import (
 //
 // The bar every fixture in this directory has to clear (ADR-001, design.md
 // §4a.1): **a frame that could not be captured is NOT written from
-// documentation.** Three of the five seats have no structured error frame at
-// all — that is a measurement, recorded in the README as a measurement, and
-// there is no invented `turn.failed` line anywhere in this directory.
+// documentation.** Two of the five seats have no structured error frame at
+// all — that is a measurement, recorded in the README as a measurement. The
+// `turn.failed` line in this directory is a capture, not an invention: codex
+// had no such line through 0.147.0 and grew one by 0.151.0, and the fixture
+// that holds it is pinned to the build that produced it.
 const (
-	claudeWireVersion = "2.1.226"            // claude --version
-	codexWireVersion  = "0.147.0"            // codex --version -> codex-cli 0.147.0
-	agyWireVersion    = "1.1.11"             // agy --version
-	grokWireVersion   = "1.0.4 (d846eb93d9)" // grok --version
-	cursorWireVersion = "2026.08.04-aaa8809" // cursor-agent --version
+	claudeWireVersion = "2.1.226" // claude --version
+	codexWireVersion  = "0.147.0" // codex --version -> codex-cli 0.147.0
+	// codexFailedWireVersion pins the FAILED `codex exec --json` turn, which
+	// is a third surface of the same CLI rather than a stale entry: the
+	// 0.147.0 file above is a turn that answered, and this build is the first
+	// at which a turn that failed put anything on stdout at all.
+	codexFailedWireVersion = "0.151.0"            // codex --version -> codex-cli 0.151.0
+	agyWireVersion         = "1.1.11"             // agy --version
+	grokWireVersion        = "1.0.4 (d846eb93d9)" // grok --version
+	cursorWireVersion      = "2026.08.04-aaa8809" // cursor-agent --version
 	// The codex seat now has TWO pinned builds, and that is not a stale entry
 	// above: they pin different SURFACES of one CLI. `codex-0.147.0-turn.jsonl`
 	// is `codex exec --json`, the invocation the room seats; this one is
@@ -508,5 +515,37 @@ func TestCodexAppServerWireIsPinnedAt_0_149_1(t *testing.T) {
 	}
 	if p.limits == nil || p.limits.Primary == nil || p.limits.Primary.WindowDurationMins == 0 {
 		t.Errorf("account/rateLimits/updated stopped carrying a quota window: %+v", p.limits)
+	}
+}
+
+// TestCodexFailedTurnWireIsPinnedAt_0_151_0 replays a real `codex exec --json`
+// turn that FAILED. Four frames: thread.started, turn.started, an `error` line
+// and a `turn.failed` line carrying the same sentence, then exit 1 with an
+// EMPTY stderr. Exactly one failure event comes out — the verdict, not the
+// `error` line beside it — and it carries the vendor's sentence, so the room's
+// card can say it instead of `exit status 1`.
+func TestCodexFailedTurnWireIsPinnedAt_0_151_0(t *testing.T) {
+	p := replay(Codex{}, wireFixture(t, "codex-"+codexFailedWireVersion+"-turn-failed.jsonl"))
+
+	if p.sessionID == "" {
+		t.Error("no thread id came out of thread.started; a failed turn still opens a thread")
+	}
+	if p.body != "" {
+		t.Errorf("a failed turn streamed body text %q; nothing on the wire was an answer", p.body)
+	}
+	var fails int
+	for _, ev := range p.events {
+		if ev.Kind == runner.KindError {
+			fails++
+			if !strings.HasPrefix(ev.Note, "You've hit your usage limit.") {
+				t.Errorf("failure note = %q, want the vendor's own sentence", ev.Note)
+			}
+		}
+	}
+	if fails != 1 {
+		t.Errorf("%d failure events, want exactly 1: turn.failed is the verdict and `error` is not a second one", fails)
+	}
+	if p.last(runner.KindMeta) != nil {
+		t.Error("a turn.completed marker came out of a turn that failed")
 	}
 }

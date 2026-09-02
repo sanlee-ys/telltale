@@ -13,7 +13,13 @@ import (
 //
 // Everything below was verified against codex-cli 0.146.0 on 2026-08-04 by
 // running the real binary and reading its actual output, not by reading flag
-// names. That distinction earned its keep on the Claude adapter, where
+// names. The three argv shapes were re-run against codex-cli 0.151.0 on
+// 2026-09-01 (the turn.failed paragraph on codexLine holds that capture): the
+// first turn in both postures and the resume each passed argument parsing and
+// produced `thread.started`, so no flag moved between 0.149.1 and 0.151.0. The
+// SANDBOX claims below were NOT re-measured on that run and stay pinned at
+// 0.149.1: every turn that day died at the account's usage limit before a
+// tool could be asked for. That distinction earned its keep on the Claude adapter, where
 // `--allowedTools` was specified as the read-only mechanism on the strength of
 // its name and the official docs, and turned out to pre-approve tools rather
 // than remove them. A flag's name is not evidence of its effect.
@@ -316,15 +322,52 @@ func (c Codex) NextTurn(prompt, workspace, binary, sessionID string, p Posture) 
 //     CostUSD stays nil for this vendor forever. Deriving a dollar figure from
 //     tokens is on the rejected list — a made-up number rendered next to a real
 //     one is exactly the failure this product refuses.
-//   - No error event. A failing turn was observed to write to stderr and exit
-//     non-zero with NOTHING on stdout (a bad resume id gives
-//     `Error: thread/resume: ... no rollout found`, exit 1). runner already
-//     turns that into a KindError from the exit code and stderr tail, so there
-//     is no stdout error shape to model. If codex later grows a `turn.failed`
-//     event it will be dropped here, and the exit code will still carry it.
+//   - No error event, UNTIL codex-cli 0.151.0. Through 0.147.0 a failing turn
+//     was observed to write to stderr and exit non-zero with NOTHING on stdout
+//     (a bad resume id gives `Error: thread/resume: ... no rollout found`,
+//     exit 1), and runner turned that into a KindError from the exit code and
+//     the stderr tail. The paragraph that stood here said a `turn.failed`
+//     event would be dropped and the exit code would still carry it. The
+//     first half came true. The second half is the defect this struct closes.
+//
+// MEASURED 2026-09-01, codex-cli 0.151.0, Windows 11, from a scratch directory
+// with the seat's exact argv (both postures and the resume shape), the prompt
+// on stdin. Every turn ended the same way, and stderr was EMPTY:
+//
+//	{"type":"thread.started","thread_id":"01a05fe0-eeab-7773-81a7-4af560cfa4e1"}
+//	{"type":"turn.started"}
+//	{"type":"error","message":"You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 11:45 PM."}
+//	{"type":"turn.failed","error":{"message":"You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 11:45 PM."}}
+//	(exit 1)
+//
+// The failure sentence now rides STDOUT as JSON, and the stderr tail the
+// runner keeps for the card holds nothing. Dropping the line left the room
+// with a bare `exit status 1` on a seat that had said exactly what was wrong.
+// That is how this surfaced: a hosted read room and a gated write room both
+// showed `codex — failed (exit 1)` and no sentence. `turn.failed` is
+// therefore parsed, and its sentence is the card's note.
+//
+// `error` is NOT parsed, on purpose. In the capture it always paired with a
+// `turn.failed` that carried the same text, and whether a lone `error` line
+// means the turn is over is unmeasured. A column marked failed on an event
+// that may be a recoverable hiccup would be the room inventing the verdict.
+// `turn.failed` IS the verdict.
+//
+// The failure is left Unclassified. runner.FailureClass is grounded in strings
+// captured off a run that positively never reached the conversation, and a
+// usage-limit refusal says nothing either way about the thread: the resume
+// shape produced `thread.started` with the requested id and then died the
+// same way. Whether a room may keep a restored thread across that is a resume
+// ruling (ADR-008, sixteenth amendment), and it is not made here.
 type codexLine struct {
 	Type     string `json:"type"`
 	ThreadID string `json:"thread_id"`
+	// Error is turn.failed's payload, captured at 0.151.0 as
+	// `"error":{"message":"..."}`. Only the message is modelled, because
+	// nothing else was on the line.
+	Error struct {
+		Message string `json:"message"`
+	} `json:"error"`
 
 	// item.started / item.completed
 	Item struct {
@@ -479,6 +522,23 @@ func (Codex) ParseEvent(line []byte) (runner.Event, bool) {
 			}
 			return runner.Event{Kind: runner.KindActivity, Acts: []runner.ActCall{act}}, true
 		}
+	case "turn.failed":
+		// The vendor's own verdict on the turn, in its own words. Captured at
+		// codex-cli 0.151.0 (see codexLine). Through 0.147.0 the failure was
+		// stderr plus an exit code, and this line did not exist.
+		//
+		// The SHAPE is agy's (vendors/agy.go): a KindError with exit code 0, no
+		// error and no EndsTurn, because the process has not exited yet. That
+		// puts it on the branch failedturn_test.go pins. The column settles at
+		// the vendor's sentence and the exit still retires it. What the exit
+		// must NOT do is replace this sentence with its own `exit status 1`.
+		// dispatch.go's KindError branch demotes the exit to the note's detail
+		// line when the vendor has already spoken.
+		note := "the vendor reported the turn failed"
+		if cl.Error.Message != "" {
+			note = cl.Error.Message
+		}
+		return runner.Event{Kind: runner.KindError, Note: note}, true
 	case "turn.completed":
 		// The end-of-turn marker. It carries no text and no cost: codex reports
 		// only token counts, so unlike the Claude adapter there is no final-text

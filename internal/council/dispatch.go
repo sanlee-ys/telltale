@@ -1231,9 +1231,30 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			// found with session ID`. Both are true; only one of them tells the
 			// user what to do, and the raw one reads as a broken vendor.
 			if !m.threadLost[ev.Vendor] {
-				if ev.Note != "" {
+				switch {
+				case !ev.EndsTurn && ev.Err != nil && c.Phase == PhaseFailed && c.Note != "":
+					// The process exit of a seat whose VENDOR already said why.
+					// Only the runner's exit event carries Err, and the only way
+					// a column is already failed with a note when that exit
+					// lands is a failure the vendor reported in its own stream
+					// (agy's `status: "ERROR"`, codex's `turn.failed` since
+					// 0.151.0). The vendor's sentence is the diagnosis and the
+					// exit is the mechanics, so the exit goes to the detail
+					// line rather than over the title. MEASURED 2026-09-01 at
+					// codex-cli 0.151.0: the stream said "You've hit your usage
+					// limit ..." with an empty stderr, and the exit that
+					// followed said `exit status 1`. Before this case the
+					// second line replaced the first, and both rooms showed a
+					// seat that had fallen over for no stated reason.
+					if c.NoteDetail == "" {
+						c.NoteDetail = ev.Note
+						if c.NoteDetail == "" {
+							c.NoteDetail = ev.Err.Error()
+						}
+					}
+				case ev.Note != "":
 					c.Note = ev.Note
-				} else if ev.Err != nil {
+				case ev.Err != nil:
 					c.Note = ev.Err.Error()
 				}
 			}
