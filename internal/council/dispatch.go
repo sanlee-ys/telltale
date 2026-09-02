@@ -216,6 +216,13 @@ func (m *Model) dispatch() tea.Cmd {
 		m.st.Notice = "a race is already being prepared — ctrl+c stops it"
 		return nil
 	}
+	if m.seatPrep != nil {
+		// The same window for a seat's worktree being cut (seattree.go,
+		// §9.55): the brief it stands in front of has not spawned, and a
+		// second dispatch would cut names from the same repository under it.
+		m.st.Notice = "worktrees are being prepared for a brief — ctrl+c stops it"
+		return nil
+	}
 	activeFlow := m.flowChain != nil && m.flowChain.Current() != nil && m.flowDraft != ""
 	if m.st.Draft == "" && !activeFlow {
 		m.st.Notice = "nothing to dispatch: the brief is empty"
@@ -437,7 +444,16 @@ func (m *Model) dispatch() tea.Cmd {
 		// for a race the room was going to turn down anyway.
 		return m.beginArenaSetup(route, prompt)
 	}
-	return m.sendTurn(route, prompt, nil)
+	// A writing brief in a writing room may need a seat's worktree cut before
+	// it spawns (seattree.go, §9.55). The cut runs off the loop, exactly as a
+	// race's does, and the brief is sent when it lands; a seat that already
+	// has its tree — every turn after its first — spawns here, synchronously,
+	// as it always did.
+	launch := func() tea.Cmd { return m.sendTurn(route, prompt, nil) }
+	if need := m.seatsNeedingTrees(route); len(need) > 0 {
+		return m.beginSeatSetup(need, launch)
+	}
+	return launch()
 }
 
 // busySeats names every seat still answering, with the turn it is on, in the
@@ -686,6 +702,14 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 		if quoting {
 			vendorPrompt = BuildRebuttalPrompt(prompt, *c, priorReplies)
 		}
+		// Where this seat's process is about to run, stamped on the column
+		// (seattree.go, §9.55) — the badge that says which containment holds.
+		// Stamped before the spawn, from the same read the spawn uses
+		// (seatDir), so the two cannot disagree. A racer's is its arena tree,
+		// stamped below once that tree is known to exist.
+		if !ts.arena {
+			c.Containment = m.containmentFor(c.Vendor)
+		}
 
 		// A seat with a long-lived process is handed the turn on the stdin it
 		// already has open. A seat without one pays a fresh spawn, as before.
@@ -717,6 +741,7 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 				failures = append(failures, dispatchFailedMsg{c.Vendor, "arena: " + why})
 				continue
 			}
+			c.Containment = ContainClaim{Level: ContainSeatTree, Branch: arenaBranch(ts.arenaRaceN, c.Vendor)}
 			// The one turn shape where the room adds words to a brief. Every
 			// racer gets the SAME constant line ahead of the same brief, so
 			// the comparison the race exists for is untouched — see
@@ -1057,9 +1082,12 @@ func itoa(i int) string { return strconv.Itoa(i) }
 // inspect an invocation. What the caller does with it is §9.43's comparison.
 func (m *Model) specFor(v vendors.Vendor, c *Column, prompt string) (runner.Spec, string, error) {
 	p := m.posture()
+	// The directory the process runs in: the seat's own worktree in a writing
+	// room, the workspace otherwise (seatDir, §9.55).
+	dir := m.seatDir(c.Vendor)
 	if id := m.sessions[c.Vendor]; id != "" {
 		// Resume: the brief is already in this vendor's own history.
-		spec, err := v.NextTurn(prompt, m.st.Workspace, c.Binary, id, p)
+		spec, err := v.NextTurn(prompt, dir, c.Binary, id, p)
 		if err == nil {
 			return spec, id, nil
 		}
@@ -1067,7 +1095,7 @@ func (m *Model) specFor(v vendors.Vendor, c *Column, prompt string) (runner.Spec
 	// First turn for THIS vendor, so it gets the operating context. Per vendor
 	// rather than per room: a seat added to a later turn is still a stranger,
 	// and would otherwise be the only one guessing.
-	spec, err := v.FirstTurn(m.brief.Apply(prompt), m.st.Workspace, c.Binary, p)
+	spec, err := v.FirstTurn(m.brief.Apply(prompt), dir, c.Binary, p)
 	return spec, "", err
 }
 

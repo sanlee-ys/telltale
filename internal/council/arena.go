@@ -184,8 +184,10 @@ func gitOut(dir string, args ...string) (string, error) {
 	return gitOutCtx(context.Background(), dir, args...)
 }
 
-// gitOutCtx is gitOut under a caller's context, and it has exactly one caller:
-// the /arena worktree setup (§9.37, amended 2026-08-17).
+// gitOutCtx is gitOut under a caller's context, and it has exactly two callers,
+// both worktree setups: the /arena race's (§9.37, amended 2026-08-17) and, since
+// §9.55, a writing seat's own (seattree.go). Both run off the render loop under
+// the same deadline, and nothing else in this package is deadlined.
 //
 // The context does two things no other git call in this package needs. It
 // carries the setup's DEADLINE, so a `git worktree add` that blocks — on a lock

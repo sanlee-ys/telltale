@@ -41,7 +41,10 @@ import (
 //     cannot act in, which is the whole complaint this change answers.
 const (
 	// arenaSetupDeadline bounds the WHOLE setup: base read, race numbering,
-	// seed plan, and every seat's worktree add and seeding, together.
+	// seed plan, and every seat's worktree add and seeding, together. The seat
+	// worktree setup (seattree.go, §9.55) runs under the same clock, for the
+	// same reason and against the same measurement: it is fewer git calls
+	// than a race and the lock it can meet is the same lock.
 	//
 	// One deadline over the whole thing rather than one per git call, because
 	// the number an operator experiences is how long the room was unusable, and

@@ -2922,9 +2922,59 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 		plain = append(plain, b)
 		styled = append(styled, sty.ForSandbox(c.Sandbox.Level).Render(b))
 	}
-	if s := c.Gran.String(); s != "" {
-		plain = append(plain, s)
-		styled = append(styled, sty.Muted.Render(s))
+	// Where the seat's process actually runs (§9.55): its own worktree, or
+	// the shared tree — and, when the room would have cut a worktree and
+	// could not, why. Beside the posture badge because it is the other half
+	// of the same claim: WRITES says the seat may edit, this says WHICH tree
+	// it edits. A fallback the operator did not choose wears the warning hue
+	// AND the warning mark, because a writing seat in the shared tree is the
+	// hazard §9.55 exists to remove; a chosen shared tree and a seat tree are
+	// muted chrome. Nothing is drawn before the first dispatch: no process,
+	// no directory, no claim.
+	//
+	// THE REASON SHEDS BEFORE THE WORD, and the mark is what survives it. At
+	// the reference width a three-seat column is 37 cells, and `WRITES  shared
+	// tree · not a git repo  final only` is fifty: the row would clip, and a
+	// clipped word is not a word (§9.11). So the granularity word leaves
+	// first (stripBadges' own order — it is restated on the header one row
+	// up), then the reason, leaving `⚠ shared tree`: the mark says a reason
+	// exists, the notice said it when the fallback happened, and the `?`
+	// postures page carries it in full. The mark is g.Warn, so --ascii keeps
+	// it as `!`, and it leads the word the way `⚠ unavailable` does.
+	contain := c.Containment.Badge(st.ASCII)
+	containS := ""
+	if contain != "" {
+		style := sty.Muted
+		if c.Containment.Level == ContainShared && c.Containment.Why != "" {
+			style = sty.SevWarn
+			contain = g.Warn + " " + contain
+		}
+		containS = style.Render(contain)
+	}
+	gran := c.Gran.String()
+	row := func(extra ...string) int {
+		n := 0
+		for _, s := range append(append([]string{}, plain...), extra...) {
+			if s != "" {
+				n += lipgloss.Width(s) + 2
+			}
+		}
+		return n
+	}
+	if contain != "" && gran != "" && row(contain, gran) > w {
+		gran = ""
+	}
+	if contain != "" && c.Containment.Why != "" && row(contain, gran) > w {
+		contain = g.Warn + " " + ContainClaim{Level: ContainShared}.Badge(st.ASCII)
+		containS = sty.SevWarn.Render(contain)
+	}
+	if contain != "" {
+		plain = append(plain, contain)
+		styled = append(styled, containS)
+	}
+	if gran != "" {
+		plain = append(plain, gran)
+		styled = append(styled, sty.Muted.Render(gran))
 	}
 
 	left := strings.Join(plain, "  ")
@@ -4164,6 +4214,21 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 		return statusLine(left, hs, lay, sty, g)
 	}
 
+	if st.TreeSetup != "" {
+		// A seat's own worktree being cut before a writing brief (seattree.go,
+		// §9.55): the arena branch above, word for word, under the word that
+		// says which setup this is. `worktree:` rather than `arena:` because a
+		// reader waiting on a brief must not be told a race is being prepared.
+		var hs []hint
+		if st.Notice != "" {
+			hs = append(hs, hint{key: g.Warn, label: st.Notice, alarm: true})
+		}
+		hs = append(hs,
+			hint{key: phaseMark(PhaseWaiting, st, g), label: "worktree: " + st.TreeSetup + g.Ellipsis, shed: st.Notice != ""},
+			hint{key: "ctrl+c", label: "stop"})
+		return statusLine(left, hs, lay, sty, g)
+	}
+
 	if st.Notice != "" {
 		// A notice replaces the keys rather than joining them, and keeps the
 		// warning mark at severity while its words stay plain — the same split
@@ -4906,6 +4971,14 @@ func helpPostures(st State, lay Layout, sty Styles, g Glyphs) []string {
 		body := maxInt(20, lay.Width-2*framePad-helpIndent)
 		for _, l := range wrap(c.Sandbox.Detail, body) {
 			seats = append(seats, sty.Muted.Render(helpHang+l))
+		}
+		// Where the seat runs, in full (§9.55): the badge row sheds the
+		// reason for a fallback at column width, and this page is where the
+		// whole sentence lives.
+		if s := containDetail(c.Containment); s != "" {
+			for _, l := range wrap(s, body) {
+				seats = append(seats, sty.Muted.Render(helpHang+l))
+			}
 		}
 		// The other half of that seat's badge line, and the reason this section
 		// grew: §9.14 took the granularity explanation out of the body of every

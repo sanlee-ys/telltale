@@ -577,6 +577,17 @@ type Column struct {
 	// Its age is measured from SeatQuota.WrittenAt against State.Now, so Render
 	// stays pure over State — the read itself runs as a Cmd.
 	Quota *SeatQuota
+
+	// Containment is where this seat's process runs, as the badge row states
+	// it (seattree.go, §9.55): its own worktree, the shared tree, or the shared
+	// tree with the reason the room could not give it its own. Stamped at
+	// dispatch for every seat the brief reaches, and NOT a per-turn fact:
+	// startTurn leaves it alone, because the directory a seat works in
+	// outlives any one brief and the next dispatch re-stamps it. The zero
+	// value is no claim — a seat never dispatched is in no directory at all —
+	// and renders nothing, which is what keeps every golden built before
+	// §9.55 exactly as it was.
+	Containment ContainClaim
 }
 
 // startTurn moves a column onto a new turn.
@@ -1413,6 +1424,14 @@ type State struct {
 	// It sits on State because Render draws it and Render is pure over State.
 	// The setup itself is Model.arenaPrep, which the renderer cannot reach.
 	ArenaSetup string
+
+	// TreeSetup is ArenaSetup's twin for a SEAT's worktree being cut before an
+	// ordinary writing dispatch (seattree.go, §9.55): the step in words, empty
+	// when no setup is running. Its own field rather than a second meaning for
+	// ArenaSetup, because the footer names which kind of setup it is drawing —
+	// a race and a brief are different things to be waiting on — and one
+	// string cannot say both.
+	TreeSetup string
 
 	// Spinner advances only while something is genuinely in flight.
 	Spinner int

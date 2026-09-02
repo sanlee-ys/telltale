@@ -1017,6 +1017,14 @@ func runCouncil(args []string) error {
 	// its own surface.
 	host := fs.Bool("host", false, "open the room in a HOST process you can leave running: `/detach` walks away and the seats keep working, `telltale council` comes back (a read room only — a room that writes without asking will not detach)")
 	live := fs.String("live", "", "seat a pane showing this vendor's own terminal screen: display only, and a second process (claude)")
+	// The opt-out from per-seat worktrees (design.md §9.55). In a writing room
+	// every seat is given its own worktree beside the workspace and /adopt
+	// merges what you keep; this flag is the older room, where every seat
+	// writes into one tree, for the operator who wants exactly that. A flag
+	// rather than a room word because it decides where processes WRITE — the
+	// same class of fact as the workspace — and the badge on every column
+	// says which holds either way.
+	sharedTree := fs.Bool("shared-tree", false, "let writing seats share the workspace instead of each getting its own worktree (<repo>-seat-<vendor>, branch seat/<vendor>) — the column badge says which holds")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1038,17 +1046,18 @@ func runCouncil(args []string) error {
 	}
 
 	opts := council.Options{
-		Dir:       *dir,
-		Seats:     room,
-		ASCII:     *ascii || os.Getenv("TELLTALE_ASCII") != "",
-		NoTitle:   *noTitle,
-		Write:     !*read,
-		Auto:      *auto,
-		BriefPath: *brief,
-		Resume:    *resume,
-		Fresh:     *fresh,
-		TracePath: *trace,
-		Live:      liveSeat,
+		Dir:        *dir,
+		Seats:      room,
+		ASCII:      *ascii || os.Getenv("TELLTALE_ASCII") != "",
+		NoTitle:    *noTitle,
+		Write:      !*read,
+		Auto:       *auto,
+		BriefPath:  *brief,
+		Resume:     *resume,
+		Fresh:      *fresh,
+		TracePath:  *trace,
+		Live:       liveSeat,
+		SharedTree: *sharedTree,
 	}
 
 	if *host {

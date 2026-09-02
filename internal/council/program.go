@@ -83,6 +83,14 @@ type Options struct {
 	// on a keystroke that can be pressed by accident. cmd/telltale hands over a
 	// string; ParseLive answers which seats can take it.
 	Live model.VendorID
+
+	// SharedTree opts OUT of the worktree a writing seat is given by default
+	// (seattree.go, design.md §9.55): every seat runs in the workspace, the
+	// room §9.54 shipped. A flag rather than a room word, deliberately — it
+	// decides where five processes will WRITE, which is the same class of
+	// fact as the workspace itself, and the badge on every column says which
+	// holds so the choice is never off screen.
+	SharedTree bool
 }
 
 // Model is the Bubble Tea model. It owns State plus the things Render must not
@@ -448,6 +456,26 @@ type Model struct {
 	// stopped can be dropped by comparison. Never reset: an id has to be unique
 	// over the room's whole life, not over the current setup.
 	arenaPrepN int
+	// seatTrees is every seat's own worktree the room has cut or found, keyed
+	// by seat (seattree.go, §9.55). Held on Model for lastRace's reason: the
+	// renderer reads the badge stamped on the column, never this, and the
+	// trees outlive every turn the way arena trees do.
+	seatTrees map[model.VendorID]seatTree
+	// seatRefused records, per seat, that its worktree could not be cut for
+	// the current workspace — so the next dispatch spawns into the shared
+	// tree at once, badge and all, instead of paying the same git call to hear
+	// the same refusal. A /cd elsewhere gets a fresh attempt: the entry names
+	// its workspace and is ignored for any other.
+	seatRefused map[model.VendorID]seatRefusal
+	// seatPrep is the seat-worktree setup standing in front of a dispatch
+	// right now, arenaPrep's twin, and nil the rest of the time. Its own field
+	// because the two setups end differently — a race that could not be
+	// prepared is refused, a seat that could not be given a tree falls back —
+	// and one prep type answering both would carry two contracts.
+	seatPrep *seatPrep
+	// seatPrepN numbers seat preps, arenaPrepN's rule: unique over the room's
+	// whole life, never reset.
+	seatPrepN int
 	// checkCmd is the command `/arena check` named, verbatim, and checkArgv is
 	// the same command split for exec — argv, never a shell (§9.48). Empty
 	// means no check, which is ABSENT on every racer's block rather than a
@@ -500,27 +528,29 @@ func New(opts Options) *Model {
 func newWithBrief(opts Options, b Brief, hs GateHook, re Reattachment) *Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &Model{
-		opts:       opts,
-		st:         stateWith(opts, hs.Wired()),
-		styles:     NewStyles(true), // assume dark until the terminal answers
-		glyphs:     GlyphsFor(opts.ASCII),
-		events:     make(chan runner.Event, eventBuffer),
-		sessions:   map[model.VendorID]string{},
-		resumeIDs:  map[model.VendorID]string{},
-		unproven:   map[model.VendorID]bool{},
-		threadLost: map[model.VendorID]bool{},
-		forkWatch:  map[model.VendorID]string{},
-		failure:    map[model.VendorID]runner.FailureClass{},
-		redactors:  map[model.VendorID]*Redactor{},
-		procs:      map[model.VendorID]*seatProc{},
-		gateInputs: map[string]map[string]any{},
-		turns:      map[model.VendorID]*turnState{},
-		cancelling: map[model.VendorID]bool{},
-		givenUp:    map[model.VendorID]bool{},
-		roomCtx:    ctx,
-		roomCancel: cancel,
-		brief:      b,
-		hooks:      hs,
+		opts:        opts,
+		st:          stateWith(opts, hs.Wired()),
+		styles:      NewStyles(true), // assume dark until the terminal answers
+		glyphs:      GlyphsFor(opts.ASCII),
+		events:      make(chan runner.Event, eventBuffer),
+		sessions:    map[model.VendorID]string{},
+		resumeIDs:   map[model.VendorID]string{},
+		unproven:    map[model.VendorID]bool{},
+		threadLost:  map[model.VendorID]bool{},
+		forkWatch:   map[model.VendorID]string{},
+		failure:     map[model.VendorID]runner.FailureClass{},
+		redactors:   map[model.VendorID]*Redactor{},
+		procs:       map[model.VendorID]*seatProc{},
+		gateInputs:  map[string]map[string]any{},
+		turns:       map[model.VendorID]*turnState{},
+		cancelling:  map[model.VendorID]bool{},
+		givenUp:     map[model.VendorID]bool{},
+		seatTrees:   map[model.VendorID]seatTree{},
+		seatRefused: map[model.VendorID]seatRefusal{},
+		roomCtx:     ctx,
+		roomCancel:  cancel,
+		brief:       b,
+		hooks:       hs,
 		// Never nil, so /trace has something to answer with in a model a test
 		// built directly. Run replaces it with the sink it installed into the
 		// runner, because there must be exactly one ring and the runner has to be
@@ -969,6 +999,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the handler and returned as the next command (arenasetup.go).
 		return m, m.applyArenaSetup(msg)
 
+	case seatSetupMsg:
+		// The same shape for a SEAT's worktree being cut before an ordinary
+		// writing dispatch (seattree.go, §9.55): a step, or the setup landing
+		// and launching the brief it stood in front of.
+		return m, m.applySeatSetup(msg)
+
 	case arenaStatMsg:
 		// One interim read landing (or being dropped as stale — the drop
 		// rules live with the handler). No follow-up command: the next read
@@ -1003,7 +1039,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// where nothing is happening, and that was the exact lie a frozen setup
 		// used to tell. §7.1's budget of one moving cell is untouched: no column
 		// can be spinning during a setup, because nothing has been dispatched.
-		if m.st.Busy() || m.st.ArenaSetup != "" {
+		if m.st.Busy() || m.st.ArenaSetup != "" || m.st.TreeSetup != "" {
 			m.st.Spinner++
 		}
 		// The tick is also the rebuild's backstop: a seat whose process died
@@ -1041,6 +1077,13 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// second ctrl+c means what it always means.
 	if m.arenaPrep != nil && msg.String() == "ctrl+c" {
 		m.stopArenaSetup()
+		return m, nil
+	}
+	// The same key, the same reason, for a seat's worktree being cut before a
+	// writing brief (seattree.go, §9.55): the git command is the thing the
+	// operator needs to be able to end, and nothing below can end it.
+	if m.seatPrep != nil && msg.String() == "ctrl+c" {
+		m.stopSeatSetup()
 		return m, nil
 	}
 	if m.st.Gating() {
