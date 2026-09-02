@@ -520,6 +520,10 @@ type Model struct {
 	// flowAdvancePending asks Update to dispatch the next hop after the current
 	// turn has fully retired. Dispatching earlier would trip the in-flight guard.
 	flowAdvancePending bool
+	// fanPrompts is each seat's own task for a fanned flow stage, set by
+	// launchFlowStage and consumed by the sendTurn it calls (§9.55). Nil the
+	// rest of the time, which is every ordinary dispatch.
+	fanPrompts map[model.VendorID]string
 }
 
 // New builds the model. Nothing renders until the first WindowSizeMsg arrives:

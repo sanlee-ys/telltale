@@ -69,6 +69,12 @@ type FlowStep struct {
 	BaselineExists bool
 	BaselineSize   int64
 	BaselineMod    time.Time
+
+	// Stage is which stage of the chain this hop belongs to, 0-based (§9.55).
+	// Hops joined with `&` share a stage and run at once; `->` opens the next.
+	// Steps stay a flat slice, so a chain with no fan is exactly the shape it
+	// always was — every stage one step long.
+	Stage int
 }
 
 // writeTargetPrefix is the ONLY thing that confers write authority on a hop.
@@ -109,7 +115,14 @@ func validWriteTarget(target string) error {
 	return nil
 }
 
-// FlowChain is an ordered pipeline of steps.
+// FlowChain is an ordered pipeline of stages, flattened into steps.
+//
+// A STAGE is the unit that runs at once (§9.55): one hop, or several hops
+// joined with `&` that fan out to their seats concurrently. Steps stay a flat
+// slice in chain order, each carrying the stage it belongs to, so every reader
+// that walks Steps — the marker, the death notice, the tests written against
+// one-hop stages — sees exactly the shape it always saw when no stage fans.
+// CurrentIndex points at the FIRST step of the current stage.
 type FlowChain struct {
 	Steps        []FlowStep
 	CurrentIndex int
@@ -125,6 +138,20 @@ func (s *FlowStep) RequiresWriteGate() bool {
 // Example: "/flow @claude draft feature spec -> @codex review security ->
 // @agy publish write:docs/spec.md". The third hop is a write hop because it
 // says so, not because "docs/spec.md" looks like a filename.
+//
+// A stage fans with `&`: "@codex refactor the poller & @grok write the docs ->
+// @claude review both" runs the first two hops at once on their own seats, and
+// the third waits on both (§9.55). The joiner is `&` followed by a mention, so
+// an ampersand inside a task ("fix a & b") stays prose — the same rule that
+// keeps a bare `->` in a sentence from becoming a chain.
+//
+// Two refusals a fan adds, each stated rather than resolved. One seat cannot
+// take two hops of one stage: a seat holds one turn at a time (§9.54), and
+// dispatching it twice would be the busy-seat refusal with the chain's own
+// name on it. And a stage runs at ONE posture — every hop declares `write:`,
+// or none does — because a fan is one dispatch and §9.16's table gives a
+// dispatch one posture; a read hop spawned beside a write hop at write posture
+// would be a hop holding authority it never declared.
 func ParseFlowChain(input string) (*FlowChain, error) {
 	input = strings.TrimSpace(input)
 	if strings.HasPrefix(input, "/flow") {
@@ -138,81 +165,119 @@ func ParseFlowChain(input string) (*FlowChain, error) {
 		return nil, errors.New("empty flow instruction")
 	}
 
-	rawHops := strings.Split(input, "->")
-	if len(rawHops) < 2 {
+	rawStages := strings.Split(input, "->")
+	if len(rawStages) < 2 {
 		return nil, errors.New("flow chain must contain at least 2 hops separated by '->'")
 	}
 
 	aliases := mentionAliases()
 	var steps []FlowStep
-	for _, raw := range rawHops {
-		raw = strings.TrimSpace(raw)
-		parts := strings.Fields(raw)
-		if len(parts) < 2 {
-			return nil, fmt.Errorf("invalid hop format %q: expected '@seat verb [task/path]'", raw)
-		}
-
-		seatStr := parts[0]
-		if !strings.HasPrefix(seatStr, "@") {
-			return nil, fmt.Errorf("invalid seat %q in hop: seat must start with '@'", seatStr)
-		}
-
-		name := strings.ToLower(strings.TrimPrefix(seatStr, "@"))
-		vendorID, ok := aliases[name]
-		if !ok || allAliases[name] {
-			return nil, fmt.Errorf("unknown vendor seat @%s in flow chain (valid seats: @%s)",
-				name, strings.Join(SeatNames(), ", @"))
-		}
-
-		verb := strings.ToLower(parts[1])
-		// The verb slot would otherwise swallow a target the user clearly meant
-		// to declare, and the hop would run as a READ hop that looks written.
-		// Silently downgrading a declared write is the same class of lie as
-		// silently upgrading a read, so it is refused out loud.
-		if strings.HasPrefix(verb, writeTargetPrefix) {
-			return nil, fmt.Errorf("hop %q puts the %s target in the verb slot: expected '@seat verb %s<path>'", raw, writeTargetPrefix, writeTargetPrefix)
-		}
-		if verb == "merge" {
-			return nil, fmt.Errorf("merge hops are not supported in v1: file receipts cannot prove a GitHub merge")
-		}
-
-		// Write authority is declared, never inferred. Only a `write:<path>`
-		// token makes a hop a write hop — no path sniffing, no verb allowlist.
-		// "@cursor implement authentication" is a read hop; so is a task that
-		// happens to end in "v1." Anything else guesses authority from English.
-		task := ""
-		path := ""
-		var taskWords []string
-		for _, tok := range parts[2:] {
-			rest, isTarget := strings.CutPrefix(tok, writeTargetPrefix)
-			if !isTarget {
-				taskWords = append(taskWords, tok)
-				continue
+	for stage, rawStage := range rawStages {
+		var stageSeats []model.VendorID
+		writes, reads := 0, 0
+		for _, raw := range splitFan(rawStage) {
+			raw = strings.TrimSpace(raw)
+			parts := strings.Fields(raw)
+			if len(parts) < 2 {
+				return nil, fmt.Errorf("invalid hop format %q: expected '@seat verb [task/path]'", raw)
 			}
+
+			seatStr := parts[0]
+			if !strings.HasPrefix(seatStr, "@") {
+				return nil, fmt.Errorf("invalid seat %q in hop: seat must start with '@'", seatStr)
+			}
+
+			name := strings.ToLower(strings.TrimPrefix(seatStr, "@"))
+			vendorID, ok := aliases[name]
+			if !ok || allAliases[name] {
+				return nil, fmt.Errorf("unknown vendor seat @%s in flow chain (valid seats: @%s)",
+					name, strings.Join(SeatNames(), ", @"))
+			}
+			for _, prev := range stageSeats {
+				if prev == vendorID {
+					return nil, fmt.Errorf("@%s is named twice in one stage: a seat takes one hop at a time — put the second hop after ->", vendorID)
+				}
+			}
+			stageSeats = append(stageSeats, vendorID)
+
+			verb := strings.ToLower(parts[1])
+			// The verb slot would otherwise swallow a target the user clearly meant
+			// to declare, and the hop would run as a READ hop that looks written.
+			// Silently downgrading a declared write is the same class of lie as
+			// silently upgrading a read, so it is refused out loud.
+			if strings.HasPrefix(verb, writeTargetPrefix) {
+				return nil, fmt.Errorf("hop %q puts the %s target in the verb slot: expected '@seat verb %s<path>'", raw, writeTargetPrefix, writeTargetPrefix)
+			}
+			if verb == "merge" {
+				return nil, fmt.Errorf("merge hops are not supported in v1: file receipts cannot prove a GitHub merge")
+			}
+
+			// Write authority is declared, never inferred. Only a `write:<path>`
+			// token makes a hop a write hop — no path sniffing, no verb allowlist.
+			// "@cursor implement authentication" is a read hop; so is a task that
+			// happens to end in "v1." Anything else guesses authority from English.
+			task := ""
+			path := ""
+			var taskWords []string
+			for _, tok := range parts[2:] {
+				rest, isTarget := strings.CutPrefix(tok, writeTargetPrefix)
+				if !isTarget {
+					taskWords = append(taskWords, tok)
+					continue
+				}
+				if path != "" {
+					return nil, fmt.Errorf("hop %q declares more than one %s target", raw, writeTargetPrefix)
+				}
+				rest = strings.TrimSpace(rest)
+				if err := validWriteTarget(rest); err != nil {
+					return nil, fmt.Errorf("%s target %q in hop %q: %v", writeTargetPrefix, rest, raw, err)
+				}
+				path = rest
+			}
+			task = strings.Join(taskWords, " ")
 			if path != "" {
-				return nil, fmt.Errorf("hop %q declares more than one %s target", raw, writeTargetPrefix)
+				writes++
+			} else {
+				reads++
 			}
-			rest = strings.TrimSpace(rest)
-			if err := validWriteTarget(rest); err != nil {
-				return nil, fmt.Errorf("%s target %q in hop %q: %v", writeTargetPrefix, rest, raw, err)
-			}
-			path = rest
-		}
-		task = strings.Join(taskWords, " ")
 
-		steps = append(steps, FlowStep{
-			Vendor: vendorID,
-			Verb:   verb,
-			Task:   task,
-			State:  FlowStateQueued,
-			Path:   path,
-		})
+			steps = append(steps, FlowStep{
+				Vendor: vendorID,
+				Verb:   verb,
+				Task:   task,
+				State:  FlowStateQueued,
+				Path:   path,
+				Stage:  stage,
+			})
+		}
+		if writes > 0 && reads > 0 {
+			return nil, fmt.Errorf("stage %d mixes write hops and read hops: a fanned stage runs at one posture — every hop declares %s<path>, or none does", stage+1, writeTargetPrefix)
+		}
 	}
 
 	return &FlowChain{Steps: steps, CurrentIndex: 0}, nil
 }
 
-// Current returns the active step.
+// splitFan divides one stage's text into its hops: at every `&` whose next
+// non-space character is `@`. An ampersand anywhere else belongs to the task.
+func splitFan(stage string) []string {
+	var hops []string
+	start := 0
+	for i := 0; i < len(stage); i++ {
+		if stage[i] != '&' {
+			continue
+		}
+		rest := strings.TrimLeft(stage[i+1:], " \t")
+		if !strings.HasPrefix(rest, "@") {
+			continue
+		}
+		hops = append(hops, stage[start:i])
+		start = i + 1
+	}
+	return append(hops, stage[start:])
+}
+
+// Current returns the active step: the first step of the current stage.
 func (fc *FlowChain) Current() *FlowStep {
 	if fc == nil || fc.CurrentIndex < 0 || fc.CurrentIndex >= len(fc.Steps) {
 		return nil
@@ -220,55 +285,177 @@ func (fc *FlowChain) Current() *FlowStep {
 	return &fc.Steps[fc.CurrentIndex]
 }
 
-// MarkAwaitingWrite parks a Queued write hop until the user authorizes dispatch.
-func (fc *FlowChain) MarkAwaitingWrite(detail string) error {
+// Stage returns every step of the current stage, in chain order — one step
+// for an ordinary hop, several for a fan.
+func (fc *FlowChain) Stage() []*FlowStep {
 	curr := fc.Current()
 	if curr == nil {
-		return errors.New("no active step")
+		return nil
 	}
-	if curr.State != FlowStateQueued {
-		return fmt.Errorf("cannot await write from state %s", curr.State)
+	var out []*FlowStep
+	for i := fc.CurrentIndex; i < len(fc.Steps) && fc.Steps[i].Stage == curr.Stage; i++ {
+		out = append(out, &fc.Steps[i])
 	}
-	if !curr.RequiresWriteGate() {
-		return errors.New("step has no target path — not a write hop")
+	return out
+}
+
+// StepFor is the current stage's step on one seat, or nil when that seat has
+// no hop in this stage. It is how a landing column finds its own hop while a
+// fan's other seats are still answering.
+func (fc *FlowChain) StepFor(v model.VendorID) *FlowStep {
+	for _, s := range fc.Stage() {
+		if s.Vendor == v {
+			return s
+		}
 	}
-	curr.State = FlowStateBlocked
-	curr.Receipt = Receipt{Verified: false, Detail: detail}
 	return nil
 }
 
-// Start moves Queued → Running and captures a path baseline.
+// StageN is the current stage's 1-based number, and Stages the count — what
+// the header's `hop N/M` prints, so a fan of two hops is one hop on the marker
+// rather than two the reader cannot tell apart from a serial pair.
+func (fc *FlowChain) StageN() int {
+	if curr := fc.Current(); curr != nil {
+		return curr.Stage + 1
+	}
+	return 0
+}
+
+func (fc *FlowChain) Stages() int {
+	if fc == nil || len(fc.Steps) == 0 {
+		return 0
+	}
+	return fc.Steps[len(fc.Steps)-1].Stage + 1
+}
+
+// StageWrites reports that the current stage's hops declared a write target.
+// The parser refuses a mixed stage, so one answer holds for every hop in it.
+func (fc *FlowChain) StageWrites() bool {
+	for _, s := range fc.Stage() {
+		if s.RequiresWriteGate() {
+			return true
+		}
+	}
+	return false
+}
+
+// StageDone reports that every step of the current stage finished — Returned
+// or Published — which is the join: the next stage dispatches only then.
+func (fc *FlowChain) StageDone() bool {
+	stage := fc.Stage()
+	if len(stage) == 0 {
+		return false
+	}
+	for _, s := range stage {
+		if s.State != FlowStateReturned && s.State != FlowStatePublished {
+			return false
+		}
+	}
+	return true
+}
+
+// Unfinished is the first step of the current stage that has not finished,
+// or nil — the hop a death notice names.
+func (fc *FlowChain) Unfinished() *FlowStep {
+	for _, s := range fc.Stage() {
+		if s.State != FlowStateReturned && s.State != FlowStatePublished {
+			return s
+		}
+	}
+	return nil
+}
+
+// FanLabel names a fanned stage's seats for the header — `@codex & @grok` —
+// and is empty for a one-seat stage, where FlowVendor names it as before.
+func (fc *FlowChain) FanLabel() string {
+	stage := fc.Stage()
+	if len(stage) < 2 {
+		return ""
+	}
+	names := make([]string, 0, len(stage))
+	for _, s := range stage {
+		names = append(names, "@"+string(s.Vendor))
+	}
+	return strings.Join(names, " & ")
+}
+
+// MarkAwaitingWrite parks the current stage's Queued write hops until the
+// user authorizes dispatch. Every write hop in the stage, because the gate
+// is one keystroke for the stage and the card names each of them.
+func (fc *FlowChain) MarkAwaitingWrite(detail string) error {
+	stage := fc.Stage()
+	if len(stage) == 0 {
+		return errors.New("no active step")
+	}
+	for _, curr := range stage {
+		if curr.State != FlowStateQueued {
+			return fmt.Errorf("cannot await write from state %s", curr.State)
+		}
+		if !curr.RequiresWriteGate() {
+			return errors.New("step has no target path — not a write hop")
+		}
+	}
+	for _, curr := range stage {
+		curr.State = FlowStateBlocked
+		curr.Receipt = Receipt{Verified: false, Detail: detail}
+	}
+	return nil
+}
+
+// Start moves the current stage's steps Queued → Running and captures each
+// one's path baseline in the workspace.
 func (fc *FlowChain) Start(workspace string) error {
-	curr := fc.Current()
-	if curr == nil {
+	return fc.StartIn(func(model.VendorID) string { return workspace })
+}
+
+// StartIn is Start with the baseline directory chosen PER SEAT (§9.55): a
+// write hop's receipt is verified where its seat's process actually runs,
+// which in a writing room is that seat's own worktree, not the workspace.
+func (fc *FlowChain) StartIn(dirFor func(model.VendorID) string) error {
+	stage := fc.Stage()
+	if len(stage) == 0 {
 		return errors.New("no active step to start")
 	}
-	if curr.State != FlowStateQueued {
-		return fmt.Errorf("cannot start step in state %s", curr.State)
+	for _, curr := range stage {
+		if curr.State != FlowStateQueued {
+			return fmt.Errorf("cannot start step in state %s", curr.State)
+		}
 	}
-	curr.State = FlowStateRunning
-	curr.StartedAt = time.Now()
-	captureBaseline(workspace, curr)
+	now := time.Now()
+	for _, curr := range stage {
+		curr.State = FlowStateRunning
+		curr.StartedAt = now
+		captureBaseline(dirFor(curr.Vendor), curr)
+	}
 	return nil
 }
 
-// ClearBlockForStart returns a write hop from Blocked (pre-auth) to Queued so Start can run.
+// ClearBlockForStart returns the stage's write hops from Blocked (pre-auth)
+// to Queued so Start can run.
 func (fc *FlowChain) ClearBlockForStart() error {
-	curr := fc.Current()
-	if curr == nil {
+	stage := fc.Stage()
+	if len(stage) == 0 {
 		return errors.New("no active step")
 	}
-	if curr.State != FlowStateBlocked {
-		return fmt.Errorf("cannot clear block from state %s", curr.State)
+	for _, curr := range stage {
+		if curr.State != FlowStateBlocked {
+			return fmt.Errorf("cannot clear block from state %s", curr.State)
+		}
 	}
-	curr.State = FlowStateQueued
-	curr.Receipt = Receipt{}
+	for _, curr := range stage {
+		curr.State = FlowStateQueued
+		curr.Receipt = Receipt{}
+	}
 	return nil
 }
 
-// MarkReturned records that the seat finished (PhaseDone). Not an approval.
-func (fc *FlowChain) MarkReturned() error {
-	curr := fc.Current()
+// MarkReturned records that the current step's seat finished (PhaseDone).
+// Not an approval.
+func (fc *FlowChain) MarkReturned() error { return fc.MarkReturnedAt(fc.Current()) }
+
+// MarkReturnedAt is MarkReturned on one named step of the current stage —
+// the form a fan needs, where the seat that landed is not always the first.
+func (fc *FlowChain) MarkReturnedAt(curr *FlowStep) error {
 	if curr == nil {
 		return errors.New("no active step")
 	}
@@ -279,7 +466,8 @@ func (fc *FlowChain) MarkReturned() error {
 	return nil
 }
 
-// MarkFailed records a harness-detected failure (e.g. artifact save).
+// MarkFailed records a harness-detected failure (e.g. artifact save) on the
+// current step.
 //
 // It refuses a step that has already finished, and that guard is the point
 // rather than tidiness. Returned and Published are terminal successes, and a
@@ -291,22 +479,29 @@ func (fc *FlowChain) MarkReturned() error {
 //
 // A failure discovered after the hop finished stops the chain. It does not
 // relitigate the hop.
-func (fc *FlowChain) MarkFailed(detail string) error {
-	curr := fc.Current()
+func (fc *FlowChain) MarkFailed(detail string) error { return fc.MarkFailedAt(fc.Current(), detail) }
+
+// MarkFailedAt is MarkFailed on one named step of the current stage.
+func (fc *FlowChain) MarkFailedAt(curr *FlowStep, detail string) error {
 	if curr == nil {
 		return errors.New("no active step")
 	}
 	if curr.State == FlowStateReturned || curr.State == FlowStatePublished {
-		return fmt.Errorf("cannot fail step %d (@%s %s): already %s", fc.CurrentIndex+1, curr.Vendor, curr.Verb, curr.State)
+		return fmt.Errorf("cannot fail step %d (@%s %s): already %s", fc.stepNumber(curr), curr.Vendor, curr.Verb, curr.State)
 	}
 	curr.State = FlowStateFailed
 	curr.Receipt = Receipt{Verified: false, Detail: detail}
 	return nil
 }
 
-// MarkPublished sets Published only with a verified disk receipt.
+// MarkPublished sets Published on the current step, only with a verified
+// disk receipt.
 func (fc *FlowChain) MarkPublished(receipt Receipt) error {
-	curr := fc.Current()
+	return fc.MarkPublishedAt(fc.Current(), receipt)
+}
+
+// MarkPublishedAt is MarkPublished on one named step of the current stage.
+func (fc *FlowChain) MarkPublishedAt(curr *FlowStep, receipt Receipt) error {
 	if curr == nil {
 		return errors.New("no active step")
 	}
@@ -321,29 +516,45 @@ func (fc *FlowChain) MarkPublished(receipt Receipt) error {
 	return nil
 }
 
-// Advance moves to the next hop only from Returned or Published.
+// stepNumber is a step's 1-based position in the chain, for the sentences
+// that name one.
+func (fc *FlowChain) stepNumber(s *FlowStep) int {
+	for i := range fc.Steps {
+		if &fc.Steps[i] == s {
+			return i + 1
+		}
+	}
+	return fc.CurrentIndex + 1
+}
+
+// Advance moves to the next stage only once every step of the current one is
+// Returned or Published. A stage with one hop still running, blocked or
+// failed refuses by name, exactly as a single hop did.
 func (fc *FlowChain) Advance() (bool, error) {
-	curr := fc.Current()
-	if curr == nil {
+	stage := fc.Stage()
+	if len(stage) == 0 {
 		return false, errors.New("no active step to advance")
 	}
-
-	switch curr.State {
-	case FlowStateFailed:
-		return false, fmt.Errorf("cannot advance: step %d (@%s %s) failed", fc.CurrentIndex+1, curr.Vendor, curr.Verb)
-	case FlowStateBlocked:
-		return false, fmt.Errorf("cannot advance: step %d (@%s %s) is blocked", fc.CurrentIndex+1, curr.Vendor, curr.Verb)
-	case FlowStateQueued, FlowStateRunning:
-		return false, fmt.Errorf("cannot advance: step %d (@%s %s) is still %s", fc.CurrentIndex+1, curr.Vendor, curr.Verb, curr.State)
-	case FlowStateReturned, FlowStatePublished:
-		if fc.CurrentIndex >= len(fc.Steps)-1 {
-			return false, nil
+	for _, curr := range stage {
+		n := fc.stepNumber(curr)
+		switch curr.State {
+		case FlowStateFailed:
+			return false, fmt.Errorf("cannot advance: step %d (@%s %s) failed", n, curr.Vendor, curr.Verb)
+		case FlowStateBlocked:
+			return false, fmt.Errorf("cannot advance: step %d (@%s %s) is blocked", n, curr.Vendor, curr.Verb)
+		case FlowStateQueued, FlowStateRunning:
+			return false, fmt.Errorf("cannot advance: step %d (@%s %s) is still %s", n, curr.Vendor, curr.Verb, curr.State)
+		case FlowStateReturned, FlowStatePublished:
+		default:
+			return false, fmt.Errorf("invalid step state %v", curr.State)
 		}
-		fc.CurrentIndex++
-		return true, nil
-	default:
-		return false, fmt.Errorf("invalid step state %v", curr.State)
 	}
+	next := fc.CurrentIndex + len(stage)
+	if next >= len(fc.Steps) {
+		return false, nil
+	}
+	fc.CurrentIndex = next
+	return true, nil
 }
 
 func captureBaseline(workspace string, step *FlowStep) {

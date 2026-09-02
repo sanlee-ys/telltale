@@ -282,7 +282,13 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	// typed is otherwise indistinguishable from the room acting on its own.
 	hop := ""
 	if st.FlowSteps > 0 {
-		hop = "  " + g.Sep + "  hop " + strconv.Itoa(st.FlowHop) + "/" + strconv.Itoa(st.FlowSteps) + " @" + string(st.FlowVendor)
+		// A stage that fans to several seats names them all (State.FlowSeats,
+		// §9.55); a one-seat hop names its seat as it always has.
+		who := "@" + string(st.FlowVendor)
+		if st.FlowSeats != "" {
+			who = st.FlowSeats
+		}
+		hop = "  " + g.Sep + "  hop " + strconv.Itoa(st.FlowHop) + "/" + strconv.Itoa(st.FlowSteps) + " " + who
 		// `s` armed: the chain ends after this hop, and the promise lives on the
 		// marker rather than only in the notice that announced it — a notice
 		// scrolls away while the armed state persists, the WRITE badge's own

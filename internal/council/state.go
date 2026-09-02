@@ -1322,6 +1322,13 @@ type State struct {
 	// retires it with the marker, so it can never outlive the chain it stops.
 	FlowStop bool
 
+	// FlowSeats is the hop cell's label when the current stage FANS to more
+	// than one seat (`@codex & @grok`, §9.55). Empty for a one-seat hop, where
+	// FlowVendor names it as it always has. A label rather than a list,
+	// because the header is the only reader and it prints the words; a list
+	// would be a second spelling of a fact the chain already holds.
+	FlowSeats string
+
 	// Gates are the tool calls waiting on a decision, OLDEST FIRST.
 	//
 	// A queue rather than a single value, because one assistant message really
