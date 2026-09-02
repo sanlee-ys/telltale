@@ -72,6 +72,11 @@ type Options struct {
 	// Live names the seat whose pane draws a real terminal screen instead of a
 	// parsed transcript (design.md §9.53). Empty is the ordinary room.
 	//
+	// Takes whatever --live said, unvalidated: Run normalizes it through
+	// ParseLive and refuses an impossible seat before the alternate screen. So
+	// the caller's whole wiring is one field, and which seats can be live is
+	// answered in this package rather than in cmd/telltale.
+	//
 	// A flag and not a key. The live pane is a SECOND process on that seat's
 	// account, so opening one doubles what the seat spends — and a control that
 	// doubles a bill belongs where the room is opened, decided once, rather than
@@ -2987,6 +2992,18 @@ type roomProgram interface{ Kill() }
 // observation surfaces — statusline and hud — keep their read-only guarantee
 // unchanged, and nothing here is reachable from either of them (ADR-008).
 func Run(opts Options) error {
+	// --live is normalized and refused HERE, before the alternate screen, for
+	// the reason --brief and --trace are: a seat that cannot be live must be a
+	// line on stderr rather than a card behind a TUI the user has to quit to
+	// read (§9.53). Doing it here rather than in cmd/telltale is what keeps the
+	// caller's wiring to one field: it hands over whatever the flag said, and
+	// this package answers which seats exist and which of them can be live.
+	live, err := ParseLive(string(opts.Live))
+	if err != nil {
+		return err
+	}
+	opts.Live = live
+
 	// Loaded before the program starts. A bad --brief path must surface as a
 	// plain error on stderr, not as a card inside a TUI the user then has to
 	// quit to read.

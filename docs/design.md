@@ -17377,8 +17377,10 @@ exact assertion those tests exist to make.
 
 #### The seat is seated by a flag, and by nothing else
 
-`--live claude` names the seat. Parsing lives in `ParseLive` in `internal/council`, so
-`cmd/telltale` hands over a string and learns nothing about vendors. There is no key. A key
+`--live claude` names the seat. Parsing lives in `ParseLive` in `internal/council` and `Run`
+calls it before the alternate screen, so `cmd/telltale` hands over one field and learns nothing
+about vendors — and an impossible seat is a line on stderr rather than a card behind a TUI the
+user has to quit to read, which is the discipline `--brief` and `--trace` already follow. There is no key. A key
 would have to be taught on the help panel and would be a second way to spend a second account
 that the operator has not asked for; the flag is a decision made once, at the point where the
 room is opened, and that is the right place for a control that doubles a bill.
