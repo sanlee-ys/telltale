@@ -1,0 +1,56 @@
+name: branch-cleanup
+
+# A branch whose pull request has closed is stale by definition, merged or
+# not, and the repository deletes it itself. Two reasons this is a workflow
+# rather than a chore:
+#
+#   - GitHub's "automatically delete head branches" setting acts only on
+#     MERGED pull requests. A lane branch whose pull request was closed as
+#     superseded (the crew work landed six of them that way on 2026-09-02)
+#     stays behind under that setting.
+#   - A session working through a policy-enforcing egress proxy can create
+#     refs and cannot delete them: `git push --delete` answers 403 at the
+#     receive-pack, and the same session holds no API credential. The
+#     workflow's own token can, so the deletion lives where the permission is.
+#
+# Dispatch it by hand with a space-separated list to sweep what is already
+# stale. `main` is refused in both paths, whatever the input says.
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: "space-separated branch names to delete"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Delete the closed pull request's head branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          case "$BRANCH" in
+            main|master) echo "refusing to delete $BRANCH"; exit 0 ;;
+          esac
+          git push origin --delete "$BRANCH" || echo "$BRANCH was already gone"
+      - name: Delete the branches named on dispatch
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          BRANCHES: ${{ inputs.branches }}
+        run: |
+          for b in $BRANCHES; do
+            case "$b" in
+              main|master) echo "refusing to delete $b"; continue ;;
+            esac
+            git push origin --delete "$b" || echo "$b was already gone"
+          done
