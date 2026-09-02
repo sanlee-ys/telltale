@@ -165,10 +165,33 @@ Nothing new is stored: this is a rendering rule over the echo each column alread
 history keeps its per-column copies, and if spending the band would leave the columns
 fewer than eight rows of body it is not spent at all.
 
+**A seat takes a brief while another seat is still answering.** The room is a crew, not a
+committee: a turn is a fact about a *seat*, and seats are busy or idle one at a time. Hand
+Codex a refactor, and while it runs hand Grok the docs — `@codex <brief>`, enter, `@grok
+<brief>`, enter — and both columns stream at once, each on its own turn number and its own
+clock. The room refuses a brief only for a seat that is *still answering*: `@codex` while
+Codex is mid-answer gets `a turn is in flight on codex (turn 4) — ctrl+c on its column cancels
+that turn, or address another seat`, and the draft stays put. A brief that names several seats
+goes to the idle ones and says who was skipped and why: `sent to grok, agy — skipped: codex
+(turn 4), still on a turn; ctrl+c on its column cancels it`. That is the rule that keeps the
+persistent seats honest too: a stream-json or ACP process holds one turn open at a time, and
+the refusal is what stands between it and a second prompt written into a process mid-turn.
+A turn number is a *dispatch* number — turn 5 is the fifth brief the room sent, whoever it
+went to — so the separators, the by-turn page, `/retry` and the saved room all keep reading
+one coordinate; a seat's own history is the subset of those numbers it took part in. The
+header names the most recent dispatch's route and, when more than one seat is answering,
+counts them: `turn 5 → codex · 3 in flight`, measured over the columns. The one turn that
+still needs the whole room is a race: `/arena` refuses while any seat is busy, and every
+ordinary brief is refused while a race runs, because a race owns every worktree and every
+seat until its last racer lands.
+
 Turn 1 is blind. Later turns ride each vendor's own native session resume rather than
 re-sending the transcript, which keeps that guarantee structural: each session holds only
 its own history. `ctrl+r` arms a rebuttal turn — off by default — in which each vendor
-sees the others' last answers, fenced and labelled as untrusted material.
+sees the others' last answers, fenced and labelled as untrusted material. The snapshot is
+taken per seat, at the moment that seat's brief is sent: a neighbour that is still
+answering contributes its last *finished* reply rather than the half it has streamed so
+far, and nothing at all if it has never finished one.
 
 ## Reading five answers at once
 
@@ -215,6 +238,17 @@ in front of the answer is how the original bug worked. That distinction is the w
 seat had no way to tell that the arrows were moving the first. Under `--ascii` the rail is
 `[` and the focus mark `]`; under `NO_COLOR` the contrast step is what goes, and every
 other carrier is still there.
+
+**The strip under the header is the crew's inbox.** `⚠ NEEDS YOU` used to name only the
+seats stopped on an approval card. It now also names the seats whose turn *ended* while you
+were looking somewhere else — `⚠ NEEDS YOU   2 Codex   3 Grok done   4 Cursor failed` — with
+the phase word saying how, in the same word the column header uses. Both kinds of entry are
+measurements: a card the gate queue holds, or a landing the room stamped against the last
+time your keys were on that column. Going to the seat is what takes it off; a seat that
+lands again later comes back. `.` jumps to the next seat on the strip, wrapping, and the
+footer names that key only while the strip has somebody on it; the digits still reach any
+seat by position. Nothing is stored about what you acknowledged — the strip is a comparison
+between two timestamps the room took itself, which is why it cannot drift.
 
 **A backgrounded seat says where it left off, once.** Since the default route became one
 seat, the other three sit out most turns — and a column of `⚠ not addressed in turn 2` /
@@ -375,12 +409,26 @@ the word that failed and lists the room's commands. A brief that genuinely begin
 slash — a path, a regex — is sent by typing **one space in front of it**, which the notice
 also says.
 
+**`ctrl+c` stops the seat you are looking at.** With several seats answering, the key
+cancels the *focused* seat's turn and leaves its neighbours working; when the focused seat
+is idle and something else is running it cancels everything in flight, as it always did;
+when nothing is running it quits. The footer says which of the three is live on every
+frame — `ctrl+c cancel codex`, `ctrl+c cancel all`, or plain `ctrl+c cancel` when only one
+seat is answering. `x` is still the per-seat give-up with its `y`/`n` card, and it still
+names what the cut costs that kind of seat. `q` refuses while any seat is busy and names
+which: `a turn is in flight on codex (turn 4) — ctrl+c cancels a seat's turn first`. The
+room-wide commands — `/cd`, `/seat`, `/unseat`, `/read`, `/write`, `/retry`, `/adopt`,
+`/arena drop` — refuse the same way and name the same seats, because each of them changes
+something a busy seat was dispatched against.
+
 **`--fresh` is room-wide; `c` is one seat.** A seat whose context has filled up does not
 need the other three restarted with it, so `c` in view mode clears the **focused** seat's
 thread — `y` confirms, `n` keeps it, any other key cancels — and its next brief opens a new
 session with the brief re-applied. The turns already on screen stay: what is cleared is the
 thread the next brief would have continued, not the record of what was said. It refuses
-while a turn is in flight, for the same reason `/cd` does. The rule it is the first control
+while *that* seat is on a turn — `a turn is in flight on Claude Code (turn 4) — c clears a
+seat between its turns` — and a busy neighbour does not stop it, because the thread being
+dropped is this seat's alone; `u` follows the same per-seat rule. The rule it is the first control
 built to — anything that changes while the room is open is reachable from inside it, and a
 flag is for what is true at launch — is [design.md §9.17](design.md).
 

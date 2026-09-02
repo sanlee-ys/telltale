@@ -17750,3 +17750,138 @@ exactly the pane's rectangle, and that the display-only marker is a word rather 
 the session that wrote this. The spawn guard makes that impossible from inside the suite by
 design, and it is the same class of debt as the host's first live turn ([STATE.md](../STATE.md)):
 an operator-driven check, owed and named rather than implied.
+
+### 9.54 the room was a committee, and a crew's seats are busy one at a time (2026-09-02)
+
+`dispatch()` opened with one line — `if m.turn != nil { "a turn is already in flight — ctrl+c
+cancels it" }` — and that line was the whole difference between the room that existed and the
+room the owner asked for. Seats were concurrent inside a turn and the room was serial across
+turns: `@all` fanned one brief out to five processes at once, and the moment any of them was
+still answering, a second brief to a different seat was refused. You could not hand codex a
+refactor and, while it ran, hand grok the docs. The owner's ruling is that council is a **crew**,
+not a committee answering one question at a time, and a crew's seats are busy or idle **one at
+a time**.
+
+#### What a turn is now
+
+A turn is a fact about a SEAT. `Model.turn` is gone; `Model.turns` maps each seat in flight to the
+dispatch it is answering, and `turnState` is the record of ONE DISPATCH — the seats one press of
+enter sent a brief to, and what those seats share while they answer it: the turn number, the
+route the header names, the arena's all-or-nothing bookkeeping. What moved down to the seat is
+everything the operator can now do to one seat while its neighbours work: its process handle,
+its own child context (so cancelling it kills its child and nobody else's), the cancellation
+word, the give-up.
+
+**The turn number stays one room-wide sequence**, and that is a ruling rather than a leftover. A
+per-seat count was considered — "codex's turn 4, grok's turn 4" — and refused, because every
+surface that already prints a turn number reads one coordinate: the separators, the by-turn page
+(`PageTurns`), `/retry`, `room.json`, the reattach card. Two seats both on "their turn 4" would
+leave the page able to open only one of them. So a turn number is a **dispatch** number: turn 5
+is the fifth brief the room sent, whoever it went to, and a seat's own history is the subset of
+those numbers it took part in. `Column.TurnN` already carried exactly this.
+
+#### What the operator sees
+
+- **A brief to a busy seat is refused for THAT seat, by name and turn.** `@codex …` while codex
+  is mid-answer: `a turn is in flight on codex (turn 4) — ctrl+c on its column cancels that
+  turn, or address another seat`, and the draft stays put. `@all` with codex busy goes to the idle
+  seats and says so: `sent to grok, agy — skipped: codex (turn 4), still on a turn; ctrl+c on
+  its column cancels it`. Both halves are measured — the seats in the new dispatch's live set, the seats
+  whose own turn refused them. The refusal is what stands between a persistent seat and a second
+  prompt written into a process mid-turn, which is the failure the room-wide wall was in front of.
+- **The header names the newest dispatch and counts the rest.** `turn 5 → codex · 3 in flight`.
+  The count is `State.SeatsInFlight()`, measured over the columns, and it is printed only when
+  some seat in flight is on a turn OTHER than the one the cell names (`inFlightBeyond`, read off
+  `Column.TurnN`) — an `@all` turn with its three seats streaming reads `turn 3 → everyone` as it
+  always did, because `· 3 in flight` beside it would be the route restated as a number. A live
+  column with no turn number at all is not counted as another dispatch: zero means never
+  dispatched, and a count that read it as elsewhere would be inferring. The route retires when
+  ITS dispatch lands (`ts.n == st.Turn`), not when the room goes quiet.
+- **ctrl+c has three meanings and the footer says which is live.** The focused seat's turn if it
+  has one (`ctrl+c cancel codex`); everything in flight when the focused seat is idle (`ctrl+c
+  cancel all`); quit when nothing is. With one seat in flight the label is the plain `cancel`
+  every earlier frame carried. The gate line's `cancel the turn` became the same label, because
+  the key reaches `viewKey` through `gateKey`'s fall-through and means there what it means here.
+  `x` is unchanged: the per-seat give-up with its card.
+- **The room-wide refusals name the seats.** `q`, `/cd`, `/seat`, `/unseat`, `/read`, `/write`,
+  `/retry`, `/adopt` and `/arena drop` still need the whole room idle — each changes something a
+  busy seat was dispatched against — and each now says `a turn is in flight on codex (turn 4),
+  grok (turn 5) — …`. `c` and `u` became per seat: the thread or the tree they touch is the
+  focused seat's alone.
+- **A race is the one turn that still owns the room.** `/arena` refuses while any seat is busy
+  (a race that skipped a seat is not a comparison), and every brief is refused while a race runs
+  (its racers are writing into worktrees a room brief would cut across). `race()` is the read.
+- **A `/flow` hop waits on its own seat.** Hop N+1 dispatches the moment hop N's seat lands,
+  whatever the rest of the room is doing; the chain's death-on-teardown runs only when the hop's
+  own dispatch ends (`turnState.flow`). A hop whose seat is busy with an unrelated brief stops
+  the chain by name — `flow stopped at hop 2/3: @codex is still on turn 4 — …` — rather than
+  queueing behind the seat, because a chain that dispatched itself later, when a seat happened
+  to free up, is the room acting on its own at a moment nobody chose (§9.16's argument).
+- **A rebuttal quotes what a busy neighbour last FINISHED saying.** The snapshot is taken per
+  seat at its dispatch; a seat mid-answer contributes its last filed turn (`settledReply`) and
+  nothing if it has never filed one. Quoting the half it has streamed would put half an argument
+  in front of another model as though it were whole.
+
+#### The inbox
+
+§9.40's strip named only the seats stopped on a gate. A crew has a second stall of the same shape:
+an answer lands in a column the reader is not on, the room knows, and the reader has to go
+looking. The strip now lists **seats whose turn ended since the reader last had the keys on
+them** — `⚠ NEEDS YOU   2 Codex   3 Grok done   4 Cursor failed` — with the terminal phase word,
+the same word the column header speaks, as the whole distinction between the two kinds of entry
+(no glyph, no colour: it reads the same under `--ascii` and `NO_COLOR`).
+
+Every entry is a measurement, on §9.40's own rule. A landing is two stamps the Model took itself:
+`Column.Ended`, written in `finishColumn` while the seat still holds a turn (so the second
+retirement a persistent seat or an ACP racer goes through cannot re-stamp it), and
+`Column.LastFocus`, written by `setFocus` on BOTH the seat left and the seat entered, so it marks
+the end of the reader's last look. The strip is `Ended.After(LastFocus)` over terminal columns.
+Nothing stores what was acknowledged — the comparison cannot drift, which is the argument §9.40
+made for deriving the gate half from `Focus`. The default-focus hole stays open for §9.40's reason
+and closes itself: the focused seat is never listed, and the reader's first departure stamps it.
+
+`.` is the strip's key: the next listed seat after the focus, wrapping. The footer names it only
+while the strip has an entry (§7.8: never a key that does nothing); in compose it is a full stop.
+
+#### Mechanics worth knowing
+
+- **One event reader.** Every dispatch and every batch re-arms the pump, and two goroutines
+  reading one channel would deliver batches to `Update` out of order — an exit before the text it
+  followed. `Model.eventsArmed` makes `waitEvents` hand out one reader; `Update` clears it on the
+  batch. `sendTurn`'s Cmd can therefore be nil for a dispatch that DID start, so `applyArenaSetup`
+  reads `race()` rather than the Cmd.
+- **The give-up and the cancel outlive the seat's turn.** `givenUp` and `cancelling` moved from
+  the turn to the Model, keyed by seat, and are cleared at the seat's next dispatch. A cut seat's
+  turn ends the instant its column lands, while its process is still draining — and on the
+  persistent seat still answering the interrupt with a failed `result` — and those echoes met a
+  seat with no turn, where `applyEvents` would have written the abort error over the give-up's own
+  note.
+- **Teardown walks `dispatches()`** — every distinct record in the map — and reaps each one's
+  one-shot handles, racer handles, ephemeral sessions and context. `TestTeardownReapsEveryDispatch`
+  pins two dispatches; `teardown_test.go` still pins the racer.
+- **Geometry.** `frameOwnersFor` counts a column still in flight as an owner, read off the
+  column's own phase, so a brief to grok while codex streams does not narrow codex's prose under
+  the reader. The no-mid-stream-reflow rule is about the room moving because a VENDOR did
+  something; a dispatch is the operator's act.
+
+#### What this section does NOT change
+
+`room.json` gains no field: sessions and the turn count are room-level and the save runs at each
+dispatch's end. `--trace` clocks are per process and unaffected. Session resume per vendor is
+unchanged — a seat is refused a second prompt while busy, which is the only new rule a resume
+could meet. The spawn guard is untouched: every crew test dispatches through `countSpawns`.
+
+#### Verification
+
+`gofmt`, `go vet ./...`, `go test ./... -count=1`, `go build ./...`, and the windows/amd64 and
+darwin/arm64 cross-builds, all clean; `go test -race ./internal/council` once. Five goldens are
+new — `two-in-flight`, `busy-seat-refused`, `inbox-landed`, `inbox-landed-ascii` — and the
+existing goldens that moved moved on ONE cell each: the footer's cancel label, on frames where
+two or more seats are in flight, which is the key's new meaning drawn honestly. No header of an
+existing frame moved.
+
+**Not verified here: a live crew.** No two vendors were run concurrently by the session that
+wrote this. What the suite pins is the room's bookkeeping over stubbed processes; what only a live
+run can show is a persistent seat taking its NEXT brief cleanly after a per-seat cancel, two
+one-shot seats' event streams interleaving through one reader without a stall, and a `/flow` hop
+landing beside an unrelated seat mid-answer. Owed and named rather than implied, on §9.53's rule.
