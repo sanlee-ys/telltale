@@ -17119,3 +17119,293 @@ take their strings from the model itself rather than from text typed into the te
 wording change moves the golden instead of quietly passing a stale assertion. **No footer hint
 was added**, so no existing golden moved: every golden's last line is the footer's key hints,
 and one new hint there rewrites about eighty-nine files at once.
+
+<a id="s9-53"></a>
+
+### 9.53 a live seat shows Claude Code's own screen, and measures nothing from it (2026-09-01)
+
+Every seat in this room is the same kind of thing: a column whose body is text council parsed
+out of a structured stream. That is what makes the gauges honest, and it is also the whole
+limit. The operator cannot see what the agent's own terminal shows. The permission prompt it
+draws, the spinner it spins, the box it puts around a diff — none of that is in
+`--output-format stream-json`, so none of it is in the room.
+
+This section adds a second KIND of seat. A LIVE seat runs the vendor in its own interactive
+mode, under a pseudoconsole, and draws that program's real screen inside the pane the seat
+already owns. Everything else about the seat does not move.
+
+#### The display-only contract
+
+**The live screen contributes NO measured field.** Not a cost, not a token count, not a context
+percentage, not a quota window, not a posture, not a phase, not a turn clock. Every gauge, every
+badge and every number on a live seat still comes from the structured adapter path, or renders
+absent under [§4a.1](#s4a-1)'s rule.
+
+This is not caution. It is the honest-gauge rule ([ADR-001](#adr-001)) applied to the one input
+that would break it. A screen of ANSI is a picture of a program, and reading a number off a
+picture is inference. `claude.exe`'s own status row prints a dollar cost and a weekly-limit
+sentence — both were captured in the spike, both are exactly the figures this room renders
+elsewhere, and both are exactly the figures the room must NOT take from here. `CapNone` exists
+to refuse inference. A field scraped off a repaint is a field this product spent its whole life
+declining to invent.
+
+So the seam is drawn at the type. The emulator lives on `Model`. The only thing that crosses
+onto `State` is `State.Live.Grid`, a slice of already-decoded plain rows, and `Render` draws
+those rows and nothing else. `applyPTY` writes `State.Live` and no other field of `State`.
+`TestLiveSeatMeasuresNothing` asserts that as a property rather than as a review note: it feeds
+the emulator a script carrying a cost, a quota sentence, a posture word and an elapsed time,
+then compares the whole `State` before and after and demands the only difference is `Live`.
+
+**The live pane is a SECOND process, and it doubles that seat's spend.** The structured session
+keeps running; the live child is another `claude` on the same account. The room says so where
+the pane is, in a word, because a surface that quietly billed twice would be the most expensive
+thing this section could ship.
+
+#### Only Claude Code can take the seat
+
+`vendors.Persistent` has exactly one implementer (`vendors/claude.go`). Codex, Antigravity and
+Grok are batch programs that exit every turn, so a pseudoconsole on one of them is a pane that
+is empty between turns. Cursor speaks ACP JSON-RPC and draws no terminal UI at all; seating it
+live would mean a different invocation that loses every measured field the ACP path supplies,
+which is the display path bought with the structured one — the exact trade this section refuses.
+
+The live invocation is not council's invocation. Council runs `claude --input-format stream-json
+--output-format stream-json ...`. The live child runs `claude` with no arguments, which is a
+different program mode with a different contract, and that is why it is a separate child rather
+than a second reader of the first.
+
+#### `os/exec` cannot spawn a ConPTY child
+
+Go's `syscall.SysProcAttr` on Windows has no field for a `PROC_THREAD_ATTRIBUTE_LIST`, so
+`EXTENDED_STARTUPINFO_PRESENT` cannot be honoured through `exec.Command`, and
+`PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` is the whole mechanism by which a child attaches to a
+pseudoconsole. The spawn half is therefore a direct `windows.CreateProcess`, and it is the only
+place in this repository that starts a process without `os/exec`.
+
+The containment half is NOT rewritten. `windowsGroup`'s job object was measured working
+unchanged on a ConPTY child: `AssignProcessToJobObject` succeeded, and closing the job handle
+killed the child immediately where `ClosePseudoConsole` alone had left a `claude.exe` REPL alive
+more than three seconds. `attach` is refactored to take a pid, `attach(*exec.Cmd)` calls it, and
+the PTY calls the same function. One job-object implementation, two spawn shapes.
+
+`golang.org/x/sys/windows` v0.47.0 already exposes `CreatePseudoConsole`, `ResizePseudoConsole`,
+`ClosePseudoConsole`, `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` and `NewProcThreadAttributeList`, so
+the pseudoconsole itself costs no new module.
+
+One non-obvious requirement, measured: the child does NOT attach to the pseudoconsole unless
+`STARTF_USESTDHANDLES` is set with all three std handles left at zero. Without it the child
+keeps the PARENT's std handles, even with `bInheritHandles` false and even when the parent owns
+no console at all — a `cmd /c echo` printed on the parent's own stdout and the pty stream stayed
+empty. That one flag is the difference.
+
+#### `CREATE_NO_WINDOW` is the trap, and it fails silently
+
+`proc_windows.go` sets `CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW` and `HideWindow` on every
+child today, and the comment there is correct for every child it was written for. It is fatal
+here. Measured on 2026-08-31, a ConPTY child created with `CREATE_NO_WINDOW`:
+
+- emits ZERO bytes — not even conhost's own preamble,
+- accepts no input, so a write to its stdin does nothing,
+- exits 0, and `CreateProcess` returns a NIL error.
+
+There is no log line, no error and no output. The pane is simply blank. `DETACHED_PROCESS`
+fails the same way and additionally exits 1. `CREATE_NEW_PROCESS_GROUP` and `HideWindow` are
+both compatible and both measured working.
+
+An implementer reaches this bug by copying the existing spawn helper, which is the most likely
+thing to do, so the refusal is written down at the call site and the flag is named in
+`pty_windows.go`'s doc comment rather than left to this file.
+
+**There is no console flash to suppress.** That was measured with a differential `EnumWindows`
+scan carrying a positive control, across every flag combination and on runs up to twenty
+seconds: zero new visible windows. The reason is structural — a child holding
+`PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` attaches to the pseudoconsole's own headless conhost and
+never asks Windows for a console, so `CREATE_NO_WINDOW` has nothing to suppress and its only
+effect here is to break the attach. One caveat for whoever writes the regression test: ConPTY's
+conhost DOES create a window of class `PseudoConsoleWindow`, `IsWindowVisible` reports it as
+visible, and it never paints. A flash test must match `ConsoleWindowClass` and must not treat
+`PseudoConsoleWindow` as a flash.
+
+#### `fit` is not sufficient, and no width helper can be
+
+`fit` (§9.5) is ANSI-aware for SGR, which is the `padRight` trap it was written for. It does not
+solve this problem and cannot. `lipgloss.Width` measures display cells, and a cursor-move, an
+erase-in-line, an absolute cursor position and a scroll-region set all measure as ZERO cells —
+so `MaxWidth` passes them through untouched into telltale's frame, where they execute against
+the host screen.
+
+These were all found in the real captures, and each is a different kind of damage:
+
+| Sequence | Damage if forwarded |
+|---|---|
+| `ESC[8;20;60t` | resizes the operator's REAL terminal window |
+| `ESC[>0q` | the real terminal answers into telltale's own stdin — a reply to a question the host never asked |
+| `ESC[?9001h` | switches the host into win32-input-mode, and Bubble Tea then decodes keys wrong |
+| `ESC[?1004h` | enables focus reporting on the host, injecting focus events into its input |
+| `ESC[?2004h`, `ESC[?2031h` | change how the HOST receives pastes and theme changes |
+| `ESC[2J`, `ESC[13;1H` | absolute addressing against the pane's origin, painting over telltale's frame |
+| `ESC]0;...BEL` | sets the host window title to the guest's path |
+
+The escapes must be CONSUMED, not measured. That is an emulator, and it is mandatory.
+
+#### Why `x/vt`, and not a hand-rolled parser
+
+`github.com/charmbracelet/x/vt` at `v0.0.0-20260830003929-9f48cc723c1c` (MIT) is taken as a
+direct dependency. Three reasons, in the order that decided it.
+
+**A hand-rolled parser is not a smaller problem, it is the same problem with a smaller test
+suite.** The table above is not the list of sequences to handle; it is the list found in twenty
+seconds of two guests. Correctness here is not "parse the ones we saw" — a sequence this room
+does not model and forwards by accident is a host-terminal corruption the goldens cannot see,
+because `PlainStyles` neutralises telltale's own escapes and is blind to a vendor's. The failure
+mode of an incomplete parser is invisible to every test this repo has.
+
+**The dependency cost is exactly two modules.** Measured by diffing `go list -m all`: `x/vt` and
+`github.com/charmbracelet/x/exp/ordered` (v0.1.0, MIT, a small generics helper). Everything else
+it needs — `ultraviolet`, `x/ansi`, `x/term`, `colorprofile`, `displaywidth`, `uax29`,
+`go-colorful`, `go-runewidth`, `cancelreader`, `uniseg`, `terminfo`, `x/sys`, `x/sync` — is
+already in the graph because Bubble Tea v2 pulls it. `golang.org/x/exp` is NOT pulled in.
+
+**It links against this repo's exact pins, proven rather than assumed.** A compatibility program
+built against `bubbletea/v2 v2.0.9`, `lipgloss/v2 v2.0.6` and
+`ultraviolet v0.0.0-20260811164956-006e29f97886` compiled and ran, and one type satisfied both
+`tea.Model` and `uv.Drawable`. `x/vt`'s own `go.mod` asks for an OLDER `ultraviolet`
+pseudo-version; minimal version selection promotes it to this repo's newer one and it still
+works. That promotion is the standing version risk and it is measured green today.
+
+The alternatives were surveyed and rejected on evidence: `hinshun/vt10x` has no tagged release
+and no commit since 2022-03-01, and `liamg/darktile` is a terminal application whose emulator is
+not importable.
+
+The counted cost of taking it: `x/vt` has no tagged release either. It is a pseudo-version off
+`main` from a vendor moving fast, so its API can change with no semver signal. That is a real
+cost and it is accepted, because the alternative is owning a VT parser in a repository whose
+test suite cannot see the bug class it would introduce.
+
+#### The update path, which is dictated by `Render` purity
+
+`Render` is pure over `State` — `TestRenderIsPure` renders twice and demands byte equality, and
+`TestElapsedIsPureOverState` sleeps between the two renders and demands it again. A pane that
+asked an emulator for "the current screen" from inside `Render` fails both. So the screen is
+materialised in `Update` and `Render` draws finished rows:
+
+```
+ConPTY output pipe
+  -> reader goroutine, chunks into a BOUNDED channel      (a full channel stalls the child)
+  -> waitPTY() tea.Cmd, shaped like waitEvents            (block on one, drain up to a cap)
+  -> Update, case ptyBatchMsg
+       emulator.Write(chunk)      -- the emulator is on Model, never on State
+       st.Live.Grid = snapshot()  -- decoded rows cross onto State
+       re-arm waitPTY()
+  -> Render draws st.Live.Grid
+```
+
+The emulator sits on `Model` for the same stated reason `gateInputs` does: it holds the whole
+raw stream, and `State` is what the renderer can reach. Only finished rows cross.
+
+Coalescing falls out of the shape. One `Update` applies every chunk it drained but takes ONE
+snapshot, so a flood costs one grid copy per frame rather than one per chunk. The emulator holds
+the state, so nothing is lost by coalescing — which is the same argument `drainMax` already
+makes for text.
+
+**Resize is issued from `Update`.** `layoutFor` is pure and callable there, so the room computes
+the pane's cell rectangle, and when it differs from the pseudoconsole's current size it calls
+`ResizePseudoConsole` and `Emulator.Resize` together. Doing one without the other leaves the
+grid and the pty disagreeing about the width. Never from `Render`.
+
+#### What the pane draws, and what it drops
+
+The pane draws the emulator's TEXT grid. It does NOT carry the guest's colours, and that is a
+decision rather than an omission.
+
+Three reasons. A golden may not embed ANSI (§9.5), and `PlainStyles` neutralises telltale's own
+escapes and not a vendor's, so a coloured grid could not be pinned by a golden at all. Colour in
+this room is always a SECOND signal for a distinction telltale is making, and the guest's
+colours are not telltale's claims. And carrying SGR through a clip re-opens the bleed hazard
+`fit` exists to close: a row clipped mid-run leaves a colour open into the next pane.
+
+The cost is real and worth naming: a guest that distinguishes something by colour alone loses
+that distinction here. Claude Code does not — its own output carries words and glyphs — but that
+is a measurement of one guest, not a rule about guests.
+
+The guest's own GLYPHS are kept verbatim, including under `--ascii`. `--ascii` governs
+telltale's glyph set, and the live pane's chrome respects it. The grid is another program's
+screen, which is quoted material in the sense CLAUDE.md already carves out for error text: a
+room that rewrote what a vendor printed would be showing something the vendor did not print.
+
+The pane does not scroll. A live terminal viewport is the emulator's current screen, and the
+emulator is sized to the pane, so there is no hidden region for a scroll key to reach. The
+guest's own scrollback stays inside the guest.
+
+#### Honest degradation, and the build floor
+
+**Only Windows build 10.0.26200 was measured.** ConPTY's documented floor is Windows 10 1809
+(build 17763), and that floor is DOCUMENTATION, not a measurement made here. Older builds are
+also reported to repaint more heavily, so the 97.3%-payload result may not hold below Windows
+11. **This is the single largest unverified claim behind this section.**
+
+The seat is therefore gated rather than trusted. `StartPTY` reads the running build with
+`RtlGetVersion` and refuses below 17763 with a sentence naming the build it found and the build
+it needs. A refusal renders as an `unavailable` card in the pane, which is the shape §4a.1
+already rules for a field that could not be read: the room says what it could not do, and does
+not draw a blank pane that looks like an agent with nothing to say.
+
+**Non-Windows compiles and refuses.** `pty_other.go` carries the `!windows` build tag and
+returns `unavailable on this OS`. A build tag rather than a runtime check, so a Unix build does
+not carry a pseudoconsole path it can never take, and so the refusal is a fact about the binary
+rather than a guess made at the moment somebody presses a key.
+
+The other measured gaps, recorded so a later reader does not mistake silence for coverage: no
+streaming agent turn was driven through a pane, no alternate-screen guest was exercised (`x/vt`
+has two screen buffers and should handle the alternate-screen mode set, and that path is
+untested here), the longest spike run was twenty seconds so nothing is known about handle or
+memory growth over a long session, and the documented ConPTY close deadlock did not reproduce on
+this build — a negative result on one machine, not a guarantee.
+
+#### The spawn guard grows a sixth var, in the same change
+
+`startPTYSession` is declared beside the other spawn vars in `persistent.go` and takes a
+`runner.Spec`, so `refuseRealVendor` needs no fork — a second refuser would be a second thing to
+keep honest. `TestMain` wraps it, and `countSpawns` stubs it with the restore in the existing
+`t.Cleanup`.
+
+This is not optional and it is not a follow-up. A council test never spawns a vendor, and a PTY
+child is a vendor process like any other: the fact that its output is DISPLAY ONLY changes
+nothing about whose account it runs on. A spawn that escaped the count would let
+"nothing was spawned" pass over a vendor launched with a pseudoconsole attached, which is the
+exact assertion those tests exist to make.
+
+#### The seat is seated by a flag, and by nothing else
+
+`--live claude` names the seat. Parsing lives in `ParseLive` in `internal/council` and `Run`
+calls it before the alternate screen, so `cmd/telltale` hands over one field and learns nothing
+about vendors — and an impossible seat is a line on stderr rather than a card behind a TUI the
+user has to quit to read, which is the discipline `--brief` and `--trace` already follow. There is no key. A key
+would have to be taught on the help panel and would be a second way to spend a second account
+that the operator has not asked for; the flag is a decision made once, at the point where the
+room is opened, and that is the right place for a control that doubles a bill.
+
+**Nothing types into the pane either.** `PTYSession.Write` exists because the pseudoconsole's
+input pipe exists whether or not anybody writes to it, and no council code calls it. So the
+first cut is a WINDOW, not a terminal: the operator watches the agent's own screen and answers
+it, when it asks something, in the seat's structured column beside it. Sending keystrokes needs
+a key encoding, a focus rule and an answer to what `q` means while a pane has the keyboard, and
+none of those is a display question. Owed, and named here rather than half-built.
+
+#### Verification
+
+`go vet ./...` clean, `go build`, and `go test ./internal/council -timeout 20m`. The live seat's
+tests drive the emulator and the render path directly, never `startPTYSession`, which is the
+same shape `arenacheck_test.go` uses for the check var.
+
+Two goldens are new — `live-seat.txt` and `live-seat-ascii.txt` — and no existing golden moved.
+The feature is entirely opt-in: `State.Live`'s zero value is off, no footer hint was added, and
+no chrome row was spent, so every existing frame renders byte-identically. The goldens pin the
+seat's chrome and a FIXED emulator grid produced by feeding a fixed byte script through `x/vt`
+in the test. They pin what a golden can pin: that escapes were consumed, that the grid is
+exactly the pane's rectangle, and that the display-only marker is a word rather than a colour.
+
+**Not verified here: a live drive.** No `claude` interactive session was run through a pane by
+the session that wrote this. The spawn guard makes that impossible from inside the suite by
+design, and it is the same class of debt as the host's first live turn ([STATE.md](../STATE.md)):
+an operator-driven check, owed and named rather than implied.

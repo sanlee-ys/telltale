@@ -1395,6 +1395,83 @@ type State struct {
 	// ASCII mirrors the glyph set, so Render can pick a different affordance
 	// where a straight substitution does not work.
 	ASCII bool
+
+	// Live is the seat whose pane draws a real terminal screen (§9.53).
+	//
+	// Its zero value is a room with no live seat, which is every room that did
+	// not ask for one — so no existing frame moves and no golden changed when
+	// this landed.
+	//
+	// It holds DECODED ROWS and nothing else, and that boundary is the whole
+	// design. The emulator that produced them lives on Model, beside gateInputs
+	// and for the identical reason: it holds the raw stream, and State is what
+	// the renderer can reach. What crosses is text the renderer may draw. What
+	// does not cross is anything a gauge could be tempted to read.
+	Live LiveSeat
+}
+
+// LivePhase is what a live pane can be, and the three states are kept apart for
+// §4a.1's reason: a pane that is starting, a pane that has ended and a pane
+// that was refused all draw nothing, and rendering the three alike would be the
+// zero-vs-absent collapse this repo exists to prevent.
+type LivePhase uint8
+
+const (
+	// LiveOff: no live seat. The zero value, and the ordinary room.
+	LiveOff LivePhase = iota
+	// LiveOpening: the child was started and has not painted yet.
+	LiveOpening
+	// LiveShowing: Grid holds the child's current screen.
+	LiveShowing
+	// LiveEnded: the child exited. The last screen it drew stays on the pane,
+	// because a pane that blanked on exit would lose the thing an operator most
+	// often opened it to read — what the agent said last.
+	LiveEnded
+	// LiveUnavailable: the seat was refused, and Note says by what.
+	LiveUnavailable
+)
+
+// LiveSeat is one seat's live terminal screen, as the renderer sees it.
+//
+// Every field here is either chrome telltale wrote or text an emulator decoded.
+// There is deliberately no cost, no token count, no context percentage, no
+// quota window and no elapsed time on this struct, and that absence is the
+// contract rather than an oversight (§9.53). The live child's screen prints all
+// five — `claude.exe`'s own status row carries a dollar figure and a weekly
+// limit — and every one of them would be a number read off a picture. A gauge
+// fed from here would be inferred, and ADR-001 refuses inferred.
+type LiveSeat struct {
+	// Seat is which column draws the screen. Empty means none, whatever Phase
+	// says, so a half-built State cannot paint a pane onto a seat nobody named.
+	Seat model.VendorID
+	// Phase is what the pane is doing.
+	Phase LivePhase
+	// Note is why, in a sentence, when Phase is LiveUnavailable or when a
+	// LiveEnded child ended badly. Empty on a clean end and on a pane the room
+	// closed itself, because a process the room ended did not fail.
+	Note string
+	// Cols and Rows are the rectangle the emulator was sized to. Held so the
+	// renderer can tell a grid that matches the pane from one that has not
+	// caught up with a resize yet, and clip rather than tear.
+	Cols, Rows int
+	// Grid is the child's screen, one already-decoded row per line, PLAIN.
+	//
+	// Plain, with the guest's colours dropped, and §9.53 argues the trade: a
+	// golden may not embed vendor ANSI, colour in this room is always a second
+	// signal for a claim telltale is making, and a styled row clipped at a pane
+	// edge leaves an open colour run bleeding into the next pane. The guest's
+	// own GLYPHS survive, including under --ascii, because they are quoted
+	// material — the room must not rewrite what another program printed.
+	Grid []string
+}
+
+// On reports whether a live pane should be drawn for this seat.
+//
+// Both halves are required. A Phase with no Seat is a room that would paint a
+// screen onto whichever column happened to be first, and a Seat with LiveOff is
+// a seat that was asked for and refused before it started.
+func (l LiveSeat) On(v model.VendorID) bool {
+	return l.Seat != "" && l.Seat == v && l.Phase != LiveOff
 }
 
 // NewState is the empty room.

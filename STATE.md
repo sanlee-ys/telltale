@@ -720,7 +720,19 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   is a product question nobody has answered, and the reader is one root away
   from it either way.
 
-- **The PTY "live seat" is MEASURED, and it is not built (2026-09-01).** The
+- **The PTY "live seat" is BUILT, and it has never been driven (2026-09-01).**
+  [design.md §9.53](docs/design.md#s9-53) holds the whole design and the
+  measurements the spike made; the paragraph below is kept because it records
+  what was measured and where, and because every trap in it is still a trap.
+  What changed is that the seat exists: `runner.StartPTY`, an `x/vt` emulator on
+  `Model`, decoded rows on `State.Live`, and a sixth spawn var in the guard.
+  What is still owed is the drive. **No `claude` interactive session has ever
+  been run through a pane.** The spawn guard makes that impossible from inside
+  the suite by design, so it is the same class of debt as the host's first live
+  turn two entries down: an operator-driven check. Also unbuilt: no key sends a
+  keystroke into the pane, so the pane is a window rather than a terminal.
+
+- **The PTY spike's own measurements (2026-08-31).** The
   spike ran on this machine — Windows 11 build 10.0.26200.9168, go1.26.6 — and
   its findings are recorded here because nothing else in the repo holds them.
   **ConPTY needs no new dependency**: `golang.org/x/sys/windows` v0.47.0 already

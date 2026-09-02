@@ -2103,6 +2103,14 @@ func (m *Model) teardown() {
 		// teardown actually made (§9.52).
 		m.ended++
 	}
+	// The live seat is a vendor process too (§9.53), so it dies here and is
+	// counted here. Killed explicitly rather than left to the room context that
+	// would also reach it: the closing line reports how many agents this
+	// teardown ended, and a child that died from a cancellation somewhere below
+	// would go uncounted while still having been ended by this room.
+	if m.killLive() {
+		m.ended++
+	}
 	// The children die before the file they were pointed at is removed. The
 	// other order would leave a live seat holding a path to a deleted hooks
 	// file, which is the shape of a seat that quietly stops being screened.

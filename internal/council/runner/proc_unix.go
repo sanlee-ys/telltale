@@ -47,6 +47,18 @@ func (g *unixGroup) attach(cmd *exec.Cmd) error {
 	return nil
 }
 
+// attachPid completes the interface the live seat added (design.md §9.53).
+//
+// It records the pgid the same way attach does, and it is unreachable today:
+// StartPTY refuses on this platform before any group is made, because the
+// pseudoconsole path is Windows-only. It is written rather than left to panic
+// so that an openpty implementation lands with containment already in place,
+// which is the half a Unix port would otherwise be most likely to skip.
+func (g *unixGroup) attachPid(pid uint32) error {
+	g.pgid = int(pid)
+	return nil
+}
+
 func (g *unixGroup) kill() error {
 	if g.pgid == 0 {
 		return nil

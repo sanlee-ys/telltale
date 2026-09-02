@@ -14,6 +14,16 @@ type procGroup interface {
 	prepare(*exec.Cmd)
 	// attach adopts the running child. Called immediately after Start.
 	attach(*exec.Cmd) error
+	// attachPid adopts a running child by pid, for the one spawn that has no
+	// exec.Cmd to hand over.
+	//
+	// The live seat cannot use os/exec at all — a ConPTY child needs a
+	// STARTUPINFOEX attribute list, and SysProcAttr has no field for one
+	// (design.md §9.53) — so it calls windows.CreateProcess itself and holds a
+	// pid rather than a *exec.Cmd. The containment is NOT forked for it: this
+	// is the same job object, measured working unchanged on a pseudoconsole
+	// child, and attach above is now one line over it.
+	attachPid(pid uint32) error
 	// kill terminates the child and its descendants.
 	kill() error
 	// close releases any handle the group holds.

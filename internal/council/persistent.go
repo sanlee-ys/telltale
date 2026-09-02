@@ -12,8 +12,11 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
-// startSession and startProcess are the council package's ONLY two process
-// spawns, behind vars so the security tests can count them.
+// startSession, startProcess, startRPCSession and startPTYSession are the
+// council package's vendor process spawns, behind vars so the security tests
+// can count them. startEditor (review.go) and startCheck (arenacheck.go) are
+// guarded on the same rule for programs that are not vendors, which makes six
+// in all — main_test.go wraps every one of them.
 //
 // A var rather than an injected interface because the property under test is
 // "nothing was spawned", and the cheapest honest way to assert that is to make
@@ -34,6 +37,24 @@ var startRPCSession = func(ctx context.Context, spec runner.Spec, out chan<- run
 }
 
 var startProcess = runner.Start
+
+// startPTYSession is the SIXTH thing this package can spawn, and it is behind
+// its own var for the reason the three above are: the security tests count
+// spawns, and a call site that escaped the count would be a hole in exactly the
+// assertion those tests exist to make.
+//
+// A PTY child is a real vendor process on the operator's own account. The fact
+// that its output is DISPLAY ONLY (design.md §9.53) changes what the room may
+// render from it and changes nothing at all about what it costs — so it is
+// guarded identically, and "a council test never spawns a vendor" covers it
+// word for word.
+//
+// It takes a runner.Spec so refuseRealVendor needs no fork. A signature of
+// (binary, args) would have forced a second refuser, and a second refuser is a
+// second thing to keep honest.
+var startPTYSession = func(ctx context.Context, spec runner.Spec, cols, rows int, out chan<- runner.PTYChunk) (runner.PTYSession, error) {
+	return runner.StartPTY(ctx, spec, cols, rows, out)
+}
 
 // seatSession is the slice of runner.Session the seat logic drives.
 //

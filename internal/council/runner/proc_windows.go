@@ -54,6 +54,21 @@ func (g *windowsGroup) prepare(cmd *exec.Cmd) {
 }
 
 func (g *windowsGroup) attach(cmd *exec.Cmd) error {
+	return g.attachPid(uint32(cmd.Process.Pid))
+}
+
+// attachPid is the whole of attach, expressed over the one fact it uses.
+//
+// Split out for the live seat (design.md §9.53), which starts its child with
+// windows.CreateProcess because a pseudoconsole needs a STARTUPINFOEX attribute
+// list that SysProcAttr cannot carry — so it has a pid and no *exec.Cmd. The
+// containment is deliberately NOT duplicated for it: a second job-object
+// implementation is a second place for the kill-on-close limit to go missing,
+// and the vendor that most needs killing is the one behind a shim. Measured
+// 2026-08-31: AssignProcessToJobObject succeeds on a ConPTY child, and closing
+// the job handle killed a claude.exe REPL that ClosePseudoConsole alone had
+// left running.
+func (g *windowsGroup) attachPid(pid uint32) error {
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
 		return err
@@ -76,7 +91,7 @@ func (g *windowsGroup) attach(cmd *exec.Cmd) error {
 	h, err := windows.OpenProcess(
 		windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE,
 		false,
-		uint32(cmd.Process.Pid),
+		pid,
 	)
 	if err != nil {
 		windows.CloseHandle(job)
