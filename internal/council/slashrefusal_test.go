@@ -58,7 +58,7 @@ func TestAMistypedCommandSpawnsNothing(t *testing.T) {
 			// line the user is about to edit must not have to be retyped.
 			t.Errorf("%q was thrown away rather than handed back: %q", draft, m.st.Draft)
 		}
-		if !strings.Contains(m.st.Notice, "no room command") {
+		if !strings.Contains(m.st.Notice, "no command") {
 			t.Errorf("%q was refused without saying so: %q", draft, m.st.Notice)
 		}
 	}
@@ -209,7 +209,7 @@ func TestAKnownCommandIsStillACommand(t *testing.T) {
 		m.setDraft(rc.verb)
 
 		handled := m.roomCommand()
-		if strings.Contains(m.st.Notice, "no room command") {
+		if strings.Contains(m.st.Notice, "no command") {
 			t.Errorf("%s was refused by the table that lists it: %q", rc.verb, m.st.Notice)
 		}
 		if rc.run == nil {

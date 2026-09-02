@@ -85,6 +85,10 @@ func roomVerbs() []roomVerb {
 		{verb: "/arena"},
 		{verb: "/cd", run: (*Model).cdCommand},
 		{verb: "/flow"},
+		// /hand <to> <from>: one seat's worktree diff into the draft, addressed
+		// to another seat (handcmd.go, §9.55). It takes arguments, so the
+		// verb-plus-space form is unmistakably a command.
+		{verb: "/hand", run: (*Model).handCommand},
 		{verb: "/read", bare: true, run: func(m *Model, _ string) bool { return m.postureCommand(false) }},
 		// Bare-only, for /read and /write's reason rather than for symmetry: it
 		// takes no argument, and "/retry the failing test" is a sentence someone
@@ -152,11 +156,15 @@ func (m *Model) refuseUnknownCommand() bool {
 	// HARD budget: TestTheRefusalFitsTheRoomItIsShownIn fails any wording the
 	// room's own width clips. The remedy clause outranks elegance; a refusal
 	// that truncates its vocabulary teaches a partial alphabet. "sends it"
-	// lost its object when /adopt joined — the third purchase on this line,
-	// and the last cheap one: the next verb has to find its characters
-	// somewhere else.
-	m.st.Notice = "no room command " + firstWord(m.st.Draft, m.glyphs.Ellipsis) +
-		", a leading space sends · " + strings.Join(roomWords(), " ")
+	// lost its object when /adopt joined — the third purchase on this line.
+	// /hand (§9.55) paid with "room " and the article: "no command /x, leading
+	// space sends" says the same three things in seven fewer cells, and the
+	// tests still require "no command" and "leading space" to reach the
+	// screen. That is the fourth purchase, and the line now fits its width
+	// with nothing left to sell — the next verb changes the shape of this
+	// sentence, not a word in it.
+	m.st.Notice = "no command " + firstWord(m.st.Draft, m.glyphs.Ellipsis) +
+		", leading space sends · " + strings.Join(roomWords(), " ")
 	return true
 }
 

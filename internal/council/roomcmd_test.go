@@ -564,7 +564,7 @@ func TestRetryIsOnlyABareCommand(t *testing.T) {
 	if !m.roomCommand() {
 		t.Fatal("a slash-leading draft was neither run nor refused")
 	}
-	if !strings.Contains(m.st.Notice, "no room command") {
+	if !strings.Contains(m.st.Notice, "no command") {
 		t.Errorf("/retry took an argument it does not have: %q", m.st.Notice)
 	}
 	if m.st.Draft != "/retry the failing test" {
