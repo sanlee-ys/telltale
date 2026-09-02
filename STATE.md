@@ -775,11 +775,21 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   process facts with real processes — a real client detaches and exits, the host
   outlives it, a second client rejoins it, and a `taskkill /F` on the detached
   host reaps a real seat — but every one of those seats is this test binary
-  re-executed, and the host's roster is empty by construction. So `--host`,
-  `/detach`, the rejoin, `kill` and `ls`'s live section have never been driven
-  against a real vendor answering a real brief. One `telltale council --host
-  --read`, one brief, one `/detach`, one `telltale council` and one `telltale
-  council kill` pays the whole path.
+  re-executed, and the host's roster is empty by construction.
+
+  **MEASURED 2026-09-01, on the built binary, at Windows 11 Pro 10.0.26200:**
+  the whole operator path ran against a sandbox `HOME` and a real five-seat
+  roster — `telltale council --host --read`, `/detach` (pid named), `telltale
+  council ls` reporting the live host, `telltale council` rejoining it, a second
+  `/detach`, then `telltale council kill` ending it and `ls` reporting none. The
+  write refusal ran too: `telltale council --host` warned before it opened and
+  refused the `/detach` in the ruled sentence. **NO VENDOR WAS SPAWNED IN ANY OF
+  IT**, and that is what the run does not pay for rather than a caveat on it: a
+  host starts a seat's process on the FIRST DISPATCH and this drive never
+  dispatched, so five columns drew `idle` (and `cursor` drew `undrivable`, the
+  §9.36 refusal) without a vendor existing. What is still owed is one brief
+  through a hosted room — a real vendor answering, streaming into a detached
+  host, and still being there on the rejoin.
 
 Cross-platform and cross-machine status has its own file: [PARITY.md](PARITY.md).
 
