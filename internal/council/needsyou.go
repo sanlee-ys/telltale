@@ -20,13 +20,21 @@ import (
 // something is stopped and the reader has to go looking for it, one column at a
 // time, while it stays stopped. That is the stall this line exists to delete.
 //
-// **It is driven by the gate queue and by nothing else.** State.Gates is a
-// structured record of vendors that asked for permission and have not been
-// answered; every name on this strip comes from one of those entries. A seat that
-// has gone quiet, a seat streaming nothing, a seat whose reply merely looks like a
-// question — none of them reach this line, because none of them is a measurement
-// that anyone is blocked (§4a.1). "Needs you" is a claim about a vendor waiting on
-// a keystroke, and the queue is the only thing that knows.
+// **It is driven by two measurements and by nothing else.** The first is the
+// gate queue: State.Gates is a structured record of vendors that asked for
+// permission and have not been answered, and a name from one of those entries
+// is a seat that is BLOCKED. The second, since §9.54, is a landing: a seat whose
+// turn reached a terminal phase — done, failed, cancelled — while the reader was
+// not looking at it, which the room knows from two stamps it took itself,
+// Column.Ended and Column.LastFocus. That is the crew's inbox. With several
+// seats answering different briefs, an answer that lands in a column the reader
+// is not on is the stall the gate strip was built for, one phase later: the
+// room knows and the reader has to go looking. A seat that has gone quiet, a
+// seat streaming nothing, a seat whose reply merely looks like a question —
+// none of them reach this line, because none of them is a measurement that
+// anyone is blocked or that anything has ended (§4a.1). "Needs you" is a claim
+// about a vendor waiting on a keystroke or a reply waiting to be read, and the
+// queue and the stamps are the only things that know.
 //
 // **A seat leaves the strip when the user goes to it, and that is the only thing
 // besides answering that takes it off.** Derived from Focus rather than stored as
@@ -37,6 +45,16 @@ import (
 // which is the one failure it exists to prevent. Derived, the worst that happens
 // is the strip re-listing a seat the reader has already visited and left, and
 // that is TRUE: it is still stopped and they are no longer looking at it.
+//
+// The landed entries follow the same rule with one more fact in hand. A gate
+// is stopped for as long as it is up, so re-listing it after a visit is right;
+// a landing happened ONCE, at Ended, so "since you last looked" is a comparison
+// against when the reader was last on that column — LastFocus, stamped when
+// focus enters a column and again when it leaves (setFocus). A seat visited
+// after it landed is behind the reader's last look and drops off; a seat that
+// lands again later is ahead of it and comes back. Nothing is stored about
+// what was acknowledged: the two stamps are events, and the strip is a
+// comparison between them.
 //
 // **The default focus is a real hole in that rule and it is deliberately left
 // open.** NewState seats the keys on column 0 without the user pressing anything,
@@ -52,13 +70,34 @@ type needsYouCell struct {
 	// name is the seat's identity at whichever rung of the ladder is being
 	// tried: its label, or its two-letter tag.
 	name string
+	// word is what the seat needs you FOR, and it is the whole distinction
+	// between the two kinds of entry (§9.54): empty for a blocked seat, whose
+	// entry reads exactly as it did before the inbox — `2 Codex` — and the
+	// terminal phase word for a landed one — `3 Grok done`, `4 Cursor failed`.
+	// A word rather than a glyph or a colour, so --ascii and NO_COLOR keep the
+	// distinction; and the SAME word the column header speaks, so the strip and
+	// the column cannot disagree about how a turn ended.
+	word string
 }
 
 func (c needsYouCell) text() string {
-	if c.num == "" {
-		return c.name
+	s := c.name
+	if c.num != "" {
+		s = c.num + " " + s
 	}
-	return c.num + " " + c.name
+	if c.word != "" {
+		s += " " + c.word
+	}
+	return s
+}
+
+// needsYouEntry is one seat on the strip: which column, and — for a seat that
+// LANDED rather than one that is blocked — the phase word that says how.
+type needsYouEntry struct {
+	idx int
+	// word is empty for a blocked seat and the terminal phase's own word for a
+	// landed one; see needsYouCell.word.
+	word string
 }
 
 // needsYouLead is the words, and the words are the whole signal.
@@ -113,22 +152,47 @@ const needsYouGap = "   "
 // is no key that reaches an unseated column) and it is therefore the one entry
 // here that cannot be cleared by focus, which is honest: nothing the reader can
 // press from this room will unblock it.
-func needsYou(st State) []int {
-	if len(st.Gates) == 0 {
-		return nil
-	}
+func needsYou(st State) []needsYouEntry {
 	waiting := make(map[model.VendorID]bool, len(st.Gates))
 	for _, p := range st.Gates {
 		waiting[p.Vendor] = true
 	}
-	var out []int
+	var out []needsYouEntry
 	for i, c := range st.Columns {
-		if i == st.Focus || !waiting[c.Vendor] {
+		if i == st.Focus {
 			continue
 		}
-		out = append(out, i)
+		if waiting[c.Vendor] {
+			// Blocked outranks landed on the same seat, and it cannot arise: a
+			// card is up only while the seat's turn is open, and a landing
+			// happens only when it closes. Listed once either way.
+			out = append(out, needsYouEntry{idx: i})
+			continue
+		}
+		if landedUnread(c) {
+			out = append(out, needsYouEntry{idx: i, word: c.Phase.String()})
+		}
 	}
 	return out
+}
+
+// landedUnread reports that this column's turn ended since the reader last had
+// the keys on it (§9.54). Both halves are stamps the Model took — Ended in
+// finishColumn (or at a dispatch that failed before spawning), LastFocus in
+// setFocus — and the comparison is the whole rule: a zero Ended is a turn that
+// has not ended or a seat that never took one, and every State a test types by
+// hand is that, so no existing frame grows a strip. The phase test is what keeps
+// the word honest: Ended is only ever stamped at a retirement, but a column
+// re-dispatched to is reset by startTurn, and the guard says so twice.
+func landedUnread(c Column) bool {
+	if c.Ended.IsZero() || !c.Ended.After(c.LastFocus) {
+		return false
+	}
+	switch c.Phase {
+	case PhaseDone, PhaseFailed, PhaseCancelled:
+		return true
+	}
+	return false
 }
 
 // needsYouRows is how many rows the strip wants: one, or none.
@@ -191,13 +255,13 @@ func needsYouLine(st State, w int, sty Styles, g Glyphs) string {
 
 	cells := func(name func(Column) string) []needsYouCell {
 		out := make([]needsYouCell, 0, len(seats))
-		for _, i := range seats {
-			c := st.Columns[i]
+		for _, e := range seats {
+			c := st.Columns[e.idx]
 			num := ""
 			if n := st.SeatNumber(c); n > 0 && !st.Page.Open {
 				num = strconv.Itoa(n)
 			}
-			out = append(out, needsYouCell{num: num, name: name(c)})
+			out = append(out, needsYouCell{num: num, name: name(c), word: e.word})
 		}
 		return out
 	}
@@ -259,7 +323,8 @@ func needsYouFit(cs []needsYouCell, lead string, w int, sty Styles) (string, boo
 // the gate card's own title style, and this line is that card's claim hoisted to
 // the room: `waiting on you` in one column, `NEEDS YOU` above all of them. The
 // `+N more` cell stays Muted with the numbers, because it counts seats rather
-// than naming one.
+// than naming one. A landed seat's phase word is Muted too: the name is still
+// the anchor, and the word qualifies it the way the number does.
 func needsYouJoin(cs []needsYouCell, dropped int, lead string, sty Styles) (plain, styled string) {
 	var p, s strings.Builder
 	p.WriteString(lead)
@@ -267,11 +332,13 @@ func needsYouJoin(cs []needsYouCell, dropped int, lead string, sty Styles) (plai
 	for _, c := range cs {
 		p.WriteString(needsYouGap + c.text())
 		s.WriteString(needsYouGap)
-		if c.num == "" {
-			s.WriteString(sty.Alert.Render(c.name))
-			continue
+		if c.num != "" {
+			s.WriteString(sty.Muted.Render(c.num) + " ")
 		}
-		s.WriteString(sty.Muted.Render(c.num) + " " + sty.Alert.Render(c.name))
+		s.WriteString(sty.Alert.Render(c.name))
+		if c.word != "" {
+			s.WriteString(" " + sty.Muted.Render(c.word))
+		}
 	}
 	if dropped > 0 {
 		more := "+" + strconv.Itoa(dropped) + " more"

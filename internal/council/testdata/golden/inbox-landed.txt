@@ -1,0 +1,24 @@
+  council READ  │  ~/code/telltale                                                  turn 3  │  4/4 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⚠ NEEDS YOU   2 Codex done   3 Antigravity failed                                                                     
+▌ ▸ 1 CC … ⠋ streaming 1m30s  │    2 CX Codex ✓ done 42s    │    3 AG Antigrav… ✗ failed  │    4 CU Cursor  ──  ✓ done  
+▌   ro:tools  tokens          │    ro:requested  final onl  │    unsandboxed  final only  │    WRITES  events           
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▌                             │  Done: the poller backs     │  ○ not addressed in turn 3  │                             
+▌                             │  off exponentially now.     │                             │                             
+▌                             │                             │  ⚠ exit status 1: the       │  Docs written.              
+▌ Reading the retry loop      │  ○ not addressed in turns   │    vendor could not be      │                             
+▌ first.                      │    2–3                      │    reached                  │  ○ not addressed in turn 3  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+           ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-4 seat  │  . needs you  │  ctrl+c cancel  │  ? help  

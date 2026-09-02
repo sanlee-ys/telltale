@@ -107,7 +107,7 @@ func TestCdUnknownDirectoryKeepsTheDraft(t *testing.T) {
 
 func TestCdRefusedMidTurn(t *testing.T) {
 	m, a, _ := cdRoom(t)
-	m.turn = &turnState{cancel: func() {}, live: map[model.VendorID]bool{}}
+	occupy(m)
 	m.setDraft("/cd kb-agent")
 	m.roomCommand()
 	if !sameDir(m.st.Workspace, a) {
@@ -214,7 +214,7 @@ func TestARefusedCdWritesNothing(t *testing.T) {
 	})
 	t.Run("a turn in flight", func(t *testing.T) {
 		m, _, b := dispatchedCdRoom(t)
-		m.turn = &turnState{cancel: func() {}, live: map[model.VendorID]bool{}}
+		occupy(m)
 		m.setDraft("/cd " + b)
 		m.roomCommand()
 		nothingWasSaved(t)
@@ -258,6 +258,8 @@ func (f *fakeSession) SendTurn([][]byte) error  { return nil }
 func (f *fakeSession) SendAside([][]byte) error { return nil }
 func (f *fakeSession) Kill()                    { f.killed = true; f.alive = false }
 func (f *fakeSession) Alive() bool              { return f.alive }
+func (f *fakeSession) CloseInput()              {}
+func (f *fakeSession) Done() <-chan struct{}    { return neverDone }
 
 // TestAMovedRoomRespawnsThePersistentSeatOnItsOwnThread is the Claude-seat
 // half of /cd. cwd is fixed at spawn — the stream-json envelope has no cwd
@@ -324,11 +326,11 @@ func TestAStaleExitDoesNotFailTheLiveSeat(t *testing.T) {
 		Vendor: model.VendorClaude, Label: "Claude Code",
 		Avail: AvailInstalled, Phase: PhaseStreaming, Body: "half an answer",
 	}}
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		cancel:     func() {},
 		live:       map[model.VendorID]bool{model.VendorClaude: true},
 		persistent: map[model.VendorID]bool{model.VendorClaude: true},
-	}
+	})
 
 	// The predecessor's exit, and a stale process-level error for good measure.
 	m.applyEvents([]runner.Event{
@@ -347,7 +349,7 @@ func TestAStaleExitDoesNotFailTheLiveSeat(t *testing.T) {
 	if m.sessions[model.VendorClaude] != "claude-sess-1" {
 		t.Error("a stale exit cost the seat its earned thread")
 	}
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Error("a stale exit ended the turn")
 	}
 
@@ -540,7 +542,7 @@ func TestRetryRefusesWhenEverySeatAnswered(t *testing.T) {
 // later.
 func TestRetryRefusedMidTurnKeepsTheDraft(t *testing.T) {
 	m := retryRoom(t)
-	m.turn = &turnState{cancel: func() {}, live: map[model.VendorID]bool{}}
+	occupy(m)
 	m.setDraft("/retry")
 	m.roomCommand()
 
@@ -564,7 +566,7 @@ func TestRetryIsOnlyABareCommand(t *testing.T) {
 	if !m.roomCommand() {
 		t.Fatal("a slash-leading draft was neither run nor refused")
 	}
-	if !strings.Contains(m.st.Notice, "no room command") {
+	if !strings.Contains(m.st.Notice, "no command") {
 		t.Errorf("/retry took an argument it does not have: %q", m.st.Notice)
 	}
 	if m.st.Draft != "/retry the failing test" {
@@ -630,7 +632,7 @@ func TestTheReSendSpawnsOnlyForTheSeatsThatOweAnAnswer(t *testing.T) {
 			Vendor: v, Kind: runner.KindMeta, EndsTurn: true, Text: "an answer",
 		}})
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Fatal("fixture: the turn never ended, so there is no finished turn to re-send")
 	}
 

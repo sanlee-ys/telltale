@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
@@ -245,6 +246,18 @@ type Host struct {
 	roomCtx    context.Context
 	roomCancel context.CancelFunc
 
+	// active is the client being served right now, or nil. Shutdown closes it,
+	// and that is what lets a caught signal end a room that has a client
+	// attached: serveClient's read loop parks in the kernel and does not watch
+	// a context, so closing the listener alone reaches it no sooner than the
+	// client's next word. Guarded by pmu, like the process maps, because it is
+	// the same class of thing — a handle Shutdown must reach.
+	active *Conn
+	// ended is set when the room was ended by a signal the room job caught
+	// (roomjob_unix.go), so Serve can return nil for a deliberate end rather
+	// than the closed-listener error the wake-up otherwise looks like.
+	ended atomic.Bool
+
 	interrupts int
 	// startedAt is stamped once, when the room opens, so a rewritten discovery
 	// file keeps saying when the HOST started rather than when it was last
@@ -327,6 +340,11 @@ func New(cfg Config) (*Host, error) {
 				s.Drivable, s.Phase = false, PhaseUndrivable
 				s.Note = "this seat speaks a request/response protocol the host does not drive yet"
 			}
+			// Read off the adapter's interface, which is the same test
+			// dispatchSeat makes when it chooses between a session and a
+			// child. The fold needs the answer too, because it decides which
+			// event ends this seat's turn (Seat.Persistent).
+			_, s.Persistent = reg[e.Vendor].(vendors.Persistent)
 		}
 		h.room.Seats = append(h.room.Seats, s)
 	}
@@ -366,6 +384,33 @@ func (h *Host) Serve(ctx context.Context) error {
 		return err
 	}
 	h.job = job
+
+	// A caught SIGTERM or SIGINT ends the room the way a shutdown frame does:
+	// Shutdown kills every seat and closes what Serve is parked on, and Serve
+	// returns on its ordinary path, removing host.json on the way out. On
+	// Windows the channel is nil and this goroutine only ever sees stopWatch;
+	// roomjob_unix.go says why the Unix host must reap for itself. Installed
+	// before the socket exists, so there is no moment at which the host is
+	// reachable and cannot be told to end.
+	stopWatch := make(chan struct{})
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		select {
+		case <-stopWatch:
+		case <-job.Signalled():
+			h.ended.Store(true)
+			h.Shutdown()
+		}
+	}()
+	// WAITED for, not merely stopped. A signal-driven Shutdown runs on that
+	// goroutine, and Serve returning — and the host process exiting on its
+	// heels — while the listener is still unlinking its nodes was measured
+	// leaving a cleanly ended host's lock files on disk.
+	defer func() {
+		close(stopWatch)
+		<-watchDone
+	}()
 
 	ln, err := Listen(h.cfg.PipeName)
 	if err != nil {
@@ -437,10 +482,22 @@ func (h *Host) Serve(ctx context.Context) error {
 	for {
 		conn, err := h.accept(ctx, first)
 		if err != nil {
+			if h.ended.Load() {
+				return nil
+			}
 			return err
 		}
+		h.pmu.Lock()
+		h.active = conn
+		h.pmu.Unlock()
 		err = h.serveClient(ctx, conn)
+		h.pmu.Lock()
+		h.active = nil
+		h.pmu.Unlock()
 		conn.Close()
+		if h.ended.Load() {
+			return nil
+		}
 		if !errors.Is(err, errClientDetached) {
 			// A shutdown frame, a bare disconnect, or a real failure. All three
 			// end the room, and the deferred Shutdown above is what ends it.
@@ -520,8 +577,10 @@ func (h *Host) Shutdown() {
 	h.pmu.Lock()
 	sessions := h.sessions
 	handles := h.handles
+	active := h.active
 	h.sessions = map[model.VendorID]seatSession{}
 	h.handles = map[model.VendorID]seatProcess{}
+	h.active = nil
 	h.pmu.Unlock()
 	for _, s := range sessions {
 		s.Kill()
@@ -534,6 +593,11 @@ func (h *Host) Shutdown() {
 	}
 	if h.ln != nil {
 		h.ln.Close()
+	}
+	if active != nil {
+		// After the listener, so a client woken by this close cannot dial
+		// back into a listener that is still taking clients.
+		active.Close()
 	}
 }
 

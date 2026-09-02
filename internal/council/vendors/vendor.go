@@ -9,6 +9,7 @@ package vendors
 
 import (
 	"errors"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -106,16 +107,71 @@ type SilentResumeFork interface {
 	SilentResumeForkMeasuredAt() string
 }
 
+// LiveFallback is a live seat that names the batch adapter the room may fall
+// back to when the live protocol cannot be brought up.
+//
+// It exists because three seats moved to long-lived processes on 2026-09-02
+// (design.md §9.57) on the strength of vendor documentation rather than a live
+// run, and a seat built that way needs a measured path to retreat to: the
+// `codex app-server` handshake can be refused by a build that predates it, a
+// `grok agent stdio` server can decline `initialize`, and an `agy` that does
+// not know `--input-format` exits at argument parsing. Each of those has a
+// batch invocation beside it that WAS measured, and the room should spend a
+// brief on that rather than on a column that reports the same refusal every
+// turn.
+//
+// The interface names the fallback and nothing else. WHEN to fall back is the
+// room's call, made from what it can see — a protocol reporting Dead(), or a
+// live process exiting before it ever named a session — and the doc comment on
+// each implementer says which shape its failure takes. Nothing here decides
+// for the room, because the seat cannot see the process exit and the room
+// cannot see the handshake.
+type LiveFallback interface {
+	Vendor
+
+	// Fallback returns the spawn-per-turn adapter for the same vendor id. It is
+	// a measured adapter, and it may be handed to FirstTurn/NextTurn/ParseEvent
+	// exactly as a batch seat is.
+	Fallback() Vendor
+}
+
+// GracefulStop is a live seat that wants a last word before its process is
+// killed.
+//
+// The room's teardown used to be one call — Kill — and for the stream-json
+// seat that was measured sufficient: Claude Code exits 0 on a closed stdin.
+// `codex app-server` was measured NOT doing that at 0.149.1 (design.md §9.50:
+// four runs exited in 1.5–3.3 s after stdin closed, one was still alive 15 s
+// later), so its seat owns the kill in three steps — say what has to be said,
+// close the pipe, wait a bounded grace, then kill. This interface is the first
+// step and the bound; the runner's kill path is unchanged and is what actually
+// ends the process.
+//
+// A Protocol implements it for a Conversational seat, and the adapter itself
+// implements it for a Persistent one, because those are the two things the
+// room holds per process.
+type GracefulStop interface {
+	// Closing returns the lines to write before stdin is closed: an interrupt
+	// for a turn still in flight, a refusal for any question the vendor is
+	// blocked on, and nothing at all for an idle process.
+	Closing() [][]byte
+	// Grace is how long the room waits after closing stdin before it kills the
+	// process. A bound, not a promise that the process exits within it.
+	Grace() time.Duration
+}
+
 // Persistent is a vendor that can be driven as ONE process taking many turns,
 // rather than a fresh child per turn.
 //
-// Exactly one vendor implements it, and that is a fact about the CLIs rather
-// than a gap in this code. `codex exec` and `agy -p` are batch programs: they
-// read a prompt, answer, and exit. Neither documents nor exposes a mode that
-// keeps a process alive across turns, so neither can be handed a second turn
-// and neither has a channel on which to ask a question mid-turn. Their columns
-// keep spawn-per-turn, and their badges keep saying exactly what they did
-// before — the honest alternative to pretending the room is uniform.
+// Two vendors implement it since 2026-09-02, and the second is the one to read
+// this comment for. Claude Code's stream-json session was MEASURED (claude.go);
+// Antigravity's `--input-format stream-json` was read from its documentation
+// at 1.1.24 and is seated on that reading, with `agy -p` kept beside it as the
+// measured fallback (agystream.go, design.md §9.57). `codex exec` stays a
+// batch program and is now the fallback behind the app-server seat; `grok
+// --single` likewise behind the ACP seat. Neither batch adapter has a channel
+// on which to ask a question mid-turn, which is the whole reason the live
+// shapes exist.
 //
 // The Cursor seat used to be a third batch column and is now neither: it is
 // Conversational, above.
@@ -177,11 +233,30 @@ type Vendor interface {
 // Registry maps a vendor id to its adapter. Only vendors whose invocation has
 // actually been verified appear here; a seat with no adapter renders as an
 // unavailable column rather than a guess.
-func Registry() map[model.VendorID]Vendor {
+//
+// A VAR since 2026-09-02, on the precedent of council's spawn vars and for a
+// related reason. Every registered seat is now a live process, so a council
+// test that needs "an ordinary batch seat" — the give-up and re-send suites
+// exercise a code path that kills a one-shot child — has no registry entry to
+// find one in. That path is not dead: it is the room's state after a
+// LiveFallback retreat, and it is every arena racer. A test reaches it by
+// swapping in FallbackRegistry for the test's lifetime, which is a production
+// state rather than a mock of vendor behaviour. Production never reassigns
+// this.
+var Registry = registry
+
+func registry() map[model.VendorID]Vendor {
 	return map[model.VendorID]Vendor{
-		model.VendorClaude:      Claude{},
-		model.VendorCodex:       Codex{},
-		model.VendorAntigravity: Antigravity{},
+		model.VendorClaude: Claude{},
+		// Three seats moved to long-lived processes on 2026-09-02 (design.md
+		// §9.57), and each entry below is the live shape with its measured
+		// batch adapter reachable through LiveFallback. The invocations the
+		// live shapes build were read from vendor documentation at the
+		// versions named on each type and have NOT been driven from here; the
+		// badges say "unmeasured" for that reason and design.md §9.57 lists
+		// the runs that would let them stop.
+		model.VendorCodex:       CodexAppServer{},
+		model.VendorAntigravity: AntigravityStream{},
 		// Cursor is registered even though it detects as unusable on Windows,
 		// and the two facts are independent on purpose: the registry answers
 		// "is there an adapter for this seat", detection answers "can this
@@ -192,6 +267,24 @@ func Registry() map[model.VendorID]Vendor {
 		// ErrCursorIsLiveOnly, because the seat is Conversational and there is no
 		// spawn-per-turn invocation of it any more.
 		model.VendorCursor: Cursor{},
-		model.VendorGrok:   Grok{},
+		model.VendorGrok:   GrokAgent{},
 	}
+}
+
+// FallbackRegistry is Registry with every LiveFallback seat replaced by its
+// measured batch adapter: the room a full retreat would leave.
+//
+// It exists so that state can be constructed rather than reached. The room
+// falls back one seat at a time, on a refused handshake it has watched; a test
+// that wants the batch shape of a seat should not have to script a refusal to
+// get there, and a reader who wants to know what the batch room looks like
+// should not have to reassemble it from five doc comments.
+func FallbackRegistry() map[model.VendorID]Vendor {
+	reg := registry()
+	for id, v := range reg {
+		if lf, ok := v.(LiveFallback); ok {
+			reg[id] = lf.Fallback()
+		}
+	}
+	return reg
 }

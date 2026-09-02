@@ -1,0 +1,24 @@
+  council ⚠ REPLAY  │  ~/code/example                                    turn 1 → everyone  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⚠ NEEDS YOU   2 Codex done                                                                                            
+  › add a --version flag and a test for it                                                                              
+                                                                                                                        
+▌ ▸ 1 CC Claude Code ⠋ streaming 3s     │    2 CX Codex  ──────────  ✓ done 3s  │    3 AG Antigravity ⠋ streaming 5s    
+▌   REPLAY  gated  tokens               │    REPLAY  WRITES  final only  $0.01  │    REPLAY  WRITES  final only         
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▌ turn 1  ────────────────────  you 2s  │                                       │                                       
+▌ ⚙ Read: cmd/example/main.go           │  turn 1  ───────────────────────────  │                                       
+▌ ⚙ Write: cmd/example/version.go ✓     │  Added --version to the flag set in   │                                       
+▌                                       │  main.go, printing the build tag,     │  turn 1  ───────────────────────────  
+▌ Reading main.go first, then the flag  │  with a test that runs the binary     │  Done. version.go carries the flag    
+▌ set.                                  │  and checks the line.                 │  and version_test.go covers it.       
+                                                                                                                        
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+                                                                         ⚠ replay ended — 11 records over 7s · q quits  

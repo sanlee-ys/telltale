@@ -61,9 +61,10 @@ const (
 	cursorWireVersion      = "2026.08.04-aaa8809" // cursor-agent --version
 	// The codex seat now has TWO pinned builds, and that is not a stale entry
 	// above: they pin different SURFACES of one CLI. `codex-0.147.0-turn.jsonl`
-	// is `codex exec --json`, the invocation the room seats; this one is
-	// `codex app-server`, a second protocol that ships parsed and unseated
-	// (design.md §9.50). When the seat moves, the exec pin goes with it.
+	// is `codex exec --json`, the invocation the room seated until 2026-09-02
+	// and keeps as the FALLBACK (design.md §9.57); this one is `codex
+	// app-server`, the seat since then (§9.50 captured it, §9.57 seated it).
+	// Both pins stay while both invocations can be dispatched.
 	codexAppServerWireVersion = "0.149.1" // codex --version -> codex-cli 0.149.1
 )
 

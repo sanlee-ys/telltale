@@ -137,9 +137,29 @@ func KillHost(councilDir string) (string, error) {
 		// The file is stale and the process is gone. Removing it is the honest
 		// act and it is stated, because a command that silently deleted state
 		// would be doing something the operator did not ask for.
+		// What the dead host LEFT is swept before its file goes. On Windows the
+		// room job reaped the seats when the host died and this finds nothing;
+		// on macOS and Linux nothing binds a seat's lifetime to the host
+		// (roomjob_unix.go), so a hard-killed host's seats are still running
+		// with its session id, and this is the one command that can end them.
+		// It acts only on a pid that is GONE — reapOrphans's own guard — and
+		// the count is printed because "ended its session" is not a
+		// measurement and "ended 3 processes" is.
+		swept := reapOrphans(rep.File.PID)
+		removeStaleTransport(rep.File.Pipe)
 		if err := RemoveHostFile(councilDir); err != nil {
 			return "", fmt.Errorf("councilhost: the host was already gone and its discovery file "+
 				"could not be removed: %w", err)
+		}
+		if swept > 0 {
+			noun := "processes were"
+			if swept == 1 {
+				noun = "process was"
+			}
+			return fmt.Sprintf("no host was running: %s.\n%d %s still running in that host's "+
+				"session and %s ended.\nthe stale %s was removed.",
+				rep.Reason, swept, noun, map[bool]string{true: "was", false: "were"}[swept == 1],
+				filepath.Base(HostPath(councilDir))), nil
 		}
 		return fmt.Sprintf("no host was running: %s.\nthe stale %s was removed. nothing else changed.",
 			rep.Reason, filepath.Base(HostPath(councilDir))), nil
@@ -149,6 +169,10 @@ func KillHost(councilDir string) (string, error) {
 	if err := killProcess(pid); err != nil {
 		return "", err
 	}
+	// A host that answered SIGTERM removed its own transport on the way out;
+	// one that had to be killed could not, and this is the same act as
+	// removing its discovery file.
+	removeStaleTransport(rep.File.Pipe)
 	if err := RemoveHostFile(councilDir); err != nil {
 		return "", fmt.Errorf("councilhost: pid %d was ended and its discovery file could not be "+
 			"removed: %w", pid, err)

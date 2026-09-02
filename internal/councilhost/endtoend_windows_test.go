@@ -121,7 +121,11 @@ func TestOneClientDrivesAHostedRoomEndToEnd(t *testing.T) {
 	}
 
 	h.events <- runner.Event{Vendor: model.VendorClaude, Kind: runner.KindSession, SessionID: "sess-1"}
-	h.events <- runner.Event{Vendor: model.VendorClaude, Kind: runner.KindDone, EndsTurn: true}
+	// The turn ends the way the claude adapter really ends one: a `result`
+	// line, which is KindMeta with EndsTurn set. This used to feed KindDone
+	// with EndsTurn, a shape no adapter emits, and the test passed while the
+	// live room drew a finished seat as `streaming` for the rest of its life.
+	h.events <- runner.Event{Vendor: model.VendorClaude, Kind: runner.KindMeta, EndsTurn: true, Text: "morning"}
 	done := awaitRoom(t, fr, func(r Room) bool { return r.Seats[0].Phase == PhaseDone })
 	if done.Seats[0].SessionID != "sess-1" {
 		t.Fatalf("the session id did not cross the wire: %+v", done.Seats[0])

@@ -29,6 +29,10 @@ import (
 //     2026-08-29 hybrid amendment): the base attempt merged whole, plus named
 //     paths taken from the donor. The ref carries both seats precisely so this
 //     page can stay derivable — see the hybrid note on tallyArenaRefs.
+//   - `adopt/seat-<vendor>` and `adopt/seat-<base>+<donor>` are minted by the
+//     same verb over a SEAT's own branch (§9.55) — the room taking one seat's
+//     ordinary work, with no race behind it. Read, counted and printed apart
+//     from every race figure above: see ArenaRecord.SeatAdopts.
 //
 // The alternative was a counts file under ~/.telltale. It was rejected: CLAUDE.md
 // enumerates the writes the gauges are ratified to make, a fourth one is an
@@ -146,6 +150,29 @@ type ArenaRecord struct {
 	// have raced last week, and a seat that has never raced is ABSENT from the
 	// record rather than sitting at 0% (§4a.1, the founding rule).
 	Seats []SeatRecord
+
+	// SeatAdopts is every seat the operator has adopted from its OWN branch —
+	// `adopt/seat-<vendor>` refs, one per adoption (§9.55) — in seating order,
+	// and only the seats with at least one. KEPT APART from the race counts
+	// above, and that separation is the honesty of the page: a race adopt is
+	// a verdict between competing attempts at one brief, a seat adopt is the
+	// room taking one seat's ordinary work with nobody else in the running.
+	// Folding the second into a rate would score a seat for races it never
+	// entered; leaving it off the page would hide the integrations the room
+	// actually performs most often.
+	SeatAdopts []SeatAdopt
+}
+
+// SeatAdopt is one seat's count of adoptions from its own branch: Whole is
+// `adopt/seat-<vendor>` refs, Hybrid the `adopt/seat-<a>+<b>` refs this seat
+// was either side of. A count of REFS, not of races: a seat's line is one
+// continuous branch and each adoption of it is its own event, which is exactly
+// what freeAdoptBranch's `-2`, `-3` suffixes record.
+type SeatAdopt struct {
+	Vendor model.VendorID
+	Label  string
+	Whole  int
+	Hybrid int
 }
 
 // Raced reports that the refs hold at least one race. False is the page's
@@ -237,7 +264,23 @@ func tallyArenaRefs(repo string, arenaRefs, adoptRefs []string) ArenaRecord {
 		races[n] = true
 		mark(entered, v, n)
 	}
+	// Seat-branch adoptions, tallied apart from every race figure (§9.55).
+	seatWhole := map[model.VendorID]int{}
+	seatHybrid := map[model.VendorID]int{}
 	for _, ref := range adoptRefs {
+		// The seat spellings open with a word where the race spellings carry a
+		// number, so neither parse below can read one; they are still tried
+		// first, because a ref that IS a seat adoption must never fall through
+		// to be ignored as one this room did not mint.
+		if v, ok := parseSeatAdoptRef(ref); ok {
+			seatWhole[v]++
+			continue
+		}
+		if b, d, ok := parseSeatHybridRef(ref); ok {
+			seatHybrid[b]++
+			seatHybrid[d]++
+			continue
+		}
 		// The hybrid spelling is tried FIRST, and the order is load-bearing rather
 		// than stylistic: `adopt/t4-claude+codex` must never fall through to the
 		// whole-adoption parse and credit one seat with the whole act. It cannot
@@ -291,7 +334,49 @@ func tallyArenaRefs(repo string, arenaRefs, adoptRefs []string) ArenaRecord {
 		s.Adopted = len(won[v])
 		rec.Seats = append(rec.Seats, s)
 	}
+	for _, v := range addressableVendors() {
+		if seatWhole[v] > 0 || seatHybrid[v] > 0 {
+			rec.SeatAdopts = append(rec.SeatAdopts, SeatAdopt{Vendor: v, Label: vendorLabel(v),
+				Whole: seatWhole[v], Hybrid: seatHybrid[v]})
+		}
+	}
 	return rec
+}
+
+// parseSeatAdoptRef reads `adopt/seat-<vendor>` and freeAdoptBranch's
+// `adopt/seat-<vendor>-<k>` — adoptSource.adoptName's own spelling for a seat
+// branch, read back (§9.55).
+func parseSeatAdoptRef(ref string) (model.VendorID, bool) {
+	rest, found := strings.CutPrefix(ref, "adopt/seat-")
+	if !found || strings.Contains(rest, "+") {
+		return "", false
+	}
+	if head, tail, cut := lastDash(rest); cut && allDigits(tail) {
+		rest = head
+	}
+	return knownVendor(rest)
+}
+
+// parseSeatHybridRef reads `adopt/seat-<base>+<donor>[-<k>]`.
+func parseSeatHybridRef(ref string) (base, donor model.VendorID, ok bool) {
+	rest, found := strings.CutPrefix(ref, "adopt/seat-")
+	if !found {
+		return "", "", false
+	}
+	if head, tail, cut := lastDash(rest); cut && allDigits(tail) {
+		rest = head
+	}
+	b, d, found := strings.Cut(rest, "+")
+	if !found {
+		return "", "", false
+	}
+	if base, ok = knownVendor(b); !ok {
+		return "", "", false
+	}
+	if donor, ok = knownVendor(d); !ok {
+		return "", "", false
+	}
+	return base, donor, true
 }
 
 // parseArenaRef reads `arena/t<N>/<vendor>` — arenaBranch's own spelling, read
@@ -532,6 +617,11 @@ func recordLines(rec ArenaRecord, w int, sty Styles, g Glyphs) []string {
 
 	out := []string{strongLabelRule("arena record", recordMeta(rec), w, g.RuleHeavy, sty)}
 	out = append(out, styleAll(wrap(recordWindow(rec), w), sty.Muted)...)
+	if line := recordSeatAdopts(rec); line != "" {
+		// Its own sentence under the window, never a column on a seat's rule:
+		// the rows above are race verdicts and this is not one (§9.55).
+		out = append(out, styleAll(wrap(line, w), sty.Muted)...)
+	}
 	if !rec.Raced() {
 		// Absence of the whole record, stated once. Five seats each reading
 		// "never raced" would be five true sentences standing in for the one true
@@ -542,6 +632,25 @@ func recordLines(rec ArenaRecord, w int, sty Styles, g Glyphs) []string {
 		out = append(out, "", seatRule(s.Vendor, s.Label, seatStanding(s), w, sty, g))
 	}
 	return out
+}
+
+// recordSeatAdopts is the sentence for the seat-branch adoptions, or empty when
+// the refs hold none (absence draws nothing, §4a.1). It says what it counts
+// and why the figure sits outside every rate above it.
+func recordSeatAdopts(rec ArenaRecord) string {
+	if len(rec.SeatAdopts) == 0 {
+		return ""
+	}
+	var parts []string
+	for _, s := range rec.SeatAdopts {
+		p := s.Label + " " + itoa(s.Whole)
+		if s.Hybrid > 0 {
+			p += " (part of " + itoa(s.Hybrid) + " hybrid " + plural(s.Hybrid, "adopt") + ")"
+		}
+		parts = append(parts, p)
+	}
+	return "Seat adopts, from ordinary turns on seat/ branches: " + strings.Join(parts, ", ") +
+		". Counted apart from the races above and inside no rate — a seat adopt takes one seat's work with no competing attempt, so it is not a verdict."
 }
 
 // recordMeta is the count that hangs off the heading: how many races the refs
@@ -657,6 +766,9 @@ func (s State) YankRecord() Yank {
 
 	var b strings.Builder
 	b.WriteString("# arena record — " + rec.Repo + "\n\n" + recordWindow(rec) + "\n")
+	if line := recordSeatAdopts(rec); line != "" {
+		b.WriteString(line + "\n")
+	}
 	if rec.Raced() {
 		for _, seat := range rec.Seats {
 			b.WriteString("\n- " + seat.Label + ": " + seatStanding(seat))

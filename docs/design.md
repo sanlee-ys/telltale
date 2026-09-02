@@ -7752,7 +7752,8 @@ host holds the room.
   0700, and it is stdlib. It carries an asymmetry that must be measured into `PARITY.md` first:
   `proc_unix.go` records that on macOS a process group does not bind lifetimes, so a `kill -9`
   on a host LEAKS every seat there, while on Windows it does not. That is the reverse of the
-  usual direction.
+  usual direction. *Amended 2026-09-02: built, and the asymmetry is in `PARITY.md` —
+  [§7.30](#s7-30).*
 - **A GATED room is refused, not hosted.** A gated seat blocks on a question, and carrying that
   question and its answer over this wire is a card, a keystroke, and a reply written back down
   the vendor's own stdin. None of that is built, so `councilhost.New` refuses
@@ -8106,12 +8107,177 @@ shipped first, on purpose.
 **It is Windows-only, like the host it extends.** The Unix equivalent carries the asymmetry
 `PARITY.md` already owes: on macOS a process group does not bind lifetimes, so a `kill -9` on a
 host LEAKS every seat there. A detached host makes that asymmetry worse rather than equal, which
-is a reason to measure it before building rather than to build and label.
+is a reason to measure it before building rather than to build and label. *Amended 2026-09-02:
+no longer Windows-only — [§7.30](#s7-30) builds the Unix transport, measures the asymmetry on
+Linux, and records it in `PARITY.md`.*
 
 **No vendor has been dispatched to through a host, detached or not.** Every seat spawn in this
 package's suite is stubbed, by design — the spawn guard exists to stop a test spending a real
 turn — so neither CI nor a session can close that debt. It is the operator's to pay, and
 `STATE.md` carries it.
+
+<a id="s7-30"></a>
+
+### 7.30 the room outlives the terminal on macOS and Linux too (2026-09-02)
+
+**What this section rules.** [§7.28](#s7-28) built the host on a Windows named pipe and a Job
+Object and withheld the Unix side until one measured asymmetry reached `PARITY.md`. [§7.29](#s7-29)
+exposed detach on the same terms. This section builds the Unix transport and the Unix containment,
+so that `telltale council --host`, `/detach`, rejoin, `telltale council ls` and `telltale council
+kill` do on macOS and Linux what they do on Windows — and it states, rather than labels, the one
+thing they do differently. The owner's daily machine is a MacBook, so before this the crew tool's
+central feature refused on the machine it was for, and `council ls` there printed `telltale
+council --host opens a room in one` as the remedy for an absence: a true absence with a false
+remedy. That sentence is unchanged and is now true on every platform; the fix was the transport,
+not the words.
+
+**What a reader must not read into it.** No frame was added to the protocol, no field to
+`host.json`, and nothing about what reaches disk changed: the room's conversation still lives in
+host memory and dies with the host. `protocol.go` is untouched. The seats' own containment
+(`runner/proc_unix.go`, a process group per seat) is untouched too, and the reason is the next
+heading.
+
+#### The containment is the host's SESSION, and it is not a Job Object
+
+The Windows room job has one property no Unix primitive has: `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`
+binds every seat's **lifetime** to the host's last handle, so a host that dies by any route takes
+its seats with it, and a child cannot leave the job by anything it does. `runner/proc_unix.go`
+measured the Unix side on 2026-08-17: a process group NAMES a set of processes and does not bind
+their lifetimes — SIGINT, SIGTERM, SIGHUP and SIGKILL on the parent, and the `Setpgid` child
+survived all four.
+
+So the Unix containment is built from the two facts that do hold, and `roomjob_unix.go` states
+the difference in as many words:
+
+- **Membership is inherited and cannot be lost by accident.** The client starts the host with
+  `Setsid`, so the host leads a session of its own with no controlling terminal; every seat, and
+  every shell a seat starts, is born carrying that session id, and it changes only when something
+  in the tree calls `setsid(2)` itself. **That is the one escape, and it is the measured
+  difference: a child that calls `setsid` leaves the session and nothing here can see it go. A
+  Job Object child cannot leave.** Nothing council dispatches is known to do this; a vendor that
+  daemonised its tool calls would be a `PARITY.md` finding.
+- **Lifetime is not bound, so the host reaps.** `NewRoomJob` installs a SIGTERM/SIGINT handler
+  and ignores SIGHUP; `Serve` turns a caught signal into `Shutdown`, which kills every registered
+  seat through its per-seat group and exits on the ordinary path, removing `host.json`.
+  `telltale council kill` sends SIGTERM to the host, SIGTERM to every other process in the host's
+  session at the same time, waits a bounded grace for the host, and then sweeps the session with
+  SIGKILL — so a host that could not run its handler still has its seats ended by the command
+  that ends it. On a **dead** host's stale file, `kill` sweeps the dead session too and prints
+  how many processes it ended, because a dead leader's session id still names its orphans and
+  the kernel does not hand that pid out again while any of them carries it.
+
+**Why the session and not the host's process group.** A room-level container must hold every
+seat; a per-seat container must kill ONE seat's whole tree on an interrupt or an eviction without
+touching the others. `runner/proc_unix.go` builds the second from a process group per seat, and
+it is the containment the ordinary room measured and relies on. Seats that joined the host's own
+group would give that up: `kill -TERM -pgid` on one seat would signal every seat. A session sits
+one level above the process groups and holds all of them — the same nesting the Windows side has,
+the room job over the per-seat jobs, in the platform's own hierarchy.
+
+**What is left uncovered, stated once here and once in `PARITY.md`:** `kill -9` the host and walk
+away, and the seats keep running — holding sessions and spending quota — until the next
+`telltale council kill` sweeps the dead session. `TestASigkilledHostLeaksItsSeatAndKillSweepsIt`
+pins BOTH halves: the leak, so the asymmetry cannot be forgotten, and the sweep that answers it.
+
+#### The transport: a socket in the council directory, and two locks beside it
+
+The socket is `~/.telltale/council/telltale-council-<key>.sock`, in the directory council already
+writes, and `Listen` refuses a directory whose mode admits another account (`chmod 700` is the
+named remedy). The node is 0600, and both connect directions read the peer's uid and pid from the
+kernel — `SO_PEERCRED` on Linux, `LOCAL_PEERCRED` plus `LOCAL_PEERPID` on macOS — so the program on
+the other end is trusted exactly as far as the filesystem trusts it, which is §7.24's boundary
+unchanged. A browser has no URL scheme for a filesystem path any more than for `\\.\pipe\...`, so
+§7.28's transport ruling stands; the gate that enforces it (`TestTheHostBindsNoPort`) moved from
+"this package does not import `net`" to "this package reaches `net` for Unix domain sockets, by
+name, and for nothing else", and it walks every source file on every platform's build tags.
+
+**One client at a time is enforced by the host here, not by the kernel.** A pipe with one
+instance refuses a second open; a Unix socket accepts into a backlog whether or not anybody will
+ever `accept`. So the listener runs its own accept loop for its whole life, hands a connection to
+`Accept` only when `Accept` is waiting, and answers everything else with `KindRefused` at once,
+naming the pid that holds the room. A second client is told "one client at a time" instead of
+sitting in a backlog until the first one leaves.
+
+**The probe cannot connect, and the socket alone cannot answer it.** `WaitNamedPipe` asks "is an
+instance available" and opens nothing. A socket path answers only "does a node exist", and a node
+outlives a hard-killed host; a probe that CONNECTED would be accepted the moment the host was
+free, read as a client with no handshake, and would end the room it was listing. So two facts are
+carried by `flock(2)` on two zero-byte files beside the socket, and a probe reads each by trying a
+SHARED lock without waiting — it fails at once if the host holds the exclusive one:
+
+- `<name>.lock`, held for the listener's whole life: somebody is listening. A second `Listen`
+  fails on it with the sentence `FILE_FLAG_FIRST_PIPE_INSTANCE` earns, and a stale socket node
+  whose lock is free is unlinked safely.
+- `<name>.held`, held while a client is attached: the room is held. `Dial` reads it before
+  connecting, so a client never connects into a held room; the host's refusal is the second arm.
+
+A flock is released when the process exits by any route, SIGKILL included, so a dead host never
+reads as listening. That is the property a pid in a file cannot have, and it is why the file says
+WHAT and the lock says WHETHER.
+
+**flock, and not fcntl record locks — measured.** The first cut used `F_SETLK` byte ranges on one
+file, two facts on one node, and every in-process test failed: fcntl locks belong to a PROCESS,
+so a probe inside the host's own process read its own lock as free, and closing the probe's
+descriptor released the listener's locks with it. flock belongs to an open file description, so a
+second open in the same process conflicts exactly as another process would. The cost is a second
+zero-byte node.
+
+**The pid says WHO, in four readings.** `kill(pid, 0)` alone answers "is there a process I may
+signal" and nothing else, and a pid is reusable. `verifyHostProcess` asks four things: the pid is
+alive and this user's; it leads its own session (`getsid(pid) == pid`, which every host does);
+its image name is this binary's (`/proc/<pid>/exe` on Linux, `kern.proc.pid`'s `p_comm` on macOS,
+sixteen bytes and compared as a prefix); and it started no later than `host.json` says
+(`/proc/<pid>/stat` field 22 against `btime`; `p_starttime` on macOS). A recycled pid fails on the
+second, third or fourth, and an identity that cannot be read is "not a host", never "gone".
+
+#### What is measured, and where
+
+**Linux, in this repository's own CI.** The `race` job runs the whole suite on `ubuntu-latest`,
+and every claim above is a test there: `TestOneClientDrivesAHostedRoomEndToEnd` and
+`TestAHostAcrossAProcessBoundaryTakesAClient` (the transport, the peer check, the one-client
+refusal by both arms, a bare disconnect ending the room);
+`TestADetachedHostOutlivesItsClientProcessAndKillReapsEverySeat` (a client process detaches and
+exits, the host survives, a second client rejoins and receives the projection, and `kill` reaps a
+seat reachable only through the session); `TestAProbeDoesNotConsumeTheHostsSocket` (five probes,
+then a connect, then `PipeBusy` with a client attached); `TestAStaleHostFileIsNeverMistakenForALiveHost`
+(a pid that ran and exited, reported dead by `Probe` and left on disk, removed by `kill`);
+`TestASigkilledHostLeaksItsSeatAndKillSweepsIt` and `TestTheIdentityCheckRefusesARecycledPID`
+(the containment and the identity, on stand-in processes). The built binary was also driven by
+hand on Linux on 2026-09-02 — `--host --read` with `/detach` on stdin, `ls`, a rejoin, `kill`, and
+a `kill -9`'d host reported stale by `ls` and left alone — and the host's `ps` line read
+`SID == PID`, `PPID 1`, no TTY.
+
+**macOS is measured by the test suite, and not yet by hand (amended 2026-09-02).**
+`peer_darwin.go` and `identity_darwin.go` compile under `GOOS=darwin` for both architectures, and
+every call they make exists in x/sys v0.47.0. The `darwin` CI job's first run on Apple Silicon
+(the crew PR, run 33657422294) ran this package's `_unix_test.go` suites in-process on the
+runner: host, client, detach, rejoin, one-client refusal, kill and the stale-file path all
+passed there, which exercises `LOCAL_PEERPID` on every dial. What that first run also found: a
+sandboxed home under `/var/folders/<xx>/<hash>/T/` put the socket path at 105 bytes, past
+macOS's 104-byte `sun_path`, and the host refused while the client heard nothing for ten
+seconds; `PipeName` now retreats to a short per-uid directory when the council directory's path
+would not fit (pipe_unix.go). Still owed: the built binary driven by hand on a Mac through
+`--host`, `/detach`, `ls`, rejoin and `kill`, and `p_comm`'s sixteen-byte truncation against a
+binary named `telltale` under a real `kill` sweep; until then `PARITY.md`'s row says "suites
+measured, hand cycle owed".
+
+#### What this rung deliberately does not do
+
+**It does not put the seats in the host's process group.** The heading above says why, and
+`PARITY.md`'s row names the consequence: `council kill` reaps through the session, and a host
+signalled by anything else reaps through its handler.
+
+**It does not make the host survive its own SIGKILL.** Nothing on this platform can, and the
+sentence that says so is in three places on purpose — `roomjob_unix.go`, `PARITY.md`, and the
+test that pins the leak.
+
+**It does not add a field to `host.json`.** The socket path goes where the pipe name went. The
+two lock files and the socket node carry no content; `TestATurnIsNotPersistedAnywhere` asserts
+the lock files are zero bytes and walks the directory they live in.
+
+**It does not change the protocol or the client.** `Client`, `RunClient`, `Rejoin`, `StartHosted`,
+`KillHostedRoom` and `ls`'s words are the same code on every platform; the platform split is
+entirely below `Listen`, `Dial`, `ProbePipe`, `verifyHostProcess` and `killProcess`.
 
 <a id="s8"></a>
 
@@ -8283,6 +8449,24 @@ that file is the procedure, and neither restates the other.
    draft (schema 1.12.0, `zip` + nested `portable`, `windows_amd64` only) and the
    submission flow are in [packaging/winget/](../packaging/winget/).
 
+   **Amended 2026-09-02: the tap ships.** What the refusal above was waiting for
+   was a measurement on Apple Silicon, and `ci.yml`'s `darwin` job is one: it
+   builds the binary on `macos-latest` (arm64) on every commit and runs the suite,
+   `doctor`, the statusline smokes and `council ls` there, with the Windows job's
+   honesty assertions. The tap lives in `Formula/` of this repository, on (3)'s
+   credential argument for the scoop bucket, and goreleaser rewrites the formula at
+   each tag. It is a **formula and not a cask**: Homebrew fetches a formula's
+   archive with curl and writes no `com.apple.quarantine`, so the unsigned binary
+   runs as installed, while a cask arrives quarantined and goreleaser's cask
+   documentation answers that with an `xattr` post-install hook it labels a
+   Gatekeeper bypass. goreleaser v2.17.1 deprecates `brews` in favour of casks, and
+   `goreleaser check` now exits 2 naming that one key; the pin is exact, deprecated
+   keys are removed only at a major version, and `.goreleaser.yaml` carries the
+   measurement. Still not done, each with its reason: **homebrew-core**, whose
+   acceptance rules ask for a notable project (75 GitHub stars among the signals)
+   and nothing here measures that number; **winget**, per this item; **signing and
+   notarization**, per (8). packaging/README.md is the runbook.
+
 8. **Not signed, and the decision is the owner's** (recorded 2026-08-16). No
    artifact carries a signature. `.goreleaser.yaml` declares no `signs` block and
    `release.yml` holds no signing secret, so the claim is checkable from the two
@@ -8322,7 +8506,7 @@ notarization stay owner decisions, and no contributor builds that pipeline.
 
 | Check | Fires on | Runner | Fails on |
 |---|---|---|---|
-| `ci.yml` | push to main, pull request, release | windows-latest, ubuntu-latest | vet, the suite, the build, the binary smokes, the schema gate, the install-script gate (added 2026-08-18) |
+| `ci.yml` | push to main, pull request, release | windows-latest, ubuntu-latest, macos-latest (Apple Silicon, added 2026-09-02) | vet, the suite, the build, the binary smokes, the schema gate, the install-script gate (added 2026-08-18) |
 | `govulncheck.yml` | push to main, pull request, Monday 07:00 UTC | windows-latest | a reachable known vulnerability |
 | `codeql.yml` | push to main, pull request, Monday 07:30 UTC | ubuntu-latest | a default-suite alert |
 | `dependabot.yml` | weekly | none | nothing. It opens a pull request |
@@ -8539,7 +8723,8 @@ gate reported three bytes and failed.
 
 **No other channel is reshaped by this.** No Homebrew tap, no npm, no winget
 automation. Items 2 and 7 rule each one, and a one-paste installer is not an
-argument to revisit any of them. macOS and Linux keep the measured `curl` and
+argument to revisit any of them. (The tap arrived on 2026-09-02 by item 7's own
+amendment, on a measurement rather than on this installer.) macOS and Linux keep the measured `curl` and
 `shasum` walk in the README, which is the same verification without a script.
 
 #### The listing and launch cadence, recorded and not executed (added 2026-08-18)
@@ -8830,7 +9015,7 @@ both halves of the split, and `TestNoVendorClaimsUnverifiedEnforcement` now requ
 Windows claim to cite the build it was measured on. macOS and Linux are untouched.
 
 **Amended 2026-09-01 — the installed build moved to codex-cli 0.151.0, and the sandbox claims
-above were NOT re-measured on it.** A chip traced the seat's `failed (exit 1)` ([§9.54](#s9-54))
+above were NOT re-measured on it.** A chip traced the seat's `failed (exit 1)` ([§9.58](#s9-58))
 and re-ran the three seat argv shapes at 0.151.0 from a scratch directory. All three parsed and
 produced `thread.started`, so the flags this section rests on are still accepted. The four
 sandbox probes could not run: every turn that day died at the account's usage limit before a
@@ -13169,7 +13354,7 @@ is covered without an amendment.
 *(Amended 2026-09-01: codex adopted the shape. codex-cli 0.151.0 puts a `turn.failed` frame on
 stdout, and the adapter now parses it into exactly this event. The amendment is not free: a
 spawn-per-turn failure now produces TWO events, the vendor's sentence and then the exit, and the
-exit must not overwrite the sentence. [§9.54](#s9-54) records that rule.)*
+exit must not overwrite the sentence. [§9.58](#s9-58) records that rule.)*
 
 <a id="s9-34"></a>
 
@@ -17766,7 +17951,512 @@ an operator-driven check, owed and named rather than implied.
 
 <a id="s9-54"></a>
 
-### 9.54 the codex seat failed in both rooms and said only `exit status 1` (2026-09-01)
+### 9.54 the room was a committee, and a crew's seats are busy one at a time (2026-09-02)
+
+`dispatch()` opened with one line — `if m.turn != nil { "a turn is already in flight — ctrl+c
+cancels it" }` — and that line was the whole difference between the room that existed and the
+room the owner asked for. Seats were concurrent inside a turn and the room was serial across
+turns: `@all` fanned one brief out to five processes at once, and the moment any of them was
+still answering, a second brief to a different seat was refused. You could not hand codex a
+refactor and, while it ran, hand grok the docs. The owner's ruling is that council is a **crew**,
+not a committee answering one question at a time, and a crew's seats are busy or idle **one at
+a time**.
+
+#### What a turn is now
+
+A turn is a fact about a SEAT. `Model.turn` is gone; `Model.turns` maps each seat in flight to the
+dispatch it is answering, and `turnState` is the record of ONE DISPATCH — the seats one press of
+enter sent a brief to, and what those seats share while they answer it: the turn number, the
+route the header names, the arena's all-or-nothing bookkeeping. What moved down to the seat is
+everything the operator can now do to one seat while its neighbours work: its process handle,
+its own child context (so cancelling it kills its child and nobody else's), the cancellation
+word, the give-up.
+
+**The turn number stays one room-wide sequence**, and that is a ruling rather than a leftover. A
+per-seat count was considered — "codex's turn 4, grok's turn 4" — and refused, because every
+surface that already prints a turn number reads one coordinate: the separators, the by-turn page
+(`PageTurns`), `/retry`, `room.json`, the reattach card. Two seats both on "their turn 4" would
+leave the page able to open only one of them. So a turn number is a **dispatch** number: turn 5
+is the fifth brief the room sent, whoever it went to, and a seat's own history is the subset of
+those numbers it took part in. `Column.TurnN` already carried exactly this.
+
+#### What the operator sees
+
+- **A brief to a busy seat is refused for THAT seat, by name and turn.** `@codex …` while codex
+  is mid-answer: `a turn is in flight on codex (turn 4) — ctrl+c on its column cancels that
+  turn, or address another seat`, and the draft stays put. `@all` with codex busy goes to the idle
+  seats and says so: `sent to grok, agy — skipped: codex (turn 4), still on a turn; ctrl+c on
+  its column cancels it`. Both halves are measured — the seats in the new dispatch's live set, the seats
+  whose own turn refused them. The refusal is what stands between a persistent seat and a second
+  prompt written into a process mid-turn, which is the failure the room-wide wall was in front of.
+- **The header names the newest dispatch and counts the rest.** `turn 5 → codex · 3 in flight`.
+  The count is `State.SeatsInFlight()`, measured over the columns, and it is printed only when
+  some seat in flight is on a turn OTHER than the one the cell names (`inFlightBeyond`, read off
+  `Column.TurnN`) — an `@all` turn with its three seats streaming reads `turn 3 → everyone` as it
+  always did, because `· 3 in flight` beside it would be the route restated as a number. A live
+  column with no turn number at all is not counted as another dispatch: zero means never
+  dispatched, and a count that read it as elsewhere would be inferring. The route retires when
+  ITS dispatch lands (`ts.n == st.Turn`), not when the room goes quiet.
+- **ctrl+c has three meanings and the footer says which is live.** The focused seat's turn if it
+  has one (`ctrl+c cancel codex`); everything in flight when the focused seat is idle (`ctrl+c
+  cancel all`); quit when nothing is. With one seat in flight the label is the plain `cancel`
+  every earlier frame carried. The gate line's `cancel the turn` became the same label, because
+  the key reaches `viewKey` through `gateKey`'s fall-through and means there what it means here.
+  `x` is unchanged: the per-seat give-up with its card.
+- **The room-wide refusals name the seats.** `q`, `/cd`, `/seat`, `/unseat`, `/read`, `/write`,
+  `/retry`, `/adopt` and `/arena drop` still need the whole room idle — each changes something a
+  busy seat was dispatched against — and each now says `a turn is in flight on codex (turn 4),
+  grok (turn 5) — …`. `c` and `u` became per seat: the thread or the tree they touch is the
+  focused seat's alone.
+- **A race is the one turn that still owns the room.** `/arena` refuses while any seat is busy
+  (a race that skipped a seat is not a comparison), and every brief is refused while a race runs
+  (its racers are writing into worktrees a room brief would cut across). `race()` is the read.
+- **A `/flow` hop waits on its own seat.** Hop N+1 dispatches the moment hop N's seat lands,
+  whatever the rest of the room is doing; the chain's death-on-teardown runs only when the hop's
+  own dispatch ends (`turnState.flow`). A hop whose seat is busy with an unrelated brief stops
+  the chain by name — `flow stopped at hop 2/3: @codex is still on turn 4 — …` — rather than
+  queueing behind the seat, because a chain that dispatched itself later, when a seat happened
+  to free up, is the room acting on its own at a moment nobody chose (§9.16's argument).
+- **A rebuttal quotes what a busy neighbour last FINISHED saying.** The snapshot is taken per
+  seat at its dispatch; a seat mid-answer contributes its last filed turn (`settledReply`) and
+  nothing if it has never filed one. Quoting the half it has streamed would put half an argument
+  in front of another model as though it were whole.
+
+#### The inbox
+
+§9.40's strip named only the seats stopped on a gate. A crew has a second stall of the same shape:
+an answer lands in a column the reader is not on, the room knows, and the reader has to go
+looking. The strip now lists **seats whose turn ended since the reader last had the keys on
+them** — `⚠ NEEDS YOU   2 Codex   3 Grok done   4 Cursor failed` — with the terminal phase word,
+the same word the column header speaks, as the whole distinction between the two kinds of entry
+(no glyph, no colour: it reads the same under `--ascii` and `NO_COLOR`).
+
+Every entry is a measurement, on §9.40's own rule. A landing is two stamps the Model took itself:
+`Column.Ended`, written in `finishColumn` while the seat still holds a turn (so the second
+retirement a persistent seat or an ACP racer goes through cannot re-stamp it), and
+`Column.LastFocus`, written by `setFocus` on BOTH the seat left and the seat entered, so it marks
+the end of the reader's last look. The strip is `Ended.After(LastFocus)` over terminal columns.
+Nothing stores what was acknowledged — the comparison cannot drift, which is the argument §9.40
+made for deriving the gate half from `Focus`. The default-focus hole stays open for §9.40's reason
+and closes itself: the focused seat is never listed, and the reader's first departure stamps it.
+
+`.` is the strip's key: the next listed seat after the focus, wrapping. The footer names it only
+while the strip has an entry (§7.8: never a key that does nothing); in compose it is a full stop.
+
+#### Mechanics worth knowing
+
+- **One event reader.** Every dispatch and every batch re-arms the pump, and two goroutines
+  reading one channel would deliver batches to `Update` out of order — an exit before the text it
+  followed. `Model.eventsArmed` makes `waitEvents` hand out one reader; `Update` clears it on the
+  batch. `sendTurn`'s Cmd can therefore be nil for a dispatch that DID start, so `applyArenaSetup`
+  reads `race()` rather than the Cmd.
+- **The give-up and the cancel outlive the seat's turn.** `givenUp` and `cancelling` moved from
+  the turn to the Model, keyed by seat, and are cleared at the seat's next dispatch. A cut seat's
+  turn ends the instant its column lands, while its process is still draining — and on the
+  persistent seat still answering the interrupt with a failed `result` — and those echoes met a
+  seat with no turn, where `applyEvents` would have written the abort error over the give-up's own
+  note.
+- **Teardown walks `dispatches()`** — every distinct record in the map — and reaps each one's
+  one-shot handles, racer handles, ephemeral sessions and context. `TestTeardownReapsEveryDispatch`
+  pins two dispatches; `teardown_test.go` still pins the racer.
+- **Geometry.** `frameOwnersFor` counts a column still in flight as an owner, read off the
+  column's own phase, so a brief to grok while codex streams does not narrow codex's prose under
+  the reader. The no-mid-stream-reflow rule is about the room moving because a VENDOR did
+  something; a dispatch is the operator's act.
+
+#### What this section does NOT change
+
+`room.json` gains no field: sessions and the turn count are room-level and the save runs at each
+dispatch's end. `--trace` clocks are per process and unaffected. Session resume per vendor is
+unchanged — a seat is refused a second prompt while busy, which is the only new rule a resume
+could meet. The spawn guard is untouched: every crew test dispatches through `countSpawns`.
+
+#### Verification
+
+`gofmt`, `go vet ./...`, `go test ./... -count=1`, `go build ./...`, and the windows/amd64 and
+darwin/arm64 cross-builds, all clean; `go test -race ./internal/council` once. Five goldens are
+new — `two-in-flight`, `busy-seat-refused`, `inbox-landed`, `inbox-landed-ascii` — and the
+existing goldens that moved moved on ONE cell each: the footer's cancel label, on frames where
+two or more seats are in flight, which is the key's new meaning drawn honestly. No header of an
+existing frame moved.
+
+**Not verified here: a live crew.** No two vendors were run concurrently by the session that
+wrote this. What the suite pins is the room's bookkeeping over stubbed processes; what only a live
+run can show is a persistent seat taking its NEXT brief cleanly after a per-seat cancel, two
+one-shot seats' event streams interleaving through one reader without a stall, and a `/flow` hop
+landing beside an unrelated seat mid-answer. Owed and named rather than implied, on §9.53's rule.
+
+<a id="s9-55"></a>
+
+### 9.55 a crew's writers share one tree, and the room becomes the integrator (2026-09-02)
+
+§9.54 made the seats concurrent and left them where they were: every ordinary turn ran in
+`State.Workspace`, and a worktree existed only inside `/arena`. The moment two writing seats
+could answer at once, two writers were in one checkout — which §9.37 had already ruled out
+for a race in one sentence, "four writers in one shared tree are not four answers, they are
+one trampled tree". And the containment could not be a card: only the stream-json seat can
+be asked before a write (`canGate`), the other four act unasked. So the crew's containment
+is the race's, made structural and made permanent: **a writing seat gets its own worktree,
+cut once from the room's HEAD and reused for every writing turn after it, and the room is
+the integrator** — nothing a seat writes reaches the room's tree except by `/adopt`.
+
+#### What changed
+
+- **One worktree per writing seat, by default.** In write posture the first brief to a seat
+  cuts `<repo>-seat-<vendor>` beside the workspace on `seat/<vendor>`, from HEAD, and the
+  seat's process runs there (`seatDir` is the one read every spawn path — `specFor`,
+  `seatProcess`, the flow receipt, `/hand` — goes through). Read posture and a `/flow` read
+  hop keep the shared tree: a tree cut for a hop that cannot write is containment for a
+  hazard that does not exist. `--shared-tree` is the opt-out, a FLAG rather than a room word
+  because it decides where five processes write, the same class of fact as the workspace.
+  The cut runs off the render loop under arenasetup.go's deadline, serially, with the step
+  named on the footer (`worktree: preparing worktree for codex…`) and ctrl+c stopping the
+  setup; a tree already cut is kept. A tree an earlier room left is found by name and
+  reused, and the notice says so; a directory at that name that is not the seat's worktree
+  is refused by name. Nothing is seeded into a seat's tree and no brief file is written into
+  it — those are affordances for a fresh throwaway tree, and a seat's tree is reused.
+- **The badge says which holds** (`Column.Containment`, stamped at dispatch from the same
+  read the spawn uses): `wt: seat/codex`, `shared tree`, or `⚠ shared tree · <why>` for a
+  fallback the room could not avoid, with git's own sentence in the notice when it happened
+  and the whole reason on the `?` postures page. At a three-seat column's width the reason
+  sheds before the word and the mark stays, because a clipped reason is not a reason
+  (§9.11); the granularity word sheds first, on stripBadges' own order. A seat never
+  dispatched wears no badge: no process, no directory, no claim. `--ascii` keeps the mark
+  as `!` and the separator as `-`.
+- **`/adopt <seat>` merges a seat's branch, the race's way** (`adoptSource`). The card
+  names `git merge --no-ff seat/codex` onto `adopt/seat-codex`, refuses a dirty room and an
+  empty branch exactly as before, and after the merge **resets the seat's tree and branch
+  onto the new HEAD** — a reset that fails degrades the notice, never the adoption, and says
+  what moves the tree by hand. Resolution order is a ruling: the arena branch when the
+  seat's CURRENT turn is a race attempt (that is the block on the column), else the seat
+  branch, else the race receipt. Hybrids work across two seat branches on
+  `adopt/seat-<base>+<donor>`; a hybrid across a race attempt and a seat branch is refused,
+  because one receipt names one kind of branch. The donor is not reset — only its named
+  paths were taken.
+- **`/arena record` counts seat adopts apart** (`ArenaRecord.SeatAdopts`, from
+  `adopt/seat-<vendor>[-k]` refs): their own sentence under the window, inside no rate. A
+  race adopt is a verdict among competing attempts at one brief; a seat adopt is the room
+  taking one seat's ordinary work with nobody else in the running, and folding it into a
+  rate would score a seat for races it never entered.
+- **`/flow` fans with `&`** (`FlowStep.Stage`): hops joined by `& @seat` are one stage and
+  one dispatch, each seat handed its own task; the stage after `->` dispatches when the
+  stage's last seat lands (`StageDone`), carrying every predecessor's reply as its own
+  labelled fence, in landing order. The header names the stage (`hop 1/2 @codex & @grok`).
+  Two refusals a fan adds, at parse: a seat named twice in one stage, and a stage mixing
+  write and read hops — a stage runs at ONE posture, because a fan is one dispatch and
+  §9.16's table gives a dispatch one posture. One `y` releases a writing stage and the card
+  names every target. A busy seat stops the whole stage by name, on §9.54's rule. An
+  ampersand not followed by a mention stays prose.
+- **`/hand <to> <from>`** (`handcmd.go`) puts `<from>`'s stat and patch — against the point
+  its branch parted from the room's HEAD, read with `add -N` so created files count — into
+  the draft addressed `@<to>`, fenced as measured git output with the tree and branch named.
+  A draft, on §9.49's whole argument; `enter` is the only thing that spends. The cap is the
+  composer's: a patch past it is cut at a hunk boundary and the closing fence states the
+  cut and the way to the whole (`y`).
+
+#### What this section does NOT change
+
+`room.json` gains no field: a seat's tree is rediscovered on disk by name. The arena's own
+worktrees, seeding, brief file, ranks, `x`, `u` and `/arena drop` are untouched — a racer's
+badge now reads `wt: arena/t<N>/<vendor>`, which is the tree it already stood in. The spawn
+guard is untouched: every test here dispatches through `countSpawns`, and the git that
+runs is against a temp repository.
+<a id="s9-56"></a>
+
+### 9.56 the gauges route, and a real run can be shown without a vendor (2026-09-02)
+
+Two changes, one premise: §9.54 made the seats a crew, and a crew changes what two existing
+things are FOR. The quota readings (§9.21) used to say "this turn may not land"; on a crew they
+answer "which seat has room for this brief". And the room's event stream, which every column
+already applies, is the one thing that could show the room to someone who has not paid for five
+seats — if it were kept, and if what was kept could be shown honestly.
+
+#### The readings as routing
+
+The routing cell qualifies the route. `→ codex · 5h 94% used` when the draft addresses a seat
+whose relayed window is at or above `--headroom-warn` (default 90) and under a hundred;
+`→ everyone · codex 5h 94% used` on a route that names a set, so the seat is named. `@auto` is
+a route word (`Route.Auto`) that resolves against State: among seated, idle seats with a measured
+reading, the most headroom in the SHORTEST window — the window that resets soonest, since that is
+the one the next brief spends from — ties to seating order. The cell states the pick before
+enter, `→ auto: grok (5h 12% used)`; enter rewrites the draft to `@grok …`, dispatches, and the
+notice repeats the choice. The header and room.json record a turn to grok, which is what
+happened, and no surface learns a fifth route shape.
+
+Every rule is §4a.1's, restated for a rank:
+
+- **Nothing is invented and nothing is aggregated.** The hint copies one window's label and
+  percentage. `@auto` ranks headroom (a hundred minus the vendor's own figure) and prints the
+  figure it ranked. No total, no average, no dollar.
+- **An absent seat is never ranked.** Cursor and grok have no reading anywhere (§7.17), an
+  unrelayed Claude has none today, and a rank needs a number. With no measured seat in the room
+  the cell says `→ auto: no measured reading` and enter refuses — `@auto needs a measured
+  reading; none of the seated seats has one` — rather than falling back to the default route.
+  A brief handed to the readings must not go quietly to Claude because the readings were empty.
+- **A stale reading is absent, not a number.** A window whose reset has passed is dropped by
+  quotacache on read and by `measuredWindows` between reads, when the room's own clock passes
+  it. A reading past `quotaAgeWarn` is the alarm's to name as stale (§9.21) and is absent here.
+- **The hint stops one short of a hundred.** A full window is the alarm's cell, with the
+  warning mark, and one fact in two cells on one line is the drift vendorTag's comment warns of.
+- **A busy seat is never picked.** §9.54's refusal would meet the pick a keystroke later.
+
+The threshold is council's own pick, which is why it is a flag: the default is a boundary no
+vendor published, so the operator can move it, and the cell prints the vendor's figure beside
+whatever threshold applied. `quotaFullPercent` is unchanged and still the only threshold this
+package did not choose.
+
+#### The recording, and the boundary it is written under
+
+`--record <file>` writes the room's event stream as it happens: the room line (seats, postures,
+posture, workspace as the header drew it), each dispatch as its seats hold it (turn, route, each
+seat's brief as `startTurn` echoed it, whether it ran on a persistent process), every
+`runner.Event` in every batch `applyEvents` receives, and each gate decision the operator made.
+JSON lines, millisecond offsets from the monotonic clock, one flat record type so a fixture can
+be typed by hand. `runner.Gate.Input` is the one field dropped: never rendered, a Write's whole
+file content, and a replay has no vendor to hand it back to.
+
+**This is content, and it is not argued as one of the numbers-and-keys writes.** CLAUDE.md's
+read/write boundary holds room.json, the quota relay and the token relay to numbers and keys.
+The recording is the event sink's kind of exception — "different in kind", contained by scope
+rather than redaction — and it is contained three ways: an explicit path the operator typed
+(a path under `~/.telltale` is refused before a byte is written, and an existing file is
+refused rather than overwritten or extended); an explicit flag typed at the door (no key in the
+room starts one); and off by default (the recorder is nil, every hook on it is a no-op, no test
+builds one). `recording.go` carries the argument at length; this paragraph is the decision.
+
+**No redaction, on purpose.** The recorder writes what `applyEvents` saw. A recording that
+differed from the run would be a second truth; the replay puts the same bytes through the same
+redactor at the same choke point, so the frames match and the file underneath is the raw
+stream. The review the README requires of every frame is given a tool instead:
+`telltale council replay-check <file>` lists the workspace, the seats, every session id, every
+tool line and gate card, and the size of the prose — and says it did not read the prose.
+
+#### The replay
+
+`--replay <file>` opens a room over the file. `Run` returns to `runReplay` before `LoadRoom`,
+the brief, the trace, the relay or a host is consulted. The State is built from the room line
+— seats, labels, postures, granularities, the abbreviated workspace with `Home` left empty — so
+a replay on a laptop with nothing installed draws the recorded room. Each dispatch line puts the
+recorded seats on the recorded turn through `startTurn` and `holdTurn` (a `turnState` with no
+handle and a no-op cancel); each event line goes through `applyEvents`; each gate line takes the
+card down the way `decideGate` does, with the wait charged from the recording's clock.
+
+**The clock is the recording's, and `Render` stays pure.** `State.Now` on a tick is the
+recording's start plus the wall time elapsed since the replay opened, times `--replay-speed`;
+each record stamps its own offset on the same clock and never moves it backwards. The two wall
+reads the live retirement path makes — `finishColumn`'s Elapsed and the charged gate wait —
+are stamped from the recording before the event lands, using the guards those paths already
+have. A fixture played through `Update` therefore renders the same bytes every time
+(`replay`, `replay-gate`, `replay-ascii` goldens), and two plays of one file are one frame.
+
+**Labelled on every frame, in words.** `⚠ REPLAY` in the header where WRITE/READ sits;
+`REPLAY` first on every column's badge row (the whole row at strip width); `⚠ REPLAY nothing
+here is live` where the compose footer's routing cell and `enter dispatch` would be;
+`ctrl+c quit` on the view line. A replay is a real run played back — not §8's invented
+recording, because somebody ran it and every event was measured — and the label is what the
+honesty rule asks in return: a replayed frame must never pass for a live one.
+
+**Three refusals, and nothing else.** Enter, the card's `y`/`n`/`a`, and the per-seat verbs
+say `this room is a replay; nothing here is live`. `ctrl+c` and `q` quit in every mode.
+`saveRoom` returns on the replay flag, so a finished turn and a teardown write nothing;
+`TestAReplayNeverTouchesRoomJSON` plants a sentinel room under the suite's sandbox home and
+reads it back unchanged. No spawn var is reached: `Init` starts the feed and nothing else,
+which is the spawn guard's own "no test calls Init" argument met from the other side.
+
+#### What a recording does not hold
+
+The operator's cancels and give-ups (a cancelled column replays as the vendor's own exit),
+focus and scrolling, the `--brief` file's text, and `--trace`'s clocks. A recording with a long
+idle gap replays the gap at the recorded pace; `--replay-speed` is the remedy, not a cap.
+
+#### Verification
+
+`gofmt`, `go vet ./...`, `go test ./... -count=1`, `go build ./...`, the windows/amd64 and
+darwin/arm64 cross-builds, and `go test -race ./internal/council`, all clean. Goldens new:
+`containment-badges`, `containment-badges-ascii`, `containment-badges-expanded`,
+`flow-fan`, `arena-record-seats`, `arena-record-seats-ascii`. Goldens moved: the two
+`slash-refusal` frames, on one line — the refusal's vocabulary gained `/hand` and paid for
+it with "room" and an article. No other existing golden moved: a column dispatched before
+this section carries no containment claim, so no frame built before it changed.
+
+**Not verified here: a live crew in its trees.** No vendor was run by the session that wrote
+this. What only a live run can show: a persistent seat resuming its thread after the respawn
+that moves it from the workspace into its tree (the same `--resume` composition `/cd`
+measured, in a directory that did not exist a second earlier); a one-shot seat honouring the
+tree as cwd on a resume (`codex resume` rejects `--cd`, and the tree is passed as `Dir`);
+two seats writing at once into two trees and `/adopt` folding each in turn; the fanned
+`/flow` stage's two artifacts landing beside each other and the join reading both; and the
+`⚠ shared tree` badge at real widths on a real fallback. Owed and named rather than implied,
+on §9.53's rule.
+darwin/arm64 cross-builds, and `go test -race ./internal/council` once. New goldens:
+`route-headroom`, `route-auto`, `replay`, `replay-gate`, `replay-ascii`. No existing golden
+moved: a room with no near-full reading and no `@auto` draws the routing cell it drew before,
+and a live room's header, badge rows and footer are untouched by the replay flag.
+
+**Not verified here: a live recording.** No vendor was run by the session that wrote this, so
+no recording of a real room exists yet; the replay fixture is synthesized (fake ids, fake paths,
+three seats, one card, one finished seat). What only a live run can show is a `--record` of a
+five-seat room with real timing, that its replay reads as the room did, and what `replay-check`
+lists off a real capture. The hero decision stays the owner's.
+<a id="s9-57"></a>
+
+### 9.57 three seats stay up between briefs, on a reading rather than a run (2026-09-02)
+
+Until this change the room kept exactly two processes alive across turns: the Claude seat
+(`claude -p --input-format stream-json`, §9.8, measured) and the Cursor seat (`cursor-agent acp`,
+§9.36, measured). Codex, Antigravity and Grok each paid a whole process per brief — `codex exec
+--json`, `agy -p`, `grok --single=` — and two of those cold starts were measured on the reference
+box at **5.6 s** (Cursor, before §9.36) and **6.4 s** (Antigravity). A crew tool that dispatches a
+brief every few minutes spends most of a seat's wall clock on startup that way, and a seat that
+starts fresh every turn has no channel on which to be asked anything. This section records the
+move of all three to long-lived processes, what each was built from, and — the part that matters
+more — the fact that **none of the three shapes has been driven from this repository.** Every
+badge on those columns says `unmeasured` and names the version it was read at, and the checklist
+at the end is the price of removing the word.
+
+**This is a departure from §9.50's ruling and says so.** §9.50 left the codex app-server protocol
+unseated because a read-posture turn on it was measured failing to inspect in two of three arms,
+and named the read posture's liveness as the measurement owed before any flip. That measurement
+has not been made. The seat moved anyway, on the crew ledger above, with three things holding the
+honesty line: the measured batch invocation stays one step away as the fallback, the seat owns
+its own kill, and the badge says what nobody has watched. The owed measurement is now the FIRST
+item of the checklist rather than a precondition, and that ordering is a decision, recorded here
+so nobody reads the registry and assumes the debt was paid.
+
+#### What was built, and from which pages
+
+| seat | live shape | fallback (measured) | built from |
+|---|---|---|---|
+| Codex | `codex app-server`, one process, `thread/start{cwd, sandbox, approvalPolicy}`, `turn/start` per turn, `item/*/requestApproval` answered through the room's card | `codex exec --json` (codex.go, 0.149.1) | the protocol capture of §9.50 at **0.149.1**; the app-server README on `openai/codex` main and `app-server-protocol/src/protocol/v2/{shared,item}.rs`, read 2026-09-02, for the `approvalPolicy` enum (`untrusted`, `on-request`, `never`), the v2 decision enum (`accept`, `acceptForSession`, `decline`, `cancel`), the approval params (`itemId`, `command`, `cwd`, `reason`, `grantRoot`), and `turn.status: "interrupted"`. Installed build **0.152.1**, undriven |
+| Grok | `grok agent stdio`, the ACP client of §9.36 under a second dialect, `session/new{cwd}`, `session/prompt` per turn, `session/request_permission` answered by kind through the room's card | `grok --single=` (grok.go, 1.0.4) | docs.x.ai/build/cli/headless-scripting and zed.dev/acp/agent/grok-build, read 2026-09-02, for the subcommand and the `--cwd` / `--resume` flags this seat deliberately does not pass; agentclientprotocol.com/protocol/schema for `loadSession`, the option `kind` values and the `cancelled` outcome. Grok Build **1.0.13**, undriven |
+| Antigravity | `agy --input-format stream-json --output-format stream-json`, one process, `{"event":"user","message":{"content":…}}` per turn, `result` ends the turn | `agy -p` (agy.go, 1.1.13) | antigravity.google/docs/cli/headless and the changelog entry for **1.1.15** (2026-08-19), read 2026-09-02, for the flag, the envelope, "one turn per message in a single conversation", and "close stdin … the process exits after the input pipe is closed and the current turn completes". Installed build **1.1.24**, undriven |
+
+Three shapes in the package carry the move:
+
+- **`vendors.LiveFallback`** names the measured batch adapter behind each live seat.
+  `FallbackRegistry()` is the whole room after a retreat, and it exists so that state can be
+  constructed rather than scripted — the give-up and re-send suites build "an ordinary one-shot
+  seat" from it, because the default registry no longer drives one. `Registry` became a var for
+  that reason, on the spawn vars' precedent.
+- **`vendors.GracefulStop`** is the seat owning its kill. §9.50 measured a closed stdin NOT
+  reliably ending `codex app-server` (four exits in 1.5–3.3 s, one alive at 15 s), so the
+  app-server protocol's `Closing()` cancels any held approval and interrupts an open turn,
+  `Grace()` bounds the wait at 4 s, and the runner's job-object kill is unchanged behind both.
+  The ACP client and the Antigravity seat implement the same pair.
+- **`acpDialect`** is everything the shared ACP client may vary per vendor, and it is three
+  fields: the read-posture mode id (cursor: `plan`, measured; grok: none), whether permission
+  answers use the measured option spelling or pick by kind from the request (cursor: fixed; grok:
+  by kind, `cancelled` when the kind is not offered), and whether `session/load` waits for the
+  server to advertise it (grok only). `cursoracp.go` is `acp.go` now, with every measured
+  sentence intact.
+
+**Codex's approval policy is a choice, and the alternative is named.** Read posture asks for
+`never`; write postures ask for `on-request`, the vendor's own interactive default, under the
+`workspace-write` sandbox — so the vendor asks when it wants more than the sandbox allows and the
+room cards that. `untrusted` would ask about every command off the vendor's trusted list, and the
+pages read for this do not say whether a command approved under it then runs outside the sandbox.
+A policy that might trade the sandbox for a keystroke is not one to adopt unmeasured. The gated
+posture never reaches the seat as itself: `spawnPosture` collapses it to write for every
+Conversational seat, and whether a request becomes a card or an automatic yes is the room's
+decision when one arrives.
+
+**Two things the codex badge did, in opposite directions.** On Windows the read level HOLDS at
+`ro:enforced`, because the same 0.149.1 session measured the sandbox on the app-server path — a
+write through cmd.exe denied with no file on disk — and the detail now carries that path's
+sharper liveness residual. Off Windows the level DROPS to `ro:requested`: the macOS enforcement
+was `codex exec`'s (2026-08-05, 0.146.0), every app-server arm ran on Windows, and a seat move
+re-measures rather than inherits. That is the one badge this change lowered.
+
+**What is unchanged, stated so it is not inferred.** `canGate` still names one seat. Two more can
+now be ASKED — a request the vendor raises reaches a person — and neither has a coverage
+measurement, so both stay `WRITES` with `asks · unmeasured` where the argument lives. Grok's cost
+figure comes only from the `--single` fallback: the ACP prompt response is `{stopReason, _meta?}`
+and nothing read says what grok puts in `_meta`, so on the ACP seat cost renders **absent**,
+never zero. Antigravity's `--conversation` on the stream argv is unmeasured for composition, and
+the §9.43 fork tell is what makes sending it safe: the seat implements `SilentResumeFork`, so the
+room compares the id it asked for against the id `init` reports.
+
+**What the core does with the two interfaces (landed 2026-09-02, in the crew integration).**
+This paragraph said "nothing yet" while the six crew lanes ran apart; the core was patched once
+they merged, and it now reads both. `LiveFallback`: a seat whose protocol reports `Dead()` — on
+the brief that finds it dead in `handTurnToSeat`, or on the failed-turn event the handshake
+refusal produces — and a persistent seat whose process dies on its FIRST turn before it names a
+session, both retreat to the batch adapter for the rest of the room (`fallback.go`). The retreat
+is on the SAME dispatch: the brief the operator typed goes down the batch branch with the
+operating brief applied, the column stays on its turn with a note naming the invocation, the
+badge reads `seatShape(v, true)` through `postureClaimFor`, and the seats in flight beside it are
+untouched. `GracefulStop`: teardown, a respawn, and a cancel that has to become a kill all run
+`stopProc` — `Closing()` down the pipe, `runner.Session.CloseInput`, `Grace()`, then the kill
+that §9.50 measured necessary — with teardown waiting on every seat's grace at once. Both are
+pinned over stubbed sessions in `fallback_test.go`; the live run each one owes is on the
+checklist below, and STATE.md carries the consolidated list.
+
+#### The live measurements owed, as a checklist
+
+Each item names the command to run on the reference box and the sentence it would let the badge
+change. Capture the wire under `vendors/testdata/wire/<vendor>-<version>-<arm>.jsonl` per the
+README there; a claim that is not captured is not made.
+
+- [ ] **Codex, read liveness (the §9.50 debt).** `codex --version`; then, through the seat's own
+  argv (`telltale council --read` with only codex seated, or a driver issuing `initialize`,
+  `thread/start{sandbox:"read-only",approvalPolicy:"never"}`), a brief that lists the workspace
+  and reads one file. Three trials. Passes when every trial inspects. Until then the Windows
+  detail keeps "two of three read turns".
+- [ ] **Codex, the approval flow, both branches.** A write-posture thread (`workspace-write`,
+  `on-request`) asked to write OUTSIDE the workspace and to reach the network: does
+  `item/commandExecution/requestApproval` or `item/fileChange/requestApproval` arrive, does the
+  vendor BLOCK until answered, does `accept` run it and `decline` stop it, and does the file
+  land or not. This is what lets `asks · unmeasured` become `asks · measured`.
+- [ ] **Codex, `turn/interrupt` and teardown order.** Interrupt a running turn: does
+  `turn/completed` arrive with `status: "interrupted"`; then `Closing()` + stdin close: how long
+  until exit, across five runs, against the 4 s grace.
+- [ ] **Codex, macOS.** The read sandbox on the app-server path, on the Mac, before the
+  off-Windows badge may return to `ro:enforced`. Record in PARITY.md.
+- [ ] **Codex, the exec fallback trigger.** Run the seat against a build without `app-server`
+  (or an unauthenticated one) and watch what the room shows; this is the arm the room's retreat
+  (`fallback.go`) is built for, and the note and the `exec · unasked · fallback` badge are what
+  it should show.
+- [ ] **Grok, the handshake and a turn.** `grok --version`; `grok agent stdio` driven with the
+  seat's own `initialize` and `session/new{cwd}`: what `agentCapabilities` advertises
+  (`loadSession` above all), whether `modes` names a plan mode, and a fenced brief streaming
+  back. Also whether a brief beginning `/` is eaten on this path as it is on `--single`.
+- [ ] **Grok, a permission request.** A write-posture session asked to run a command off the
+  allowlist and to write a file: does `session/request_permission` arrive for either, what
+  `optionId`s and `kind`s it offers, and do `allow_once` and `reject_once` do what they say.
+- [ ] **Grok, cost.** Whether anything on the ACP wire — the prompt response's `_meta`, a
+  `session/update` variant — carries `total_cost_usd`. Until it does, the ACP seat shows no cost
+  and the badge says why.
+- [ ] **Grok, `session/load`.** A saved id reloaded in a new process, if `loadSession` is
+  advertised; the refusal shape if it is not held.
+- [ ] **Antigravity, the stream handshake.** `agy --version`; two turns down one stdin with the
+  seat's own argv: same pid, same `conversation_id` on both `result` events, and the second turn
+  answering a question only the first could. Then close stdin and time the exit against the 3 s
+  grace.
+- [ ] **Antigravity, `--conversation` under stream input.** Resume a saved id: same id back
+  (resumed), a different id back (the §9.43 fork, on this path), or a refusal.
+- [ ] **Antigravity, `--print-timeout` under stream input.** Whether 30m bounds each turn or the
+  whole process. A per-process bound ends the seat half an hour into a room.
+- [ ] **Antigravity, the fallback trigger.** The exact exit code and stderr line a build without
+  `--input-format` produces. The room retreats on the SHAPE (a first-turn death with no session
+  named) rather than on that line, so the reading confirms the trigger rather than gates it.
+
+#### Verification
+
+No vendor was started. `go test ./internal/council/vendors -count=1` and the same with `-race`
+pass over synthesized fixtures: the app-server handshake, both approval methods answered each way
+in both vocabularies, the interrupt cancelling held approvals first, `Closing()` in order and
+silent when idle, every fallback trigger reported by `Dead()`, the approval policy per posture;
+the grok dialect's handshake, its `loadSession` gate against the cursor dialect's measured
+behaviour, a permission answered by kind and cancelled when the kind is absent, the read
+posture's own refusal, interrupt and closing order, no cost on the prompt response; the
+Antigravity stream's argv, envelope, `result` ending the turn, the fork fixture replayed, and its
+refusals. `internal/council/seatshape_test.go` pins every badge word and the fallback registry.
+`go vet ./...`, `GOOS=windows GOARCH=amd64 go build ./...` and `GOOS=darwin GOARCH=arm64 go build
+./...` are clean. The `help-postures` golden moved by exactly the codex detail's new sentences.
+
+<a id="s9-58"></a>
+
+### 9.58 the codex seat failed in both rooms and said only `exit status 1` (2026-09-01)
 
 Two live drives on 2026-09-01 and 2026-09-02 showed the same seat in the same state. The
 hosted read room drew `codex — failed (exit 1)`. The gated write room drew `Codex ✗ failed 12s`
@@ -17804,6 +18494,14 @@ was the whole failure signal. At 0.151.0 the reason rides stdout as a `turn.fail
 stderr is empty. The adapter dropped the frame as an unknown type, on the rule that an unlisted
 type is dropped rather than guessed at, and the exit event arrived with `exit status 1` and an
 empty tail. Both rooms rendered exactly what they were handed.
+
+**Which path this is, after [§9.57](#s9-57).** The drives above ran on a build that seated
+`codex exec --json`. On the same day this section landed, §9.57 seated `codex app-server`
+first and kept `codex exec --json` as the measured fallback. The app-server path reports a
+failed turn on its own `turn/completed` with `status: "failed"`, as a `KindError` that ends the
+turn, so the sentence reaches the room there already. The adapter change below is the fallback
+path's, and the exit guard below is what the fallback needed: a spawn-per-turn seat is the one
+whose failure sentence a process exit can overwrite.
 
 #### What changed
 

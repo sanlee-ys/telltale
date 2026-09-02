@@ -20,7 +20,7 @@ func arenaLiveTurn(m *Model) *arenaLiveState {
 	m.st.Columns[1].Phase = PhaseStreaming
 	m.st.Columns[1].TurnN = 5
 	ls := &arenaLiveState{}
-	m.turn = &turnState{
+	m.holdTurn(&turnState{
 		cancel:     func() {},
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
@@ -28,7 +28,7 @@ func arenaLiveTurn(m *Model) *arenaLiveState {
 		arenaBase:  "abcdef1234",
 		arenaTrees: map[model.VendorID]string{model.VendorCodex: "/x/repo-arena-t5-codex"},
 		arenaLive:  map[model.VendorID]*arenaLiveState{model.VendorCodex: ls},
-	}
+	})
 	return ls
 }
 
@@ -97,9 +97,10 @@ func TestArenaFinalReplacesTheInterim(t *testing.T) {
 
 	m := clearModel()
 	ls := arenaLiveTurn(m)
-	m.turn.arenaRaceN = raceN
-	m.turn.arenaBase = base
-	m.turn.arenaTrees = trees
+	ts := m.race()
+	ts.arenaRaceN = raceN
+	ts.arenaBase = base
+	ts.arenaTrees = trees
 	_ = ls
 
 	// A mid-race read lands: the tree is untouched, so it is a measured zero.
@@ -191,7 +192,7 @@ func TestArenaRefreshStopsWithTheTurnAndTheSeat(t *testing.T) {
 	c := &m.st.Columns[1]
 
 	// The seat lands: even armed, nothing more is launched for it.
-	delete(m.turn.live, model.VendorCodex)
+	delete(m.race().live, model.VendorCodex)
 	ls.armed = true
 	if m.dueArenaRefreshes() != nil {
 		t.Error("a landed seat's tree was read again")
@@ -218,7 +219,7 @@ func TestArenaRefreshStopsWithTheTurnAndTheSeat(t *testing.T) {
 	}
 
 	// The turn tears down entirely: the late message is a no-op, not a panic.
-	m.turn = nil
+	idle(m)
 	m.applyArenaStat(arenaStatMsg{vendor: model.VendorCodex, turnN: 5, stat: "stale"})
 	if c.ArenaInterim != nil {
 		t.Error("a read landed on a room with no turn")
@@ -281,9 +282,11 @@ func TestArenaStreamActivityArmsTheRefresh(t *testing.T) {
 	m.redactors = map[model.VendorID]*Redactor{}
 	ls := arenaLiveTurn(m)
 	claudeLS := &arenaLiveState{}
-	m.turn.live[model.VendorClaude] = true
-	m.turn.arenaTrees[model.VendorClaude] = "/x/repo-arena-t5-claude"
-	m.turn.arenaLive[model.VendorClaude] = claudeLS
+	race := m.race()
+	race.live[model.VendorClaude] = true
+	race.arenaTrees[model.VendorClaude] = "/x/repo-arena-t5-claude"
+	race.arenaLive[model.VendorClaude] = claudeLS
+	m.turns[model.VendorClaude] = race
 	m.st.Columns[0].Phase = PhaseStreaming
 	m.st.Columns[0].TurnN = 5
 
@@ -306,11 +309,11 @@ func TestArenaStreamActivityArmsTheRefresh(t *testing.T) {
 	m2 := clearModel()
 	m2.redactors = map[model.VendorID]*Redactor{}
 	m2.st.Columns[1].Phase = PhaseStreaming
-	m2.turn = &turnState{
+	m2.holdTurn(&turnState{
 		cancel:     func() {},
 		live:       map[model.VendorID]bool{model.VendorCodex: true},
 		persistent: map[model.VendorID]bool{},
-	}
+	})
 	m2.applyEvents([]runner.Event{{Vendor: model.VendorCodex, Kind: runner.KindText, Text: "hi"}})
 	if m2.dueArenaRefreshes() != nil {
 		t.Error("an ordinary turn launched a live stat read")

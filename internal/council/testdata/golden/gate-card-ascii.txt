@@ -21,4 +21,4 @@
   +------------------------------------------------------------------------------------------------------------------+  
   |  :                                                                                                               |  
   +---------------------------------------------------------------------------------------------------------  GATE  -+  
-                 Write: internal/council/gate.go  |  y approve  |  n deny  |  a stop asking  |  ctrl+c cancel the turn  
+                   Write: internal/council/gate.go  |  y approve  |  n deny  |  a stop asking  |  ctrl+c cancel claude  

@@ -27,16 +27,16 @@
                  it                                                                                                     
                                                                                                                         
     ro:enforced  Codex                                                                                                  
-                 -s read-only, applied by the vendor's own Windows sandbox — measured 2026-08-29 at codex-cli 0.149.1:  
-                 a shell write was denied with no file on disk, a read ran clean, and the resume override enforced the  
-                 same. One residual is liveness, not safety: the sandbox could not spawn this machine's PowerShell,     
-                 and turns completed because the model retried through cmd.exe — a turn can still fail to inspect when  
-                 it does not retry                                                                                      
+                 app-server · asks · unmeasured at 0.152.1: sandbox read-only on the app-server thread, applied by the  
+                 vendor's own Windows sandbox — measured 2026-08-29 at codex-cli 0.149.1 on that path: a shell write    
+                 was denied with no file on disk. The residual is liveness, not safety, and it is worse here than on    
+                 the `codex exec` fallback: the sandbox could not spawn this machine's PowerShell, and in two of three  
+                 read turns the model gave up rather than retrying through cmd.exe. Nothing has been driven at 0.152.1  
                  "final only" — MEASURED: this vendor sends nothing at all until its turn is done, so a quiet column    
                  here is a working one and not a stalled one                                                            
                                                                                                                         
     unsandboxed  Antigravity                                                                                            
-  ↓ 7 more below                                                                                                        
+  ↓ 9 more below                                                                                                        
     ?            close                                                                                                  
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  ›                                                                                                               │  

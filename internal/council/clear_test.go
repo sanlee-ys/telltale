@@ -26,8 +26,10 @@ func (s *killSession) record(lines [][]byte) error {
 	}
 	return nil
 }
-func (s *killSession) Kill()       { s.killed = true }
-func (s *killSession) Alive() bool { return !s.killed }
+func (s *killSession) Kill()                 { s.killed = true }
+func (s *killSession) Alive() bool           { return !s.killed }
+func (s *killSession) CloseInput()           {}
+func (s *killSession) Done() <-chan struct{} { return neverDone }
 
 // clearModel is a three-seat room where every seat holds a thread.
 //
@@ -46,9 +48,12 @@ func clearModel() *Model {
 			model.VendorCodex:       "codex-thread",
 			model.VendorAntigravity: "agy-thread",
 		},
-		resumeIDs: map[model.VendorID]string{},
-		unproven:  map[model.VendorID]bool{},
-		procs:     map[model.VendorID]*seatProc{},
+		resumeIDs:  map[model.VendorID]string{},
+		unproven:   map[model.VendorID]bool{},
+		procs:      map[model.VendorID]*seatProc{},
+		turns:      map[model.VendorID]*turnState{},
+		cancelling: map[model.VendorID]bool{},
+		givenUp:    map[model.VendorID]bool{},
 	}
 }
 
@@ -172,7 +177,7 @@ func TestClearedMarkerRetiresOnTheNextTurn(t *testing.T) {
 
 func TestAskClearSeatRefusesWhileATurnIsInFlight(t *testing.T) {
 	m := clearModel()
-	m.turn = &turnState{}
+	occupy(m)
 
 	m.askClearSeat()
 

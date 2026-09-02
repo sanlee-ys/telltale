@@ -34,8 +34,11 @@ func agyTurnModel(t *testing.T) *Model {
 	m.st.Mode = ModeViewing
 	m.st.Columns[0].Vendor = model.VendorAntigravity
 	m.st.Columns[0].Label = "Antigravity"
-	delete(m.turn.live, model.VendorClaude)
-	m.turn.live[model.VendorAntigravity] = true
+	ts := m.turnOf(model.VendorClaude)
+	delete(ts.live, model.VendorClaude)
+	delete(m.turns, model.VendorClaude)
+	ts.live[model.VendorAntigravity] = true
+	m.turns[model.VendorAntigravity] = ts
 	return m
 }
 
@@ -90,7 +93,7 @@ func TestAVendorReportedFailureLeavesTheRoomInFlight(t *testing.T) {
 	// runner.Start kills the child on it, so retiring here would kill a process
 	// that is still winding down — the same refusal §9.33 made for codex, on the
 	// same reasoning, and the reason this is a settle rather than a retirement.
-	if m.turn == nil {
+	if !m.anyInFlight() {
 		t.Fatal("the vendor's failure line retired the turn; the turn's cancel would kill a process that is still alive")
 	}
 
@@ -134,7 +137,7 @@ func TestAVendorReportedFailureRetiresOnTheExit(t *testing.T) {
 
 	m.applyEvents([]runner.Event{{Vendor: model.VendorAntigravity, Kind: runner.KindDone}})
 
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Error("the process exit did not end the turn; `q` would stay refused forever")
 	}
 	c := m.st.Columns[0]
@@ -169,7 +172,7 @@ func TestALateVendorReportedFailureCannotResurrectTheRoom(t *testing.T) {
 	}
 
 	m := agyTurnModel(t)
-	m.turn = nil
+	idle(m)
 	m.applyEvents([]runner.Event{agyFailureEvent(t)})
 	if m.st.Columns[0].Settling {
 		t.Error("a failure from a dead turn settled a column, so the footer would never offer `q` again")
@@ -205,8 +208,11 @@ func codexTurnModel(t *testing.T) *Model {
 	m.st.Mode = ModeViewing
 	m.st.Columns[0].Vendor = model.VendorCodex
 	m.st.Columns[0].Label = "Codex"
-	delete(m.turn.live, model.VendorClaude)
-	m.turn.live[model.VendorCodex] = true
+	ts := m.turnOf(model.VendorClaude)
+	delete(ts.live, model.VendorClaude)
+	delete(m.turns, model.VendorClaude)
+	ts.live[model.VendorCodex] = true
+	m.turns[model.VendorCodex] = ts
 	return m
 }
 
@@ -272,7 +278,7 @@ func TestACodexFailureSentenceOutlivesTheProcessExit(t *testing.T) {
 	if c.Settling {
 		t.Error("a retired column still claims to be exiting")
 	}
-	if m.turn != nil {
+	if m.anyInFlight() {
 		t.Error("the process exit did not end the turn; `q` would stay refused forever")
 	}
 }

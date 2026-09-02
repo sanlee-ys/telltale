@@ -1,7 +1,10 @@
 # telltale
 
-A dispatch room for five vendor CLIs. One brief, answered side by side
-by Claude Code, Codex, Antigravity, Cursor, and Grok.
+A crew of five vendor CLIs in one terminal: Claude Code, Codex,
+Antigravity, Cursor, and Grok, each in its own column. Address `@all`
+and one brief is answered side by side; address one seat and it takes
+that brief while the others keep working. Each writing seat works in its
+own git worktree, and the room is the integrator (`/adopt`).
 A statusline and a HUD sit under the room.
 Every number comes from measured tool output.
 
@@ -39,7 +42,16 @@ Every number comes from measured tool output.
      repository today. -->
 
 **v0.2.0** (2026-08-14). Windows is verified on every commit.
-Intel macOS is smoke-checked. `darwin_arm64` and `linux_amd64` are built, not run.
+The crew work after the tag (per-seat turns, worktrees, `@auto`,
+`--record`/`--replay`, the Unix host, three long-lived seats) is built and
+tested offline; the live runs it owes are listed in [STATE.md](STATE.md).
+A `darwin` CI job on Apple Silicon runs the suite and the binary smokes on
+a runner with no vendor CLI; its first run (2026-09-02, on the crew PR) found
+a socket path past macOS's 104-byte bound and a test that read a sentence
+off screen, both fixed, and it is green since. Intel macOS is smoke-checked
+by hand. `linux_amd64` is built, and a
+source build was driven by hand on Linux with no vendor (`doctor`,
+`council ls`, `replay-check`); the archive is not run.
 No binary is signed. Check `checksums.txt` on the release.
 Detail: [SECURITY.md](SECURITY.md). The v1 cut gates are in [docs/design.md §1](docs/design.md#s1).
 
@@ -73,11 +85,26 @@ scoop bucket add telltale https://github.com/sanlee-ys/telltale
 scoop install telltale
 ```
 
-**Direct download.** Each release attaches `windows_amd64`, `darwin_amd64`,
-`darwin_arm64`, and `linux_amd64`, plus `checksums.txt`. Unpack one archive
-and put `telltale` on `PATH`.
+**macOS, Homebrew** (the tap lives in this repository; not yet exercised by
+a `brew install`, and the first one is owed)
 
-Measured on Intel macOS against `v0.2.0` (2026-08-17):
+```
+brew tap sanlee-ys/telltale https://github.com/sanlee-ys/telltale
+brew install telltale
+telltale doctor
+```
+
+Homebrew fetches the release archive into its own cache and sets no
+`com.apple.quarantine` mark, so Gatekeeper is never asked about the binary.
+The binary is still **not signed**: the tap changes how it arrives, not what
+it is. Apple Silicon gets `darwin_arm64`, Intel gets `darwin_amd64`, and
+Linux gets `linux_amd64`. goreleaser rewrites
+[Formula/telltale.rb](Formula/telltale.rb) at each tag; the one checked in
+names `v0.2.0` with the sha256 values from that release's `checksums.txt`.
+
+**macOS, curl** (measured on Intel macOS against `v0.2.0`, 2026-08-17; on
+Apple Silicon write `darwin_arm64` for `darwin_amd64`, a substitution nobody
+has walked by hand)
 
 ```
 curl -fLO https://github.com/sanlee-ys/telltale/releases/download/v0.2.0/telltale_0.2.0_darwin_amd64.tar.gz
@@ -87,10 +114,22 @@ tar -xzf telltale_0.2.0_darwin_amd64.tar.gz
 ./telltale doctor
 ```
 
-A browser download on macOS sets `com.apple.quarantine`. After the checksum
-passes, run `xattr -d com.apple.quarantine telltale`. Do not add that line
-to the `curl` block: `curl` does not set the mark, and the command then
-exits 1. The measured walk is in [SECURITY.md](SECURITY.md).
+There is no `xattr` line because `curl` writes no `com.apple.quarantine`
+attribute and a browser does, and Gatekeeper acts on that attribute alone.
+After a browser download, run `xattr -d com.apple.quarantine telltale` once
+the checksum passes; inside the `curl` block that same line exits 1 because
+there is nothing to remove. The measured walk is in [SECURITY.md](SECURITY.md).
+
+**macOS, from source**
+
+```
+go build -o telltale ./cmd/telltale
+./telltale doctor
+```
+
+**Direct download.** Each release attaches `windows_amd64`, `darwin_amd64`,
+`darwin_arm64`, and `linux_amd64`, plus `checksums.txt`. Unpack one archive
+and put `telltale` on `PATH`. The `curl` block above is that walk, measured.
 
 **Windows, winget.** Not submitted. Use the one paste above, scoop, or a
 source build. Draft: [packaging/](packaging/).
@@ -164,7 +203,7 @@ keyed to a line `doctor` actually prints.
 | `drivable FAILED` under a `binary ok` | The binary is here and council will not seat it. "Is it there" and "can it be driven" have different fixes, so `doctor` refuses to collapse them. | Read the reason on that row. It names the entry point and why: usually a shell shim that takes its prompt as an argument, which council will not put through `cmd.exe`. |
 | `auth  not checked` and `network  not checked`, on every seat, always | Not a failure and not a soft pass. This report probes neither. | Nothing. A seat that is installed and signed out reports its own auth failure on its column the first time you dispatch to it. |
 | `re-measure §3.x before trusting the fields this adapter sources` | Your vendor runs a version other than the one telltale surveyed. | Nothing on this machine. It is a staleness fact about telltale: no check failed, the tally is unchanged, and the command still exits 0. |
-| `telltale version` says `dev`, or an older tag, after the install | Another `telltale.exe` is earlier on `PATH`. The install script appends its directory rather than jumping the queue. | Run `Get-Command telltale`. It names the one that runs. Remove the other one, or set `TELLTALE_INSTALL_DIR` to the directory it already lives in. |
+| `telltale version` says `dev`, or an older tag, after the install | Another `telltale.exe` is earlier on `PATH`. The install script appends its directory rather than jumping the queue. | Run `Get-Command telltale` (`which -a telltale` on macOS). It names the one that runs. Remove the other one, or set `TELLTALE_INSTALL_DIR` to the directory it already lives in. |
 | A column in the room stays empty after a dispatch | The seat answered nothing, or the vendor refused the turn. | The column carries the reason. [docs/council.md](docs/council.md) reads the badges and the phase words. |
 | Windows warns before the first run | The binary is unsigned. No telltale release carries an Authenticode signature ([docs/design.md §8](docs/design.md#s8), item 8). | Verify the archive against `checksums.txt`, which is the whole verification this release offers. [SECURITY.md](SECURITY.md) states what that does and does not prove. |
 | The statusline shows nothing, or `bad statusline input: unexpected end of JSON input` | The statusline is wired, not run. The vendor calls it and hands it JSON on stdin, so by hand it gets no payload. | Paste the `statusLine.command` block above, then start a session. |
@@ -174,7 +213,8 @@ with no colour and no alternate screen, for exactly that reason.
 
 ## What it is
 
-- **`telltale council`:** one brief, five vendor columns. This is the product.
+- **`telltale council`:** five vendor seats working as a crew, one column
+  each. This is the product.
 - **`telltale statusline`:** model, context, session cost, and quota pacing
   from the JSON the vendor sends on stdin. No network. No credential read.
 - **`telltale hud`:** a watch TUI over Claude Code, Codex, Gemini CLI,
@@ -201,7 +241,7 @@ The Cursor store holds tokens in the same SQLite file as session state.
 The adapter does not read them. [SECURITY.md](SECURITY.md) states the
 boundary.
 
-## The dispatch room
+## The crew room
 
 ```
 telltale.exe council
@@ -209,12 +249,48 @@ telltale.exe council
 
 An unaddressed brief goes to Claude. `@codex`, `@agy`, `@cursor`,
 `@grok`, and `@all` route a turn. `-@claude` addresses every seat but
-that one. `--read` opens a room that only talks. `--cd` sets the
-workspace. A plain `telltale council` can write, and the header says so.
+that one. A seat takes its brief while the other seats are still
+answering theirs; a busy seat is refused by name, and `ctrl+c` cancels
+the seat you are looking at. `--read` opens a room that only talks.
+`--cd` sets the workspace. A plain `telltale council` can write, and the
+header says so.
+
+In a writing room every seat works in its own git worktree, cut once
+beside the workspace on `seat/<vendor>`. The room is the integrator:
+`/adopt codex` merges that branch behind a y/n card, `/hand claude codex`
+puts one seat's patch into another seat's brief, and `/flow … & @seat …`
+fans a stage across seats and waits on all of them. `--shared-tree` is
+the older room.
+
+Every seat is a live process. Claude asks before every tool call,
+measured, and wears `gated`. Codex and Grok can carry an approval request
+into the same card on their live shapes, which were read from vendor
+documentation and not yet driven: their badges say `unmeasured` until a
+run on the reference box says otherwise. A live shape whose handshake is
+refused falls back to the batch invocation that was measured, and the
+column says so.
+
+The strip under the header is the inbox: `⚠ NEEDS YOU` names the seats
+stopped on a card and the seats whose turn ended while you were reading
+another column; `.` goes to the next one. `@auto` routes a brief to the
+seated idle seat with the most measured headroom in its shortest quota
+window, from the same relay the badges read, and refuses when no seat has
+a reading.
+
+`--record <file>` keeps a real run, every seat's output and every card
+with its timing; `--replay <file>` plays it back with the same renderer
+on a machine with nothing installed, labelled `REPLAY` on every frame;
+`telltale council replay-check <file>` lists what the file carries
+before it is shared. No recording of a real five-seat room exists yet.
+
+`--host` opens a read room in a process that outlives the terminal, on
+Windows, macOS, and Linux; `/detach` walks away, `telltale council`
+rejoins, `telltale council kill` ends it. Measured on Windows and Linux;
+built for the Mac.
 
 [docs/council.md](docs/council.md) is the room guide: badges, routing,
 keys, and flags. [docs/design.md §9](docs/design.md#s9) is the measured
-record per vendor.
+record per vendor, and §9.54 through §9.57 and §7.30 are the crew.
 
 ## `telltale snapshot`
 

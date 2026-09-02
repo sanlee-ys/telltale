@@ -85,6 +85,10 @@ func roomVerbs() []roomVerb {
 		{verb: "/arena"},
 		{verb: "/cd", run: (*Model).cdCommand},
 		{verb: "/flow"},
+		// /hand <to> <from>: one seat's worktree diff into the draft, addressed
+		// to another seat (handcmd.go, §9.55). It takes arguments, so the
+		// verb-plus-space form is unmistakably a command.
+		{verb: "/hand", run: (*Model).handCommand},
 		{verb: "/read", bare: true, run: func(m *Model, _ string) bool { return m.postureCommand(false) }},
 		// Bare-only, for /read and /write's reason rather than for symmetry: it
 		// takes no argument, and "/retry the failing test" is a sentence someone
@@ -152,11 +156,15 @@ func (m *Model) refuseUnknownCommand() bool {
 	// HARD budget: TestTheRefusalFitsTheRoomItIsShownIn fails any wording the
 	// room's own width clips. The remedy clause outranks elegance; a refusal
 	// that truncates its vocabulary teaches a partial alphabet. "sends it"
-	// lost its object when /adopt joined — the third purchase on this line,
-	// and the last cheap one: the next verb has to find its characters
-	// somewhere else.
-	m.st.Notice = "no room command " + firstWord(m.st.Draft, m.glyphs.Ellipsis) +
-		", a leading space sends · " + strings.Join(roomWords(), " ")
+	// lost its object when /adopt joined — the third purchase on this line.
+	// /hand (§9.55) paid with "room " and the article: "no command /x, leading
+	// space sends" says the same three things in seven fewer cells, and the
+	// tests still require "no command" and "leading space" to reach the
+	// screen. That is the fourth purchase, and the line now fits its width
+	// with nothing left to sell — the next verb changes the shape of this
+	// sentence, not a word in it.
+	m.st.Notice = "no command " + firstWord(m.st.Draft, m.glyphs.Ellipsis) +
+		", leading space sends · " + strings.Join(roomWords(), " ")
 	return true
 }
 
@@ -293,12 +301,14 @@ func (m *Model) runRoomCommand() bool {
 // resolveCD rejects is never assigned, so it is never a value the file could
 // briefly hold.
 func (m *Model) cdCommand(arg string) bool {
-	if m.turn != nil {
+	if m.anyInFlight() {
 		// The turn in flight was dispatched against the old directory, and the
 		// spawn-per-turn seats read the workspace at dispatch. Moving it under
 		// them would make the room's header disagree with where three agents
-		// are actually acting.
-		m.st.Notice = "a turn is in flight — /cd moves the room between turns"
+		// are actually acting. Room-wide (anyInFlight, where this read m.turn):
+		// the workspace is a property of the room, and ONE busy seat is still
+		// acting in the directory the header names (§9.54).
+		m.st.Notice = m.busySeats() + " — /cd moves the room between turns"
 		return true
 	}
 	if arg == "" {
@@ -511,10 +521,12 @@ func (m *Model) resolveTrace(arg string) string {
 // arrive from a file is not one anyone typed" survives this change intact,
 // because a posture typed into the composer is typed.
 func (m *Model) postureCommand(write bool) bool {
-	if m.turn != nil {
+	if m.anyInFlight() {
 		// The draft is kept, the way /cd keeps it: the command is still what the
-		// user wants, one turn later.
-		m.st.Notice = "a turn is in flight — /read and /write move the room between turns"
+		// user wants, one turn later. Room-wide (anyInFlight, where this read
+		// m.turn): posture is what the header claims for every seat, and a busy
+		// seat is still acting under the posture it was spawned with (§9.54).
+		m.st.Notice = m.busySeats() + " — /read and /write move the room between turns"
 		return true
 	}
 	if write == m.st.Write {
@@ -597,11 +609,12 @@ func (m *Model) postureCommand(write bool) bool {
 // anyway. A `/seat` typed before the first brief rides out on that brief's own
 // save, which is the only save there was ever going to be.
 func (m *Model) seatCommand(arg string) bool {
-	if m.turn != nil {
+	if m.anyInFlight() {
 		// The grid for a turn in flight was decided at dispatch (frameOwnersFor),
 		// so reseating under it would redraw the room around columns that are
-		// mid-answer. /cd's refusal, for /cd's reason.
-		m.st.Notice = "a turn is in flight — /seat changes the room between turns"
+		// mid-answer. /cd's refusal, for /cd's reason, and room-wide for the
+		// same reason (anyInFlight, where this read m.turn).
+		m.st.Notice = m.busySeats() + " — /seat changes the room between turns"
 		return true
 	}
 
@@ -660,8 +673,9 @@ func (m *Model) seatCommand(arg string) bool {
 // dispatch, and reseating under it would redraw the room around columns that are
 // mid-answer.
 func (m *Model) unseatCommand(arg string) bool {
-	if m.turn != nil {
-		m.st.Notice = "a turn is in flight — /unseat changes the room between turns"
+	if m.anyInFlight() {
+		// Room-wide, on /seat's argument (anyInFlight, where this read m.turn).
+		m.st.Notice = m.busySeats() + " — /unseat changes the room between turns"
 		return true
 	}
 
@@ -883,7 +897,7 @@ func (m *Model) applyPosture(write bool) {
 	windows := runtime.GOOS == "windows"
 	for i := range m.st.Columns {
 		c := &m.st.Columns[i]
-		c.Sandbox = postureClaim(c.Vendor, windows, write, m.st.Asking(), m.hooks.Wired())
+		c.Sandbox = postureClaimFor(c.Vendor, windows, write, m.st.Asking(), m.hooks.Wired(), m.fellBack[c.Vendor])
 	}
 }
 
@@ -944,8 +958,11 @@ func (m *Model) applyPosture(write bool) {
 // Every seat answered: there is nothing to re-send, and saying so is better than
 // a composer the operator has to clear by hand.
 func (m *Model) retryCommand(_ string) bool {
-	if m.turn != nil {
-		m.st.Notice = "a turn is in flight — /retry re-sends between turns"
+	if m.anyInFlight() {
+		// Room-wide (anyInFlight, where this read m.turn): lastTurnUnanswered
+		// reads the columns as the record of the LAST dispatch, and a seat
+		// still answering it has not yet said whether it owes an answer.
+		m.st.Notice = m.busySeats() + " — /retry re-sends between turns"
 		return true
 	}
 

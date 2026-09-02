@@ -1,9 +1,10 @@
 # telltale council — the dispatch room
 
-`telltale council` is one brief, typed once and answered by five vendors side by side —
-**Claude Code**, **Codex**, **Antigravity**, **Cursor** and **Grok**, each in its own
-column, in your terminal. It exists because the alternative is five terminals and a
-clipboard.
+`telltale council` is five vendor CLIs in one terminal — **Claude Code**, **Codex**,
+**Antigravity**, **Cursor** and **Grok**, each in its own column — working as a crew: one
+brief answered side by side when you address `@all`, or each seat taking its own brief
+while the others are still working. It exists because the alternative is five terminals
+and a clipboard.
 
 This file is the room's own guide: what each mark on the frame means, how a turn is routed,
 how to read five answers at once, how to get one back out — and how to race one brief
@@ -64,10 +65,14 @@ Every claim in the two header lines is made per vendor, never as a blanket:
   one asked merely to list a directory — so council passed `-s danger-full-access`, the only
   mode that ran, and said so. Re-measured at codex-cli 0.149.1, the sandbox enforces: a
   shell write under `-s read-only` was denied with no file on disk, so the read posture
-  passes `-s read-only` again and the seat is `ro:enforced` on every OS. The write posture
-  still passes `danger-full-access` on Windows only, because that build's sandbox denies
-  `.git` and refuses the override that unlocks it elsewhere — a seat that cannot commit
-  builds and never lands (design.md §9.2's 2026-08-29 amendment).
+  asks for the read-only sandbox again. Since 2026-09-02 the seat is one live `codex
+  app-server` process rather than a `codex exec` per turn (design.md §9.57), and the badge
+  follows the path that was measured: `ro:enforced` on Windows, where the same 0.149.1
+  session measured the sandbox on the app-server thread, and `ro:requested` off Windows,
+  where only the `codex exec` fallback has been driven. The write posture still passes
+  `danger-full-access` on Windows only, because that build's sandbox denies `.git` and
+  refuses the override that unlocks it elsewhere — a seat that cannot commit builds and
+  never lands (design.md §9.2's 2026-08-29 amendment).
 - **The streaming granularity.** Only Claude streams (`tokens`, verified live). Codex and
   Antigravity were measured to emit nothing at all until the turn ends, so they are
   labelled `final only` and open on a waiting card that says so, rather than on an empty
@@ -85,11 +90,13 @@ table, followed by the full claim each of your own seats is making.
 | badge | what it means for you |
 |---|---|
 | `ro:tools` | The write and shell tools are **absent** from that session, so it cannot edit your files. Verified by reading what the session reported about itself, not by trusting a flag. Residual: a deny list cannot cover a tool a future release adds. |
-| `ro:enforced` | The vendor's own **OS-level sandbox** is applying it — `codex -s read-only`, on every OS since codex-cli 0.149.1. The one posture here that an operating system rather than a flag is behind. |
+| `ro:enforced` | The vendor's own **OS-level sandbox** is applying it — Codex's read-only sandbox, measured at codex-cli 0.149.1: on Windows on the seated `app-server` path, and off Windows only on the `codex exec` fallback, so the live seat there wears `ro:requested` until a run on that platform says otherwise. The one posture here that an operating system rather than a flag is behind. |
 | `ro:requested` | A read-only flag was passed and accepted, and **what it actually enforces was never observed**. Weaker than the two above, and it says so rather than borrowing their word. |
 | `unsandboxed` | **Nothing restricts this vendor at the OS level** — measured, not assumed. Treat the column as able to change your files. It deliberately does not open with `ro:`, because a reader scanning four headers takes in the prefix before the qualifier. |
 | `WRITES` | The room can write — the default. This column may edit and run things in the workspace. |
-| `gated` | The room can write, and this seat **asks first**: `y` approves, `n` denies, and nothing runs until you answer. Only the seat driven as a live process can be asked; the others say `WRITES` rather than implying they can. |
+| `gated` | The room can write, and this seat **asks first**: `y` approves, `n` denies, and nothing runs until you answer. Only Claude wears it, because only Claude was measured asking about every call. Codex and Grok can carry an approval request into the same card on their live shapes, on a reading nobody has driven — so they say `WRITES`, and the `?` postures page says `unmeasured` beside the shape. Cursor asks about some shell commands and never about edits; Antigravity has no channel to ask on. |
+| `wt: seat/codex` | This seat's process runs in **its own git worktree** on that branch, a sibling of the workspace. The default for every writing seat; `/adopt` merges what you keep, `/hand` passes it on. |
+| `shared tree` | This seat's process runs in the workspace itself. By choice when the badge is plain (a read room, `--shared-tree`); with `⚠` and a reason (`not a git repo`, `worktree refused`) when the room wanted to give it a worktree and could not. |
 
 Two of those need the same answer to the obvious follow-up — *must they stay that way?*
 
@@ -165,10 +172,57 @@ Nothing new is stored: this is a rendering rule over the echo each column alread
 history keeps its per-column copies, and if spending the band would leave the columns
 fewer than eight rows of body it is not spent at all.
 
+**A seat takes a brief while another seat is still answering.** The room is a crew, not a
+committee: a turn is a fact about a *seat*, and seats are busy or idle one at a time. Hand
+Codex a refactor, and while it runs hand Grok the docs — `@codex <brief>`, enter, `@grok
+<brief>`, enter — and both columns stream at once, each on its own turn number and its own
+clock. The room refuses a brief only for a seat that is *still answering*: `@codex` while
+Codex is mid-answer gets `a turn is in flight on codex (turn 4) — ctrl+c on its column cancels
+that turn, or address another seat`, and the draft stays put. A brief that names several seats
+goes to the idle ones and says who was skipped and why: `sent to grok, agy — skipped: codex
+(turn 4), still on a turn; ctrl+c on its column cancels it`. That is the rule that keeps the
+persistent seats honest too: a stream-json or ACP process holds one turn open at a time, and
+the refusal is what stands between it and a second prompt written into a process mid-turn.
+A turn number is a *dispatch* number — turn 5 is the fifth brief the room sent, whoever it
+went to — so the separators, the by-turn page, `/retry` and the saved room all keep reading
+one coordinate; a seat's own history is the subset of those numbers it took part in. The
+header names the most recent dispatch's route and, when more than one seat is answering,
+counts them: `turn 5 → codex · 3 in flight`, measured over the columns. The one turn that
+still needs the whole room is a race: `/arena` refuses while any seat is busy, and every
+ordinary brief is refused while a race runs, because a race owns every worktree and every
+seat until its last racer lands.
+
+**The routing cell says which seat has headroom, before enter.** On a crew the question the
+seat readings exist to answer is "which seat has room for *this* brief", so it is answered
+where the route is, while the route can still be changed. When the draft addresses a seat
+whose relayed quota window is at or above the threshold (`--headroom-warn N`, default 90
+percent used), the cell says so: `→ codex · 5h 94% used`, or on a route that names a set,
+`→ everyone · codex 5h 94% used`. The figure is the vendor's own, copied from the same relay
+the badge row reads (the statusline's `~/.telltale/quota/<vendor>.json`), and it is the only
+thing the cell adds. A seat with no reading gets no number and no word: Cursor and Grok have
+no quota anywhere telltale can read, and an unrelayed Claude is the same absence. A reading
+whose window has reset since the relay wrote it is absent too, not a stale number, and a
+reading past the five-hour age mark is the alarm's (`⚠ claude stale 19h ago`), not the
+hint's. A window at 100% is the alarm's as well. The hint stops one short of it.
+
+**`@auto` hands the choice to the readings.** As a route word it picks, among the seats that
+are seated and idle and have a measured reading, the one with the most headroom in its
+shortest window (the window that resets soonest), and the cell states the pick before enter:
+`→ auto: grok (5h 12% used)`. Ties go to seating order. Enter sends the brief to that seat and
+the notice repeats the choice, `@auto → grok (5h 12% used)`; the header, the transcript and
+the saved room record a turn to grok, because that is what happened. A seat with no reading
+is never ranked, a busy seat is never picked, and when no seated seat has a reading the cell
+reads `→ auto: no measured reading` and enter refuses with `@auto needs a measured reading;
+none of the seated seats has one`, keeping the draft. `@auto` beside a named seat or an
+exclusion is refused like `@` beside `-@`: two theories of who chooses.
+
 Turn 1 is blind. Later turns ride each vendor's own native session resume rather than
 re-sending the transcript, which keeps that guarantee structural: each session holds only
 its own history. `ctrl+r` arms a rebuttal turn — off by default — in which each vendor
-sees the others' last answers, fenced and labelled as untrusted material.
+sees the others' last answers, fenced and labelled as untrusted material. The snapshot is
+taken per seat, at the moment that seat's brief is sent: a neighbour that is still
+answering contributes its last *finished* reply rather than the half it has streamed so
+far, and nothing at all if it has never finished one.
 
 ## Reading five answers at once
 
@@ -216,8 +270,19 @@ seat had no way to tell that the arrows were moving the first. Under `--ascii` t
 `[` and the focus mark `]`; under `NO_COLOR` the contrast step is what goes, and every
 other carrier is still there.
 
+**The strip under the header is the crew's inbox.** `⚠ NEEDS YOU` used to name only the
+seats stopped on an approval card. It now also names the seats whose turn *ended* while you
+were looking somewhere else — `⚠ NEEDS YOU   2 Codex   3 Grok done   4 Cursor failed` — with
+the phase word saying how, in the same word the column header uses. Both kinds of entry are
+measurements: a card the gate queue holds, or a landing the room stamped against the last
+time your keys were on that column. Going to the seat is what takes it off; a seat that
+lands again later comes back. `.` jumps to the next seat on the strip, wrapping, and the
+footer names that key only while the strip has somebody on it; the digits still reach any
+seat by position. Nothing is stored about what you acknowledged — the strip is a comparison
+between two timestamps the room took itself, which is why it cannot drift.
+
 **A backgrounded seat says where it left off, once.** Since the default route became one
-seat, the other three sit out most turns — and a column of `⚠ not addressed in turn 2` /
+seat, the other seats sit out most turns — and a column of `⚠ not addressed in turn 2` /
 `turn 3` / `turn 4` buried the answer that seat actually gave. Consecutive skips now
 coalesce at render time into one muted `○ not addressed in turns 2–7`; the mark is `○`
 rather than `⚠` because sitting a turn out is not a failure, and the live turn's skip keeps
@@ -280,6 +345,17 @@ flags or from the default, never from the saved file, because a posture that can
 from a file is not one anyone typed. And one room shared by every terminal means two
 councils open at once share one state file — last save wins.
 
+**`--host` lets the room outlive the terminal.** `telltale council --host --read` opens the
+room in a host process of its own; `/detach` walks away and every seat keeps its process
+and its conversation; a later `telltale council` rejoins that live process rather than
+reattaching from the file, `telltale council ls` says whether a host is running (and
+reports a stale `host.json` without removing it, because a listing that tidied would be a
+writer), and `telltale council kill` ends the host and every seat with it. A read room
+only: the host carries no approval card, so a room that writes without asking will not
+detach. On Windows the seats live inside the host's job object; on macOS and Linux they
+share the host's session, measured on Linux and built for the Mac (design.md §7.29,
+§7.30; [PARITY.md](../PARITY.md) has the difference in one row).
+
 ## Pasting into the composer
 
 **A paste lands in the draft whole, and never sends.** Enter — a keystroke, from a person
@@ -328,10 +404,23 @@ badge on every column, uniform on purpose because grading them would imply a saf
 difference that does not exist. A `--read` room says `READ` in the same place, because
 absence of a badge is not a claim.
 
-Only the seat driven as a live process can be asked. The other three are batch CLIs with
-no channel a question could arrive on, so they act unasked — which is exactly why the
-directory matters more than the posture, and why the throwaway worktree above is the
-control that actually holds.
+**Every seat is a live process now, and only one of them is measured asking.** Claude
+Code's stream-json session raises an approval card for every tool call, verified live, and
+that is the `gated` badge. Since 2026-09-02 Codex (`codex app-server`), Grok (`grok agent
+stdio`) and Antigravity (`agy --input-format stream-json`) also stay up between briefs,
+each built from the vendor's documentation at a named version and not yet driven from this
+repository (design.md §9.57) — the `?` postures page opens each one's claim with the shape
+and the word `unmeasured`. Codex and Grok can hand an approval request to the same card;
+Antigravity and Cursor act unasked on a write — which is exactly why the directory matters
+more than the posture, and why the worktree per seat below is the control that actually
+holds. **A live shape that cannot be brought up falls back.** If the handshake is refused
+(a build without the subcommand, a logged-out CLI), or a process dies on its first turn
+before naming a session, the seat retreats to the batch invocation that WAS measured —
+`codex exec --json`, `grok --single`, `agy -p` — for the rest of the room, on the same
+brief: the column's note names the invocation, and the postures page reads `exec · unasked
+· fallback, measured at 0.149.1` rather than `unmeasured`. A fallen-back seat asks about
+nothing. Quitting the room gives each live seat its closing message, closes its stdin and
+waits a bounded grace before the kill that still follows.
 
 **`a` on the approval card stops the asking.** `y` approves, `n` denies, `a` approves this
 call and every one after it — on the card rather than in the composer, because that is
@@ -375,12 +464,26 @@ the word that failed and lists the room's commands. A brief that genuinely begin
 slash — a path, a regex — is sent by typing **one space in front of it**, which the notice
 also says.
 
+**`ctrl+c` stops the seat you are looking at.** With several seats answering, the key
+cancels the *focused* seat's turn and leaves its neighbours working; when the focused seat
+is idle and something else is running it cancels everything in flight, as it always did;
+when nothing is running it quits. The footer says which of the three is live on every
+frame — `ctrl+c cancel codex`, `ctrl+c cancel all`, or plain `ctrl+c cancel` when only one
+seat is answering. `x` is still the per-seat give-up with its `y`/`n` card, and it still
+names what the cut costs that kind of seat. `q` refuses while any seat is busy and names
+which: `a turn is in flight on codex (turn 4) — ctrl+c cancels a seat's turn first`. The
+room-wide commands — `/cd`, `/seat`, `/unseat`, `/read`, `/write`, `/retry`, `/adopt`,
+`/arena drop` — refuse the same way and name the same seats, because each of them changes
+something a busy seat was dispatched against.
+
 **`--fresh` is room-wide; `c` is one seat.** A seat whose context has filled up does not
-need the other three restarted with it, so `c` in view mode clears the **focused** seat's
+need the other seats restarted with it, so `c` in view mode clears the **focused** seat's
 thread — `y` confirms, `n` keeps it, any other key cancels — and its next brief opens a new
 session with the brief re-applied. The turns already on screen stay: what is cleared is the
 thread the next brief would have continued, not the record of what was said. It refuses
-while a turn is in flight, for the same reason `/cd` does. The rule it is the first control
+while *that* seat is on a turn — `a turn is in flight on Claude Code (turn 4) — c clears a
+seat between its turns` — and a busy neighbour does not stop it, because the thread being
+dropped is this seat's alone; `u` follows the same per-seat rule. The rule it is the first control
 built to — anything that changes while the room is open is reachable from inside it, and a
 flag is for what is true at launch — is [design.md §9.17](design.md).
 
@@ -390,6 +493,85 @@ last 200 records and hands them to the file the moment you open one — type it 
 a turn you cannot explain and you get *that* turn, not the next one. `/trace off` stops and
 the room keeps measuring; bare `/trace` reports. Council never picks the path: that is what
 keeps `room.json` the only file it writes on its own initiative.
+
+**The crew's controls, in one place.** Each is explained where it belongs; this list is so a
+reader who learned the room as a committee finds every key it grew. `.` jumps to the next seat
+on the `⚠ NEEDS YOU` strip (reading, above). `@auto` is a route word that lets the readings pick
+the seat, and `--headroom-warn N` sets the threshold the routing cell warns at (routing, above).
+`/adopt <seat>` merges a seat's own branch after an ordinary turn, `/hand <to> <from>` puts one
+seat's work in another's brief, `/flow … & @seat …` fans a stage across seats and waits on all of
+them, and `--shared-tree` is the opt-out from a worktree per writing seat (the next section).
+`--record <file>` keeps a real run, `--replay <file>` shows it without a vendor, and `telltale
+council replay-check <file>` reviews it first (record and replay, below). `--host` opens the
+room in a process that outlives this terminal, `/detach` walks away, `telltale council` rejoins,
+`telltale council ls` says whether a host is running, and `telltale council kill` ends it (the
+room remembers, above; design.md §7.29 and §7.30). `ctrl+c` cancels the focused seat, and
+`q` names the seats still busy (this section).
+
+## A writing seat gets its own worktree, and the room merges what you keep
+
+**In a writing room every seat works in its own git worktree, cut once and reused.** The
+first writing brief to Codex cuts `<repo>-seat-codex` beside the workspace on branch
+`seat/codex`, from the room's HEAD; the seat's process runs *there*, and every later brief
+to Codex runs there too. Five writers in one tree are not five answers — that was already
+the race's founding rule — and now that seats answer concurrently, two writers in one tree
+would be one trampled tree. Only Claude is measured asking before a write; the other four
+act unasked, or on a request nobody has yet watched arrive, so the containment has to be
+structural rather than a card. A read room keeps the shared tree, because nothing in it writes, and so does a
+`/flow` read hop in a write room. `--shared-tree` is the opt-out: the older room, every
+seat writing into the workspace.
+
+**The badge says which containment holds.** `wt: seat/codex` on a column whose process
+runs in its own worktree; `shared tree` on one that runs in the workspace by choice. A
+worktree the room *could not* cut is a stated fallback, never a silent one: the badge reads
+`⚠ shared tree · not a git repo` or `⚠ shared tree · worktree refused`, the notice carries
+git's own sentence when it happens, and the `?` postures page carries the reason in full.
+At a three-seat column's width the reason sheds before the word and the mark stays —
+`⚠ shared tree` — because a clipped reason is not a reason. Nothing is drawn before a
+seat's first dispatch: no process, no directory, no claim.
+
+**Cutting a tree takes a moment, and the room stays a room.** The footer names the step —
+`worktree: preparing worktree for codex…` — with a spinner and no count, the seats are cut
+one at a time, and **ctrl+c stops the setup** and hands the brief back; a tree already cut
+is kept and reused. A tree left by an earlier room is found by name and reused, and the
+notice says so; a directory at that name that is *not* the seat's worktree is refused by
+name, and that seat runs in the shared tree. The trees are kept until you delete them
+(`git worktree remove`), exactly as a race's are.
+
+**`/adopt <seat>` takes a seat's work the way it takes a racer's.** After an ordinary turn,
+`/adopt codex` arms the same card — `git merge --no-ff seat/codex` onto a fresh
+`adopt/seat-codex`, cut from where the room stands — refuses a dirty room and an empty
+branch exactly as a race adopt does, and then **resets the seat's tree and branch onto the
+new HEAD**, so Codex's next brief starts from the integrated tree rather than re-offering
+what you already took. When a seat's current turn is a race attempt, `/adopt` takes the
+arena branch, because that is the block on the column; once a later turn has cleared it,
+the seat branch is what the verb reaches. `/adopt claude +codex helper.go` works across
+two seat branches on `adopt/seat-claude+codex`, with the same path refusals; the donor's
+tree is not reset, since only its named paths were taken. `/arena record` counts seat
+adopts on their own line, apart from every race figure and inside no rate: a seat adopt
+takes one seat's work with no competing attempt, so it is not a verdict.
+
+**`/hand <to> <from>` gives one seat another seat's work.** `/hand claude codex` puts
+Codex's whole contribution — the diff stat and the patch against the point its branch
+parted from the room — into the composer draft addressed `@claude`, fenced as measured git
+output with the worktree path and the branch named, so the seat reading it knows the code
+is not in its own directory. It is a draft: add the sentence that says what to do with it,
+and `enter` sends it like any other brief. A patch too big for the composer is cut at a
+hunk boundary and the closing fence says how many lines crossed and that `y` on the column
+copies the whole. It refuses, by name, a seat still on a turn, a seat with nothing to
+hand, and a seat with no worktree at all.
+
+**`/flow` fans with `&`, and the next hop waits on all of them.** `/flow @codex refactor
+the poller & @grok write the docs -> @claude review both` runs the two joined hops at once
+on their own seats and dispatches the third only when both have landed; the joined hop
+receives each finished predecessor's reply as its own labelled fence, the way a rebuttal
+does. The header names the whole stage — `hop 1/2 @codex & @grok` — and the notice says
+what the join is still waiting on. Every existing rule holds: only the literal `/flow`
+prefix makes a chain, only `write:<path>` confers write authority, a hop reaches its own
+seat and no other, and a busy seat stops the chain by name. Two rules a fan adds: a seat
+cannot take two hops of one stage, and a stage runs at one posture — every hop declares
+`write:`, or none does — so one `y` releases the stage and the card names every target.
+An ampersand inside a task (`fix a & b`) stays prose; only `& @seat` fans.
 
 ## The race: /arena
 
@@ -623,13 +805,57 @@ throwaway racer has been spawned, streamed and killed live — twice now — but
 watched finish on its own; that half still stands on its offline tests, and
 [design.md §9.37](design.md) says so beside its payment blocks.
 
+## Record and replay
+
+The room cannot be seen without five paid CLI logins, and a frame worth showing is a frame
+somebody spent quota on. `telltale council --record <file>` keeps a real run: every event the
+room applied (each seat's output, tool lines, session ids, costs, gate cards), each dispatch,
+and each answer you gave a card, with the clock each one landed on. `telltale council --replay
+<file>` opens a room fed from that file instead of from vendors, at the original pace
+(`--replay-speed N` multiplies it), and draws it with the same renderer: the columns stream,
+the card goes up and comes down when you answered it, the elapsed figures count the seconds
+the vendor actually took.
+
+**A replay is labelled on every frame.** `⚠ REPLAY` sits in the header where `WRITE` or `READ`
+sits, `REPLAY` leads every column's badge row ahead of the recorded posture, and the compose
+footer reads `⚠ REPLAY nothing here is live` where the routing cell and `enter dispatch` would
+be. Enter says `this room is a replay; nothing here is live`; so do the card's `y`, `n` and
+`a`, and the per-seat verbs. `ctrl+c` and `q` leave. Reading is untouched: scroll, focus, the
+digits, the by-turn page, the ledger, the help panel. A replay starts no vendor, dispatches
+nothing, reads no quota relay, and neither reads nor writes the saved room; its seats, their
+postures and its workspace all come from the file, so it draws the room that was recorded on
+a machine with nothing installed.
+
+**The recording is yours, at a path you name.** Everything else council writes is numbers and
+keys; this file carries the conversation verbatim, unredacted (a redacting recorder would be
+a second truth; the replay runs the same redactor over the same bytes, so the screen matches),
+and so it is never anything under `~/.telltale`: a `--record` path there is refused, an
+existing file is refused rather than overwritten or extended, and no key inside the room
+starts one. Before a capture goes anywhere, `telltale council replay-check <file>` prints what
+a review needs to see: the workspace, the seats, every session id, every tool line and gate
+card (each may name a path), how much prose is in it, and a reminder that it did not read the
+prose. That is the README's frame review, given a tool. What a recording does not hold: your
+cancels and give-ups (a column you cancelled live replays as the vendor's own exit), focus
+and scrolling, and the `--brief` file's text.
+
 ## Flags
 
 `telltale council` flags: `--fresh` (start over instead of reattaching), `--cd <dir>`
 (launch-time override of the room's workspace — the daily path never needs it),
 `--vendor <list>`, `--brief <file>`, `--read`, `--auto`, `--trace <file>`, `--resume`
 (accepted, and redundant — reattaching is the default), `--write` (accepted, and does
-nothing — writing is the default), `--ascii`, `--no-title`.
+nothing — writing is the default), `--shared-tree` (writing seats share the workspace
+instead of each getting its own worktree; the column badge says which holds),
+`--headroom-warn N` (the routing cell's threshold, default 90), `--record <file>` and
+`--replay <file>` with `--replay-speed N` (above), `--host` (open the room in a host
+process of its own that outlives this terminal: `/detach` walks away, `telltale council`
+rejoins, `telltale council kill` ends it — a read room only, because a room that writes
+without asking will not detach; [design.md §7.29](design.md), and §7.30 for macOS and
+Linux), `--live claude` (seat a pane showing claude's own terminal screen beside the
+measured seats; display only, and nothing on it is read as a number; [design.md
+§9.53](design.md)), `--ascii`, `--no-title`. `telltale council replay-check <file>` reviews
+a recording without opening it; `telltale council ls` prints the saved room and whether a
+host is running, and writes nothing.
 
 `--vendor <list>` decides who is in the room: `all` keeps every detected seat on screen
 including the ones that cannot be driven, and a comma list (`--vendor claude,codex`) seats

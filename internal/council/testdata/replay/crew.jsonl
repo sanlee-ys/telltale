@@ -1,0 +1,12 @@
+{"kind":"room","v":1,"started":"2026-09-01T10:00:00Z","workspace":"~/code/example","write":true,"seats":[{"vendor":"claude","label":"Claude Code","avail":0,"sandbox":6,"detail":"asks before every tool call that changes anything","gran":1},{"vendor":"codex","label":"Codex","avail":0,"sandbox":5,"detail":"no read-only posture was requested","gran":3},{"vendor":"agy","label":"Antigravity","avail":0,"sandbox":5,"detail":"no read-only posture was requested","gran":3}]}
+{"kind":"dispatch","ms":1500,"turn":1,"route":{},"sent":[{"vendor":"claude","prompt":"add a --version flag and a test for it","persistent":true},{"vendor":"codex","prompt":"add a --version flag and a test for it"},{"vendor":"agy","prompt":"add a --version flag and a test for it"}]}
+{"kind":"event","ms":2100,"vendor":"claude","event":"session","session_id":"11111111-2222-4333-8444-555555555555"}
+{"kind":"event","ms":2600,"vendor":"claude","event":"text","text":"Reading main.go first, then the flag set.\n"}
+{"kind":"event","ms":3200,"vendor":"claude","event":"activity","acts":[{"id":"toolu_fixture01","text":"Read: cmd/example/main.go"}]}
+{"kind":"event","ms":3400,"vendor":"codex","event":"text","text":"Added --version to the flag set in main.go, printing the build tag, with a test that runs the binary and checks the line.\n"}
+{"kind":"event","ms":4000,"vendor":"claude","event":"gate","gate":{"request_id":"req-fixture-01","tool_use_id":"toolu_fixture02","tool":"Write","text":"Write: cmd/example/version.go"}}
+{"kind":"event","ms":4300,"vendor":"codex","event":"meta","session_id":"01999999-aaaa-4bbb-8ccc-dddddddddddd","cost_usd":0.0123}
+{"kind":"event","ms":4600,"vendor":"codex","event":"done","exit":0}
+{"kind":"gate","ms":6000,"vendor":"claude","request_id":"req-fixture-01","allow":true}
+{"kind":"event","ms":6400,"vendor":"claude","event":"activity","acts":[{"id":"toolu_fixture02","text":"Write: cmd/example/version.go","outcome":1}]}
+{"kind":"event","ms":7000,"vendor":"agy","event":"text","text":"Done. version.go carries the flag and version_test.go covers it.\n"}

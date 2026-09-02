@@ -487,3 +487,314 @@ func TestAVendorWithNoQuotaAnywhereRendersNothingForever(t *testing.T) {
 		t.Errorf("the footer warned about a vendor with no quota anywhere: %q", got)
 	}
 }
+
+// The gauges as routing (design.md §9.56). Every test below is the shape of
+// TestASeatWithNoReadingRendersNothingAndAMeasuredZeroRenders, applied to the
+// routing cell: a measured reading is a number, an absent one is nothing, and
+// the two must never render alike.
+
+// resetWindow is a window whose reset instant is already behind quotaNow:
+// the relay wrote it, and the window it described has since ended.
+// quotaWindow deliberately cannot build one (a zero resetIn is "no reset
+// instant", agy's real shape), so it is typed out here.
+func resetWindow(label string, pct float64) model.QuotaWindow {
+	w := quotaWindow(label, pct, 0)
+	t := quotaNow.Add(-time.Minute)
+	w.ResetsAt = &t
+	return w
+}
+
+// routeState is room() composing the given draft at quotaNow, with the
+// readings the caller hands over on claude and agy.
+func routeState(draft string, claude, agy *SeatQuota) State {
+	st := room()
+	st.Now = quotaNow
+	st.Mode = ModeComposing
+	st.Draft = draft
+	st.Route, _ = ParseRoute(draft)
+	st.Columns[0].Quota = claude
+	st.Columns[2].Quota = agy
+	return st
+}
+
+// TestTheRoutingCellNamesAWindowNearItsLimit walks the branches of the hint:
+// above the threshold, below it, at a hundred (the alarm's cell, not this
+// one), absent, stale by age, and a window whose reset has passed. Only the
+// first prints a number, and the number is the vendor's own.
+func TestTheRoutingCellNamesAWindowNearItsLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		draft  string
+		claude *SeatQuota
+		agy    *SeatQuota
+		warn   int
+		want   string
+	}{
+		{"a window over the threshold on the addressed seat", "go",
+			seatQuota(0, quotaWindow("5h", 94, time.Hour)), nil, 0, "→ claude · 5h 94% used"},
+		{"at the threshold exactly", "go",
+			seatQuota(0, quotaWindow("5h", 90, time.Hour)), nil, 0, "→ claude · 5h 90% used"},
+		{"one under the threshold", "go",
+			seatQuota(0, quotaWindow("5h", 89, time.Hour)), nil, 0, "→ claude"},
+		// A hundred is the vendor's own statement that the window is used
+		// up, and quotaAlarm owns that cell; printing it here too would be
+		// one fact in two cells on one line.
+		{"a full window is the alarm's, not the hint's", "go",
+			seatQuota(0, quotaWindow("5h", 100, time.Hour)), nil, 0, "→ claude"},
+		{"no reading at all", "go", nil, nil, 0, "→ claude"},
+		// Stale by age: quotaAlarm names it stale; this cell treats it as
+		// absent, because a number it may not rank is a number it may not
+		// warn on either.
+		{"a stale reading is absent here", "go",
+			seatQuota(19*time.Hour, quotaWindow("5h", 94, time.Hour)), nil, 0, "→ claude"},
+		// The window this percentage described has reset since the relay
+		// wrote it; the number is not stale, it is false (§7.15).
+		{"a window whose reset has passed is absent", "go",
+			seatQuota(0, resetWindow("5h", 94)), nil, 0, "→ claude"},
+		{"the second window carries the warning", "go",
+			seatQuota(0, quotaWindow("5h", 12, time.Hour), quotaWindow("7d", 96, 5*24*time.Hour)), nil, 0,
+			"→ claude · 7d 96% used"},
+		// The route names a set, so the seat is named too.
+		{"an @all route names the seat", "@all go",
+			nil, seatQuota(0, quotaWindow("gemini-weekly", 95, 3*time.Hour)), 0,
+			"→ everyone · agy gemini-weekly 95% used"},
+		{"the near-full seat is not addressed", "@agy go",
+			seatQuota(0, quotaWindow("5h", 94, time.Hour)), nil, 0, "→ agy"},
+		// The threshold is the operator's (--headroom-warn), and the cell
+		// prints the figure it was applied to.
+		{"a lowered threshold", "go",
+			seatQuota(0, quotaWindow("5h", 60, time.Hour)), nil, 50, "→ claude · 5h 60% used"},
+		{"a raised threshold", "go",
+			seatQuota(0, quotaWindow("5h", 94, time.Hour)), nil, 99, "→ claude"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st := routeState(tc.draft, tc.claude, tc.agy)
+			st.HeadroomWarn = tc.warn
+			if got := routeCell(st); got != tc.want {
+				t.Fatalf("routeCell = %q, want %q", got, tc.want)
+			}
+			_, plain := hints(PlainStyles(), UnicodeGlyphs(), modeHints(st, UnicodeGlyphs()))
+			if !strings.Contains(plain, tc.want) {
+				t.Errorf("the footer does not carry %q: %q", tc.want, plain)
+			}
+			if tc.want == "→ "+routeLabel(st) && strings.Contains(plain, "used") {
+				t.Errorf("the footer warned about a seat with nothing to warn about: %q", plain)
+			}
+		})
+	}
+}
+
+// TestTheRoutingCellGolden pins the frame: one addressed seat near its limit.
+func TestTheRoutingCellGolden(t *testing.T) {
+	st := routeState("@codex tighten the poller", nil, nil)
+	st.Columns[1].Quota = seatQuota(0, quotaWindow("5h", 94, time.Hour))
+	golden(t, "route-headroom", render(st))
+}
+
+// TestAutoPicksTheSeatWithTheMostHeadroomInItsShortestWindow is the pick,
+// branch by branch: the shortest window is the one that resets soonest, the
+// pick is the largest headroom in it, a busy seat is out, a stale reading is
+// out, a reset window is out, and a seat with no reading is never ranked.
+func TestAutoPicksTheSeatWithTheMostHeadroomInItsShortestWindow(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		claude *SeatQuota
+		agy    *SeatQuota
+		busy   []int
+		want   string
+		cell   string
+	}{
+		{"the seat with more room in its shortest window",
+			seatQuota(0, quotaWindow("5h", 60, time.Hour), quotaWindow("7d", 10, 5*24*time.Hour)),
+			seatQuota(0, quotaWindow("gemini-weekly", 12, 3*time.Hour)),
+			nil, "agy", "gemini-weekly 12% used"},
+		// claude's 7d has more room than agy's window, and it does not count:
+		// the 5h window resets first, so the 5h reading binds the next brief.
+		{"the shortest window binds, not the roomiest",
+			seatQuota(0, quotaWindow("7d", 5, 5*24*time.Hour), quotaWindow("5h", 70, time.Hour)),
+			seatQuota(0, quotaWindow("gemini-weekly", 40, 3*time.Hour)),
+			nil, "agy", "gemini-weekly 40% used"},
+		{"a tie goes to column order",
+			seatQuota(0, quotaWindow("5h", 40, time.Hour)),
+			seatQuota(0, quotaWindow("gemini-weekly", 40, time.Hour)),
+			nil, "claude", "5h 40% used"},
+		{"a busy seat is not picked however much room it has",
+			seatQuota(0, quotaWindow("5h", 1, time.Hour)),
+			seatQuota(0, quotaWindow("gemini-weekly", 80, time.Hour)),
+			[]int{0}, "agy", "gemini-weekly 80% used"},
+		{"a stale reading is never ranked",
+			seatQuota(19*time.Hour, quotaWindow("5h", 1, time.Hour)),
+			seatQuota(0, quotaWindow("gemini-weekly", 80, time.Hour)),
+			nil, "agy", "gemini-weekly 80% used"},
+		{"a window whose reset has passed is never ranked",
+			seatQuota(0, resetWindow("5h", 1)),
+			seatQuota(0, quotaWindow("gemini-weekly", 80, time.Hour)),
+			nil, "agy", "gemini-weekly 80% used"},
+		// A window with no reset instant sorts behind one that has one; alone
+		// it is still a measured window and still ranks.
+		{"a window with no reset instant still counts",
+			nil,
+			seatQuota(0, quotaWindow("gemini-weekly", 30, 0)),
+			nil, "agy", "gemini-weekly 30% used"},
+		{"a measured zero is the most headroom there is",
+			seatQuota(0, quotaWindow("5h", 0, time.Hour)),
+			seatQuota(0, quotaWindow("gemini-weekly", 1, time.Hour)),
+			nil, "claude", "5h 0% used"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st := routeState("@auto go", tc.claude, tc.agy)
+			for _, i := range tc.busy {
+				st.Columns[i].Phase = PhaseStreaming
+			}
+			v, cell, ok := autoPick(st)
+			if !ok || string(v) != tc.want || cell != tc.cell {
+				t.Fatalf("autoPick = %s %q %v, want %s %q true", v, cell, ok, tc.want, tc.cell)
+			}
+			if got, want := routeCell(st), "→ auto: "+tc.want+" ("+tc.cell+")"; got != want {
+				t.Errorf("routeCell = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// TestAutoNeverRanksASeatWithNoReading is the absent half, and the one this
+// feature had to get right: a room where nothing is measured has no pick,
+// and the cell says so BEFORE enter rather than falling back to the default
+// route. Cursor and grok are that seat forever (§7.17).
+func TestAutoNeverRanksASeatWithNoReading(t *testing.T) {
+	st := routeState("@auto go", nil, nil)
+	st.Columns = append(st.Columns,
+		Column{Vendor: model.VendorCursor, Label: "Cursor", Avail: AvailInstalled, Gran: GranTokens},
+		Column{Vendor: model.VendorGrok, Label: "Grok", Avail: AvailInstalled, Gran: GranTokens})
+	if v, cell, ok := autoPick(st); ok {
+		t.Fatalf("autoPick chose %s (%q) in a room with no reading", v, cell)
+	}
+	if got := routeCell(st); got != "→ auto: no measured reading" {
+		t.Errorf("routeCell = %q", got)
+	}
+	// A seat with a reading beside two that can never have one: the pick
+	// is the measured seat, and the two are not ranked below it — they are
+	// not ranked at all.
+	st.Columns[0].Quota = seatQuota(0, quotaWindow("5h", 99, time.Hour))
+	if v, _, ok := autoPick(st); !ok || v != model.VendorClaude {
+		t.Errorf("autoPick = %s %v, want the one measured seat", v, ok)
+	}
+	// The cell computes nothing across seats.
+	if got := routeCell(st); strings.Contains(got, "$") || strings.Contains(got, "seats") {
+		t.Errorf("the cell aggregated: %q", got)
+	}
+}
+
+// TestAutoGolden pins the resolved cell on a frame.
+func TestAutoGolden(t *testing.T) {
+	st := routeState("@auto tighten the poller",
+		seatQuota(0, quotaWindow("5h", 60, time.Hour)),
+		seatQuota(0, quotaWindow("gemini-weekly", 12, 3*time.Hour)))
+	golden(t, "route-auto", render(st))
+}
+
+// TestAutoDispatchesToItsPickAndSaysSo is enter on `@auto`: the seat the
+// cell named is the seat that spawns, the header names that seat, and the
+// notice states the pick with its reading.
+func TestAutoDispatchesToItsPickAndSaysSo(t *testing.T) {
+	log := countSpawns(t)
+	m := crewRoom(t)
+	m.st.Now = quotaNow
+	m.column(model.VendorCodex).Quota = seatQuota(0, quotaWindow("5h", 12, time.Hour))
+	m.column(model.VendorClaude).Quota = seatQuota(0, quotaWindow("5h", 70, time.Hour))
+
+	send(t, m, "@auto tighten the poller")
+	if log.n() != 1 || log.specs[0].Vendor != model.VendorCodex {
+		t.Fatalf("@auto spawned %d seats (%v), want codex alone", log.n(), log.specs)
+	}
+	if m.turnOf(model.VendorCodex) == nil || m.turnOf(model.VendorClaude) != nil {
+		t.Error("the dispatch did not land on the picked seat alone")
+	}
+	if got, want := m.st.Notice, "@auto → codex (5h 12% used)"; got != want {
+		t.Errorf("notice = %q, want %q", got, want)
+	}
+	if m.st.TurnRoute == nil || m.st.TurnRoute.label() != "codex" {
+		t.Errorf("the header route is %v, want codex", m.st.TurnRoute)
+	}
+	if m.st.Draft != "" {
+		t.Errorf("the draft survived a dispatch: %q", m.st.Draft)
+	}
+}
+
+// TestAutoRefusesWithoutAMeasuredReading is enter with nothing to choose
+// from: the notice names the reason, nothing spawns, and the draft stays.
+func TestAutoRefusesWithoutAMeasuredReading(t *testing.T) {
+	log := countSpawns(t)
+	m := crewRoom(t)
+	m.st.Now = quotaNow
+
+	send(t, m, "@auto tighten the poller")
+	if log.n() != 0 {
+		t.Fatalf("@auto spawned %d seats with no reading in the room", log.n())
+	}
+	if m.st.Notice != autoRefusal {
+		t.Errorf("notice = %q, want %q", m.st.Notice, autoRefusal)
+	}
+	if m.st.Draft != "@auto tighten the poller" {
+		t.Errorf("the draft was not kept: %q", m.st.Draft)
+	}
+
+	// The only measured seat is busy: same refusal, because a busy seat
+	// cannot take the brief and picking it would resolve @auto to a refusal.
+	m.column(model.VendorCodex).Quota = seatQuota(0, quotaWindow("5h", 12, time.Hour))
+	occupy(m, model.VendorCodex)
+	m.column(model.VendorCodex).Phase = PhaseStreaming
+	send(t, m, "@auto tighten the poller")
+	if log.n() != 0 || m.st.Notice != autoRefusal {
+		t.Errorf("a busy measured seat was picked: %d spawns, notice %q", log.n(), m.st.Notice)
+	}
+}
+
+// TestAutoPutsTheTypedDraftBackWhenDispatchRefuses. The rewrite from `@auto`
+// to a seat name is the room's; a dispatch that then refuses must not leave
+// the operator editing a line they did not type.
+func TestAutoPutsTheTypedDraftBackWhenDispatchRefuses(t *testing.T) {
+	log := countSpawns(t)
+	m := crewRoom(t)
+	m.st.Now = quotaNow
+	m.column(model.VendorCodex).Quota = seatQuota(0, quotaWindow("5h", 12, time.Hour))
+
+	// A mention with no brief after it: dispatch refuses that shape.
+	send(t, m, "@auto")
+	if log.n() != 0 {
+		t.Fatalf("an empty brief spawned %d seats", log.n())
+	}
+	if m.st.Draft != "@auto" {
+		t.Errorf("draft = %q, want the typed @auto back", m.st.Draft)
+	}
+	if !strings.Contains(m.st.Notice, "no brief") {
+		t.Errorf("notice = %q, want dispatch's own refusal", m.st.Notice)
+	}
+
+	// @auto beside a named seat is refused before any pick is made.
+	send(t, m, "@auto @codex go")
+	if log.n() != 0 || !strings.Contains(m.st.Notice, "drop the other mentions") {
+		t.Errorf("mixed @auto: %d spawns, notice %q", log.n(), m.st.Notice)
+	}
+	if st := m.st; !st.Route.Mixed || !st.Route.Auto {
+		t.Errorf("route = %+v, want Mixed and Auto", st.Route)
+	}
+	if got := routeCell(m.st); !strings.Contains(got, "@auto picks the seat") {
+		t.Errorf("routeCell = %q", got)
+	}
+}
+
+// TestTheRoutingHintSurvivesASCII. The hint and the pick are words and
+// digits; the reduced glyph set loses nothing.
+func TestTheRoutingHintSurvivesASCII(t *testing.T) {
+	st := routeState("go", seatQuota(0, quotaWindow("5h", 94, time.Hour)), nil)
+	st.ASCII = true
+	if got := Render(st, PlainStyles(), GlyphsFor(true)); !strings.Contains(got, "claude · 5h 94% used") {
+		t.Errorf("--ascii dropped the hint:\n%s", got)
+	}
+	st = routeState("@auto go", seatQuota(0, quotaWindow("5h", 94, time.Hour)), nil)
+	st.ASCII = true
+	if got := Render(st, PlainStyles(), GlyphsFor(true)); !strings.Contains(got, "auto: claude (5h 94% used)") {
+		t.Errorf("--ascii dropped the pick:\n%s", got)
+	}
+}

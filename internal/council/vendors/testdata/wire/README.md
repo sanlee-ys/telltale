@@ -45,11 +45,13 @@ the account's usage limit, which is why the turn failed and is not the point;
 the point is the frame. Only the thread id was sanitized.
 
 **Two files pin one CLI, and that is not a stale entry.** `codex-0.147.0-turn.jsonl`
-is `codex exec --json` — the invocation the room seats — and
-`codex-app-server-0.149.1-turn.jsonl` is `codex app-server`, a second protocol
-that ships parsed and unseated (design.md §9.50). They are different surfaces of
-one binary, so a bump retires them independently; when the seat moves, the exec
-pin goes with it.
+is `codex exec --json` — the invocation the room seated until 2026-09-02 and
+keeps as the fallback — and `codex-app-server-0.149.1-turn.jsonl` is `codex
+app-server`, the seat since then (design.md §9.50 captured it, §9.57 seated it
+without re-driving it). They are different surfaces of one binary, so a bump
+retires them independently, and both stay while both can be dispatched. No
+capture exists yet for `grok agent stdio` or for `agy --input-format
+stream-json`; §9.57's checklist is where those are owed.
 
 Three of the five bumped past the version their adapter's doc comments were
 written against — Claude Code 2.1.220 → 2.1.226, codex-cli 0.146.0 → 0.147.0,

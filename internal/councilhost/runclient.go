@@ -139,6 +139,16 @@ func RunClient(c *Client, in io.Reader, out io.Writer, width int) (Outcome, erro
 			if err := c.RequestDetach(); err != nil {
 				return OutcomeHostExited, err
 			}
+			// leave is the detach answer, acted on: the socket closed on the
+			// client's side and the leaving sentence on screen, which is the
+			// one line that names the pid still running and how to end it.
+			leave := func() (Outcome, error) {
+				if err := c.CloseDetached(); err != nil {
+					return OutcomeDetached, err
+				}
+				fmt.Fprintf(out, "\n%s\n", RenderDetached(c.HostPID()))
+				return OutcomeDetached, nil
+			}
 			select {
 			case f := <-answers:
 				if f.Kind != KindDetached {
@@ -146,12 +156,23 @@ func RunClient(c *Client, in io.Reader, out io.Writer, width int) (Outcome, erro
 					// frame loop, and this client stays exactly where it was.
 					continue
 				}
-				if err := c.CloseDetached(); err != nil {
-					return OutcomeDetached, err
-				}
-				fmt.Fprintf(out, "\n%s\n", RenderDetached(c.HostPID()))
-				return OutcomeDetached, nil
+				return leave()
 			case <-finished:
+				// The frame loop posts the detach answer and then returns, and
+				// returning closes finished, so on a granted detach BOTH arms
+				// of this select are ready at once and Go picks either. When
+				// this arm wins the answer is already sitting in the channel:
+				// read it before settling, or the client leaves the room with
+				// its outcome right and its leaving sentence never printed,
+				// which is what a loaded `go test ./...` measured once
+				// (2026-09-02) and fifteen isolated runs never did.
+				select {
+				case f := <-answers:
+					if f.Kind == KindDetached {
+						return leave()
+					}
+				default:
+				}
 				return settled()
 			}
 		case line == "/quit":

@@ -635,3 +635,156 @@ jobs:
           if ($median -gt $ceilingMs) {
             throw "statusline median $([int]$median) ms exceeds the ${ceilingMs} ms ceiling; this path grew a scan, a network call or a TUI init"
           }
+
+  # macOS on Apple Silicon: the job that turns `darwin_arm64: built, not run`
+  # into `run` (design.md §8 item 7, amended 2026-09-02). Until this job
+  # existed, macOS in this gate was a cross-compile on an Ubuntu runner plus a
+  # hand smoke on an Intel laptop, and the arm64 binary had never been
+  # executed by anything this project controls. GitHub's macos-latest runners
+  # are Apple Silicon, so a green run here is a measurement on that platform,
+  # and README.md, SECURITY.md and the release notes record it as one.
+  #
+  # A second measured platform, not a second primary. windows-latest above
+  # stays the verified target (ADR-002) and keeps every smoke; this job
+  # carries vet, the suite, the build, and the four smokes whose facts the
+  # Windows steps assert — doctor's honest states and the three statusline
+  # routings — translated into bash, plus `telltale version` and
+  # `telltale council ls`, because those two are what a stranger types first.
+  #
+  # The bash assertions and the pwsh `$out -match` assertions state the SAME
+  # facts, line for line. A fact added to one belongs in the other, or the two
+  # platforms are being held to different gauges.
+  #
+  # What this job cannot measure: the runner has none of the five vendor CLIs,
+  # so every seat resolves `binary FAILED`, no adapter meets a live macOS
+  # corpus, and no council turn dispatches. It runs a binary built from this
+  # commit, not the archive goreleaser attaches — Formula/telltale.rb is what
+  # hands a user that archive, and `brew test` is that file's own check.
+  darwin:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Vet
+        run: go vet ./...
+      - name: Test (fixture eval, on Apple Silicon)
+        run: go test ./...
+      - name: Build
+        run: go build -o telltale ./cmd/telltale
+      - name: Smoke (version, and doctor's three states through the real binary)
+        shell: bash
+        run: |
+          set -uo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          # A source build says `dev`. A binary that reports a tag it was never given
+          # is the version form of a rendered guess.
+          ver=$(./telltale version) || fail "version exited $?"
+          [ "$ver" = "telltale dev" ] || fail "a source build did not report dev: $ver"
+
+          # This runner has none of the five vendor CLIs, which makes it the exact
+          # machine the honest states matter on (design.md §9.42), the same as the
+          # Windows step. The "writes nothing" half is a BEFORE/AFTER of ~/.telltale
+          # rather than a test for its absence, for the reason that step gives:
+          # `go test ./...` ran earlier in this job and the cache packages' tests use
+          # the real home, so the directory may already exist here. BSD stat, because this
+          # is macOS; the GNU branch exists only so the script can be dry-run on Linux
+          # (GNU `stat -f` is filesystem status, and its free-block count moves between
+          # two calls, which a first draft of this step measured as "doctor wrote").
+          snapshot() {
+            local dir="$HOME/.telltale"
+            [ -d "$dir" ] || { echo '<absent>'; return; }
+            if [ "$(uname)" = Darwin ]; then
+              find "$dir" -type f -exec stat -f '%N|%z|%m' {} + | sort
+            else
+              find "$dir" -type f -exec stat -c '%n|%s|%Y' {} + | sort
+            fi
+          }
+          esc=$(printf '\033')
+          before=$(snapshot)
+          rc=0; out=$(./telltale doctor --timeout 20s) || rc=$?
+          [ "$rc" -eq 0 ] || fail "doctor exited $rc; a failed CHECK is this mode working, not a failed command"
+          [ "$(snapshot)" = "$before" ] || fail "doctor changed something under ~/.telltale; the preflight writes nothing at all"
+          if grep -qE 'auth[[:space:]]+ok|network[[:space:]]+ok' <<<"$out"; then fail "honesty violation: doctor passed a check it never ran: $out"; fi
+          grep -qE 'auth[[:space:]]+not checked' <<<"$out" || fail "auth did not report not-checked: $out"
+          grep -qE 'network[[:space:]]+not checked' <<<"$out" || fail "network did not report not-checked: $out"
+          # The two states a bare machine must actually render. If a vendor CLI is
+          # ever preinstalled on this image, THIS is the line that will say so.
+          grep -qE 'binary[[:space:]]+FAILED' <<<"$out" || fail "a machine with no vendor CLIs reported no failed binary check: $out"
+          grep -qE 'version[[:space:]]+not checked' <<<"$out" || fail "version was not skipped for a binary that is not there: $out"
+          if grep -q "$esc" <<<"$out"; then fail "doctor emitted ANSI escapes; it is read in pipes and pastes: $out"; fi
+      - name: Smoke (fixture through the real binary)
+        shell: bash
+        run: |
+          set -uo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          out=$(./telltale statusline < internal/statusline/testdata/apikey.json) || fail "statusline exited $?"
+          grep -q 'Sonnet' <<<"$out" || fail "unexpected statusline output: $out"
+          if grep -qE '5h|7d' <<<"$out"; then fail "honest-gauge violation: quota rendered without rate_limits: $out"; fi
+          [ ! -e "$HOME/.telltale/quota" ] || fail "quota relay wrote for a payload with no rate_limits"
+      - name: Smoke (Antigravity routing through the real binary)
+        shell: bash
+        run: |
+          set -uo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          out=$(./telltale statusline < internal/statusline/testdata/agy-full.json) || fail "statusline exited $?"
+          grep -q 'gemini-weekly' <<<"$out" || fail "agy payload did not route to the Antigravity renderer: $out"
+          if grep -qF '$' <<<"$out"; then fail "honest-gauge violation: cost rendered for a vendor with no cost field: $out"; fi
+          claude=$(./telltale statusline < internal/statusline/testdata/full.json) || fail "statusline exited $?"
+          grep -q 'Opus' <<<"$claude" || fail "Claude payload misrouted after the product probe: $claude"
+          # full.json carries the real 2.1.233 context_window token block. Those counts
+          # describe ONE API call, so the statusline must render none of them
+          # (design.md §7.16b) — the Windows step's assertion, on this platform's binary.
+          if grep -qE '16000|12000|2800|1200' <<<"$claude"; then fail "honest-gauge violation: a per-API-call token count rendered: $claude"; fi
+          # ...and must relay none of them.
+          [ ! -e "$HOME/.telltale/usage/claude.json" ] || fail "the Claude statusline wrote a token relay; §7.16b measured no per-turn count it could honestly write"
+      - name: Smoke (Cursor routing through the real binary)
+        shell: bash
+        run: |
+          set -uo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          # This vendor stamps NO marker, so the flag is the whole of the routing
+          # (design.md §2.2).
+          out=$(./telltale statusline --vendor cursor < internal/statusline/testdata/cursor-full.json) || fail "statusline exited $?"
+          grep -q 'Composer' <<<"$out" || fail "cursor payload did not route to the Cursor renderer: $out"
+          # The number alone: an ANSI code sits between "ctx " and "34.5%", so a
+          # phrase-spanning pattern could never match its own passing output.
+          grep -q '34\.5%' <<<"$out" || fail "the one vendor-sourced context reading did not render: $out"
+          # remaining_percentage (65.5) and total_input_tokens (68900) are computed by
+          # the CLI from used_percentage and must never be displayed.
+          if grep -qE '65\.5|68900|68\.9k' <<<"$out"; then fail "honest-gauge violation: a CLI-computed value reached the line: $out"; fi
+          if grep -qF '$' <<<"$out"; then fail "honest-gauge violation: cost rendered for a vendor with no cost field: $out"; fi
+          # Every context_window key null is unread, not zero.
+          nullctx=$(./telltale statusline --vendor cursor < internal/statusline/testdata/cursor-nocontext.json) || fail "statusline exited $?"
+          if grep -q 'ctx' <<<"$nullctx"; then fail "honest-gauge violation: an unread context rendered: $nullctx"; fi
+          # Without the flag the same payload has no marker to route on. The Windows
+          # step reads only the line here, not the exit code, and this one does the same.
+          unflagged=$(./telltale statusline < internal/statusline/testdata/cursor-full.json) || true
+          if grep -q 'autorun' <<<"$unflagged"; then fail "an unflagged cursor payload reached the Cursor renderer: $unflagged"; fi
+          [ ! -e "$HOME/.telltale/quota/cursor.json" ] || fail "quota relay wrote for a vendor whose payload carries no quota"
+          [ ! -e "$HOME/.telltale/usage/cursor.json" ] || fail "the Cursor statusline wrote a token relay; its only token-shaped numbers are CLI-derived"
+      - name: Smoke (council ls is a reader, through the real binary)
+        shell: bash
+        run: |
+          set -uo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          snapshot() {
+            local dir="$HOME/.telltale"
+            [ -d "$dir" ] || { echo '<absent>'; return; }
+            if [ "$(uname)" = Darwin ]; then
+              find "$dir" -type f -exec stat -f '%N|%z|%m' {} + | sort
+            else
+              find "$dir" -type f -exec stat -c '%n|%s|%Y' {} + | sort
+            fi
+          }
+          esc=$(printf '\033')
+          # The sixth reader (design.md §7.27): it prints the saved room and opens
+          # nothing. A fresh home has no room, and that is a listing, not an error.
+          before=$(snapshot)
+          rc=0; out=$(./telltale council ls) || rc=$?
+          echo "telltale council ls exited $rc"
+          [ "$rc" -eq 0 ] || fail "council ls exited $rc on a machine with no saved room; an empty room lists, it does not fail"
+          grep -q 'no room is saved yet' <<<"$out" || fail "council ls on a fresh home did not report the empty room: $out"
+          [ "$(snapshot)" = "$before" ] || fail "council ls changed something under ~/.telltale; it is a reader and writes nothing (§7.27)"
+          if grep -q "$esc" <<<"$out"; then fail "council ls emitted ANSI escapes; it is read in pipes and pastes: $out"; fi

@@ -41,7 +41,10 @@ import (
 //     cannot act in, which is the whole complaint this change answers.
 const (
 	// arenaSetupDeadline bounds the WHOLE setup: base read, race numbering,
-	// seed plan, and every seat's worktree add and seeding, together.
+	// seed plan, and every seat's worktree add and seeding, together. The seat
+	// worktree setup (seattree.go, §9.55) runs under the same clock, for the
+	// same reason and against the same measurement: it is fewer git calls
+	// than a race and the lock it can meet is the same lock.
 	//
 	// One deadline over the whole thing rather than one per git call, because
 	// the number an operator experiences is how long the room was unusable, and
@@ -299,7 +302,10 @@ func (m *Model) applyArenaSetup(msg arenaSetupMsg) tea.Cmd {
 		return nil
 	}
 	cmd := m.sendTurn(p.route, p.prompt, res)
-	if cmd == nil && m.turn == nil {
+	// race() is the read here, where this asked m.turn == nil: the pump's Cmd
+	// can be nil for a dispatch that DID start (waitEvents hands out one
+	// reader), so the state is the test rather than the command (§9.54).
+	if m.race() == nil {
 		// The setup succeeded and the dispatch still produced nothing — every
 		// racer's worktree failed on its own, so there was nobody left to send
 		// to. Each seat says why on its column; what belongs here is the brief,

@@ -30,7 +30,9 @@ permissions:
 jobs:
   # The repo's own gate, called rather than copied. `.github/workflows/ci.yml`
   # is the single definition of what "green" means here — vet, the suite, the
-  # build, and three binary-level smokes on windows-latest — and a release that
+  # build, and the binary-level smokes on windows-latest, the race detector on
+  # ubuntu-latest, and since 2026-09-02 the suite and the smokes run again on
+  # macos-latest, which is Apple Silicon — and a release that
   # ran a second, hand-maintained copy of it would be green against a gate that
   # had drifted. A release that skips the gate is a false green; a release that
   # runs a stale copy of it is a subtler one.
