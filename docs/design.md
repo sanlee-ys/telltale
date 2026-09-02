@@ -17929,6 +17929,8 @@ the session that wrote this. The spawn guard makes that impossible from inside t
 design, and it is the same class of debt as the host's first live turn ([STATE.md](../STATE.md)):
 an operator-driven check, owed and named rather than implied.
 
+<a id="s9-54"></a>
+
 ### 9.54 the room was a committee, and a crew's seats are busy one at a time (2026-09-02)
 
 `dispatch()` opened with one line — `if m.turn != nil { "a turn is already in flight — ctrl+c
@@ -18064,6 +18066,8 @@ run can show is a persistent seat taking its NEXT brief cleanly after a per-seat
 one-shot seats' event streams interleaving through one reader without a stall, and a `/flow` hop
 landing beside an unrelated seat mid-answer. Owed and named rather than implied, on §9.53's rule.
 
+<a id="s9-55"></a>
+
 ### 9.55 a crew's writers share one tree, and the room becomes the integrator (2026-09-02)
 
 §9.54 made the seats concurrent and left them where they were: every ordinary turn ran in
@@ -18137,10 +18141,6 @@ worktrees, seeding, brief file, ranks, `x`, `u` and `/arena drop` are untouched 
 badge now reads `wt: arena/t<N>/<vendor>`, which is the tree it already stood in. The spawn
 guard is untouched: every test here dispatches through `countSpawns`, and the git that
 runs is against a temp repository.
-<!-- 9.55 is reserved for the crew lane (per-seat worktrees, /adopt across seat branches,
-     parallel /flow, /hand) that landed beside this one; this section took 9.56 so the two
-     branches merge without renumbering. -->
-
 <a id="s9-56"></a>
 
 ### 9.56 the gauges route, and a real run can be shown without a vendor (2026-09-02)
@@ -18356,14 +18356,20 @@ never zero. Antigravity's `--conversation` on the stream argv is unmeasured for 
 the §9.43 fork tell is what makes sending it safe: the seat implements `SilentResumeFork`, so the
 room compares the id it asked for against the id `init` reports.
 
-**What the core does not do yet, and the patch that would.** Nothing in `persistent.go` or
-`dispatch.go` reads `LiveFallback` or `GracefulStop` today: a refused handshake ends the turn
-visibly and the next brief respawns the same shape, and teardown is still one `Kill`. The
-research memo for this change carries the unified diff — a `fellBack` set on the model, a
-`liveSeat` that consults it, `handTurnToSeat` retreating on `Dead()`, a `CloseInput` on
-`runner.Session` so the grace period has a pipe to close, and the badge reading
-`seatShape(v, fellBack)`. It was written as a patch rather than applied because those files were
-being refactored in a sibling lane at the time.
+**What the core does with the two interfaces (landed 2026-09-02, in the crew integration).**
+This paragraph said "nothing yet" while the six crew lanes ran apart; the core was patched once
+they merged, and it now reads both. `LiveFallback`: a seat whose protocol reports `Dead()` — on
+the brief that finds it dead in `handTurnToSeat`, or on the failed-turn event the handshake
+refusal produces — and a persistent seat whose process dies on its FIRST turn before it names a
+session, both retreat to the batch adapter for the rest of the room (`fallback.go`). The retreat
+is on the SAME dispatch: the brief the operator typed goes down the batch branch with the
+operating brief applied, the column stays on its turn with a note naming the invocation, the
+badge reads `seatShape(v, true)` through `postureClaimFor`, and the seats in flight beside it are
+untouched. `GracefulStop`: teardown, a respawn, and a cancel that has to become a kill all run
+`stopProc` — `Closing()` down the pipe, `runner.Session.CloseInput`, `Grace()`, then the kill
+that §9.50 measured necessary — with teardown waiting on every seat's grace at once. Both are
+pinned over stubbed sessions in `fallback_test.go`; the live run each one owes is on the
+checklist below, and STATE.md carries the consolidated list.
 
 #### The live measurements owed, as a checklist
 
@@ -18387,8 +18393,9 @@ README there; a claim that is not captured is not made.
 - [ ] **Codex, macOS.** The read sandbox on the app-server path, on the Mac, before the
   off-Windows badge may return to `ro:enforced`. Record in PARITY.md.
 - [ ] **Codex, the exec fallback trigger.** Run the seat against a build without `app-server`
-  (or an unauthenticated one) and watch what the room shows; this is the arm the core patch is
-  for.
+  (or an unauthenticated one) and watch what the room shows; this is the arm the room's retreat
+  (`fallback.go`) is built for, and the note and the `exec · unasked · fallback` badge are what
+  it should show.
 - [ ] **Grok, the handshake and a turn.** `grok --version`; `grok agent stdio` driven with the
   seat's own `initialize` and `session/new{cwd}`: what `agentCapabilities` advertises
   (`loadSession` above all), whether `modes` names a plan mode, and a fenced brief streaming
@@ -18410,7 +18417,8 @@ README there; a claim that is not captured is not made.
 - [ ] **Antigravity, `--print-timeout` under stream input.** Whether 30m bounds each turn or the
   whole process. A per-process bound ends the seat half an hour into a room.
 - [ ] **Antigravity, the fallback trigger.** The exact exit code and stderr line a build without
-  `--input-format` produces, so the core patch can match it rather than infer it.
+  `--input-format` produces. The room retreats on the SHAPE (a first-turn death with no session
+  named) rather than on that line, so the reading confirms the trigger rather than gates it.
 
 #### Verification
 
