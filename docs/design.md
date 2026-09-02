@@ -17885,3 +17885,97 @@ wrote this. What the suite pins is the room's bookkeeping over stubbed processes
 run can show is a persistent seat taking its NEXT brief cleanly after a per-seat cancel, two
 one-shot seats' event streams interleaving through one reader without a stall, and a `/flow` hop
 landing beside an unrelated seat mid-answer. Owed and named rather than implied, on §9.53's rule.
+
+### 9.55 a crew's writers share one tree, and the room becomes the integrator (2026-09-02)
+
+§9.54 made the seats concurrent and left them where they were: every ordinary turn ran in
+`State.Workspace`, and a worktree existed only inside `/arena`. The moment two writing seats
+could answer at once, two writers were in one checkout — which §9.37 had already ruled out
+for a race in one sentence, "four writers in one shared tree are not four answers, they are
+one trampled tree". And the containment could not be a card: only the stream-json seat can
+be asked before a write (`canGate`), the other four act unasked. So the crew's containment
+is the race's, made structural and made permanent: **a writing seat gets its own worktree,
+cut once from the room's HEAD and reused for every writing turn after it, and the room is
+the integrator** — nothing a seat writes reaches the room's tree except by `/adopt`.
+
+#### What changed
+
+- **One worktree per writing seat, by default.** In write posture the first brief to a seat
+  cuts `<repo>-seat-<vendor>` beside the workspace on `seat/<vendor>`, from HEAD, and the
+  seat's process runs there (`seatDir` is the one read every spawn path — `specFor`,
+  `seatProcess`, the flow receipt, `/hand` — goes through). Read posture and a `/flow` read
+  hop keep the shared tree: a tree cut for a hop that cannot write is containment for a
+  hazard that does not exist. `--shared-tree` is the opt-out, a FLAG rather than a room word
+  because it decides where five processes write, the same class of fact as the workspace.
+  The cut runs off the render loop under arenasetup.go's deadline, serially, with the step
+  named on the footer (`worktree: preparing worktree for codex…`) and ctrl+c stopping the
+  setup; a tree already cut is kept. A tree an earlier room left is found by name and
+  reused, and the notice says so; a directory at that name that is not the seat's worktree
+  is refused by name. Nothing is seeded into a seat's tree and no brief file is written into
+  it — those are affordances for a fresh throwaway tree, and a seat's tree is reused.
+- **The badge says which holds** (`Column.Containment`, stamped at dispatch from the same
+  read the spawn uses): `wt: seat/codex`, `shared tree`, or `⚠ shared tree · <why>` for a
+  fallback the room could not avoid, with git's own sentence in the notice when it happened
+  and the whole reason on the `?` postures page. At a three-seat column's width the reason
+  sheds before the word and the mark stays, because a clipped reason is not a reason
+  (§9.11); the granularity word sheds first, on stripBadges' own order. A seat never
+  dispatched wears no badge: no process, no directory, no claim. `--ascii` keeps the mark
+  as `!` and the separator as `-`.
+- **`/adopt <seat>` merges a seat's branch, the race's way** (`adoptSource`). The card
+  names `git merge --no-ff seat/codex` onto `adopt/seat-codex`, refuses a dirty room and an
+  empty branch exactly as before, and after the merge **resets the seat's tree and branch
+  onto the new HEAD** — a reset that fails degrades the notice, never the adoption, and says
+  what moves the tree by hand. Resolution order is a ruling: the arena branch when the
+  seat's CURRENT turn is a race attempt (that is the block on the column), else the seat
+  branch, else the race receipt. Hybrids work across two seat branches on
+  `adopt/seat-<base>+<donor>`; a hybrid across a race attempt and a seat branch is refused,
+  because one receipt names one kind of branch. The donor is not reset — only its named
+  paths were taken.
+- **`/arena record` counts seat adopts apart** (`ArenaRecord.SeatAdopts`, from
+  `adopt/seat-<vendor>[-k]` refs): their own sentence under the window, inside no rate. A
+  race adopt is a verdict among competing attempts at one brief; a seat adopt is the room
+  taking one seat's ordinary work with nobody else in the running, and folding it into a
+  rate would score a seat for races it never entered.
+- **`/flow` fans with `&`** (`FlowStep.Stage`): hops joined by `& @seat` are one stage and
+  one dispatch, each seat handed its own task; the stage after `->` dispatches when the
+  stage's last seat lands (`StageDone`), carrying every predecessor's reply as its own
+  labelled fence, in landing order. The header names the stage (`hop 1/2 @codex & @grok`).
+  Two refusals a fan adds, at parse: a seat named twice in one stage, and a stage mixing
+  write and read hops — a stage runs at ONE posture, because a fan is one dispatch and
+  §9.16's table gives a dispatch one posture. One `y` releases a writing stage and the card
+  names every target. A busy seat stops the whole stage by name, on §9.54's rule. An
+  ampersand not followed by a mention stays prose.
+- **`/hand <to> <from>`** (`handcmd.go`) puts `<from>`'s stat and patch — against the point
+  its branch parted from the room's HEAD, read with `add -N` so created files count — into
+  the draft addressed `@<to>`, fenced as measured git output with the tree and branch named.
+  A draft, on §9.49's whole argument; `enter` is the only thing that spends. The cap is the
+  composer's: a patch past it is cut at a hunk boundary and the closing fence states the
+  cut and the way to the whole (`y`).
+
+#### What this section does NOT change
+
+`room.json` gains no field: a seat's tree is rediscovered on disk by name. The arena's own
+worktrees, seeding, brief file, ranks, `x`, `u` and `/arena drop` are untouched — a racer's
+badge now reads `wt: arena/t<N>/<vendor>`, which is the tree it already stood in. The spawn
+guard is untouched: every test here dispatches through `countSpawns`, and the git that
+runs is against a temp repository.
+
+#### Verification
+
+`gofmt`, `go vet ./...`, `go test ./... -count=1`, `go build ./...`, the windows/amd64 and
+darwin/arm64 cross-builds, and `go test -race ./internal/council`, all clean. Goldens new:
+`containment-badges`, `containment-badges-ascii`, `containment-badges-expanded`,
+`flow-fan`, `arena-record-seats`, `arena-record-seats-ascii`. Goldens moved: the two
+`slash-refusal` frames, on one line — the refusal's vocabulary gained `/hand` and paid for
+it with "room" and an article. No other existing golden moved: a column dispatched before
+this section carries no containment claim, so no frame built before it changed.
+
+**Not verified here: a live crew in its trees.** No vendor was run by the session that wrote
+this. What only a live run can show: a persistent seat resuming its thread after the respawn
+that moves it from the workspace into its tree (the same `--resume` composition `/cd`
+measured, in a directory that did not exist a second earlier); a one-shot seat honouring the
+tree as cwd on a resume (`codex resume` rejects `--cd`, and the tree is passed as `Dir`);
+two seats writing at once into two trees and `/adopt` folding each in turn; the fanned
+`/flow` stage's two artifacts landing beside each other and the join reading both; and the
+`⚠ shared tree` badge at real widths on a real fallback. Owed and named rather than implied,
+on §9.53's rule.
