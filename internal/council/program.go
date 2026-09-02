@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/vt"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -67,6 +68,16 @@ type Options struct {
 	// `/trace <file>` typed after a slow turn writes that turn. Empty still opens
 	// nothing and changes no pixel; it just no longer throws the numbers away.
 	TracePath string
+
+	// Live names the seat whose pane draws a real terminal screen instead of a
+	// parsed transcript (design.md §9.53). Empty is the ordinary room.
+	//
+	// A flag and not a key. The live pane is a SECOND process on that seat's
+	// account, so opening one doubles what the seat spends — and a control that
+	// doubles a bill belongs where the room is opened, decided once, rather than
+	// on a keystroke that can be pressed by accident. cmd/telltale hands over a
+	// string; ParseLive answers which seats can take it.
+	Live model.VendorID
 }
 
 // Model is the Bubble Tea model. It owns State plus the things Render must not
@@ -103,6 +114,32 @@ type Model struct {
 	// interrupts numbers the control messages sent to vendors, so each one
 	// carries an id that can be recognised coming back.
 	interrupts int
+
+	// live is the pseudoconsole child behind the live pane, or nil (§9.53).
+	//
+	// A SECOND process for a seat that already has one: the structured session
+	// in procs keeps supplying every gauge on that column, and this one supplies
+	// only pixels. Killed by teardown beside the others, and counted with them,
+	// because it is an agent running on the operator's account like any other.
+	live runner.PTYSession
+	// emu decodes the live child's bytes into a cell grid.
+	//
+	// On Model and NOT on State, for exactly the reason gateInputs below is: it
+	// holds the whole raw stream — every escape, every repaint — and State is
+	// what the renderer can reach. Only the decoded rows cross onto State.Live,
+	// and a renderer that could ask an emulator for "the current screen" would
+	// fail TestRenderIsPure on its second call.
+	emu *vt.Emulator
+	// ptyChunks carries raw reads off the pseudoconsole. Bounded, so a slow
+	// consumer stalls the child rather than losing its screen — dispatch.go's
+	// argument for the event channel, unchanged.
+	ptyChunks chan runner.PTYChunk
+	// liveCols, liveRows are the rectangle the pty and the emulator are sized to
+	// right now. Held so a resize is issued only when the pane actually changed:
+	// ResizePseudoConsole makes the guest repaint its whole screen, measured at
+	// 1624 bytes inside 15ms, and a room that re-sent it every frame would be
+	// paying that on every keystroke.
+	liveCols, liveRows int
 
 	// gateInputs holds each pending request's tool arguments, keyed by request
 	// id, because an approval has to echo them back.
@@ -745,6 +782,12 @@ func (m *Model) Init() tea.Cmd {
 		// a test builds directly launches nothing, and main_test.go's TestMain
 		// needs no exception for this path.
 		m.rebuildCmd(),
+		// The live seat (§9.53). Fired from HERE for the reason the rebuild is:
+		// no test calls Init, so a Model a test builds directly starts no
+		// pseudoconsole, and the package's spawn guard needs no exception for
+		// this path. Nil when --live named nothing, which is every room that did
+		// not ask for one.
+		m.liveCmd(),
 	)
 }
 
@@ -756,6 +799,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.st.Width, m.st.Height = msg.Width, msg.Height
+		// The live pane's rectangle is a function of the frame, so a terminal
+		// resize is what tells the guest to repaint at a new width (§9.53).
+		// Issued HERE and never from Render: livePaneRect is pure over State,
+		// so the update loop can ask the question the renderer is about to ask
+		// without the renderer doing anything but draw. A no-op when the pane
+		// did not actually change size, and when there is no live seat at all.
+		m.syncLiveSize()
 		return m, nil
 
 	case tea.BackgroundColorMsg:
@@ -778,6 +828,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The room-open rebuild, launched ON the update loop so m.procs keeps
 		// its single writer (rebuild.go).
 		return m, m.startRebuild()
+
+	case ptyBatchMsg:
+		// The live seat's bytes (§9.53), and they go nowhere near applyEvents.
+		// A pty chunk is not a runner.Event and must never become one: the text
+		// path ends in Column.Body through sanitize, which drops every byte
+		// below 0x20 — ESC included — so a screen routed that way would arrive
+		// with its escapes stripped and their payload left as literal garbage.
+		//
+		// applyPTY writes State.Live and nothing else. That is the display-only
+		// contract, and TestLiveSeatMeasuresNothing pins it by diffing the whole
+		// State across this call.
+		m.applyPTY(msg.chunks)
+		// The pane's size can only be known once the frame is, and the first
+		// chunks arrive from a child opened at a provisional 80x24. Asked on
+		// every batch rather than only on a resize, because it is a comparison
+		// against the size already set and costs nothing when nothing moved.
+		m.syncLiveSize()
+		if len(msg.chunks) == 0 || m.ptyChunks == nil {
+			// The channel closed, or the child's terminal chunk has landed and
+			// applyPTY retired it. Re-arming would park a goroutine on a channel
+			// nothing will ever write to.
+			return m, nil
+		}
+		return m, m.waitPTY()
 
 	case eventBatchMsg:
 		m.applyEvents(msg.events)

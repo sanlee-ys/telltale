@@ -157,6 +157,19 @@ func TestMain(m *testing.M) {
 		return realEditor(name, args, dir)
 	}
 
+	// The live seat (design.md §9.53) is the SIXTH spawn, and it is guarded on
+	// the same rule as the three above with no softening. Its output is display
+	// only — the pane renders a screen and no gauge reads it — and that is a
+	// claim about what the room may DRAW, not about what the process costs. A
+	// pseudoconsole child is `claude` running interactively on the operator's
+	// own account, and a spawn that escaped this wrap would let a suite run
+	// start one.
+	realPTY := startPTYSession
+	startPTYSession = func(ctx context.Context, spec runner.Spec, cols, rows int, out chan<- runner.PTYChunk) (runner.PTYSession, error) {
+		refuseRealVendor("startPTYSession", spec)
+		return realPTY(ctx, spec, cols, rows, out)
+	}
+
 	// The arena check (arenacheck.go) is the fifth thing this package can
 	// spawn, and it is guarded on the same rule for a wider reason than the
 	// three above: what it runs is a command the OPERATOR named, so on the
@@ -299,7 +312,7 @@ func refuseRealCheck(tree string, argv []string) {
 			"  args: %q\n"+
 			"  dir:  %s\n"+
 			"Stub the spawn vars in this test — countSpawns(t) in "+
-			"flow_security_test.go does all four.",
+			"flow_security_test.go does all of them.",
 		argv, tree))
 }
 
@@ -320,6 +333,6 @@ func refuseRealVendor(site string, spec runner.Spec) {
 			"  args:   %q\n"+
 			"  dir:    %s\n"+
 			"Stub the spawn vars in this test — countSpawns(t) in "+
-			"flow_security_test.go does all three.",
+			"flow_security_test.go does all of them.",
 		site, spec.Binary, spec.Args, spec.Dir))
 }

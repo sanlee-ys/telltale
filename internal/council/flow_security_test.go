@@ -20,7 +20,7 @@ import (
 // checks the flag instead of the effect, and a flow that reported "read
 // posture: yes" while spawning a write invocation would pass such a test.
 
-// spawnLog counts and records the package's two process-spawn call sites.
+// spawnLog counts and records the package's process-spawn call sites.
 //
 // It does not simulate a vendor. The fake session's only behaviours are the
 // three the seat logic actually calls on a live one (Send, Alive, Kill), and it
@@ -50,6 +50,19 @@ type checkRun struct {
 	tree string
 	argv []string
 }
+
+// deadPTY is a live seat that was counted and never started.
+//
+// Its Alive is true for deadSession's reason: a stub that reported dead would
+// send the room down the child-exited branch, and a test asserting "nothing was
+// spawned" would then be reading a pane that had already given up.
+type deadPTY struct{}
+
+func (deadPTY) Resize(int, int) error { return nil }
+func (deadPTY) Write([]byte) error    { return nil }
+func (deadPTY) Kill()                 {}
+func (deadPTY) Alive() bool           { return true }
+func (deadPTY) Pid() int              { return 0 }
 
 type deadSession struct{}
 
@@ -96,10 +109,20 @@ func countSpawns(t *testing.T) *spawnLog {
 		log.specs = append(log.specs, runner.Spec{Binary: name, Args: args, Dir: dir})
 		return nil
 	}
+	// The sixth spawn, and the same hole if it escapes: a PTY child is a vendor
+	// process like any other, and "nothing was spawned" must not pass over one
+	// that had been launched with a pseudoconsole attached. Display only says
+	// what the room may DRAW from it, never what it costs to start (§9.53).
+	origPTY := startPTYSession
+	startPTYSession = func(_ context.Context, spec runner.Spec, _, _ int, _ chan<- runner.PTYChunk) (runner.PTYSession, error) {
+		log.specs = append(log.specs, spec)
+		return deadPTY{}, nil
+	}
 	t.Cleanup(func() {
 		startProcess, startSession, startRPCSession = origProcess, origSession, origRPC
 		startCheck = origCheck
 		startEditor = origEditor
+		startPTYSession = origPTY
 	})
 	return log
 }
