@@ -8,11 +8,23 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
+// oneSeatRoom holds the claude seat as the host would build it: persistent,
+// because that is what the claude adapter is, and the flag is what decides
+// which event ends its turn.
 func oneSeatRoom() Room {
 	return Room{
 		Version: RoomVersion,
-		Seats:   []Seat{{Vendor: model.VendorClaude, Phase: PhaseIdle, Drivable: true}},
+		Seats:   []Seat{{Vendor: model.VendorClaude, Phase: PhaseIdle, Drivable: true, Persistent: true}},
 	}
+}
+
+// turnEnded is the claude adapter's own end-of-turn event, in the shape the
+// adapter really emits: a `result` line is KindMeta with EndsTurn set
+// (vendors/claude.go). Two tests used to feed KindDone with EndsTurn instead,
+// which no adapter produces, and they passed over a fold that dropped the real
+// shape entirely.
+func turnEnded(text string) runner.Event {
+	return runner.Event{Vendor: model.VendorClaude, Kind: runner.KindMeta, EndsTurn: true, Text: text}
 }
 
 // TestWaitingAndStreamingStayApart is council.Phase's own rule, carried across
@@ -67,7 +79,7 @@ func TestAnExitCodeIsAbsentUntilAProcessReportsOne(t *testing.T) {
 	// A vendor's own end-of-turn line ends the TURN, not the process. A
 	// persistent seat takes another turn from the same pid, so reporting an
 	// exit there would be inventing a process death.
-	r.Apply(runner.Event{Vendor: model.VendorClaude, Kind: runner.KindDone, EndsTurn: true})
+	r.Apply(turnEnded(""))
 	if r.Seats[0].ExitCode != nil {
 		t.Fatalf("an end-of-turn line produced exit code %d — the process did not exit",
 			*r.Seats[0].ExitCode)

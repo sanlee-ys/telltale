@@ -71,6 +71,24 @@ type Seat struct {
 	// then says why. A seat the host cannot drive is NOT rendered as a seat
 	// that failed: those are two states and they render two ways.
 	Drivable bool `json:"drivable"`
+	// Persistent is true when this seat is ONE process that takes many turns
+	// (vendors.Persistent). It decides which event ends a turn on this seat.
+	//
+	// A spawn-per-turn seat ends its turn by dying, and the runner reports
+	// that as KindDone. A persistent process does not exit between turns, so
+	// its turn ends with a line in its own stream — the vendor's `result`,
+	// which the adapter reports as KindMeta with EndsTurn set — and no KindDone
+	// is coming. The fold used to drop every KindMeta, so a persistent seat
+	// whose answer was complete and on screen stayed `streaming` for the rest
+	// of the room's life: it was still `streaming` after a detach, a closed
+	// window and a rejoin, with the identical text. That is a false claim
+	// about what an agent is doing (§4a.1), on the surface the whole split
+	// exists to draw.
+	//
+	// The flag is set by the host from the adapter's interface, never guessed
+	// from output, and it is a key on the wire so a client can say which seats
+	// keep a process between turns.
+	Persistent bool `json:"persistent,omitempty"`
 }
 
 // Phase is what a seat is doing right now.
@@ -167,7 +185,48 @@ func (r *Room) Apply(ev runner.Event) bool {
 		// reads would invite a later session to render it without checking
 		// where it came from, and §4a.1's rule is that a displayed value names
 		// its source.
-		return false
+		//
+		// The END-OF-TURN half of the same line is not dropped. On a persistent
+		// seat this is the ONLY end-of-turn signal there is (Seat.Persistent's
+		// doc has the measurement), so it is what moves the seat to done.
+		//
+		// On a spawn-per-turn seat the same flag arrives too — codex says
+		// `turn.completed` seconds before it exits — and here it deliberately
+		// changes NOTHING. council's own Model settles that column's phase on
+		// this line and keeps the process live until the exit, because the
+		// vendor's capture covers no turn that ran tools (vendors/codex.go).
+		// This host's turn guard reads phases alone (watchTurn), so settling a
+		// batch seat here would clear the guard while the child is still
+		// exiting, and the next dispatch would kill it (dispatchBatch). The
+		// exit still arrives as KindDone and settles the seat there, as it did
+		// before; the linger it draws is the pre-existing state of this rung,
+		// not a change made by this branch.
+		if !ev.EndsTurn || !s.Persistent {
+			return false
+		}
+		if s.Phase != PhaseWaiting && s.Phase != PhaseStreaming {
+			// A turn that was already interrupted or failed keeps saying so. A
+			// `result` that lands after the operator cancelled is the vendor
+			// confirming the abandonment, not a completion.
+			return false
+		}
+		if ev.SessionID != "" {
+			s.SessionID = ev.SessionID
+		}
+		// The final reply is carried on this line as a fallback for a turn that
+		// streamed nothing, and it is used ONLY when the body is empty, so the
+		// ordinary streaming path never draws the reply twice. A clean end with
+		// nothing at all says so in council's own words rather than drawing an
+		// empty done column, which §4a.1 would read as a false zero.
+		if strings.TrimSpace(s.Body) == "" {
+			if ev.Text != "" {
+				s.Body = ev.Text
+			} else {
+				s.Body = "[Turn completed with 0 text chunks streamed]"
+			}
+		}
+		s.Phase = PhaseDone
+		return true
 	case runner.KindGate:
 		// The gate is a card, a keystroke and an answer written back down the
 		// same pipe. None of that is built here, so the seat says the host
