@@ -577,6 +577,17 @@ type Column struct {
 	// Its age is measured from SeatQuota.WrittenAt against State.Now, so Render
 	// stays pure over State — the read itself runs as a Cmd.
 	Quota *SeatQuota
+
+	// Containment is where this seat's process runs, as the badge row states
+	// it (seattree.go, §9.55): its own worktree, the shared tree, or the shared
+	// tree with the reason the room could not give it its own. Stamped at
+	// dispatch for every seat the brief reaches, and NOT a per-turn fact:
+	// startTurn leaves it alone, because the directory a seat works in
+	// outlives any one brief and the next dispatch re-stamps it. The zero
+	// value is no claim — a seat never dispatched is in no directory at all —
+	// and renders nothing, which is what keeps every golden built before
+	// §9.55 exactly as it was.
+	Containment ContainClaim
 }
 
 // startTurn moves a column onto a new turn.
@@ -1317,6 +1328,13 @@ type State struct {
 	// retires it with the marker, so it can never outlive the chain it stops.
 	FlowStop bool
 
+	// FlowSeats is the hop cell's label when the current stage FANS to more
+	// than one seat (`@codex & @grok`, §9.55). Empty for a one-seat hop, where
+	// FlowVendor names it as it always has. A label rather than a list,
+	// because the header is the only reader and it prints the words; a list
+	// would be a second spelling of a fact the chain already holds.
+	FlowSeats string
+
 	// Gates are the tool calls waiting on a decision, OLDEST FIRST.
 	//
 	// A queue rather than a single value, because one assistant message really
@@ -1419,6 +1437,14 @@ type State struct {
 	// It sits on State because Render draws it and Render is pure over State.
 	// The setup itself is Model.arenaPrep, which the renderer cannot reach.
 	ArenaSetup string
+
+	// TreeSetup is ArenaSetup's twin for a SEAT's worktree being cut before an
+	// ordinary writing dispatch (seattree.go, §9.55): the step in words, empty
+	// when no setup is running. Its own field rather than a second meaning for
+	// ArenaSetup, because the footer names which kind of setup it is drawing —
+	// a race and a brief are different things to be waiting on — and one
+	// string cannot say both.
+	TreeSetup string
 
 	// Spinner advances only while something is genuinely in flight.
 	Spinner int

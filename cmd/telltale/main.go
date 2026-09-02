@@ -1041,6 +1041,14 @@ func runCouncil(args []string) error {
 	record := fs.String("record", "", "write this room's event stream — every seat's output, each dispatch, each gate decision, with timing — to this new file for --replay. It carries the conversation: name a path outside ~/.telltale, and run `telltale council replay-check <file>` before sharing it")
 	replay := fs.String("replay", "", "play a --record file back instead of opening a live room: no vendor starts, nothing dispatches, and every frame says REPLAY")
 	replaySpeed := fs.Float64("replay-speed", 1, "play a --replay file this many times faster than it was recorded")
+	// The opt-out from per-seat worktrees (design.md §9.55). In a writing room
+	// every seat is given its own worktree beside the workspace and /adopt
+	// merges what you keep; this flag is the older room, where every seat
+	// writes into one tree, for the operator who wants exactly that. A flag
+	// rather than a room word because it decides where processes WRITE — the
+	// same class of fact as the workspace — and the badge on every column
+	// says which holds either way.
+	sharedTree := fs.Bool("shared-tree", false, "let writing seats share the workspace instead of each getting its own worktree (<repo>-seat-<vendor>, branch seat/<vendor>) — the column badge says which holds")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1074,18 +1082,19 @@ func runCouncil(args []string) error {
 	}
 
 	opts := council.Options{
-		Dir:       *dir,
-		Seats:     room,
-		ASCII:     *ascii || os.Getenv("TELLTALE_ASCII") != "",
-		NoTitle:   *noTitle,
-		Write:     !*read,
-		Auto:      *auto,
-		Headroom:  *headroom,
-		BriefPath: *brief,
-		Resume:    *resume,
-		Fresh:     *fresh,
-		TracePath: *trace,
-		Live:      liveSeat,
+		Dir:        *dir,
+		Seats:      room,
+		ASCII:      *ascii || os.Getenv("TELLTALE_ASCII") != "",
+		NoTitle:    *noTitle,
+		Write:      !*read,
+		Auto:       *auto,
+		Headroom:   *headroom,
+		BriefPath:  *brief,
+		Resume:     *resume,
+		Fresh:      *fresh,
+		TracePath:  *trace,
+		Live:       liveSeat,
+		SharedTree: *sharedTree,
 
 		RecordPath:  *record,
 		ReplayPath:  *replay,

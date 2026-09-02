@@ -90,6 +90,8 @@ table, followed by the full claim each of your own seats is making.
 | `unsandboxed` | **Nothing restricts this vendor at the OS level** — measured, not assumed. Treat the column as able to change your files. It deliberately does not open with `ro:`, because a reader scanning four headers takes in the prefix before the qualifier. |
 | `WRITES` | The room can write — the default. This column may edit and run things in the workspace. |
 | `gated` | The room can write, and this seat **asks first**: `y` approves, `n` denies, and nothing runs until you answer. Only the seat driven as a live process can be asked; the others say `WRITES` rather than implying they can. |
+| `wt: seat/codex` | This seat's process runs in **its own git worktree** on that branch, a sibling of the workspace. The default for every writing seat; `/adopt` merges what you keep, `/hand` passes it on. |
+| `shared tree` | This seat's process runs in the workspace itself. By choice when the badge is plain (a read room, `--shared-tree`); with `⚠` and a reason (`not a git repo`, `worktree refused`) when the room wanted to give it a worktree and could not. |
 
 Two of those need the same answer to the obvious follow-up — *must they stay that way?*
 
@@ -463,6 +465,71 @@ a turn you cannot explain and you get *that* turn, not the next one. `/trace off
 the room keeps measuring; bare `/trace` reports. Council never picks the path: that is what
 keeps `room.json` the only file it writes on its own initiative.
 
+## A writing seat gets its own worktree, and the room merges what you keep
+
+**In a writing room every seat works in its own git worktree, cut once and reused.** The
+first writing brief to Codex cuts `<repo>-seat-codex` beside the workspace on branch
+`seat/codex`, from the room's HEAD; the seat's process runs *there*, and every later brief
+to Codex runs there too. Five writers in one tree are not five answers — that was already
+the race's founding rule — and now that seats answer concurrently, two writers in one tree
+would be one trampled tree. Only the seat driven as a live process can be asked before a
+write; the other four act unasked, so the containment has to be structural rather than a
+card. A read room keeps the shared tree, because nothing in it writes, and so does a
+`/flow` read hop in a write room. `--shared-tree` is the opt-out: the older room, every
+seat writing into the workspace.
+
+**The badge says which containment holds.** `wt: seat/codex` on a column whose process
+runs in its own worktree; `shared tree` on one that runs in the workspace by choice. A
+worktree the room *could not* cut is a stated fallback, never a silent one: the badge reads
+`⚠ shared tree · not a git repo` or `⚠ shared tree · worktree refused`, the notice carries
+git's own sentence when it happens, and the `?` postures page carries the reason in full.
+At a three-seat column's width the reason sheds before the word and the mark stays —
+`⚠ shared tree` — because a clipped reason is not a reason. Nothing is drawn before a
+seat's first dispatch: no process, no directory, no claim.
+
+**Cutting a tree takes a moment, and the room stays a room.** The footer names the step —
+`worktree: preparing worktree for codex…` — with a spinner and no count, the seats are cut
+one at a time, and **ctrl+c stops the setup** and hands the brief back; a tree already cut
+is kept and reused. A tree left by an earlier room is found by name and reused, and the
+notice says so; a directory at that name that is *not* the seat's worktree is refused by
+name, and that seat runs in the shared tree. The trees are kept until you delete them
+(`git worktree remove`), exactly as a race's are.
+
+**`/adopt <seat>` takes a seat's work the way it takes a racer's.** After an ordinary turn,
+`/adopt codex` arms the same card — `git merge --no-ff seat/codex` onto a fresh
+`adopt/seat-codex`, cut from where the room stands — refuses a dirty room and an empty
+branch exactly as a race adopt does, and then **resets the seat's tree and branch onto the
+new HEAD**, so Codex's next brief starts from the integrated tree rather than re-offering
+what you already took. When a seat's current turn is a race attempt, `/adopt` takes the
+arena branch, because that is the block on the column; once a later turn has cleared it,
+the seat branch is what the verb reaches. `/adopt claude +codex helper.go` works across
+two seat branches on `adopt/seat-claude+codex`, with the same path refusals; the donor's
+tree is not reset, since only its named paths were taken. `/arena record` counts seat
+adopts on their own line, apart from every race figure and inside no rate: a seat adopt
+takes one seat's work with no competing attempt, so it is not a verdict.
+
+**`/hand <to> <from>` gives one seat another seat's work.** `/hand claude codex` puts
+Codex's whole contribution — the diff stat and the patch against the point its branch
+parted from the room — into the composer draft addressed `@claude`, fenced as measured git
+output with the worktree path and the branch named, so the seat reading it knows the code
+is not in its own directory. It is a draft: add the sentence that says what to do with it,
+and `enter` sends it like any other brief. A patch too big for the composer is cut at a
+hunk boundary and the closing fence says how many lines crossed and that `y` on the column
+copies the whole. It refuses, by name, a seat still on a turn, a seat with nothing to
+hand, and a seat with no worktree at all.
+
+**`/flow` fans with `&`, and the next hop waits on all of them.** `/flow @codex refactor
+the poller & @grok write the docs -> @claude review both` runs the two joined hops at once
+on their own seats and dispatches the third only when both have landed; the joined hop
+receives each finished predecessor's reply as its own labelled fence, the way a rebuttal
+does. The header names the whole stage — `hop 1/2 @codex & @grok` — and the notice says
+what the join is still waiting on. Every existing rule holds: only the literal `/flow`
+prefix makes a chain, only `write:<path>` confers write authority, a hop reaches its own
+seat and no other, and a busy seat stops the chain by name. Two rules a fan adds: a seat
+cannot take two hops of one stage, and a stage runs at one posture — every hop declares
+`write:`, or none does — so one `y` releases the stage and the card names every target.
+An ampersand inside a task (`fix a & b`) stays prose; only `& @seat` fans.
+
 ## The race: /arena
 
 **`/arena <brief>` races one brief across every seated vendor, each attempt in its own git
@@ -743,6 +810,9 @@ writes without asking will not detach; [design.md §7.29](design.md), and §7.30
 and Linux), `--live claude` (seat a pane showing claude's own terminal screen beside the
 measured seats; display only, and nothing on it is read as a number; [design.md
 §9.53](design.md)). `telltale council replay-check <file>` reviews a recording without opening it.
+nothing — writing is the default), `--shared-tree` (writing seats share the workspace
+instead of each getting its own worktree; the column badge says which holds), `--ascii`,
+`--no-title`.
 
 `--vendor <list>` decides who is in the room: `all` keeps every detected seat on screen
 including the ones that cannot be driven, and a comma list (`--vendor claude,codex`) seats

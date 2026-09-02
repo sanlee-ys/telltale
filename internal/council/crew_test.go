@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
-	"github.com/sanlee-ys/telltale/internal/council/vendors"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
@@ -80,15 +79,6 @@ func landed(c *Column, phase Phase, at time.Time) {
 // tests that stop a one-shot seat swap its handle for a recordedKill first.
 func crewRoom(t *testing.T) *Model {
 	t.Helper()
-	// The crew tests stop one-shot seats through their process handles
-	// (fakeHandles), and only a batch shape has one. Since the live seats
-	// landed (design.md §9.57) the registry seats codex, grok and antigravity
-	// as long-lived processes, so this room pins the batch registry the way
-	// seatshape_test.go does: the turn mechanics under test are the same for
-	// both shapes, and the handle is the measurable thing a kill leaves.
-	real := vendors.Registry
-	vendors.Registry = vendors.FallbackRegistry
-	t.Cleanup(func() { vendors.Registry = real })
 	m := flowRoom(t, true)
 	m.st.Width, m.st.Height = 120, 24
 	m.st.Mode = ModeComposing

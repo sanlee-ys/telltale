@@ -267,10 +267,15 @@ func spawnPosture(v vendors.Vendor, p vendors.Posture) vendors.Posture {
 func (m *Model) seatProcess(v vendors.Vendor, c *Column) (*seatProc, string, error) {
 	existing, had := m.procs[c.Vendor]
 	want := spawnPosture(v, m.seatPosture())
+	// The directory this seat works in for THIS dispatch: its own worktree in
+	// a writing room, the workspace otherwise (seatDir, §9.55). A process
+	// pinned to the other one cannot serve the turn, for the same measured
+	// reason a /cd cannot redirect one — cwd is fixed at spawn.
+	dir := m.seatDir(c.Vendor)
 	moved := false
 	repostured := false
 	if had && existing.sess.Alive() {
-		if sameDir(existing.dir, m.st.Workspace) && existing.posture == want {
+		if sameDir(existing.dir, dir) && existing.posture == want {
 			return existing, "", nil
 		}
 		// Two reasons a live process cannot serve this turn, and one remedy.
@@ -288,7 +293,7 @@ func (m *Model) seatProcess(v vendors.Vendor, c *Column) (*seatProc, string, err
 		// forbid: the column would say READ while the live process still held
 		// the write flags it was launched with. Respawning costs one process and
 		// carries the thread across on the same measured --resume composition.
-		moved = !sameDir(existing.dir, m.st.Workspace)
+		moved = !sameDir(existing.dir, dir)
 		repostured = !moved
 		existing.sess.Kill()
 		m.dropProcess(c.Vendor)
@@ -318,7 +323,7 @@ func (m *Model) seatProcess(v vendors.Vendor, c *Column) (*seatProc, string, err
 	if err != nil {
 		return nil, "", err
 	}
-	p := &seatProc{sess: sess, wire: wire, resumed: resumed, dir: m.st.Workspace, posture: want}
+	p := &seatProc{sess: sess, wire: wire, resumed: resumed, dir: dir, posture: want}
 	m.procs[c.Vendor] = p
 
 	if resumed {
@@ -337,6 +342,17 @@ func (m *Model) seatProcess(v vendors.Vendor, c *Column) (*seatProc, string, err
 		return p, "this hop needs a different posture — this seat is starting a new session for it", nil
 	}
 	if moved {
+		// Three moves, three sentences, because they are three facts (§4a.1).
+		// A seat that stepped into its own worktree, or back out of it into
+		// the shared tree (a /read, or --shared-tree's absence on a relaunch),
+		// did not move because the ROOM moved, and a note saying the room had
+		// would send the operator looking for a /cd nobody typed.
+		if st, ok := m.seatTrees[c.Vendor]; ok && sameDir(st.tree, dir) {
+			return p, "this seat now works in its own worktree, " + st.branch + " — starting a new session there", nil
+		}
+		if st, ok := m.seatTrees[c.Vendor]; ok && sameDir(dir, m.st.Workspace) && sameDir(st.tree, existing.dir) {
+			return p, "this seat is back in the shared tree — starting a new session there", nil
+		}
 		// The move itself was announced by /cd; what needs saying is that THIS
 		// seat had no thread to carry across, so its history starts here.
 		return p, "the room moved — this seat is starting a new session there", nil
@@ -361,8 +377,12 @@ func (m *Model) spawnSeat(v vendors.Vendor, c *Column, resumeID string, want ven
 	// The ROOM's context, never the turn's. A turn that is cancelled must not
 	// take this process with it — that is the entire point of keeping it — so
 	// only quitting the room cancels this.
+	// Where the process runs: the seat's own worktree in a writing room, the
+	// workspace otherwise (seatDir, §9.55) — the one read every spawn path
+	// shares, so the badge and the argv cannot name different directories.
+	dir := m.seatDir(c.Vendor)
 	if cv, ok := v.(vendors.Conversational); ok {
-		spec, proto, err := cv.Open(m.st.Workspace, c.Binary, resumeID, want)
+		spec, proto, err := cv.Open(dir, c.Binary, resumeID, want)
 		if err != nil {
 			return nil, nil, false, err
 		}
@@ -394,13 +414,13 @@ func (m *Model) spawnSeat(v vendors.Vendor, c *Column, resumeID string, want ven
 	// already re-briefed for that reason — and a replacement that came back
 	// unscreened while the badge still said the guard was wired would be the
 	// quietest false claim in the room.
-	spec, err := pv.Session(m.st.Workspace, c.Binary, m.hooks.Path, want)
+	spec, err := pv.Session(dir, c.Binary, m.hooks.Path, want)
 	if err != nil {
 		return nil, nil, false, err
 	}
 	resumed := false
 	if resumeID != "" {
-		if rs, rerr := pv.SessionResume(m.st.Workspace, c.Binary, m.hooks.Path,
+		if rs, rerr := pv.SessionResume(dir, c.Binary, m.hooks.Path,
 			resumeID, want); rerr == nil {
 			spec = rs
 			resumed = true

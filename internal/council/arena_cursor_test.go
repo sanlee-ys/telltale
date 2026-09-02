@@ -317,12 +317,16 @@ func TestCancelAndTeardownKillTheRacer(t *testing.T) {
 // here — and which seats those are is read off the registry rather than
 // counted by hand, because the count moved once already.
 func TestARaceBriefCarriesTheConductLineAndAnOrdinaryBriefDoesNot(t *testing.T) {
-	_, log, _ := arenaCursorRace(t)
+	m, log, _ := arenaCursorRace(t)
 
+	// Counted over the seats IN THIS ROOM, not over the registry: the room
+	// seats four of the five vendors, and which of them race one-shot is a
+	// property of the registry the room was built under (flowRoom pins the
+	// batch one since §9.57), so the expectation is read off both together.
 	reg := vendors.Registry()
 	want := 0
-	for _, v := range reg {
-		if _, conversational := v.(vendors.Conversational); !conversational {
+	for _, c := range m.st.Columns {
+		if _, conversational := reg[c.Vendor].(vendors.Conversational); !conversational {
 			want++
 		}
 	}

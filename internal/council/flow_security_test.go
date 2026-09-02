@@ -253,6 +253,17 @@ func specPrompt(spec runner.Spec) string {
 // flowRoom is a full four-seat room with no terminal and no child processes.
 func flowRoom(t *testing.T, write bool) *Model {
 	t.Helper()
+	// The rooms built here drive codex, antigravity and grok as ONE-SHOT seats:
+	// the tests stop them by their process handles, read the prompt off the
+	// argv the batch shape carries, and count one spawn per turn. Since the
+	// live seats landed (design.md §9.57) the registry seats those three as
+	// long-lived processes, so this builder pins the batch registry for the
+	// test's life, the way seatshape_test.go does. Claude and Cursor have no
+	// fallback and keep their live shapes, which is what the ACP and stream
+	// tests over this same room rely on.
+	realReg := vendors.Registry
+	vendors.Registry = vendors.FallbackRegistry
+	t.Cleanup(func() { vendors.Registry = realReg })
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	var cols []Column

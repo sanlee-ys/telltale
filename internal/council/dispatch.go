@@ -216,6 +216,13 @@ func (m *Model) dispatch() tea.Cmd {
 		m.st.Notice = "a race is already being prepared — ctrl+c stops it"
 		return nil
 	}
+	if m.seatPrep != nil {
+		// The same window for a seat's worktree being cut (seattree.go,
+		// §9.55): the brief it stands in front of has not spawned, and a
+		// second dispatch would cut names from the same repository under it.
+		m.st.Notice = "worktrees are being prepared for a brief — ctrl+c stops it"
+		return nil
+	}
 	activeFlow := m.flowChain != nil && m.flowChain.Current() != nil && m.flowDraft != ""
 	if m.st.Draft == "" && !activeFlow {
 		m.st.Notice = "nothing to dispatch: the brief is empty"
@@ -246,7 +253,8 @@ func (m *Model) dispatch() tea.Cmd {
 			m.flowWriteArmed = false
 		}
 		curr := m.flowChain.Current()
-		if curr == nil {
+		stage := m.flowChain.Stage()
+		if curr == nil || len(stage) == 0 {
 			m.st.Notice = "flow has no current step"
 			m.flowChain = nil
 			m.clearFlowMarker()
@@ -256,13 +264,19 @@ func (m *Model) dispatch() tea.Cmd {
 		// return without dispatching — a blocked write hop, a refused one — and
 		// leaving the marker on the PREVIOUS hop would point at the seat that
 		// already finished while the room waits on this one.
-		m.st.FlowHop = m.flowChain.CurrentIndex + 1
-		m.st.FlowSteps = len(m.flowChain.Steps)
+		//
+		// The marker counts STAGES (§9.55): a fan of two hops is one hop on
+		// the header, named by every seat in it (FlowSeats), because the two
+		// run as one dispatch and land as one join.
+		m.st.FlowHop = m.flowChain.StageN()
+		m.st.FlowSteps = m.flowChain.Stages()
 		m.st.FlowVendor = curr.Vendor
-		// Posture comes from the STEP. A hop with no declared target is a read
+		m.st.FlowSeats = m.flowChain.FanLabel()
+		// Posture comes from the STAGE. A hop with no declared target is a read
 		// hop even in a --write room, and this is set before any of the paths
-		// below can spawn anything.
-		m.flowReadHop = !curr.RequiresWriteGate()
+		// below can spawn anything. One posture per stage is what the parser
+		// guarantees: it refuses a stage that mixes write and read hops.
+		m.flowReadHop = !m.flowChain.StageWrites()
 
 		// A write hop in a READ room is refused, not downgraded. Running it
 		// read-only and reporting "returned" would be the room claiming to have
@@ -280,25 +294,26 @@ func (m *Model) dispatch() tea.Cmd {
 		// whole sweep exists to remove. It reports the POSTURE, not the launch
 		// argv, because /read reaches this state too and "opened with --read"
 		// would then be false as well as useless.
-		if curr.RequiresWriteGate() && !m.st.Write {
+		if m.flowChain.StageWrites() && !m.st.Write {
 			if curr.State == FlowStateQueued {
 				_ = m.flowChain.MarkAwaitingWrite("the room is read-only; write hops need a room that can write — /write lets it")
 			}
 			m.flowWritePending = false
 			m.flowWriteArmed = false
-			m.st.Notice = fmt.Sprintf("flow blocked at step %d: @%s → %s is a write hop and the room is read-only — /write lets it, between turns",
-				m.flowChain.CurrentIndex+1, curr.Vendor, curr.Path)
+			m.st.Notice = fmt.Sprintf("flow blocked at step %d: %s is a write hop and the room is read-only — /write lets it, between turns",
+				m.flowChain.StageN(), flowWriteTargets(stage))
 			return nil
 		}
 
 		// Pre-dispatch write gate: Path marks write authority. Do not spawn the
-		// seat until the user authorizes (y).
-		if curr.RequiresWriteGate() && !m.flowWriteArmed {
+		// seat until the user authorizes (y). A fanned stage is one gate naming
+		// every write hop in it, because one y releases one dispatch.
+		if m.flowChain.StageWrites() && !m.flowWriteArmed {
 			if curr.State == FlowStateQueued {
 				_ = m.flowChain.MarkAwaitingWrite("awaiting user authorization before write hop runs")
 			}
 			m.flowWritePending = true
-			m.st.Notice = fmt.Sprintf("flow write gate: y authorizes @%s → %s · n cancels", curr.Vendor, curr.Path)
+			m.st.Notice = "flow write gate: y authorizes " + flowWriteTargets(stage) + " · n cancels"
 			return nil
 		}
 		if curr.State == FlowStateBlocked && m.flowWriteArmed {
@@ -307,44 +322,50 @@ func (m *Model) dispatch() tea.Cmd {
 				return nil
 			}
 		}
-		// A hop goes to ONE seat and waits on that seat alone (§9.54): the next
-		// hop is dispatched the moment the previous hop's seat lands, whatever
-		// the rest of the room is doing. What a hop cannot do is take a seat
-		// that is still answering something else — an ordinary brief the
-		// operator sent to it while the earlier hop ran. That is refused here,
-		// before Start would mark the step running, and it ends the chain
-		// rather than queueing behind the seat: a chain that dispatched itself
-		// later, when a seat happened to free up, would be the room acting on
-		// its own at a moment nobody chose, which is the exact thing the hop
-		// marker on the header exists to prevent (§9.16). The refusal names the
-		// seat and the turn it is on, and the whole chain is retired so the
-		// next enter is the operator's brief and not the corpse's (§9.35).
-		if ts := m.turnOf(curr.Vendor); ts != nil {
-			m.st.Notice = fmt.Sprintf("flow stopped at hop %d/%d: @%s is still on turn %d — ctrl+c on its column cancels that, then send the chain again",
-				m.flowChain.CurrentIndex+1, len(m.flowChain.Steps), curr.Vendor, ts.n)
-			m.endFlowChain()
-			return nil
+		// A hop goes to its own seats and waits on those seats alone (§9.54):
+		// the next stage is dispatched the moment the previous stage's last
+		// seat lands, whatever the rest of the room is doing. What a hop cannot
+		// do is take a seat that is still answering something else — an
+		// ordinary brief the operator sent to it while the earlier hop ran.
+		// That is refused here, before Start would mark the step running, and
+		// it ends the chain rather than queueing behind the seat: a chain that
+		// dispatched itself later, when a seat happened to free up, would be
+		// the room acting on its own at a moment nobody chose, which is the
+		// exact thing the hop marker on the header exists to prevent (§9.16).
+		// The refusal names the seat and the turn it is on, and the whole
+		// chain is retired so the next enter is the operator's brief and not
+		// the corpse's (§9.35). A fan is checked seat by seat: one busy seat
+		// stops the whole stage, because a stage that ran two of its three
+		// hops would not be the stage the operator typed.
+		for _, s := range stage {
+			if ts := m.turnOf(s.Vendor); ts != nil {
+				m.st.Notice = fmt.Sprintf("flow stopped at hop %d/%d: @%s is still on turn %d — ctrl+c on its column cancels that, then send the chain again",
+					m.flowChain.StageN(), m.flowChain.Stages(), s.Vendor, ts.n)
+				m.endFlowChain()
+				return nil
+			}
 		}
-		if err := m.flowChain.Start(m.st.Workspace); err != nil {
-			m.st.Notice = "flow start error: " + err.Error()
-			// The whole chain, marker included — this used to nil the chain by
-			// hand and leave the header claiming a hop, the half-cleared state
-			// endFlowChain exists to make unrepresentable (§9.35).
+		route = Route{}
+		for _, s := range stage {
+			route.Vendors = append(route.Vendors, s.Vendor)
+		}
+		if m.seatedIn(route) == 0 {
+			// Every seat this stage names is out of the room. Ended here rather
+			// than left Running, so the next enter is the operator's brief.
+			m.st.Notice = "none of the seats this hop names are seated — flow ended"
 			m.endFlowChain()
 			return nil
 		}
 		m.flowWriteArmed = false
 		m.flowWritePending = false
-		curr = m.flowChain.Current()
-		route = Route{Vendors: []model.VendorID{curr.Vendor}}
-		prompt = strings.TrimSpace(curr.Task)
-		if prompt == "" {
-			prompt = curr.Verb
+		// A writing stage in a writing room may need seats' worktrees cut first
+		// (seattree.go, §9.55). The cut runs off the loop and the stage is
+		// launched when it lands; Start runs THEN, so a write hop's baseline is
+		// read in the tree its seat will actually write into.
+		if need := m.seatsNeedingTrees(route); len(need) > 0 {
+			return m.beginSeatSetup(need, m.launchFlowStage)
 		}
-		if m.flowCarry != "" {
-			prompt += "\n\n" + m.flowCarry
-			m.flowCarry = ""
-		}
+		return m.launchFlowStage()
 	} else {
 		m.endFlowChain()
 		if brief, ok := parseCommand(m.st.Draft, "/arena"); ok {
@@ -437,7 +458,16 @@ func (m *Model) dispatch() tea.Cmd {
 		// for a race the room was going to turn down anyway.
 		return m.beginArenaSetup(route, prompt)
 	}
-	return m.sendTurn(route, prompt, nil)
+	// A writing brief in a writing room may need a seat's worktree cut before
+	// it spawns (seattree.go, §9.55). The cut runs off the loop, exactly as a
+	// race's does, and the brief is sent when it lands; a seat that already
+	// has its tree — every turn after its first — spawns here, synchronously,
+	// as it always did.
+	launch := func() tea.Cmd { return m.sendTurn(route, prompt, nil) }
+	if need := m.seatsNeedingTrees(route); len(need) > 0 {
+		return m.beginSeatSetup(need, launch)
+	}
+	return launch()
 }
 
 // busySeats names every seat still answering, with the turn it is on, in the
@@ -487,6 +517,11 @@ func (m *Model) seatBusy(c *Column) string {
 // every clock this turn will render.
 func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea.Cmd {
 	reg := vendors.Registry()
+	// A fanned flow stage hands each seat its own task (launchFlowStage,
+	// §9.55). Consumed here, on the way in, so no later dispatch can inherit
+	// a prompt meant for a stage that already ran.
+	fan := m.fanPrompts
+	m.fanPrompts = nil
 
 	// The seats this brief names that are still answering an earlier one
 	// (§9.54). Decided BEFORE anything below moves, because every one of the
@@ -580,6 +615,14 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 	// asked about — through the one sanitize choke point everything else on
 	// State goes through. Not redacted: see promptEcho.
 	echo := sanitize(prompt)
+	// Per seat when a stage fans: the column's echo is the task THAT seat was
+	// handed, not the first hop's.
+	echoFor := func(v model.VendorID) string {
+		if p, ok := fan[v]; ok {
+			return sanitize(p)
+		}
+		return echo
+	}
 	next := ts.n
 
 	// Worktrees were added BEFORE any seat spawns, and the base SHA read once so
@@ -681,10 +724,22 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 		}
 
 		// Each vendor may receive a DIFFERENT prompt on a quoting turn, since
-		// each one is shown the others' answers and not its own.
+		// each one is shown the others' answers and not its own — and on a
+		// fanned stage, where each hop is its own task.
 		vendorPrompt := prompt
+		if p, ok := fan[c.Vendor]; ok {
+			vendorPrompt = p
+		}
 		if quoting {
-			vendorPrompt = BuildRebuttalPrompt(prompt, *c, priorReplies)
+			vendorPrompt = BuildRebuttalPrompt(vendorPrompt, *c, priorReplies)
+		}
+		// Where this seat's process is about to run, stamped on the column
+		// (seattree.go, §9.55) — the badge that says which containment holds.
+		// Stamped before the spawn, from the same read the spawn uses
+		// (seatDir), so the two cannot disagree. A racer's is its arena tree,
+		// stamped below once that tree is known to exist.
+		if !ts.arena {
+			c.Containment = m.containmentFor(c.Vendor)
 		}
 
 		// A seat with a long-lived process is handed the turn on the stdin it
@@ -717,6 +772,7 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 				failures = append(failures, dispatchFailedMsg{c.Vendor, "arena: " + why})
 				continue
 			}
+			c.Containment = ContainClaim{Level: ContainSeatTree, Branch: arenaBranch(ts.arenaRaceN, c.Vendor)}
 			// The one turn shape where the room adds words to a brief. Every
 			// racer gets the SAME constant line ahead of the same brief, so
 			// the comparison the race exists for is untouched — see
@@ -816,7 +872,7 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 		// The finished turn goes to history and everything describing it is
 		// reset — the line that used to be five assignments erasing the
 		// previous answer off the screen.
-		c.startTurn(next, echo, quoting)
+		c.startTurn(next, echoFor(c.Vendor), quoting)
 		c.Phase = PhaseStreaming
 		// GranUnknown lands in Waiting alongside GranFinalOnly, and the
 		// asymmetry is the point. PhaseStreaming asserts "output is arriving and
@@ -846,7 +902,7 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 			// previous answer is filed with the turn it belongs to rather than
 			// left under the new turn's separator, where it would read as this
 			// brief's reply with someone else's failure note stapled underneath.
-			c.startTurn(next, echo, quoting)
+			c.startTurn(next, echoFor(c.Vendor), quoting)
 			c.Phase = PhaseFailed
 			c.Note = f.note
 			// Terminal without ever being live, so this is the one retirement
@@ -1060,9 +1116,12 @@ func itoa(i int) string { return strconv.Itoa(i) }
 // inspect an invocation. What the caller does with it is §9.43's comparison.
 func (m *Model) specFor(v vendors.Vendor, c *Column, prompt string) (runner.Spec, string, error) {
 	p := m.posture()
+	// The directory the process runs in: the seat's own worktree in a writing
+	// room, the workspace otherwise (seatDir, §9.55).
+	dir := m.seatDir(c.Vendor)
 	if id := m.sessions[c.Vendor]; id != "" {
 		// Resume: the brief is already in this vendor's own history.
-		spec, err := v.NextTurn(prompt, m.st.Workspace, c.Binary, id, p)
+		spec, err := v.NextTurn(prompt, dir, c.Binary, id, p)
 		if err == nil {
 			return spec, id, nil
 		}
@@ -1070,7 +1129,7 @@ func (m *Model) specFor(v vendors.Vendor, c *Column, prompt string) (runner.Spec
 	// First turn for THIS vendor, so it gets the operating context. Per vendor
 	// rather than per room: a seat added to a later turn is still a stranger,
 	// and would otherwise be the only one guessing.
-	spec, err := v.FirstTurn(m.brief.Apply(prompt), m.st.Workspace, c.Binary, p)
+	spec, err := v.FirstTurn(m.brief.Apply(prompt), dir, c.Binary, p)
 	return spec, "", err
 }
 
@@ -1753,22 +1812,88 @@ func (m *Model) finishColumn(c *Column, phase Phase) {
 	m.turnColumnFinished(c.Vendor)
 }
 
-// finishFlowHop records harness-observed completion of the active flow seat.
+// flowWriteTargets names a stage's write hops for the gate and the refusal:
+// `@codex → docs/a.md, @grok → docs/b.md`. One hop reads exactly as it did
+// before stages existed.
+func flowWriteTargets(stage []*FlowStep) string {
+	var parts []string
+	for _, s := range stage {
+		if s.RequiresWriteGate() {
+			parts = append(parts, "@"+string(s.Vendor)+" → "+s.Path)
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+// launchFlowStage starts the current stage and spawns it: every hop's seat at
+// once, each with its own task, the carry from the previous stage fenced under
+// each (§9.55). Reached from dispatch directly, or from the seat setup that
+// stood in front of it.
+//
+// Start runs here rather than in dispatch so that a write hop's baseline is
+// captured in the directory its seat runs in (StartIn with seatDir) — which,
+// in a writing room, is a worktree that may only just have been cut.
+func (m *Model) launchFlowStage() tea.Cmd {
+	fc := m.flowChain
+	if fc == nil {
+		return nil
+	}
+	stage := fc.Stage()
+	if len(stage) == 0 {
+		return nil
+	}
+	if err := fc.StartIn(m.seatDir); err != nil {
+		m.st.Notice = "flow start error: " + err.Error()
+		// The whole chain, marker included — this used to nil the chain by
+		// hand and leave the header claiming a hop, the half-cleared state
+		// endFlowChain exists to make unrepresentable (§9.35).
+		m.endFlowChain()
+		return nil
+	}
+	route := Route{}
+	prompts := map[model.VendorID]string{}
+	for _, s := range stage {
+		route.Vendors = append(route.Vendors, s.Vendor)
+		p := strings.TrimSpace(s.Task)
+		if p == "" {
+			p = s.Verb
+		}
+		if m.flowCarry != "" {
+			p += "\n\n" + m.flowCarry
+		}
+		prompts[s.Vendor] = p
+	}
+	m.flowCarry = ""
+	if len(stage) > 1 {
+		// Each hop of a fan carries its own task, so the one prompt sendTurn
+		// takes is overridden per seat (Model.fanPrompts, consumed there).
+		m.fanPrompts = prompts
+	}
+	return m.sendTurn(route, prompts[stage[0].Vendor], nil)
+}
+
+// finishFlowHop records harness-observed completion of one flow seat.
 // Non-write hops become Returned (not approved). Write hops (Path set) must
 // already have been user-gated before dispatch; on PhaseDone we verify the disk
 // receipt and MarkPublished or MarkFailed. Artifact save failure fails the hop.
+//
+// Per SEAT, per stage (§9.55): the landing column finds its own hop in the
+// current stage (StepFor), so a fan's seats retire one at a time, each adding
+// its fenced reply to the carry, and the chain advances only when the stage's
+// last seat has landed (StageDone) — that is the join.
 func (m *Model) finishFlowHop(c *Column) {
 	if m.flowChain == nil || c.Phase != PhaseDone || strings.TrimSpace(c.Body) == "" {
 		return
 	}
-	curr := m.flowChain.Current()
-	if curr == nil || c.Vendor != curr.Vendor || curr.State != FlowStateRunning {
+	step := m.flowChain.StepFor(c.Vendor)
+	if step == nil || step.State != FlowStateRunning {
 		return
 	}
+	hop := m.flowChain.StageN()
 
 	store, err := NewArtifactStore()
 	if err != nil {
-		_ = m.flowChain.MarkFailed("artifact store: " + err.Error())
+		_ = m.flowChain.MarkFailedAt(step, "artifact store: "+err.Error())
 		m.st.Notice = "flow hop failed: artifact store: " + err.Error()
 		m.endFlowChain()
 		return
@@ -1779,47 +1904,37 @@ func (m *Model) finishFlowHop(c *Column) {
 	}
 	path, err := store.SaveArtifact(sessID, c.TurnN, c.Vendor, c.Body, c.Prompt)
 	if err != nil {
-		_ = m.flowChain.MarkFailed("artifact save: " + err.Error())
+		_ = m.flowChain.MarkFailedAt(step, "artifact save: "+err.Error())
 		m.st.Notice = "flow hop failed: " + err.Error()
 		m.endFlowChain()
 		return
 	}
 	m.st.Notice = "artifact saved: " + path
 
-	if curr.RequiresWriteGate() {
-		receipt := VerifyReceipt(m.st.Workspace, curr)
-		curr.Receipt = receipt
+	if step.RequiresWriteGate() {
+		// Verified where the seat actually wrote: its own worktree in a
+		// writing room (seatDir), the workspace otherwise. A receipt read in
+		// the workspace for a file the seat wrote into its tree would fail a
+		// write that landed.
+		receipt := VerifyReceipt(m.seatDir(c.Vendor), step)
+		step.Receipt = receipt
 		if !receipt.Verified {
-			_ = m.flowChain.MarkFailed(receipt.Detail)
+			_ = m.flowChain.MarkFailedAt(step, receipt.Detail)
 			m.st.Notice = joinNotice(m.st.Notice, "publish failed: "+receipt.Detail)
 			m.endFlowChain()
 			return
 		}
-		if err := m.flowChain.MarkPublished(receipt); err != nil {
+		if err := m.flowChain.MarkPublishedAt(step, receipt); err != nil {
 			m.st.Notice = joinNotice(m.st.Notice, err.Error())
 			return
 		}
 		m.st.Notice = joinNotice(m.st.Notice, "flow hop published ("+receipt.Detail+")")
 	} else {
-		if err := m.flowChain.MarkReturned(); err != nil {
+		if err := m.flowChain.MarkReturnedAt(step); err != nil {
 			m.st.Notice = joinNotice(m.st.Notice, err.Error())
 			return
 		}
-		m.st.Notice = joinNotice(m.st.Notice, fmt.Sprintf("flow hop %d returned (@%s %s) — not an approval", m.flowChain.CurrentIndex+1, curr.Vendor, curr.Verb))
-	}
-
-	// `s` was pressed while this hop ran. The hop itself finished on its own
-	// terms — artifact saved, receipt verified, Returned or Published exactly as
-	// recorded above — and the chain ends here instead of handing off. Checked
-	// AFTER the hop's record is written, because stopping is about the NEXT hop
-	// and must not cost this one its receipt; and BEFORE the artifact is read
-	// back, because a stopped chain has no successor to feed (§9.35).
-	if m.st.FlowStop {
-		hop, total := m.flowChain.CurrentIndex+1, len(m.flowChain.Steps)
-		m.st.Notice = joinNotice(m.st.Notice, fmt.Sprintf(
-			"flow stopped after hop %d/%d — %s not dispatched", hop, total, hopsWord(total-hop)))
-		m.endFlowChain()
-		return
+		m.st.Notice = joinNotice(m.st.Notice, fmt.Sprintf("flow hop %d returned (@%s %s) — not an approval", hop, step.Vendor, step.Verb))
 	}
 
 	// This hop is already finished — Returned or Published — so a failure reading
@@ -1831,12 +1946,46 @@ func (m *Model) finishFlowHop(c *Column) {
 	// carrying it hands the next seat a session id and a prompt hash as though
 	// the previous seat had written them — measured on a live chain, where codex
 	// answered with the artifact's PromptSHA256-8 quoted back.
+	//
+	// Read back per seat and APPENDED to the carry, in landing order: the
+	// stage that follows a fan receives every predecessor's reply, each in its
+	// own labelled fence. Only this stage's replies — the carry was emptied
+	// when this stage launched, so older artifacts never accumulate.
 	artifact, err := store.LoadArtifactBody(sessID, c.TurnN, c.Vendor)
 	if err != nil {
 		m.st.Notice = joinNotice(m.st.Notice, "flow stopped: cannot read this hop's artifact back: "+err.Error())
 		m.endFlowChain()
 		return
 	}
+	fence := FormatFencedArtifact(c.Label, c.TurnN, artifact)
+	if m.flowCarry == "" {
+		m.flowCarry = fence
+	} else {
+		m.flowCarry += "\n\n" + fence
+	}
+
+	if !m.flowChain.StageDone() {
+		// The join: another seat of this stage is still answering, and the
+		// next stage waits on it. The notice names what is still owed.
+		if left := m.flowChain.Unfinished(); left != nil {
+			m.st.Notice = joinNotice(m.st.Notice, "waiting on @"+string(left.Vendor)+" before hop "+itoa(hop+1))
+		}
+		return
+	}
+
+	// `s` was pressed while this stage ran. The stage itself finished on its
+	// own terms — artifacts saved, receipts verified, Returned or Published
+	// exactly as recorded above — and the chain ends here instead of handing
+	// off. Checked AFTER the stage's record is written, because stopping is
+	// about the NEXT hop and must not cost this one its receipt (§9.35).
+	if m.st.FlowStop {
+		total := m.flowChain.Stages()
+		m.st.Notice = joinNotice(m.st.Notice, fmt.Sprintf(
+			"flow stopped after hop %d/%d — %s not dispatched", hop, total, hopsWord(total-hop)))
+		m.endFlowChain()
+		return
+	}
+
 	hasNext, err := m.flowChain.Advance()
 	if err != nil {
 		m.st.Notice = joinNotice(m.st.Notice, "flow stopped: "+err.Error())
@@ -1852,7 +2001,6 @@ func (m *Model) finishFlowHop(c *Column) {
 		m.endFlowChain()
 		return
 	}
-	m.flowCarry = FormatFencedArtifact(c.Label, c.TurnN, artifact)
 	m.flowAdvancePending = true
 }
 
@@ -1865,6 +2013,7 @@ func (m *Model) finishFlowHop(c *Column) {
 // chain that no longer exists is the same lie one word longer.
 func (m *Model) clearFlowMarker() {
 	m.st.FlowHop, m.st.FlowSteps, m.st.FlowVendor = 0, 0, ""
+	m.st.FlowSeats = ""
 	m.st.FlowStop = false
 }
 
@@ -1886,6 +2035,7 @@ func (m *Model) endFlowChain() {
 	m.flowAdvancePending = false
 	m.flowWritePending = false
 	m.flowWriteArmed = false
+	m.fanPrompts = nil
 	m.clearFlowMarker()
 }
 
@@ -2186,9 +2336,11 @@ func (m *Model) turnColumnFinished(v model.VendorID) {
 	// brief landing while a hop streams is not the hop dying, and reading it
 	// as one would end a chain that is still working.
 	if ts.flow && m.flowChain != nil && !m.flowAdvancePending {
-		curr := m.flowChain.Current()
-		if curr != nil && curr.State != FlowStateReturned && curr.State != FlowStatePublished {
-			hop, total := m.flowChain.CurrentIndex+1, len(m.flowChain.Steps)
+		// The first hop of the stage that did not finish, which on a fan is
+		// not always the first hop of the stage (§9.55).
+		curr := m.flowChain.Unfinished()
+		if curr != nil {
+			hop, total := m.flowChain.StageN(), m.flowChain.Stages()
 			verb := "stopped"
 			if cancelled {
 				verb = "cancelled"

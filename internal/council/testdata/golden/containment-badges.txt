@@ -1,7 +1,7 @@
-  council READ  │  ~/code/telltale                                             no turn yet  │  3/3 seated  │  no brief  
+  council ⚠ WRITE  │  ~/code/telltale                                          no turn yet  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ▌ ▸ 1 CC Claude Code  ────────  ○ idle  │    2 CX Codex  ─────────────  ○ idle  │    3 AG Antigravity  ───────  ○ idle  
-▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
+▌   WRITES  wt: seat/claude  tokens     │    WRITES  shared tree  final only    │    WRITES  ⚠ shared tree              
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -19,6 +19,6 @@
                                                                                                                         
 ▌ no turn dispatched yet.               │  no turn dispatched yet.              │  no turn dispatched yet.              
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
-  │  › /unseet codex_                                                                                                │  
-  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────  COMPOSE  ─╯  
-    ⚠ no command /unseet, leading space sends · /adopt /arena /cd /flow /hand /read /retry /seat /trace /unseat /write  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+                    ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-3 seat  │  i compose  │  ? help  │  q quit  
