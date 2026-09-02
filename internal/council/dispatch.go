@@ -939,6 +939,9 @@ func (m *Model) holdTurn(ts *turnState) {
 	for v := range ts.live {
 		m.turns[v] = ts
 	}
+	// The --record file sees every dispatch through this one writer of
+	// Model.turns (recording.go). A nil recorder is a no-op.
+	m.recordDispatch(ts)
 }
 
 // settledReply is what a rebuttal may quote from this column at THIS moment
@@ -2229,7 +2232,11 @@ func (m *Model) turnColumnFinished(v model.VendorID) {
 // every accidental launch — including one opened in the wrong directory and
 // immediately quit.
 func (m *Model) saveRoom() {
-	if m.st.Turn == 0 {
+	// A replay never writes room.json (replay.go): its turn counter is the
+	// recording's, and saving it would point the operator's next live room at
+	// a conversation that happened on another day, possibly on another
+	// machine.
+	if m.st.Turn == 0 || m.replay != nil {
 		return
 	}
 	sessions := make(map[model.VendorID]string, len(m.sessions))

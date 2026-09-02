@@ -1212,6 +1212,12 @@ type State struct {
 	// One parse, one source of truth, displayed and acted on.
 	Route Route
 
+	// HeadroomWarn is the used-percentage at or above which the routing cell
+	// names a seat's quota window before enter (quota.go, routeCell), from
+	// --headroom-warn. Zero means the flag's default, so a State a test types
+	// out by hand gets the same threshold a room opened with no flag gets.
+	HeadroomWarn int
+
 	// Turn counts dispatched turns, so the header can say which round this is.
 	// Turn 0 means nothing has been sent.
 	//
@@ -1420,6 +1426,17 @@ type State struct {
 	// ASCII mirrors the glyph set, so Render can pick a different affordance
 	// where a straight substitution does not work.
 	ASCII bool
+
+	// Replay reports that this room is a RECORDING being played back
+	// (replay.go, design.md §9.56): the columns are fed from a --record file,
+	// no vendor is running, and nothing typed here reaches one.
+	//
+	// On State because every frame has to say so — the header, each column's
+	// badge row and the footer all read it — and Render is pure over State.
+	// A replayed frame that could be mistaken for a live one would be the
+	// README's "invented recording" in a new form: a real run, shown as
+	// though it were happening now.
+	Replay bool
 
 	// Live is the seat whose pane draws a real terminal screen (§9.53).
 	//

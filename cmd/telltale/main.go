@@ -979,6 +979,18 @@ func runCouncil(args []string) error {
 		return council.KillHostedRoom(os.Stdout)
 	}
 
+	// `telltale council replay-check <file>` lists the identities a --record
+	// file carries — workspace, seats, session ids, tool lines — so the owner
+	// can review a capture before committing it (design.md §9.56, and the
+	// README's frame-review rule). A sub-noun like `ls`, and a READER like
+	// `ls`: it opens no room, starts nothing, and writes only stdout.
+	if len(args) > 0 && args[0] == "replay-check" {
+		if len(args) != 2 {
+			return errors.New("telltale council replay-check takes one argument: the --record file to review")
+		}
+		return council.ReplayCheck(args[1], os.Stdout)
+	}
+
 	// The one seam this change opens in an existing command. `host` is a
 	// SUB-NOUN, matching `hook cursor`, `events view` and `otel grok`, and it is
 	// routed before the flag set so that `telltale council host --pipe …` is not
@@ -1009,6 +1021,10 @@ func runCouncil(args []string) error {
 	resume := fs.Bool("resume", false, "reattach to the saved room (this is the default; the flag is kept for muscle memory)")
 	fresh := fs.Bool("fresh", false, "start a new room instead of reattaching to the saved one")
 	trace := fs.String("trace", "", "append each turn's measured clock — spawn, wait, stream — to this file")
+	// The routing cell's threshold (design.md §9.56). A percent the operator
+	// moves, because the default is council's own pick and not a vendor's
+	// statement; the cell prints the vendor's figure beside it either way.
+	headroom := fs.Int("headroom-warn", council.HeadroomWarnDefault, "the routing cell names a seat's quota window before enter once its reading is at or above this percent used")
 	// The way into a hosted room, and it is an OPT-IN flag rather than a change
 	// to the daily command (design.md §7.29). `telltale council` runs the
 	// single-process room and always has, so there is no host for a key in that
@@ -1017,8 +1033,25 @@ func runCouncil(args []string) error {
 	// its own surface.
 	host := fs.Bool("host", false, "open the room in a HOST process you can leave running: `/detach` walks away and the seats keep working, `telltale council` comes back (a read room only — a room that writes without asking will not detach)")
 	live := fs.String("live", "", "seat a pane showing this vendor's own terminal screen: display only, and a second process (claude)")
+	// The recording pair (design.md §9.56). --record is the one write council
+	// makes that carries content, and its flag text says where it may go;
+	// --replay opens a room that starts nothing. Both are opt-in, off by
+	// default, and refused together below, because a replay has no run to
+	// record.
+	record := fs.String("record", "", "write this room's event stream — every seat's output, each dispatch, each gate decision, with timing — to this new file for --replay. It carries the conversation: name a path outside ~/.telltale, and run `telltale council replay-check <file>` before sharing it")
+	replay := fs.String("replay", "", "play a --record file back instead of opening a live room: no vendor starts, nothing dispatches, and every frame says REPLAY")
+	replaySpeed := fs.Float64("replay-speed", 1, "play a --replay file this many times faster than it was recorded")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *replay != "" && *record != "" {
+		return errors.New("--replay and --record: a replay is a recording being shown, not a run being kept — choose one")
+	}
+	if *replay != "" && *host {
+		return errors.New("--replay and --host: a replay runs nothing, so there is nothing for a host to hold")
+	}
+	if *replaySpeed <= 0 {
+		return fmt.Errorf("--replay-speed %v: a speed is a positive multiple of the recorded pace", *replaySpeed)
 	}
 
 	// Parsed here, where the flag lives, and rejected before the alternate
@@ -1028,6 +1061,9 @@ func runCouncil(args []string) error {
 	room, err := council.ParseSeats(*seats)
 	if err != nil {
 		return err
+	}
+	if *headroom < 1 || *headroom > 100 {
+		return fmt.Errorf("--headroom-warn %d: a percent between 1 and 100", *headroom)
 	}
 	// Same discipline for --live (design.md §9.53): the pane is display only,
 	// and only a vendor that keeps one process across turns can hold one, so a
@@ -1044,11 +1080,22 @@ func runCouncil(args []string) error {
 		NoTitle:   *noTitle,
 		Write:     !*read,
 		Auto:      *auto,
+		Headroom:  *headroom,
 		BriefPath: *brief,
 		Resume:    *resume,
 		Fresh:     *fresh,
 		TracePath: *trace,
 		Live:      liveSeat,
+
+		RecordPath:  *record,
+		ReplayPath:  *replay,
+		ReplaySpeed: *replaySpeed,
+	}
+
+	if *replay != "" {
+		// Straight to the room: a replay consults no host, because a host is
+		// a live room and this one is a file (design.md §9.56).
+		return council.Run(opts)
 	}
 
 	if *host {
@@ -1294,6 +1341,11 @@ usage:
                          sitting in ends with /quit. It refuses to act on a
                          stale file rather than terminating whatever process
                          took that number (§7.29)
+  telltale council replay-check <file>
+                         list what a --record file carries before you commit
+                         or share it: the workspace, the seats, every session
+                         id, every tool line and gate card. Reads the file,
+                         writes stdout, starts nothing (§9.56)
   telltale hook cursor   (wire into ~/.cursor/hooks.json as an afterAgentResponse
                          command hook) read one turn's token counts on stdin,
                          add them to this machine's running total, print nothing
@@ -1558,6 +1610,15 @@ telltale council flags:
                               watching; it is the one setting that leaves
                               nothing in the room asking permission for
                               anything.
+  --headroom-warn N           the routing cell names a seat's quota window
+                              before enter once its reading is at or above N
+                              percent used (default 90): "-> codex · 5h 94%
+                              used". Only a window the statusline relayed; a
+                              seat with no reading gets no number. @auto as a
+                              route word picks, among seated idle seats with a
+                              reading, the one with the most headroom in its
+                              shortest window, says which, and refuses when no
+                              seated seat has a reading.
   --live claude               seat a pane that shows claude's OWN terminal screen
                               beside the measured seats. Display only: every
                               gauge, badge and cost on that seat still comes
@@ -1615,6 +1676,21 @@ telltale council flags:
                               which is worth a file and not worth four more
                               numbers on every column. The file is appended to,
                               so runs accumulate.
+  --record <file>             keep this run: every seat's output, each dispatch
+                              and each gate decision, with the clock it landed
+                              on, written to a NEW file at the path you name.
+                              The file carries the conversation, verbatim and
+                              unredacted, so it is yours and never under
+                              ~/.telltale (a path there is refused); review it
+                              with telltale council replay-check before it
+                              goes anywhere. Off unless typed.
+  --replay <file>             show a --record file instead of opening a live
+                              room. No vendor starts, nothing dispatches
+                              (enter says so), the saved room is neither read
+                              nor written, and every frame says REPLAY: in the
+                              header, on every column, in the footer.
+  --replay-speed N            play the recording N times faster (default 1,
+                              the pace it was recorded at)
   --ascii                     draw with ASCII only (also TELLTALE_ASCII=1)
   --no-title                  leave the terminal window title alone
 

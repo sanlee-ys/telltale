@@ -18063,3 +18063,129 @@ wrote this. What the suite pins is the room's bookkeeping over stubbed processes
 run can show is a persistent seat taking its NEXT brief cleanly after a per-seat cancel, two
 one-shot seats' event streams interleaving through one reader without a stall, and a `/flow` hop
 landing beside an unrelated seat mid-answer. Owed and named rather than implied, on §9.53's rule.
+
+<!-- 9.55 is reserved for the crew lane (per-seat worktrees, /adopt across seat branches,
+     parallel /flow, /hand) that landed beside this one; this section took 9.56 so the two
+     branches merge without renumbering. -->
+
+<a id="s9-56"></a>
+
+### 9.56 the gauges route, and a real run can be shown without a vendor (2026-09-02)
+
+Two changes, one premise: §9.54 made the seats a crew, and a crew changes what two existing
+things are FOR. The quota readings (§9.21) used to say "this turn may not land"; on a crew they
+answer "which seat has room for this brief". And the room's event stream, which every column
+already applies, is the one thing that could show the room to someone who has not paid for five
+seats — if it were kept, and if what was kept could be shown honestly.
+
+#### The readings as routing
+
+The routing cell qualifies the route. `→ codex · 5h 94% used` when the draft addresses a seat
+whose relayed window is at or above `--headroom-warn` (default 90) and under a hundred;
+`→ everyone · codex 5h 94% used` on a route that names a set, so the seat is named. `@auto` is
+a route word (`Route.Auto`) that resolves against State: among seated, idle seats with a measured
+reading, the most headroom in the SHORTEST window — the window that resets soonest, since that is
+the one the next brief spends from — ties to seating order. The cell states the pick before
+enter, `→ auto: grok (5h 12% used)`; enter rewrites the draft to `@grok …`, dispatches, and the
+notice repeats the choice. The header and room.json record a turn to grok, which is what
+happened, and no surface learns a fifth route shape.
+
+Every rule is §4a.1's, restated for a rank:
+
+- **Nothing is invented and nothing is aggregated.** The hint copies one window's label and
+  percentage. `@auto` ranks headroom (a hundred minus the vendor's own figure) and prints the
+  figure it ranked. No total, no average, no dollar.
+- **An absent seat is never ranked.** Cursor and grok have no reading anywhere (§7.17), an
+  unrelayed Claude has none today, and a rank needs a number. With no measured seat in the room
+  the cell says `→ auto: no measured reading` and enter refuses — `@auto needs a measured
+  reading; none of the seated seats has one` — rather than falling back to the default route.
+  A brief handed to the readings must not go quietly to Claude because the readings were empty.
+- **A stale reading is absent, not a number.** A window whose reset has passed is dropped by
+  quotacache on read and by `measuredWindows` between reads, when the room's own clock passes
+  it. A reading past `quotaAgeWarn` is the alarm's to name as stale (§9.21) and is absent here.
+- **The hint stops one short of a hundred.** A full window is the alarm's cell, with the
+  warning mark, and one fact in two cells on one line is the drift vendorTag's comment warns of.
+- **A busy seat is never picked.** §9.54's refusal would meet the pick a keystroke later.
+
+The threshold is council's own pick, which is why it is a flag: the default is a boundary no
+vendor published, so the operator can move it, and the cell prints the vendor's figure beside
+whatever threshold applied. `quotaFullPercent` is unchanged and still the only threshold this
+package did not choose.
+
+#### The recording, and the boundary it is written under
+
+`--record <file>` writes the room's event stream as it happens: the room line (seats, postures,
+posture, workspace as the header drew it), each dispatch as its seats hold it (turn, route, each
+seat's brief as `startTurn` echoed it, whether it ran on a persistent process), every
+`runner.Event` in every batch `applyEvents` receives, and each gate decision the operator made.
+JSON lines, millisecond offsets from the monotonic clock, one flat record type so a fixture can
+be typed by hand. `runner.Gate.Input` is the one field dropped: never rendered, a Write's whole
+file content, and a replay has no vendor to hand it back to.
+
+**This is content, and it is not argued as one of the numbers-and-keys writes.** CLAUDE.md's
+read/write boundary holds room.json, the quota relay and the token relay to numbers and keys.
+The recording is the event sink's kind of exception — "different in kind", contained by scope
+rather than redaction — and it is contained three ways: an explicit path the operator typed
+(a path under `~/.telltale` is refused before a byte is written, and an existing file is
+refused rather than overwritten or extended); an explicit flag typed at the door (no key in the
+room starts one); and off by default (the recorder is nil, every hook on it is a no-op, no test
+builds one). `recording.go` carries the argument at length; this paragraph is the decision.
+
+**No redaction, on purpose.** The recorder writes what `applyEvents` saw. A recording that
+differed from the run would be a second truth; the replay puts the same bytes through the same
+redactor at the same choke point, so the frames match and the file underneath is the raw
+stream. The review the README requires of every frame is given a tool instead:
+`telltale council replay-check <file>` lists the workspace, the seats, every session id, every
+tool line and gate card, and the size of the prose — and says it did not read the prose.
+
+#### The replay
+
+`--replay <file>` opens a room over the file. `Run` returns to `runReplay` before `LoadRoom`,
+the brief, the trace, the relay or a host is consulted. The State is built from the room line
+— seats, labels, postures, granularities, the abbreviated workspace with `Home` left empty — so
+a replay on a laptop with nothing installed draws the recorded room. Each dispatch line puts the
+recorded seats on the recorded turn through `startTurn` and `holdTurn` (a `turnState` with no
+handle and a no-op cancel); each event line goes through `applyEvents`; each gate line takes the
+card down the way `decideGate` does, with the wait charged from the recording's clock.
+
+**The clock is the recording's, and `Render` stays pure.** `State.Now` on a tick is the
+recording's start plus the wall time elapsed since the replay opened, times `--replay-speed`;
+each record stamps its own offset on the same clock and never moves it backwards. The two wall
+reads the live retirement path makes — `finishColumn`'s Elapsed and the charged gate wait —
+are stamped from the recording before the event lands, using the guards those paths already
+have. A fixture played through `Update` therefore renders the same bytes every time
+(`replay`, `replay-gate`, `replay-ascii` goldens), and two plays of one file are one frame.
+
+**Labelled on every frame, in words.** `⚠ REPLAY` in the header where WRITE/READ sits;
+`REPLAY` first on every column's badge row (the whole row at strip width); `⚠ REPLAY nothing
+here is live` where the compose footer's routing cell and `enter dispatch` would be;
+`ctrl+c quit` on the view line. A replay is a real run played back — not §8's invented
+recording, because somebody ran it and every event was measured — and the label is what the
+honesty rule asks in return: a replayed frame must never pass for a live one.
+
+**Three refusals, and nothing else.** Enter, the card's `y`/`n`/`a`, and the per-seat verbs
+say `this room is a replay; nothing here is live`. `ctrl+c` and `q` quit in every mode.
+`saveRoom` returns on the replay flag, so a finished turn and a teardown write nothing;
+`TestAReplayNeverTouchesRoomJSON` plants a sentinel room under the suite's sandbox home and
+reads it back unchanged. No spawn var is reached: `Init` starts the feed and nothing else,
+which is the spawn guard's own "no test calls Init" argument met from the other side.
+
+#### What a recording does not hold
+
+The operator's cancels and give-ups (a cancelled column replays as the vendor's own exit),
+focus and scrolling, the `--brief` file's text, and `--trace`'s clocks. A recording with a long
+idle gap replays the gap at the recorded pace; `--replay-speed` is the remedy, not a cap.
+
+#### Verification
+
+`gofmt`, `go vet ./...`, `go test ./... -count=1`, `go build ./...`, the windows/amd64 and
+darwin/arm64 cross-builds, and `go test -race ./internal/council` once. New goldens:
+`route-headroom`, `route-auto`, `replay`, `replay-gate`, `replay-ascii`. No existing golden
+moved: a room with no near-full reading and no `@auto` draws the routing cell it drew before,
+and a live room's header, badge rows and footer are untouched by the replay flag.
+
+**Not verified here: a live recording.** No vendor was run by the session that wrote this, so
+no recording of a real room exists yet; the replay fixture is synthesized (fake ids, fake paths,
+three seats, one card, one finished seat). What only a live run can show is a `--record` of a
+five-seat room with real timing, that its replay reads as the room did, and what `replay-check`
+lists off a real capture. The hero decision stays the owner's.

@@ -185,6 +185,30 @@ still needs the whole room is a race: `/arena` refuses while any seat is busy, a
 ordinary brief is refused while a race runs, because a race owns every worktree and every
 seat until its last racer lands.
 
+**The routing cell says which seat has headroom, before enter.** On a crew the question the
+seat readings exist to answer is "which seat has room for *this* brief", so it is answered
+where the route is, while the route can still be changed. When the draft addresses a seat
+whose relayed quota window is at or above the threshold (`--headroom-warn N`, default 90
+percent used), the cell says so: `→ codex · 5h 94% used`, or on a route that names a set,
+`→ everyone · codex 5h 94% used`. The figure is the vendor's own, copied from the same relay
+the badge row reads (the statusline's `~/.telltale/quota/<vendor>.json`), and it is the only
+thing the cell adds. A seat with no reading gets no number and no word: Cursor and Grok have
+no quota anywhere telltale can read, and an unrelayed Claude is the same absence. A reading
+whose window has reset since the relay wrote it is absent too, not a stale number, and a
+reading past the five-hour age mark is the alarm's (`⚠ claude stale 19h ago`), not the
+hint's. A window at 100% is the alarm's as well. The hint stops one short of it.
+
+**`@auto` hands the choice to the readings.** As a route word it picks, among the seats that
+are seated and idle and have a measured reading, the one with the most headroom in its
+shortest window (the window that resets soonest), and the cell states the pick before enter:
+`→ auto: grok (5h 12% used)`. Ties go to seating order. Enter sends the brief to that seat and
+the notice repeats the choice, `@auto → grok (5h 12% used)`; the header, the transcript and
+the saved room record a turn to grok, because that is what happened. A seat with no reading
+is never ranked, a busy seat is never picked, and when no seated seat has a reading the cell
+reads `→ auto: no measured reading` and enter refuses with `@auto needs a measured reading;
+none of the seated seats has one`, keeping the draft. `@auto` beside a named seat or an
+exclusion is refused like `@` beside `-@`: two theories of who chooses.
+
 Turn 1 is blind. Later turns ride each vendor's own native session resume rather than
 re-sending the transcript, which keeps that guarantee structural: each session holds only
 its own history. `ctrl+r` arms a rebuttal turn — off by default — in which each vendor
@@ -671,19 +695,54 @@ throwaway racer has been spawned, streamed and killed live — twice now — but
 watched finish on its own; that half still stands on its offline tests, and
 [design.md §9.37](design.md) says so beside its payment blocks.
 
+## Record and replay
+
+The room cannot be seen without five paid CLI logins, and a frame worth showing is a frame
+somebody spent quota on. `telltale council --record <file>` keeps a real run: every event the
+room applied (each seat's output, tool lines, session ids, costs, gate cards), each dispatch,
+and each answer you gave a card, with the clock each one landed on. `telltale council --replay
+<file>` opens a room fed from that file instead of from vendors, at the original pace
+(`--replay-speed N` multiplies it), and draws it with the same renderer: the columns stream,
+the card goes up and comes down when you answered it, the elapsed figures count the seconds
+the vendor actually took.
+
+**A replay is labelled on every frame.** `⚠ REPLAY` sits in the header where `WRITE` or `READ`
+sits, `REPLAY` leads every column's badge row ahead of the recorded posture, and the compose
+footer reads `⚠ REPLAY nothing here is live` where the routing cell and `enter dispatch` would
+be. Enter says `this room is a replay; nothing here is live`; so do the card's `y`, `n` and
+`a`, and the per-seat verbs. `ctrl+c` and `q` leave. Reading is untouched: scroll, focus, the
+digits, the by-turn page, the ledger, the help panel. A replay starts no vendor, dispatches
+nothing, reads no quota relay, and neither reads nor writes the saved room; its seats, their
+postures and its workspace all come from the file, so it draws the room that was recorded on
+a machine with nothing installed.
+
+**The recording is yours, at a path you name.** Everything else council writes is numbers and
+keys; this file carries the conversation verbatim, unredacted (a redacting recorder would be
+a second truth; the replay runs the same redactor over the same bytes, so the screen matches),
+and so it is never anything under `~/.telltale`: a `--record` path there is refused, an
+existing file is refused rather than overwritten or extended, and no key inside the room
+starts one. Before a capture goes anywhere, `telltale council replay-check <file>` prints what
+a review needs to see: the workspace, the seats, every session id, every tool line and gate
+card (each may name a path), how much prose is in it, and a reminder that it did not read the
+prose. That is the README's frame review, given a tool. What a recording does not hold: your
+cancels and give-ups (a column you cancelled live replays as the vendor's own exit), focus
+and scrolling, and the `--brief` file's text.
+
 ## Flags
 
 `telltale council` flags: `--fresh` (start over instead of reattaching), `--cd <dir>`
 (launch-time override of the room's workspace — the daily path never needs it),
 `--vendor <list>`, `--brief <file>`, `--read`, `--auto`, `--trace <file>`, `--resume`
 (accepted, and redundant — reattaching is the default), `--write` (accepted, and does
-nothing — writing is the default), `--ascii`, `--no-title`, `--host` (open the room in a
+nothing — writing is the default), `--headroom-warn N` (the routing cell's threshold, default
+90), `--record <file>` and `--replay <file>` with `--replay-speed N` (above), `--ascii`,
+`--no-title`, `--host` (open the room in a
 host process of its own that outlives this terminal: `/detach` walks away, `telltale
 council` rejoins, `telltale council kill` ends it — a read room only, because a room that
 writes without asking will not detach; [design.md §7.29](design.md), and §7.30 for macOS
 and Linux), `--live claude` (seat a pane showing claude's own terminal screen beside the
 measured seats; display only, and nothing on it is read as a number; [design.md
-§9.53](design.md)).
+§9.53](design.md)). `telltale council replay-check <file>` reviews a recording without opening it.
 
 `--vendor <list>` decides who is in the room: `all` keeps every detected seat on screen
 including the ones that cannot be driven, and a comma list (`--vendor claude,codex`) seats

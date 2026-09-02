@@ -363,3 +363,235 @@ func quotaAlarm(st State) string {
 	}
 	return ""
 }
+
+// The gauges as ROUTING (design.md §9.56).
+//
+// Once seats take briefs one at a time (§9.54) the question the readings
+// exist to answer changes shape. On a committee the reading said "this turn
+// may not land"; on a crew it says "which seat has headroom for THIS brief" —
+// and that is a question about the route, asked while the route can still be
+// changed, so it is answered in the routing cell and nowhere else.
+//
+// Everything below is a READ of the same relayed readings quotaAlarm reads,
+// under the same rules, and it adds no number the relay did not carry:
+//
+//   - the hint names one seat, one window and that window's own percentage,
+//     copied. No total, no average, no arithmetic over two seats' figures.
+//   - `@auto` RANKS, and ranking is the one operation here that is not a copy.
+//     What it ranks is headroom — a hundred minus the vendor's own used
+//     percentage, in the vendor's own shortest window — over seats that HAVE
+//     a reading. A seat with none is never ranked, because a rank needs a
+//     number and the honest number for that seat is absence (§4a.1). Cursor
+//     and grok are that seat forever (§7.17), and so is an unrelayed Claude.
+//   - a reading that no longer describes now is absent, not a number. Two
+//     cases: a window whose reset has passed (quotacache drops it on read,
+//     and the room's own clock can pass it between reads), and a reading past
+//     quotaAgeWarn (quotaAlarm names that one as stale; this file ranks and
+//     warns on it as if it were not there).
+//   - the hint STOPS at a hundred. A full window is quotaAlarm's cell, with
+//     the warning mark, and printing it twice on one line would be one fact
+//     in two cells.
+
+// HeadroomWarnDefault is where the routing cell starts naming a window: at
+// or above this percent used. It is the one threshold in this file council
+// DID pick, and --headroom-warn exists precisely because it is a pick rather
+// than a vendor's statement: the number is the operator's to move, and the
+// cell prints the vendor's own percentage beside it so the reader can see the
+// figure the threshold was applied to.
+const HeadroomWarnDefault = 90
+
+// autoRefusal is what enter says when `@auto` has nothing to choose from.
+const autoRefusal = "@auto needs a measured reading; none of the seated seats has one"
+
+// headroomThreshold is the room's threshold, with the flag's default standing
+// in for a State that never set one (every State a test types out by hand).
+func headroomThreshold(st State) int {
+	if st.HeadroomWarn <= 0 {
+		return HeadroomWarnDefault
+	}
+	return st.HeadroomWarn
+}
+
+// measuredWindows is the windows of one reading that still describe `now`:
+// each carries a percentage, none has reset, and the reading as a whole is
+// not past quotaAgeWarn. Nil for a seat with no reading, and nil for a seat
+// whose reading has gone stale — the same answer on purpose, because both
+// are a seat this file may not put a number on.
+func measuredWindows(q *SeatQuota, now time.Time) []model.QuotaWindow {
+	if q == nil || now.Sub(q.WrittenAt) >= quotaAgeWarn {
+		return nil
+	}
+	var out []model.QuotaWindow
+	for _, w := range q.Windows {
+		if w.UsedPercent == nil {
+			continue
+		}
+		if w.ResetsAt != nil && !w.ResetsAt.After(now) {
+			// The window this percentage described no longer exists; the
+			// number is not stale, it is false (§7.15).
+			continue
+		}
+		out = append(out, w)
+	}
+	return out
+}
+
+// shortestWindow is the window that resets soonest, which is the one whose
+// headroom binds the next brief. A window with no reset instant sorts behind
+// every window that has one — agy's buckets arrive that way — and among
+// those, or when none carries a reset, the vendor's own order decides.
+func shortestWindow(ws []model.QuotaWindow) (model.QuotaWindow, bool) {
+	if len(ws) == 0 {
+		return model.QuotaWindow{}, false
+	}
+	best := ws[0]
+	for _, w := range ws[1:] {
+		switch {
+		case w.ResetsAt == nil:
+			continue
+		case best.ResetsAt == nil, w.ResetsAt.Before(*best.ResetsAt):
+			best = w
+		}
+	}
+	return best, true
+}
+
+// usedCell is the window's label and its own percentage, with the word the
+// routing cell spends: `5h 94% used`. The badge row prints the same label and
+// the same figure without the word; the word is here because this cell sits
+// beside a seat NAME, where a bare `5h 94%` reads as a duration and a score.
+func usedCell(w model.QuotaWindow) string {
+	return w.Label + " " + theme.Percent(float64(*w.UsedPercent)) + " used"
+}
+
+// headroomWarning names the first addressed, seated seat with a measured
+// window at or above the threshold and under a hundred, and that window's
+// reading. Empty when no addressed seat is there.
+//
+// Seated ∩ addressed, quotaAlarm's intersection: a warning about a seat this
+// brief will not reach is a warning about a turn that does not happen. Column
+// order decides between two, on quotaAlarm's argument — ranking two warnings
+// would need a measurement nobody has, and each seat's own badge row carries
+// the rest.
+func headroomWarning(st State) (model.VendorID, string) {
+	limit := float64(headroomThreshold(st))
+	for _, c := range st.Columns {
+		if !st.seats(c) || !st.Route.addresses(c.Vendor) {
+			continue
+		}
+		for _, w := range measuredWindows(c.Quota, st.Now) {
+			if pct := float64(*w.UsedPercent); pct >= limit && pct < quotaFullPercent {
+				return c.Vendor, usedCell(w)
+			}
+		}
+	}
+	return "", ""
+}
+
+// autoPick is `@auto`'s choice: among seated, IDLE seats with a measured
+// reading, the one with the most headroom in its shortest window. Ties go to
+// column order. ok is false when no seated seat has a reading, which is the
+// refusal and never a fallback to the default route — a brief the operator
+// handed to the readings must not go quietly to Claude because the readings
+// were empty.
+//
+// Idle is the column's own phase (Column.inFlight), so Render can ask the same
+// question the dispatch asks: a seat mid-answer cannot take this brief
+// (§9.54), and picking it would resolve `@auto` to a refusal.
+func autoPick(st State) (model.VendorID, string, bool) {
+	var (
+		pick   model.VendorID
+		cell   string
+		best   float64
+		picked bool
+	)
+	for _, c := range st.Columns {
+		if !st.seats(c) || c.inFlight() {
+			continue
+		}
+		w, ok := shortestWindow(measuredWindows(c.Quota, st.Now))
+		if !ok {
+			continue
+		}
+		room := quotaFullPercent - float64(*w.UsedPercent)
+		if !picked || room > best {
+			pick, cell, best, picked = c.Vendor, usedCell(w), room, true
+		}
+	}
+	return pick, cell, picked
+}
+
+// routeCell is the routing cell's key text: the route, qualified by what the
+// readings say about it.
+//
+//	→ codex                       nothing to add
+//	→ codex · 5h 94% used         the addressed seat's window is near its limit
+//	→ everyone · codex 5h 94% used  the same, on a route that names a set
+//	→ auto: grok (5h 12% used)    what @auto resolved to on this frame
+//	→ auto: no measured reading   what enter will refuse, said first
+//
+// The seat name is dropped when the route already IS that seat, and kept
+// otherwise, so the cell never says `codex` twice and never leaves a reader
+// guessing which of `everyone` it means.
+func routeCell(st State) string {
+	if st.Route.Auto && !st.Route.Mixed {
+		if v, w, ok := autoPick(st); ok {
+			return "→ auto: " + string(v) + " (" + w + ")"
+		}
+		return "→ auto: no measured reading"
+	}
+	label := routeLabel(st)
+	v, w := headroomWarning(st)
+	switch {
+	case w == "":
+		return "→ " + label
+	case label == string(v):
+		return "→ " + label + " · " + w
+	default:
+		return "→ " + label + " · " + string(v) + " " + w
+	}
+}
+
+// dispatchAuto is enter on an `@auto` draft. It reports whether it handled the
+// keystroke; false means the draft is not an auto route and the ordinary
+// dispatch runs.
+//
+// The pick is made HERE, at enter, against the same State the footer just
+// rendered its cell from — so what the cell said is what the room does. The
+// draft is rewritten to name the seat (`@auto fix it` becomes `@grok fix
+// it`) and handed to dispatch unchanged from there: the header, the
+// transcript and room.json then record a turn to grok, which is the truth,
+// and `@auto` leaves no second route shape for those surfaces to learn. The
+// notice says the pick and its reading so the choice is on screen after the
+// cell that made it has been cleared.
+//
+// A refused dispatch (every seat busy, nothing seated) puts the operator's own
+// words back: the rewrite was the room's, and a draft the room edited and
+// then failed to send would leave them editing text they did not type.
+func (m *Model) dispatchAuto() (tea.Cmd, bool) {
+	r := m.st.Route
+	if !r.Auto {
+		return nil, false
+	}
+	if r.Mixed {
+		m.st.Notice = "@auto picks the seat itself — drop the other mentions"
+		return nil, true
+	}
+	v, w, ok := autoPick(m.st)
+	if !ok {
+		m.st.Notice = autoRefusal
+		return nil, true
+	}
+	typed := m.st.Draft
+	_, brief := ParseRoute(typed)
+	m.setDraft("@" + string(v) + " " + brief)
+	cmd := m.dispatch()
+	if m.turnOf(v) == nil {
+		// Refused: dispatch wrote the reason. The draft it left is the
+		// rewritten one, so the typed one goes back.
+		m.setDraft(typed)
+		return cmd, true
+	}
+	m.st.Notice = "@auto → " + string(v) + " (" + w + ")"
+	return cmd, true
+}

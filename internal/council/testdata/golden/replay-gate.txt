@@ -1,0 +1,24 @@
+  council ⚠ REPLAY  │  ~/code/example                                    turn 1 → everyone  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  › add a --version flag and a test for it                                                                              
+                                                                                                                        
+▌ ▸ 1 CC Claude Code  ───  ⚠ needs you  │    2 CX Codex  ─────  ⠋ streaming 2s  │    3 AG Antigravity  ─  ⠋ waiting 2s  
+▌   REPLAY  gated  tokens               │    REPLAY  WRITES  final only         │    REPLAY  WRITES  final only         
+▌ ⚠ waiting on you: Write:              │                                       │                                       
+▌   cmd/example/version.go              │                                       │                                       
+▌   y approve   n deny   a stop asking  │                                       │                                       
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▌ turn 1  ────────────────────  you 0s  │  turn 1  ───────────────────────────  │                                       
+▌ ⚙ Read: cmd/example/main.go           │  Added --version to the flag set in   │                                       
+▌                                       │  main.go, printing the build tag,     │                                       
+▌ Reading main.go first, then the flag  │  with a test that runs the binary     │                                       
+▌ set.                                  │  and checks the line.                 │  turn 1  ───────────────────────────  
+▌                                       │                                       │  working — the reply arrives whole.   
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  GATE  ─╯  
+                              Write: cmd/example/version.go  │  y approve  │  n deny  │  a stop asking  │  ctrl+c quit  
