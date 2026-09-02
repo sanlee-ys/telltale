@@ -165,3 +165,13 @@ func killProcess(pid int) error {
 // room. Folding here is what stops a second host being started over a room the
 // operator already has.
 func foldWorkspace(path string) string { return strings.ToLower(path) }
+
+// reapOrphans has nothing to reap on Windows, and says zero rather than
+// guessing: the room job carries JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, so a
+// host that is gone took every seat with it when its handle closed. The Unix
+// half (process_unix.go) is where a dead host's session still has members.
+func reapOrphans(pid int) int { return 0 }
+
+// removeStaleTransport has nothing to remove on Windows: a named pipe is a
+// kernel object that goes with its last handle, so a dead host leaves no node.
+func removeStaleTransport(name string) {}
