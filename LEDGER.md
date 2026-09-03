@@ -25,3 +25,14 @@ is no longer the price of a change.
 - **2026-09-02 — No new `design.md` sections through 2026-09-30.** (San, "the
   pstack cut.") The 58 sections of §9 and 30 of §7 stay as history. New
   measurements: `PARITY.md` or a test. New decisions: a line here.
+- **2026-09-03 — The room's identity is MONOGRAPH, with four grafts.** (San, on
+  an independent audit of three rendered prototypes.) One ink at six values, two
+  accent pigments, and the measured value as the brightest thing on screen.
+  Grafted onto it: the race board's fixed lane and empty track, the leading
+  verdict marks and `/adopt`, and the posture badges ordered by EVIDENCE, from
+  `explore/room-broadcast`; the continuous posture rail and the recorder-strip
+  trace, from `explore/room-instrument`, repainted in this palette. Two rulings
+  ride with it — seat hues stay RETIRED, and truecolour may enhance the identity
+  but may never define it, so every distinction is carried by value, weight and a
+  word. `docs/room-identity.md` is the page; `--ascii` and `NO_COLOR` are
+  untouched, which is why six of 118 goldens moved.

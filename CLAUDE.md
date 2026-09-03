@@ -367,11 +367,20 @@ nowhere else.
   (`go version -m telltale.exe` shows them). What [ADR-002](docs/design.md#adr-002) buys is that neither
   module's package init runs on a path that executes on every prompt. design.md §5's
   2026-08-16 amendment says what the gate asserts and what it deliberately does not.
-- **Council adds no hues of its own** (`internal/council/style.go`) — it maps
-  `internal/theme`'s existing palette, and spends only *weight* (bold) as a new
-  signal. If you're tempted to add a new color for a new council concept, that's
-  very likely the wrong move — reuse an existing severity/identity token instead.
-- **Colour, and any single glyph, is always a second signal.** Every distinction
-  this UI makes (phase, sandbox posture, focus) is carried first by a word or a
-  glyph that survives `--ascii` and `NO_COLOR`, with colour/weight only making it
-  easier to spot. If your change only reads correctly in colour, it's incomplete.
+- **Council HAS its own ink set, and the rule that forbade it is LIFTED.** Read
+  `LEDGER.md`'s 2026-09-02 and 2026-09-03 lines before you cite anything about
+  council's colour, then `docs/room-identity.md` and `internal/council/style.go`.
+  "Council adds no hues of its own" was true until the ledger lifted it; the room
+  now carries one warm ink at six values plus two accent pigments, all of them
+  hex, all of them inside `internal/council`. `internal/theme` is untouched, so
+  `internal/statusline` and `internal/hud` keep the 4-bit palette and ADR-002 is
+  unaffected — the blast radius of that set is one package, and it stays that
+  way.
+- **Truecolour may ENHANCE the identity; it may never DEFINE it.** A hex triple
+  is allowed. A distinction that DEPENDS on one is not. Every distinction this UI
+  makes (phase, sandbox posture, focus, a verdict, a rank) is carried first by a
+  word or a mark that survives `--ascii`, `NO_COLOR` and a 16-colour console,
+  with colour, weight and the one painted ground only making it easier to spot.
+  If your change only reads correctly in colour, it's incomplete. This is
+  accessibility rather than taste, and `LEDGER.md` says it was NOT lifted with
+  the three taste rulings.
