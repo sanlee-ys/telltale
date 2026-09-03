@@ -219,11 +219,17 @@ type Palette struct {
 // rather than white, and both accents are lifted to the values they need at low
 // luminance rather than the values they had on paper.
 //
-// The figures are the portfolio's own, measured there against #16130f rather
-// than assumed here: Measured 15.0:1, Text 11.4:1, Muted 6.0:1, Identity 9.0:1,
-// Withdrawn 11.4:1. Against Windows Terminal's Campbell ground (#0c0c0c) every
-// one of them is HIGHER, because that ground is darker still — so the numbers
-// above are the floor rather than the claim.
+// Contrast, and where each figure comes from. Measured 15.0:1, Muted 6.0:1,
+// Identity 9.0:1 and Withdrawn 11.4:1 are the PORTFOLIO's own measurements,
+// taken there against its #16130f ground; they are copied rather than re-derived
+// because the pigments are copied. Against Windows Terminal's Campbell ground
+// (#0c0c0c) every one of them is higher, that ground being darker still, so the
+// figures above are a floor rather than a claim about this surface.
+//
+// Broke is the one value not taken from the site — the site has no failure
+// state — so its figure is computed here rather than cited: #e07a5f is 7.0:1 on
+// #0c0c0c. It is the same oxide pigment as Withdrawn, lifted for the lamp, which
+// is what keeps the accent count at two families rather than three.
 //
 // Nothing here paints a background. The ground stays whatever terminal the
 // operator chose, which is the half of theme.go's argument that survives intact:
@@ -249,6 +255,13 @@ func NightPalette() Palette {
 // a page, and copper at this luminance would read as highlighter. So the paper
 // set takes the pigments down — burnt sienna for withdrawn, oxide for broke —
 // while the night set takes them up.
+//
+// Measured, Muted, Identity and Broke are the site's own paper values and carry
+// its measurements (16.25:1, 6.37:1, 8.41:1 and 11.98:1 against #fafaf9).
+// Withdrawn is the value computed here, for the same reason Broke is at night:
+// the site spends ONE warm pigment and the room needs two strengths of it.
+// #8a4b12 is 6.8:1 on white, so it clears WCAG AA for body text — which it has
+// to, because this is a badge that says a seat may change your files.
 func PaperPalette() Palette {
 	return Palette{
 		Measured:  "#1e1c1b",
