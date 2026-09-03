@@ -87,9 +87,9 @@ a demo of the crew is a demo of measured claims only after that list is paid.
      §9.55's fanned stage and join.
   6. A write brief in a directory that is not a git repo: `⚠ shared tree ·
      not a git repo` at real widths — retires §9.55's badge item.
-  7. `telltale council --record demo.jsonl` over a real five-seat room, then
-     `telltale council replay-check demo.jsonl` and `--replay demo.jsonl` —
-     retires §9.56's "no real recording exists" and the README's sentence.
+  7. `--replay demo.jsonl` of the real recording made 2026-09-03 (`--record`
+     and `replay-check` are PAID; §9.56 carries the measurement) — retires
+     §9.56's synthesized-fixture note and the README's "tested offline".
   8. The routing cell against the live quota relay, and `@auto` with Claude's
      5h window beside agy's weekly bucket — retires §9.56's routing items.
   9. Codex read liveness: `telltale council --read`, brief "list this
