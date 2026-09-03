@@ -249,6 +249,16 @@ func Render(f Frame, p Palette) ([]byte, error) {
 		num(padX), num(headerH/2+FontSize*0.36), FontStack, num(FontSize-1), p.Foreground, faintOpacity, esc(f.Caption))
 
 	top := headerH + padY
+	// Every BACKGROUND first, in one pass, so nothing can paint over a glyph:
+	// SVG has no z-index and later elements win, so the whole ledger ground is
+	// laid down before the first character of the first row.
+	for i, rs := range rows {
+		for _, r := range rs {
+			if rect := r.rect(p, top+float64(i)*LineHeight); rect != "" {
+				b.WriteString("  " + rect + "\n")
+			}
+		}
+	}
 	for i, rs := range rows {
 		// The baseline sits three quarters down the line box, which is where a
 		// terminal puts it and what keeps descenders clear of the row below.
@@ -274,16 +284,31 @@ type run struct {
 	sty   sgr
 }
 
+// rect is the background this run is printed on, or "" when it has none.
+//
+// Emitted as a separate element ahead of every row's text rather than as an
+// attribute on the tspan, because SVG has no text-background: a rect is the only
+// way to paint behind a glyph, and a rect cannot live inside <text>. Its height
+// is the full row pitch, so rects on neighbouring runs tile exactly and a band
+// spanning several of them arrives as one continuous strip rather than as blocks
+// with hairline seams between them — which is the whole point of the rail it
+// was added for.
+func (r run) rect(p Palette, y float64) string {
+	ground := r.sty.ground(p)
+	if ground == "" {
+		return ""
+	}
+	return fmt.Sprintf(`<rect x="%s" y="%s" width="%s" height="%s" fill="%s"/>`,
+		num(padX+float64(r.col)*Advance), num(y),
+		num(float64(r.cells)*Advance), num(LineHeight), ground)
+}
+
 func (r run) svg(p Palette) string {
 	var attrs strings.Builder
 	fmt.Fprintf(&attrs, `x="%s" textLength="%s" lengthAdjust="spacingAndGlyphs"`,
 		num(padX+float64(r.col)*Advance), num(float64(r.cells)*Advance))
 
-	fill := p.Foreground
-	if r.sty.fg >= 0 {
-		fill = p.ANSI[r.sty.fg]
-	}
-	fmt.Fprintf(&attrs, ` fill="%s"`, fill)
+	fmt.Fprintf(&attrs, ` fill="%s"`, r.sty.fill(p))
 	if r.sty.faint {
 		fmt.Fprintf(&attrs, ` fill-opacity="%s"`, faintOpacity)
 	}
@@ -303,12 +328,60 @@ func (r run) svg(p Palette) string {
 // italics are not in it because neither renderer emits them — and parse fails
 // loudly if one ever starts.
 type sgr struct {
-	fg    int // -1: the terminal's default foreground
+	fg int // -1: the terminal's default foreground
+	// hex is a truecolor foreground the surface named for itself, "#rrggbb".
+	// When it is set it wins over fg — see sgr.fill for why the palette is not
+	// consulted.
+	hex string
+	// bg and bgHex are the same pair for a BACKGROUND, and -1 / "" is no
+	// background at all rather than the panel's own colour.
+	//
+	// They arrived with council's POSTURE RAIL (internal/council/style.go's
+	// RailGround), the one thing this product paints a ground for. This package
+	// refused backgrounds outright before, on the rule that a style a surface
+	// starts emitting must show up here as a BUILD FAILURE rather than vanish
+	// from the picture. It did exactly that, and this is the picture learning to
+	// draw it — which is the mechanism working, not the mechanism relaxed.
+	bg    int
+	bgHex string
 	bold  bool
 	faint bool
 }
 
-func reset() sgr { return sgr{fg: -1} }
+func reset() sgr { return sgr{fg: -1, bg: -1} }
+
+// fill resolves the foreground this run paints with.
+//
+// A named hex wins over an index and the palette is not consulted for it: the
+// point of a triple is that it is the same colour on every scheme, which is
+// exactly why a full-screen surface may spend one and a statusline may not
+// (internal/council/style.go).
+func (st sgr) fill(p Palette) string {
+	switch {
+	case st.hex != "":
+		return st.hex
+	case st.fg >= 0:
+		return p.ANSI[st.fg]
+	default:
+		return p.Foreground
+	}
+}
+
+// ground resolves the background this run paints, or "" for none.
+//
+// A run with no background of its own draws no rect at all rather than a rect in
+// the panel's own colour — one fewer element per run in a file whose diff a
+// human reads.
+func (st sgr) ground(p Palette) string {
+	switch {
+	case st.bgHex != "":
+		return st.bgHex
+	case st.bg >= 0:
+		return p.ANSI[st.bg]
+	default:
+		return ""
+	}
+}
 
 // parse splits one rendered line into styled runs and reports its cell width.
 //
@@ -390,31 +463,96 @@ func apply(st sgr, params string) (sgr, error) {
 		case p == 22:
 			st.bold, st.faint = false, false
 		case p >= 30 && p <= 37:
-			st.fg = p - 30
+			st.fg, st.hex = p-30, ""
 		case p == 39:
-			st.fg = -1
+			st.fg, st.hex = -1, ""
 		case p >= 90 && p <= 97:
-			st.fg = p - 90 + 8
-		case p == 38:
-			// 38;5;n — the extended-colour form. Only the 16 indices telltale's
-			// palette actually names are accepted: a 256-colour or truecolor
-			// value would mean a surface started asserting a colour over the
-			// user's scheme, which is a decision to make in theme, not a case to
-			// quietly widen here.
-			if i+2 >= len(fields) || fields[i+1] != "5" {
-				return st, fmt.Errorf("SGR 38 in a form this palette cannot resolve: %q", params)
+			st.fg, st.hex = p-90+8, ""
+		case p >= 40 && p <= 47:
+			st.bg, st.bgHex = p-40, ""
+		case p == 49:
+			st.bg, st.bgHex = -1, ""
+		case p >= 100 && p <= 107:
+			st.bg, st.bgHex = p-100+8, ""
+		case p == 38 || p == 48:
+			// The extended-colour forms, and BOTH are accepted now, for a
+			// foreground (38) and for a background (48) alike.
+			//
+			// `;5;n` stays limited to the 16 indices telltale's palette names: a
+			// 256-colour value would be a surface reaching for a shade the scheme
+			// has no say over, without the decision that a hex triple forces
+			// somebody to write down.
+			//
+			// `;2;r;g;b` is the surface having made that decision. It arrived
+			// when internal/council took its own ink set (style.go's MONOGRAPH
+			// palette): a full-screen room that inherited eight primaries from
+			// whatever scheme was loaded could not have an identity of its own.
+			// The picture draws the triple verbatim — a truecolor run is by
+			// definition the same colour under every scheme, so there is nothing
+			// here to resolve against a palette.
+			c, err := extended(fields, &i)
+			if err != nil {
+				return st, err
 			}
-			idx, err := strconv.Atoi(fields[i+2])
-			if err != nil || idx < 0 || idx > 15 {
-				return st, fmt.Errorf("SGR 38;5;%s is outside the 4-bit palette", fields[i+2])
+			if p == 38 {
+				st.fg, st.hex = c.index, c.hex
+			} else {
+				st.bg, st.bgHex = c.index, c.hex
 			}
-			st.fg = idx
-			i += 2
 		default:
 			return st, fmt.Errorf("SGR parameter %d is not one this package draws", p)
 		}
 	}
 	return st, nil
+}
+
+// extColour is one resolved extended-colour parameter: either a palette index or
+// an asserted triple, never both.
+type extColour struct {
+	index int // -1 when hex carries the colour
+	hex   string
+}
+
+// extended reads the parameters after a 38 or a 48 and advances the cursor past
+// them.
+//
+// The cursor is a pointer because the caller is walking one flat parameter list
+// and an extended colour eats two fields or four; getting that count wrong is
+// how a channel value gets read back as a second SGR code, which would be a
+// silently wrong colour rather than an error.
+func extended(fields []string, i *int) (extColour, error) {
+	rest := len(fields) - *i - 1
+	if rest < 1 {
+		return extColour{}, fmt.Errorf("SGR %s with no colour form after it", fields[*i])
+	}
+	switch fields[*i+1] {
+	case "5":
+		if rest < 2 {
+			return extColour{}, fmt.Errorf("SGR %s;5 with no index after it", fields[*i])
+		}
+		idx, err := strconv.Atoi(fields[*i+2])
+		if err != nil || idx < 0 || idx > 15 {
+			return extColour{}, fmt.Errorf("SGR %s;5;%s is outside the 4-bit palette", fields[*i], fields[*i+2])
+		}
+		*i += 2
+		return extColour{index: idx}, nil
+	case "2":
+		if rest < 4 {
+			return extColour{}, fmt.Errorf("SGR %s;2 with fewer than three channels after it", fields[*i])
+		}
+		var ch [3]int
+		for k := 0; k < 3; k++ {
+			v, err := strconv.Atoi(fields[*i+2+k])
+			if err != nil || v < 0 || v > 255 {
+				return extColour{}, fmt.Errorf("SGR %s;2 channel %q is not a byte", fields[*i], fields[*i+2+k])
+			}
+			ch[k] = v
+		}
+		*i += 4
+		return extColour{index: -1, hex: fmt.Sprintf("#%02x%02x%02x", ch[0], ch[1], ch[2])}, nil
+	}
+	return extColour{}, fmt.Errorf("SGR %s in a form this package cannot resolve: %q",
+		fields[*i], strings.Join(fields, ";"))
 }
 
 // num formats a coordinate to two decimals with the trailing zeros stripped.

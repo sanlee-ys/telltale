@@ -7,114 +7,132 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
-// §9.28: the ratified exception. Council spends one hue per seat, and only where
-// seat names are what the eye is sorting.
+// The MONOGRAPH set retires §9.28's five seat hues and keeps its closed list.
+// Council spends ONE identity ink on seat names, and what separates the seat the
+// keys move from the rest is WEIGHT — see style.go's seatInk for the argument.
 //
 // Every assertion here is over a RENDERED string with NewStyles, because the
 // whole feature is invisible to PlainStyles by construction — which is also the
-// property TestSeatHuesAreInvisibleToPlainStyles pins directly, and the reason
+// property TestSeatInkIsInvisibleToPlainStyles pins directly, and the reason
 // this pass regolds nothing.
 
-// seatVendors is every VendorID that can reach a seat hue, seatable or not — the
-// five the room seats plus Gemini, which is in the normalized model and takes
-// the documented fallback. Kept beside the tests so the fallback has a witness
-// as well as a doc comment.
+// seatVendors is every VendorID that can reach a seat's ink, seatable or not —
+// the five the room seats plus Gemini, which is in the normalized model. It is
+// kept now that the hue is gone because the CALL SITES are still a closed list
+// and these tests walk it.
 var seatVendors = []model.VendorID{
 	model.VendorClaude, model.VendorCodex, model.VendorGemini,
 	model.VendorAntigravity, model.VendorCursor, model.VendorGrok,
 }
 
-// TestEverySeatWearsItsOwnHue. A vendor the room can seat holds a hue nobody
-// else holds; one it cannot falls back to the identity hue every seat name used
-// to have, which is a seat that looks as it always did rather than broken.
-func TestEverySeatWearsItsOwnHue(t *testing.T) {
-	if h := seatHue(model.VendorGemini); h != "6" {
-		// Asserted by name so that giving Gemini a hue of its own is a decision
-		// somebody makes here, on purpose, rather than a side effect.
-		t.Errorf("gemini's fallback hue is %q, want the identity hue", h)
+// TestEverySeatWearsTheRoomsOneInk. No seat has an ink of its own, and no seat
+// is missing one either: a vendor the room can seat and a vendor it cannot both
+// render in the identity ink, and a sixth vendor therefore needs no decision.
+//
+// This is the inverse of the assertion it replaces. TestEverySeatWearsItsOwnHue
+// pinned uniqueness across a set that style.go admitted was one index from full;
+// the ruling that lifted §9.28 is what let the answer be "one ink, and the tag
+// is what scales."
+func TestEverySeatWearsTheRoomsOneInk(t *testing.T) {
+	sty := NewStyles(true)
+	for _, v := range seatVendors {
+		if got, want := sty.SeatIdentity(v).Render("x"), sty.Identity.Render("x"); got != want {
+			t.Errorf("%s's seat ink is %q, want the room's identity ink %q", v, got, want)
+		}
+		if got, want := sty.SeatStrong(v).Render("x"), sty.Strong.Render("x"); got != want {
+			t.Errorf("%s's seat ink at weight is %q, want %q", v, got, want)
+		}
 	}
 
-	// Each seatable vendor's NAME actually renders in its own hue, on the surface
-	// with the highest payoff — a turn page, where the seats stack in one column
-	// and position answers nothing.
-	sty := NewStyles(true)
+	// Weight, not hue, is what says which seat the keys move — asserted on the
+	// surface with the highest payoff, a turn page, where the seats stack in one
+	// column and position answers nothing about who is speaking.
 	g := UnicodeGlyphs()
 	for _, v := range addressableVendors() {
 		line := seatRule(v, "Some Seat", "✓ done  1s", 60, sty, g)
 		if !strings.Contains(line, sty.SeatStrong(v).Render("Some Seat")) {
-			t.Errorf("%s's seat rule does not render its name in its own hue: %q",
+			t.Errorf("%s's seat rule does not render its name at the seat weight: %q",
 				v, stripANSI(line))
 		}
-		// Two different seats must not produce the same styled name.
-		if v != model.VendorCodex &&
-			strings.Contains(line, sty.SeatStrong(model.VendorCodex).Render("Some Seat")) {
-			t.Errorf("%s's seat rule renders in codex's hue", v)
-		}
+	}
+	if sty.SeatStrong(model.VendorClaude).Render("x") == sty.SeatIdentity(model.VendorClaude).Render("x") {
+		t.Error("a seat at weight renders identically to one without it; the focus signal is gone")
 	}
 }
 
-// TestNoSeatHueIsASeverity is the boundary that makes this exception safe to
-// grant at all.
+// TestTheIdentityInkIsNotAnAccent is the boundary that survives the retirement,
+// restated for a palette of hex inks rather than of 4-bit indices.
 //
-// The green/yellow/red ramp — 1/2/3 and their bright twins 9/10/11 — is
-// severity, on every surface this product draws. A seat that happened to wear
-// red would be a seat that reads as failed, on a row where `✗ failed` is the
-// thing beside it. The chrome family is fenced off for the same kind of reason:
-// 0/7/8/15 are the gauge track and the terminal's own fore/background.
-func TestNoSeatHueIsASeverity(t *testing.T) {
-	severity := map[string]bool{"1": true, "2": true, "3": true,
-		"9": true, "10": true, "11": true}
-	chrome := map[string]bool{"0": true, "7": true, "8": true, "15": true}
-
-	for _, v := range seatVendors {
-		h := seatHue(v)
-		if severity[h] {
-			t.Errorf("%s's seat hue %q is in the severity family; a seat would read "+
-				"as an outcome", v, h)
-		}
-		if chrome[h] {
-			t.Errorf("%s's seat hue %q is in the chrome family", v, h)
+// A seat that wore the withdrawn ink would read as cancelled and one that wore
+// the broke ink would read as failed, on a row where `✗ failed` is the thing
+// beside it. The measured ink is fenced off for the neighbouring reason: it
+// means a value somebody read, and a NAME is not a reading.
+func TestTheIdentityInkIsNotAnAccent(t *testing.T) {
+	for _, p := range []struct {
+		name string
+		pal  Palette
+	}{{"night", NightPalette()}, {"paper", PaperPalette()}} {
+		for _, bad := range []struct{ what, hex string }{
+			{"the withdrawn ink", p.pal.Withdrawn},
+			{"the broke ink", p.pal.Broke},
+			{"the measured ink", p.pal.Measured},
+		} {
+			if p.pal.Identity == bad.hex {
+				t.Errorf("%s: the identity ink is %s; a seat name would read as one",
+					p.name, bad.what)
+			}
 		}
 	}
 }
 
-// TestSeatHuesAreExhaustive fails the build when a VendorID is added without
-// anybody deciding what colour that seat is.
+// TestEveryInkIsDistinct fails the build when two tokens collapse onto one
+// pigment, which is how a palette silently loses a level.
 //
-// A default branch is the right BEHAVIOUR — an unknown seat renders in the
-// identity hue rather than breaking — and it is exactly what makes the decision
-// skippable, because nothing goes wrong on screen. So the guard is here instead:
-// the list above has to be updated in the same change that adds a vendor, and
-// updating it is what puts the hue question in front of whoever is doing it.
-func TestSeatHuesAreExhaustive(t *testing.T) {
-	seats := addressableVendors()
-	if len(seats) != 5 {
-		t.Fatalf("the room seats %d vendors; §9.28 plus the Grok amendment decided a hue "+
-			"for 5. A sixth seat needs a hue decision, and it is now the HARD one: the "+
-			"legal set (4,5,6,12,13,14) has exactly 13 left, after which a new seat "+
-			"cannot have its own hue without taking a severity or abandoning 4-bit "+
-			"indices — see seatHue's note. Decide it before this number moves.", len(seats))
-	}
-	seen := map[string]model.VendorID{}
-	for _, v := range seats {
-		h := seatHue(v)
-		if h == "" {
-			t.Errorf("%s has no seat hue at all", v)
-			continue
+// The MONOGRAPH hierarchy is carried by VALUE — Measured above Text above Muted
+// above Dim above RuleInk above Hair — so two tokens sharing a hex is not a tidy
+// palette, it is a distinction that stopped being drawn.
+func TestEveryInkIsDistinct(t *testing.T) {
+	for _, p := range []struct {
+		name string
+		pal  Palette
+	}{{"night", NightPalette()}, {"paper", PaperPalette()}} {
+		// Text is deliberately empty — vendor prose renders in the terminal's own
+		// foreground, which is what keeps the bare body lines in the palette (see
+		// Palette.Text). It is asserted by name rather than walked with the rest.
+		if p.pal.Text != "" {
+			t.Errorf("%s: Text is %q; prose renders in the terminal's own ink",
+				p.name, p.pal.Text)
 		}
-		if other, dup := seen[h]; dup {
-			t.Errorf("%s and %s share hue %q; a seat hue that is not a seat's own is a "+
-				"hue spent for nothing", v, other, h)
+		seen := map[string]string{}
+		for _, tok := range []struct{ name, hex string }{
+			{"Measured", p.pal.Measured},
+			{"Muted", p.pal.Muted}, {"Dim", p.pal.Dim},
+			{"RuleInk", p.pal.RuleInk}, {"Hair", p.pal.Hair},
+			{"Identity", p.pal.Identity}, {"Withdrawn", p.pal.Withdrawn},
+			{"Broke", p.pal.Broke},
+			// A GROUND rather than an ink, and walked with the rest anyway: a
+			// rail that shared a value with a token printed ON it would be the
+			// posture ledger erasing its own contents.
+			{"Rail", p.pal.Rail},
+		} {
+			if tok.hex == "" {
+				t.Errorf("%s: %s has no value", p.name, tok.name)
+				continue
+			}
+			if other, dup := seen[tok.hex]; dup {
+				t.Errorf("%s: %s and %s are both %s; a level stopped being drawn",
+					p.name, tok.name, other, tok.hex)
+			}
+			seen[tok.hex] = tok.name
 		}
-		seen[h] = v
 	}
 }
 
-// TestSeatHuesAreInvisibleToPlainStyles is the golden contract, and on this pass
-// it is the whole verification story: every site the hue reaches renders through
+// TestSeatInkIsInvisibleToPlainStyles is the golden contract, and on this pass
+// it is the whole verification story: every site the ink reaches renders through
 // PlainStyles as the identity function, so a golden that moved on this change is
 // a bug rather than a regold.
-func TestSeatHuesAreInvisibleToPlainStyles(t *testing.T) {
+func TestSeatInkIsInvisibleToPlainStyles(t *testing.T) {
 	p := PlainStyles()
 	for _, v := range seatVendors {
 		for _, s := range []string{"", "Claude Code", "  padded  "} {
@@ -128,44 +146,62 @@ func TestSeatHuesAreInvisibleToPlainStyles(t *testing.T) {
 			}
 		}
 	}
+	// The MONOGRAPH tokens are on the same contract, and it is what makes the
+	// whole identity free: each one is a colour or a weight, so every layout
+	// golden is blind to it.
+	for _, tok := range []struct {
+		name  string
+		style func(Styles) interface{ Render(...string) string }
+	}{
+		{"Measured", func(s Styles) interface{ Render(...string) string } { return s.Measured }},
+		{"Hair", func(s Styles) interface{ Render(...string) string } { return s.Hair }},
+		{"RuleInk", func(s Styles) interface{ Render(...string) string } { return s.RuleInk }},
+		{"Focus", func(s Styles) interface{ Render(...string) string } { return s.Focus }},
+	} {
+		if got := tok.style(p).Render("x"); got != "x" {
+			t.Errorf("PlainStyles().%s.Render(%q) = %q, want it unchanged", tok.name, "x", got)
+		}
+	}
 }
 
-// TestTheHueIsSpentOnlyOnSeatNames is the closed list, from the other side.
+// TestTheInkIsSpentOnlyOnSeatNames is the closed list, from the other side.
 //
-// Position already answers "which seat" in the grid, so a column header wearing
-// a per-seat hue would be a circus row spending the room's newest signal on the
-// one question the layout had already settled. Severity owns the phase words and
-// the marks beside them; chrome owns the rules and leaders; a posture badge is a
-// claim that must not compete with a name.
-func TestTheHueIsSpentOnlyOnSeatNames(t *testing.T) {
+// Position already answers "which seat" in the grid, so a column header renders
+// in the room's own Strong rather than through the seat accessors. Severity owns
+// the phase words and the marks beside them; the two rule inks own the rules and
+// leaders; a posture badge is a claim that must not compete with a name.
+func TestTheInkIsSpentOnlyOnSeatNames(t *testing.T) {
 	sty := NewStyles(true)
 	g := UnicodeGlyphs()
 	st := talking()
 	frame := Render(st, sty, g)
 
-	// The grid's column header keeps the room's identity hue, not the seat's.
-	if strings.Contains(frame, sty.SeatStrong(model.VendorClaude).Render("Claude Code")) {
-		t.Error("a grid column header wears a seat hue; position already answers which seat it is")
-	}
 	if !strings.Contains(frame, sty.Strong.Render("Claude Code")) {
-		t.Error("the grid's focused column header lost the room's identity hue")
+		t.Error("the grid's focused column header lost the room's identity ink at weight")
 	}
 
-	// Phase words stay severity, on a seat with a hue of its own.
+	// Phase words stay severity, and `done` now wears the MEASURED ink: a turn
+	// that ended is a reading, not a hue of its own.
 	done := talking()
 	done.Columns[1].Phase = PhaseDone
 	if !strings.Contains(Render(done, sty, g), sty.SevOK.Render(g.ActOK+" done")) {
 		t.Error("a phase word stopped rendering as a severity")
 	}
+	if sty.SevOK.Render("x") != sty.Measured.Render("x") {
+		t.Error("a finished turn no longer reports in the measured ink")
+	}
 
-	// A posture badge stays a claim.
-	if !strings.Contains(frame, sty.Alert.Render("unsandboxed")) {
+	// A posture badge stays a claim — printed on the posture rail, which is the
+	// ground the whole badge row moved onto on 2026-09-03 (style.go's
+	// RailGround). The claim's own ink is unchanged; what is new is the paper.
+	if !strings.Contains(frame, sty.onBand(sty.Alert).Render("unsandboxed")) {
 		t.Error("a posture badge lost its own style")
 	}
 }
 
 // TestTheTabBarSortsBySeat: the tab bar is the other place a seat NAME heads a
-// reading area, and the tier where a reader picks one by name.
+// reading area, and the tier where a reader picks one by name. The selected tab
+// is the one at weight.
 func TestTheTabBarSortsBySeat(t *testing.T) {
 	sty := NewStyles(true)
 	g := UnicodeGlyphs()
@@ -175,27 +211,27 @@ func TestTheTabBarSortsBySeat(t *testing.T) {
 	frame := Render(st, sty, g)
 
 	if !strings.Contains(frame, sty.SeatStrong(model.VendorClaude).Render("Claude Code")) {
-		t.Error("the selected tab does not carry its seat's hue at weight")
+		t.Error("the selected tab does not carry the seat ink at weight")
 	}
 	if !strings.Contains(frame, sty.SeatIdentity(model.VendorCodex).Render("Codex")) {
-		t.Error("an unselected tab does not carry its seat's hue")
+		t.Error("an unselected tab does not carry the seat ink")
 	}
 	// The selected tab still outranks the others by WEIGHT and by the mark, which
-	// is what survives NO_COLOR — the hue is the second signal here as everywhere.
+	// is what survives NO_COLOR — the ink is the second signal here as everywhere.
 	if !strings.Contains(stripANSI(frame), g.Focus+" 1 CC Claude Code") {
-		t.Error("the selected tab lost the focus mark; the hue would be carrying it alone")
+		t.Error("the selected tab lost the focus mark; the ink would be carrying it alone")
 	}
 	if strings.Contains(frame, sty.SeatStrong(model.VendorCodex).Render("Codex")) {
 		t.Error("an unselected tab took weight")
 	}
 }
 
-// TestACollapsedSeatIsNamedInItsOwnHue. The notice is the one place a seat's
+// TestACollapsedSeatIsNamedInTheSeatInk. The notice is the one place a seat's
 // name appears inside PROSE, and §9.25 kept the two-letter tag out of prose on
 // the argument that an abbreviation introduced mid-sentence is one nobody can
-// learn there. A hue is not an abbreviation: it costs no cell and teaches
+// learn there. An ink is not an abbreviation: it costs no cell and teaches
 // nothing new.
-func TestACollapsedSeatIsNamedInItsOwnHue(t *testing.T) {
+func TestACollapsedSeatIsNamedInTheSeatInk(t *testing.T) {
 	sty := NewStyles(true)
 	g := UnicodeGlyphs()
 	st := room()
@@ -204,12 +240,12 @@ func TestACollapsedSeatIsNamedInItsOwnHue(t *testing.T) {
 	frame := Render(st, sty, g)
 
 	if !strings.Contains(frame, sty.SeatIdentity(model.VendorCodex).Render("Codex")) {
-		t.Errorf("the collapsed-seat notice does not name Codex in its own hue:\n%s",
+		t.Errorf("the collapsed-seat notice does not name Codex in the seat ink:\n%s",
 			stripANSI(frame))
 	}
 	// The mark stays a warning and the prose stays chrome.
 	if !strings.Contains(frame, sty.SevWarn.Render(g.Warn)) {
-		t.Error("the notice lost its warning mark's hue")
+		t.Error("the notice lost its warning mark's ink")
 	}
 	if !strings.Contains(frame, sty.Muted.Render(" 1 seat is not on screen: ")) {
 		t.Error("the notice's prose is no longer chrome")

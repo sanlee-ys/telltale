@@ -336,9 +336,26 @@ func TestAWriteCapableBadgeDoesNotRenderLikeAReadOnlyOne(t *testing.T) {
 	if sty.ForSandbox(SandboxGated).Render("x") == sty.Alert.Render("x") {
 		t.Error("a gated seat is coloured like an ungated one")
 	}
-	for _, l := range []SandboxLevel{SandboxTools, SandboxEnforced, SandboxRequested} {
-		if sty.ForSandbox(l).Render("x") != sty.Muted.Render("x") {
-			t.Errorf("level %v is not chrome; only the badges that can change your files are loud", l)
+	// THE EVIDENCE LADDER (2026-09-03). The three read-only badges used to be one
+	// render — all Muted — and they are not one fact: `ro:enforced` is an OS
+	// sandbox this repo drove at a pinned version, `ro:tools` is a tool set read
+	// off what the session reported, and `ro:requested` is a flag nobody measured
+	// the result of. A containment that was measured looking exactly like one
+	// that was merely asked for is §4a.1 broken on the surface the product exists
+	// for, so what is asserted now is that the five steps are five DISTINCT
+	// renders, and that none of the read-only three is as loud as Alert.
+	ladder := []SandboxLevel{SandboxEnforced, SandboxTools, SandboxRequested, SandboxGated, SandboxWrite}
+	seen := map[string]SandboxLevel{}
+	for _, l := range ladder {
+		got := sty.ForSandbox(l).Render("x")
+		if prev, dup := seen[got]; dup {
+			t.Errorf("level %v renders identically to %v; a step of the evidence ladder stopped being drawn", l, prev)
+		}
+		seen[got] = l
+	}
+	for _, l := range []SandboxLevel{SandboxEnforced, SandboxTools, SandboxRequested} {
+		if sty.ForSandbox(l).Render("x") == sty.Alert.Render("x") {
+			t.Errorf("read-only level %v is as loud as a seat that can change your files", l)
 		}
 	}
 
@@ -346,7 +363,10 @@ func TestAWriteCapableBadgeDoesNotRenderLikeAReadOnlyOne(t *testing.T) {
 	// the weight safe to add: nothing above is the sole carrier of anything, so
 	// NO_COLOR and --ascii are untouched.
 	plain := PlainStyles()
-	for _, l := range []SandboxLevel{SandboxWrite, SandboxNone, SandboxGated, SandboxTools} {
+	for _, l := range []SandboxLevel{
+		SandboxWrite, SandboxNone, SandboxGated,
+		SandboxTools, SandboxEnforced, SandboxRequested,
+	} {
 		if got := plain.ForSandbox(l).Render("badge"); got != "badge" {
 			t.Errorf("the identity style set is not a no-op for level %v: %q", l, got)
 		}

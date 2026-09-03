@@ -1,17 +1,17 @@
   council READ  │  ~/code/telltale                                             no turn yet  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   council  ──────────────────────────────────────────────────────────────────────  what the badge on each column means  
-    Each column states its own posture; there is no room-wide claim.                                                    
+    Each column states its own posture, not the room. Best evidence first.                                              
                                                                                                                         
+    ro:enforced  the vendor's own OS-level sandbox does it — codex, every OS                                            
     ro:tools     the write tools are ABSENT from that session — checked                                                 
                  against what the session reported about itself, not a flag                                             
-    ro:enforced  the vendor's own OS-level sandbox does it — codex, every OS                                            
     ro:requested a flag was passed and accepted; what it actually enforces                                              
                  was never observed. Weaker than the two above, and says so                                             
+    gated        as WRITES, and this seat asks first — y approves, n denies                                             
+    WRITES       the DEFAULT: this column may edit and run. --read opts out                                             
     unsandboxed  nothing restricts this vendor at the OS level. MEASURED,                                               
                  not assumed — treat this column as able to change your files                                           
-    WRITES       the DEFAULT: this column may edit and run. --read opts out                                             
-    gated        as WRITES, and this seat asks first — y approves, n denies                                             
                                                                                                                         
     What contains this room is the WORKSPACE above, not any of these words.                                             
     Point council at a throwaway worktree when that matters.                                                            

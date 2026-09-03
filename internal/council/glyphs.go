@@ -124,6 +124,23 @@ type Glyphs struct {
 	ActFail    string // the vendor reported the call failed
 	ActUnknown string // the call ended and the vendor said nothing about how
 
+	// Fill is the REACHED part of a racer's lane track, drawn over Rule
+	// (arenalane.go).
+	//
+	// It is not a new character. `█` over `─`, and `#` over `-` in the reduced
+	// set, is the HUD's gauge exactly — internal/hud/glyphs.go's own Fill and
+	// Track, with the HUD's own argument for the pair: a full-height fill over a
+	// mid-height rule reads as a level above a baseline, while a shaded track
+	// reads as texture and fights the text. §7.1 principle 5 says these are one
+	// product, so the one quantity council draws is drawn in the vocabulary the
+	// other surface already taught the reader.
+	//
+	// `#` in the reduced set is the collision every other glyph here refused, and
+	// it is correct HERE for the reason those refusals name: `#` is refused as an
+	// OUTCOME MARK because it already means gauge fill. This IS a gauge fill. One
+	// meaning, one character, on both surfaces.
+	Fill string
+
 	Spinner []string
 
 	// ASCII reports whether this is the reduced set.
@@ -173,6 +190,7 @@ func UnicodeGlyphs() Glyphs {
 		ActOK:      "✓", // ✓
 		ActFail:    "✗", // ✗
 		ActUnknown: "?",
+		Fill:       "█", // █ — the HUD's gauge fill, unchanged
 		Spinner: []string{
 			"⠋", "⠙", "⠹", "⠸", "⠼",
 			"⠴", "⠦", "⠧", "⠇", "⠏",
@@ -247,6 +265,7 @@ func ASCIIGlyphs() Glyphs {
 		ActOK:      "+",
 		ActFail:    "x",
 		ActUnknown: "?",
+		Fill:       "#", // the HUD's ascii gauge fill, unchanged
 		Spinner:    []string{"-", "\\", "|", "/"},
 	}
 }

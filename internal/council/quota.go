@@ -217,7 +217,12 @@ func (f quotaForm) plain() string {
 }
 
 func (f quotaForm) render(sty Styles) string {
-	out := sty.Muted.Render(f.reading)
+	// The reading is the vendor's own relayed number, so it takes the MEASURED
+	// ink rather than chrome (MONOGRAPH, style.go). The AGE beside it is a
+	// statement about the measurement rather than a measurement, which is the
+	// separation §7.17 already draws one surface over — so it stays chrome until
+	// it goes stale and becomes a severity.
+	out := sty.Measured.Render(f.reading)
 	if f.age == "" {
 		return out
 	}
