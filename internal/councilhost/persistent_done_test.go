@@ -54,7 +54,7 @@ func TestAPersistentSeatThatFinishedIsDrawnDone(t *testing.T) {
 	h.roomCtx, h.roomCancel = context.WithCancel(ctx)
 	go h.fold()
 
-	h.dispatch("say your seat name, one line")
+	h.dispatch("say your seat name, one line", nil)
 
 	// Exactly the lines a `--input-format stream-json` process emits for one
 	// turn, in order: init, one text delta, and the result that ends the turn.
@@ -93,15 +93,11 @@ func TestAPersistentSeatThatFinishedIsDrawnDone(t *testing.T) {
 		t.Fatalf("a finished seat still drew as streaming:\n%s", out)
 	}
 
-	// The turn guard reads the same phases the operator sees. Before this fix
-	// the seat never settled, so the guard never cleared and every later brief
-	// was refused as "a turn is already running" — the room was one turn long.
-	// A second dispatch must be accepted and counted. The guard clears on
-	// watchTurn's own 25ms poll after the phase settles, so the test waits for
-	// the guard rather than racing it: a keystroke lands well after 25ms, and
-	// this test is about the phase reaching the guard, not about the poll.
-	awaitTurnGuardClear(t, h)
-	h.dispatch("and again")
+	// The turn guard reads the same phase the operator sees, under the same
+	// lock (§7.31). Before this fix the seat never settled, so every later
+	// brief was refused as "a turn is already running" — the room was one turn
+	// long. A second dispatch must be accepted and counted.
+	h.dispatch("and again", nil)
 	r := awaitRoom2(t, h, func(r Room) bool { return r.Turn == 2 })
 	if r.Notice != "" {
 		t.Fatalf("the second brief was refused: %q", r.Notice)
@@ -111,28 +107,43 @@ func TestAPersistentSeatThatFinishedIsDrawnDone(t *testing.T) {
 	}
 }
 
-// TestABatchSeatIsNotSettledByItsOwnEndOfTurnLine is the other half of the
-// decision Room.Apply's KindMeta branch records.
+// TestABatchSeatSettlesOnItsEndOfTurnLineAndStaysBusyUntilItExits is the
+// other half of the decision Room.applyAt's KindMeta branch records, as §7.31
+// re-cut it.
 //
 // codex says `turn.completed` seconds before it exits, and that line is the
-// same KindMeta-with-EndsTurn shape. On this rung it changes nothing: the
-// host's turn guard is phase-based, so settling a batch seat here would let
-// the next dispatch kill a child that is still exiting, on a capture that
-// covers no turn that ran tools (vendors/codex.go). The seat settles on its
-// exit, as it did before, and the exit code lands with it.
-func TestABatchSeatIsNotSettledByItsOwnEndOfTurnLine(t *testing.T) {
+// same KindMeta-with-EndsTurn shape. The PHASE settles on it, so the column
+// reads `done · exiting` instead of `streaming` for those seconds (§9.33), and
+// the SEAT stays busy, so a dispatch landing in the gap is refused rather than
+// killing a child that is still winding down (dispatchBatch). The exit clears
+// the linger and lands the exit code.
+func TestABatchSeatSettlesOnItsEndOfTurnLineAndStaysBusyUntilItExits(t *testing.T) {
 	r := Room{Seats: []Seat{{Vendor: model.VendorCodex, Phase: PhaseIdle, Drivable: true}}}
-	r.beginTurn()
+	r.beginAll()
 	r.Apply(runner.Event{Vendor: model.VendorCodex, Kind: runner.KindText, Text: "codex here"})
-	if r.Apply(runner.Event{Vendor: model.VendorCodex, Kind: runner.KindMeta, EndsTurn: true}) {
-		t.Fatal("a batch seat's end-of-turn line reported a change")
+	if !r.Apply(runner.Event{Vendor: model.VendorCodex, Kind: runner.KindMeta, EndsTurn: true}) {
+		t.Fatal("a batch seat's end-of-turn line reported no change")
 	}
-	if r.Seats[0].Phase != PhaseStreaming {
-		t.Fatalf("a batch seat settled on its end-of-turn line: %q", r.Seats[0].Phase)
+	s := r.Seats[0]
+	if s.Phase != PhaseDone {
+		t.Fatalf("a batch seat did not settle on its end-of-turn line: %q", s.Phase)
+	}
+	if !s.Settling {
+		t.Fatal("a settled batch seat whose process is still up did not say it was exiting")
+	}
+	if !s.busy() {
+		t.Fatal("a seat still winding down was free to take a brief; the next dispatch would kill its child")
+	}
+	if s.ExitCode != nil {
+		t.Fatalf("an end-of-turn line reported exit code %d — the process did not exit", *s.ExitCode)
 	}
 	r.Apply(runner.Event{Vendor: model.VendorCodex, Kind: runner.KindDone})
-	if r.Seats[0].Phase != PhaseDone || r.Seats[0].ExitCode == nil || *r.Seats[0].ExitCode != 0 {
-		t.Fatalf("the exit did not settle the batch seat: %+v", r.Seats[0])
+	s = r.Seats[0]
+	if s.Phase != PhaseDone || s.ExitCode == nil || *s.ExitCode != 0 {
+		t.Fatalf("the exit did not settle the batch seat: %+v", s)
+	}
+	if s.Settling || s.busy() {
+		t.Fatalf("the exit did not free the seat: %+v", s)
 	}
 }
 
@@ -143,7 +154,7 @@ func TestABatchSeatIsNotSettledByItsOwnEndOfTurnLine(t *testing.T) {
 // turn a seat the operator stopped into a seat that completed.
 func TestALateResultDoesNotUnCancelASeat(t *testing.T) {
 	r := oneSeatRoom()
-	r.beginTurn()
+	r.beginAll()
 	r.Apply(runner.Event{Vendor: model.VendorClaude, Kind: runner.KindText, Text: "partial"})
 	r.Seats[0].Phase = PhaseCancelled
 	if r.Apply(turnEnded("partial answer")) {
@@ -161,21 +172,21 @@ func TestALateResultDoesNotUnCancelASeat(t *testing.T) {
 // streamed, so a normal turn never draws its reply twice.
 func TestATurnThatStreamedNothingSaysSo(t *testing.T) {
 	r := oneSeatRoom()
-	r.beginTurn()
+	r.beginAll()
 	r.Apply(turnEnded(""))
 	if r.Seats[0].Body != "[Turn completed with 0 text chunks streamed]" {
 		t.Fatalf("an empty turn drew %q", r.Seats[0].Body)
 	}
 
 	r = oneSeatRoom()
-	r.beginTurn()
+	r.beginAll()
 	r.Apply(turnEnded("the whole answer"))
 	if r.Seats[0].Body != "the whole answer" {
 		t.Fatalf("the result's text was not used as the fallback: %q", r.Seats[0].Body)
 	}
 
 	r = oneSeatRoom()
-	r.beginTurn()
+	r.beginAll()
 	r.Apply(runner.Event{Vendor: model.VendorClaude, Kind: runner.KindText, Text: "streamed"})
 	r.Apply(turnEnded("streamed"))
 	if r.Seats[0].Body != "streamed" {
@@ -192,22 +203,6 @@ func awaitSeat(t *testing.T, h *Host, want func(Seat) bool) Seat {
 	t.Helper()
 	r := awaitRoom2(t, h, func(r Room) bool { return want(r.Seats[0]) })
 	return r.Seats[0]
-}
-
-// awaitTurnGuardClear waits for watchTurn to see every seat settled.
-func awaitTurnGuardClear(t *testing.T, h *Host) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		h.mu.Lock()
-		busy := h.inFlight
-		h.mu.Unlock()
-		if !busy {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatal("the turn guard never cleared after every seat settled")
 }
 
 // awaitRoom2 polls Snapshot until want holds, or fails the test.

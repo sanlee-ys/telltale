@@ -1,0 +1,24 @@
+  council ⚠ WRITE hosted  │  ~/code/telltale                                   no turn yet  │  4/5 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⚠ 1 seat is not on screen: Cursor (installed but not drivable)  │  --vendor all seats them anyway                     
+▌ ▸ 1 CC Claude Code ○ idle   │    2 CX Codex  ───  ○ idle  │    3 AG Antigravity ○ idle  │    4 GR Grok  ────  ○ idle  
+▌   WRITES  tokens            │    WRITES  final only       │    WRITES  final only       │    WRITES  tokens           
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▌ no turn dispatched yet.     │  no turn dispatched yet.    │  no turn dispatched yet.    │  no turn dispatched yet.    
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────  VIEW  │  hosted pid 4242, not asking  ─╯  
+   ⚠ this room writes to the workspace without asking, so it will not detach: telltale never leaves an agent working …  

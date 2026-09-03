@@ -561,6 +561,11 @@ type Model struct {
 	// launchFlowStage and consumed by the sendTurn it calls (§9.55). Nil the
 	// rest of the time, which is every ordinary dispatch.
 	fanPrompts map[model.VendorID]string
+	// hosted is the link to the host this room is drawn from, or nil for the
+	// single-process room (hosted.go, design.md §7.31). Its presence is what
+	// turns the spawn paths off: enter sends a frame, ctrl+c sends a frame,
+	// teardown closes the link, saveRoom writes nothing.
+	hosted *hostedRun
 }
 
 // New builds the model. Nothing renders until the first WindowSizeMsg arrives:
@@ -911,6 +916,19 @@ func isDir(path string) bool {
 type spinMsg time.Time
 
 func (m *Model) Init() tea.Cmd {
+	if m.hosted != nil {
+		// A hosted room's sources are the tick, the wire and this machine's
+		// quota relay (hosted.go, design.md §7.31). No rebuild and no live
+		// seat: the host holds the seats, and this room spawns nothing by any
+		// path — which is what keeps the spawn guard's "no test calls Init"
+		// argument true from this side as well.
+		return tea.Batch(
+			func() tea.Msg { return tea.RequestBackgroundColor() },
+			spin(),
+			readQuotaCmd(),
+			m.waitHost(),
+		)
+	}
 	if m.replay != nil {
 		// A replay's only sources are the tick and the file (replay.go). No
 		// relay read — a live reading on a replayed frame would be two rooms'
@@ -990,6 +1008,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The room-open rebuild, launched ON the update loop so m.procs keeps
 		// its single writer (rebuild.go).
 		return m, m.startRebuild()
+
+	case hostFrameMsg:
+		// One frame off the host's wire (hosted.go): a room to project, an
+		// answer to a detach, a refusal, or the stream ending. The handler
+		// re-arms the one reader, or quits.
+		return m, m.applyHostFrame(msg)
 
 	case ptyBatchMsg:
 		// The live seat's bytes (§9.53), and they go nowhere near applyEvents.
@@ -1180,6 +1204,15 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// verbs. Reading is untouched — scroll, focus, the pages, the help.
 	if m.replay != nil {
 		if handled, cmd := m.replayKey(msg); handled {
+			return m, cmd
+		}
+	}
+	// A hosted room answers the keys that would spawn, kill or alter a seat
+	// before the ordinary keymap does (hosted.go): enter sends a frame,
+	// ctrl+c sends a frame, and the per-seat verbs are refused in words.
+	// Reading is untouched, for the replay's reason.
+	if m.hosted != nil {
+		if handled, cmd := m.hostedKey(msg); handled {
 			return m, cmd
 		}
 	}

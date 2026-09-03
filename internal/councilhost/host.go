@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -263,21 +264,6 @@ type Host struct {
 	// file keeps saying when the HOST started rather than when it was last
 	// rewritten.
 	startedAt time.Time
-
-	// inFlight is true from the moment a turn is broadcast until every drivable
-	// seat has settled.
-	//
-	// It exists because a second dispatch used to start a SECOND child for a
-	// batch seat while the first was still streaming, and the first was then
-	// dropped from the handles map — unreachable by interrupt and by Shutdown,
-	// still folding text into the new turn's body, and reaped only by the room
-	// job at host death. That is the backstop being used as the ordinary route,
-	// which roomjob_windows.go says it must not be.
-	//
-	// Guarded by mu, because the answer is read off the same seat phases the
-	// room draws from: what "a turn is running" means must not be able to
-	// disagree with what the operator can see.
-	inFlight bool
 }
 
 // eventBuffer is how many events may be in flight from the seats.
@@ -329,26 +315,59 @@ func New(cfg Config) (*Host, error) {
 			s.Drivable, s.Phase = false, PhaseUndrivable
 			s.Note = "no adapter exists for this seat"
 		default:
-			if _, conversational := reg[e.Vendor].(vendors.Conversational); conversational {
+			v := reg[e.Vendor]
+			if _, conversational := v.(vendors.Conversational); conversational {
 				// A conversational seat cannot be driven by writing a line: its
 				// turn cannot be built until the vendor has answered a request
 				// of the room's own, and it asks questions back on the same
-				// pipe (design.md §9.36). Refusing it in words is the honest
-				// state. Dispatching to it and drawing a column that never
-				// finishes would be the same fault as a blocked seat rendered
-				// as a slow one.
-				s.Drivable, s.Phase = false, PhaseUndrivable
-				s.Note = "this seat speaks a request/response protocol the host does not drive yet"
+				// pipe (design.md §9.36). Since design.md §9.57 two more seats
+				// wear that shape — codex's app-server and grok's ACP — and each
+				// names the batch adapter that WAS measured (vendors.LiveFallback).
+				// The host takes that adapter, the way the room retreats to it
+				// on a refused handshake (fallback.go), and the seat says so on
+				// its badge (Seat.FellBack). Before §7.31 the host refused both
+				// seats outright, which was two of five columns lost to a
+				// registry change the host never saw.
+				//
+				// A conversational seat with NO fallback — cursor — is still
+				// refused in words: dispatching to it and drawing a column that
+				// never finishes would be the same fault as a blocked seat
+				// rendered as a slow one.
+				if lf, ok := v.(vendors.LiveFallback); ok {
+					v = lf.Fallback()
+					s.FellBack = true
+				} else {
+					s.Drivable, s.Phase = false, PhaseUndrivable
+					s.Note = "this seat speaks a request/response protocol the host does not drive yet"
+				}
 			}
 			// Read off the adapter's interface, which is the same test
 			// dispatchSeat makes when it chooses between a session and a
 			// child. The fold needs the answer too, because it decides which
 			// event ends this seat's turn (Seat.Persistent).
-			_, s.Persistent = reg[e.Vendor].(vendors.Persistent)
+			_, s.Persistent = v.(vendors.Persistent)
 		}
 		h.room.Seats = append(h.room.Seats, s)
 	}
 	return h, nil
+}
+
+// registry is vendors.Registry with every seat the host drives through its
+// batch adapter replaced by that adapter — the shape dispatch and interrupt
+// read, so a fallen-back seat is a one-shot seat on every brief.
+func (h *Host) registry() map[model.VendorID]vendors.Vendor {
+	reg := vendors.Registry()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, s := range h.room.Seats {
+		if !s.FellBack {
+			continue
+		}
+		if lf, ok := reg[s.Vendor].(vendors.LiveFallback); ok {
+			reg[s.Vendor] = lf.Fallback()
+		}
+	}
+	return reg
 }
 
 func postureWord(p vendors.Posture) string {
@@ -707,11 +726,12 @@ func (h *Host) serveClient(ctx context.Context, conn *Conn) error {
 			// on until the broadcast finished, and an adapter that blocked took
 			// the control channel with it.
 			//
-			// Safe because dispatch refuses to start a second turn while one is
-			// running, so these goroutines cannot overlap on the seats.
-			go h.dispatch(f.Prompt)
+			// Safe because dispatch accepts a seat under the room's lock and
+			// marks it busy there, so two of these goroutines cannot both take
+			// one seat; what they may do is spawn different seats at once.
+			go h.dispatch(f.Prompt, f.Seats)
 		case KindInterrupt:
-			h.interrupt()
+			h.interrupt(f.Seats)
 		case KindShutdown:
 			return nil
 		default:
@@ -766,44 +786,88 @@ func (h *Host) pump(fw *FrameWriter, stop <-chan struct{}) {
 	}
 }
 
-// dispatch broadcasts one turn to every drivable seat.
+// dispatch sends one turn to the seats a client named, and to every drivable
+// seat when it named none.
 //
-// Every seat is dispatched INDEPENDENTLY and a failure on one is that seat's
-// card, never the turn's. Three of these vendors are separate programs with
-// separate ways of being unhappy, and a room that abandoned the broadcast on
-// the first refusal would lose the answers of the seats that were fine.
-func (h *Host) dispatch(prompt string) {
+// Per seat and never per room (design.md §7.31, which carries §9.54's crew
+// into the host). A busy seat is refused and named; an idle seat the same
+// brief names still goes. Before §7.31 this host refused any second dispatch
+// while any seat was running — the committee §9.54 retired from the room,
+// still standing in the process behind it.
+//
+// The decision is made under the room's lock in one pass, and beginTurn marks
+// the accepted seats Waiting before the lock is released. So the phase a seat
+// is refused on is the phase the operator can see, and two dispatches cannot
+// both accept one seat — which is what keeps the handle map honest: a second
+// child for a batch seat whose first is still streaming would drop the first
+// from the map, unreachable by interrupt and by Shutdown, reaped only by the
+// room job at host death. That is the backstop used as the ordinary route,
+// which roomjob_windows.go says it must not be.
+//
+// Every accepted seat is dispatched INDEPENDENTLY and a failure on one is that
+// seat's card, never the turn's. Three of these vendors are separate programs
+// with separate ways of being unhappy, and a room that abandoned the broadcast
+// on the first refusal would lose the answers of the seats that were fine.
+func (h *Host) dispatch(prompt string, seats []model.VendorID) {
 	if prompt == "" {
 		return
 	}
+	named := make(map[model.VendorID]bool, len(seats))
+	for _, v := range seats {
+		named[v] = true
+	}
+
 	h.mu.Lock()
-	if h.inFlight {
-		// REFUSED, and said out loud. A room that silently swallowed the second
-		// turn would look identical to one that lost it, and a room that ran it
-		// anyway would leave the first turn's children unreachable.
-		h.room.Notice = "a turn is already running in this room — wait for it, or interrupt it"
+	h.room.Notice = ""
+	accepted := map[model.VendorID]bool{}
+	var busy, sent []string
+	for _, s := range h.room.Seats {
+		if !s.Drivable || (len(named) > 0 && !named[s.Vendor]) {
+			continue
+		}
+		if s.busy() {
+			busy = append(busy, string(s.Vendor)+" (turn "+itoa(s.Turn)+")")
+			continue
+		}
+		accepted[s.Vendor] = true
+		sent = append(sent, string(s.Vendor))
+	}
+	if len(accepted) == 0 {
+		// REFUSED, and said out loud, in council's own words. A room that
+		// silently swallowed the brief would look identical to one that lost
+		// it. The remedy is per seat: naming the whole-room cancel would tell
+		// an operator who wanted grok to stop codex.
+		if len(busy) > 0 {
+			h.room.Notice = "a turn is in flight on " + strings.Join(busy, ", ") +
+				" — ctrl+c on its column cancels that turn, or address another seat"
+		} else {
+			h.room.Notice = "none of the seats this brief names can be driven — see the columns"
+		}
 		h.dirty = true
 		h.mu.Unlock()
 		return
 	}
-	h.inFlight = true
-	h.room.Notice = ""
-	h.room.beginTurn()
+	h.room.beginTurn(h.room.Turn+1, prompt, accepted, time.Now())
+	if len(busy) > 0 {
+		// A partial send says so: who took the brief and who was skipped, and
+		// why. Both halves are measured.
+		h.room.Notice = "sent to " + strings.Join(sent, ", ") + " — skipped: " +
+			strings.Join(busy, ", ") + ", still on a turn; ctrl+c on its column cancels it"
+	}
 	h.dirty = true
-	seats := make([]Seat, len(h.room.Seats))
-	copy(seats, h.room.Seats)
+	roster := make([]Seat, len(h.room.Seats))
+	copy(roster, h.room.Seats)
 	h.mu.Unlock()
 
-	reg := vendors.Registry()
-	for _, s := range seats {
-		if !s.Drivable {
+	reg := h.registry()
+	for _, s := range roster {
+		if !accepted[s.Vendor] {
 			continue
 		}
 		if err := h.dispatchSeat(reg[s.Vendor], s, prompt); err != nil {
 			h.noteSeat(s.Vendor, PhaseFailed, err.Error())
 		}
 	}
-	go h.watchTurn()
 	h.refreshHostFile()
 }
 
@@ -832,41 +896,6 @@ func (h *Host) refreshHostFile() {
 		PID: os.Getpid(), Pipe: h.cfg.PipeName, StartedAt: h.startedAt,
 		Workspace: h.cfg.Workspace, Seats: seats, Turn: turn,
 	})
-}
-
-// watchTurn clears the in-flight flag once no seat is still running.
-//
-// It polls the room's own phases rather than counting terminal events, because
-// the phases are what the operator sees: a room that said "a turn is already
-// running" while every column read `done` would be the host disagreeing with
-// its own screen. A seat that never settles holds the flag, which is the
-// honest outcome — the way out of that is the interrupt, not a timer that
-// declares a running turn over.
-func (h *Host) watchTurn() {
-	t := time.NewTicker(25 * time.Millisecond)
-	defer t.Stop()
-	for {
-		select {
-		case <-h.roomCtx.Done():
-			return
-		case <-t.C:
-			h.mu.Lock()
-			running := false
-			for i := range h.room.Seats {
-				switch h.room.Seats[i].Phase {
-				case PhaseWaiting, PhaseStreaming:
-					running = true
-				}
-			}
-			if !running {
-				h.inFlight = false
-			}
-			h.mu.Unlock()
-			if !running {
-				return
-			}
-		}
-	}
 }
 
 // dispatchSeat sends one turn to one seat.
@@ -974,28 +1003,44 @@ func (h *Host) dispatchBatch(v vendors.Vendor, s Seat, prompt string) error {
 // what it is.
 func v0Parse(p vendors.Persistent) runner.ParseFunc { return p.ParseEvent }
 
-// interrupt asks every running seat to abandon the turn in flight.
+// interrupt asks the named seats — every seat, when none is named — to abandon
+// the turn in flight.
 //
 // A persistent seat is INTERRUPTED and not killed, because keeping the process
 // is the whole point of it: killing one would cost the next turn a session init
 // that was already measured at about 25 seconds and $0.23. A batch seat has no
 // such channel — its stdin was written and closed before the first token
 // arrived — so for that one the kill IS the interrupt.
-func (h *Host) interrupt() {
+//
+// Per seat since design.md §7.31, for the reason dispatch is: the client's
+// ctrl+c stops the focused seat while its neighbours work on (§9.54), and a
+// host that could only stop everyone would make that key a lie over a hosted
+// room.
+func (h *Host) interrupt(seats []model.VendorID) {
+	named := make(map[model.VendorID]bool, len(seats))
+	for _, v := range seats {
+		named[v] = true
+	}
+	wanted := func(v model.VendorID) bool { return len(named) == 0 || named[v] }
+
 	h.pmu.Lock()
 	h.interrupts++
 	id := fmt.Sprintf("host-%d", h.interrupts)
 	sessions := make(map[model.VendorID]seatSession, len(h.sessions))
 	for k, v := range h.sessions {
-		sessions[k] = v
+		if wanted(k) {
+			sessions[k] = v
+		}
 	}
 	handles := make(map[model.VendorID]seatProcess, len(h.handles))
 	for k, v := range h.handles {
-		handles[k] = v
+		if wanted(k) {
+			handles[k] = v
+		}
 	}
 	h.pmu.Unlock()
 
-	reg := vendors.Registry()
+	reg := h.registry()
 	for vid, sess := range sessions {
 		p, ok := reg[vid].(vendors.Persistent)
 		if !ok {
@@ -1011,26 +1056,37 @@ func (h *Host) interrupt() {
 		hd.Kill()
 	}
 	h.mu.Lock()
+	now := time.Now()
 	for i := range h.room.Seats {
-		switch h.room.Seats[i].Phase {
-		case PhaseWaiting, PhaseStreaming:
-			// Cancelled and not Failed. Output already on screen was really
-			// produced, and blaming the vendor for the operator's keystroke is
-			// the distinction council.PhaseCancelled exists for.
-			h.room.Seats[i].Phase = PhaseCancelled
+		if !wanted(h.room.Seats[i].Vendor) {
+			continue
+		}
+		// Cancelled and not Failed. Output already on screen was really
+		// produced, and blaming the vendor for the operator's keystroke is
+		// the distinction council.PhaseCancelled exists for.
+		if h.room.Seats[i].cancel(now) {
+			h.dirty = true
 		}
 	}
-	h.dirty = true
 	h.mu.Unlock()
 }
 
 // noteSeat records a host-side refusal on one seat's card.
+//
+// The seat is retired on the spot: it never entered a live phase, so this is
+// the one retirement the fold does not stamp, and the inbox (§9.54) reads the
+// stamp.
 func (h *Host) noteSeat(v model.VendorID, ph Phase, note string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if i := h.room.seatIndex(v); i >= 0 {
-		h.room.Seats[i].Phase = ph
-		h.room.Seats[i].Note = note
+		s := &h.room.Seats[i]
+		s.Phase = ph
+		s.Note = note
+		s.Settling = false
+		now := time.Now()
+		s.stampElapsed(now)
+		s.Ended = now
 		h.dirty = true
 	}
 }

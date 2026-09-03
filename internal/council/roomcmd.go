@@ -276,10 +276,29 @@ func (m *Model) runRoomCommand() bool {
 	if !addressesRoom(m.st.Draft) {
 		return false
 	}
+	// /detach sits OUTSIDE the table, and the reason is the refusal's width:
+	// refuseUnknownCommand's own comment records that the line fits its
+	// narrowest room "with nothing left to sell", so a twelfth verb there
+	// would clip the vocabulary it teaches. The verb belongs to the hosted
+	// room, whose help panel names it (helpKeysHosted); in the ordinary room
+	// it is answered with its own remedy rather than listed as a word the
+	// room can act on (hosted.go, design.md §7.31). Bare-only, /read's
+	// reason: "/detach the parser from the lexer" is a sentence.
+	if parseBareCommand(m.st.Draft, "/detach") {
+		return m.detachCommand()
+	}
 	for _, rc := range roomVerbs() {
 		arg, ok := rc.match(m.st.Draft)
 		if !ok {
 			continue
+		}
+		if m.hosted != nil {
+			// Every verb in the table changes a seat's process, tree, thread
+			// or posture, and a hosted room's client holds none of those
+			// (hosted.go). Refused in words, draft kept, so the operator can
+			// take the line to the room it works in.
+			m.st.Notice = hostedRefusal(rc.verb)
+			return true
 		}
 		if rc.run == nil {
 			// /flow, which dispatch.go parses against this same draft. Recognised

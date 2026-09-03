@@ -218,8 +218,19 @@ func TestATurnIsNotPersistedAnywhere(t *testing.T) {
 	if err := c.Dispatch(marker + "-prompt"); err != nil {
 		t.Fatal(err)
 	}
-	h.events <- runner.Event{Vendor: model.VendorClaude, Kind: runner.KindText, Text: marker + "-reply"}
+	// The turn is opened on the host's dispatch goroutine, and opening it
+	// clears the seat's body for the new turn (Seat.startTurn, §7.31). A real
+	// seat cannot speak before the dispatch that started it, so the event is
+	// fed only once the turn is open — the same order a process would give.
 	deadline := time.Now().Add(5 * time.Second)
+	for h.Snapshot().Turn != 1 {
+		if time.Now().After(deadline) {
+			t.Fatal("the host never opened the turn the client dispatched")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	h.events <- runner.Event{Vendor: model.VendorClaude, Kind: runner.KindText, Text: marker + "-reply"}
+	deadline = time.Now().Add(5 * time.Second)
 	for !strings.Contains(h.Snapshot().Seats[0].Body, marker) {
 		if time.Now().After(deadline) {
 			t.Fatal("the fold never saw the marker, so the search below would prove nothing")

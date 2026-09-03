@@ -224,13 +224,18 @@ func (c *Client) handshake() error {
 // HostPID is the process id of the host this client is talking to.
 func (c *Client) HostPID() int { return c.hostPID }
 
-// Dispatch sends one turn to every seat.
-func (c *Client) Dispatch(prompt string) error {
-	return c.send(Frame{Kind: KindDispatch, Prompt: prompt})
+// Dispatch sends one turn to the named seats, or to every drivable seat when
+// none is named (design.md §7.31). The plain client names none; the TUI
+// resolves the route and names them.
+func (c *Client) Dispatch(prompt string, seats ...model.VendorID) error {
+	return c.send(Frame{Kind: KindDispatch, Prompt: prompt, Seats: seats})
 }
 
-// Interrupt asks the seats to abandon the turn in flight.
-func (c *Client) Interrupt() error { return c.send(Frame{Kind: KindInterrupt}) }
+// Interrupt asks the named seats — every seat, when none is named — to abandon
+// the turn in flight.
+func (c *Client) Interrupt(seats ...model.VendorID) error {
+	return c.send(Frame{Kind: KindInterrupt, Seats: seats})
+}
 
 func (c *Client) send(f Frame) error {
 	if err := c.fw.Write(f); err != nil {

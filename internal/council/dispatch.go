@@ -210,6 +210,12 @@ type dispatchFailedMsg struct {
 // seat, inside sendTurn, and the idle seats it also named still go. The two
 // room-wide refusals that remain are both about the arena, and each says why.
 func (m *Model) dispatch() tea.Cmd {
+	if m.hosted != nil {
+		// A hosted room's enter sends a frame and spawns nothing (hosted.go,
+		// design.md §7.31). Checked first, so no path below can reach a spawn
+		// var from a room whose seats live in another process.
+		return m.hostedDispatch()
+	}
 	if race := m.race(); race != nil {
 		// A race owns every worktree and every seat for as long as it runs: an
 		// ordinary brief sent under it would hand a seat whose racer is writing
@@ -2484,8 +2490,10 @@ func (m *Model) saveRoom() {
 	// A replay never writes room.json (replay.go): its turn counter is the
 	// recording's, and saving it would point the operator's next live room at
 	// a conversation that happened on another day, possibly on another
-	// machine.
-	if m.st.Turn == 0 || m.replay != nil {
+	// machine. A hosted room never writes it either (hosted.go): the client
+	// holds no session id, and a file it wrote would describe a room another
+	// process owns.
+	if m.st.Turn == 0 || m.replay != nil || m.hosted != nil {
 		return
 	}
 	sessions := make(map[model.VendorID]string, len(m.sessions))
@@ -2705,6 +2713,14 @@ func (m *Model) teardown() {
 		return
 	}
 	m.teardownDone = true
+	if m.hosted != nil {
+		// A hosted room holds no process of its own. The way out is the
+		// shutdown frame, and the host kills the seats (hosted.go). closed is
+		// deliberately NOT set: the closing line counts what THIS process
+		// ended, and the hosted runner prints the host's outcome instead.
+		m.hostedClose()
+		return
+	}
 	// The room is on its way out, whatever it finds below. Set before the kill
 	// loop so the closing line is printed even by a teardown that panics past
 	// this point — a room that ended seats and said nothing is the defect

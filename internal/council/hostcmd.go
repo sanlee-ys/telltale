@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/sanlee-ys/telltale/internal/councilhost"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
@@ -91,6 +93,51 @@ const (
 // reason no resize protocol exists.
 const clientWidth = 100
 
+// plainClient reports whether the hosted room must draw with §7.28's plain
+// client instead of the room's own columns (design.md §7.31, design point 6).
+//
+// The TUI needs a terminal. When stdin is not a character device — a pipe, a
+// file, a scripted drive with `/detach` on stdin, which is how §7.30's Linux
+// measurement ran — the plain client takes the room, and every one of its
+// notices and controls is unchanged. A var so a test can force either half
+// without a terminal to hand it.
+var plainClient = func() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return true
+	}
+	return fi.Mode()&os.ModeCharDevice == 0
+}
+
+// ErrHostedFlag is the shape of every flag a hosted room refuses.
+var ErrHostedFlag = errors.New("council: this flag has no meaning in a hosted room")
+
+// refuseHostedFlags is the one place a flag that cannot hold in a hosted room
+// is refused, before anything opens (§7.31).
+//
+// Each of these would have been accepted and done nothing: the host takes no
+// brief file, holds no recorder and no trace sink, and spawns no
+// pseudoconsole. A flag that is accepted and silently does nothing is a
+// promise the room cannot keep, and a line on stderr before the room opens is
+// the same discipline --brief and --live already follow in the ordinary room.
+func refuseHostedFlags(opts Options) error {
+	switch {
+	case opts.Live != "":
+		return fmt.Errorf("%w: --live seats a pseudoconsole child in this process, and a hosted room's "+
+			"seats live in the host; a live seat over the wire is owed (design.md §7.31)", ErrHostedFlag)
+	case opts.BriefPath != "":
+		return fmt.Errorf("%w: --brief is handed to every seat on its first turn by the room that "+
+			"spawns them, and the host takes no brief file yet", ErrHostedFlag)
+	case opts.RecordPath != "":
+		return fmt.Errorf("%w: --record writes the room's event stream, and a hosted room's events "+
+			"never reach this process", ErrHostedFlag)
+	case opts.TracePath != "":
+		return fmt.Errorf("%w: --trace writes each turn's measured clock from the runner, and the "+
+			"runner lives in the host", ErrHostedFlag)
+	}
+	return nil
+}
+
 // Rejoin takes over a live host if there is one, and otherwise says so.
 //
 // This is what `telltale council` with no arguments consults BEFORE opening the
@@ -103,7 +150,11 @@ const clientWidth = 100
 //   - A live host somebody is in: REFUSED, naming `telltale council kill`.
 //   - A discovery file whose host is gone: the died notice, then the ordinary
 //     room, which rebuilds from room.json (§9.52).
-func Rejoin(in io.Reader, out io.Writer) (HostedOutcome, error) {
+//
+// opts is the launch's own flags, read for the view a rejoined TUI room draws
+// with (--ascii, --vendor, --headroom-warn) and for the flags a hosted room
+// refuses. A rejoin never starts a host, so nothing in opts reaches one.
+func Rejoin(opts Options, in io.Reader, out io.Writer) (HostedOutcome, error) {
 	dir, err := councilDir()
 	if err != nil {
 		// No resolvable home directory. There can be no discovery file, so there
@@ -144,6 +195,11 @@ func Rejoin(in io.Reader, out io.Writer) (HostedOutcome, error) {
 		return HostedNotTaken, nil
 	}
 
+	// Refused BEFORE the join, so a flag that cannot hold is a line on stderr
+	// and never a client that reached a live room and then left it.
+	if err := refuseHostedFlags(opts); err != nil {
+		return HostedHandled, err
+	}
 	c, err := joinHostedRoom(councilhost.JoinConfig{PipeName: rep.File.Pipe})
 	if err != nil {
 		// The probe said live and the connection says otherwise. That window is
@@ -153,8 +209,14 @@ func Rejoin(in io.Reader, out io.Writer) (HostedOutcome, error) {
 			"opening the ordinary room instead.\n\n", err)
 		return HostedNotTaken, nil
 	}
-	fmt.Fprintf(out, "%s\n\n", councilhost.RenderRejoined(rep.File))
-	return HostedHandled, runHostedClient(c, in, out)
+	if plainClient() {
+		fmt.Fprintf(out, "%s\n\n", councilhost.RenderRejoined(rep.File))
+		return HostedHandled, runHostedClient(c, in, out)
+	}
+	// The TUI room. The rejoin notice rides on the room's own notice line in
+	// its one-line form, because a line printed here would be gone the moment
+	// the alternate screen opened (§7.31).
+	return HostedHandled, runHostedTUI(opts, c, councilhost.RejoinedNotice(rep.File), out)
 }
 
 // StartHosted opens a room in a host of its own and drives it from here.
@@ -166,15 +228,26 @@ func Rejoin(in io.Reader, out io.Writer) (HostedOutcome, error) {
 // does nothing would be the honest-gauge failure this project exists to prevent,
 // spent on its own surface.
 func StartHosted(opts Options, in io.Reader, out io.Writer) error {
-	re, err := LoadRoom()
-	if err != nil && !errors.Is(err, ErrNoSavedRoom) {
-		re = Reattachment{}
+	if err := refuseHostedFlags(opts); err != nil {
+		return err
+	}
+	var re Reattachment
+	if !opts.Fresh {
+		// The saved room's workspace and roster, as the ordinary room reads
+		// them; its session ids are NOT handed to the host, which starts every
+		// seat fresh (§7.31's named limitation). --fresh declines even that.
+		loaded, err := LoadRoom()
+		if err != nil && !errors.Is(err, ErrNoSavedRoom) {
+			loaded = Reattachment{}
+		}
+		re = loaded
 	}
 	ws, _, err := openWorkspace(opts, re)
 	if err != nil {
 		return err
 	}
 	seats := seatsFor(opts.Seats, re.Room.Seats, re.Active())
+	opts.Seats = seats
 
 	if opts.Write {
 		// Said BEFORE the room opens, because it is the one thing about a
@@ -200,7 +273,52 @@ func StartHosted(opts Options, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return runHostedClient(c, in, out)
+	if plainClient() {
+		return runHostedClient(c, in, out)
+	}
+	return runHostedTUI(opts, c, "", out)
+}
+
+// runHostedTUI draws a hosted room with the room's own Model (design.md
+// §7.31) and reports how it ended.
+//
+// The first room frame is read here, before the program starts, so the model
+// is built over a whole room rather than over nothing: a rejoining client's
+// first frame IS the current room, and building the columns from it is what
+// makes a rejoin draw the conversation the host kept. The handshake's own
+// contract is that a room frame follows the welcome at once (serveClient).
+//
+// The four outcomes print four different things once the alternate screen is
+// gone, and only one of them prints nothing: an ended room, which the host's
+// own teardown already accounted for.
+func runHostedTUI(opts Options, c *councilhost.Client, notice string, out io.Writer) error {
+	first, err := c.Next()
+	if err != nil {
+		_ = c.Close()
+		fmt.Fprintf(out, "\n%s\n", councilhost.RenderHostExit())
+		return nil
+	}
+	mdl := newHostedModel(opts, first, c, notice)
+	p := tea.NewProgram(mdl)
+	stopSignals := watchExitSignals(mdl, p)
+	defer stopSignals()
+	if _, err := p.Run(); err != nil {
+		mdl.hostedClose()
+		return err
+	}
+	h := mdl.hosted
+	switch h.outcome {
+	case councilhost.OutcomeDetached:
+		fmt.Fprintf(out, "%s\n", councilhost.RenderDetached(c.HostPID()))
+	case councilhost.OutcomeHostExited:
+		fmt.Fprintf(out, "%s\n", councilhost.RenderHostExit())
+	default:
+		// Ended: the shutdown frame went, and Close waited for the host to
+		// finish killing the seats before the program returned. One line, so
+		// a closed terminal is not mistaken for a detached room.
+		fmt.Fprintln(out, "telltale council: the room is closed. the host ended, and every seat with it.")
+	}
+	return nil
 }
 
 // runHostedClient runs the plain client and reports how it ended.

@@ -33,10 +33,13 @@ func TestTheFourNoticesNeverRenderAlike(t *testing.T) {
 	notices := map[string]string{
 		"detached": RenderDetached(f.PID),
 		"rejoined": RenderRejoined(f),
-		"died":     RenderHostDied(f, "~/.telltale/council/room.json"),
-		"refused":  RenderDetachRefused(),
-		"busy":     RenderHostBusy(f),
-		"exited":   RenderHostExit(),
+		// The TUI's one-line form (§7.31). It is the same fact as the line
+		// above and must still be its own sentence beside every other state.
+		"rejoined-line": RejoinedNotice(f),
+		"died":          RenderHostDied(f, "~/.telltale/council/room.json"),
+		"refused":       RenderDetachRefused(),
+		"busy":          RenderHostBusy(f),
+		"exited":        RenderHostExit(),
 	}
 	seen := map[string]string{}
 	for name, text := range notices {
@@ -77,6 +80,23 @@ func TestTheRejoinNoticeSaysNothingWasRebuilt(t *testing.T) {
 		if strings.Contains(out, forbidden) {
 			t.Errorf("the rejoin notice borrows a rebuild's words (%q):\n%s", forbidden, out)
 		}
+	}
+
+	// The one-line form the TUI's notice row carries (§7.31) keeps the denial
+	// and the pid, and fits a 120-column room beside the warning mark: the
+	// notice line truncates from the right, and a denial that fell off the
+	// end would leave a rejoin reading as a rebuild.
+	line := RejoinedNotice(noticeFixture())
+	if strings.Contains(line, "\n") {
+		t.Errorf("the one-line rejoin notice has a newline in it: %q", line)
+	}
+	for _, want := range []string{"nothing was rebuilt", "no session was resumed", "pid 4242"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the one-line rejoin notice lacks %q:\n%s", want, line)
+		}
+	}
+	if n := len([]rune(line)); n > 110 {
+		t.Errorf("the one-line rejoin notice is %d cells; a 120-column room clips it", n)
 	}
 }
 

@@ -57,7 +57,7 @@ func Render(r Room, width int) string {
 			fmt.Fprintf(&b, "      %s\n", fit(s.Note, width-6))
 		}
 		for _, a := range s.Acts {
-			fmt.Fprintf(&b, "      · %s\n", fit(a, width-8))
+			fmt.Fprintf(&b, "      · %s\n", fit(actLine(a), width-8))
 		}
 		for _, line := range wrap(s.Body, width-6) {
 			fmt.Fprintf(&b, "      %s\n", line)
@@ -116,6 +116,49 @@ func RenderRejoined(f HostFile) string {
 		"rejoined the host that was already running — pid %d, started %s.\n"+
 			"the seats kept working while you were away. nothing was rebuilt, and no session was resumed.",
 		f.PID, f.StartedAt.Format(time.RFC3339))
+}
+
+// RejoinedNotice is RenderRejoined in one line, for the TUI's notice line
+// (design.md §7.31).
+//
+// The notice line is one row and it truncates from the right, so the clause
+// that separates this state from §9.52's `rebuilt` — the denial — has to sit
+// where a narrow room still shows it. It is the same fact as RenderRejoined
+// and never a variation on it: nothing was rebuilt, no session was resumed,
+// and the process named is the one that never stopped.
+func RejoinedNotice(f HostFile) string {
+	return fmt.Sprintf(
+		"rejoined the host that was already running (pid %d): nothing was rebuilt, and no session was resumed",
+		f.PID)
+}
+
+// actLine renders one tool call the way the trace does: the vendor's own text,
+// with its outcome as a word rather than as a colour.
+//
+// The outcome words are separate values on purpose, and ActUnknown is the one
+// that earns the type: a vendor that reports a step ENDED without saying
+// whether it worked is a different fact from a vendor reporting success, and
+// collapsing them is the failure §4a.1 exists to forbid.
+func actLine(a Act) string {
+	text := strings.TrimSpace(a.Text)
+	if text == "" {
+		return ""
+	}
+	switch a.Status {
+	case ActOK:
+		return text + " — ok"
+	case ActFailed:
+		if d := strings.TrimSpace(a.Detail); d != "" {
+			return text + " — failed: " + d
+		}
+		return text + " — failed"
+	case ActUnknown:
+		return text + " — ended, outcome not reported"
+	case ActDenied:
+		return text + " — denied"
+	default:
+		return text
+	}
 }
 
 // RenderHostDied is what a client prints when the host it left is gone.

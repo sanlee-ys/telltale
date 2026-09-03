@@ -1476,7 +1476,29 @@ type State struct {
 	// the renderer can reach. What crosses is text the renderer may draw. What
 	// does not cross is anything a gauge could be tempted to read.
 	Live LiveSeat
+
+	// Hosted names the host process this room is drawn FROM, when the room
+	// lives in one (design.md §7.31), and is the zero value in the
+	// single-process room — so no golden built before §7.31 moved.
+	//
+	// It is on State because two words read it: the header's `hosted` and the
+	// composer border's `hosted pid N`. Both are words, so they survive --ascii
+	// and NO_COLOR, and both exist because a hosted room and the ordinary
+	// room draw the same columns and must not be mistaken for each other: `q`
+	// ends every seat in both, but only one of them can be left running.
+	Hosted HostedRoom
 }
+
+// HostedRoom is what the renderer knows about the host behind a hosted room:
+// its pid, and nothing else. The link, the outcome and the frame reader live
+// on Model (hosted.go), where Render cannot reach them.
+type HostedRoom struct {
+	// PID is the host process. Zero means this room is not hosted.
+	PID int
+}
+
+// On reports that this room is drawn from a host.
+func (h HostedRoom) On() bool { return h.PID > 0 }
 
 // LivePhase is what a live pane can be, and the three states are kept apart for
 // §4a.1's reason: a pane that is starting, a pane that has ended and a pane

@@ -1126,7 +1126,7 @@ func runCouncil(args []string) error {
 	//
 	// It runs AFTER the flags are parsed, so a misspelled --vendor is still a
 	// line on stderr rather than a surprise inside a rejoined room.
-	switch outcome, err := council.Rejoin(os.Stdin, os.Stdout); {
+	switch outcome, err := council.Rejoin(opts, os.Stdin, os.Stdout); {
 	case errors.Is(err, council.ErrRoomHeld):
 		os.Exit(1)
 	case err != nil:
@@ -1652,11 +1652,14 @@ telltale council flags:
                               typed, and telltale never leaves an agent working
                               while nobody is watching. Pair it with --read to
                               get a room you can walk away from.
-                              It draws with the host's plain client rather than
-                              the council TUI: the room lives in another process
-                              and this one only prints it. Type a brief and
-                              press enter to dispatch; /detach, /interrupt and
-                              /quit are the controls (§7.29).
+                              It draws with the room's own columns, badges and
+                              panes, and /detach is typed into the composer
+                              (§7.31). When stdin is not a terminal it draws
+                              with the host's plain client instead: type a brief
+                              and press enter to dispatch; /detach, /interrupt
+                              and /quit are the controls (§7.29). --live,
+                              --brief, --record and --trace are refused with
+                              --host, each with its reason.
                               The a key does the same from inside the room, and
                               it is on the approval CARD rather than in the
                               composer because that is where you form the
