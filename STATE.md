@@ -889,7 +889,16 @@ Nothing open. The last one here was the 44 seconds, and it was measured
      vendor through a host. One brief through `telltale council --host --read`
      on this PR's binary, then `/detach`, a closed window and a rejoin, must
      show the columns and the badges survive the rejoin. That drive is the
-     closer for this entry.
+     closer for this entry. **Attempted 2026-09-03 and stopped before the
+     rejoin**: the hosted room drew the columns, the rail and the badges, and
+     a claude seat answered through the host; then another session installed
+     a fresh `telltale.exe` while the host ran, Windows renamed the host's
+     file to `telltale.exe~`, and the liveness probe called that a reused pid.
+     `telltale council` removed `host.json` and rebuilt five seats over a host
+     that was alive. The probe now forgives that one rename
+     (`sameImage` in `internal/councilhost/process_windows.go`, with the
+     measurement); the rejoin half of the drive is still owed, on a binary
+     nobody reinstalls while it runs.
   2. **The live seat in a hosted room.** `--live` with `--host` is refused
      with one sentence. A pseudoconsole child in the host and its cell grid on
      the wire is a second wire format and a second spawn guard.
