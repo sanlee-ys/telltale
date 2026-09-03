@@ -453,11 +453,12 @@ func TestTheInboxListsASeatThatLandedWhileYouWereElsewhere(t *testing.T) {
 	if strings.Contains(line, "Claude") {
 		t.Errorf("the seat the reader is on, still working, is listed: %q", line)
 	}
-	// The footer names the key, and only because the strip has an entry.
-	if !strings.Contains(render(inboxRoom()), ". needs you") {
+	// The footer names the key, and only because the strip has an entry. It is
+	// called what the strip is called: nothing here is blocked, so `unread`.
+	if !strings.Contains(render(inboxRoom()), ". unread") {
 		t.Error("the footer does not teach the strip's key while the strip has entries")
 	}
-	if strings.Contains(render(room()), ". needs you") {
+	if got := render(room()); strings.Contains(got, ". unread") || strings.Contains(got, ". needs you") {
 		t.Error("the footer names the strip's key in a room with nothing on the strip")
 	}
 }

@@ -3,6 +3,7 @@ package council
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -93,6 +94,10 @@ func TestTheStripSaysNothingWithoutAPendingGate(t *testing.T) {
 	got := render(st)
 	if strings.Contains(got, needsYouLead) {
 		t.Errorf("a room with no pending gate drew a needs-you strip:\n%s", got)
+	}
+	// Nor an inbox: the failed seat has no Ended stamp, so nothing LANDED.
+	if strings.Contains(got, unreadLead) {
+		t.Errorf("a room with no landing drew an inbox:\n%s", got)
 	}
 	if n := needsYouRows(st); n != 0 {
 		t.Errorf("needsYouRows = %d with an empty gate queue, want 0", n)
@@ -417,8 +422,8 @@ func fiveSeatNeedsYou() State {
 	return st
 }
 
-// needsYouRowOf pulls the strip out of a rendered frame by the one phrase that is
-// always on it, and fails when it is not there.
+// needsYouRowOf pulls the strip out of a rendered frame by the one of its two
+// leads that is on it, and fails when neither is there.
 //
 // By content rather than by row index: the strip's position is a decision §9.40
 // argues for, and a helper that hard-coded it would go on passing if the line
@@ -426,10 +431,180 @@ func fiveSeatNeedsYou() State {
 func needsYouRowOf(t *testing.T, frame string) string {
 	t.Helper()
 	for _, l := range strings.Split(frame, "\n") {
-		if strings.Contains(l, needsYouLead) {
+		if strings.Contains(l, needsYouLead) || strings.Contains(l, unreadLead) {
 			return l
 		}
 	}
 	t.Fatalf("no needs-you strip in the frame:\n%s", frame)
 	return ""
+}
+
+// allLandedRoom is the frame that was misread (unreadLead's doc): a WRITE room
+// of five gated seats at the end of an `@all` brief, every seat done, the reader
+// still on seat 1. Nothing is pending. Four replies landed unread.
+func allLandedRoom() State {
+	st := room()
+	st.Write = true
+	st.Turn = 3
+	// Wide enough for five columns: the misread frame was the columns tier, with
+	// the strip's lead sitting above seat 1's own `✓ done`.
+	st.Width = 150
+	st.Columns = append(st.Columns,
+		Column{Vendor: model.VendorCursor, Label: "Cursor", Avail: AvailInstalled, Gran: GranEvents},
+		Column{Vendor: model.VendorGrok, Label: "Grok", Avail: AvailInstalled, Gran: GranFinalOnly})
+	base := time.Date(2026, 9, 3, 9, 0, 0, 0, time.UTC)
+	st.Now = base.Add(20 * time.Second)
+	for i := range st.Columns {
+		c := &st.Columns[i]
+		c.Sandbox = SandboxClaim{Level: SandboxGated, Detail: "asks before every tool call"}
+		c.TurnN, c.Elapsed = 3, 3*time.Second
+		c.Body = "Hello. Standing by."
+		c.LastFocus = base.Add(-time.Minute)
+		landed(c, PhaseDone, base.Add(time.Duration(i+1)*time.Second))
+	}
+	st.Columns[0].Body = "Hello. COO seat, standing by."
+	st.Focus = 0
+	return st
+}
+
+// TestAnInboxWithNoPendingGateSaysUnread is the fix for the frame allLandedRoom
+// rebuilds. The strip on it may not say `NEEDS YOU`: no vendor is stopped on a
+// keystroke, and the word that means that is not available for a reply that can
+// wait. It says `UNREAD`, with no warning mark, over the same four entries with
+// the same phase words — so the inbox keeps everything §9.54 gave it except the
+// alarm. The footer's key follows the lead, and --ascii keeps the word.
+func TestAnInboxWithNoPendingGateSaysUnread(t *testing.T) {
+	st := allLandedRoom()
+	if len(st.Gates) != 0 {
+		t.Fatal("fixture: a gate is pending")
+	}
+	got := render(st)
+	golden(t, "inbox-unread", got)
+
+	line := needsYouRowOf(t, got)
+	if strings.Contains(line, needsYouLead) {
+		t.Errorf("a strip with no blocked seat says %q: %q", needsYouLead, line)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(line), unreadLead) {
+		t.Errorf("the strip does not open with %q and no mark: %q", unreadLead, line)
+	}
+	for _, want := range []string{"2 Codex done", "3 Antigravity done", "4 Cursor done", "5 Grok done"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the inbox lost an entry %q: %q", want, line)
+		}
+	}
+	if strings.Contains(line, "Claude") {
+		t.Errorf("the seat the reader is on is listed: %q", line)
+	}
+	if !strings.Contains(got, ". unread") || strings.Contains(got, ". needs you") {
+		t.Errorf("the footer's key is not called what the strip is called:\n%s", got)
+	}
+
+	ascii := Render(st, PlainStyles(), GlyphsFor(true))
+	if !strings.Contains(needsYouRowOf(t, ascii), unreadLead) {
+		t.Errorf("--ascii lost the inbox's word:\n%s", ascii)
+	}
+
+	// The ink follows the word: an inbox is anchors, not an alarm. Under real
+	// styles the lead and the names wear Strong and nothing on the line wears
+	// Alert — which is what keeps the 2026-09-03 audit's "too many yellow
+	// warnings" from returning on every @all brief.
+	sty := NewStyles(true)
+	styled := needsYouLine(st, st.Width-2*framePad, sty, UnicodeGlyphs())
+	if !strings.Contains(styled, sty.Strong.Render(unreadLead)) {
+		t.Errorf("the inbox lead is not at Strong: %q", styled)
+	}
+	if strings.Contains(styled, sty.Alert.Render(unreadLead)) || strings.Contains(styled, sty.Alert.Render("Codex")) {
+		t.Errorf("an inbox with nothing blocked wears the gate's ink: %q", styled)
+	}
+}
+
+// TestABlockedSeatOutranksTheInboxOnAMixedStrip: one seat stopped on a gate and
+// one that landed share the line, and the line says `NEEDS YOU` — a vendor
+// waiting on a key is the claim that cannot wait — while the landed entry keeps
+// its phase word so nothing is dropped.
+func TestABlockedSeatOutranksTheInboxOnAMixedStrip(t *testing.T) {
+	st := inboxRoom()
+	st.Gates = []PendingGate{{Vendor: model.VendorCursor, RequestID: "r4", ToolUseID: "t4",
+		Text: "Write: docs/README.md"}}
+	st.Columns[3].Phase, st.Columns[3].Ended = PhaseStreaming, time.Time{}
+
+	line := needsYouRowOf(t, render(st))
+	if !strings.Contains(line, needsYouLead) || strings.Contains(line, unreadLead) {
+		t.Errorf("a strip with a blocked seat on it does not say %q: %q", needsYouLead, line)
+	}
+	for _, want := range []string{"2 Codex done", "3 Antigravity failed", "4 Cursor"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the mixed strip lost %q: %q", want, line)
+		}
+	}
+	if strings.Contains(line, "Cursor done") || strings.Contains(line, "Cursor streaming") {
+		t.Errorf("the blocked seat carries a phase word: %q", line)
+	}
+	// The footer is the gate's own key list while a card is up, so the strip's
+	// key is read off stripKeyLabel directly: it follows the lead.
+	if got := stripKeyLabel(st); got != "needs you" {
+		t.Errorf("stripKeyLabel = %q on a mixed strip, want %q", got, "needs you")
+	}
+}
+
+// TestTheStripNeverSaysNeedsYouWithoutAPendingGate is the property the two
+// leads exist to hold, swept over every room shape this file and crew_test
+// build with an empty gate queue: `NEEDS YOU` is a claim that a vendor is
+// stopped on a keystroke, and State.Gates is the only thing that knows.
+func TestTheStripNeverSaysNeedsYouWithoutAPendingGate(t *testing.T) {
+	landedFive := fiveSeatNeedsYou()
+	landedFive.Gates = nil
+	base := time.Date(2026, 9, 3, 9, 0, 0, 0, time.UTC)
+	for i := range landedFive.Columns {
+		landedFive.Columns[i].LastFocus = base
+		landed(&landedFive.Columns[i], PhaseFailed, base.Add(time.Second))
+	}
+	for _, tc := range []struct {
+		name string
+		st   State
+	}{
+		{"every seat landed", allLandedRoom()},
+		{"two landed, one working", inboxRoom()},
+		{"five seats failed", landedFive},
+		{"nothing landed, nothing pending", room()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if len(tc.st.Gates) != 0 {
+				t.Fatal("fixture: a gate is pending")
+			}
+			for _, ascii := range []bool{false, true} {
+				got := Render(tc.st, PlainStyles(), GlyphsFor(ascii))
+				if strings.Contains(got, needsYouLead) {
+					t.Errorf("ascii=%v: %q with an empty gate queue:\n%s", ascii, needsYouLead, got)
+				}
+				if listed := len(needsYou(tc.st)) > 0; listed != strings.Contains(got, unreadLead) {
+					t.Errorf("ascii=%v: strip has %d entries and the frame says %q=%v",
+						ascii, len(needsYou(tc.st)), unreadLead, !listed)
+				}
+			}
+		})
+	}
+	// And the inbox sheds like the gate strip does: whole seats, never a
+	// fragment, with its own word the last thing to go.
+	vocabulary := []string{unreadLead, "more"}
+	for _, c := range landedFive.Columns {
+		vocabulary = append(vocabulary, strings.Fields(c.Label)...)
+	}
+	for _, ascii := range []bool{false, true} {
+		g := GlyphsFor(ascii)
+		for w := lipgloss.Width(unreadLead); w <= 200; w++ {
+			line := needsYouLine(landedFive, w, PlainStyles(), g)
+			if line == "" {
+				t.Fatalf("w=%d ascii=%v: four landed seats and no strip at all", w, ascii)
+			}
+			if n := lipgloss.Width(line); n > w {
+				t.Errorf("w=%d ascii=%v: the strip is %d cells: %q", w, ascii, n, line)
+			}
+			if !strings.Contains(line, unreadLead) {
+				t.Errorf("w=%d ascii=%v: the inbox shed its own word: %q", w, ascii, line)
+			}
+			assertWholeWords(t, []string{line}, vocabulary, "w=%d ascii=%v", w, ascii)
+		}
+	}
 }

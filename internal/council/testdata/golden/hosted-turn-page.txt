@@ -1,6 +1,6 @@
   council READ hosted  │  ~/code/telltale                                           turn 2  │  4/5 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⚠ NEEDS YOU   Codex done   Grok failed                                                                                
+  UNREAD   Codex done   Grok failed                                                                                     
   ⚠ 1 seat is not on screen: Cursor (installed but not drivable)  │  --vendor all seats them anyway                     
                                                                                                                         
                                                                                                                         
