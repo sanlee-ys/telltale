@@ -614,6 +614,11 @@ func TestHostedViewSurvivesAFrame(t *testing.T) {
 // TestHostedRoomWritesNoRoomFile: the client holds no session id and owns no
 // conversation, so the one file council writes is not written from here.
 func TestHostedRoomWritesNoRoomFile(t *testing.T) {
+	// A home of this test's own: the suite's sandbox home is shared, and a
+	// room another test saved there would be read as this client's write.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	m, _ := hostedModel(t, hostedFixture(), "")
 	m.st.Turn = 3
 	m.saveRoom()
