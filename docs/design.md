@@ -8279,6 +8279,178 @@ the lock files are zero bytes and walks the directory they live in.
 `KillHostedRoom` and `ls`'s words are the same code on every platform; the platform split is
 entirely below `Listen`, `Dial`, `ProbePipe`, `verifyHostProcess` and `killProcess`.
 
+<a id="s7-31"></a>
+
+### 7.31 the hosted room draws with the room's own columns, and you can leave it from there (2026-09-02)
+
+**What this section rules.** [§7.28](#s7-28) built the host and drew its room with a plain
+text client. [§7.29](#s7-29) exposed detach on that client and said, in its own words, that
+the TUI had no host to leave. This section makes council's own `Model` and `Render` the
+renderer of a hosted room. A room that outlives the terminal now draws the five columns, the
+posture badge on each column, the tool trace, the turn page, the panes ([§9.51](#s9-51)) and
+the help panel, the same way the single-process room draws them. It also gains `/detach`
+inside the TUI. The plain client stays as the degraded path, and the paragraph below says
+when it is used.
+
+**What a reader must not read into it.** No golden file of the single-process room moved.
+Every hosted frame is pinned by a new golden under `testdata/golden/hosted-*.txt`. No
+transcript content reaches disk: `room.json` and `host.json` stay numbers and keys. No new
+spawn path exists. The client still reaches the host through `startHostedRoom` and
+`joinHostedRoom`, which the spawn guard already wraps.
+
+#### Design point 1: what crosses the wire
+
+Three shapes were possible.
+
+1. **`council.State` on the wire.** The host would own the canonical `State` and the client
+   would only render it. Refused. `councilhost` cannot import `council`. `boundary_test.go`
+   pins that direction, and this section is the reason the direction exists. `State` also
+   carries facts that belong to the client's machine and to the reader: the posture claim
+   for each vendor, the focus, the scroll, the pane sizes, the help page, the draft. A host
+   that owned those would own the reader's eyes.
+2. **Events on the wire.** The host would forward every `runner.Event`, and the client would
+   fold them. Refused. A rejoining client needs the whole current room, and the host holds
+   no event log. A replay from the host would be a second copy of the conversation, which
+   `resume.go` refuses for this data.
+3. **The host's projection, widened.** The host's `Room` is already the fold. It already
+   travels whole on every frame, so a rejoin already receives the whole current room as its
+   first frame. This section widens `Room` to carry every fact `Render` reads about a seat,
+   and package `council` builds a `State` from it with one pure function.
+
+**Ruling: shape 3.** One process owns the conversation, and that process is the host. One
+process owns the view, and that process is the client. The function that joins them is
+`stateFromRoom` in `internal/council/hosted.go`. It is pure over its two arguments, the
+`Room` and the previous `State`. It copies the conversation from the seat and keeps the view
+from the previous column with the same vendor: scroll, follow, last focus, the quota reading
+the client read from its own relay. `TestHostedStateIsPureOverTheRoom` pins the purity.
+
+What the seat carries now, and did not before:
+
+| field | why `Render` needs it |
+|---|---|
+| `Turn`, `Prompt`, `Quoted` | the column echo, the band, the turn page, `PageTurns` |
+| `History` | the transcript, the turn page, the act ledger |
+| `Acts` as `{Text, Status, Detail}` | the trace's outcome marks, which a flat string lost |
+| `Started`, `Ended`, `Elapsed` | the header clock, the finished column's figure, the inbox |
+| `CostUSD`, `CostSession` | the cost cell and its `session` word |
+| `Settling` | `done · exiting` on a batch seat, [§9.33](#s9-33)'s linger made visible |
+| `Skipped`, `NoteDetail` | the skip line and the two-line card |
+
+`Acts` was a list of rendered strings. It is structured now, because a string had already
+folded the outcome into words and the TUI draws the outcome as a mark. The plain client
+renders the same structure through `actLine`, so its output did not change.
+
+**Redaction stays a client choke point.** The host does not redact. The client passes every
+body, act and note through `Redact` and `sanitize` in `stateFromRoom`, on the way into
+`State`. That is the same rule the single-process room applies in `applyEvents`, applied to a
+whole string instead of a stream.
+
+**The frame cost is named.** A frame now carries every seat's history. The 50 ms coalescing
+tick bounds the rate, and `maxFrame` bounds the size at 8 MiB. Nothing has measured a room
+against that ceiling. The host's memory ceiling is still owed ([§7.28](#s7-28)), and this
+section makes the frame grow with it.
+
+#### Design point 2: the crew is the model
+
+[§9.54](#s9-54) made the seats busy one at a time. The host still refused a second dispatch
+while any seat was running. That was the committee, and this section removes it from the
+host.
+
+- `KindDispatch` carries `Seats`. The client resolves the route (`@codex`, `-@claude`,
+  `@all`, the default) against its own `State`, and sends the explicit vendor list. An empty
+  list still means every drivable seat, which is what the plain client sends.
+- The host refuses per seat. A busy seat is named on the room's notice and the idle seats
+  in the same list still go. The refusal reads the seat's phase and its `Settling` flag,
+  under the room's lock, in the same call that marks the seats it accepts. The old
+  `watchTurn` poll is gone.
+- A drivable seat the dispatch did not name is marked `not addressed in turn N`, with
+  `Skipped` set, exactly as `sendTurn` marks it.
+- `KindInterrupt` carries `Seats`. The client's `ctrl+c` interrupts the focused seat when
+  it is busy, every seat when the focused seat is idle, and ends the room when nothing is
+  busy. That is `viewKey`'s own rule, and the footer's cancel cell names which.
+- The header's `turn N → route · K in flight`, the inbox strip and the seat numbers all
+  compute from `State`, so they work over a hosted room without a second implementation.
+
+#### Design point 3: keys, and what a key must not do
+
+**`/detach` is a room verb, not a key.** A single keystroke that walks away from five agents
+is a keystroke that can be pressed by accident. The verb sits in `roomVerbs` beside `/cd` and
+`/seat`, so the refusal that lists the room's vocabulary lists it too.
+
+**In a single-process room `/detach` refuses.** The notice says `this room has no host to
+leave — open one with telltale council --host`. A verb that did nothing would be the
+honest-gauge failure spent on the room's own surface.
+
+**`q` and `ctrl+c` still END the room.** They send `KindShutdown`, the host kills every seat,
+and the closing line says so. Nothing about leaving happens on a key.
+
+**The footer did not change.** Every hint on the mode line is the same in a hosted room. The
+two places that say `hosted` are the header, which gains the word `hosted` after the posture
+word, and the composer's border label, which gains `hosted pid N`. Both are words, so they
+survive `--ascii` and `NO_COLOR`. The help panel's `/cd` row becomes a `/detach` row in a
+hosted room, and its `ctrl+c / q` row says that `q` ends every seat. The panel keeps its 16
+rows.
+
+**What is refused inside a hosted room, with one notice each.** `/cd`, `/seat`, `/unseat`,
+`/read`, `/write`, `/arena`, `/flow`, `/hand`, `/adopt`, `/retry`, `/trace`, `c`, `u`, `x`,
+`o`, `a`, `s` and `ctrl+r`. Each of them changes a seat's process, tree, thread or gate, and
+the client holds none of those. The rebuttal (`ctrl+r`) is owed: a quoting turn hands each
+seat a different prompt, and the dispatch frame carries one.
+
+#### Design point 4: four states, four renders
+
+[§4a.1](#s4a-1) rules that `rebuilt`, `survived`, `died` and `refused` never render alike.
+The TUI keeps every sentence [§7.29](#s7-29) wrote, and adds none of its own:
+
+| state | where it renders | the sentence |
+|---|---|---|
+| detached | printed after the alternate screen closes | `RenderDetached` |
+| rejoined | the room's notice line, on the first frame | `RejoinedNotice`, a one-line form of `RenderRejoined` that keeps the clause `nothing was rebuilt, and no session was resumed` |
+| the host died while you were away | printed before the ordinary room opens, unchanged | `RenderHostDied` |
+| the host died while you were in it | the TUI quits and prints it | `RenderHostExit` |
+| refused | the room's notice line | `UnwatchedWriteRefusal`, verbatim, from the host's own `KindRefused` |
+
+The refusal is the host's sentence and never the client's. The client sends `KindDetach` in
+a write room too, because [§7.29](#s7-29) enforces the ruling in the host, and the client
+draws the reason the host returns. `TestTheFourNoticesNeverRenderAlike` walks the one-line
+form beside the others.
+
+#### Design point 5: the live seat is scoped out
+
+`--live` with `--host` is refused before anything opens, with one sentence. A live seat is a
+pseudoconsole child, and in a hosted room that child would have to live in the host and its
+cell grid would have to cross the wire on every repaint. That is a second wire format and a
+second spawn guard, and it is owed. `STATE.md` carries it.
+
+#### Design point 6: the plain client stays
+
+`councilhost.Render` and `RunClient` are unchanged and still used. The TUI needs a terminal.
+When `stdin` is not a character device the hosted room falls back to the plain client, so a
+scripted drive (`/detach` on a pipe, which is how the Linux measurement in [§7.30](#s7-30)
+ran) still works. `plainClient` in `hostcmd.go` is the one place that decides, and it is a var
+so a test can force either. The notice tests stay in `councilhost`, because the sentences
+live there.
+
+#### Flags a hosted room refuses, and why
+
+`--brief`, `--record`, `--trace` and `--live` are refused with `--host`, one sentence each,
+before the room opens. The host takes no brief file, holds no recorder and no trace sink, and
+spawns no pseudoconsole. A flag that was accepted and did nothing would be a promise the room
+could not keep. `--fresh` is honoured. `--auto` and `--shared-tree` are accepted, because a
+hosted room already runs ungated and already runs every seat in the workspace.
+
+#### Known limitations, named
+
+- **A hosted room starts every seat fresh.** The host is handed a roster and never a saved
+  session id, so no `Restored` card is drawn and no thread is resumed. This predates this
+  section. It is named here so the missing card is read as honest rather than as a defect.
+- **The host does not write `room.json`.** [§7.28](#s7-28) said it would, on the room's own
+  schedule. It does not, and no code in `internal/councilhost` reaches `SaveRoom`. A hosted
+  room's session ids therefore never reach disk. `STATE.md` carries it.
+- **No vendor has been dispatched through a hosted TUI room.** Every seat in both suites is
+  stubbed. The stubbed end-to-end in `internal/council/hosted_e2e_test.go` re-executes the
+  test binary as a real host with an empty roster and drives the `Model` over a real pipe.
+  The owner's second live brief on the built binary is the closer.
 <a id="s8"></a>
 
 ## 8. Roadmap (decided 2026-08-01; adoption track added 2026-08-02, ADR-005)
