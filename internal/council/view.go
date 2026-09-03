@@ -582,38 +582,87 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	// zero would be the one seat the device could not mark, which is the kind of
 	// hole that teaches a reader to stop trusting a signal.
 	focusPad := sty.Focus.Render(g.FocusRail) + strings.Repeat(" ", framePad-1)
+	// The POSTURE RAIL's own separators and frame pads (style.go's RailGround).
+	//
+	// The posture row is the one horizontal object that runs the WHOLE frame, and
+	// a rail that stopped at each column edge would be five tinted blocks rather
+	// than one printed line — which is the difference between a ledger and a set
+	// of cards. Same cells, same glyphs, same widths: only the ground under them
+	// changes, so no golden can see this and the ASCII set is untouched. The focus
+	// rail keeps its slot on this row too, because focus is a claim about the
+	// COLUMN and the ledger's ground is a claim about the ROW.
+	bandGutter := sty.bandFill().Render(sepPad)
+	bandSep := bandGutter + sty.onBand(sty.Rule()).Render(g.Sep) + bandGutter
+	bandFocusSep := bandGutter + sty.onBand(sty.Focus).Render(g.FocusRail) + bandGutter
+	bandBlankSep := sty.bandFill().Render(blankSep)
+	bandPad := sty.bandFill().Render(framePadStr)
+	bandFocusPad := sty.onBand(sty.Focus).Render(g.FocusRail) +
+		sty.bandFill().Render(strings.Repeat(" ", framePad-1))
 	rails := railRows(cells, lay.Body)
 	var b strings.Builder
 	for row := 0; row < lay.Body; row++ {
 		// The rail rides §9.23's band and nothing more: it marks the rows the thin
 		// rail would have marked, so focus never asserts a grid over emptiness and
 		// the frame's edge never changes shape when the keys move.
+		onRail := row == ledgerRow
 		lead := framePadStr
+		if onRail {
+			lead = bandPad
+		}
 		if rails[row] && len(vis) > 0 && vis[0] == st.Focus {
 			lead = focusPad
+			if onRail {
+				lead = bandFocusPad
+			}
 		}
 		b.WriteString(lead)
 		div := blankSep
+		if onRail {
+			div = bandBlankSep
+		}
 		if rails[row] {
 			div = sep
+			if onRail {
+				div = bandSep
+			}
 		}
 		for j := range vis {
 			if j > 0 {
 				d := div
 				if rails[row] && vis[j] == st.Focus {
 					d = focusSep
+					if onRail {
+						d = bandFocusSep
+					}
 				}
 				b.WriteString(d)
 			}
 			b.WriteString(cells[j][row])
 		}
-		b.WriteString(framePadStr)
+		if onRail {
+			b.WriteString(bandPad)
+		} else {
+			b.WriteString(framePadStr)
+		}
 		if row < lay.Body-1 {
 			b.WriteString("\n")
 		}
 	}
 	return b.String()
 }
+
+// ledgerRow is where the posture row sits inside every column's rendered cell.
+//
+// columnChrome builds that cell and always puts the seat header first and the
+// badge row second — for every column, at every width, available or not, since
+// the badge row is RESERVED rather than conditional. So the rail's row is a
+// constant, and columnsBody paints the frame's gutters and pads on it.
+//
+// A constant rather than a search over the drawn rows, because a search would
+// have to recognise a posture row by its CONTENT, and the one column whose
+// posture row is legitimately EMPTY — a seat that is not seated — is exactly the
+// column the rail exists to draw a deliberate gap on.
+const ledgerRow = 1
 
 // railRows decides, for the whole frame at once, which body rows carry the │
 // between columns.
@@ -840,7 +889,15 @@ func columnChrome(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 		// on one column would start its body a line above every other column's,
 		// and a grid whose rows do not line up is a worse trade than one empty
 		// claim slot.
-		fit(badgeRow(st, c, w, sty, g), w),
+		//
+		// It is also the POSTURE RAIL, and that is why it pads on the rail's own
+		// ground rather than in plain spaces. The reserved-but-empty slot above is
+		// the case that earned it: a claim slot with nothing in it has to look
+		// like a gap in a printed line, and a plain blank looks like a row that
+		// failed to draw. fitOn paints the whole cell, so an unavailable seat's
+		// silence reads as deliberate at exactly the width its neighbours' claims
+		// read at.
+		fitOn(badgeRow(st, c, w, sty, g), w, sty.bandFill()),
 	}
 	for _, l := range gateCard(st, c, w, sty, g) {
 		lines = append(lines, fit(l, w))
@@ -1928,7 +1985,10 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		// nothing-changed (said in words, against the named base), and a diff
 		// that could not be read (the error, never dressed up as "no changes").
 		out = append(out, "")
-		out = append(out, sty.Muted.Render(padRight(labelRule("arena "+c.Arena.Branch, "", w, g), w, g)))
+		// The rule now carries the ADOPT AFFORDANCE (arenalane.go): the room drew
+		// the branch, the diff and the verdict and never drew the one command
+		// that acts on all three.
+		out = append(out, arenaRule(c.Arena.Branch, adoptAffordance(), w, sty, g))
 		out = append(out, styleAll(wrap(abbreviate(c.Arena.Tree, st.Home), w), sty.Muted)...)
 		// Seeding is stated only when it RAN. A nil Seed — the room repo has
 		// no .worktreeinclude — draws nothing, while "seeded 0 files" is a
@@ -1959,7 +2019,12 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 			if c.Elapsed > 0 {
 				finish += " · " + dur(c.Elapsed)
 			}
-			out = append(out, styleAll(wrap(finish, w), sty.bold(sty.Text))...)
+			// With a LANE in front of it (arenalane.go): eight fixed cells filled
+			// to the racer's host-observed position, so three columns of receipts
+			// answer "who won" before any of them is read. Both numbers in the
+			// fill are the two the words beside it already spell, so the track is
+			// a second rendering of a measured fact rather than a derived one.
+			out = append(out, laneLines(c.Arena.Rank, c.Arena.Of, finish, w, sty, g)...)
 		}
 		// The commit receipt, and its two honest alternatives (§9.37, amended
 		// 2026-08-09). "committed <sha>" is the measured tip — shortSHA of what
@@ -1981,10 +2046,11 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		// all — no command was named, and a room that was never asked for a
 		// check has no check to report (the Seed line's rule, one field over).
 		if ck := c.Arena.Check; ck != nil {
-			raw := checkLine(ck)
-			for _, line := range wrap(raw, w) {
-				out = append(out, fit(checkStyle(sty, ck).Render(line), w))
-			}
+			// With a LEADING MARK (arenalane.go). The sentence is §9.48's own,
+			// byte for byte; the mark puts the verdict at the front of the line,
+			// which is where §9.48's argument already said the eye should reach
+			// it first.
+			out = append(out, verdictLines(ck, st, w, sty, g)...)
 			if ck.Dirty {
 				// Said, not swept up. The check ran after the diff and the
 				// commit, so nothing it wrote is in either — but /adopt commits
@@ -2097,6 +2163,14 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		// and renders nothing at all: absence, not a zero.
 		out = append(out, "")
 		out = append(out, sty.Muted.Render(padRight(labelRule("arena · so far", "", w, g), w, g)))
+		// The RUNNING lane (arenalane.go). A race that is still on has no rank,
+		// and the lane says exactly that: an EMPTY track under a turning spinner,
+		// with the words "racing · no rank yet" beside it. It is the honesty rule
+		// drawn rather than written — a track at any length would be a finishing
+		// position the host has not reported — and the spinner is the only thing
+		// on this block that moves because it is the only fact here still
+		// changing.
+		out = append(out, runningLaneLines(st, w, sty, g)...)
 		switch {
 		case c.ArenaInterim.Err != "":
 			out = append(out, wrap("live stat unavailable: "+c.ArenaInterim.Err, w)...)
@@ -2639,6 +2713,9 @@ func actLinesMarked(a Act, mark string, style lipgloss.Style, w int, sty Styles,
 			lines[last] = strings.TrimSuffix(lines[last], mark) + style.Render(mark)
 		}
 	}
+	if len(lines) > 0 {
+		lines[0] = recorderHead(lines[0], sty, g)
+	}
 
 	// Failure detail only. A successful call's output is not shown at all: the
 	// trace is a record of what was done, and pasting every command's stdout
@@ -2649,6 +2726,50 @@ func actLinesMarked(a Act, mark string, style lipgloss.Style, w int, sty Styles,
 		}
 	}
 	return lines
+}
+
+// recorderHead sets the first line of a trace entry as three claims rather than
+// as one run of text: the RECORD MARK, the TOOL, and the ARGUMENT.
+//
+// The trace is the room's flight recorder — the answer to "what did this agent
+// actually do" — and it arrived at the eye as an undifferentiated line at one
+// intensity, so five columns of it read as prose. Three levels fix that without
+// moving a character: the ⚙ recedes to chrome because it is the same mark on
+// every entry and carries no information after the first one; the tool NAME
+// takes weight because it is what a reader scans a recorder strip for; the
+// argument keeps the terminal's own text ink because it is the content.
+//
+// Split at the first ": " and nowhere else. That is the separator dispatch
+// writes between a tool and its argument (`Bash: go test ./...`), and an entry
+// with no argument at all (`Glob`, `Read`) has no separator and takes weight
+// whole — which is correct, because there the tool name IS the entry. A colon
+// inside an argument cannot be reached: only the FIRST one is considered, and it
+// is only accepted while it is still on this line, so a wrapped command whose
+// continuation carries a colon is untouched.
+//
+// Applied AFTER the outcome mark, and only to line zero. When an entry is one
+// line the mark's escapes are already on the tail; a prefix test over the plain
+// head still holds, which is why the order is this way round rather than the
+// other. Under PlainStyles every style here is the identity function and the
+// line is the bytes hangWrap produced.
+func recorderHead(line string, sty Styles, g Glyphs) string {
+	head := g.Act + " "
+	if !strings.HasPrefix(line, head) {
+		return line
+	}
+	rest := line[len(head):]
+	name, arg := rest, ""
+	if i := strings.Index(rest, ": "); i >= 0 {
+		name, arg = rest[:i+1], rest[i+1:]
+	} else if i := strings.IndexByte(rest, ' '); i >= 0 {
+		// No argument, but something follows the tool name — on a one-line entry
+		// that something is the OUTCOME MARK, and the caller has already rendered
+		// it. Splitting at the space is what keeps `name` free of escapes: weight
+		// applied over an already-styled run would emit that run's reset in the
+		// middle of the line and turn the weight off for everything after it.
+		name, arg = rest[:i], rest[i:]
+	}
+	return sty.Muted.Render(head) + sty.bold(sty.Text).Render(name) + arg
 }
 
 // actDetailMaxRows is how much of a vendor's failure reason one trace entry may
@@ -2770,7 +2891,16 @@ func gateCard(st State, c Column, w int, sty Styles, g Glyphs) []string {
 	// No seat name: in the grid the card's POSITION is the seat, and naming it
 	// again inside its own column would be the room saying one thing twice. The
 	// by-turn page has no position left to carry it and passes one (§9.22).
-	return gateCardLines(mine, "", w, sty, g)
+	//
+	// `next` is what makes the room's ask SINGULAR (2026-09-03). A gated room
+	// draws one of these cards per blocked seat, every one of them opening at
+	// Alert — so a three-seat room asked the reader three questions in the same
+	// voice, and the audit read the result as "too many simultaneous warnings
+	// flatten the hierarchy; the actionable gate line is not singular enough."
+	// The keys answer ONE call, the oldest (gateLabel, and the footer prints its
+	// text), so that is the one card whose title stays loud. The others are still
+	// claims, still marked, still worded identically — one step quieter.
+	return gateCardLines(mine, "", len(st.Gates) > 0 && st.Gates[0].Vendor == c.Vendor, w, sty, g)
 }
 
 // gateCardLines is the card itself, with the queue and the subject supplied.
@@ -2779,7 +2909,7 @@ func gateCard(st State, c Column, w int, sty Styles, g Glyphs) []string {
 // the seat's label wherever it does not. The two callers are the grid's column
 // and the by-turn page; splitting the card in two instead would have given the
 // one line in this room that guards a write two spellings to drift between.
-func gateCardLines(q []PendingGate, who string, w int, sty Styles, g Glyphs) []string {
+func gateCardLines(q []PendingGate, who string, next bool, w int, sty Styles, g Glyphs) []string {
 	if len(q) == 0 {
 		return nil
 	}
@@ -2791,7 +2921,16 @@ func gateCardLines(q []PendingGate, who string, w int, sty Styles, g Glyphs) []s
 	// its body hanging under it. The call being decided used to wrap back to the
 	// column edge, so the second line of a long path sat flush against the frame
 	// and read as a new statement rather than as the rest of the question.
-	out := styleAll(hangWrap(g.Warn+" ", "waiting on you: "+subject, w), sty.Alert)
+	// Alert on the card the next keystroke ANSWERS, and the withdrawn ink
+	// without weight on every other. Both keep the ⚠ and both keep the words,
+	// so --ascii and NO_COLOR read the identical sentence on each — what the
+	// weight now says is not "this is a warning" but "this is the one you are
+	// about to answer". See gateCard for why the room had to pick one.
+	title := sty.SevWarn
+	if next {
+		title = sty.Alert
+	}
+	out := styleAll(hangWrap(g.Warn+" ", "waiting on you: "+subject, w), title)
 
 	// The edit itself, when the vendor's payload carried both halves of it — and
 	// nothing at all when it did not (§9.41). It sits between the question and
@@ -2969,13 +3108,24 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 	if c.Avail != AvailInstalled {
 		return ""
 	}
+	// Every element on this row is drawn ON THE RAIL (style.go's RailGround):
+	// the posture claim, the containment claim, the granularity word, the relayed
+	// quota, the cost, and the air between them. `band` is the ONE place that
+	// happens, so a claim added here later cannot land off the ground the rest of
+	// the row is printed on — which would read as a hole in the ledger rather
+	// than as a new badge. Under PlainStyles it is the identity function and this
+	// whole row is byte for byte what it was.
+	band := func(s lipgloss.Style) lipgloss.Style { return sty.onBand(s) }
+	// The two-cell air between badges, and the row's own indent, painted rather
+	// than left blank for fitOn's reason at the call site.
+	air := sty.bandFill().Render("  ")
 	if w <= stripWidth {
 		if st.Replay {
 			// At strip width the row holds one word, and in a replay that
 			// word is REPLAY: the recorded posture is a claim about a room
 			// that is over, and the claim a reader needs on THIS column is
 			// that it is not live (replay.go).
-			return sty.SevWarn.Render("REPLAY")
+			return band(sty.SevWarn).Render("REPLAY")
 		}
 		return stripBadges(c, w, sty)
 	}
@@ -2984,11 +3134,11 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 		// First on the row, ahead of the recorded posture, so a column read
 		// on its own says what it is before it says what its seat could do.
 		plain = append(plain, "REPLAY")
-		styled = append(styled, sty.SevWarn.Render("REPLAY"))
+		styled = append(styled, band(sty.SevWarn).Render("REPLAY"))
 	}
 	if b := c.Sandbox.Badge(); b != "" {
 		plain = append(plain, b)
-		styled = append(styled, sty.ForSandbox(c.Sandbox.Level).Render(b))
+		styled = append(styled, band(sty.ForSandbox(c.Sandbox.Level)).Render(b))
 	}
 	// Where the seat's process actually runs (§9.55): its own worktree, or
 	// the shared tree — and, when the room would have cut a worktree and
@@ -3012,9 +3162,9 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 	contain := c.Containment.Badge(st.ASCII)
 	containS := ""
 	if contain != "" {
-		style := sty.Muted
+		style := band(sty.Muted)
 		if c.Containment.Level == ContainShared && c.Containment.Why != "" {
-			style = sty.SevWarn
+			style = band(sty.SevWarn)
 			contain = g.Warn + " " + contain
 		}
 		containS = style.Render(contain)
@@ -3034,7 +3184,7 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 	}
 	if contain != "" && c.Containment.Why != "" && row(contain, gran) > w {
 		contain = g.Warn + " " + ContainClaim{Level: ContainShared}.Badge(st.ASCII)
-		containS = sty.SevWarn.Render(contain)
+		containS = band(sty.SevWarn).Render(contain)
 	}
 	if contain != "" {
 		plain = append(plain, contain)
@@ -3042,13 +3192,13 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 	}
 	if gran != "" {
 		plain = append(plain, gran)
-		styled = append(styled, sty.Muted.Render(gran))
+		styled = append(styled, band(sty.Muted).Render(gran))
 	}
 
 	left := strings.Join(plain, "  ")
-	leftS := strings.Join(styled, "  ")
+	leftS := strings.Join(styled, air)
 	if left != "" {
-		left, leftS = "  "+left, "  "+leftS
+		left, leftS = "  "+left, air+leftS
 	}
 
 	cost := costCell(c)
@@ -3071,8 +3221,8 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 	if cost == "" {
 		avail = w - lipgloss.Width(left) - 2
 	}
-	if qs, qp := seatQuotaCell(c.Quota, st.Now, avail, sty, g); qp != "" {
-		left, leftS = left+"  "+qp, leftS+"  "+qs
+	if qs, qp := seatQuotaCell(c.Quota, st.Now, avail, sty.onRail(), g); qp != "" {
+		left, leftS = left+"  "+qp, leftS+air+qs
 	}
 
 	if cost == "" {
@@ -3083,9 +3233,10 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 	// number: §9.2 is emphatic that a claim you cannot see is not a claim, and
 	// the cost is the one thing on this line the transcript also records.
 	if gap := w - lipgloss.Width(left) - lipgloss.Width(cost); gap >= 1 {
-		return leftS + strings.Repeat(" ", gap) + sty.Measured.Render(cost)
+		return leftS + sty.bandFill().Render(strings.Repeat(" ", gap)) +
+			band(sty.Measured).Render(cost)
 	}
-	return leftS + sty.Measured.Render("  "+cost)
+	return leftS + air + band(sty.Measured).Render(cost)
 }
 
 // stripBadges is the badge row at strip width: the posture word, or nothing at
@@ -3123,7 +3274,7 @@ func stripBadges(c Column, w int, sty Styles) string {
 	if b == "" || lipgloss.Width(b) > w {
 		return ""
 	}
-	return sty.ForSandbox(c.Sandbox.Level).Render(b)
+	return sty.onBand(sty.ForSandbox(c.Sandbox.Level)).Render(b)
 }
 
 // costCell is the vendor's own figure, and the word that says what it counted.

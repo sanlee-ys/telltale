@@ -574,7 +574,10 @@ func pageGateCard(st State, w int, sty Styles, g Glyphs) []string {
 			break
 		}
 	}
-	return gateCardLines(st.Gates, label, w, sty, g)
+	// The page draws the OLDEST request and nothing else, so the card it draws
+	// is by construction the one the keys answer — it is always the singular
+	// one (gateCard).
+	return gateCardLines(st.Gates, label, true, w, sty, g)
 }
 
 // pageHint is the keys a page's overflow marker names.

@@ -8,7 +8,8 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
-// Styles is council's palette — the MONOGRAPH set (LEDGER, 2026-09-02).
+// Styles is council's palette — the MONOGRAPH set (LEDGER, 2026-09-02, and the
+// room-identity graft of 2026-09-03; see docs/room-identity.md).
 //
 // It no longer maps internal/theme's ANSI indices. The ledger lifted three taste
 // rulings on 2026-09-02 — "council adds no hues of its own", "colour and any
@@ -17,6 +18,17 @@ import (
 // holding shut. internal/theme is untouched, so internal/statusline and
 // internal/hud keep the 4-bit palette and the stdlib-only rule (ADR-002) is
 // unaffected: the blast radius of this set is one package.
+//
+// # Truecolour ENHANCES; it never DEFINES
+//
+// The 2026-09-03 audit ruled on this directly, against the prototype that made a
+// private ink the carrier of a claim: an identity may spend a hex triple, and no
+// distinction may DEPEND on one. So every ink below is redundant by
+// construction — each thing it marks is already spelled by a word or a mark that
+// survives --ascii, NO_COLOR and a 16-colour console — and the one ground this
+// file paints (Palette.Rail) draws nothing at all when it is empty. That is the
+// property the goldens prove rather than assert: they render PlainStyles, where
+// the whole set is the identity function.
 //
 // # What replaced the ANSI indices, and why hex is now defensible
 //
@@ -37,9 +49,26 @@ import (
 //	Measured (#ece4d5 + weight)  the numbers, and the words that report one
 //	Text     (the terminal's)    vendor prose — see Palette.Text
 //	Muted    (#9a9081)           chrome, labels, the caps words
-//	Dim      (#7a7164)           the reading area of a column the keys do not move
-//	RuleInk  (#6b6252)           the ink rule: ━, and the composer's box
-//	Hair     (#474139)           the hairline: ─, the separators, the leaders
+//	Dim      (#8a8174)           the reading area of a column the keys do not move
+//	RuleInk  (#736a5d)           the ink rule: ━, and the composer's box
+//	Hair     (#675f53)           the hairline: ─, the separators, the leaders
+//
+// # The bottom three values were RAISED on 2026-09-03, and it was not taste
+//
+// The 2026-09-03 audit put this identity at a projector width and named the
+// failure: at 180x50 "four unfocused columns recede too far; their prose and
+// hairlines will disappear at the back." It was measurable. Against Campbell's
+// #0c0c0c the first set drew Dim at 4.0:1, RuleInk at 3.2:1 and Hair at 1.9:1 —
+// one below WCAG's 4.5:1 floor for body text and two below the 3:1 floor a
+// non-text UI component needs, on a surface whose whole claim is that you can
+// read it from across a room. The three values are now 5.0:1, 3.6:1 and 3.0:1,
+// which clears both floors and keeps the order the scale depends on. The paper
+// set moved for the same reason and by the same rule (PaperPalette).
+//
+// The top of the scale did NOT move. Measured, Muted, Identity, Withdrawn and
+// Broke are the portfolio's own pigments and carry the portfolio's own measured
+// figures; re-tinting them would have thrown away that provenance to fix a
+// problem they did not have.
 //
 // The one thing a reader is told to look at is the brightest ink on screen, and
 // the several hundred lines a vendor emitted sit BELOW the six characters that
@@ -171,6 +200,38 @@ type Styles struct {
 	// rather than each taking a seatFocus they would each have to interpret.
 	Blurred bool
 
+	// RailGround is the ground the POSTURE RAIL is printed on, or "" for no rail
+	// at all (PlainStyles, and any set that does not want one).
+	//
+	// The rail is the 2026-09-03 graft's one new primitive, and it is the
+	// prototype the audit picked as the best posture ledger of the three: the
+	// badge row — the row that says what each seat is ALLOWED to do — is painted
+	// as one continuous horizontal object that runs the whole frame, gutters and
+	// frame pads included, rather than as five separate cells. Two things follow
+	// from that, and only the second is the reason it is worth having.
+	//
+	// The ledger becomes the frame's governing object, so the eye goes to the
+	// differentiator instead of to the prose. And an ABSENT reading stops being
+	// an ambiguous blank: on the rail the same nothing is a gap in a printed
+	// line — visibly part of the ledger, visibly holding no reading, and visibly
+	// not a zero, because a measured zero prints `$0.0000` in the measured ink
+	// and an unmeasured one prints nothing at all. That is §4a.1's
+	// zero-versus-absent rule drawn rather than written, and it costs no
+	// character and no golden.
+	//
+	// It is REPAINTED from the prototype's warm band into this palette's own
+	// values (Palette.Rail): the ground is the bottom of the same ink scale
+	// every other token comes from, one step off the terminal's own, so the rail
+	// reads as the paper the readings are printed on rather than as a coloured
+	// stripe laid over the room.
+	//
+	// **Nothing depends on it.** Empty here — which is what PlainStyles hands
+	// out, and what a set with no ground would — and onBand returns its argument
+	// untouched, so the whole rail vanishes and every claim on it is still
+	// spelled by its own word. That is the audit's "truecolour may enhance,
+	// never define" honoured at the type level rather than by inspection.
+	RailGround string
+
 	// Plain reports that every style is a no-op, for layout goldens.
 	Plain bool
 }
@@ -208,6 +269,20 @@ type Palette struct {
 	Identity  string // ink blue: who, and what has focus
 	Withdrawn string // copper: cancelled, unavailable, the ⚠ mark
 	Broke     string // oxide: failed, denied, a line the patch cut
+
+	// Rail is the one value in this set that is a GROUND rather than an ink: the
+	// paper the posture ledger is printed on (Styles.RailGround).
+	//
+	// It is the bottom of the same warm scale as the rest — below Hair on the
+	// night set, above Hair on the paper one — so it belongs to the page rather
+	// than being laid over it. Quiet on purpose: what makes the rail carry the
+	// eye is that it is the one continuous horizontal object on the frame, not
+	// that it is loud, and a saturated band would out-shout the accents two rows
+	// under it.
+	//
+	// Every ink the badge row spends is legible on it, and that is asserted
+	// rather than eyeballed — see TestTheRailIsLegibleOnBothGrounds.
+	Rail string
 }
 
 // NightPalette is the room after dark, with a lamp on — the theme a terminal is
@@ -236,12 +311,20 @@ type Palette struct {
 // the room supplies ink, not paper.
 func NightPalette() Palette {
 	return Palette{
-		Measured:  "#ece4d5",
-		Text:      "",
-		Muted:     "#9a9081",
-		Dim:       "#7a7164",
-		RuleInk:   "#6b6252",
-		Hair:      "#474139",
+		Measured: "#ece4d5",
+		Text:     "",
+		Muted:    "#9a9081",
+		// The three raised on 2026-09-03 — 5.0:1, 3.6:1 and 3.0:1 on #0c0c0c,
+		// against 4.0, 3.2 and 1.9 before. See the projector paragraph on
+		// Styles. Every figure here is computed against Campbell rather than
+		// cited, because these three are this room's own pigments and not the
+		// site's.
+		Dim:     "#8a8174",
+		RuleInk: "#736a5d",
+		Hair:    "#675f53",
+		// 1.4:1 against the same ground: a band a reader sees and does not
+		// read. Every ink the badge row spends clears 4.5:1 on it.
+		Rail:      "#332e27",
 		Identity:  "#9cb8d2",
 		Withdrawn: "#ffbe77",
 		Broke:     "#e07a5f",
@@ -264,12 +347,22 @@ func NightPalette() Palette {
 // to, because this is a badge that says a seat may change your files.
 func PaperPalette() Palette {
 	return Palette{
-		Measured:  "#1e1c1b",
-		Text:      "",
-		Muted:     "#5f5c58",
-		Dim:       "#8b8681",
-		RuleInk:   "#423f3c",
-		Hair:      "#d5d2cb",
+		Measured: "#1e1c1b",
+		Text:     "",
+		Muted:    "#5f5c58",
+		// Darkened on 2026-09-03 for the projector, exactly as the night set's
+		// three were lightened: Dim was 3.6:1 on white and Hair was 1.5:1, and a
+		// hairline at 1.5:1 is a rule that exists in a screenshot and not in a
+		// room. They are 5.4:1 and 3.1:1 now. Dim stays LIGHTER than Muted
+		// (6.37:1), which is the ordering the unfocused column depends on.
+		// RuleInk did not move: on paper the ink rule is meant to be the heaviest
+		// line on the page, and 10.4:1 is already that.
+		Dim:     "#6f6a64",
+		RuleInk: "#423f3c",
+		Hair:    "#969288",
+		// 1.3:1 on white — the same barely-there band as the night set's, on the
+		// other side of the ink scale, and every badge ink clears 4.5:1 on it.
+		Rail:      "#e4ded0",
 		Identity:  "#1d4e73",
 		Withdrawn: "#8a4b12",
 		Broke:     "#5e1f0d",
@@ -317,12 +410,69 @@ func NewStyles(isDark bool) Styles {
 		// number is set in weight the way a table of figures is set in print. One
 		// token, one appearance, both grounds — a Measured that meant "brighter"
 		// in one theme and "bolder" in the other would be two tokens.
-		Measured: ink(p.Measured).Bold(true),
-		Hair:     ink(p.Hair),
-		RuleInk:  ink(p.RuleInk),
-		Focus:    ink(p.Identity),
+		Measured:   ink(p.Measured).Bold(true),
+		Hair:       ink(p.Hair),
+		RuleInk:    ink(p.RuleInk),
+		Focus:      ink(p.Identity),
+		RailGround: p.Rail,
 	}
 }
+
+// onBand puts a style on the posture rail's ground.
+//
+// A method rather than a second set of fields, so PlainStyles stays the identity
+// set BY CONSTRUCTION: the guard here returns the style untouched and no golden
+// can see the rail exist. A parallel `RailMuted`, `RailAlert`, … would have to
+// remember that, and would forget it the first time one of them grew an
+// attribute.
+func (s Styles) onBand(st lipgloss.Style) lipgloss.Style {
+	if s.Plain || s.RailGround == "" {
+		return st
+	}
+	return st.Background(lipgloss.Color(s.RailGround))
+}
+
+// bandFill is the rail's ground with no text style on it — what the EMPTY half
+// of a ledger cell is painted with, and the whole reason the rail is worth
+// having (see Styles.RailGround).
+func (s Styles) bandFill() lipgloss.Style {
+	return s.onBand(lipgloss.NewStyle())
+}
+
+// onRail is the whole set moved onto the rail's ground, for a builder that
+// renders INTO the badge row from another file (seatQuotaCell).
+//
+// A derived set rather than a ground threaded through that builder, for forSeat's
+// own reason: the change has to reach a helper two calls deep, every one of them
+// already takes a Styles, and passing the ground alongside would mean each of
+// them deciding for itself what "on the rail" means.
+func (s Styles) onRail() Styles {
+	if s.Plain || s.RailGround == "" {
+		return s
+	}
+	s.Text = s.onBand(s.Text)
+	s.Muted = s.onBand(s.Muted)
+	s.Identity = s.onBand(s.Identity)
+	s.SevOK = s.onBand(s.SevOK)
+	s.SevWarn = s.onBand(s.SevWarn)
+	s.SevCrit = s.onBand(s.SevCrit)
+	s.Strong = s.onBand(s.Strong)
+	s.Alert = s.onBand(s.Alert)
+	s.Dim = s.onBand(s.Dim)
+	s.Measured = s.onBand(s.Measured)
+	return s
+}
+
+// Lane is the REACHED part of a racer's lane track and Track is the part it has
+// not reached (the arena's race board — arenalane.go).
+//
+// The fill is the racer's host-observed finishing position, so it takes the ink
+// this room spends on a figure somebody measured; the rest of the track is a
+// hairline, which is what the room draws a distance in. Neither is a seat's own
+// colour: seat hues were retired with §9.28 and a lane that wore one would be
+// this identity buying back the thing it sold.
+func (s Styles) Lane() lipgloss.Style  { return s.Measured }
+func (s Styles) Track() lipgloss.Style { return s.Hair }
 
 // PlainStyles is the identity set: every Render returns its input unchanged, so
 // layout goldens compare byte for byte without depending on the CI terminal's
@@ -344,6 +494,10 @@ func PlainStyles() Styles {
 		// whole cost model of this identity: every one of them is a colour or a
 		// weight, so the room's bytes are the bytes the goldens already hold.
 		Measured: s, Hair: s, RuleInk: s, Focus: s,
+		// RailGround is left empty, which is the rail switched OFF — onBand
+		// returns its argument untouched, fitOn pads in plain spaces, and the
+		// posture row is byte-for-byte the row it was before the rail existed.
+		// A golden cannot see the ledger's ground, and no claim on it needs one.
 		Plain: true,
 	}
 }
@@ -437,6 +591,44 @@ func (s Styles) ForPhase(p Phase) lipgloss.Style {
 // `WRITES` break the `ro:` prefix on purpose), which is why the badges survive
 // --ascii and NO_COLOR exactly as they did. Weight and hue only make the word
 // findable in a frame with four columns of prose in it.
+//
+// # The ladder is ordered by EVIDENCE, not by risk (2026-09-03)
+//
+// The three read-only badges all rendered Muted — one volume for `ro:enforced`,
+// `ro:tools` and `ro:requested` — and those three are not one fact. state.go
+// says so in its own doc comments: `ro:enforced` is an OS-level sandbox this
+// repo drove and measured at a pinned version, `ro:tools` is a restricted tool
+// set read off what the session reported about itself, and `ro:requested` is a
+// flag that was passed and accepted with NOTHING measuring the result. The
+// posture ledger is the thing no competitor draws, and it was drawn in one
+// colour — so the difference between a containment this project MEASURED and one
+// it merely ASKED FOR arrived at the eye as chrome. §4a.1 says an unmeasured
+// value is either omitted or visibly marked; this is that rule reaching the one
+// surface the product exists for.
+//
+// Five distinct renders, strongest evidence first:
+//
+//	ro:enforced   SevOK       an OS sandbox, driven and measured at a version
+//	ro:tools      Text        a real mechanism, named, at full contrast
+//	ro:requested  SevWarn     asked for; nothing measured what came back
+//	gated         Text + bold may write, and has to be told yes first
+//	WRITES        Alert       may change your files, right now
+//	unsandboxed   Alert       has no read-only posture at all, and that is measured
+//
+// SevOK on `ro:enforced` is the one to argue for. In this palette SevOK IS the
+// measured ink at weight (NewStyles), so it does not say "fine" — it says "a
+// value somebody read", which is exactly the claim `ro:enforced` makes and
+// exactly what separates it from the badge below it. Minting a sixth token for
+// "measured" would be the drift this file forbids.
+//
+// `WRITES` and `unsandboxed` share Alert deliberately: they are two routes to
+// one consequence, the word is what says which, and splitting them by ink would
+// spend the loudest treatment in the room on a distinction that changes nothing
+// a reader would do next.
+//
+// None of this weakens the redundancy rule. Every step is spelled by a DIFFERENT
+// WORD, the words are what --ascii and NO_COLOR read, and PlainStyles renders
+// all six as the identity style, so no golden can see any of it.
 func (s Styles) ForSandbox(l SandboxLevel) lipgloss.Style {
 	switch l {
 	case SandboxWrite, SandboxNone:
@@ -447,6 +639,15 @@ func (s Styles) ForSandbox(l SandboxLevel) lipgloss.Style {
 		// colouring it like the ungated ones would teach the eye to skip the
 		// difference the gate exists to make.
 		return s.bold(s.Text)
+	case SandboxEnforced:
+		return s.SevOK
+	case SandboxTools:
+		// Full contrast, no ink of its own. A tool allowlist is a real mechanism
+		// and it is not an OS boundary; it sits between the two claims that DO
+		// carry ink, and the absence of one is what says so.
+		return s.Text
+	case SandboxRequested:
+		return s.SevWarn
 	default:
 		return s.Muted
 	}

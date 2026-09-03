@@ -774,12 +774,29 @@ func padRight(s string, w int, g Glyphs) string {
 // (the tab bar, the help body), the padding has to be ANSI-aware, and this is
 // it. lipgloss.Width and MaxWidth both skip escapes.
 func fit(s string, w int) string {
+	return fitOn(s, w, lipgloss.NewStyle())
+}
+
+// fitOn is fit with the PADDING's own style named by the caller.
+//
+// One row in the room needs it: the posture rail (style.go's RailGround), whose
+// ground has to run the whole width of a cell rather than stopping where the
+// badges stop. fit's plain spaces would leave the empty half of a posture row
+// unpainted, which is the difference between a printed line with a gap in it and
+// a line that simply ran out — and that difference is the whole reason the rail
+// exists.
+//
+// The padding is the only thing styled. Whatever was already rendered into `s`
+// passes through untouched, so this stays as ANSI-safe as fit is: the arithmetic
+// is lipgloss.Width and MaxWidth throughout, both of which skip escapes. Under
+// PlainStyles the caller hands in the identity style and the bytes are fit's own.
+func fitOn(s string, w int, pad lipgloss.Style) string {
 	if w <= 0 {
 		return ""
 	}
 	s = lipgloss.NewStyle().MaxWidth(w).Render(s)
 	if d := w - lipgloss.Width(s); d > 0 {
-		s += strings.Repeat(" ", d)
+		s += pad.Render(strings.Repeat(" ", d))
 	}
 	return s
 }
