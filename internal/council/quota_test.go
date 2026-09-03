@@ -230,17 +230,18 @@ func TestTheReadingNeverEvictsAClaimTheBadgeRowAlreadyMade(t *testing.T) {
 		if !strings.Contains(row, "ro:tools") {
 			t.Errorf("w=%d: the reading displaced the posture claim: %q", w, row)
 		}
-		if !strings.Contains(row, "$0.0123") {
+		// The row this seat drew before the reading existed is the reference.
+		// A column too narrow for the figure beside the claims shows no figure
+		// at all (badgeRow: shown whole or not shown), and the reading is not
+		// what took it. So the property is: wherever the bare row shows the
+		// cost, the row with the reading shows it too.
+		was := badgeRow(st, bare, w, PlainStyles(), UnicodeGlyphs())
+		if strings.Contains(was, "$0.0123") && !strings.Contains(row, "$0.0123") {
 			t.Errorf("w=%d: the reading displaced the cost: %q", w, row)
 		}
-		// The row this seat drew before the reading existed is the ceiling. A
-		// narrow badge row already overruns and lets the caller's fit() clip it
-		// (badgeRow's own fallback), so the property is not "always inside w" —
-		// it is that adding the reading never makes that worse.
-		was := badgeRow(st, bare, w, PlainStyles(), UnicodeGlyphs())
-		if ceiling := maxInt(w, lipgloss.Width(was)); lipgloss.Width(row) > ceiling {
-			t.Errorf("w=%d: the reading widened the badge row from %d to %d cells: %q",
-				w, lipgloss.Width(was), lipgloss.Width(row), row)
+		if lipgloss.Width(row) > w {
+			t.Errorf("w=%d: the badge row with the reading overruns at %d cells: %q",
+				w, lipgloss.Width(row), row)
 		}
 	}
 }

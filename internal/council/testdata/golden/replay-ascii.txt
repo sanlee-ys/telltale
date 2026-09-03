@@ -4,7 +4,7 @@
   : add a --version flag and a test for it                                                                              
                                                                                                                         
 [ ] 1 CC Claude Code - streaming 3s     |    2 CX Codex  ----------  + done 3s  |    3 AG Antigravity - streaming 5s    
-[   REPLAY  gated  tokens               |    REPLAY  WRITES  final only  $0.01  |    REPLAY  WRITES  final only         
+[   REPLAY  gated  tokens               |    REPLAY  WRITES  final only         |    REPLAY  WRITES  final only         
                                                                                                                         
                                                                                                                         
                                                                                                                         

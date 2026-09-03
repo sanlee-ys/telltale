@@ -2910,7 +2910,9 @@ func gatePreviewHalf(content, mark, word string, w int, sty Styles, g Glyphs) []
 // shows $0.0000; a turn that reported nothing shows no cost cell at all. Those
 // are different facts, and deriving a figure from token counts is on this
 // repo's deliberately-rejected list (design.md §8) — council does not get to
-// invent dollars either.
+// invent dollars either. A column too narrow to hold the figure WHOLE shows
+// no cost cell either, and never a clipped one; the ruling is at the cost
+// cell below.
 //
 // It takes the State for one reason: the seat's relayed quota reading states
 // its own age, and an age is State.Now minus a stamp — the same way every clock
@@ -3020,6 +3022,35 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 
 	cost := costCell(c)
 
+	// A FIGURE IS SHOWN WHOLE OR NOT SHOWN. When the cost cannot sit beside the
+	// claims with one cell of clearance, it leaves this row whole, exactly as
+	// it leaves at strip width (stripBadges) and as the turn separator drops
+	// its meta before its label (turnRule).
+	//
+	// This row used to fall back to trailing the badges when the anchor did
+	// not fit, and let the caller's fit() clip whatever overran. fit() clips
+	// without an ellipsis, so the cut landed inside the digits: `$0.0123`
+	// arrived as `$0.01`, and `$0.0123 session` as `$0.012`. §4a.1 rules that
+	// a displayed value is the measured one, and stripBadges already ruled
+	// that a clipped number is a DIFFERENT number, not a damaged one. A
+	// reader had no way to tell `$0.01` was cut, and a cut that also lost the
+	// word `session` turned a running total into a per-turn spend. Three
+	// goldens carried that cut before this was fixed (hosted-turn, replay,
+	// replay-ascii) and passed, because a golden pins appearance and cannot
+	// tell an honest figure from a clipped one.
+	//
+	// Whole, or gone; never rounded and never marked. A coarser figure would
+	// be a number the vendor did not report, and this room's `~` means an
+	// estimate, which a rounded reading of a measured figure is not. Nothing
+	// marks the departure either: the row draws no cost for a seat that
+	// reported none, and a placeholder here would give one glyph two meanings.
+	// What a narrow column loses is the standing figure on this row; every
+	// finished turn keeps its own on its separator, where the turn page still
+	// carries it whole (historyMeta).
+	if cost != "" && w-lipgloss.Width(left)-lipgloss.Width(cost) < 1 {
+		cost = ""
+	}
+
 	// The seat's relayed account quota (§9.21, amended 2026-08-17), and it takes
 	// only the space the row has LEFT after everything already on it.
 	//
@@ -3045,14 +3076,18 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 	if cost == "" {
 		return leftS
 	}
-	// Right-anchored when it fits; back to trailing the badges when it does
-	// not. What must never happen is the posture claim giving way to the
-	// number: §9.2 is emphatic that a claim you cannot see is not a claim, and
-	// the cost is the one thing on this line the transcript also records.
-	if gap := w - lipgloss.Width(left) - lipgloss.Width(cost); gap >= 1 {
-		return leftS + strings.Repeat(" ", gap) + sty.Muted.Render(cost)
+	// Right-anchored, and the gap is at least one by construction: the cost
+	// was kept only if it cleared the claims by a cell, and the reading was
+	// offered only the space left after the cost and its clearance. What must
+	// never happen is the posture claim giving way to the number: §9.2 is
+	// emphatic that a claim you cannot see is not a claim. Should the
+	// arithmetic above ever be broken, the figure leaves rather than clips,
+	// on the same rule as the check above.
+	gap := w - lipgloss.Width(left) - lipgloss.Width(cost)
+	if gap < 1 {
+		return leftS
 	}
-	return leftS + sty.Muted.Render("  "+cost)
+	return leftS + strings.Repeat(" ", gap) + sty.Muted.Render(cost)
 }
 
 // stripBadges is the badge row at strip width: the posture word, or nothing at
