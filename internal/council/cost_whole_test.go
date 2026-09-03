@@ -21,14 +21,15 @@ import (
 // row can take around the figure: the three reference postures, a session
 // total (which adds a word the cut used to remove), a replayed room, a shared
 // tree with a reason, and a seat with a relayed quota reading. At each width
-// the row must carry the whole figure or no `$` at all, and adding the figure
-// must never push a row that fit past w, so the caller's fit() has nothing to
-// clip on the figure's account.
+// the row must carry the whole figure or no `$` at all, and the row must be
+// inside w, so the caller's fit() has nothing to clip.
 //
-// The comparison is against the same row WITHOUT a cost, on purpose. Between
-// the strip floor and about twenty-six cells the badge words themselves
-// overrun and fit() clips them (`final onl`), which is §9.11's own defect and
-// not this one; a test about the figure asserts what the figure changes.
+// The width check used to compare against the same row WITHOUT a cost, because
+// between the strip floor and about twenty-six cells the badge words
+// themselves overran and fit() clipped them (`final onl`). That was §9.11's
+// own defect, and TestTheBadgeWordsLeaveWholeOrNotAtAll is its record; with
+// the words shedding whole at every width the row is asserted inside w
+// outright.
 func TestTheCostIsShownWholeOrNotShown(t *testing.T) {
 	cost := 0.0041
 	base := room()
@@ -68,19 +69,16 @@ func TestTheCostIsShownWholeOrNotShown(t *testing.T) {
 	for _, g := range []Glyphs{UnicodeGlyphs(), GlyphsFor(true)} {
 		for _, sh := range shapes {
 			shown := 0
-			bare := sh.col
-			bare.CostUSD, bare.CostSession = nil, false
 			for w := stripWidth; w <= 80; w++ {
 				row := badgeRow(sh.st, sh.col, w, PlainStyles(), g)
-				without := badgeRow(sh.st, bare, w, PlainStyles(), g)
-				if lipgloss.Width(without) <= w && lipgloss.Width(row) > w {
-					t.Errorf("%s w=%d: the figure pushed the badge row to %d cells, so fit() would clip it: %q",
+				if lipgloss.Width(row) > w {
+					t.Errorf("%s w=%d: the badge row is %d cells, so fit() would clip it: %q",
 						sh.name, w, lipgloss.Width(row), row)
 				}
 				// fit() is what the column applies to this row (columnChrome),
 				// and on a row that fits it may only pad. Stated directly so a
 				// change to fit() cannot slip past the width check above.
-				if lipgloss.Width(row) <= w && strings.TrimRight(fit(row, w), " ") != strings.TrimRight(row, " ") {
+				if strings.TrimRight(fit(row, w), " ") != strings.TrimRight(row, " ") {
 					t.Errorf("%s w=%d: fit() changed the badge row: %q -> %q", sh.name, w, row, fit(row, w))
 				}
 				switch {

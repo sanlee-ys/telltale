@@ -3138,10 +3138,8 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 		plain = append(plain, "REPLAY")
 		styled = append(styled, band(sty.SevWarn).Render("REPLAY"))
 	}
-	if b := c.Sandbox.Badge(); b != "" {
-		plain = append(plain, b)
-		styled = append(styled, band(sty.ForSandbox(c.Sandbox.Level)).Render(b))
-	}
+	posture := c.Sandbox.Badge()
+	postureS := band(sty.ForSandbox(c.Sandbox.Level)).Render(posture)
 	// Where the seat's process actually runs (§9.55): its own worktree, or
 	// the shared tree — and, when the room would have cut a worktree and
 	// could not, why. Beside the posture badge because it is the other half
@@ -3172,21 +3170,50 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 		containS = style.Render(contain)
 	}
 	gran := c.Gran.String()
-	row := func(extra ...string) int {
+	// row is the width the row would have with these words on it: two cells
+	// of air before each one, which is the indent for the first word and the
+	// gap for every word after it.
+	row := func(words ...string) int {
 		n := 0
-		for _, s := range append(append([]string{}, plain...), extra...) {
+		for _, s := range append(append([]string{}, plain...), words...) {
 			if s != "" {
 				n += lipgloss.Width(s) + 2
 			}
 		}
 		return n
 	}
-	if contain != "" && gran != "" && row(contain, gran) > w {
+	// THE LADDER RUNS AT EVERY WIDTH, not only where a containment badge is
+	// on the row. It used to run only then, so a row with no containment
+	// claim was handed to the caller's fit() at its full length, and fit()
+	// clips without an ellipsis: a four-seat room at 120 columns gives each
+	// seat 25 cells, and `  ro:requested  final only` is 26, so the seat
+	// read `ro:requested  final onl`. stripBadges ruled at fourteen cells
+	// that a clipped state word is not a word, and that a clipped one which
+	// is also a PREFIX of another word in the vocabulary is worse than damage
+	// (`fina` is not `final only`); the strip floor is not where that stops
+	// being true. The words leave whole, in stripBadges' own order (the cost
+	// has its own ruling at the cost cell below): the granularity word, then
+	// the containment reason, then the containment badge, then the posture
+	// badge, which is the safety claim §9.2 refuses to let yield to anything
+	// and so goes last, and only when it cannot fit whole beside REPLAY.
+	// REPLAY never leaves above the strip: it is the one claim about the room
+	// rather than the seat, and it is what the strip itself keeps.
+	if gran != "" && row(posture, contain, gran) > w {
 		gran = ""
 	}
-	if contain != "" && c.Containment.Why != "" && row(contain, gran) > w {
+	if contain != "" && c.Containment.Why != "" && row(posture, contain, gran) > w {
 		contain = g.Warn + " " + ContainClaim{Level: ContainShared}.Badge(st.ASCII)
 		containS = band(sty.SevWarn).Render(contain)
+	}
+	if contain != "" && row(posture, contain, gran) > w {
+		contain = ""
+	}
+	if posture != "" && row(posture, contain, gran) > w {
+		posture = ""
+	}
+	if posture != "" {
+		plain = append(plain, posture)
+		styled = append(styled, postureS)
 	}
 	if contain != "" {
 		plain = append(plain, contain)
