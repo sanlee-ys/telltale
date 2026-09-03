@@ -11,7 +11,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/model"
 )
 
-// The MONOGRAPH prototype's capture harness (explore/room-monograph).
+// The room identity's capture harness (docs/room-identity.md).
 //
 // It is a TEST rather than a command for the reason the identity brief gives:
 // the fixtures that build a populated room already live in this package's tests,
@@ -23,13 +23,13 @@ import (
 // It is SKIPPED unless TELLTALE_SHOTS names a directory, so a plain
 // `go test ./internal/council` neither writes files nor slows down.
 //
-//	TELLTALE_SHOTS=<dir> go test ./internal/council -run TestMonographCaptures
+//	TELLTALE_SHOTS=<dir> go test ./internal/council -run TestRoomIdentityCaptures
 //
 // What it writes is ANSI, one file per panel. Turning ANSI into a picture is a
 // separate step on purpose: internal/svgframe already converts a frame to SVG
 // for the README, and the contact sheet wants a font and a layout that are
 // properties of the SHEET rather than of the product.
-func TestMonographCaptures(t *testing.T) {
+func TestRoomIdentityCaptures(t *testing.T) {
 	dir := os.Getenv("TELLTALE_SHOTS")
 	if dir == "" {
 		t.Skip("set TELLTALE_SHOTS=<dir> to write the contact sheet's ANSI captures")
@@ -70,6 +70,16 @@ func TestMonographCaptures(t *testing.T) {
 	post := postureRoom()
 	post.Width, post.Height = 180, 50
 	write("postures-180x50-dark", Render(post, dark, uni))
+
+	// The room WAITING ON YOU: three seats gated, the reader on one of them.
+	// It is captured because the 2026-09-03 audit named this state on another
+	// prototype's sheet — "too many simultaneous yellow warnings flatten the
+	// hierarchy; the actionable gate line is not singular enough" — and a fix
+	// nobody photographs is a fix nobody checked.
+	gated := needsYouRoom()
+	gated.Width, gated.Height = 180, 50
+	gated.Now = shotNow
+	write("needsyou-180x50-dark", Render(gated, dark, uni))
 
 	// The paper set, at the width the columns tier is drawn for.
 	write("columns-120x36-paper", Render(shotColumns(120, 36), paper, uni))
