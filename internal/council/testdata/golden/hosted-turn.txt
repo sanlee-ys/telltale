@@ -5,7 +5,7 @@
   › tighten the parser's error path                                                                                     
                                                                                                                         
 ▌ ▸ 1 CC Cl… ⠋ streaming 30s  │    2 CX Codex ✓ done 12s    │    3 AG Antigra… ✓ done 6s  │    4 GR Grok ✗ failed 2s    
-▌   ro:tools  tokens  $0.012  │    ro:enforced  final only  │    unsandboxed  final only  │    unsandboxed  tokens      
+▌   ro:tools  tokens          │    ro:enforced  final only  │    unsandboxed  final only  │    unsandboxed  tokens      
 ▌                             │                             │                             │                             
 ▌ ↑ 5 more above              │                             │                             │                             
 ▌   ✓                         │                             │                             │                             
