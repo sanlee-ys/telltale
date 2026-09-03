@@ -89,7 +89,7 @@ func verifyHostProcess(pid int, startedAt time.Time) error {
 	if err != nil {
 		return err
 	}
-	if !strings.EqualFold(filepath.Base(name), self) {
+	if !sameImage(filepath.Base(name), self) {
 		return fmt.Errorf("%w: pid %d is %s, and this binary is %s — the pid was reused",
 			ErrNotTelltale, pid, filepath.Base(name), self)
 	}
@@ -106,6 +106,32 @@ func verifyHostProcess(pid int, startedAt time.Time) error {
 		}
 	}
 	return nil
+}
+
+// sameImage compares a process's image name with this binary's.
+//
+// EqualFold, as the Unix half does, and ONE suffix is forgiven: the `~` that
+// the go command appends when it replaces a binary that is running. Windows
+// will not overwrite an executable that is mapped, so `go build -o` and
+// `go install` rename the old file to `name~` and write the new one beside it.
+// The running process keeps the old file, and QueryFullProcessImageName then
+// reports the renamed path. That process is still the host it was. This is the
+// case identity_linux.go strips " (deleted)" for, in the shape Windows gives it.
+//
+// Measured 2026-09-03 on the reference workstation: a host at pid 35372 ran
+// `telltale council --host --read` with a claude seat answering; another
+// session installed a fresh telltale.exe while it ran; `telltale council ls`
+// then reported "pid 35372 is telltale.exe~, and this binary is telltale.exe —
+// the pid was reused", and `telltale council` removed host.json and rebuilt
+// five seats over a host that was alive and still held its seat. A pid that
+// was truly recycled by a later telltale is still caught by the creation-time
+// half below; the name half only has to tell telltale from a stranger.
+func sameImage(image, self string) bool {
+	if strings.EqualFold(image, self) {
+		return true
+	}
+	renamed, ok := strings.CutSuffix(image, "~")
+	return ok && strings.EqualFold(renamed, self)
 }
 
 // processImageName reads a process's full executable path.
