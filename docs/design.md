@@ -18471,7 +18471,7 @@ measured, in a directory that did not exist a second earlier); a one-shot seat h
 tree as cwd on a resume (`codex resume` rejects `--cd`, and the tree is passed as `Dir`);
 two seats writing at once into two trees and `/adopt` folding each in turn; the fanned
 `/flow` stage's two artifacts landing beside each other and the join reading both; and the
-`⚠ shared tree` badge at real widths on a real fallback. Owed and named rather than implied,
+`⚠ shared tree` badge at real widths on a real fallback — SEEN 2026-09-03 on every seat of a five-seat room opened in `~` (not a git repo) at about 180 columns, with the `· <why>` clause shed at that width; the clause itself at a wider room is still unchecked. The rest owed and named rather than implied,
 on §9.53's rule.
 darwin/arm64 cross-builds, and `go test -race ./internal/council` once. New goldens:
 `route-headroom`, `route-auto`, `replay`, `replay-gate`, `replay-ascii`. No existing golden
@@ -18479,7 +18479,7 @@ moved: a room with no near-full reading and no `@auto` draws the routing cell it
 and a live room's header, badge rows and footer are untouched by the replay flag.
 
 **Not verified here: a live recording.** No vendor was run by the session that wrote this, so
-no recording of a real room exists yet; the replay fixture is synthesized (fake ids, fake paths,
+a recording of a real room EXISTS as of 2026-09-03 — the owner ran `--record demo.jsonl` over a five-seat gated write room at turn 3 with one `@all` brief, and `replay-check` read it clean: 75 records over 24s, five seats, one dispatch, 59 text events, no tool calls, no gate cards (the file carries verbatim prose and session ids, so it stays local). `--replay` of that file has NOT yet been driven; the replay fixture in the suite is still synthesized (fake ids, fake paths,
 three seats, one card, one finished seat). What only a live run can show is a `--record` of a
 five-seat room with real timing, that its replay reads as the room did, and what `replay-check`
 lists off a real capture. The hero decision stays the owner's.
