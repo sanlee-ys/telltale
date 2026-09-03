@@ -5086,23 +5086,29 @@ func helpBadgeGloss() []struct {
 		level SandboxLevel
 		gloss []string
 	}{
-		{SandboxTools, []string{
-			"the write tools are ABSENT from that session — checked",
-			"against what the session reported about itself, not a flag",
-		}},
+		// ORDERED BY EVIDENCE, strongest first (2026-09-03), and the order is the
+		// page's structure rather than its decoration. The list used to run
+		// tools, enforced, requested, none, write, gated — which is no order at
+		// all — and the audit read the whole page as "reference documentation,
+		// not projected evidence". Read down it now and the ladder is the
+		// argument: an OS sandbox this repo drove; a tool set read off the
+		// session; a flag nobody measured; a seat that asks first; a seat that
+		// writes; a seat with no posture at all. ForSandbox renders those five
+		// steps five different ways, from the same function the room uses, so
+		// the legend and the columns cannot teach different ladders.
 		{SandboxEnforced, []string{
 			// "every OS" earned its second half on 2026-08-29: the Windows
 			// branch was `unsandboxed` until codex-cli 0.149.1 was measured
 			// denying a live write there (§9.2's dated amendment).
 			"the vendor's own OS-level sandbox does it — codex, every OS",
 		}},
+		{SandboxTools, []string{
+			"the write tools are ABSENT from that session — checked",
+			"against what the session reported about itself, not a flag",
+		}},
 		{SandboxRequested, []string{
 			"a flag was passed and accepted; what it actually enforces",
 			"was never observed. Weaker than the two above, and says so",
-		}},
-		{SandboxNone, []string{
-			"nothing restricts this vendor at the OS level. MEASURED,",
-			"not assumed — treat this column as able to change your files",
 		}},
 		// These two credited `--write or /write`, and the flag half of that was
 		// false the day it was written. **`--write` is accepted and IGNORED**
@@ -5123,11 +5129,18 @@ func helpBadgeGloss() []struct {
 		// room this panel draws in (80x24 with a collapsed-seat notice), so a
 		// second row here pushes it off. TestHelpFitsTheSmallestRoom catches
 		// it; it caught this.
+		{SandboxGated, []string{
+			"as WRITES, and this seat asks first — y approves, n denies",
+		}},
 		{SandboxWrite, []string{
 			"the DEFAULT: this column may edit and run. --read opts out",
 		}},
-		{SandboxGated, []string{
-			"as WRITES, and this seat asks first — y approves, n denies",
+		// Last, because it is the bottom of the ladder: no read-only posture at
+		// all. Two rows, and the block is nine rows in this order exactly as it
+		// was in the old one — the page's row budget is unmoved.
+		{SandboxNone, []string{
+			"nothing restricts this vendor at the OS level. MEASURED,",
+			"not assumed — treat this column as able to change your files",
 		}},
 	}
 }
@@ -5199,7 +5212,11 @@ func helpPostures(st State, lay Layout, sty Styles, g Glyphs) []string {
 		// (§9.11: a rule outranks a blank). It is what keeps the WORKSPACE
 		// sentence, the load-bearing line on this page, above the fold now that
 		// §9.44 costs the panel a row.
-		"  Each column states its own posture; there is no room-wide claim.",
+		// It names the AXIS now as well as the scope. A ladder a reader cannot
+		// see is a list, and the row under the title is the only place on this
+		// page with room to say which way the ladder runs. Both claims survive:
+		// "not the room" is §9.2's no-room-wide-claim rule in four words.
+		"  Each column states its own posture, not the room. Best evidence first.",
 		"",
 	}
 
@@ -5247,9 +5264,14 @@ func helpPostures(st State, lay Layout, sty Styles, g Glyphs) []string {
 		// another and the badges line up with the words they were just defined
 		// by. Two lists of the same vocabulary that do not share a left edge
 		// read as two unrelated lists.
+		// The seat NAME takes the room's seat ink, which is what makes this half
+		// scannable: a reader looking for one seat's evidence finds the name
+		// rather than reading the paragraph above it. It goes through the closed
+		// list's own accessor, so a future ruling that wants per-seat ink back
+		// changes one function (style.go's seatInk).
 		seats = append(seats, "",
 			"  "+sty.ForSandbox(c.Sandbox.Level).Render(b)+
-				strings.Repeat(" ", maxInt(1, 13-len(b)))+sty.Muted.Render(c.Label))
+				strings.Repeat(" ", maxInt(1, 13-len(b)))+sty.SeatIdentity(c.Vendor).Render(c.Label))
 		// Hung at the legend's own continuation indent, so a seat's detail sits
 		// UNDER the name it belongs to. It used to hang at six cells while its
 		// own label started at fifteen — the child ten cells LEFT of its parent,
@@ -5258,15 +5280,23 @@ func helpPostures(st State, lay Layout, sty Styles, g Glyphs) []string {
 		// title at weight, its body hanging under it) and this was the last place
 		// still drawing the shape that rule was written to remove.
 		body := maxInt(20, lay.Width-2*framePad-helpIndent)
+		// FULL CONTRAST, not chrome (2026-09-03). This is the measured, per-seat
+		// argument behind a safety badge — the one thing on this page that is
+		// evidence rather than vocabulary — and it was the quietest ink in the
+		// room. The audit named it: "long low-contrast paragraphs are reference
+		// documentation, not projected evidence." The granularity gloss below
+		// stays chrome, because it explains a WORD rather than backing a CLAIM,
+		// and that split is what keeps the two readable as two things.
 		for _, l := range wrap(c.Sandbox.Detail, body) {
-			seats = append(seats, sty.Muted.Render(helpHang+l))
+			seats = append(seats, sty.Text.Render(helpHang+l))
 		}
 		// Where the seat runs, in full (§9.55): the badge row sheds the
 		// reason for a fallback at column width, and this page is where the
 		// whole sentence lives.
 		if s := containDetail(c.Containment); s != "" {
+			// The other half of the same measured claim, so the same ink.
 			for _, l := range wrap(s, body) {
-				seats = append(seats, sty.Muted.Render(helpHang+l))
+				seats = append(seats, sty.Text.Render(helpHang+l))
 			}
 		}
 		// The other half of that seat's badge line, and the reason this section

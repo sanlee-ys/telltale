@@ -137,17 +137,54 @@ func TestWeightAndIntensitySurvive(t *testing.T) {
 // generated pictures exist to end.
 func TestUnknownStyleIsAnError(t *testing.T) {
 	for _, line := range []string{
-		"\x1b[7mreverse\x1b[m",          // reverse video
-		"\x1b[4munderline\x1b[m",        // underline
-		"\x1b[41mbackground\x1b[m",      // a background colour
-		"\x1b[38;5;200mxterm256\x1b[m",  // outside the four-bit palette
-		"\x1b[38;2;255;0mshort\x1b[m",   // truecolor with a channel missing
-		"\x1b[38;2;255;0;300mbig\x1b[m", // a channel outside a byte
-		"\x1b[1Kbad",                    // a CSI sequence that is not SGR at all
+		"\x1b[7mreverse\x1b[m",             // reverse video
+		"\x1b[4munderline\x1b[m",           // underline
+		"\x1b[38;5;200mxterm256\x1b[m",     // outside the four-bit palette
+		"\x1b[48;5;200mgroundx\x1b[m",      // the same, as a ground
+		"\x1b[38;2;255;0mshort\x1b[m",      // truecolor with a channel missing
+		"\x1b[38;2;255;0;300mbig\x1b[m",    // a channel outside a byte
+		"\x1b[48;2;255;0;300mground\x1b[m", // the same, as a ground
+		"\x1b[1Kbad",                       // a CSI sequence that is not SGR at all
 	} {
 		if _, err := Render(Frame{Caption: "c", Alt: "a", Lines: []string{line}}, Dark()); err == nil {
 			t.Errorf("%q rendered without complaint; it must not", line)
 		}
+	}
+}
+
+// TestABackgroundIsDrawnAsARect. A background left the refused list when council
+// grew its POSTURE RAIL (internal/council/style.go's RailGround), and this is
+// what replaced the refusal: the ground reaches the picture as a rect under the
+// run's own text, at the full row pitch so neighbouring runs tile into one
+// continuous strip.
+//
+// The refusal was not wrong and it was not relaxed. The mechanism is that a
+// style a surface starts emitting shows up here as a build failure rather than
+// vanishing from the picture; it fired, somebody read it, and the answer was to
+// teach the picture to draw the thing. What stays refused is a ground OUTSIDE
+// the sixteen named indices, because an index above 15 has no entry in a Palette
+// and drawing it would mean this package inventing a colour.
+func TestABackgroundIsDrawnAsARect(t *testing.T) {
+	out := render(t, "\x1b[48;2;51;46;39m rail \x1b[m plain")
+	if !strings.Contains(out, "<rect") || !strings.Contains(out, `fill="#332e27"/>`) {
+		t.Errorf("the ledger rail's ground did not reach the picture:\n%s", out)
+	}
+	// The rect is laid down BEFORE any text element, or it paints over the
+	// glyphs it is supposed to sit under.
+	if strings.Index(out, `fill="#332e27"/>`) > strings.Index(out, "<tspan") {
+		t.Errorf("a background rect is drawn after the row's text:\n%s", out)
+	}
+	// A run with no ground of its own draws no rect at all. Counted rather than
+	// searched for: the panel itself is a rect, so the assertion is that no
+	// SECOND one appeared.
+	plainOut := render(t, "no ground here")
+	if n := strings.Count(plainOut, "<rect"); n != 1 {
+		t.Errorf("a run with no background emitted %d rects, want only the panel's:\n%s", n, plainOut)
+	}
+	// A 4-bit ground resolves through the scheme, exactly as a 4-bit ink does.
+	idx := render(t, "\x1b[41mred ground\x1b[m")
+	if !strings.Contains(idx, `fill="`+Dark().ANSI[1]+`"/>`) {
+		t.Errorf("a 4-bit ground did not resolve through the palette:\n%s", idx)
 	}
 }
 

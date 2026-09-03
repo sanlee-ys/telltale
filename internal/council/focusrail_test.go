@@ -249,8 +249,11 @@ func TestTheDemotionStopsAtTheReadingArea(t *testing.T) {
 		// The user's own words, echoed inside an unfocused column, at weight.
 		{"the prompt echo", sty.Strong.Render(g.Prompt + " which way should the room read?")},
 		// The posture badge that says a seat can change your files. Alert, not
-		// faint, on a column nobody is reading.
-		{"an unsandboxed posture badge", sty.Alert.Render("unsandboxed")},
+		// faint, on a column nobody is reading — and ON THE RAIL since
+		// 2026-09-03, because the badge row is the posture ledger's own ground
+		// (style.go's RailGround). onBand rather than a literal, so this keeps
+		// asserting the DEMOTION rather than the ground.
+		{"an unsandboxed posture badge", sty.onBand(sty.Alert).Render("unsandboxed")},
 		// A failure note's mark keeps the warning hue.
 		{"a note card's mark", sty.SevWarn.Render(g.Warn)},
 		// And the seat's own name keeps its hue.

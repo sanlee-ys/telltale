@@ -322,9 +322,11 @@ func NightPalette() Palette {
 		Dim:     "#8a8174",
 		RuleInk: "#736a5d",
 		Hair:    "#675f53",
-		// 1.4:1 against the same ground: a band a reader sees and does not
-		// read. Every ink the badge row spends clears 4.5:1 on it.
-		Rail:      "#332e27",
+		// 1.25:1 against the same ground: a band a reader SEES and does not
+		// READ. Every ink the badge row spends clears WCAG AA on it (Muted, the
+		// quietest of them, at 4.98:1), which is the constraint that picked this
+		// value rather than the two steps brighter it started at.
+		Rail:      "#26231d",
 		Identity:  "#9cb8d2",
 		Withdrawn: "#ffbe77",
 		Broke:     "#e07a5f",
@@ -360,9 +362,10 @@ func PaperPalette() Palette {
 		Dim:     "#6f6a64",
 		RuleInk: "#423f3c",
 		Hair:    "#969288",
-		// 1.3:1 on white — the same barely-there band as the night set's, on the
-		// other side of the ink scale, and every badge ink clears 4.5:1 on it.
-		Rail:      "#e4ded0",
+		// 1.29:1 on white — the same barely-there band as the night set's, on
+		// the other side of the ink scale, and every badge ink clears WCAG AA on
+		// it (Muted at 5.15:1).
+		Rail:      "#e8e2d6",
 		Identity:  "#1d4e73",
 		Withdrawn: "#8a4b12",
 		Broke:     "#5e1f0d",

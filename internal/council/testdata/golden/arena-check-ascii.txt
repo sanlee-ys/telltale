@@ -11,12 +11,12 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-[ arena arena/t6/claude  -------------  |  arena arena/t6/codex  -------------  |  arena arena/t6/agy  ---------------  
+[ arena arena/t6/claude  -----  /adopt  |  arena arena/t6/codex  -----  /adopt  |  arena arena/t6/agy  -------  /adopt  
 [ ~/code/telltale-arena-t6-claude       |  ~/code/telltale-arena-t6-codex       |  ~/code/telltale-arena-t6-agy         
-[ 1st of 3 · done · 20s                 |  2nd of 3 · done · 20s                |  3rd of 3 · done · 20s                
-[ committed 1111111.                    |  committed 2222222.                   |  check unavailable: exec: "go":       
-[ check PASS · 1m14s · go test ./...    |  check FAIL · exit 2 · 31s · go test  |  executable file not found in $PATH   
-[  a.txt | 2 +-                         |  ./...                                |  · go test ./...                      
+[ ########  1st of 3 · done · 20s       |  #####---  2nd of 3 · done · 20s      |  ##------  3rd of 3 · done · 20s      
+[ committed 1111111.                    |  committed 2222222.                   |  ! check unavailable: exec: "go":     
+[ + check PASS · 1m14s · go test ./...  |  x check FAIL · exit 2 · 31s · go     |  executable file not found in $PATH   
+[  a.txt | 2 +-                         |  test ./...                           |  · go test ./...                      
 [  1 file changed                       |   b.go | 9 ++++-----                  |  no changes against abcdef1.          
   +------------------------------------------------------------------------------------------------------------------+  
   |  :                                                                                                               |  

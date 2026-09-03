@@ -10,7 +10,7 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-▌ arena arena/t1/claude  ─────────────  │                                       │                                       
+▌ arena arena/t1/claude  ─────  /adopt  │                                       │                                       
 ▌ ~/code/telltale/.arena/t1/claude      │                                       │                                       
 ▌ diff --git a/internal/council/view.g  │                                       │                                       
 ▌ index 1111111..2222222 100644         │                                       │                                       

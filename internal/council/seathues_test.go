@@ -110,6 +110,10 @@ func TestEveryInkIsDistinct(t *testing.T) {
 			{"RuleInk", p.pal.RuleInk}, {"Hair", p.pal.Hair},
 			{"Identity", p.pal.Identity}, {"Withdrawn", p.pal.Withdrawn},
 			{"Broke", p.pal.Broke},
+			// A GROUND rather than an ink, and walked with the rest anyway: a
+			// rail that shared a value with a token printed ON it would be the
+			// posture ledger erasing its own contents.
+			{"Rail", p.pal.Rail},
 		} {
 			if tok.hex == "" {
 				t.Errorf("%s: %s has no value", p.name, tok.name)
@@ -187,8 +191,10 @@ func TestTheInkIsSpentOnlyOnSeatNames(t *testing.T) {
 		t.Error("a finished turn no longer reports in the measured ink")
 	}
 
-	// A posture badge stays a claim.
-	if !strings.Contains(frame, sty.Alert.Render("unsandboxed")) {
+	// A posture badge stays a claim — printed on the posture rail, which is the
+	// ground the whole badge row moved onto on 2026-09-03 (style.go's
+	// RailGround). The claim's own ink is unchanged; what is new is the paper.
+	if !strings.Contains(frame, sty.onBand(sty.Alert).Render("unsandboxed")) {
 		t.Error("a posture badge lost its own style")
 	}
 }
