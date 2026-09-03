@@ -36,6 +36,8 @@ import (
 	"errors"
 	"io"
 	"sync"
+
+	"github.com/sanlee-ys/telltale/internal/model"
 )
 
 // ProtocolVersion is the wire contract's own number.
@@ -125,6 +127,13 @@ type Frame struct {
 	// carries what a person typed, and it is the reason the transport's
 	// descriptor is argued rather than defaulted.
 	Prompt string `json:"prompt,omitempty"`
+	// Seats is set on KindDispatch and KindInterrupt: which seats the turn
+	// goes to, or which seats to stop (design.md §7.31). The client resolves
+	// the route — @codex, -@claude, @all, the default — against its own
+	// State and sends the explicit list, so the host never parses a mention.
+	// Empty means every drivable seat, which is what the plain client sends
+	// and what §7.28's broadcast was.
+	Seats []model.VendorID `json:"seats,omitempty"`
 	// Room is set on KindRoom.
 	Room *Room `json:"room,omitempty"`
 }

@@ -18,7 +18,7 @@ import (
 func TestRenderIsPureOverTheRoom(t *testing.T) {
 	r := Room{
 		Version: RoomVersion, Workspace: `C:\src`, Turn: 2, Posture: "read",
-		Seats: []Seat{{Vendor: model.VendorClaude, Phase: PhaseDone, Body: "hello", Acts: []string{"Bash: ls — ok"}}},
+		Seats: []Seat{{Vendor: model.VendorClaude, Phase: PhaseDone, Body: "hello", Acts: []Act{{Text: "Bash: ls", Status: ActOK}}}},
 	}
 	first := Render(r, 80)
 	for i := 0; i < 5; i++ {
@@ -42,7 +42,7 @@ func TestRenderNeverOverrunsItsWidth(t *testing.T) {
 			Vendor: model.VendorClaude, Phase: PhaseStreaming,
 			Body: strings.Repeat("a long streamed sentence with plenty of words in it ", 6) +
 				"\n" + strings.Repeat("z", 300),
-			Acts: []string{"Bash: " + strings.Repeat("x", 200) + " — ok"},
+			Acts: []Act{{Text: "Bash: " + strings.Repeat("x", 200), Status: ActOK}},
 			Note: strings.Repeat("a note about why this seat is unhappy ", 6),
 		}},
 	}

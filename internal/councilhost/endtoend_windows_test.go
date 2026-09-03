@@ -198,7 +198,7 @@ func TestATurnIsNotPersistedAnywhere(t *testing.T) {
 	defer cancel()
 	go h.fold()
 
-	h.dispatch(marker + "-prompt")
+	h.dispatch(marker+"-prompt", nil)
 	h.events <- runner.Event{Vendor: model.VendorClaude, Kind: runner.KindText, Text: marker + "-reply"}
 	deadline := time.Now().Add(5 * time.Second)
 	for !strings.Contains(h.Snapshot().Seats[0].Body, marker) {

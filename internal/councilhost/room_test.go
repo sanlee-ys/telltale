@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
@@ -17,6 +18,20 @@ func oneSeatRoom() Room {
 		Version: RoomVersion,
 		Seats:   []Seat{{Vendor: model.VendorClaude, Phase: PhaseIdle, Drivable: true, Persistent: true}},
 	}
+}
+
+// beginAll opens the next turn on every drivable seat that is not busy, the
+// way a dispatch with no named seats does, at the wall clock. The fold tests
+// below are about what one event does to one seat, so the route is the
+// broadcast §7.28 shipped and §7.31 kept as the empty list.
+func (r *Room) beginAll() {
+	accepted := map[model.VendorID]bool{}
+	for _, s := range r.Seats {
+		if s.Drivable && !s.busy() {
+			accepted[s.Vendor] = true
+		}
+	}
+	r.beginTurn(r.Turn+1, "brief", accepted, time.Now())
 }
 
 // turnEnded is the claude adapter's own end-of-turn event, in the shape the
@@ -43,7 +58,7 @@ func turnEnded(text string) runner.Event {
 // must not draw as though it did.
 func TestWaitingAndStreamingStayApart(t *testing.T) {
 	r := oneSeatRoom()
-	r.beginTurn()
+	r.beginAll()
 	if r.Seats[0].Phase != PhaseWaiting {
 		t.Fatalf("a dispatched seat with no output drew as %q", r.Seats[0].Phase)
 	}
@@ -72,7 +87,7 @@ func TestAnExitCodeIsAbsentUntilAProcessReportsOne(t *testing.T) {
 	if r.Seats[0].ExitCode != nil {
 		t.Fatal("a fresh seat already carried an exit code")
 	}
-	r.beginTurn()
+	r.beginAll()
 	r.Apply(runner.Event{Vendor: model.VendorClaude, Kind: runner.KindText, Text: "working"})
 	if r.Seats[0].ExitCode != nil {
 		t.Fatal("a streaming seat carried an exit code before anything exited")
@@ -118,7 +133,7 @@ func TestAToolCallSaysWhatTheVendorSaidAboutIt(t *testing.T) {
 	}
 	seen := map[string]bool{}
 	for _, c := range cases {
-		got := actLine(runner.ActCall{Text: "Bash: go test", Outcome: c.outcome, Detail: c.detail})
+		got := actLine(Act{Text: "Bash: go test", Status: actStatusWord(c.outcome), Detail: c.detail})
 		if got != c.want {
 			t.Errorf("outcome %v rendered %q, want %q", c.outcome, got, c.want)
 		}
@@ -138,7 +153,7 @@ func TestAToolCallSaysWhatTheVendorSaidAboutIt(t *testing.T) {
 // refusal is a sentence on the card.
 func TestAGateIsRefusedInWordsRatherThanLeftBlocked(t *testing.T) {
 	r := oneSeatRoom()
-	r.beginTurn()
+	r.beginAll()
 	if !r.Apply(runner.Event{
 		Vendor: model.VendorClaude, Kind: runner.KindGate,
 		Gate: &runner.Gate{Tool: "Write", Text: "Write: x.txt"},
@@ -173,7 +188,7 @@ func TestAnUndrivableSeatIsNotDispatchedTo(t *testing.T) {
 		{Vendor: model.VendorClaude, Phase: PhaseIdle, Drivable: true},
 		{Vendor: model.VendorCursor, Phase: PhaseUndrivable, Drivable: false, Note: "protocol not driven here"},
 	}}
-	r.beginTurn()
+	r.beginAll()
 	if r.Seats[0].Phase != PhaseWaiting {
 		t.Fatalf("the drivable seat drew as %q", r.Seats[0].Phase)
 	}
@@ -200,14 +215,14 @@ func TestACloneSharesNoSliceWithTheRoom(t *testing.T) {
 	r.Seats[0].ExitCode = &code
 
 	c := r.clone()
-	r.Seats[0].Acts[0] = "MUTATED"
+	r.Seats[0].Acts[0].Text = "MUTATED"
 	*r.Seats[0].ExitCode = 9
 	r.Apply(runner.Event{
 		Vendor: model.VendorClaude, Kind: runner.KindActivity,
 		Acts: []runner.ActCall{{Text: "Bash: rm"}},
 	})
 
-	if c.Seats[0].Acts[0] == "MUTATED" {
+	if c.Seats[0].Acts[0].Text == "MUTATED" {
 		t.Fatal("the clone shares its Acts backing array with the room")
 	}
 	if len(c.Seats[0].Acts) != 1 {
@@ -228,7 +243,7 @@ func TestACloneSharesNoSliceWithTheRoom(t *testing.T) {
 func TestAProcessExitKeepsTheVendorsFailureSentence(t *testing.T) {
 	r := oneSeatRoom()
 	r.Seats[0].Vendor = model.VendorCodex
-	r.beginTurn()
+	r.beginAll()
 	r.Apply(runner.Event{Vendor: model.VendorCodex, Kind: runner.KindError, Note: "You've hit your usage limit."})
 	if r.Seats[0].Note != "You've hit your usage limit." {
 		t.Fatalf("the vendor's sentence did not reach the seat: %+v", r.Seats[0])
@@ -250,7 +265,7 @@ func TestAProcessExitKeepsTheVendorsFailureSentence(t *testing.T) {
 	}
 	// And the exit still names itself on a seat nobody had failed yet.
 	r2 := oneSeatRoom()
-	r2.beginTurn()
+	r2.beginAll()
 	r2.Apply(runner.Event{Vendor: model.VendorClaude, Kind: runner.KindError, Err: exit, Note: "exit status 1: something on stderr", ExitCode: 1})
 	if r2.Seats[0].Note != "exit status 1: something on stderr" {
 		t.Errorf("a bare exit lost its own note: %q", r2.Seats[0].Note)
