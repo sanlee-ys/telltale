@@ -39,7 +39,7 @@ import (
 //	Muted    (#9a9081)           chrome, labels, the caps words
 //	Dim      (#7a7164)           the reading area of a column the keys do not move
 //	RuleInk  (#6b6252)           the ink rule: ━, and the composer's box
-//	Hair     (#3f3a33)           the hairline: ─, the separators, the leaders
+//	Hair     (#474139)           the hairline: ─, the separators, the leaders
 //
 // The one thing a reader is told to look at is the brightest ink on screen, and
 // the several hundred lines a vendor emitted sit BELOW the six characters that
@@ -235,7 +235,7 @@ func NightPalette() Palette {
 		Muted:     "#9a9081",
 		Dim:       "#7a7164",
 		RuleInk:   "#6b6252",
-		Hair:      "#3f3a33",
+		Hair:      "#474139",
 		Identity:  "#9cb8d2",
 		Withdrawn: "#ffbe77",
 		Broke:     "#e07a5f",

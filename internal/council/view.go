@@ -2050,9 +2050,15 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 			out = append(out, wrap("no changes against "+shortSHA(c.Arena.Base)+".", w)...)
 		default:
 			for _, line := range strings.Split(c.Arena.Stat, "\n") {
+				// The MEASURED ink: a diffstat is git's own count of what this
+				// attempt changed, which is the same class of fact as the cost
+				// cell and the check's elapsed (MONOGRAPH, style.go). On a board
+				// comparing three attempts it is the number the eye is there for.
+				//
 				// fit, not padRight — a body line, and the ANSI trap is about
-				// what a line CAN carry, not what it happens to today.
-				out = append(out, fit(strings.TrimRight(line, " "), w))
+				// what a line CAN carry, which this style now makes what it
+				// does carry.
+				out = append(out, fit(sty.Measured.Render(strings.TrimRight(line, " ")), w))
 			}
 			if c.Arena.DiffTruncated {
 				out = append(out, wrap("(the yankable diff is truncated at 1 MB — the worktree holds the whole of it)", w)...)
