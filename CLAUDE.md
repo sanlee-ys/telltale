@@ -3,6 +3,8 @@
 This file is the convention layer a fresh session cannot get from Go itself. Read
 `README.md`, `STATE.md`, `PARITY.md` and `docs/design.md` too — this file is short on
 purpose and defers to them for the product's own claims.
+Rulings since 2026-09-02 live in `LEDGER.md`, one dated line each; read it before
+citing a `design.md` taste ruling, because three of them are lifted there.
 
 ## Build and test
 

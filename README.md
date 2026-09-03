@@ -1,5 +1,8 @@
 # telltale
 
+Telltale is a harness that measures what it's driving and refuses to
+drive one unwatched.
+
 A crew of five vendor CLIs in one terminal: Claude Code, Codex,
 Antigravity, Cursor, and Grok, each in its own column. Address `@all`
 and one brief is answered side by side; address one seat and it takes
