@@ -1,24 +1,24 @@
-  council ⚠ REPLAY  │  ~/code/example                                    turn 1 → everyone  │  3/3 seated  │  no brief  
+  council READ  │  ~/code/telltale                                                  turn 1  │  4/4 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⚠ NEEDS YOU   2 Codex done                                                                                            
-  › add a --version flag and a test for it                                                                              
-                                                                                                                        
-▌ ▸ 1 CC Claude Code ⠋ streaming 3s     │    2 CX Codex  ──────────  ✓ done 3s  │    3 AG Antigravity ⠋ streaming 5s    
-▌   REPLAY  gated  tokens               │    REPLAY  WRITES  final only         │    REPLAY  WRITES  final only         
+▌ ▸ 1 CC Claude Code ✓ done   │    2 CX Codex  ───  ✓ done  │    3 AG Antigravity ○ idle  │    4 CU Cursor  ──  ✓ done  
+▌   WRITES  tokens   $0.0041  │    ro:enforced  final only  │    unsandboxed  final only  │    ro:requested  tokens     
                                                                                                                         
                                                                                                                         
                                                                                                                         
                                                                                                                         
                                                                                                                         
                                                                                                                         
-▌ turn 1  ────────────────────  you 2s  │                                       │                                       
-▌ ⚙ Read: cmd/example/main.go           │  turn 1  ───────────────────────────  │                                       
-▌ ⚙ Write: cmd/example/version.go ✓     │  Added --version to the flag set in   │                                       
-▌                                       │  main.go, printing the build tag,     │  turn 1  ───────────────────────────  
-▌ Reading main.go first, then the flag  │  with a test that runs the binary     │  Done. version.go carries the flag    
-▌ set.                                  │  and checks the line.                 │  and version_test.go covers it.       
                                                                                                                         
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▌ Tests pass.                 │  Done.                      │  no turn dispatched yet.    │  Done.                      
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  ›                                                                                                               │  
   ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
-                                                                         ⚠ replay ended — 11 records over 7s · q quits  
+                    ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-4 seat  │  i compose  │  ? help  │  q quit  

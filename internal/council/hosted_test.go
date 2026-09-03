@@ -217,15 +217,21 @@ func TestHostedTurnDrawsTheTraceTheHistoryAndTheClock(t *testing.T) {
 	st := hostedState(hostedTurnFixture(now))
 	got := render(st)
 	golden(t, "hosted-turn", got)
-	// The cost cell is clipped to what a 27-cell column can hold; the figure
-	// and its `session` word are asserted whole on the expanded column below.
 	// The card wraps at the column's width, so the note is asserted by a
 	// fragment that sits inside one row.
 	for _, want := range []string{"turn 2", "streaming 30s", "done 12s", "not addressed in turn 2",
-		"hit your usage", "exit status 1", "$0.012"} {
+		"hit your usage", "exit status 1"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the hosted turn does not draw %q:\n%s", want, got)
 		}
+	}
+	// A 25-cell column cannot hold `$0.0123 session` whole, so it draws no
+	// figure at all (badgeRow: shown whole or not shown). This frame used to
+	// pin `$0.012`, a cut that lost a digit and the word that made it a
+	// running total; the figure and its word are asserted whole on the
+	// expanded column below, where there is room for them.
+	if strings.Contains(got, "$") {
+		t.Errorf("the narrow hosted column drew a figure it cannot show whole:\n%s", got)
 	}
 	wide := st
 	wide.Expanded = true

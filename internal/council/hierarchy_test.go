@@ -389,10 +389,16 @@ func TestTheBadgeRowRightAnchorsTheCostWithoutDroppingTheClaim(t *testing.T) {
 		t.Errorf("the cost is not right-anchored: %q", wide)
 	}
 
-	// Too narrow to anchor: the claim stays and the number tucks in behind it.
-	// The cell's own fit is what clips — never this function dropping a badge.
-	if tight := badgeRow(room(), c, 28, PlainStyles(), UnicodeGlyphs()); !strings.Contains(tight, "unsandboxed") {
+	// Too narrow to anchor: the claim stays and the number leaves WHOLE. It
+	// used to tuck in behind the badges and let the caller's fit clip it,
+	// which cut the digits (badgeRow: shown whole or not shown). Never does
+	// this function drop a badge.
+	tight := badgeRow(room(), c, 28, PlainStyles(), UnicodeGlyphs())
+	if !strings.Contains(tight, "unsandboxed") {
 		t.Errorf("a narrow badge row dropped the posture claim: %q", tight)
+	}
+	if strings.Contains(tight, "$") {
+		t.Errorf("a narrow badge row kept a figure it cannot show whole: %q", tight)
 	}
 }
 
