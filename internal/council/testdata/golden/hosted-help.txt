@@ -1,0 +1,24 @@
+  council READ hosted  │  ~/code/telltale                                      no turn yet  │  4/5 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⚠ 1 seat is not on screen: Cursor (installed but not drivable)  │  --vendor all seats them anyway                     
+  council  ──────────────────────────────────────────────────────────────────  one brief, several agents, side by side  
+    i / enter    compose a brief; enter dispatches — to claude, or whoever is @mentioned (@all = everyone)              
+    ctrl+j/u/esc ctrl+j puts a newline in the brief (it grows to six rows); ctrl+u clears it; esc leaves, keeping it    
+    @codex       name a lane: @claude @codex @agy @cursor @grok; @all convenes everyone                                 
+                 -@codex excludes one. Unaddressed goes to claude. Leading only: "ask @claude" is prose                 
+    /detach      leave: the host keeps the seats and the conversation; `telltale council` rejoins it. read rooms only   
+    y / Y        copy this seat's reply, or the whole turn (in turn view, both) — while a gate waits, y/n answer it     
+    tab / 1-5    focus between columns — in compose too; 1-5 straight to a seat, by position; ^w sizes the panes        
+    ↑ ↓ / j k    scroll the focused column by a line, pgup/pgdn by a screenful — both in compose (space = pgdn here)    
+                 g / G first turn or newest; [ ] step one turn — or one hunk, in an open patch                          
+    d / D / o    d flips a racer's block to the patch; D quotes the ▸ hunk into the draft; o opens its worktree         
+    f / t / T    f gives one column the full width; t one turn the whole room; T that turn's acts (in compose, text)    
+    ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted                                     
+    ctrl+c / q   ctrl+c cancels the focused seat's turn; q ENDS the room and every seat; /detach leaves it running      
+                                                                                                                        
+  ↓ 6 more below                                                                                                        
+    ?            next page: what the badge on each column means                                                         
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────  VIEW  │  hosted pid 4242  ─╯  
+                                                                                  ? next page  │  i compose  │  q quit  

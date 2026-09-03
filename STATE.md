@@ -878,13 +878,44 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   discipline `telltale events` already has (§7.21).
 
 - **The hosted room draws with the plain client, not council's own `Model`
-  (2026-09-01).** §7.28's last limitation, unpaid and named again in §7.29.
-  `telltale council --host` and a rejoin both render with
-  `councilhost.Render` — words, no colour, no keys — so a hosted room looks
-  different from the TUI room and the client's banner says so out loud. Folding
-  `council.State` onto the wire is what makes `Model` the client's renderer, and
-  it is the next slice. Until it lands there is no key to detach with and no
-  help-panel hint for one, because the TUI room has no host to leave.
+  (2026-09-01). PAID 2026-09-02, [design.md §7.31](docs/design.md#s7-31).**
+  `telltale council --host` and a rejoin now draw with the room's own columns,
+  badges, trace, turn page, panes and help panel, and `/detach` is typed into
+  the composer. The host's projection carries the whole turn, the client
+  builds a `State` from it with one pure function, and the host takes a brief
+  per seat. The plain client is the path when stdin is not a terminal. Still
+  owed, in order:
+  1. **The owner's live drive on the built binary.** No lane can dispatch a
+     vendor through a host. One brief through `telltale council --host --read`
+     on this PR's binary, then `/detach`, a closed window and a rejoin, must
+     show the columns and the badges survive the rejoin. That drive is the
+     closer for this entry.
+  2. **The live seat in a hosted room.** `--live` with `--host` is refused
+     with one sentence. A pseudoconsole child in the host and its cell grid on
+     the wire is a second wire format and a second spawn guard.
+  3. **The rebuttal in a hosted room.** `ctrl+r` is refused with one
+     sentence. A quoting turn hands each seat a different prompt, and the
+     dispatch frame carries one.
+  4. **A hosted room starts every seat fresh.** The host is handed a roster
+     and never a saved session id, so no thread is resumed and no `Restored`
+     card is drawn. This predates §7.31 and is named there.
+  5. **The host does not write `room.json`.** §7.28 said it would, on the
+     room's own schedule; no code in `internal/councilhost` reaches `SaveRoom`,
+     so a hosted room's session ids never reach disk. Named in §7.31.
+  6. **The frame cost is unmeasured.** Every frame carries every seat's
+     history, bounded by the 50 ms tick and the 8 MiB line ceiling. Nothing
+     has measured a long room against that ceiling, and the host's memory
+     ceiling above is still owed with it.
+
+- **The host refused two of five seats after the crew merge, and §7.31 took
+  the fallback (2026-09-02).** §9.57 made codex's and grok's registry entries
+  request/response live shapes, and the host marks a conversational seat
+  undrivable, so from that merge until §7.31 a hosted room could drive only
+  claude and agy. The host now drives each such seat through its measured
+  batch adapter (`vendors.LiveFallback`) and says so on the badge, the way the
+  room retreats on a refused handshake. The agy seat is the exception: its
+  stream shape is `Persistent`, so the host drives the live shape, which
+  §9.57 lists as unmeasured. No hosted room has dispatched to it.
 
 - **No vendor has ever been dispatched to THROUGH A HOST (2026-09-01).** Every
   seat spawn in `internal/councilhost`'s suite is stubbed, by design — the spawn

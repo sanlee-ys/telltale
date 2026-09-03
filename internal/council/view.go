@@ -278,6 +278,15 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 		// Both postures name themselves so neither is inferred from a gap.
 		left += " " + sty.Muted.Render("READ")
 	}
+	if st.Hosted.On() {
+		// The room lives in another process (design.md §7.31). A word, after
+		// the posture word and at the posture word's weight: it is the same
+		// class of fact — what kind of room this is, for the whole session —
+		// and it is what tells a reader that `q` ends seats they could have
+		// left running. The pid is on the composer's border (composerLabel),
+		// where the room keeps its standing state.
+		left += " " + sty.Muted.Render("hosted")
+	}
 
 	round := "no turn yet"
 	if st.Turn > 0 {
@@ -3485,7 +3494,21 @@ func composerLabel(st State, lay Layout, sty Styles, g Glyphs) (styled, plain st
 	}
 	styled, plain = style.Render(word), word
 
-	if !st.Asking() && st.Write {
+	if st.Hosted.On() {
+		// The host's pid, in the border's standing-state slot (design.md
+		// §7.31). A hosted room asks nobody — §7.28 refuses to host a gated
+		// room — so a hosted write room says `not asking` here too, and it
+		// says it WITHOUT the `a` key: that key turns the asking back on in
+		// the ordinary room, and in this one it cannot, so naming it would be
+		// the promise §7.8 forbids.
+		sep := strings.Repeat(" ", gutter) + g.Sep + strings.Repeat(" ", gutter)
+		cell := "hosted pid " + strconv.Itoa(st.Hosted.PID)
+		if st.Write {
+			cell += ", not asking"
+		}
+		styled += sty.Muted.Render(sep) + sty.Text.Render(cell)
+		plain += sep + cell
+	} else if !st.Asking() && st.Write {
 		// The room's one separator grammar: two cells of air each side
 		// (TestTheRoomSpellsItsSeparatorOneWay).
 		sep := strings.Repeat(" ", gutter) + g.Sep + strings.Repeat(" ", gutter)
@@ -4425,6 +4448,9 @@ func routeLabel(st State) string { return st.Route.label() }
 // 17-row budget, and each ends with the `?` line that leaves it.
 func helpBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	lines := helpKeys(lay, sty, g)
+	if st.Hosted.On() {
+		lines = helpKeysHosted(lines)
+	}
 	if st.Help == HelpPostures {
 		lines = helpPostures(st, lay, sty, g)
 	}
@@ -4823,6 +4849,36 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		sty.Muted.Render("  each column states its OWN posture rather than the room claiming one for"),
 		sty.Muted.Render("  every seat. Press ? for what those posture badges mean."),
 	}
+}
+
+// helpKeysHosted is the keys page for a hosted room (design.md §7.31): the
+// ordinary page with two rows replaced, and the same number of rows.
+//
+// The panel's budget is hard (helpKeys, 16 rows), so the hosted room's two
+// facts take rows the ordinary room spends on controls this room refuses. The
+// `/cd` row held the verbs that change the room from inside it, and in a hosted
+// room every one of them is refused in words (runRoomCommand), so that row
+// teaches /detach instead — the one verb this room has and the ordinary room
+// does not. The `ctrl+c / q` row still names both keys and says what `q` costs
+// here: every seat, where /detach would have left them working.
+//
+// Row-matched by prefix rather than by index, so a row added to helpKeys
+// above either of these cannot silently move the replacement onto the wrong
+// line. A prefix that is not found leaves the page as it was; the hosted
+// golden is what catches that.
+func helpKeysHosted(lines []string) []string {
+	out := make([]string, len(lines))
+	copy(out, lines)
+	for i, l := range out {
+		switch {
+		case strings.HasPrefix(l, "  /cd <dir>"):
+			// 114 cells, the row's own budget (helpKeys).
+			out[i] = "  /detach      leave: the host keeps the seats and the conversation; `telltale council` rejoins it. read rooms only"
+		case strings.HasPrefix(l, "  ctrl+c / q"):
+			out[i] = "  ctrl+c / q   ctrl+c cancels the focused seat's turn; q ENDS the room and every seat; /detach leaves it running"
+		}
+	}
+	return out
 }
 
 // helpBadgeGloss is one plain-English sentence per badge, keyed by the level

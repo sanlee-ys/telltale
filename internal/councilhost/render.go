@@ -128,7 +128,7 @@ func RenderRejoined(f HostFile) string {
 // and the process named is the one that never stopped.
 func RejoinedNotice(f HostFile) string {
 	return fmt.Sprintf(
-		"rejoined the host that was already running (pid %d) — nothing was rebuilt, and no session was resumed",
+		"rejoined the host that was already running (pid %d): nothing was rebuilt, and no session was resumed",
 		f.PID)
 }
 

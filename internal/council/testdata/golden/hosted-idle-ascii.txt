@@ -1,0 +1,24 @@
+  council READ hosted  |  ~/code/telltale                                      no turn yet  |  4/5 seated  |  no brief  
+========================================================================================================================
+  ! 1 seat is not on screen: Cursor (installed but not drivable)  |  --vendor all seats them anyway                     
+[ ] 1 CC Claude Code . idle   |    2 CX Codex  ---  . idle  |    3 AG Antigravity . idle  |    4 GR Grok  ----  . idle  
+[   ro:tools  tokens          |    ro:enforced  final only  |    unsandboxed  final only  |    unsandboxed  tokens      
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+[ no turn dispatched yet.     |  no turn dispatched yet.    |  no turn dispatched yet.    |  no turn dispatched yet.    
+  +------------------------------------------------------------------------------------------------------------------+  
+  |  :                                                                                                               |  
+  +-------------------------------------------------------------------------------------  VIEW  |  hosted pid 4242  -+  
+                    ^v scroll  |  [ ] turn  |  f expand  |  tab focus  |  1-4 seat  |  i compose  |  ? help  |  q quit  

@@ -8374,12 +8374,14 @@ host.
 #### Design point 3: keys, and what a key must not do
 
 **`/detach` is a room verb, not a key.** A single keystroke that walks away from five agents
-is a keystroke that can be pressed by accident. The verb sits in `roomVerbs` beside `/cd` and
-`/seat`, so the refusal that lists the room's vocabulary lists it too.
+is a keystroke that can be pressed by accident. The verb is bare-only, on `/read`'s rule: a
+sentence that opens with the word is prose.
 
 **In a single-process room `/detach` refuses.** The notice says `this room has no host to
-leave — open one with telltale council --host`. A verb that did nothing would be the
-honest-gauge failure spent on the room's own surface.
+leave. open one with telltale council --host`. A verb that did nothing would be the
+honest-gauge failure spent on the room's own surface. The verb sits outside `roomVerbs`,
+because the refusal line that lists that table fits its narrowest room with no cell to spare
+(`refuseUnknownCommand`); the hosted help panel teaches it instead.
 
 **`q` and `ctrl+c` still END the room.** They send `KindShutdown`, the host kills every seat,
 and the closing line says so. Nothing about leaving happens on a key.

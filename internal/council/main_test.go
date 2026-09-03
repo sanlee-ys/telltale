@@ -119,6 +119,15 @@ import (
 // a live room about to take a turn. A guard that lags the spawn it guards is the
 // state this file exists to prevent.
 func TestMain(m *testing.M) {
+	// The stand-in host for the hosted room's end-to-end (hosted_e2e_test.go)
+	// runs BEFORE the guard is armed and before any test runs, because it is
+	// not a test: it is this binary re-executed as a real councilhost.Host with
+	// an EMPTY roster, so no vendor can be spawned by any path. councilhost's
+	// own suite uses the same shape (helper_test.go) for the same reason.
+	if code, isHelper := runHostedHelper(); isHelper {
+		os.Exit(code)
+	}
+
 	operatorHome, _ = os.UserHomeDir()
 	stateBefore := councilStateSnapshot(operatorHome)
 
