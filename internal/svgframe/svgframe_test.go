@@ -137,17 +137,53 @@ func TestWeightAndIntensitySurvive(t *testing.T) {
 // generated pictures exist to end.
 func TestUnknownStyleIsAnError(t *testing.T) {
 	for _, line := range []string{
-		"\x1b[7mreverse\x1b[m",         // reverse video
-		"\x1b[4munderline\x1b[m",       // underline
-		"\x1b[41mbackground\x1b[m",     // a background colour
-		"\x1b[38;2;255;0;0mtrue\x1b[m", // truecolor
-		"\x1b[38;5;200mxterm256\x1b[m", // outside the four-bit palette
-		"\x1b[1Kbad",                   // a CSI sequence that is not SGR at all
+		"\x1b[7mreverse\x1b[m",          // reverse video
+		"\x1b[4munderline\x1b[m",        // underline
+		"\x1b[41mbackground\x1b[m",      // a background colour
+		"\x1b[38;5;200mxterm256\x1b[m",  // outside the four-bit palette
+		"\x1b[38;2;255;0mshort\x1b[m",   // truecolor with a channel missing
+		"\x1b[38;2;255;0;300mbig\x1b[m", // a channel outside a byte
+		"\x1b[1Kbad",                    // a CSI sequence that is not SGR at all
 	} {
 		if _, err := Render(Frame{Caption: "c", Alt: "a", Lines: []string{line}}, Dark()); err == nil {
 			t.Errorf("%q rendered without complaint; it must not", line)
 		}
 	}
+}
+
+// TestTruecolorIsDrawnVerbatim. A truecolor run is accepted now, and the triple
+// reaches the picture unchanged rather than being snapped to a palette entry.
+//
+// It stopped being an error when internal/council took its own ink set
+// (style.go's MONOGRAPH palette): a full-screen room that inherited eight
+// primaries from whatever scheme was loaded could not have an identity of its
+// own. The picture's job is unchanged — show what the terminal shows — and what
+// a terminal shows for 38;2 is that exact colour on every scheme, so there is
+// nothing to resolve.
+func TestTruecolorIsDrawnVerbatim(t *testing.T) {
+	out := render(t, "\x1b[38;2;255;190;119mcopper\x1b[m plain")
+	if !strings.Contains(out, `fill="#ffbe77"`) {
+		t.Errorf("the truecolor run did not carry its own triple:\n%s", out)
+	}
+	if !strings.Contains(out, `fill="`+Dark().Foreground+`">`+" plain") {
+		t.Errorf("the run after the reset did not return to the scheme's foreground:\n%s", out)
+	}
+	// Weight travels with it: council spends bold on a measured value, and a
+	// picture that dropped it would lose the room's loudest typographic signal.
+	bold := render(t, "\x1b[1;38;2;236;228;213m$0.0123\x1b[m")
+	if !strings.Contains(bold, `font-weight="bold"`) || !strings.Contains(bold, `fill="#ece4d5"`) {
+		t.Errorf("a bold truecolor run lost weight or ink:\n%s", bold)
+	}
+}
+
+// render is Render on one line, failing the test rather than returning an error.
+func render(t *testing.T, line string) string {
+	t.Helper()
+	got, err := Render(Frame{Caption: "c", Alt: "a", Lines: []string{line}}, Dark())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(got)
 }
 
 // Cell counting is what every x coordinate is derived from, and a rune counted

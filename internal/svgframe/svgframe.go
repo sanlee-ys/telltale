@@ -280,7 +280,14 @@ func (r run) svg(p Palette) string {
 		num(padX+float64(r.col)*Advance), num(float64(r.cells)*Advance))
 
 	fill := p.Foreground
-	if r.sty.fg >= 0 {
+	switch {
+	case r.sty.hex != "":
+		// A surface that named its own ink. The palette is not consulted: the
+		// point of a hex triple is that it is the same colour on every scheme,
+		// which is exactly why a full-screen surface may spend one and a
+		// statusline may not (internal/council/style.go).
+		fill = r.sty.hex
+	case r.sty.fg >= 0:
 		fill = p.ANSI[r.sty.fg]
 	}
 	fmt.Fprintf(&attrs, ` fill="%s"`, fill)
@@ -303,7 +310,11 @@ func (r run) svg(p Palette) string {
 // italics are not in it because neither renderer emits them — and parse fails
 // loudly if one ever starts.
 type sgr struct {
-	fg    int // -1: the terminal's default foreground
+	fg int // -1: the terminal's default foreground
+	// hex is a truecolor foreground the surface named for itself, "#rrggbb".
+	// When it is set it wins over fg — see the run.svg switch for why the
+	// palette is not consulted.
+	hex   string
 	bold  bool
 	faint bool
 }
@@ -392,24 +403,56 @@ func apply(st sgr, params string) (sgr, error) {
 		case p >= 30 && p <= 37:
 			st.fg = p - 30
 		case p == 39:
+			st.hex = ""
 			st.fg = -1
 		case p >= 90 && p <= 97:
 			st.fg = p - 90 + 8
 		case p == 38:
-			// 38;5;n — the extended-colour form. Only the 16 indices telltale's
-			// palette actually names are accepted: a 256-colour or truecolor
-			// value would mean a surface started asserting a colour over the
-			// user's scheme, which is a decision to make in theme, not a case to
-			// quietly widen here.
-			if i+2 >= len(fields) || fields[i+1] != "5" {
+			// The extended-colour forms, and BOTH are accepted now.
+			//
+			// 38;5;n stays limited to the 16 indices telltale's palette names: a
+			// 256-colour value would be a surface reaching for a shade the
+			// scheme has no say over, without the decision that a hex triple
+			// forces somebody to write down.
+			//
+			// 38;2;r;g;b is the surface having made that decision. It arrived
+			// when internal/council took its own ink set (style.go's MONOGRAPH
+			// palette): a full-screen room that inherited eight primaries from
+			// whatever scheme was loaded could not have an identity of its own.
+			// The picture draws the triple verbatim — a truecolor run is by
+			// definition the same colour under every scheme, so there is nothing
+			// here to resolve against a palette.
+			if i+1 >= len(fields) {
 				return st, fmt.Errorf("SGR 38 in a form this palette cannot resolve: %q", params)
 			}
-			idx, err := strconv.Atoi(fields[i+2])
-			if err != nil || idx < 0 || idx > 15 {
-				return st, fmt.Errorf("SGR 38;5;%s is outside the 4-bit palette", fields[i+2])
+			switch fields[i+1] {
+			case "5":
+				if i+2 >= len(fields) {
+					return st, fmt.Errorf("SGR 38;5 with no index: %q", params)
+				}
+				idx, err := strconv.Atoi(fields[i+2])
+				if err != nil || idx < 0 || idx > 15 {
+					return st, fmt.Errorf("SGR 38;5;%s is outside the 4-bit palette", fields[i+2])
+				}
+				st.fg, st.hex = idx, ""
+				i += 2
+			case "2":
+				if i+4 >= len(fields) {
+					return st, fmt.Errorf("SGR 38;2 with fewer than three channels: %q", params)
+				}
+				ch := [3]int{}
+				for k := 0; k < 3; k++ {
+					v, err := strconv.Atoi(fields[i+2+k])
+					if err != nil || v < 0 || v > 255 {
+						return st, fmt.Errorf("SGR 38;2 channel %q is not a byte", fields[i+2+k])
+					}
+					ch[k] = v
+				}
+				st.fg, st.hex = -1, fmt.Sprintf("#%02x%02x%02x", ch[0], ch[1], ch[2])
+				i += 4
+			default:
+				return st, fmt.Errorf("SGR 38 in a form this palette cannot resolve: %q", params)
 			}
-			st.fg = idx
-			i += 2
 		default:
 			return st, fmt.Errorf("SGR parameter %d is not one this package draws", p)
 		}
