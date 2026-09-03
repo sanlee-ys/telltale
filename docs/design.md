@@ -18216,6 +18216,10 @@ them** — `⚠ NEEDS YOU   2 Codex   3 Grok done   4 Cursor failed` — with th
 the same word the column header speaks, as the whole distinction between the two kinds of entry
 (no glyph, no colour: it reads the same under `--ascii` and `NO_COLOR`).
 
+*Amended 2026-09-03 (`LEDGER.md`):* the lead is `NEEDS YOU` only while a listed seat is
+blocked on a gate. A strip of landed replies and nothing pending opens `UNREAD`, with no mark
+(`unreadLead` in `internal/council/needsyou.go`); the entries and their phase words are unchanged.
+
 Every entry is a measurement, on §9.40's own rule. A landing is two stamps the Model took itself:
 `Column.Ended`, written in `finishColumn` while the seat still holds a turn (so the second
 retirement a persistent seat or an ACP racer goes through cannot re-stamp it), and

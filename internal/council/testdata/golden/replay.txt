@@ -1,6 +1,6 @@
   council ⚠ REPLAY  │  ~/code/example                                    turn 1 → everyone  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⚠ NEEDS YOU   2 Codex done                                                                                            
+  UNREAD   2 Codex done                                                                                                 
   › add a --version flag and a test for it                                                                              
                                                                                                                         
 ▌ ▸ 1 CC Claude Code ⠋ streaming 3s     │    2 CX Codex  ──────────  ✓ done 3s  │    3 AG Antigravity ⠋ streaming 5s    

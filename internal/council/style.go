@@ -164,10 +164,11 @@ type Styles struct {
 	// badge saying this seat can change your files (ForSandbox), the title line
 	// of a card that explains a seat that is not working or asks for a decision
 	// (unavailableCard, gateCardLines), the needs-you strip and the seat names
-	// on it (§9.40), and the composer's GATE word — each a state where the
-	// reader is the thing the room is waiting on. This list was "exactly two
-	// things" once and drifted three users behind; if you spend Alert somewhere
-	// new, add it here.
+	// on it while a seat on it is BLOCKED (§9.40; an inbox of landed replies
+	// takes Strong instead, see unreadLead), and the composer's GATE word —
+	// each a state where the reader is the thing the room is waiting on. This
+	// list was "exactly two things" once and drifted three users behind; if you
+	// spend Alert somewhere new, add it here.
 	Alert lipgloss.Style
 
 	// Dim is Text one contrast step down, and it is spent on exactly one thing:

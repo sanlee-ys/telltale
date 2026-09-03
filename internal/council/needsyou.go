@@ -100,6 +100,12 @@ type needsYouEntry struct {
 	word string
 }
 
+// blocked reports that this entry is a seat stopped on a gate rather than one
+// that landed. The absence of a phase word is the whole test, because needsYou
+// writes one for every landed entry and never for a blocked one, and a second
+// field for the same fact would be the drift §9.30 removed everywhere else here.
+func (e needsYouEntry) blocked() bool { return e.word == "" }
+
 // needsYouLead is the words, and the words are the whole signal.
 //
 // Upper case for the same reason `WRITE` and `GATE` are: this is one of the three
@@ -109,6 +115,57 @@ type needsYouEntry struct {
 // and NO_COLOR the phrase reads exactly the same, which is the property every
 // distinction this UI makes has to have.
 const needsYouLead = "NEEDS YOU"
+
+// unreadLead is what the strip says when nothing on it is blocked: every entry
+// is a reply that landed while the reader was elsewhere (§9.54's inbox).
+//
+// It is a second lead because the two facts are different and the room was
+// saying them with one word. A gated room at the end of an `@all` brief drew
+// `⚠ NEEDS YOU   2 Codex done   3 Antigravity done   4 Cursor done   5 Grok done`,
+// and two readers of that frame — the operator and the session that filed it —
+// read a vendor stopped on a keystroke where no gate was pending (2026-09-03;
+// LEDGER.md). `done` after each name was the only thing saying otherwise, and a
+// qualifier at Muted does not overrule a lead at Alert with a warning mark on
+// it. So the lead now says which fact it is: `NEEDS YOU` behind the warning
+// mark while any listed seat is blocked, this word with no mark when every
+// listed seat merely landed. A landing is not a warning, so it wears neither
+// the mark nor the ink (needsYouLine).
+//
+// The blocked lead wins a mixed strip. One blocked seat is one vendor stopped
+// until a key is pressed, and that claim outranks any number of replies that
+// can wait; the landed entries still ride the line with their phase words, so
+// nothing is dropped, and the reader still finds the stopped seat by the one
+// entry with no word after it.
+//
+// Upper case for needsYouLead's reason, and one word so the strip's floor
+// (needsYouLadderWidths) moves down, never up, when this lead is on it.
+const unreadLead = "UNREAD"
+
+// stripLead is the lead the strip opens with for these entries, and whether it
+// carries the warning mark: needsYouLead while any entry is blocked, unreadLead
+// otherwise. Pure over the entries so the footer's key label and the strip
+// cannot disagree about which word is up (stripKeyLabel).
+func stripLead(seats []needsYouEntry) (lead string, warn bool) {
+	for _, e := range seats {
+		if e.blocked() {
+			return needsYouLead, true
+		}
+	}
+	return unreadLead, false
+}
+
+// stripKeyLabel is the footer's name for `.`, the strip's key (§9.54): the
+// strip's own lead in the footer's case, so a footer under an `UNREAD` strip
+// does not teach a key called `needs you`. Empty when the strip is empty,
+// which is the caller's cue to print no hint at all (§7.8).
+func stripKeyLabel(st State) string {
+	seats := needsYou(st)
+	if len(seats) == 0 {
+		return ""
+	}
+	lead, _ := stripLead(seats)
+	return strings.ToLower(lead)
+}
 
 // needsYouWord is the same phrase as a seat's own state word, in the case the
 // column header speaks in (§9.45's amendment).
@@ -243,6 +300,15 @@ func needsYouRows(st State) int {
 // printed there would be the room naming a key that does nothing, which is §7.8's
 // surprise; the names stay, because who is stopped is still true on a page.
 //
+// **The lead says which of two facts the line carries, and the ink follows the
+// word** (unreadLead). A strip with a blocked seat on it opens `⚠ NEEDS YOU` at
+// Alert — the gate card's own title style, hoisted to the room. A strip of
+// landed replies opens `UNREAD` with no mark, and its lead and names take
+// Strong instead: the identity ink at weight, which is what the room spends on
+// an anchor the reader is looking for rather than on a claim they must not skim
+// past. Under PlainStyles the two differ by the word and the mark alone, which
+// is the property every distinction here has to have.
+//
 // Styled after it is measured, never before: every width test here runs over the
 // plain string, and the assembled line carries escapes from two styles, so its
 // caller has to use fit rather than padRight (§9.5's ANSI trap).
@@ -251,7 +317,12 @@ func needsYouLine(st State, w int, sty Styles, g Glyphs) string {
 	if len(seats) == 0 || w < 1 {
 		return ""
 	}
-	lead := g.Warn + " " + needsYouLead
+	lead, warn := stripLead(seats)
+	emph := sty.Strong
+	if warn {
+		lead = g.Warn + " " + lead
+		emph = sty.Alert
+	}
 
 	cells := func(name func(Column) string) []needsYouCell {
 		out := make([]needsYouCell, 0, len(seats))
@@ -271,24 +342,24 @@ func needsYouLine(st State, w int, sty Styles, g Glyphs) string {
 	// learned from the column header rather than introducing one here.
 	byLabel := cells(func(c Column) string { return c.Label })
 	byTag := cells(func(c Column) string { return vendorTag(c.Vendor) })
-	if s, ok := needsYouWhole(byLabel, lead, w, sty); ok {
+	if s, ok := needsYouWhole(byLabel, lead, w, sty, emph); ok {
 		return s
 	}
-	if s, ok := needsYouWhole(byTag, lead, w, sty); ok {
+	if s, ok := needsYouWhole(byTag, lead, w, sty, emph); ok {
 		return s
 	}
-	if s, ok := needsYouFit(byTag, lead, w, sty); ok {
+	if s, ok := needsYouFit(byTag, lead, w, sty, emph); ok {
 		return s
 	}
-	return sty.Alert.Render(truncate(lead, w, g.Ellipsis))
+	return emph.Render(truncate(lead, w, g.Ellipsis))
 }
 
 // needsYouWhole is the strip with every waiting seat on it, or nothing.
 //
 // The two upper rungs: no seat is dropped and no count is printed, because there
 // is nothing to count.
-func needsYouWhole(cs []needsYouCell, lead string, w int, sty Styles) (string, bool) {
-	plain, styled := needsYouJoin(cs, 0, lead, sty)
+func needsYouWhole(cs []needsYouCell, lead string, w int, sty Styles, emph lipgloss.Style) (string, bool) {
+	plain, styled := needsYouJoin(cs, 0, lead, sty, emph)
 	if lipgloss.Width(plain) <= w {
 		return styled, true
 	}
@@ -303,9 +374,9 @@ func needsYouWhole(cs []needsYouCell, lead string, w int, sty Styles) (string, b
 // marker §9.10 shipped and got reported as a room that could not scroll. So the
 // `+N more` cell is measured as part of every candidate rather than appended to
 // one that already fit.
-func needsYouFit(cs []needsYouCell, lead string, w int, sty Styles) (string, bool) {
+func needsYouFit(cs []needsYouCell, lead string, w int, sty Styles, emph lipgloss.Style) (string, bool) {
 	for keep := len(cs) - 1; keep >= 1; keep-- {
-		plain, styled := needsYouJoin(cs[:keep], len(cs)-keep, lead, sty)
+		plain, styled := needsYouJoin(cs[:keep], len(cs)-keep, lead, sty, emph)
 		if lipgloss.Width(plain) <= w {
 			return styled, true
 		}
@@ -317,25 +388,27 @@ func needsYouFit(cs []needsYouCell, lead string, w int, sty Styles) (string, boo
 // styled for the screen — from one walk, so the two cannot disagree about what is
 // on the line.
 //
-// The seat NUMBERS are Muted and everything else is Alert. That split is the
+// The seat NUMBERS are Muted and everything else is emph. That split is the
 // grammar the column header and the tab bar already use for the same two things:
-// the number is chrome and the name is the anchor. Alert — SevWarn at weight — is
-// the gate card's own title style, and this line is that card's claim hoisted to
-// the room: `waiting on you` in one column, `NEEDS YOU` above all of them. The
+// the number is chrome and the name is the anchor. emph is the lead's own
+// style, chosen by needsYouLine: Alert — SevWarn at weight, the gate card's own
+// title style — when the line is that card's claim hoisted to the room,
+// `waiting on you` in one column and `NEEDS YOU` above all of them; Strong when
+// the line is an inbox and the names are anchors rather than alarms. The
 // `+N more` cell stays Muted with the numbers, because it counts seats rather
 // than naming one. A landed seat's phase word is Muted too: the name is still
 // the anchor, and the word qualifies it the way the number does.
-func needsYouJoin(cs []needsYouCell, dropped int, lead string, sty Styles) (plain, styled string) {
+func needsYouJoin(cs []needsYouCell, dropped int, lead string, sty Styles, emph lipgloss.Style) (plain, styled string) {
 	var p, s strings.Builder
 	p.WriteString(lead)
-	s.WriteString(sty.Alert.Render(lead))
+	s.WriteString(emph.Render(lead))
 	for _, c := range cs {
 		p.WriteString(needsYouGap + c.text())
 		s.WriteString(needsYouGap)
 		if c.num != "" {
 			s.WriteString(sty.Muted.Render(c.num) + " ")
 		}
-		s.WriteString(sty.Alert.Render(c.name))
+		s.WriteString(emph.Render(c.name))
 		if c.word != "" {
 			s.WriteString(" " + sty.Muted.Render(c.word))
 		}

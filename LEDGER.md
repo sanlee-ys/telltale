@@ -36,3 +36,13 @@ is no longer the price of a change.
   but may never define it, so every distinction is carried by value, weight and a
   word. `docs/room-identity.md` is the page; `--ascii` and `NO_COLOR` are
   untouched, which is why six of 118 goldens moved.
+- **2026-09-03 — `NEEDS YOU` means a vendor is stopped on a keystroke, and
+  nothing else may say it.** A gated WRITE room at the end of an `@all` brief
+  drew `⚠ NEEDS YOU   2 Codex done   3 Antigravity done   4 Cursor done   5
+  Grok done` with no gate pending, and two readers saw a blocked seat that was
+  not there. The strip was §9.54's inbox, and it was correct; the lead was the
+  gate's word and the gate's mark on a reply that could wait. Reason: §4a.1
+  binds the lead as it binds the entries, and a qualifier at Muted does not
+  overrule a lead at Alert. The inbox now opens `UNREAD` with no mark; one
+  blocked seat on the line brings `⚠ NEEDS YOU` back. The recorder was not at
+  fault: `replay-check` reported no gate card because there was none.

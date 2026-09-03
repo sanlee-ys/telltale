@@ -1,6 +1,6 @@
   council READ hosted  │  ~/code/telltale                                           turn 2  │  4/5 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⚠ NEEDS YOU   2 Codex done   4 Grok failed                                                                            
+  UNREAD   2 Codex done   4 Grok failed                                                                                 
   ⚠ 1 seat is not on screen: Cursor (installed but not drivable)  │  --vendor all seats them anyway                     
   › tighten the parser's error path                                                                                     
                                                                                                                         
@@ -21,4 +21,4 @@
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  ›                                                                                                               │  
   ╰─────────────────────────────────────────────────────────────────────────────────────  VIEW  │  hosted pid 4242  ─╯  
-           ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-4 seat  │  . needs you  │  ctrl+c cancel  │  ? help  
+              ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-4 seat  │  . unread  │  ctrl+c cancel  │  ? help  
