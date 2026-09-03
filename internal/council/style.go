@@ -6,39 +6,123 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/sanlee-ys/telltale/internal/model"
-	"github.com/sanlee-ys/telltale/internal/theme"
 )
 
-// Styles is council's palette. It maps internal/theme's ANSI indices to
-// lipgloss values, the same way internal/hud does and for the same reason:
-// internal/theme stays stdlib-only so the statusline binary never links a TUI
-// framework (ADR-002).
+// Styles is council's palette — the MONOGRAPH set (LEDGER, 2026-09-02).
 //
-// Council adds no hues of its own, with ONE ratified exception. A dispatch room
-// that invented a sixth colour would drift from the visual language the
-// statusline and HUD share, and that rule stands for every concept this package
-// has. The exception is the SEAT, which is the one concept council has that the
-// other two surfaces do not — see seatHue, which carries the ratification, the
-// closed list of places it is spent, and the weakness it is honest about
-// (§9.28). It is an exception to a rule, not a repeal of it: nothing else in
-// this package may add a hue, and the seat hue itself is spent only where seat
-// names are what the eye is sorting.
+// It no longer maps internal/theme's ANSI indices. The ledger lifted three taste
+// rulings on 2026-09-02 — "council adds no hues of its own", "colour and any
+// single glyph as only ever a second signal", and "Windows Terminal as the
+// reference renderer" — and this file is what the first and third of them were
+// holding shut. internal/theme is untouched, so internal/statusline and
+// internal/hud keep the 4-bit palette and the stdlib-only rule (ADR-002) is
+// unaffected: the blast radius of this set is one package.
 //
-// What it does add is WEIGHT and CONTRAST, both attributes rather than hues and
-// therefore costing the palette nothing. The room had exactly one typographic
-// level — everything was either default or faint — so a seat's name, a posture
-// claim, a key you can press and a line of vendor prose all arrived at the eye
-// with the same emphasis. Bold is how the two lines that are always true of a
-// column (who it is, what it may do) separate from the several hundred lines
-// that are only true this turn; Dim is how the column the keys move separates
-// from the three the reader is not in (§9.27).
+// # What replaced the ANSI indices, and why hex is now defensible
+//
+// theme.go argues that a hex triple is telltale asserting a colour over the
+// scheme the user already chose, and that argument is correct for a STATUSLINE,
+// which lives one line deep inside somebody else's prompt. The room is not that.
+// It takes the whole terminal for as long as it runs, and a full-screen surface
+// that inherits eight primaries from whatever scheme is loaded cannot have an
+// identity — it can only have the terminal's. That is what "the room was correct
+// and it was flat" (§9.11) was describing from the inside.
+//
+// # The ink scale, which is where the hierarchy actually lives
+//
+// SIX values of one ink, no hue, anchored on the terminal's own foreground. A
+// monograph separates its levels by how much ink is on the page, not by how many
+// colours are on it. So the eye is carried by VALUE (night figures shown):
+//
+//	Measured (#ece4d5 + weight)  the numbers, and the words that report one
+//	Text     (the terminal's)    vendor prose — see Palette.Text
+//	Muted    (#9a9081)           chrome, labels, the caps words
+//	Dim      (#7a7164)           the reading area of a column the keys do not move
+//	RuleInk  (#6b6252)           the ink rule: ━, and the composer's box
+//	Hair     (#3f3a33)           the hairline: ─, the separators, the leaders
+//
+// The one thing a reader is told to look at is the brightest ink on screen, and
+// the several hundred lines a vendor emitted sit BELOW the six characters that
+// say what it cost. That inversion IS the identity: this is an instrument, so
+// the reading outranks the prose around it.
+//
+// # Two accents, and they are the owner's own
+//
+// The values come from the portfolio's MONOGRAPH landing (ADR-014 there), which
+// is where this taste is already written down and already measured for contrast:
+//
+//	Identity (#9cb8d2 night / #1d4e73 paper)  ink blue: who, and what has focus
+//	Withdrawn(#ffbe77 night / #8a4b12 paper)  copper: cancelled, unavailable, ⚠
+//	Broke    (#e07a5f night / #5e1f0d paper)  oxide: failed, denied, a cut line
+//
+// The site spends exactly two accents — a fountain-pen blue for links, focus and
+// what shipped, and an oxide/copper for what was taken back. The room needs a
+// third because the site has no failure state and an instrument does: §4a.1 says
+// a failure must be findable, and a failure that shared the withdrawn ink would
+// not be. Oxide and copper are the same pigment at two strengths, which is what
+// keeps the count honest — two families, not three.
+//
+// # What did NOT survive: five seat hues
+//
+// §9.28 ratified one 4-bit hue per seat and its own doc comment admitted the
+// legal set was full at five, that two pairs were already twins a scheme could
+// render close, and that "the tag is what scales; the hue was always going to run
+// out." A room that answers "which seat" four times — by column position, by the
+// seat NUMBER that is also its key, by the two-letter tag, and by the spelled-out
+// name — does not need a fifth answer in colour, and the fifth is the one that
+// turns a monograph into a sticker sheet. Seat identity is now ONE ink, and what
+// separates the focused seat from the rest is weight (see seatInk).
+//
+// Weight and contrast still cost the palette nothing and still do the same jobs
+// §9.27 gave them: Strong marks an anchor, Alert marks a claim a hurried reader
+// must not skim, Dim recedes a column the keys are not in.
 type Styles struct {
 	Text     lipgloss.Style // vendor output, prompt text, the keys in the mode line
-	Muted    lipgloss.Style // chrome, rules, labels, de-emphasis
+	Muted    lipgloss.Style // chrome, labels, de-emphasis
 	Identity lipgloss.Style // vendor names, focused tab
 	SevOK    lipgloss.Style // a column that finished cleanly
 	SevWarn  lipgloss.Style // a column that is unavailable or cancelled
 	SevCrit  lipgloss.Style // a column that failed
+
+	// Measured is the brightest ink in the set, and it is spent on ONE class of
+	// thing: a value telltale actually read off a vendor or off a process. The
+	// cost figure, the clock a turn took, the token and quota cells, a diffstat,
+	// an exit code's PASS or FAIL, the counts on a seat's rule.
+	//
+	// It is the render-side half of §4a.1. The honesty rule says a value that was
+	// not measured is absent rather than plausible; this says that a value that
+	// WAS measured is the darkest ink on the page. Nothing inferred and nothing
+	// estimated may wear it — an estimate already carries its leading `~`, and
+	// the point of that mark is that it is not this.
+	//
+	// PlainStyles renders it as the identity function, like every other token
+	// here, so no layout golden can see it.
+	Measured lipgloss.Style
+
+	// Hair and RuleInk are the room's two rule weights, given ink to match the
+	// two glyphs §9.26 already spends (g.Rule and g.RuleHeavy).
+	//
+	// The room drew both at one intensity, so the weight distinction lived
+	// entirely in a single character's stroke — which is exactly as much
+	// hierarchy as a reader at the back of a room can resolve, i.e. none. A
+	// printed page uses a hairline for a row and an ink rule for a section, and
+	// the difference between them is ink as much as it is width.
+	//
+	// Hair draws the column separators, the header's zone bar, and the leader
+	// that fills a column header. RuleInk draws the full-bleed ━ under the header
+	// and the composer's box — the two things that say where the room's chrome
+	// stops.
+	Hair    lipgloss.Style
+	RuleInk lipgloss.Style
+
+	// Focus is the ink on the one vertical mark that is as tall as the thing it
+	// describes: the rail left of the column the keys move (§9.27, g.FocusRail).
+	//
+	// The rail was Muted, which put it at the same intensity as the three plain
+	// separators beside it and left the whole signal riding on one character's
+	// extra stroke. Blue is the site's focus ink; this is the one place the room
+	// spends it on something that is not a name.
+	Focus lipgloss.Style
 
 	// Strong is Identity at full weight: the room's own name, each seat's name,
 	// and the user's brief echoed back inside a column. Everything it marks is
@@ -91,21 +175,139 @@ type Styles struct {
 	Plain bool
 }
 
-// NewStyles builds the coloured set. isDark is accepted for symmetry with the
-// HUD and for the adaptive token council will need when it grows a gauge; no
-// current token consumes it, so no golden depends on the answer.
+// Palette is one MONOGRAPH ink set, resolved to hex.
+//
+// A value type rather than two constructors so that the light set and the dark
+// set are the same object with different pigments — a token that exists in one
+// and not the other is a compile error rather than a surface that renders in
+// only one theme.
+type Palette struct {
+	Measured string // the reading: numbers and the words that report one
+
+	// Text is EMPTY in both palettes, and that is the surviving half of
+	// theme.go's argument rather than an omission.
+	//
+	// Vendor prose renders in the terminal's own foreground. Two reasons, and
+	// the second is mechanical. First: the room supplies structure and accents,
+	// and the base ink a reader has already chosen for every other program is
+	// the right ink for several hundred lines somebody else's model wrote.
+	// Second: the render path leaves a number of body lines BARE — a commit
+	// receipt, a diffstat, an arena error — and a Text that were a hex would put
+	// those lines at a colour the palette never named, which is a divergence no
+	// golden can see (they all render PlainStyles) and every terminal would.
+	//
+	// The consequence is stated plainly: the ink scale is anchored at the
+	// terminal's foreground, and every other token is positioned ABOVE it
+	// (Measured) or BELOW it (Muted, Dim, RuleInk, Hair).
+	Text string
+
+	Muted     string // chrome and labels
+	Dim       string // a column the keys do not move
+	RuleInk   string // ━ and the composer's box
+	Hair      string // ─, the separators, the leaders
+	Identity  string // ink blue: who, and what has focus
+	Withdrawn string // copper: cancelled, unavailable, the ⚠ mark
+	Broke     string // oxide: failed, denied, a line the patch cut
+}
+
+// NightPalette is the room after dark, with a lamp on — the theme a terminal is
+// nearly always in.
+//
+// It is NOT the paper set inverted. A dark theme built by flipping a warm light
+// one lands on a cold blue-black, because the eye reads "dark" as "cool" and the
+// tokens follow; that throws away the reason the ground was warm. Ink is bone
+// rather than white, and both accents are lifted to the values they need at low
+// luminance rather than the values they had on paper.
+//
+// The figures are the portfolio's own, measured there against #16130f rather
+// than assumed here: Measured 15.0:1, Text 11.4:1, Muted 6.0:1, Identity 9.0:1,
+// Withdrawn 11.4:1. Against Windows Terminal's Campbell ground (#0c0c0c) every
+// one of them is HIGHER, because that ground is darker still — so the numbers
+// above are the floor rather than the claim.
+//
+// Nothing here paints a background. The ground stays whatever terminal the
+// operator chose, which is the half of theme.go's argument that survives intact:
+// the room supplies ink, not paper.
+func NightPalette() Palette {
+	return Palette{
+		Measured:  "#ece4d5",
+		Text:      "",
+		Muted:     "#9a9081",
+		Dim:       "#7a7164",
+		RuleInk:   "#6b6252",
+		Hair:      "#3f3a33",
+		Identity:  "#9cb8d2",
+		Withdrawn: "#ffbe77",
+		Broke:     "#e07a5f",
+	}
+}
+
+// PaperPalette is the same room in daylight, for a light terminal.
+//
+// The two accents change character rather than just value, which is the one
+// thing a light set cannot skip: oxide red is what an editor's pencil leaves on
+// a page, and copper at this luminance would read as highlighter. So the paper
+// set takes the pigments down — burnt sienna for withdrawn, oxide for broke —
+// while the night set takes them up.
+func PaperPalette() Palette {
+	return Palette{
+		Measured:  "#1e1c1b",
+		Text:      "",
+		Muted:     "#5f5c58",
+		Dim:       "#8b8681",
+		RuleInk:   "#423f3c",
+		Hair:      "#d5d2cb",
+		Identity:  "#1d4e73",
+		Withdrawn: "#8a4b12",
+		Broke:     "#5e1f0d",
+	}
+}
+
+// NewStyles builds the coloured set. isDark now actually decides something: it
+// picks the palette, and the two are different objects rather than one palette
+// with a brightness knob (see PaperPalette).
 func NewStyles(isDark bool) Styles {
-	_ = isDark
+	p := PaperPalette()
+	if isDark {
+		p = NightPalette()
+	}
+	ink := func(hex string) lipgloss.Style {
+		if hex == "" {
+			return lipgloss.NewStyle()
+		}
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(hex))
+	}
 	return Styles{
-		Text:     lipgloss.NewStyle(),
-		Muted:    lipgloss.NewStyle().Faint(true),
-		Identity: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorIdentity)),
-		SevOK:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOK)),
-		SevWarn:  lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorWarn)),
-		SevCrit:  lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCrit)),
-		Strong:   lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorIdentity)).Bold(true),
-		Alert:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorWarn)).Bold(true),
-		Dim:      lipgloss.NewStyle().Faint(true),
+		Text:     ink(p.Text),
+		Muted:    ink(p.Muted),
+		Identity: ink(p.Identity),
+		// A finished turn reports a measurement — the process exited, and the
+		// room read how it exited — so `✓ done` and `PASS` wear the reading's own
+		// ink rather than a hue of their own. That is one fewer colour than the
+		// green this replaced, and it says something the green did not: this is a
+		// fact somebody measured.
+		SevOK:   ink(p.Measured).Bold(true),
+		SevWarn: ink(p.Withdrawn),
+		SevCrit: ink(p.Broke),
+		// Strong is the identity ink at weight. It marks an ANCHOR — the room's
+		// own name, the seat the keys move, the brief echoed back — which is the
+		// same job the site's blue does for a link and for focus.
+		Strong: ink(p.Identity).Bold(true),
+		// Alert is the withdrawn ink at weight, and its spenders are unchanged:
+		// a posture badge saying this seat can change your files, a card that
+		// asks for a decision, the needs-you strip, the composer's GATE word.
+		Alert: ink(p.Withdrawn).Bold(true),
+		Dim:   ink(p.Dim),
+		// Ink AND weight. The ink alone carries it on a dark ground, where bone
+		// is plainly above the terminal's own grey; on paper the room's base ink
+		// IS near-black and a second near-black would be no signal at all, so the
+		// number is set in weight the way a table of figures is set in print. One
+		// token, one appearance, both grounds — a Measured that meant "brighter"
+		// in one theme and "bolder" in the other would be two tokens.
+		Measured: ink(p.Measured).Bold(true),
+		Hair:     ink(p.Hair),
+		RuleInk:  ink(p.RuleInk),
+		Focus:    ink(p.Identity),
 	}
 }
 
@@ -124,13 +326,27 @@ func PlainStyles() Styles {
 		Strong: s, Alert: s,
 		// Dim likewise: an unfocused column's prose is the same bytes at the same
 		// width, which is what makes contrast safe to spend as a signal at all.
-		Dim:   s,
+		Dim: s,
+		// The MONOGRAPH tokens are no-ops here for the same reason and it is the
+		// whole cost model of this identity: every one of them is a colour or a
+		// weight, so the room's bytes are the bytes the goldens already hold.
+		Measured: s, Hair: s, RuleInk: s, Focus: s,
 		Plain: true,
 	}
 }
 
-// Rule is the style for horizontal rules.
-func (s Styles) Rule() lipgloss.Style { return s.Muted }
+// Rule is the hairline: the column separators, the header's zone bar, and the
+// leader that fills a column header out to its state word.
+func (s Styles) Rule() lipgloss.Style { return s.Hair }
+
+// RuleStrong is the ink rule: the full-bleed ━ where the room's chrome stops and
+// the seats begin, and the composer's box.
+//
+// Two weights of rule, and the second one now differs by INK as well as by
+// stroke. §9.26 bought the distinction with a character; a reader at a projector
+// width at the back of a room cannot resolve a character's stroke, and can
+// resolve which line is darker.
+func (s Styles) RuleStrong() lipgloss.Style { return s.RuleInk }
 
 // forSeat derives the set one column renders with: unchanged for the seat the
 // keys move, one contrast step down for every other (§9.27).
@@ -223,102 +439,56 @@ func (s Styles) ForSandbox(l SandboxLevel) lipgloss.Style {
 	}
 }
 
-// seatHue is one seat's own ANSI palette index — the RATIFIED exception to
-// "council adds no hues of its own" (San, 2026-08-07; design.md §9.28).
+// seatInk is the ONE ink every seat name renders in — the retirement of §9.28's
+// five-hue exception, under the 2026-09-02 ledger ruling that lifted "council
+// adds no hues of its own" and, with it, the frame that exception was carved
+// out of.
 //
-// **Why council and not internal/theme.** The stdlib-only rule (ADR-002) is not
-// the reason and citing it here would send the next reader to fix the wrong
-// thing: these are plain strings and would compile in theme just fine. The
-// reason is theme's OWN contract — one hue, one meaning, across every surface —
-// and `internal/statusline` and `internal/hud` have no seats. A per-vendor hue
-// promoted to theme would be a token that means nothing on two of the three
-// surfaces that import it, which is how a shared palette stops being shared.
+// **What the exception bought and what it cost.** §9.28 spent one 4-bit index
+// per seat so a reader could sort names by colour. Its own doc comment then
+// recorded the bill: the legal set (4, 5, 6, 12, 13, 14) held six indices for
+// five seats; agy/cursor and codex/grok were already twins that some schemes
+// render close; and the note ended "the tag is what scales; the hue was always
+// going to run out."
 //
-// **Why 4-bit indices.** theme.go's own argument, unchanged: the terminal
-// resolves an index against the scheme the user already chose, so council looks
-// native in Windows Terminal's default and in a light scheme without a second
-// palette and without an isDark fork. A hex triple would be council asserting a
-// colour over the user's own.
+// **Why one ink is the better answer, not the cheaper one.** The room answers
+// "which seat" four times before colour is reached: the column's POSITION, the
+// seat NUMBER that is also the key that reaches it, the two-letter TAG, and the
+// spelled-out NAME. §9.18 and §9.29 built that ladder deliberately, and it is
+// the ladder that survives --ascii, NO_COLOR, a projector and a colour-blind
+// reader. A fifth answer in hue is redundancy on the one question the room had
+// already over-answered, and five saturated hues on one screen is what makes a
+// terminal read as a sticker sheet rather than as a page.
 //
-// **What is OFF LIMITS, and it is not a guideline.** The severity family — 1/2/3
-// and their bright twins 9/10/11 — belongs to the green/yellow/red ramp, and a
-// seat that happened to wear red would be a seat that reads as failed. The
-// chrome family — 0/7/8/15 — is the gauge track and the terminal's own
-// foreground/background. That leaves 4, 5, 6, 12, 13, 14, and this function
-// spends four of them. TestNoSeatHueIsASeverity fails the build if that ever
-// stops being true.
+// **What still separates seats, and it is stronger than before.** Weight. The
+// seat the keys move renders SeatStrong (the identity ink at weight); every
+// other renders SeatIdentity (the same ink, plain). That is the site's own law —
+// blue marks focus — and, unlike a hue, it says which of the five you are IN,
+// which is the question a reader in a five-column room actually asks.
 //
-// **The honest weakness.** agy is 4 and cursor is 12: one hue at two
-// intensities, which is a distinction a reader can miss and which some terminal
-// schemes render closer together than others. That is acceptable HERE and only
-// here, because the two-letter tags §9.25 made permanent — `AG` and `CU` — carry
-// the real distinction on every surface a seat name appears on, and the hue is
-// the second signal it is supposed to be. If a fifth vendor arrives wanting
-// blue, the tag is what still works and the hue is what has to be argued for.
-//
-// **The fifth vendor arrived, and here is the argument it owed.** Grok is 14,
-// bright cyan — the twin of Codex's 6, so the weakness above is now TWO pairs
-// rather than one. That is forced rather than chosen: after 4/5/6/12 the legal
-// set holds only 13 and 14, and both are twins of a seat already at the table.
-// There was no unpaired hue to spend, so the only real decision was WHICH seat
-// to pair with, and it went to Codex for a reason about how the room is
-// actually used. Silence routes to Claude alone (mentions.go, defaultRoute), so
-// the Claude column is the one on screen in nearly every room; keeping magenta
-// unshared protects the seat a reader sees most from the one confusion this
-// palette can still make. Codex's cyan is spent instead, and `CX` versus `GR`
-// is what carries the distinction when a scheme renders 6 and 14 close.
-//
-// What this exhausts is worth stating plainly for whoever adds the sixth: the
-// legal set is now FULL. 13 is the last free index, and after it a new seat
-// cannot have a hue of its own without either taking a severity — which would
-// make a seat read as failed — or abandoning 4-bit indices, which would mean
-// council asserting a colour over the user's own scheme. The tag is what
-// scales; the hue was always going to run out.
-func seatHue(v model.VendorID) string {
-	switch v {
-	case model.VendorClaude:
-		return "5" // magenta
-	case model.VendorCodex:
-		return "6" // cyan — theme's identity hue, kept for the seat that had it
-	case model.VendorAntigravity:
-		return "4" // blue
-	case model.VendorCursor:
-		return "12" // bright blue
-	case model.VendorGrok:
-		return "14" // bright cyan
-	default:
-		// Gemini and anything added since. A seat with no hue of its own renders
-		// in the identity hue every seat name used to have, which is a seat that
-		// looks exactly as it did rather than a seat that looks broken.
-		return theme.ColorIdentity
-	}
-}
+// **What this gives back.** A sixth vendor needs no hue decision at all. The
+// question §9.28 left as "now the HARD one" simply stops existing.
+func (s Styles) seatInk(st lipgloss.Style) lipgloss.Style { return st }
 
-// SeatIdentity is Identity retinted to this seat's own hue, and SeatStrong is
-// Strong retinted the same way.
+// SeatIdentity is the ink a seat's name renders in, and SeatStrong is the same
+// ink at weight — the seat the keys move.
 //
-// Derived from the base styles rather than built beside them, so PlainStyles
-// stays the identity set BY CONSTRUCTION: `s.Identity` is the empty style there,
-// and retinting is skipped outright, so no golden can see any of this. A second
-// pair of literal constructors would have to remember that, and would forget it
-// the first time one of them grew a second attribute.
+// They stay two named methods rather than collapsing into Identity and Strong at
+// every call site, because the CALL SITES are the closed list §9.28 built and
+// TestTheInkIsSpentOnlyOnSeatNames still reads: a seat rule on a turn page, a
+// tab, a seat named inside the collapsed-seat notice. Keeping the name keeps the
+// list checkable by grep, and keeps one place to change if a future ruling wants
+// per-seat ink back.
 func (s Styles) SeatIdentity(v model.VendorID) lipgloss.Style {
-	return s.retint(s.Identity, v)
+	_ = v
+	return s.seatInk(s.Identity)
 }
 
-// SeatStrong is Strong at this seat's hue — the seat name at weight, where seat
-// names are what the eye is sorting.
+// SeatStrong is a seat's name at weight, where seat names are what the eye is
+// sorting and one of them is the one the keys move.
 func (s Styles) SeatStrong(v model.VendorID) lipgloss.Style {
-	return s.retint(s.Strong, v)
-}
-
-// retint is the one place a seat hue reaches a style, and the Plain guard is
-// what keeps every layout golden blind to §9.28.
-func (s Styles) retint(st lipgloss.Style, v model.VendorID) lipgloss.Style {
-	if s.Plain {
-		return st
-	}
-	return st.Foreground(lipgloss.Color(seatHue(v)))
+	_ = v
+	return s.seatInk(s.Strong)
 }
 
 // ForDiffLine returns the style one raw patch line renders in — the "later,

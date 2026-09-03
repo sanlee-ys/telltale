@@ -244,7 +244,7 @@ func rule(w int, sty Styles, g Glyphs) string {
 	if w <= 0 {
 		return ""
 	}
-	return sty.Rule().Render(strings.Repeat(g.RuleHeavy, w))
+	return sty.RuleStrong().Render(strings.Repeat(g.RuleHeavy, w))
 }
 
 // header names the workspace and the round.
@@ -560,9 +560,20 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	// glyph heavier — so the mark is as tall as the column it describes, which is
 	// the one thing `▸` and the name's weight cannot be: both of those sit on the
 	// header row, and a reader forty rows into a transcript has scrolled past
-	// them. The mark is Muted like every other rail, because a rail that also
-	// changed hue would be chrome competing with the content it bounds (§9.23).
-	focusSep := sepPad + sty.Rule().Render(g.FocusRail) + sepPad
+	// them.
+	//
+	// **It takes the FOCUS ink now, and that reverses §9.23's call.** §9.23
+	// declined to let the rails' hue mean anything, on the ground that chrome
+	// which changes colour competes with the content it bounds — correct for the
+	// three rails that bound a column the reader is not in, and wrong for the one
+	// that answers "which column do these keys move". Drawn at the hairline's own
+	// ink, the whole distinction rode on one character's extra stroke, which is a
+	// stroke a projector at the back of a room does not resolve. Blue is the site's
+	// focus ink and this is the only mark in the room that is as tall as the thing
+	// it describes, so it is the one piece of chrome worth spending a hue on. The
+	// glyph is unchanged, so --ascii and NO_COLOR lose nothing: `[` against `|` is
+	// exactly the signal it was.
+	focusSep := sepPad + sty.Focus.Render(g.FocusRail) + sepPad
 	blankSep := strings.Repeat(" ", lipgloss.Width(plainSep))
 	// The LEFTMOST column has no gutter to its left, so the frame's own left pad
 	// carries the mark for it — cell one of framePad's two, which puts one cell of
@@ -570,7 +581,7 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 	// would if there were room for two. Without this a focused seat in position
 	// zero would be the one seat the device could not mark, which is the kind of
 	// hole that teaches a reader to stop trusting a signal.
-	focusPad := sty.Rule().Render(g.FocusRail) + strings.Repeat(" ", framePad-1)
+	focusPad := sty.Focus.Render(g.FocusRail) + strings.Repeat(" ", framePad-1)
 	rails := railRows(cells, lay.Body)
 	var b strings.Builder
 	for row := 0; row < lay.Body; row++ {
@@ -1216,7 +1227,8 @@ func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 		label = sty.Strong
 	}
 
-	status := columnStatus(st, c, g)
+	head, clock, tail := columnStatus(st, c, g)
+	status := head + clock + tail
 	style := sty.ForPhase(c.Phase)
 	if c.Avail != AvailInstalled || stoppedOnYou(st, c) {
 		// Two words, one hue, and one reason: both say this column is not
@@ -1227,7 +1239,11 @@ func columnHeader(st State, c Column, f seatFocus, w int, sty Styles, g Glyphs) 
 		// same row would take that signal back.
 		style = sty.SevWarn
 	}
-	right := style.Render(status)
+	// The clock in the MEASURED ink, whatever the phase word wears. A duration is
+	// a reading and a phase is a claim about state, so the number keeps one ink
+	// across every column while the word beside it stays a severity — which is
+	// what lets the eye compare five numbers without reading five words.
+	right := style.Render(head) + sty.Measured.Render(clock) + style.Render(tail)
 
 	// The gap between name and state is filled with a rule when the seat is
 	// doing something — same grammar as turnRule, and the two-cell air each
@@ -1468,9 +1484,20 @@ func stoppedOnYou(st State, c Column) bool {
 
 // columnStatus is the state word with its mark and, where there is one, the
 // clock that says how long it took or has taken.
-func columnStatus(st State, c Column, g Glyphs) string {
+// Three pieces rather than one string, because the middle piece is a READING
+// and the two around it are not (MONOGRAPH, style.go).
+//
+// `⚠ unavailable` and `✓ done` are the room's own words for a state; `20s` is
+// what a clock actually said. They arrived at the eye as one styled run, so the
+// only number in a column header wore whatever hue the phase word had — green
+// when the turn finished, red when it broke — and a reader scanning five columns
+// for "which of these is slow" had to read five words to find five numbers. Split
+// here rather than at the call site because the caller's width arithmetic is over
+// the plain string and must stay that way (§9.5's ANSI trap): head+clock+tail is
+// exactly the string this used to return.
+func columnStatus(st State, c Column, g Glyphs) (head, clock, tail string) {
 	if c.Avail != AvailInstalled {
-		return g.Warn + " unavailable"
+		return g.Warn + " unavailable", "", ""
 	}
 	if stoppedOnYou(st, c) {
 		// **The word is the strip's own, and it carries NO clock.** Both halves
@@ -1500,7 +1527,7 @@ func columnStatus(st State, c Column, g Glyphs) string {
 		// false claim as the word, made by the glyph. Neither is load-bearing —
 		// the word survives --ascii and NO_COLOR on its own, which is the property
 		// every distinction here has to have.
-		return g.Warn + " " + needsYouWord
+		return g.Warn + " " + needsYouWord, "", ""
 	}
 	status := c.Phase.String()
 	if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
@@ -1514,9 +1541,9 @@ func columnStatus(st State, c Column, g Glyphs) string {
 		// and left a trailing cell on every column that had not started, which
 		// pushed the state word one cell off the right edge it was aligned to.
 		if e := elapsed(st, c); e != "" {
-			status += " " + e
+			clock = " " + e
 		}
-		return phaseMark(c.Phase, st, g) + " " + status
+		return phaseMark(c.Phase, st, g) + " " + status, clock, ""
 	}
 	if c.Elapsed > 0 {
 		// Kept after the turn ends. A finished column should still be able to
@@ -1529,7 +1556,7 @@ func columnStatus(st State, c Column, g Glyphs) string {
 		// somebody reading a card is the same false reading after the fact as
 		// during. The test is on the WALL clock, so a turn that was all card
 		// still prints `done 0s` — a measured zero, not a blank.
-		status += " " + dur(vendorElapsed(c.Elapsed, c.GateWait))
+		clock = " " + dur(vendorElapsed(c.Elapsed, c.GateWait))
 	}
 	if c.Settling {
 		// The answer landed; the process has not gone yet. A WORD rather than a
@@ -1540,9 +1567,9 @@ func columnStatus(st State, c Column, g Glyphs) string {
 		// It sits AFTER the clock deliberately. The clock is this turn's earned
 		// figure and is now the time to the answer (dispatch.go); the linger is
 		// not part of it and must not look like it is.
-		status += " exiting"
+		tail = " exiting"
 	}
-	return phaseMark(c.Phase, st, g) + " " + status
+	return phaseMark(c.Phase, st, g) + " " + status, clock, tail
 }
 
 // phaseMark is the glyph in front of a column's state word.
@@ -3050,9 +3077,9 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 	// number: §9.2 is emphatic that a claim you cannot see is not a claim, and
 	// the cost is the one thing on this line the transcript also records.
 	if gap := w - lipgloss.Width(left) - lipgloss.Width(cost); gap >= 1 {
-		return leftS + strings.Repeat(" ", gap) + sty.Muted.Render(cost)
+		return leftS + strings.Repeat(" ", gap) + sty.Measured.Render(cost)
 	}
-	return leftS + sty.Muted.Render("  "+cost)
+	return leftS + sty.Measured.Render("  "+cost)
 }
 
 // stripBadges is the badge row at strip width: the posture word, or nothing at
@@ -3398,7 +3425,7 @@ func promptWidth(width int, g Glyphs) int {
 // composerTop is the box's opening border.
 func composerTop(lay Layout, sty Styles, g Glyphs) string {
 	w := boxWidth(lay.Width)
-	return framePadStr + sty.Rule().Render(
+	return framePadStr + sty.RuleStrong().Render(
 		g.BoxTL+strings.Repeat(g.Rule, maxInt(0, w-2))+g.BoxTR) + framePadStr
 }
 
@@ -3428,13 +3455,13 @@ func composerBottom(st State, lay Layout, sty Styles, g Glyphs) string {
 	air := strings.Repeat(" ", gutter)
 	left := w - 2 - (lipgloss.Width(plain) + 2*gutter) - 1
 	if plain == "" || left < 1 {
-		return framePadStr + sty.Rule().Render(
+		return framePadStr + sty.RuleStrong().Render(
 			g.BoxBL+strings.Repeat(g.Rule, maxInt(0, w-2))+g.BoxBR) + framePadStr
 	}
 	return framePadStr +
-		sty.Rule().Render(g.BoxBL+strings.Repeat(g.Rule, left)+air) +
+		sty.RuleStrong().Render(g.BoxBL+strings.Repeat(g.Rule, left)+air) +
 		styled +
-		sty.Rule().Render(air+g.Rule+g.BoxBR) + framePadStr
+		sty.RuleStrong().Render(air+g.Rule+g.BoxBR) + framePadStr
 }
 
 // composerLabel is the legend on the box's bottom border: the mode word, and the
@@ -3607,8 +3634,8 @@ func composerLines(st State, lay Layout, sty Styles, g Glyphs) []string {
 	// The box's sides, drawn on every row between the two borders. Muted with the
 	// borders themselves: the box is chrome, and only what is typed inside it is
 	// content (§9.44).
-	lgut := framePadStr + sty.Rule().Render(boxSideL(g))
-	rgut := sty.Rule().Render(boxSideR(g)) + framePadStr
+	lgut := framePadStr + sty.RuleStrong().Render(boxSideL(g))
+	rgut := sty.RuleStrong().Render(boxSideR(g)) + framePadStr
 
 	text := st.Draft
 	if st.Mode == ModeComposing {
@@ -3763,9 +3790,9 @@ func composerClipped(rows []string, w int, sty Styles, g Glyphs) string {
 // frame is the number of lines the terminal has whatever the draft is doing.
 func padRows(rows []string, lay Layout, w int, sty Styles, g Glyphs) []string {
 	for len(rows) < lay.Prompt {
-		rows = append(rows, framePadStr+sty.Rule().Render(boxSideL(g))+
+		rows = append(rows, framePadStr+sty.RuleStrong().Render(boxSideL(g))+
 			sty.Muted.Render("  ")+sty.Text.Render(padRight("", w, g))+
-			sty.Rule().Render(boxSideR(g))+framePadStr)
+			sty.RuleStrong().Render(boxSideR(g))+framePadStr)
 	}
 	return rows[:lay.Prompt]
 }

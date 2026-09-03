@@ -905,7 +905,8 @@ func TestSettlingSeatSaysItIsStillExiting(t *testing.T) {
 			Vendor: model.VendorCodex, Label: "Codex", Avail: AvailInstalled,
 			Phase: PhaseDone, Elapsed: 4 * time.Second, Settling: true,
 		}
-		got := columnStatus(State{}, c, g)
+		head, clock, tail := columnStatus(State{}, c, g)
+		got := head + clock + tail
 		if !strings.Contains(got, "done") {
 			t.Errorf("ascii=%v: status = %q, want the settled phase word", ascii, got)
 		}
@@ -919,7 +920,8 @@ func TestSettlingSeatSaysItIsStillExiting(t *testing.T) {
 		}
 
 		c.Settling = false
-		if quiet := columnStatus(State{}, c, g); strings.Contains(quiet, "exiting") {
+		qh, qc, qt := columnStatus(State{}, c, g)
+		if quiet := qh + qc + qt; strings.Contains(quiet, "exiting") {
 			t.Errorf("ascii=%v: a retired seat still claims to be exiting: %q", ascii, quiet)
 		}
 	}

@@ -346,7 +346,43 @@ func labelledRule(label, meta string, w int, ruleGlyph string, head lipgloss.Sty
 	if !ok {
 		return fit(sty.Muted.Render(plain), w)
 	}
-	return fit(head.Render(label)+sty.Muted.Render(rest), w)
+	// THREE inks, not two, because there are three things after the label and
+	// they are not the same class of statement (MONOGRAPH set, style.go).
+	//
+	// The RULE is chrome, and it takes the ink its own weight calls for — the
+	// hairline for a seat's heading, the ink rule for a page's own root. The
+	// META is not chrome at all: it is what that seat's turn cost and how long it
+	// took, i.e. a reading, and readings are the brightest ink in this room. The
+	// whole line used to render Muted after the label, so the two numbers a
+	// reader opens a turn page to compare arrived quieter than the vendor prose
+	// underneath them.
+	//
+	// Split on the LAST rule cell rather than on the meta string, because a meta
+	// that happens to contain the rule glyph (a duration with an ascii `-` in it)
+	// would otherwise cut in the wrong place. labelRuleIn puts the run before the
+	// meta and never after it, so the last cell of the run is the boundary.
+	rules := sty.Muted
+	tail := ""
+	if i := strings.LastIndex(rest, ruleGlyph); i >= 0 {
+		end := i + len(ruleGlyph)
+		rules, tail = ruleInk(ruleGlyph, sty), rest[end:]
+		rest = rest[:end]
+	}
+	return fit(head.Render(label)+rules.Render(rest)+sty.Measured.Render(tail), w)
+}
+
+// ruleInk answers which of the room's two rule inks a run of this glyph takes.
+//
+// Read off the GLYPH rather than passed down from the call site, and that is
+// deliberate: §9.26 made the weight a property of the character, so a caller
+// that picked the heavy glyph has already made the decision, and threading a
+// second parameter beside it would create a way for the two to disagree. Both
+// glyph sets are consulted because --ascii spells the heavy rule `=`.
+func ruleInk(glyph string, sty Styles) lipgloss.Style {
+	if glyph == UnicodeGlyphs().RuleHeavy || glyph == ASCIIGlyphs().RuleHeavy {
+		return sty.RuleStrong()
+	}
+	return sty.Rule()
 }
 
 // seatMeta is the numbers that belong to one seat's rule: how its turn ended,
