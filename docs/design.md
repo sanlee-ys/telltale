@@ -8441,6 +8441,17 @@ spawns no pseudoconsole. A flag that was accepted and did nothing would be a pro
 could not keep. `--fresh` is honoured. `--auto` and `--shared-tree` are accepted, because a
 hosted room already runs ungated and already runs every seat in the workspace.
 
+#### The host drives the crew's live shapes through their measured adapters
+
+[§9.57](#s9-57) moved codex and grok to request/response live shapes in the registry, and
+the host marks a conversational seat undrivable. From that merge until this section a hosted
+room could drive only claude and agy, and nothing recorded it. The host now takes the batch
+adapter `vendors.LiveFallback` names for such a seat, the way the room retreats to it on a
+refused handshake (`fallback.go`), and the seat's badge wears that adapter's measured claim.
+The wire carries `FellBack` so the client can draw it. A conversational seat with no fallback,
+which is cursor, is still refused in words. The agy seat is not conversational and keeps its
+live stream shape, which §9.57 lists as unmeasured.
+
 #### Known limitations, named
 
 - **A hosted room starts every seat fresh.** The host is handed a roster and never a saved
