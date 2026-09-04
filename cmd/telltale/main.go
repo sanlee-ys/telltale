@@ -1219,7 +1219,7 @@ func runCouncil(args []string) error {
 	// --replay opens a room that starts nothing. Both are opt-in, off by
 	// default, and refused together below, because a replay has no run to
 	// record.
-	record := fs.String("record", "", "write this room's event stream — every seat's output, each dispatch, each gate decision, with timing — to this new file for --replay. It carries the conversation: name a path outside ~/.telltale, and run `telltale council replay-check <file>` before sharing it")
+	record := fs.String("record", "", "write this room's event stream — every seat's output, each dispatch, each gate decision, with timing — to this new file for --replay. It carries the conversation: name a path outside ~/.telltale, and run telltale council replay-check on it before sharing it")
 	replay := fs.String("replay", "", "play a --record file back instead of opening a live room: no vendor starts, nothing dispatches, and every frame says REPLAY")
 	replaySpeed := fs.Float64("replay-speed", 1, "play a --replay file this many times faster than it was recorded")
 	// The opt-out from per-seat worktrees (design.md §9.55). In a writing room
