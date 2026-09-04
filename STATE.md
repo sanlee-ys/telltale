@@ -108,17 +108,13 @@ a demo of the crew is a demo of measured claims only after that list is paid.
       `fallback.go`'s offline-only standing.
   13. Item 9 on the Mac, into PARITY.md — retires the off-Windows
       `ro:requested` (§9.57 item 4).
-  14. Grok handshake and a turn: `grok agent stdio` fed the seat's `initialize`
-      and `session/new`; record `agentCapabilities`, `modes`, a fenced brief
-      streaming back, and a brief beginning `/` — retires half of `acp · asks
-      · unmeasured` (§9.57 item 6).
   15. Grok permissions: a write brief "run `mkdir zzz` and create probe.txt";
       whether `session/request_permission` arrives, its option ids and kinds,
       what each does — retires the other half (§9.57 item 7).
-  16. Grok cost and `session/load`: every frame of item 14 read for
-      `total_cost_usd`; a saved id in a new process if `loadSession` is
-      advertised — retires the absent-cost note and the resume claim (§9.57
-      items 8 and 9).
+  16. Grok `session/load`: a saved id in a new process (`loadSession` is
+      advertised at 1.0.13); and the `costUsdTicks` unit, one turn checked
+      against grok.com's billing — retires §9.57's resume claim and its cost
+      half (token counts are on the wire since 2026-09-04; the tick is not).
   17. Antigravity stream: two `{"event":"user",…}` lines down one stdin; same
       pid, same `conversation_id`, the second turn recalling the first; the
       exit timed after stdin close against 3 s — retires `stream-json ·

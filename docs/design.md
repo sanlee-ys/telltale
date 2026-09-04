@@ -18644,16 +18644,34 @@ README there; a claim that is not captured is not made.
   (or an unauthenticated one) and watch what the room shows; this is the arm the room's retreat
   (`fallback.go`) is built for, and the note and the `exec · unasked · fallback` badge are what
   it should show.
-- [ ] **Grok, the handshake and a turn.** `grok --version`; `grok agent stdio` driven with the
-  seat's own `initialize` and `session/new{cwd}`: what `agentCapabilities` advertises
-  (`loadSession` above all), whether `modes` names a plan mode, and a fenced brief streaming
-  back. Also whether a brief beginning `/` is eaten on this path as it is on `--single`.
+- [x] **Grok, the handshake and a turn.** PAID 2026-09-04 at grok 1.0.13 (5e9a58528b76), `grok agent stdio` driven
+  with the seat's own frames from a scratch cwd (the transcript is filed privately, desk/research).
+  `agentCapabilities`: `loadSession: true`; `sessionCapabilities: {list, resume, close}`;
+  `promptCapabilities.embeddedContext: true`, image and audio false; `mcpCapabilities: {http, sse}`;
+  and an `_meta` block advertising `x.ai/hooks` with blocking events `pre_tool_use`, `stop`,
+  `subagent_stop` and decisions `deny`, `block`. `authMethods`: `cached_token`, `grok.com`.
+  **`session/new` at 1.0.13 returns `sessionId`, `models` and `_meta` — no `modes` and no
+  `configOptions`.** The frame this adapter's header quotes (a `modes{currentModeId:"agent"}`
+  block) was 1.0.4's; at 1.0.13 the server advertises no mode at all, so what `session/set_mode`
+  does for the read posture is now an open question (the permissions item below). A fenced
+  brief streamed back as `agent_message_chunk` (853 chunks), beside `agent_thought_chunk`,
+  `tool_call`/`tool_call_update`, `available_commands_update` and `session_info_update`, and
+  resolved `stopReason: end_turn`. **A brief beginning `/` is NOT eaten on this path**: `/help`
+  reached the model as text and was answered with a description of the TUI's slash commands.
+  stderr carried `BatchLogProcessor.ExportError … network error` lines throughout — grok's own
+  OTLP exporter pushing at a collector that was not running (§7.16a), harmless here.
 - [ ] **Grok, a permission request.** A write-posture session asked to run a command off the
   allowlist and to write a file: does `session/request_permission` arrive for either, what
   `optionId`s and `kind`s it offers, and do `allow_once` and `reject_once` do what they say.
-- [ ] **Grok, cost.** Whether anything on the ACP wire — the prompt response's `_meta`, a
-  `session/update` variant — carries `total_cost_usd`. Until it does, the ACP seat shows no cost
-  and the badge says why.
+- [x] **Grok, cost — HALF PAID 2026-09-04 at grok 1.0.13 (5e9a58528b76).** No `total_cost_usd` anywhere. But the
+  prompt response's `_meta` now carries `usage` with `inputTokens`, `outputTokens`,
+  `cachedReadTokens`, `cacheCreationTokens`, `reasoningTokens`, `modelCalls`, `apiDurationMs`,
+  a per-model `modelUsage` map keyed `grok-4.6-build`, and **`costUsdTicks`** (129,988,800 on a
+  two-call turn). That is a cost figure in a unit nobody has measured: a tick could be 1e-9 or
+  1e-8 USD and the two readings differ tenfold, so under §4a.1 the seat may render the TOKEN
+  counts and must keep the cost cell absent until the tick is measured against grok.com's own
+  billing page for the same turn. The adapter header's "no cost, and no token usage anywhere"
+  was true at 1.0.4 and is not true at 1.0.13; the header says so now. Owed: the tick's unit.
 - [ ] **Grok, `session/load`.** A saved id reloaded in a new process, if `loadSession` is
   advertised; the refusal shape if it is not held.
 - [ ] **Antigravity, the stream handshake.** `agy --version`; two turns down one stdin with the
