@@ -42,6 +42,22 @@ func pumpArenaSetup(t *testing.T, m *Model, cmd tea.Cmd) {
 	}
 }
 
+// endArenaSetup stops a setup the way ctrl+c does and then WAITS for its
+// goroutine to exit.
+//
+// The wait is the point. A cancel alone returns while git is still being
+// killed, and a test that then returns hands t.TempDir a directory git still
+// holds. The channel is closed by the goroutine's own defer after its last
+// message, so draining it to the close is the one signal that git has exited
+// and nothing will write into the repository again. The buffer is sized so the
+// goroutine can always reach that close (arenaPrep.ch's doc), which is what
+// makes this drain finite.
+func endArenaSetup(p *arenaPrep) {
+	p.cancel()
+	for range p.ch {
+	}
+}
+
 // raceNow dispatches an /arena draft and drives its setup to completion, so a
 // test can assert against a room whose seats have actually spawned.
 //
@@ -452,6 +468,15 @@ func TestASecondRaceIsRefusedWhileOneIsBeingPrepared(t *testing.T) {
 	if first == nil {
 		t.Fatal("the first setup did not start")
 	}
+	// The test asserts against a setup that is STILL RUNNING, so nothing here
+	// pumps it to its end. Its goroutine is then running `git worktree add`
+	// inside the repository t.TempDir owns when the test returns, and the temp
+	// dir's own cleanup races git for the same directory. Measured: CI on
+	// PR #356 (2026-09-04, the Linux race job) failed this test once with
+	// `TempDir RemoveAll cleanup: unlinkat .../repo/.git: directory not
+	// empty`. Registered AFTER arenaRoom, so it runs BEFORE the temp dir's
+	// cleanup: t.Cleanup runs last-in first-out.
+	t.Cleanup(func() { endArenaSetup(first) })
 
 	m.st.Draft = "/arena and another one"
 	if cmd := m.dispatch(); cmd != nil {
