@@ -9137,7 +9137,7 @@ all seated vendors when only one had a mechanism named.
 | Claude Code | `--disallowedTools <write/exec list>` + `--strict-mcp-config` | `ro:tools` |
 | Codex (macOS/Linux) | `-s read-only`, enforced by the OS sandbox | `ro:enforced` |
 | Codex (Windows) | `-s read-only`, enforced since codex-cli 0.149.1 — before that, **no sandbox**: `-s danger-full-access` was the only mode that could spawn a process there (the 2026-08-29 amendment below) | `ro:enforced` |
-| Antigravity | **no posture flag at all**: `--mode plan --sandbox` were measured not to restrict writes, and were dropped once their only observed effect turned out to be a dead turn (§9.6b) | `unsandboxed` |
+| Antigravity | **no restriction flag at all**: `--mode plan --sandbox` were measured not to restrict writes, and were dropped once their only observed effect turned out to be a dead turn (§9.6b). Since the 2026-09-03 amendment council passes `--add-dir <workspace>` in every posture and `--mode accept-edits` in the write postures, because the cwd is no workspace to this vendor and a write inside a named workspace is auto-denied without the edit grant (§9.59) | `unsandboxed` |
 
 There is no level that renders as an unqualified "read-only", and after the live spike there is
 one that renders as the opposite. Antigravity was asked to write a file under both of its
@@ -9629,6 +9629,12 @@ ADR-008 third and twelfth amendments), and agent-ops ADR-012 rules the same way 
 Deliberately **not** part of this: `--dangerously-skip-permissions`. Dropping a flag that
 restricted nothing and adding one that approves everything are different acts, and the second
 stays refused on both seats that offer it.
+
+**Amended 2026-09-03: two flags come ON, and neither is a restriction.** `--add-dir <workspace>`
+in every posture and `--mode accept-edits` in the write postures. The first names the workspace,
+because the cwd alone is none to this vendor. The second is the vendor's edit-only grant, and
+without it print mode auto-denies every write inside a named workspace. [§9.59](#s9-59) carries
+the measurement. `--dangerously-skip-permissions` stays refused.
 
 <a id="s9-6c"></a>
 
@@ -14735,7 +14741,7 @@ codename and nothing else.
 | codex | codex-cli 0.149.1 | **answered `ZEPHYR-9`, no tool call** — the file reached the model as context |
 | grok | grok 1.0.5 | **answered `ZEPHYR-9`, no tool call**, and named its source on the wire: *"From the always_applied_workspace_rules, the Agents.md file says"* |
 | claude | Claude Code 2.1.251 | **answered `ZEPHYR-9` by going to look** — both trials ran `ls -la` then `cat`, recorded in the probe sessions' own transcripts |
-| agy | 1.1.20 | **unmeasured** — headless agy auto-denies tool turns, and the probe was not run |
+| agy | 1.1.25 | **reads it by going to look**, once `--add-dir` names the tree ([§9.59](#s9-59), 2026-09-03): asked only to create a file, it ran `list_dir` then `view_file AGENTS.md` before writing, and then wrote the file the brief in AGENTS.md asked for. The claude row's fact, not the codex row's. The codename probe itself was not run |
 | cursor | — | **unmeasured** — this seat races over ACP on a throwaway session, and no probe of that path ran |
 
 Two seats demonstrably ingest the file unprompted, which is the bar the sweep set, so the
@@ -18770,3 +18776,84 @@ limit, so the fix was checked against the captured failure and never against a c
 succeeded at 0.151.0. The 0.147.0 fixture still replays green, which is the evidence that the
 success path did not move in the parser. The first live turn after the account has quota is the
 check, and it is the operator's.
+
+<a id="s9-59"></a>
+
+### 9.59 the agy racer wrote its attempt into the vendor's own scratch directory (2026-09-03)
+
+A recorded race (`2026-09-03-rebuttal.jsonl`, turn 9) asked four seats to add `haiku.md`. Claude,
+Codex and Grok wrote the file in their worktrees. The Antigravity column said `no changes
+against 5664d51` and ranked 3rd of 4. Its trace showed why: `write_to_file` on
+`~\.gemini\antigravity-cli\scratch\sailboat-telltales\haiku.md`, then on `~\.gemini\antigravity-cli\scratch\haiku.md`.
+The seat also listed its own scratch directory and read a task log under its own `brain\`
+folder. The rank was honest. The seat never touched its worktree.
+
+#### The measurement
+
+The adapter set `Spec.Dir` to the worktree, and the vendor's `init` line reported that cwd. The
+transcript agy stored for the turn holds the cause, in its own system prompt: *"The user does
+not have any active workspace. If the user's request involves creating a new project, you should
+create a reasonable subdirectory inside the default project directory at
+C:\Users\sanle\.gemini\antigravity-cli\scratch."* Every past headless conversation on this box
+that had no `--add-dir` carried the same sentence, back to the first arena on 2026-08-08. The
+conversations that did name an active workspace were the interactive ones, opened in `~`.
+
+Eight probes at agy 1.1.25, each one `agy --output-format stream-json --disable-slash-commands
+--print-timeout 3m … -p "<create probe.md, report the paths>"` from the named directory:
+
+| cwd | extra flags | where `probe.md` landed | turn |
+| --- | --- | --- | --- |
+| arena worktree (`.git` is a file) | none | `~\.gemini\antigravity-cli\scratch` | SUCCESS |
+| the plain scratch repository (`.git` is a directory) | none | scratch | SUCCESS |
+| a directory with no `.git` | none | scratch | SUCCESS |
+| `code\telltale`, an exact `trustedWorkspaces` entry | none | scratch | SUCCESS |
+| arena worktree | `--mode accept-edits` | scratch | SUCCESS |
+| seat worktree | `--add-dir <cwd>` | **nowhere**: `write_to_file` reported DONE, no file, stderr `a tool required the "write_file" permission that headless mode cannot prompt for, so it was auto-denied` | CANCELED, empty response |
+| seat worktree | `--add-dir <cwd> --mode accept-edits` | **the worktree** | SUCCESS |
+| arena worktree | `--add-dir <cwd> --mode accept-edits --input-format stream-json`, one user line on stdin | **the worktree** | SUCCESS |
+
+A ninth run resumed the CANCELED conversation with `--conversation <id> --add-dir <cwd> --mode
+accept-edits` and asked for a second line. It edited the file in the worktree, echoed the same
+id, and reported `num_turns: 2`.
+
+So two facts, and each one needs its own flag. The cwd is no workspace to this vendor. Neither
+git shape nor the trust list changes that, and `--add-dir` is the flag that names one. A write
+inside a named workspace needs a permission that print mode cannot ask for, and `--mode
+accept-edits` is the vendor's edit-only grant. A write into the vendor's own scratch directory
+never needed the grant, which is why the defect looked like a wrong directory and not like a
+denied write.
+
+#### The fix
+
+`baseArgs` in `vendors/agy.go` takes the workspace and the posture. It passes `--add-dir
+<workspace>` in every posture, and `--mode accept-edits` in the write postures. Both precede
+`-p`, by the adapter's standing rule. The stream-json session builds from the same function.
+`PostureWriteGated` takes the write argv: this seat has no gate channel, and the posture
+contract says a gated seat may do anything write mode allows.
+
+The read posture keeps the workspace named and the edits unaccepted. That is the closest thing
+to a read posture this vendor has offered: the one in-workspace write measured under it was
+denied. **The badge does not move.** A single denied write is not a sandbox. `run_command`
+still runs under the operator's own allow rules in `settings.json`, and a write outside the named
+workspace still lands, so the column stays `unsandboxed` and its detail now says which two flags
+council passes and why. `--dangerously-skip-permissions` stays refused: the edit grant is not
+the approve-everything class ADR-008's fifth and seventh amendments refuse.
+
+One side finding, recorded in [§9.37](#s9-37)'s AGENTS.md table: with a workspace named, the
+seat ran `list_dir` and then `view_file AGENTS.md` before it wrote, on a brief that never named
+the file, and then wrote the file the brief in AGENTS.md asked for. That is the Claude row's
+fact. The codename probe was not run.
+
+#### Verification
+
+`go vet ./...`, `go build ./cmd/telltale`, `go test ./...`. `TestAgyNamesItsWorkspaceOnArgv` pins
+`--add-dir <workspace>` ahead of `-p` on the first turn and the resume, and pins that an empty
+workspace sends nothing. `TestAgyAcceptsEditsOnlyWhenTheRoomWrites` pins the grant on both
+write postures, on both paths, and its absence on read. The two posture tests now pin that the
+grant is the WHOLE difference between the postures. `TestAgyStreamSessionKeepsEveryFlagAndNoPrompt`
+pins both flags on the stream session.
+
+**Not verified here: a live `/arena` race through the room.** The council TUI takes no scripted
+input, so the racer's exact argv was run by hand in the arena worktree instead (rows seven and
+eight above), and `git status` in that worktree shows the files against `5664d51`. The first
+`/arena` after this lands is the check, and it is the operator's.

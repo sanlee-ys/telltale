@@ -688,7 +688,11 @@ func fallbackClaim(v model.VendorID, windows, write bool) SandboxClaim {
 				"permission mode and tool list were identical to a run without them. " +
 				"Council no longer passes either flag: their only observed effect was " +
 				"a turn that died with an empty column when the agent reached for a " +
-				"shell. The workspace above is the containment, not a flag",
+				"shell. The workspace above is the containment, not a flag — and " +
+				"council names it with --add-dir, because to this vendor the cwd " +
+				"alone is no workspace at all (measured 2026-09-03). A writing room " +
+				"adds --mode accept-edits, the vendor's edit-only grant; without it " +
+				"print mode auto-denies every write inside the named tree",
 		}
 	case model.VendorGrok:
 		return SandboxClaim{
@@ -942,10 +946,15 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 				"permission mode and tool list were identical to a run without them. " +
 				"Council no longer passes either flag: their only observed effect was " +
 				"a turn that died with an empty column when the agent reached for a " +
-				"shell. The workspace above is the containment, not a flag. Since " +
+				"shell. The workspace above is the containment, not a flag — and " +
+				"council names it with --add-dir, because to this vendor the cwd " +
+				"alone is no workspace at all (measured 2026-09-03). A writing room " +
+				"adds --mode accept-edits, the vendor's edit-only grant; without it " +
+				"print mode auto-denies every write inside the named tree. Since " +
 				"2026-09-02 the seat is one `agy --input-format stream-json` process " +
-				"kept open across turns, read from the 1.1.24 docs and not yet driven; " +
-				"nothing on that channel restricts it either",
+				"kept open across turns, read from the 1.1.24 docs and driven once " +
+				"on 2026-09-03 with those two flags; nothing on that channel " +
+				"restricts it either",
 		}
 	case model.VendorCursor:
 		// Re-measured end to end on 2026-08-08 against the ACP server (§9.36),

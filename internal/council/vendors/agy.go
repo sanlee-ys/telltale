@@ -91,18 +91,47 @@ func (Antigravity) ID() model.VendorID { return model.VendorAntigravity }
 // amendments), and the fleet contract rules the same way independently:
 // agent-ops ADR-012, capability parity with guard wiring as the control.
 //
-// The posture argument is now unused here, and that is itself the statement:
-// this vendor's invocation does not vary by posture. It is kept in the signature
-// because every adapter takes one and a seat that quietly stopped accepting the
-// room's posture would be harder to notice than one that accepts it and has
-// nothing to do with it. TestAgyAsksForNothingInEitherPosture pins that.
+// **`--add-dir <workspace>` is passed in every posture, and `--mode accept-edits`
+// in the write postures** (design.md §9.59, measured 2026-09-03 at agy 1.1.25).
+// Each flag closes one half of one defect. An /arena racer wrote its haiku into
+// agy's own scratch directory, and its column said "no changes".
+//
+//   - The cwd is NOT a workspace to agy. Spec.Dir was the worktree, the init
+//     line reported that cwd, and the system prompt agy built for the turn said
+//     "The user does not have any active workspace" and pointed new files at
+//     ~/.gemini/antigravity-cli/scratch. Five probes wrote to scratch: an arena
+//     worktree, a plain repository, a directory with no .git, a directory
+//     named verbatim in settings.json's trustedWorkspaces, and the worktree
+//     under --mode accept-edits alone. --add-dir names the workspace. With it
+//     the prompt lists the tree as the active workspace, and the write targets
+//     the tree.
+//   - A write INSIDE a named workspace needs a permission that print mode
+//     cannot ask for. With --add-dir alone the write_to_file step reported
+//     DONE, no file landed, stderr said `a tool required the "write_file"
+//     permission that headless mode cannot prompt for, so it was auto-denied`,
+//     and the turn ended status CANCELED with an empty response. --mode
+//     accept-edits is the vendor's edit-only grant, the Claude seat's
+//     acceptEdits in this CLI's spelling. With both flags the file landed on
+//     the -p path, on a --conversation resume (num_turns 2, same id), and on
+//     the --input-format stream-json session.
+//
+// So the postures now differ by exactly one pair of tokens. The read posture
+// keeps the workspace named and the edits unaccepted. That is the closest
+// thing to a read posture this vendor has offered: the one in-workspace write
+// measured under it was denied. The badge does not move on that single trial.
+// A run_command still runs under the operator's own allow rules, and a write
+// outside the workspace still lands, so the column stays `unsandboxed`.
+// PostureWriteGated takes the write argv: this seat has no gate channel, and
+// the posture contract says a gated seat may do anything write mode allows.
+// TestAgyAsksForNothingInEitherPosture pins the pair, and nothing else.
 //
 // Deliberately still absent: --dangerously-skip-permissions. Dropping a flag
 // that restricted nothing is not the same act as adding one that approves
 // everything, and ADR-008's fifth and seventh amendments refuse that whole class
-// on both seats that offer it.
-func (Antigravity) baseArgs(_ Posture) []string {
-	return []string{
+// on both seats that offer it. accept-edits is not that class: it is the
+// edit-only grant, and a shell command still meets the vendor's own rules.
+func (Antigravity) baseArgs(workspace string, p Posture) []string {
+	args := []string{
 		"--output-format", "stream-json",
 		// A brief is arbitrary user text and may legitimately contain a line
 		// starting with "/". Without this, agy expands that as a slash command or
@@ -142,13 +171,26 @@ func (Antigravity) baseArgs(_ Posture) []string {
 		// must precede -p or it becomes part of the prompt.
 		"--print-timeout", "30m",
 	}
+	if workspace != "" {
+		// "Add a directory to the workspace (repeatable)" — `agy --help`,
+		// 1.1.25. The one flag that makes Spec.Dir mean anything to this
+		// vendor; see the type comment above.
+		args = append(args, "--add-dir", workspace)
+	}
+	if p != PostureRead {
+		// "Set the agent execution mode for this session (accept-edits, plan)"
+		// — the same help text. The edit-only grant, and the only one council
+		// asks for.
+		args = append(args, "--mode", "accept-edits")
+	}
+	return args
 }
 
 func (a Antigravity) FirstTurn(prompt, workspace, binary string, p Posture) (runner.Spec, error) {
 	return runner.Spec{
 		Vendor: a.ID(),
 		Binary: binary,
-		Args:   append(a.baseArgs(p), "-p", prompt),
+		Args:   append(a.baseArgs(workspace, p), "-p", prompt),
 		// StdinPrompt stays empty: agy does not read the prompt from stdin.
 		Dir: workspace,
 	}, nil
@@ -166,8 +208,10 @@ func (a Antigravity) NextTurn(prompt, workspace, binary, sessionID string, p Pos
 		// captured conversation id echoed the same conversation_id, reported
 		// num_turns 2, continued step_index from the first turn rather than
 		// restarting at 0, and correctly answered a question that only the prior
-		// turn's content could answer.
-		Args: append(a.baseArgs(p), "--conversation", sessionID, "-p", prompt),
+		// turn's content could answer. --add-dir and --mode compose with it:
+		// measured 2026-09-03, a resume carrying both edited a file in the
+		// named workspace and reported num_turns 2 on the same id.
+		Args: append(a.baseArgs(workspace, p), "--conversation", sessionID, "-p", prompt),
 		Dir:  workspace,
 	}, nil
 }
