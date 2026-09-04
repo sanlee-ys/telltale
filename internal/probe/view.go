@@ -17,6 +17,12 @@ import (
 // string or a vendor's own failure sentence, is measured in the drive and
 // arrives here as data, which is the same rule the room's own Render and the
 // preflight's both keep.
+//
+// The title and the seat header keep `doctor`'s own dash separator, and every
+// row below sits on `doctor`'s grid. That is deliberate rather than copied: a
+// reader meets these two reports side by side, `doctor` points at this one and
+// this one points back, and a second layout for the same kind of statement
+// reads as a statement about a different kind of thing.
 
 const (
 	// The two fixed columns, wide enough for the longest of each ("handshake",
