@@ -1269,6 +1269,18 @@ type State struct {
 
 	// Notice is a transient one-line message in the footer.
 	Notice string
+	// RoomNote is a room fact that is too long for the footer, drawn as the last
+	// segment of the room line above the grid (roomline.go).
+	//
+	// It exists because the footer's notice is ONE truncated line shared with
+	// the mode hints, and a measured figure that disappears at a hundred columns
+	// is not a stated figure. The room line is full width and sheds whole
+	// segments rather than cutting a sentence in half, so a fact that must be
+	// read in full has a home that can hold it.
+	//
+	// Transient, like Notice, and cleared by the same moments. Nothing here is
+	// per seat: a fact about one seat belongs in Column.Note.
+	RoomNote string
 
 	// Help is which page of the help panel is open, if any.
 	Help HelpPage

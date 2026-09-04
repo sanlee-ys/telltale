@@ -2,22 +2,22 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   UNREAD   2 Codex   4 Grok failed                                                                                      
   ⚠ 1 seat is not on screen: Cursor (installed but not drivable)  │  --vendor all seats them anyway                     
+  1 seat sat turn 2 out: Antigravity                                                                                    
   › tighten the parser's error path                                                                                     
                                                                                                                         
 ▌ ▸ 1 CC Cl… ⠋ streaming 30s  │    2 CX Codex ✓ done 12s    │    3 AG Antigra… ✓ done 6s  │    4 GR Grok ✗ failed 2s    
 ▌   ro:tools  tokens          │    ro:enforced  final only  │    unsandboxed  final only  │    unsandboxed  tokens      
-▌ ↑ 3 more above  │  turn 1   │                             │                             │                             
-▌ Claude Code.                │                             │                             │                             
+▌ ↑ 4 more above  │  turn 1   │                             │                             │                             
 ▌ turn 2  ──────────────────  │                             │                             │                             
 ▌ ⚙ Read: …/parser.go ✓       │                             │                             │                             
 ▌ ⚙ Bash: go test …/parser ✗  │                             │                             │                             
 ▌     exit status 1           │  turn 1  ─────────────  9s  │                             │                             
-▌ ⚙ Edit: …/parser.go         │  › say your seat name       │  turn 1  ─────────────────  │  turn 2  ─────────────────  
-▌                             │                             │  › say your seat name       │                             
-▌ Reading the parser first.   │  Codex.                     │                             │                             
-▌                             │  turn 2  ─────────────────  │  Antigravity.               │  ⚠ You've hit your usage    
+▌ ⚙ Edit: …/parser.go         │  › say your seat name       │                             │  turn 2  ─────────────────  
+▌                             │                             │                             │                             
+▌ Reading the parser first.   │  Codex.                     │  turn 1  ─────────────────  │                             
+▌                             │  turn 2  ─────────────────  │  › say your seat name       │  ⚠ You've hit your usage    
 ▌ The error path drops the    │  Done: the line number is   │                             │    limit.                   
-▌ line number;                │  carried on the error now.  │  ○ not addressed in turn 2  │    exit status 1            
+▌ line number;                │  carried on the error now.  │  Antigravity.               │    exit status 1            
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  ›                                                                                                               │  
   ╰─────────────────────────────────────────────────────────────────────────────────────  VIEW  │  hosted pid 4242  ─╯  

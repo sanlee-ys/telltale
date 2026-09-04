@@ -36,7 +36,7 @@ import (
 // inventing a charge, and a room that implied the first brief was now free
 // would be hiding one. Both figures carry a leading `~`: one measurement, of
 // one one-word turn, extrapolated across seats. Which surface carries which
-// half is decided further down, at rebuildCostDetail.
+// half is decided further down, at rebuildCostRoom.
 //
 // WHAT IT DOES NOT DO. It starts no process the first brief was not going to
 // start anyway — the rebuild changes WHEN, never WHETHER — and it persists
@@ -286,14 +286,27 @@ func (m *Model) applyRebuildEvent(c *Column, ev runner.Event) {
 		m.adoptSession(c, ev.SessionID)
 		if ev.SessionID == asked {
 			rs.state = rebuildDone
-			// "on a NEW process" is the whole point of the sentence. The
-			// reattach card above it says the thread came back, which is true;
-			// this says what did NOT come back. Together they state both halves,
-			// and neither alone would.
-			c.Note = "this seat was rebuilt — the saved thread came back, on a NEW process. " +
-				"the one you left was ended when the room closed."
-			c.NoteDetail = rebuildCostDetail
-			c.NoteCalm = true
+			// A seat that was rebuilt SUCCESSFULLY now carries no note at all
+			// (from the LEDGER lane, roomline.go). The sentence here was word for
+			// word the same in every rebuilt column, and the cost block under it
+			// was the same two wrapped rows again — one room fact printed four
+			// times at room open. rebuildSettledNotice already states both halves
+			// the sentence carried, once: how many seats came back, and that they
+			// are NEW processes rather than the ones you left. The measured
+			// startup cost moved to the room line with it.
+			//
+			// The FAILURE notes below are untouched, and that is the whole shape
+			// of this: `this seat could not be rebuilt: <why>` is true of one seat
+			// and of no other, so it stays in the seat. 4a.1 is strengthened
+			// rather than weakened — `rebuilt` and `could not be rebuilt` no
+			// longer render as two notes a reader has to compare word by word;
+			// one is a note and the other is silence with a room line above it.
+			//
+			// CLEARED, not merely left unwritten. startRebuild writes the word
+			// `rebuilding` on this column, and a settled seat that kept it would
+			// say it is still loading a process that has already answered, which
+			// is the exact claim the honesty rung forbids.
+			c.Note, c.NoteDetail, c.NoteCalm = "", "", false
 			return
 		}
 		// The vendor answered somewhere else. adoptSession has already written
@@ -375,6 +388,12 @@ func (m *Model) settleRebuild() {
 		return
 	}
 	m.rebuild.settled = true
+	// The measured startup cost rides on the ROOM LINE now rather than under
+	// every rebuilt column (applyRebuildEvent). It cannot ride on the notice
+	// beside the sentence below: that line is the footer's, it is truncated, and
+	// this file's own comment says a cost that disappears at a hundred columns is
+	// not a stated cost. RoomNote is full width and sheds whole (roomline.go).
+	m.st.RoomNote = rebuildCostRoom
 	// REPLACES the reattach sentence rather than joining it, and that is the
 	// one place this file spends something.
 	//
@@ -422,8 +441,7 @@ func (m *Model) endRebuild() { m.rebuild = nil }
 //     that sentence holds clauses shown exactly once anywhere (a workspace that
 //     no longer exists, a posture the saved room ran under).
 
-// rebuildCostDetail is the measured cost, stated per seat, under the note that
-// says the seat was rebuilt.
+// rebuildCostRoom is the measured cost of a rebuild, stated about the ROOM.
 //
 // BOTH HALVES OR NEITHER. runner/session.go measured one one-word turn at about
 // 25 seconds and about $0.23, nearly all of it startup. The rebuild moves the
@@ -435,8 +453,11 @@ func (m *Model) endRebuild() { m.rebuild = nil }
 // Both figures carry a leading `~` and the sentence names what was measured,
 // because one turn on one seat extrapolated across a room is an estimate and
 // this repository marks estimates rather than rounding them into facts.
-const rebuildCostDetail = "its ~25s of startup is spent now instead of on your first brief, " +
-	"which still bills its ~$0.23 (measured once, on a one-word turn)."
+// Said in the PLURAL and once, rather than in the singular under every rebuilt
+// column: the figures are per seat and they are identical for every seat, which
+// makes them a room fact (from the LEDGER lane, roomline.go).
+const rebuildCostRoom = "~25s of startup each, spent now instead of on your first brief, " +
+	"still billing ~$0.23 a seat (measured once, on a one-word turn)."
 
 // rebuildStartNotice is the room fact while the seats are coming back.
 //

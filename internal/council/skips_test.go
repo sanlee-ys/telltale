@@ -77,19 +77,34 @@ func TestABrokenRunStartsANewLineInPlace(t *testing.T) {
 	}
 }
 
-// TestTheLiveSkipKeepsItsOwnLine. The run above it is history; this one is the
-// turn happening now, and it is the one a reader is deciding whether to act on.
-func TestTheLiveSkipKeepsItsOwnLine(t *testing.T) {
-	got := skipRender(skipColumn([]int{1}, 7, true), 7)
+// TestTheLiveSkipMovedToTheRoomLine. The run above it is history and it stays
+// in the column: it differs from seat to seat and it is a gap in THIS column's
+// own reading order. The live skip left, and that is the LEDGER lane's rule:
+// which seats the current turn did not reach is one fact about one dispatch, and
+// the grid printed it once per idle column.
+//
+// Nothing is lost. satOutFact says it once above the grid and NAMES every seat,
+// so a reader learns from one line what used to take three column visits.
+func TestTheLiveSkipMovedToTheRoomLine(t *testing.T) {
+	c := skipColumn([]int{1}, 7, true)
+	got := skipRender(c, 7)
 	if !strings.Contains(got, "not addressed in turns 2–6") {
 		t.Errorf("the finished skips did not coalesce:\n%s", got)
 	}
-	if !strings.Contains(got, "not addressed in turn 7") {
-		t.Errorf("the live skip lost its own line:\n%s", got)
+	if strings.Contains(got, "not addressed in turn 7") {
+		t.Errorf("the column still prints the live skip:\n%s", got)
 	}
-	// And the coalesced run stops one short of it rather than saying it twice.
+	// And the coalesced run still stops one short of it rather than swallowing it.
 	if strings.Contains(got, "turns 2–7") {
 		t.Errorf("the run swallowed the live turn:\n%s", got)
+	}
+	// The room says it instead, and it names the seat.
+	st := room()
+	st.Turn = 7
+	st.Columns = []Column{c}
+	line := strings.Join(roomLines(st, 160, GlyphsFor(false)), " ")
+	if !strings.Contains(line, "sat turn 7 out") || !strings.Contains(line, c.Label) {
+		t.Errorf("the room line does not name the seat that sat turn 7 out: %q", line)
 	}
 }
 
@@ -181,8 +196,8 @@ func TestSkipsWearTheIdleMarkNotTheWarning(t *testing.T) {
 				t.Errorf("ascii=%v: a skip wore the warning mark %q: %q", ascii, g.Warn, l)
 			}
 		}
-		if seen != 2 {
-			t.Errorf("ascii=%v: %d skip lines, want the coalesced run and the live one", ascii, seen)
+		if seen != 1 {
+			t.Errorf("ascii=%v: %d skip lines, want the coalesced run (the live skip is on the room line)", ascii, seen)
 		}
 	}
 }

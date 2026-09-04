@@ -243,8 +243,9 @@ type Layout struct {
 	Tabs bool
 	// Prompt is how many rows the compose area gets, at least 1.
 	Prompt int
-	// Notice is 1 when a row under the header names the seats that were
-	// collapsed out of the grid, 0 otherwise.
+	// Notice is how many rows the ROOM LINE takes under the header: the seats
+	// that are not on screen, the seats that sat the live turn out, and a room
+	// fact too long for the footer (roomline.go). One row, two, or none.
 	Notice int
 	// NeedsYou is 1 when a row under the header names the seats a pending
 	// approval gate is stopped on (§9.40), 0 otherwise.
@@ -269,8 +270,15 @@ type layoutInput struct {
 	Expanded bool
 	// Composer is how many rows the draft wants, before the height floor.
 	Composer int
-	// Notice reports that the collapsed-seat line is on screen.
-	Notice bool
+	// Notice is how many rows the ROOM LINE takes: the seats that are not on
+	// screen, the seats that sat the live turn out, and a room fact too long for
+	// the footer (roomline.go). One row, two, or none.
+	//
+	// A count rather than the bool it was, because the room line now carries
+	// several facts and a room with a collapsed seat and a rebuild's cost needs
+	// two rows to state them all. roomLines caps it, so this can never grow past
+	// maxRoomRows.
+	Notice int
 	// NeedsYou reports that the needs-you strip has at least one seat to name
 	// (§9.40). One row or none — the strip sheds rather than wraps, so unlike
 	// Band there is no height to pass in here.
@@ -354,9 +362,7 @@ func resolveLayoutIn(in layoutInput) Layout {
 	if l.Tabs {
 		rows++
 	}
-	if in.Notice {
-		rows++
-	}
+	rows += in.Notice
 	// The needs-you strip costs a row and, unlike the band below it, it does NOT
 	// yield (§9.40).
 	//
@@ -417,9 +423,7 @@ func resolveLayoutIn(in layoutInput) Layout {
 	if l.Prompt < 1 {
 		l.Prompt = 1
 	}
-	if in.Notice {
-		l.Notice = 1
-	}
+	l.Notice = in.Notice
 
 	l.Body = in.Height - rows - l.Prompt
 	if l.Body < 1 {

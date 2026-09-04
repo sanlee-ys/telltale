@@ -219,7 +219,11 @@ func TestHostedTurnDrawsTheTraceTheHistoryAndTheClock(t *testing.T) {
 	golden(t, "hosted-turn", got)
 	// The card wraps at the column's width, so the note is asserted by a
 	// fragment that sits inside one row.
-	for _, want := range []string{"turn 2", "streaming 30s", "done 12s", "not addressed in turn 2",
+	// `sat turn 2 out` rather than `not addressed in turn 2`: the live skip is a
+	// fact about the dispatch, so it prints once on the room line above the grid
+	// and names the seat (roomline.go, from the LEDGER lane). The column keeps
+	// every historical run.
+	for _, want := range []string{"turn 2", "streaming 30s", "done 12s", "sat turn 2 out: ",
 		"hit your usage", "exit status 1"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the hosted turn does not draw %q:\n%s", want, got)

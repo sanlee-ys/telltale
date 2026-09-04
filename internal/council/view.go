@@ -47,8 +47,11 @@ func Render(st State, sty Styles, g Glyphs) string {
 		b.WriteString(fit(framePadStr+needsYouLine(st, st.Width-2*framePad, sty, g), st.Width))
 		b.WriteString("\n")
 	}
-	if lay.Notice > 0 {
-		b.WriteString(fit(framePadStr+noticeLine(st, sty, g, st.Width-2*framePad), st.Width))
+	// The room line, one row or two (roomline.go). It is the row the
+	// collapsed-seat notice always owned, and the collapsed-seat sentence is now
+	// its first fact rather than its only one.
+	for _, l := range roomLines(st, st.Width-2*framePad, g) {
+		b.WriteString(fit(framePadStr+noticeLine(st, l, sty, g, st.Width-2*framePad), st.Width))
 		b.WriteString("\n")
 	}
 	// The live turn's brief, once, above the columns that were asked it (§9.30).
@@ -156,7 +159,7 @@ func layoutFor(st State, g Glyphs) Layout {
 		Cols:     cols,
 		Expanded: st.Expanded,
 		Composer: composerRows(st, g),
-		Notice:   collapsedNotice(st, g) != "",
+		Notice:   len(roomLines(st, st.Width-2*framePad, g)),
 		Primary:  primary,
 		Bias:     bias,
 		Band:     band,
@@ -421,7 +424,7 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 	return framePadStr + left + mid + strings.Repeat(" ", gap) + right + framePadStr
 }
 
-// noticeLine is the collapsed-seat notice, truncated honestly.
+// noticeLine draws one room-line row, truncated honestly.
 //
 // It used to be handed to fit, which cuts without saying so: at 120 columns the
 // reference machine's notice lost the last word of "--vendor all seats them
@@ -431,8 +434,8 @@ func header(st State, lay Layout, sty Styles, g Glyphs) string {
 //
 // The warning mark carries the hue and the words carry the fact, the same split
 // the activity trace's outcome marks use.
-func noticeLine(st State, sty Styles, g Glyphs, w int) string {
-	n := truncate(collapsedNotice(st, g), w, g.Ellipsis)
+func noticeLine(st State, line string, sty Styles, g Glyphs, w int) string {
+	n := truncate(line, w, g.Ellipsis)
 	if rest, ok := strings.CutPrefix(n, g.Warn); ok {
 		return sty.SevWarn.Render(g.Warn) + noticeProse(st, rest, sty)
 	}
@@ -2090,16 +2093,21 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 	if run {
 		out = append(out, skipSpan(from, to, w, sty, g)...)
 	}
-	if c.Note != "" {
+	if c.Note != "" && !c.Skipped {
+		// The LIVE skip no longer prints here (from the LEDGER lane, roomline.go).
+		// Which seats the current turn did not reach is one fact about one
+		// dispatch, and the grid printed it once per idle column — three columns
+		// each saying `not addressed in turn 12` about the same turn. satOutFact
+		// says it once, above the grid, and NAMES every seat, so nothing is lost
+		// and the reader no longer has to visit three columns to assemble one
+		// sentence.
+		//
+		// The coalesced historical run above is untouched. `not addressed in turns
+		// 10-11` differs from seat to seat and it is a gap in THAT column's own
+		// reading order, so no room line can carry it. Column.Skipped keeps its
+		// recorded reason for the run; only the live line moved.
 		out = append(out, "")
-		if c.Skipped {
-			// The LIVE skip keeps a line of its own — the coalesced run above is
-			// history, this is the turn happening now — and it is drawn as a skip
-			// rather than as a note, for the reason Column.Skipped records.
-			out = append(out, skipLine(c.Note, w, sty, g)...)
-		} else {
-			out = append(out, noteCard(c.Note, c.NoteDetail, c.NoteCalm, w, sty, g)...)
-		}
+		out = append(out, noteCard(c.Note, c.NoteDetail, c.NoteCalm, w, sty, g)...)
 	}
 	if c.Cleared {
 		// LAST, below everything, because that is when it happened: the turns

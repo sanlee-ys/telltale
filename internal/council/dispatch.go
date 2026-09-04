@@ -985,6 +985,12 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 		m.setDraft("")
 	}
 	m.st.Notice = ""
+	// The room line's own transient goes with it (roomline.go). The rebuild's
+	// measured cost answers "what did reopening this room cost", and the first
+	// brief is the moment that question is answered: from here the room is
+	// spending on this turn instead. A cost that stayed would be the finding
+	// this pass deletes — one room fact on every frame of a long session.
+	m.st.RoomNote = ""
 	if len(busy) > 0 {
 		// A partial send says so: who took the brief and who was skipped, and
 		// why. Measured, both halves — the seats in ts.live and the seats whose

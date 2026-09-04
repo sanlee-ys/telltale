@@ -1,5 +1,6 @@
   council READ  │  ~/code/telltale                                                  turn 2  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1 seat sat turn 2 out: Codex                                                                                          
 ▌ ▸ 1 CC Claude Code  ───  ⠋ streaming  │    2 CX Codex  ─────────────  ✓ done  │    3 AG Antigravity  ────  ⠋ waiting  
 ▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
                                                                                                                         
@@ -15,9 +16,8 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-▌                                       │  An older answer from turn 1.         │                                       
-▌                                       │                                       │                                       
-▌ Looking at the resume path now.       │  ○ not addressed in turn 2            │  working — the reply arrives whole.   
+                                                                                                                        
+▌ Looking at the resume path now.       │  An older answer from turn 1.         │  working — the reply arrives whole.   
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  ›                                                                                                               │  
   ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  

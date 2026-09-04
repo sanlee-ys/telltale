@@ -1,8 +1,11 @@
   council READ  |  ~/code/telltale                                                  turn 8  |  3/3 seated  |  no brief  
 ========================================================================================================================
+  2 seats sat turn 8 out: Codex, Antigravity                                                                            
 [ ] 1 CC Claude Code  -------------------------------------  - streaming  |  2 CX + done         |  3 AG ! cancelled    
 [   ro:tools  tokens                                                      |  ro:requested        |  unsandboxed         
-[                                                                         |  ^ 2  |  turn 1      |                      
+[                                                                         |                      |                      
+[                                                                         |  turn 1  ----------  |                      
+[                                                                         |  : brief for turn 1  |                      
 [                                                                         |                      |                      
 [                                                                         |  answer to turn 1    |                      
 [                                                                         |  . not addressed in  |                      
@@ -11,13 +14,10 @@
 [                                                                         |  : brief for turn 3  |  : brief for turn 2  
 [                                                                         |                      |                      
 [                                                                         |  answer to turn 3    |  answer to turn 2    
-[                                                                         |                      |                      
-[                                                                         |  last: turn 3 +      |  last: turn 2 !      
+[ turn 8  --------------------------------------------------------------  |                      |                      
+[ : and now the resume path                                               |  last: turn 3 +      |  last: turn 2 !      
 [                                                                         |  . not addressed in  |  . not addressed in  
-[ turn 8  --------------------------------------------------------------  |    turns 4-7         |    turns 3-7         
-[ : and now the resume path                                               |                      |                      
-[                                                                         |  . not addressed in  |  . not addressed in  
-[ Reading resume.go.                                                      |    turn 8            |    turn 8            
+[ Reading resume.go.                                                      |    turns 4-7         |    turns 3-7         
   +------------------------------------------------------------------------------------------------------------------+  
   |  :                                                                                                               |  
   +---------------------------------------------------------------------------------------------------------  VIEW  -+  
