@@ -46,9 +46,13 @@ import (
 //     and it is NOT the same fact as the other two: this seat discovered the
 //     file in a directory holding one file, which is the easiest possible case.
 //     Nothing here claims it auto-loads AGENTS.md.
-//   - agy (Antigravity) — UNMEASURED. Headless agy auto-denies tool turns at
-//     1.1.20, and the probe was not run. The room claims nothing about this
-//     seat, per CapNone's rule pointed at a vendor instead of a field.
+//   - agy (Antigravity) — READS IT BY GOING TO LOOK, once `--add-dir` names
+//     the tree (agy 1.1.25, 2026-09-03, §9.59). Asked only to create a file,
+//     the seat ran `list_dir` on the worktree and then `view_file` on
+//     AGENTS.md before it wrote anything, and it went on to write the file
+//     the brief in AGENTS.md asked for. That is the Claude row's fact, not
+//     the codex row's: a real read of a real file, not context ingested
+//     unprompted. The codename probe itself was not run on this seat.
 //   - cursor — UNMEASURED for the same reason nothing else about this seat is
 //     assumed: it races over ACP through a throwaway session (§9.37's cursor
 //     amendment), and no probe of that path ran.

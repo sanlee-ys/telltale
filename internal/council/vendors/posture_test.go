@@ -184,12 +184,19 @@ func TestCodexResumeCarriesTheSamePostureAsSpawn(t *testing.T) {
 // on 2026-08-04 (ADR-008, seventeenth amendment; design.md §9.6b's open
 // decision, closed).
 //
-// So this seat's invocation no longer varies by posture at all, and this test
-// pins that rather than the old asymmetry: a flag reappearing on either side is
-// council asking for a restriction it has measured to be worthless and seen kill
-// a turn. The badge is unaffected either way — it was already `unsandboxed`,
+// So this seat asks for no RESTRICTION in either posture, and this test pins
+// that rather than the old asymmetry: a refuted flag reappearing on either side
+// is council asking for a restriction it has measured to be worthless and seen
+// kill a turn. The badge is unaffected either way — it was already `unsandboxed`,
 // because a claim about what restricts this column was never a claim about which
 // flags were sent.
+//
+// Since 2026-09-03 the postures DO differ, by exactly one pair of tokens, and
+// in the other direction: the write posture carries `--mode accept-edits`, the
+// vendor's edit-only grant, because without it every write inside a named
+// workspace is auto-denied in print mode (agy.go, design.md §9.59). The read
+// posture does not carry it. This test pins that the pair is the WHOLE
+// difference, so a restriction cannot come back in under cover of the grant.
 func TestAgyAsksForNothingInEitherPosture(t *testing.T) {
 	read, _ := Antigravity{}.FirstTurn("brief", `C:\ws`, "agy.exe", PostureRead)
 	if slices.Contains(read.Args, "--sandbox") || slices.Contains(read.Args, "plan") {
@@ -211,8 +218,16 @@ func TestAgyAsksForNothingInEitherPosture(t *testing.T) {
 	if slices.Contains(write.Args, "--sandbox") || slices.Contains(write.Args, "plan") {
 		t.Error("write posture kept flags that restrict terminals without bounding writes")
 	}
-	if !slices.Equal(read.Args, write.Args) {
-		t.Errorf("this seat's postures diverged: read %v vs write %v", read.Args, write.Args)
+	// The write posture is the read posture plus the edit grant, and nothing
+	// else. Remove the pair and the argv must be identical.
+	stripped := slices.Clone(write.Args)
+	if i := slices.Index(stripped, "--mode"); i >= 0 && i+1 < len(stripped) && stripped[i+1] == "accept-edits" {
+		stripped = slices.Delete(stripped, i, i+2)
+	} else {
+		t.Errorf("write posture lacks `--mode accept-edits`; every in-workspace write is auto-denied without it: %v", write.Args)
+	}
+	if !slices.Equal(read.Args, stripped) {
+		t.Errorf("this seat's postures diverged by more than the edit grant: read %v vs write %v", read.Args, write.Args)
 	}
 	// The escape hatch stays unmade in BOTH postures. agy's print mode
 	// auto-denies approval-needing tools and points at this flag; passing it
@@ -319,9 +334,11 @@ func TestLiveSeatsKeepPromptTextOffArgvInEveryPosture(t *testing.T) {
 				}
 			}
 		}
-		// And the posture does not change the argv on any of the three: it
-		// rides the protocol (codex, grok) or is unused (agy), so a respawn
-		// on a posture change is the room's rule rather than the process's.
+		// And the posture does not change the argv on codex or grok: it rides
+		// the protocol there. On agy it IS argv since 2026-09-03 (`--mode
+		// accept-edits` in the write postures, agystream_test.go), and the
+		// room's respawn-on-posture-change rule (seatProcess) is what carries
+		// it, the same way the Claude seat's gate flags are carried.
 		if !slices.Equal(codex.Args, []string{"app-server"}) || !slices.Equal(grok.Args, []string{"agent", "stdio"}) {
 			t.Errorf("posture %v changed a live seat's argv: codex %v grok %v", p, codex.Args, grok.Args)
 		}

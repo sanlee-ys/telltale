@@ -31,6 +31,10 @@ func TestAgyStreamSessionKeepsEveryFlagAndNoPrompt(t *testing.T) {
 		{"--input-format", "stream-json"},
 		{"--disable-slash-commands"},
 		{"--print-timeout", "30m"},
+		// cwd is not a workspace to agy; this flag is (agy.go, 2026-09-03).
+		{"--add-dir", `C:\ws`},
+		// The write posture's edit grant, measured on this stream path.
+		{"--mode", "accept-edits"},
 	} {
 		i := slices.Index(spec.Args, want[0])
 		if i < 0 {
@@ -66,16 +70,30 @@ func TestAgyStreamSessionKeepsEveryFlagAndNoPrompt(t *testing.T) {
 }
 
 func TestAgyStreamAsksForNothingInEitherPosture(t *testing.T) {
-	// The batch seat's rule, carried across: this vendor's invocation does
-	// not vary by posture, and the refuted flags stay off.
+	// The batch seat's rule, carried across: the refuted flags stay off in
+	// every posture, and the write postures add exactly the edit grant
+	// (`--mode accept-edits`, agy.go). Gated is write here: this seat has no
+	// gate channel, and a gated seat may do anything write mode allows.
 	read, _ := (AntigravityStream{}).Session(`C:\ws`, "agy.exe", "", PostureRead)
 	write, _ := (AntigravityStream{}).Session(`C:\ws`, "agy.exe", "", PostureWrite)
 	gated, _ := (AntigravityStream{}).Session(`C:\ws`, "agy.exe", "/hooks", PostureWriteGated)
-	if !slices.Equal(read.Args, write.Args) || !slices.Equal(write.Args, gated.Args) {
-		t.Fatalf("the postures diverged: %v / %v / %v", read.Args, write.Args, gated.Args)
+	if !slices.Equal(write.Args, gated.Args) {
+		t.Fatalf("gated and write diverged on a seat with no gate: %v / %v", write.Args, gated.Args)
+	}
+	stripped := slices.Clone(write.Args)
+	if i := slices.Index(stripped, "--mode"); i >= 0 && i+1 < len(stripped) && stripped[i+1] == "accept-edits" {
+		stripped = slices.Delete(stripped, i, i+2)
+	} else {
+		t.Fatalf("the write posture lacks `--mode accept-edits`: %v", write.Args)
+	}
+	if !slices.Equal(read.Args, stripped) {
+		t.Fatalf("the postures diverged by more than the edit grant: %v / %v", read.Args, write.Args)
+	}
+	if slices.Contains(read.Args, "--mode") {
+		t.Fatalf("the read posture carries --mode: %v", read.Args)
 	}
 	for _, never := range []string{"--sandbox", "plan", "--dangerously-skip-permissions"} {
-		if slices.Contains(write.Args, never) {
+		if slices.Contains(write.Args, never) || slices.Contains(read.Args, never) {
 			t.Fatalf("%q reappeared on the stream seat", never)
 		}
 	}

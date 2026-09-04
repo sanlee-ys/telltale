@@ -22,7 +22,7 @@ func TestAgyFlagsMatchTheInstalledCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"--output-format", "stream-json", "--disable-slash-commands", "-p"} {
+	for _, want := range []string{"--output-format", "stream-json", "--disable-slash-commands", "--add-dir", "-p"} {
 		if !slices.Contains(spec.Args, want) {
 			t.Errorf("missing %q in %v", want, spec.Args)
 		}
@@ -33,6 +33,87 @@ func TestAgyFlagsMatchTheInstalledCLI(t *testing.T) {
 	}
 	if spec.Dir != `C:\ws` {
 		t.Errorf("Dir = %q, want the workspace", spec.Dir)
+	}
+}
+
+// TestAgyNamesItsWorkspaceOnArgv pins the flag that makes Spec.Dir mean
+// anything to this vendor.
+//
+// Measured 2026-09-03 (agy 1.1.25): with Dir set and no --add-dir, the init
+// line reported the worktree as cwd and the turn's own system prompt said "The
+// user does not have any active workspace", so the racer wrote its file into
+// ~/.gemini/antigravity-cli/scratch and its arena column read "no changes".
+// Five probes, five scratch writes: an arena worktree, a plain repository, a
+// directory with no .git, a trustedWorkspaces entry, and --mode accept-edits
+// without --add-dir. With --add-dir the write targeted the tree. So the
+// workspace goes on argv, on every path, ahead of -p, and an empty workspace
+// sends nothing rather than an empty flag value.
+func TestAgyNamesItsWorkspaceOnArgv(t *testing.T) {
+	for name, spec := range map[string]runner.Spec{
+		"first":  mustAgyFirst(t, "brief"),
+		"resume": mustAgyNext(t, "brief", "2b18de13-bd04-4804-844e-0f75f2e3461e"),
+	} {
+		i := slices.Index(spec.Args, "--add-dir")
+		if i < 0 || i+1 >= len(spec.Args) || spec.Args[i+1] != `C:\ws` {
+			t.Errorf("%s: no `--add-dir C:\\ws` in %v; cwd alone is not a workspace to agy", name, spec.Args)
+			continue
+		}
+		if i > slices.Index(spec.Args, "-p") {
+			t.Errorf("%s: --add-dir after -p would be swallowed into the prompt: %v", name, spec.Args)
+		}
+		if spec.Dir != spec.Args[i+1] {
+			t.Errorf("%s: Dir %q and --add-dir %q name different trees", name, spec.Dir, spec.Args[i+1])
+		}
+	}
+	bare, err := Antigravity{}.FirstTurn("brief", "", "agy", PostureRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(bare.Args, "--add-dir") {
+		t.Errorf("an empty workspace still sent --add-dir: %v", bare.Args)
+	}
+}
+
+// TestAgyAcceptsEditsOnlyWhenTheRoomWrites pins the other half of the same
+// measurement.
+//
+// --add-dir alone was not enough: the write_to_file step reported DONE, no
+// file landed, stderr said the "write_file" permission was auto-denied because
+// headless mode cannot prompt, and the turn ended CANCELED with an empty
+// response. `--mode accept-edits` is the vendor's edit-only grant, and with
+// both flags the file landed on the -p path, on a --conversation resume, and
+// on the stream-json session. The read posture does not carry it: the one
+// in-workspace write measured without it was denied, which is the nearest
+// thing to a read posture this vendor has ever honoured.
+func TestAgyAcceptsEditsOnlyWhenTheRoomWrites(t *testing.T) {
+	mode := func(args []string) string {
+		i := slices.Index(args, "--mode")
+		if i < 0 || i+1 >= len(args) {
+			return ""
+		}
+		return args[i+1]
+	}
+	for _, p := range []Posture{PostureWrite, PostureWriteGated} {
+		first, err := Antigravity{}.FirstTurn("brief", `C:\ws`, "agy", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		next, err := Antigravity{}.NextTurn("brief", `C:\ws`, "agy", "conv-1", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, spec := range map[string]runner.Spec{"first": first, "resume": next} {
+			if got := mode(spec.Args); got != "accept-edits" {
+				t.Errorf("posture %v %s: --mode %q, want accept-edits; without it every in-workspace write is auto-denied: %v", p, name, got, spec.Args)
+			}
+			if slices.Index(spec.Args, "--mode") > slices.Index(spec.Args, "-p") {
+				t.Errorf("posture %v %s: --mode after -p is prompt text: %v", p, name, spec.Args)
+			}
+		}
+	}
+	read := mustAgyFirst(t, "brief")
+	if got := mode(read.Args); got != "" {
+		t.Errorf("read posture carries --mode %q; the read room asks for no edit grant: %v", got, read.Args)
 	}
 }
 

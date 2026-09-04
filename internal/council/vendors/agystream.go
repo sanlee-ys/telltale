@@ -121,13 +121,16 @@ func (AntigravityStream) SilentResumeForkMeasuredAt() string {
 // The parameter exists because the Claude seat wires council's PreToolUse
 // gate hook through it; this vendor accepts a hook that answers `ask` and has
 // nothing in print mode that answers the ask, so wiring one here would stall
-// every tool call on a question with no listener. The posture is likewise
-// unused, for agy.go's reason: this vendor's invocation does not vary by it.
+// every tool call on a question with no listener. The posture and the
+// workspace ride through baseArgs, for agy.go's reason: `--add-dir` names the
+// workspace, and `--mode accept-edits` lands the write posture's edits. Both
+// were measured on this stream path on 2026-09-03: one user line down stdin,
+// and the file landed in the named tree.
 func (a AntigravityStream) Session(workspace, binary, _ string, p Posture) (runner.Spec, error) {
 	return runner.Spec{
 		Vendor: a.ID(),
 		Binary: binary,
-		Args:   append(Antigravity{}.baseArgs(p), "--input-format", "stream-json"),
+		Args:   append(Antigravity{}.baseArgs(workspace, p), "--input-format", "stream-json"),
 		Dir:    workspace,
 	}, nil
 }
