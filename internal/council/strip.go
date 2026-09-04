@@ -148,7 +148,11 @@ func anyText(lines []string) bool {
 func stripTurn(st State, c Column) (n int, acts []Act, body string, phase Phase, clock string, ok bool) {
 	live := c.Prompt != "" || len(c.Acts) > 0 || c.Body != ""
 	if c.TurnN > 0 && live {
-		return c.TurnN, c.Acts, c.Body, c.Phase, elapsed(st, c), true
+		// The header's own clock (turnClock), so the strip and the wide form
+		// cannot disagree about one turn. `elapsed` alone kept running after
+		// the turn ended: on a seat that finished and then sat out, the strip
+		// billed the whole silence to the turn it named.
+		return c.TurnN, c.Acts, c.Body, c.Phase, turnClock(st, c), true
 	}
 	if len(c.History) > 0 {
 		h := c.History[len(c.History)-1]
@@ -163,7 +167,7 @@ func stripTurn(st State, c Column) (n int, acts []Act, body string, phase Phase,
 		return h.N, h.Acts, h.Body, h.Phase, cl, true
 	}
 	if c.TurnN > 0 {
-		return c.TurnN, nil, "", c.Phase, elapsed(st, c), true
+		return c.TurnN, nil, "", c.Phase, turnClock(st, c), true
 	}
 	return 0, nil, "", c.Phase, "", false
 }

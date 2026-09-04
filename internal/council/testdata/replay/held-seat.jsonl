@@ -1,0 +1,21 @@
+{"kind":"room","v":1,"started":"2026-09-04T10:00:00Z","workspace":"~/code/example","write":true,"seats":[{"vendor":"claude","label":"Claude Code","avail":0,"sandbox":6,"detail":"asks before every tool call that changes anything","gran":1},{"vendor":"codex","label":"Codex","avail":0,"sandbox":5,"detail":"no read-only posture was requested","gran":3},{"vendor":"agy","label":"Antigravity","avail":0,"sandbox":5,"detail":"no read-only posture was requested","gran":3}]}
+{"kind":"dispatch","ms":1000,"turn":1,"route":{},"sent":[{"vendor":"claude","prompt":"name one risk of a shared remote","persistent":true},{"vendor":"codex","prompt":"name one risk of a shared remote"},{"vendor":"agy","prompt":"name one risk of a shared remote"}]}
+{"kind":"event","ms":1500,"vendor":"claude","event":"text","text":"Two agents pushing to one branch, each rebasing over the other.\n"}
+{"kind":"event","ms":2000,"vendor":"codex","event":"text","text":"A force-push from one agent erasing another's commit.\n"}
+{"kind":"event","ms":2500,"vendor":"claude","event":"meta","ends_turn":true}
+{"kind":"event","ms":3000,"vendor":"codex","event":"meta","ends_turn":true}
+{"kind":"event","ms":3500,"vendor":"agy","event":"text","text":"A stale clone that pushes over a newer main.\n"}
+{"kind":"event","ms":4000,"vendor":"agy","event":"done","exit":0}
+{"kind":"dispatch","ms":60000,"turn":2,"route":{"vendors":["claude","codex"]},"sent":[{"vendor":"claude","prompt":"and the control that closes it","persistent":true},{"vendor":"codex","prompt":"and the control that closes it","persistent":true}]}
+{"kind":"event","ms":60100,"vendor":"codex","event":"done","exit":1}
+{"kind":"event","ms":60200,"vendor":"codex","event":"session","session_id":"33333333-4444-4555-8666-777777777777"}
+{"kind":"event","ms":60500,"vendor":"claude","event":"text","text":"Branch protection on the remote.\n"}
+{"kind":"event","ms":61000,"vendor":"codex","event":"text","text":"Refuse force-pushes on the remote.\n"}
+{"kind":"event","ms":61500,"vendor":"claude","event":"meta","ends_turn":true}
+{"kind":"event","ms":62000,"vendor":"codex","event":"meta","ends_turn":true}
+{"kind":"dispatch","ms":120000,"turn":3,"route":{"vendors":["claude"]},"sent":[{"vendor":"claude","prompt":"one sentence on who enables it","persistent":true}]}
+{"kind":"event","ms":120500,"vendor":"claude","event":"text","text":"The repository admin, once.\n"}
+{"kind":"event","ms":121000,"vendor":"claude","event":"meta","ends_turn":true}
+{"kind":"dispatch","ms":180000,"turn":4,"route":{"vendors":["claude"]},"sent":[{"vendor":"claude","prompt":"and where it is recorded","persistent":true}]}
+{"kind":"event","ms":180500,"vendor":"claude","event":"text","text":"In the repository settings.\n"}
+{"kind":"event","ms":181000,"vendor":"claude","event":"meta","ends_turn":true}

@@ -8,7 +8,7 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-▌                                                  │  turn 3 ✓            │  turn 3 ⚠            │                      
+▌                                                  │  turn 3 ✓  8s        │  turn 3 ⚠            │                      
 ▌                                                  │  sat out 4           │  sat out 4           │                      
 ▌ turn 4  ───────────────────────────────────────  │                      │                      │  no turn dispatched  
 ▌ › where does the resume path break?              │  (no reply)          │  (no reply)          │  yet.                

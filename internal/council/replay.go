@@ -255,10 +255,31 @@ func (m *Model) replayDispatch(line recordLine) {
 	m.st.FrameOwners = frameOwnersFor(route, m.st)
 	for i := range m.st.Columns {
 		c := &m.st.Columns[i]
-		if !m.st.seats(*c) || m.turnOf(c.Vendor) != nil {
+		if !m.st.seats(*c) {
 			continue
 		}
 		s, ok := sent[c.Vendor]
+		if m.turnOf(c.Vendor) != nil {
+			if !ok {
+				// Still answering an earlier brief, and this brief did not
+				// name it: sendTurn's own rule, untouched.
+				continue
+			}
+			// The record says this seat TOOK the brief, and sendTurn refuses
+			// a busy seat, so the live room had already released it. The
+			// recording does not carry the release: a one-shot seat that
+			// named its own end of turn settles without retiring until its
+			// exit lands, and that exit was the next dispatch's stale one, or
+			// the operator's ctrl+c on a lingering process, neither of which
+			// is written down. Left held, the seat would never start another
+			// turn, every later reply would land in the old turn's body, and
+			// the column would report itself "not addressed" on turns it
+			// answered (measured 2026-09-04 on a real recording: grok stuck
+			// on turn 9 through turns 10 and 11 it took). The dispatch line
+			// is the evidence; the seat is released the way the room's own
+			// retirement path does it.
+			m.replayRelease(c, now)
+		}
 		if !ok {
 			// sendTurn's own words for a seat the brief did not reach.
 			c.Note = "not addressed in turn " + itoa(line.Turn)
@@ -294,6 +315,30 @@ func (m *Model) replayDispatch(line recordLine) {
 	m.st.Mode = ModeViewing
 	m.setDraft("")
 	m.st.Notice = ""
+}
+
+// replayRelease retires a seat the recording shows taking a new brief while
+// the replay still holds it on an older turn (replayDispatch).
+//
+// A seat still in flight is closed as CANCELLED, with the elapsed it had at
+// the record's own instant: the only way a live seat mid-answer becomes free
+// for the next brief is the operator's ctrl+c, and a column that read `done`
+// over an answer that never finished would be the replay inventing an ending
+// (§4a.1). A seat whose phase already settled keeps its phase and its clock.
+// Retirement then runs the room's own path, so the turn tears down when its
+// last seat leaves, exactly as it would have live.
+func (m *Model) replayRelease(c *Column, at time.Time) {
+	if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
+		if c.Elapsed == 0 && !c.Started.IsZero() {
+			if d := at.Sub(c.Started); d > 0 {
+				c.Elapsed = d
+			}
+		}
+		c.Phase = PhaseCancelled
+		c.Note = "cancelled — the output above is partial"
+	}
+	c.Settling = false
+	m.turnColumnFinished(c.Vendor)
 }
 
 // replayEvent hands one recorded event to applyEvents, after stamping the
