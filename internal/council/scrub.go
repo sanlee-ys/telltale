@@ -30,8 +30,13 @@ import (
 //
 // So CLAUDE.md's fixture rule is kept rather than bent: "fixtures are
 // synthesized, never real" binds the CONTENT, and every word in a scrubbed
-// file is synthesized here. The event shape is real, the file says so on its
-// own room line, and every frame of a scrubbed replay says so too.
+// file is synthesized here. The event shape is real, and the file says so
+// where a reader meets it: on its own room line, in the replay's notice at the
+// open and again at the close, and on replay-check's first line. It is NOT on
+// every frame the way REPLAY is. REPLAY is a claim about what the room is
+// doing, and a reader who looked away could be deceived by one frame; this is
+// a claim about the words, and a reader who reads the words has the answer in
+// front of them.
 //
 // # What is kept, and what is replaced
 //
@@ -579,7 +584,7 @@ func ScrubRecording(in, out string, w io.Writer) error {
 		return fmt.Errorf("replay-scrub %s: %w", out, err)
 	}
 	fmt.Fprintf(w, "scrubbed %d %s into %s\n", len(rec.lines), plural(len(rec.lines), "record"), out)
-	fmt.Fprintln(w, "Every structural fact is kept and every word is synthesized. The room line says scrubbed, and so does every frame of the replay.")
+	fmt.Fprintln(w, "Every structural fact is kept and every word is synthesized. The room line says scrubbed, and so do the replay's notice and replay-check.")
 	fmt.Fprintln(w, "Read the whole file before you commit it, and run `telltale council replay-check` over it.")
 	return nil
 }
