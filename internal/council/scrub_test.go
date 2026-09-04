@@ -359,6 +359,11 @@ func escapeJSONPath(p string) string { return strings.ReplaceAll(p, `\`, `\\`) }
 func TestRecordPlacementWarning(t *testing.T) {
 	root := t.TempDir()
 	ws := filepath.Join(root, "repo")
+	// The rule names two places, and it names them because they are the two a
+	// path the operator TYPES lands in. A seat's own worktree is a third
+	// place a seat can reach, and the warning is silent there on purpose: the
+	// room creates those directories itself, so a recording inside one is not
+	// a placement the operator chose.
 	for _, tc := range []struct {
 		name, path string
 		want       string
@@ -366,7 +371,7 @@ func TestRecordPlacementWarning(t *testing.T) {
 		{"inside the workspace", filepath.Join(ws, "run.jsonl"), "inside the workspace"},
 		{"deeper inside it", filepath.Join(ws, "docs", "run.jsonl"), "inside the workspace"},
 		{"the parent directory", filepath.Join(root, "run.jsonl"), "one directory above"},
-		{"a seat's worktree", filepath.Join(root, "repo-seat-grok", "run.jsonl"), ""},
+		{"a seat's worktree, which the rule does not name", filepath.Join(root, "repo-seat-grok", "run.jsonl"), ""},
 		{"somewhere else", filepath.Join(root, "other", "deeper", "run.jsonl"), ""},
 		{"no record path", "", ""},
 	} {
