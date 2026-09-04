@@ -1988,6 +1988,30 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 		return unavailableCard(c, w, sty, g), nil
 	}
 
+	// Below strip width the body changes FORM rather than shrinking (strip.go,
+	// from the STRIP lane). The wide column keeps the whole transcript with
+	// CLOCK's shortened paths; a strip states the turn, its clock, one row per
+	// tool act with no path, the tail of the reply, and how to widen it.
+	// Branching here rather than inside each builder is what keeps the two forms
+	// separable: everything below this line is the wide column, exactly as it
+	// was.
+	//
+	// A HARD THRESHOLD, and the audit ruled on it: above stripWidth the
+	// transcript is evidence and it stays a transcript, so the strip form is
+	// refused there.
+	//
+	// One anchor, at the top. A strip draws no turn separators, so there is
+	// nowhere for `[` and `]` to hop TO, and an anchor list built over rows that
+	// are not turn rules would send the hop keys to the wrong row (§9.20 —
+	// offsets are only meaningful against the lines that produced them).
+	if w <= stripWidth {
+		lines := stripBody(st, c, w, sty, g)
+		if n, _, _, _, _, ok := stripTurn(st, c); ok {
+			return lines, []turnAnchor{{N: n, Off: 0}}
+		}
+		return lines, nil
+	}
+
 	var out []string
 	var anchors []turnAnchor
 	for i, h := range c.History {
@@ -2083,11 +2107,14 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 	// oldest first, so "not addressed in turns 1–29" on a column whose record of
 	// those turns was evicted would be the room inventing an absence — the same
 	// error in the other direction as inventing a conversation (§9.9).
+	//
+	// `lastTurnLine` used to sit here and it is gone with the strip form (from
+	// the STRIP lane). It was strip-width only by its own guard, and the width it
+	// served no longer reaches this builder: `stripTurnLine` says which turn a
+	// strip last took and how it ended, on the strip's first row, with the clock
+	// beside it (strip.go).
 	from, to, run := trailingSkip(st, c)
-	if last := lastTurnLine(c, st, w, sty, g); len(last) > 0 {
-		out = append(out, "")
-		out = append(out, last...)
-	} else if run {
+	if run {
 		out = append(out, "")
 	}
 	if run {
@@ -2663,51 +2690,6 @@ func skipSpan(from, to, w int, sty Styles, g Glyphs) []string {
 // first either way.
 func skipLine(text string, w int, sty Styles, g Glyphs) []string {
 	return styleAll(hangWrap(g.Idle+" ", text, w), sty.Muted)
-}
-
-// lastTurnLine is what an idle strip says instead of nothing: which turn it last
-// took, and how that turn ended.
-//
-// Strip-width only. A wide column already answers this — the turn separators are
-// on screen with their own numbers and their own outcomes — so the line would be
-// the room repeating itself at the width that has rows to spare, and silent at
-// the width that does not. At fourteen cells a seat sitting out had a header, a
-// posture word and then a run of skips, and the one thing a reader wants from a
-// backgrounded seat is where it left off.
-//
-// Every part of it is MEASURED: the turn number is the one this column recorded,
-// the mark is that turn's own phase. A seat with no turns behind it renders
-// nothing here rather than a placeholder — absent is absent (§4a.1), and this
-// room does not draw "last: —". Nor does a seat that is IN the current turn: the
-// line answers "where did this one leave off", which is not a question about a
-// column that is answering right now.
-func lastTurnLine(c Column, st State, w int, sty Styles, g Glyphs) []string {
-	if w > stripWidth || c.TurnN <= 0 {
-		return nil
-	}
-	if !c.Skipped && c.TurnN >= st.Turn {
-		return nil
-	}
-	if c.Phase == PhaseWaiting || c.Phase == PhaseStreaming {
-		// A turn that is still running is not one this seat "last took", and its
-		// mark is the spinner — a moving cell on a line about something finished.
-		// Unreachable in a real frame, since a column only reaches here by having
-		// sat the current turn out, and kept as a guard rather than an assumption.
-		return nil
-	}
-	mark := phaseMark(c.Phase, st, g)
-	// Longest first, same shedding idiom as the header above it: `last:` is the
-	// label and the turn number is the fact, so the label is what goes when a
-	// three-digit turn arrives.
-	for _, s := range []string{
-		"last: turn " + strconv.Itoa(c.TurnN) + " " + mark,
-		"turn " + strconv.Itoa(c.TurnN) + " " + mark,
-	} {
-		if lipgloss.Width(s) <= w {
-			return []string{sty.Muted.Render(s)}
-		}
-	}
-	return nil
 }
 
 // turnHead opens one turn: the separator naming it, then the brief that

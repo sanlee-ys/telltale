@@ -220,20 +220,24 @@ func TestARealNoteKeepsItsWarning(t *testing.T) {
 // TestAnIdleStripSaysWhereItLeftOff. At fourteen cells a backgrounded seat had
 // a header, a posture word and a run of skips, and the one thing a reader wants
 // from it is which turn it last took.
+//
+// The strip form states it on its first row now (`stripTurnLine`), with that
+// turn's own mark and its clock (strip.go, from the STRIP lane).
 func TestAnIdleStripSaysWhereItLeftOff(t *testing.T) {
 	st := room()
 	st.Turn = 9
 	c := skipColumn([]int{8}, 9, true)
 	st.Columns = []Column{c}
 	got := strings.Join(columnText(st, c, stripWidth, PlainStyles(), GlyphsFor(false)), "\n")
-	if !strings.Contains(got, "last: turn 8 "+UnicodeGlyphs().ActOK) {
+	if !strings.Contains(got, "turn 8 "+UnicodeGlyphs().ActOK) {
 		t.Errorf("the strip did not say where it left off:\n%s", got)
 	}
-	// And a wide column does not repeat itself: the turn separators are already
-	// on screen with their own numbers and their own outcomes.
+	// And a wide column does not take the strip's form: its turn separators are
+	// already on screen with their own numbers and their own outcomes, and
+	// §9.19's whole sentence has the rows it needs.
 	wide := strings.Join(columnText(st, c, 40, PlainStyles(), GlyphsFor(false)), "\n")
-	if strings.Contains(wide, "last: turn") {
-		t.Errorf("a wide column repeated what its separators already say:\n%s", wide)
+	if strings.Contains(wide, "sat out") {
+		t.Errorf("a wide column took the strip's short form:\n%s", wide)
 	}
 }
 
@@ -257,29 +261,76 @@ func TestAStripWithNoTurnsBehindItSaysNothing(t *testing.T) {
 	}
 }
 
-// TestLastTurnLineShedsItsLabel. The number is the fact and `last:` is the
-// label, so the label is what goes when the line will not fit.
+// TestStripTurnLineShedsTheClockFirst. `lastTurnLine` said which turn a strip
+// last took; `stripTurnLine` says it, with the turn's clock beside it, on the
+// strip's first row (strip.go). The shedding order is the property that moved
+// with it, and it is asserted here rather than left to a golden.
 //
-// The width where that bites moved when stripColumn went from an arithmetic
-// floor to a reading width: at fourteen a three-digit turn already overflowed,
-// at eighteen it fits whole. Both halves are asserted, because the second is
-// what the wider strip was FOR — §9.19 gave this line "room" as its stated goal
-// and then drew it at a width where a long room wrapped it.
-func TestLastTurnLineShedsItsLabel(t *testing.T) {
+// The number is the fact and everything else is meta, so the clock goes first
+// and the mark second. Neither the number nor the word is ever clipped.
+func TestStripTurnLineShedsTheClockFirst(t *testing.T) {
 	g := GlyphsFor(false)
-	c := Column{Vendor: model.VendorCodex, Phase: PhaseDone, TurnN: 137}
+	st := State{Turn: 140}
 
-	// At strip width the whole line fits, label and all, on one row.
-	got := lastTurnLine(c, State{Turn: 140}, stripWidth, PlainStyles(), g)
-	if len(got) != 1 || strings.TrimSpace(got[0]) != "last: turn 137 "+g.ActOK {
-		t.Errorf("lastTurnLine at strip width = %q, want the whole line on one row", got)
+	// At strip width the whole line fits, clock and all, on one row.
+	got := stripTurnLine(137, PhaseDone, "46s", stripWidth, st, g)
+	if got != "turn 137 "+g.ActOK+"  46s" {
+		t.Errorf("stripTurnLine at strip width = %q, want the clock kept", got)
 	}
 
-	// Squeezed below it, the label is what yields — never the number and never
-	// the mark, and never by clipping.
-	got = lastTurnLine(c, State{Turn: 140}, 14, PlainStyles(), g)
-	if len(got) != 1 || strings.TrimSpace(got[0]) != "turn 137 "+g.ActOK {
-		t.Errorf("lastTurnLine squeezed = %q, want the label shed whole", got)
+	// Squeezed below it, the clock is what yields — whole, never clipped.
+	got = stripTurnLine(137, PhaseDone, "46s", 12, st, g)
+	if got != "turn 137 "+g.ActOK {
+		t.Errorf("stripTurnLine squeezed = %q, want the clock shed whole", got)
+	}
+
+	// A turn with no measured clock draws none, rather than an empty gap.
+	got = stripTurnLine(137, PhaseDone, "", stripWidth, st, g)
+	if got != "turn 137 "+g.ActOK {
+		t.Errorf("stripTurnLine with no clock = %q, want no trailing gap", got)
+	}
+}
+
+// TestTheStripFormSurvivesASCII. Every mark the strip form adds comes from the
+// glyph set, so `--ascii` and a console with no Unicode read the same room.
+//
+// Asserted by rendering the strip and demanding that no character the Unicode
+// set owns survives into the ASCII one. The two marks this form introduced are
+// the range in `sat out 10-11` and the ellipsis on a clipped reply, and both
+// were literals in the STRIP lane's first draft.
+func TestTheStripFormSurvivesASCII(t *testing.T) {
+	st := room()
+	st.Turn = 12
+	c := skipColumn([]int{9}, 12, true)
+	c.Body = strings.Repeat("a long tail sentence that will not fit. ", 6)
+	st.Columns = []Column{c}
+
+	ascii := strings.Join(columnText(st, c, stripWidth, PlainStyles(), GlyphsFor(true)), "\n")
+	for _, banned := range []string{"–", "…", "⚙", "✓", "○"} {
+		if strings.Contains(ascii, banned) {
+			t.Errorf("the strip form kept %q with --ascii on:\n%s", banned, ascii)
+		}
+	}
+	// The historical run only. The live turn's skip is the room line's fact and
+	// the strip does not repeat it (stripSatOut, satOutFact).
+	if !strings.Contains(ascii, "sat out 10-11") {
+		t.Errorf("the ASCII strip lost its range:\n%s", ascii)
+	}
+}
+
+// TestStripDropsThePathAndKeepsTheTool. Finding 3 of the density pass: at about
+// twenty cells a Windows path wrapped to ten rows and a trace of eight calls was
+// unreadable. A strip prints the tool and drops the argument.
+func TestStripDropsThePathAndKeepsTheTool(t *testing.T) {
+	for _, tc := range []struct{ text, want string }{
+		{`Read: C:\Users\sanle\Desktop\telltale-rooms\hello.py`, "Read"},
+		{"Glob", "Glob"},
+		{`"C:\WINDOWS\system32\cmd.exe" /c 'type hello.py'`, "cmd.exe"},
+		{"write_to_file: /home/x/a.md", "write_to_file"},
+	} {
+		if got := stripActName(tc.text); got != tc.want {
+			t.Errorf("stripActName(%q) = %q, want %q", tc.text, got, tc.want)
+		}
 	}
 }
 

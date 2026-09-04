@@ -3,21 +3,21 @@
   2 seats sat turn 8 out: Codex, Antigravity                                                                            
 ▌ ▸ 1 CC Claude Code  ─────────────────────────────────────  ⠋ streaming  │  2 CX ✓ done         │  3 AG ⚠ cancelled    
 ▌   ro:tools  tokens                                                      │  ro:requested        │  unsandboxed         
-▌                                                                         │                      │                      
-▌                                                                         │  turn 1  ──────────  │                      
-▌                                                                         │  › brief for turn 1  │                      
-▌                                                                         │                      │                      
-▌                                                                         │  answer to turn 1    │                      
-▌                                                                         │  ○ not addressed in  │                      
-▌                                                                         │    turn 2            │                      
-▌                                                                         │  turn 3  ──────────  │  turn 2  ──────────  
-▌                                                                         │  › brief for turn 3  │  › brief for turn 2  
-▌                                                                         │                      │                      
-▌                                                                         │  answer to turn 3    │  answer to turn 2    
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▌                                                                         │  turn 3 ✓            │  turn 2 ⚠            
+▌                                                                         │  sat out 4–7         │  sat out 3–7         
 ▌ turn 8  ──────────────────────────────────────────────────────────────  │                      │                      
-▌ › and now the resume path                                               │  last: turn 3 ✓      │  last: turn 2 ⚠      
-▌                                                                         │  ○ not addressed in  │  ○ not addressed in  
-▌ Reading resume.go.                                                      │    turns 4–7         │    turns 3–7         
+▌ › and now the resume path                                               │  answer to turn 3    │  answer to turn 2    
+▌                                                                         │                      │                      
+▌ Reading resume.go.                                                      │  2 then f widens     │  3 then f widens     
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  ›                                                                                                               │  
   ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
