@@ -99,6 +99,15 @@ jobs:
           # ...and must relay none of them. The token relay accumulates per-turn
           # counts only; there is no per-turn count in this payload to write.
           if (Test-Path "$env:USERPROFILE\.telltale\usage\claude.json") { throw "the Claude statusline wrote a token relay; §7.16b measured no per-turn count it could honestly write" }
+          # full.json is pinned at 2.1.233, before prompt_cache existed, so the
+          # cache segment must be absent from it entirely (design.md §7.16c).
+          if ($claude -match 'cache') { throw "honest-gauge violation: a cache segment rendered for a CLI that sends no prompt_cache: $claude" }
+          # prompt-cache.json is the measured 2.1.260 shape. hit_ratio 0.91 is
+          # REPORTED by the vendor and renders; the per-call counts sitting
+          # beside it would yield 75% and must not appear.
+          $pc = Get-Content internal/statusline/testdata/prompt-cache.json -Raw | ./telltale.exe statusline
+          if ($pc -notmatch 'cache 91%') { throw "the reported prompt-cache hit ratio did not render: $pc" }
+          if ($pc -match '75%|352000|310200') { throw "honest-gauge violation: the cache segment sourced something other than hit_ratio: $pc" }
       - name: Smoke (Cursor routing through the real binary)
         shell: pwsh
         run: |
@@ -739,6 +748,15 @@ jobs:
           if grep -qE '16000|12000|2800|1200' <<<"$claude"; then fail "honest-gauge violation: a per-API-call token count rendered: $claude"; fi
           # ...and must relay none of them.
           [ ! -e "$HOME/.telltale/usage/claude.json" ] || fail "the Claude statusline wrote a token relay; §7.16b measured no per-turn count it could honestly write"
+          # full.json is pinned at 2.1.233, before prompt_cache existed, so the
+          # cache segment must be absent from it entirely (design.md §7.16c).
+          if grep -q 'cache' <<<"$claude"; then fail "honest-gauge violation: a cache segment rendered for a CLI that sends no prompt_cache: $claude"; fi
+          # prompt-cache.json is the measured 2.1.260 shape. hit_ratio 0.91 is
+          # REPORTED by the vendor and renders; the per-call counts sitting
+          # beside it would yield 75% and must not appear.
+          pc=$(./telltale statusline < internal/statusline/testdata/prompt-cache.json) || fail "statusline exited $?"
+          grep -q 'cache 91%' <<<"$pc" || fail "the reported prompt-cache hit ratio did not render: $pc"
+          if grep -qE '75%|352000|310200' <<<"$pc"; then fail "honest-gauge violation: the cache segment sourced something other than hit_ratio: $pc"; fi
       - name: Smoke (Cursor routing through the real binary)
         shell: bash
         run: |

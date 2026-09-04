@@ -1,0 +1,48 @@
+{
+  "cwd": "C:\\Users\\dev\\code\\myproject",
+  "session_id": "abc123",
+  "transcript_path": "C:\\Users\\dev\\.claude\\projects\\x\\t.jsonl",
+  "prompt_id": "00000000-0000-4000-8000-00000000cafe",
+  "version": "2.1.260",
+  "model": { "id": "claude-opus-5", "display_name": "Opus" },
+  "workspace": { "current_dir": "C:\\Users\\dev\\code\\myproject", "project_dir": "C:\\Users\\dev\\code\\myproject" },
+  "cost": { "total_cost_usd": 0.01234, "total_duration_ms": 45000 },
+  "context_window": {
+    "context_window_size": 200000,
+    "used_percentage": 8,
+    "remaining_percentage": 92,
+    "total_input_tokens": 16000,
+    "total_output_tokens": 512,
+    "current_usage": {
+      "input_tokens": 1200,
+      "output_tokens": 512,
+      "cache_creation_input_tokens": 2800,
+      "cache_read_input_tokens": 12000
+    }
+  },
+  "prompt_cache": {
+    "warm": true,
+    "caching_observed": true,
+    "ttl": "1h",
+    "expires_at": 1754078400,
+    "requests": 14,
+    "misses": 2,
+    "expected_rebuilds": 1,
+    "hit_ratio": 0.91,
+    "cache_write_tokens": 352000,
+    "miss_recache_tokens": 310200,
+    "last_miss_at": 1754070000,
+    "last_miss_cause": {
+      "causes": ["tools_changed"],
+      "tools_added": 3,
+      "tools_removed": 0,
+      "system_char_delta": 512
+    },
+    "miss_causes": { "tools_changed": 2 },
+    "recache_tokens_if_cold": 45000
+  },
+  "rate_limits": {
+    "five_hour": { "used_percentage": 23.5, "resets_at": 1754074800 },
+    "seven_day": { "used_percentage": 41.2, "resets_at": 1754506800 }
+  }
+}
