@@ -157,6 +157,11 @@ type recordLine struct {
 	// The gate line.
 	RequestID string `json:"request_id,omitempty"`
 	Allow     bool   `json:"allow,omitempty"`
+
+	// stale marks an event line the replay must not apply: a process exit
+	// that belongs to a seat's replaced process (markStaleExits). Derived on
+	// read, never written.
+	stale bool
 }
 
 // recordSeat is one column as the room opened it: enough to draw the seat
@@ -363,8 +368,14 @@ func (r *recorder) write(line recordLine) {
 	}
 }
 
-// ms is the monotonic offset from the moment the file was opened.
-func (r *recorder) ms() int64 { return time.Since(r.began).Milliseconds() }
+// ms is the monotonic offset from the moment the file was opened. Zero on a
+// nil recorder, so applyEvents can take the stamp without a branch.
+func (r *recorder) ms() int64 {
+	if r == nil {
+		return 0
+	}
+	return time.Since(r.began).Milliseconds()
+}
 
 // room writes the first line: the room before the first key.
 //
@@ -389,7 +400,13 @@ func (r *recorder) room(st State) {
 	for _, v := range st.Seats.Only {
 		line.SeatsOnly = append(line.SeatsOnly, string(v))
 	}
-	for _, c := range st.Columns {
+	// The columns the room DRAWS, not every column it holds. A seat --vendor
+	// left out is still a Column (its card stays reachable), but it takes no
+	// turn and no frame shows it, so a file that listed it would replay and
+	// replay-check a room the operator never had. Measured 2026-09-03: a
+	// four-seat room recorded five seats and replay-check listed the fifth.
+	for _, i := range st.VisibleColumns() {
+		c := st.Columns[i]
 		line.Seats = append(line.Seats, recordSeat{
 			Vendor: string(c.Vendor), Label: c.Label, Avail: int(c.Avail),
 			Sandbox: int(c.Sandbox.Level), Detail: c.Sandbox.Detail,
@@ -399,17 +416,16 @@ func (r *recorder) room(st State) {
 	r.write(line)
 }
 
-// events writes one batch, in the order applyEvents will apply it.
-func (r *recorder) events(batch []runner.Event) {
+// event writes one event applyEvents is about to apply, at the batch's stamp.
+// Called from applyEvents itself, after its stale-exit guard, so the file
+// carries what the room applied and not what the channel delivered.
+func (r *recorder) event(ev runner.Event, ms int64) {
 	if r == nil {
 		return
 	}
-	ms := r.ms()
-	for _, ev := range batch {
-		line := eventRecord(ev)
-		line.MS = ms
-		r.write(line)
-	}
+	line := eventRecord(ev)
+	line.MS = ms
+	r.write(line)
 }
 
 // gate writes one operator decision on one card.
@@ -570,7 +586,79 @@ func parseRecording(src io.Reader, path string) (*recording, error) {
 	if rec.room.Kind == "" {
 		return nil, errors.New("--replay " + path + ": the file is empty")
 	}
+	markStaleExits(rec.lines)
 	return rec, nil
+}
+
+// markStaleExits finds the process exits a replay must skip.
+//
+// The recorder no longer writes them (applyEvents' staleExit guard), but the
+// files recorded before that guard existed carry them, and the first real
+// recording is one of those: every dispatch to a persistent seat was followed
+// by a `done` from the seat's PREVIOUS process, 0.1s to 11s later, and the
+// replay read each one as the new turn ending in failure. The live room had
+// attributed the exit to the replaced process by asking the current one
+// whether it was alive; the file carries only the vendor name.
+//
+// The rule that recovers the attribution without a process: an exit is the
+// LAST event a process emits (runner.Session's lifecycle goroutine sends its
+// one terminal event after the readers drain), so any event from the same
+// seat that lands after an exit and before the seat's next dispatch came from
+// a different process — the replacement the live room was already talking to.
+// The exit was therefore not this turn's end. That covers the stale exit, and
+// it covers the one other case where the room discards a persistent seat's
+// exit and the seat goes on: a first-turn death that retreats to the batch
+// adapter on the same dispatch (retreatOnDeath). An exit nothing follows is a
+// real end — a death, or a one-shot seat's ordinary finish — and is applied.
+//
+// Only a seat dispatched as PERSISTENT on the current turn is read this way.
+// A one-shot seat ends by exiting and nothing follows; if a file ever carried
+// something after it, the exit would still be its end.
+func markStaleExits(lines []recordLine) {
+	persistent := map[string]bool{}
+	for i := range lines {
+		l := &lines[i]
+		switch l.Kind {
+		case "dispatch":
+			persistent = map[string]bool{}
+			for _, s := range l.Sent {
+				if s.Persistent {
+					persistent[s.Vendor] = true
+				}
+			}
+			continue
+		case "event":
+		default:
+			continue
+		}
+		if !persistent[l.Vendor] {
+			continue
+		}
+		if l.Event != "done" && (l.Event != "error" || l.EndsTurn) {
+			continue
+		}
+		for j := i + 1; j < len(lines); j++ {
+			n := &lines[j]
+			if n.Kind == "dispatch" {
+				break
+			}
+			if n.Kind == "event" && n.Vendor == l.Vendor {
+				l.stale = true
+				break
+			}
+		}
+	}
+}
+
+// staleExits counts the lines markStaleExits set aside.
+func (r *recording) staleExits() int {
+	n := 0
+	for _, l := range r.lines {
+		if l.stale {
+			n++
+		}
+	}
+	return n
 }
 
 // started is the recording's wall-clock start, or the zero time when the
@@ -628,6 +716,12 @@ func ReplayCheck(path string, w io.Writer) error {
 	dispatches, texts, textChars, briefChars := 0, 0, 0, 0
 	ids := map[string]map[string]bool{}
 	var tools []string
+	// A tool line with no name is a RESULT: the vendor resolving an earlier
+	// call by id, carrying an outcome and no text (recordAct folds it into the
+	// call). It names no path, so listing each one would be a bare vendor
+	// word per line — measured at 112 for one seat on the first real
+	// recording — and they are counted per seat instead.
+	unnamed := map[string]int{}
 	decided := map[string]string{}
 	for _, l := range rec.lines {
 		if l.Kind == "gate" {
@@ -657,6 +751,10 @@ func ReplayCheck(path string, w io.Writer) error {
 				textChars += len(l.Text)
 			}
 			for _, a := range l.Acts {
+				if strings.TrimSpace(a.Text) == "" {
+					unnamed[l.Vendor]++
+					continue
+				}
 				tools = append(tools, "  "+l.Vendor+"  "+a.Text)
 			}
 			if l.Gate != nil {
@@ -669,6 +767,9 @@ func ReplayCheck(path string, w io.Writer) error {
 		}
 	}
 	fmt.Fprintf(w, "  dispatches: %d\n", dispatches)
+	if n := rec.staleExits(); n > 0 {
+		fmt.Fprintf(w, "  stale exits: %d (a replaced process ending after its seat moved on; a replay skips them)\n", n)
+	}
 
 	fmt.Fprintln(w, "session ids the file carries:")
 	if len(ids) == 0 {
@@ -697,8 +798,20 @@ func ReplayCheck(path string, w io.Writer) error {
 	for _, t := range tools {
 		fmt.Fprintln(w, t)
 	}
+	var unnamedSeats []string
+	for v := range unnamed {
+		unnamedSeats = append(unnamedSeats, v)
+	}
+	sort.Strings(unnamedSeats)
+	for _, v := range unnamedSeats {
+		fmt.Fprintf(w, "  %s  %d unnamed tool %s: results resolving calls above by id, no path\n", v, unnamed[v], plural(unnamed[v], "result"))
+	}
 	fmt.Fprintf(w, "vendor output: %d text %s, %d chars, verbatim and unredacted\n", texts, plural(texts, "event"), textChars)
-	fmt.Fprintf(w, "briefs: %d %s, %d chars, verbatim\n", dispatches, plural(dispatches, "dispatch"), briefChars)
+	dispatchWord := "dispatches"
+	if dispatches == 1 {
+		dispatchWord = "dispatch"
+	}
+	fmt.Fprintf(w, "briefs: %d %s, %d chars, verbatim\n", dispatches, dispatchWord, briefChars)
 	fmt.Fprintln(w, "This file carries the conversation. This check lists identities and paths and does not read the prose;")
 	fmt.Fprintln(w, "read the file whole before you commit or share it.")
 	return nil

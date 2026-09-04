@@ -18487,6 +18487,39 @@ a recording of a real room EXISTS as of 2026-09-03 — the owner ran `--record d
 three seats, one card, one finished seat). What only a live run can show is a `--record` of a
 five-seat room with real timing, that its replay reads as the room did, and what `replay-check`
 lists off a real capture. The hero decision stays the owner's.
+
+**Measured 2026-09-03: `--replay` of a real recording, and it found a defect.** The owner
+recorded a four-seat gated write room (`--vendor claude,codex,agy,grok`) over seven dispatches:
+1863 records over 39m36s, `replay-check` clean. `--replay` of that file drew every persistent
+seat as `failed` right after each dispatch, with an elapsed figure of an hour and the note "the
+vendor process ended mid-turn". The live room had shown those turns done. The mechanism, read
+off the file: each dispatch to a persistent seat was followed 0.1s to 11s later by a `done`
+from that seat, before its first text of the turn. That is the seat's PREVIOUS process ending
+after the respawn that replaced it (`stopProc`). The live room attributes that exit to the
+old process by one liveness test on the current one, and discards it. The recording carried
+only the vendor name, so the replay handed it to `applyEvents` as the new turn's terminal
+event.
+
+Two fixes, and the reason for two. The recorder now writes from inside `applyEvents`, after
+the stale-exit guard (`Model.staleExit`, the one liveness test the `KindDone` and `KindError`
+branches used to make inline), so a file carries what the room applied and not what the
+channel delivered. That is the fix at the source, and it is exact. The reader
+(`markStaleExits`) repairs a file recorded before the guard, which the first real recording
+is: a process's exit is the last event it emits, so a persistent seat's exit that another event
+from the same seat follows before its next dispatch was not this turn's end. A replay consumes
+such a line and does not apply it, and `replay-check` prints how many it will skip. The same
+rule reads the first-turn retreat to a batch adapter correctly, where the room also discards
+the exit and the seat goes on. Three tests pin it over a fixture with one stale exit and one
+real death (`stale-exit.jsonl`).
+
+Two smaller findings from the same file. The room line listed five seats and the room-open
+rebuild reported `5/4 seats rebuilt`: a seat `--vendor` left out was still marked `Restored`
+on reattach, so the rebuild launched it and the recorder listed it. `reattach` now marks a
+seat restored only if `State.seats` says it takes turns, and the room line lists the columns
+`VisibleColumns` draws. And `replay-check` printed one bare `grok` line per tool RESULT (an
+act carrying an outcome and no text, 112 of them for one seat); those fold into one count per
+seat. The replay half of the owed measurement is done; the hero decision still stays the
+owner's, and the rendering of that recording belongs to the density pass.
 <a id="s9-57"></a>
 
 ### 9.57 three seats stay up between briefs, on a reading rather than a run (2026-09-02)

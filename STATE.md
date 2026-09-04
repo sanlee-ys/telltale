@@ -90,6 +90,10 @@ a demo of the crew is a demo of measured claims only after that list is paid.
   7. `--replay demo.jsonl` of the real recording made 2026-09-03 (`--record`
      and `replay-check` are PAID; §9.56 carries the measurement) — retires
      §9.56's synthesized-fixture note and the README's "tested offline".
+     **Replay half MEASURED 2026-09-03, and it found a defect:** every
+     persistent seat replayed as `failed` at each dispatch, on the replaced
+     process's exit; fixed at the recorder and repaired at the reader (§9.56's
+     dated paragraph). The rendering of that recording is the density pass's.
   8. The routing cell against the live quota relay, and `@auto` with Claude's
      5h window beside agy's weekly bucket — retires §9.56's routing items.
   9. Codex read liveness: `telltale council --read`, brief "list this

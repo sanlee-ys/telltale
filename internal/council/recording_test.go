@@ -155,7 +155,7 @@ func TestARecordingRefusesToOverwrite(t *testing.T) {
 	// A nil recorder is every room that did not ask, and every hook on it is
 	// a no-op.
 	var none *recorder
-	none.events([]runner.Event{{Vendor: model.VendorCodex, Kind: runner.KindText}})
+	none.event(runner.Event{Vendor: model.VendorCodex, Kind: runner.KindText}, none.ms())
 	none.gate(PendingGate{}, true)
 	none.room(room())
 	if err := none.close(); err != nil {
