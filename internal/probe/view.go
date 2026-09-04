@@ -124,6 +124,16 @@ func writeCheck(b *strings.Builder, c Check) {
 			text = took + ", " + text
 		}
 	}
+	if text == "" {
+		// A row with nothing after its status ends at the status, with no
+		// trailing run of spaces. `doctor`'s own writeCheck trims the same way,
+		// and the reason is a reader rather than tidiness: this report is
+		// pasted into issues, and trailing whitespace is what a diff and a chat
+		// client both render as an unexplained change.
+		b.WriteString(strings.TrimRight(prefix, " "))
+		b.WriteByte('\n')
+		return
+	}
 	b.WriteString(prefix)
 	b.WriteString(text)
 	b.WriteByte('\n')
