@@ -47,7 +47,7 @@ is no longer the price of a change.
   blocked seat on the line brings `⚠ NEEDS YOU` back. The recorder was not at
   fault: `replay-check` reported no gate card because there was none.
 - **2026-09-03 — Telltale spends width on the trace that needs it, time on the
-  silence between acts, and states each fact once where it belongs.** (San, on
+  silence between acts, and states each fact once where it belongs.** (The integrating session, on
   an independent audit of three prototypes rendered from a real recorded room.)
   The density and repetition pass. CLOCK is the base: the cue row, the quiet
   clock, the act count, the scroll cue on the chrome row, and the per-column turn
