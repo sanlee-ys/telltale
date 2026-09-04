@@ -134,6 +134,13 @@ type recordLine struct {
 	SeatsAll  bool         `json:"seats_all,omitempty"`
 	SeatsOnly []string     `json:"seats_only,omitempty"`
 	Seats     []recordSeat `json:"seats,omitempty"`
+	// Scrubbed marks a file `telltale council replay-scrub` wrote: the shape
+	// of a real room with every word replaced (scrub.go). It rides on the
+	// room line rather than beside the file, because the claim has to travel
+	// with the bytes: a replay says `scrubbed` in its notice off this field,
+	// and replay-check says it too. A file with no such field is a capture,
+	// and is read as one.
+	Scrubbed bool `json:"scrubbed,omitempty"`
 
 	// The dispatch line.
 	Turn  int          `json:"turn,omitempty"`
@@ -331,11 +338,8 @@ func openRecorder(path string) (*recorder, error) {
 	if err != nil {
 		return nil, fmt.Errorf("--record %s: %w", path, err)
 	}
-	if home, herr := os.UserHomeDir(); herr == nil {
-		own := filepath.Join(home, ".telltale")
-		if rel, rerr := filepath.Rel(own, abs); rerr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return nil, errors.New("--record " + path + ": that is telltale's own state directory, which holds numbers and keys only — a recording carries the conversation, so name a path outside ~/.telltale")
-		}
+	if err := refuseOwnStateDir("--record", path, abs); err != nil {
+		return nil, err
 	}
 	f, err := os.OpenFile(abs, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -698,6 +702,12 @@ func ReplayCheck(path string, w io.Writer) error {
 	h := rec.room
 	fmt.Fprintf(w, "replay-check: %s\n", path)
 	fmt.Fprintf(w, "  recorded %s, %d records over %s\n", h.Started, len(rec.lines), dur(rec.span()))
+	if h.Scrubbed {
+		// Said first, because it changes what every line below it means: the
+		// identities listed under a scrubbed file are synthesized, and a
+		// reviewer who read the list as real would be reviewing nothing.
+		fmt.Fprintln(w, "  scrubbed: the shape of a real room with every word replaced (telltale council replay-scrub)")
+	}
 	fmt.Fprintf(w, "  workspace: %s\n", h.Workspace)
 	posture := "read-only"
 	if h.Write {
@@ -806,6 +816,9 @@ func ReplayCheck(path string, w io.Writer) error {
 	for _, v := range unnamedSeats {
 		fmt.Fprintf(w, "  %s  %d unnamed tool %s: results resolving calls above by id, no path\n", v, unnamed[v], plural(unnamed[v], "result"))
 	}
+	for _, line := range selfReads(rec, path) {
+		fmt.Fprintln(w, line)
+	}
 	fmt.Fprintf(w, "vendor output: %d text %s, %d chars, verbatim and unredacted\n", texts, plural(texts, "event"), textChars)
 	dispatchWord := "dispatches"
 	if dispatches == 1 {
@@ -815,4 +828,69 @@ func ReplayCheck(path string, w io.Writer) error {
 	fmt.Fprintln(w, "This file carries the conversation. This check lists identities and paths and does not read the prose;")
 	fmt.Fprintln(w, "read the file whole before you commit or share it.")
 	return nil
+}
+
+// selfReads names every act that read the recording it is recorded in (the
+// 2026-09-04 review's fault D).
+//
+// It happened on 2026-09-03: a seat read the room's own recording mid-room,
+// because the file sat where the seat could reach it. The trace showed the
+// read and nothing said what it was, so the reviewer had to recognize the
+// path. The room cannot stop a seat reading a file it can reach, and this does
+// not try to; what it does is refuse to let the fact go unnamed in the one
+// place a capture is reviewed.
+//
+// A match is the resolved path, or the file name alone: a seat that names the
+// file relatively is the same seat reading the same file, and a recording's
+// name is specific enough that the looser test costs nothing.
+func selfReads(rec *recording, path string) []string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = path
+	}
+	base := filepath.Base(abs)
+	var out []string
+	seen := map[string]bool{}
+	add := func(vendor string, ms int64) {
+		line := fmt.Sprintf("self-read: %s read this recording at %dms", vendor, ms)
+		if seen[line] {
+			return
+		}
+		seen[line] = true
+		out = append(out, line)
+	}
+	for _, l := range rec.lines {
+		if l.Kind != "event" {
+			continue
+		}
+		for _, a := range l.Acts {
+			if namesFile(a.Text, abs, base) {
+				add(l.Vendor, l.MS)
+			}
+		}
+		if l.Gate != nil && namesFile(l.Gate.Text, abs, base) {
+			add(l.Vendor, l.MS)
+		}
+	}
+	return out
+}
+
+// namesFile reports whether one act line names one file. The line is a
+// vendor's own words, so the file name arrives wrapped in whatever that vendor
+// wraps it in: a backtick, a quote, a trailing comma. Each token is unwrapped
+// and tested twice, whole and by base name.
+//
+// The comparison folds case, because Windows is the primary target (ADR-002)
+// and two spellings of one path are one path there.
+func namesFile(text, abs, base string) bool {
+	for _, tok := range strings.Fields(text) {
+		tok = strings.Trim(tok, "\"'`(),;")
+		if tok == "" {
+			continue
+		}
+		if strings.EqualFold(filepath.Clean(tok), abs) || strings.EqualFold(filepath.Base(tok), base) {
+			return true
+		}
+	}
+	return false
 }

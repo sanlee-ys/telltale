@@ -143,9 +143,33 @@ func newReplayModel(opts Options, rec *recording, path string) *Model {
 	st.Now = r.start
 	m := newModel(opts, st)
 	m.replay = r
-	m.st.Notice = "replay of " + path + " — " + itoa(len(rec.lines)) + " " + plural(len(rec.lines), "record") +
+	m.st.Notice = "replay of " + path + scrubbedMark(rec) + " — " + itoa(len(rec.lines)) + " " + plural(len(rec.lines), "record") +
 		" over " + dur(rec.span()) + "; nothing here is live"
 	return m
+}
+
+// scrubbedMark is the word a scrubbed recording adds to the replay's notice,
+// and the empty string for a capture.
+//
+// The honesty rule that puts REPLAY on every frame is the same rule: a frame
+// must never pass for something it is not. A scrubbed file is the shape of a
+// real room with every word synthesized, so a reader looking at the body is
+// looking at filler, and the notice says so at the open and again at the
+// close. The claim travels in the file (recordLine.Scrubbed), so a replay
+// cannot be handed a scrubbed file and draw it as a capture.
+func scrubbedMark(rec *recording) string {
+	if rec == nil || !rec.room.Scrubbed {
+		return ""
+	}
+	return " (scrubbed: the shape is real, every word is synthesized)"
+}
+
+// endedMark is the same claim, short enough for the closing notice.
+func endedMark(rec *recording) string {
+	if rec == nil || !rec.room.Scrubbed {
+		return ""
+	}
+	return " · scrubbed"
 }
 
 // clock maps a wall instant onto the recording's clock: the recording's start
@@ -185,8 +209,12 @@ func (m *Model) replayNext() tea.Cmd {
 		return nil
 	}
 	if r.i >= len(r.rec.lines) {
+		// The scrubbed word is repeated here, on the frame a reader is left
+		// looking at. The opening notice is gone by the first dispatch, and a
+		// reader who arrived at the end would otherwise have a full room of
+		// synthesized prose and nothing on screen saying so.
 		m.st.Notice = "replay ended — " + itoa(len(r.rec.lines)) + " " + plural(len(r.rec.lines), "record") +
-			" over " + dur(r.rec.span()) + " · q quits"
+			" over " + dur(r.rec.span()) + endedMark(r.rec) + " · q quits"
 		return nil
 	}
 	i := r.i

@@ -3455,6 +3455,14 @@ func Run(opts Options) error {
 	if err != nil {
 		return err
 	}
+	// The recording's PLACEMENT is warned about here, and not sooner, because
+	// the warning compares it against the workspace and the workspace is only
+	// now decided. Before the alternate screen, on stderr, beside the --brief
+	// and --trace refusals: a room the operator is about to watch for an hour
+	// must say this while there is still a terminal to say it on (scrub.go).
+	if warning := recordPlacementWarning(opts.RecordPath, ws); warning != "" {
+		fmt.Fprintln(os.Stderr, warning)
+	}
 	// Carried on the Reattachment because the notice is written by reattach(),
 	// which must not stat the path a second time: two reads of the same
 	// directory a moment apart can disagree, and the room would then choose its
