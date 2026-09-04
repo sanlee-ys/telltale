@@ -2555,7 +2555,16 @@ func nowParts(st State, c Column) (quiet, acts string) {
 	// delivered nothing has no instant to count from, so there is no `quiet 0s`
 	// here (§4a.1). The card in the body already says the seat is working and
 	// what to expect from it, so this does not restate that in a sentence.
-	if !c.LastOut.IsZero() && !st.Now.IsZero() {
+	//
+	// A seat behind a GATE draws no quiet clock either, and that is §9.45 rather
+	// than tidiness. The vendor is not silent there; it is stopped, and the
+	// person it is stopped on is the reader. A real frame measured the cost of
+	// getting this wrong: a gated seat drew `quiet 1m18s` beside its own
+	// approval card, which charges the vendor with the operator's own minute —
+	// the same error Column.GateWait exists to keep out of Elapsed. The card
+	// above the row already says why nothing is arriving, and the operator's
+	// share has its own figure on the turn separator.
+	if !c.LastOut.IsZero() && !st.Now.IsZero() && !stoppedOnYou(st, c) {
 		d := st.Now.Sub(c.LastOut)
 		if d < 0 {
 			d = 0

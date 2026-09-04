@@ -98,6 +98,14 @@ func TestEmitFramesFromRecording(t *testing.T) {
 			if err := os.WriteFile(base+".txt", []byte(plain), 0o644); err != nil {
 				t.Fatal(err)
 			}
+			// The ACCESSIBILITY FLOOR, as a file rather than as a claim. It is
+			// the same State through PlainStyles and the ASCII glyph set, which
+			// is what a contact sheet needs to show that every distinction is
+			// carried by a word or a mark (docs/room-identity.md).
+			ascii := Render(m.st, PlainStyles(), GlyphsFor(true))
+			if err := os.WriteFile(base+"-ascii.txt", []byte(ascii), 0o644); err != nil {
+				t.Fatal(err)
+			}
 			styled := Render(m.st, NewStyles(true), GlyphsFor(false))
 			svg, err := svgframe.Render(svgframe.Frame{
 				Caption: "telltale council --replay",
