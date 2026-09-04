@@ -1158,6 +1158,20 @@ func runCouncil(args []string) error {
 		return council.ReplayCheck(args[1], os.Stdout)
 	}
 
+	// `telltale council replay-scrub <in> <out>` writes a second recording
+	// that keeps the room's shape and replaces every word, so a real run can
+	// be committed as a fixture and replayed by a visitor with no vendor
+	// installed (design.md §9.56, and internal/council/scrub.go). A sub-noun
+	// like `ls` and `replay-check`, and it opens no room and starts nothing;
+	// it writes one file, at the path the operator typed, under the same two
+	// refusals --record carries.
+	if len(args) > 0 && args[0] == "replay-scrub" {
+		if len(args) != 3 {
+			return errors.New("telltale council replay-scrub takes two arguments: the --record file to read, and the new file to write")
+		}
+		return council.ScrubRecording(args[1], args[2], os.Stdout)
+	}
+
 	// The one seam this change opens in an existing command. `host` is a
 	// SUB-NOUN, matching `hook cursor`, `events view` and `otel grok`, and it is
 	// routed before the flag set so that `telltale council host --pipe …` is not
@@ -1522,6 +1536,11 @@ usage:
                          or share it: the workspace, the seats, every session
                          id, every tool line and gate card. Reads the file,
                          writes stdout, starts nothing (§9.56)
+  telltale council replay-scrub <in> <out>
+                         write a second recording that keeps the room's shape
+                         and replaces every word, so a real run can be
+                         committed and replayed by a machine with no vendor
+                         installed (§9.56)
   telltale hook cursor   (wire into ~/.cursor/hooks.json as an afterAgentResponse
                          command hook) read one turn's token counts on stdin,
                          add them to this machine's running total, print nothing

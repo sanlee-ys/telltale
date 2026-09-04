@@ -1,0 +1,50 @@
+  council ⚠ REPLAY  │  ~                                                                                                                turn 8 → claude  │  4/5 seated  │  briefed  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  UNREAD   2 Codex   3 Antigravity   4 Grok                                                                                                                                         
+  ⚠ 1 seat is not on screen: Cursor (left out by --vendor)  │  --vendor all seats them anyway  │  3 seats sat turn 8 out: Codex, Antigravity, Grok                                  
+▌ ▸ 1 CC Claude Code  ──────────────────────────────────────────────────────────────────────────  ⚠ needs you  │  2 CX ✓ done         │  3 AG ✓ done         │  4 GR ✓ done         
+▌   REPLAY  gated  tokens                                                                                      │  REPLAY              │  REPLAY              │  REPLAY              
+▌ ⚠ waiting on you: Write: C:\Users\bofod\Sitapun\pimigike-fizeg\lubosev-rupa-muzimo\lulen.md                  │                      │                      │                      
+▌   y approve   n deny   a stop asking                                                                         │                      │                      │                      
+▌ ↑ 8 more above  │  turn 6  │  ↑↓ scroll  │  f expand  │  1 act                                               │                      │                      │                      
+▌ long answer node some fast field table a method square limit draws step header small square output detail    │                      │                      │                      
+▌ small names piece deep counts other detail window draws closes number below holds screen other base side     │                      │                      │                      
+▌ beyond around a again but slow footer long option flat stack closes so above link frame queue first step     │                      │                      │                      
+▌ table leaf check header enough value a result clear value frame some option stack level node gives side      │                      │                      │                      
+▌ finish against some s                                                                                        │                      │                      │                      
+▌ turn 7  ───────────────────────────────────────────────────────────────────  + quoted  31s  $0.3743 session  │                      │                      │                      
+▌ › but each other check same step start name and enough last this some answer last table stack value two      │                      │                      │                      
+▌   large field node waits mark a block state giv                                                              │                      │                      │                      
+▌                                                                                                              │                      │                      │                      
+▌ s option last each light within new before header report table count fast group wide every result word       │                      │                      │                      
+▌ index light column fast two review round deep beside case enough list output fast column within other word   │                      │                      │                      
+▌ enough option within index square new band long option that long counts mark list header footer names cool   │                      │                      │                      
+▌ short new begin table term end fast chain count side closes wide the after deep beside body beside node      │                      │                      │                      
+▌ counts deep limit so wide list two index screen index beside same base there this long list across list      │                      │                      │                      
+▌ chain label method and detail note table edge names root below other a flat link closes queue side beside    │                      │                      │                      
+▌ part chain waits count line answer and deep same round count short value warm window level o                 │                      │                      │                      
+▌                                                                                                              │                      │                      │                      
+▌ beside holds label names below header cool frame word beyond limit root and above and window detail result   │                      │                      │                      
+▌ before mark shape takes between almost waits other draws fast le                                             │                      │                      │                      
+▌                                                                                                              │                      │                      │                      
+▌ takes link block state flat after here finish above quiet other short begin reason change before light       │                      │                      │                      
+▌ across across enough field here term within stack order reason writes review waits rule square closes input  │                      │                      │                      
+▌ option counts field that takes every header still count point result open flat names around moves near       │                      │                      │                      
+▌ field point light cool here part stack output writes moves leaf side root output around flat names test      │                      │                      │                      
+▌ next short note before names and edge root warm column change then counts quiet plain window across label    │                      │                      │                      
+▌ state note piece every almost label count case new every keeps note fast leaf first link square enough deep  │                      │                      │                      
+▌ around order chain deep count review count leaf answer footer finish node between range label review detail  │                      │                      │                      
+▌ holds one makes small review column against after label start short group name                               │                      │                      │                      
+▌                                                                                                              │                      │                      │                      
+▌ other above gives names frame closes small case test answer leaf order holds quiet stack body output line    │                      │                      │                      
+▌ last slow queue between square value rather review queue moves resu                                          │  turn 7 ✓  4s        │  turn 7 ✓  4s        │  turn 7 ✓  59s       
+▌ turn 8  ─────────────────────────────────────────────────────────────────────────────────  + quoted  you 0s  │                      │                      │                      
+▌ › across reason state across gives queue this line point makes names rather so block label screen leaf       │  almost leaf term    │  deep footer name    │  state next line     
+▌   names tree small small same band q                                                                         │  small tree report   │  holds frame begin   │  round enough test   
+▌                                                                                                              │  there small clear…  │  field end every …   │  around leaf warm …  
+▌ ⚙ Write: C:\Users\fekub\Bobilez\sizizudu-vacac\ginupic-koge-gaveba\figom.md                                  │                      │                      │                      
+▌ working…                                                                                                     │  2 then f expand     │  3 then f expand     │  4 then f expand     
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                                                                                           │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────  GATE  ─╯  
+                                              Write: C:\Users\bofod\Sitapun\pimigike-fizeg\lubosev-rupa-muzimo\lulen.md  │  y approve  │  n deny  │  a stop asking  │  ctrl+c quit  
