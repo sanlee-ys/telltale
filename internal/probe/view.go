@@ -44,13 +44,20 @@ func Warning(seats []Seat) string {
 	if len(names) == 0 {
 		return "No seat on this machine can be driven, so nothing would be probed."
 	}
+	// The count is spelled with its own noun rather than with "seat(s)". A
+	// reader who is about to be charged should read a sentence somebody wrote,
+	// not one a formatter assembled.
+	noun := "seats"
+	if len(names) == 1 {
+		noun = "seat"
+	}
 	return fmt.Sprintf(
-		"This SPENDS a turn. `telltale probe` drives %d seat(s) (%s) through a handshake, "+
+		"This SPENDS a turn. `telltale probe` drives %d %s (%s) through a handshake, "+
 			"one turn of one word, and a stop. Each turn runs on your own vendor "+
 			"credentials, on your own account, and is billed like any other turn you type. "+
 			"Every seat runs in a throwaway empty directory, never in this one, and the "+
 			"brief is the single word %q.",
-		len(names), strings.Join(names, ", "), Brief)
+		len(names), noun, strings.Join(names, ", "), Brief)
 }
 
 // Render draws the whole report.
