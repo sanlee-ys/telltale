@@ -3,13 +3,55 @@
 Telltale is a harness that measures what it's driving and refuses to
 drive one unwatched.
 
-A crew of five vendor CLIs in one terminal: Claude Code, Codex,
-Antigravity, Cursor, and Grok, each in its own column. Address `@all`
-and one brief is answered side by side; address one seat and it takes
-that brief while the others keep working. Each writing seat works in its
-own git worktree, and the room is the integrator (`/adopt`).
-A statusline and a HUD sit under the room.
-Every number comes from measured tool output.
+Telltale is for a builder who pays for two to five personal AI coding
+subscriptions. You put one question to all of them and you see who is
+right. You also see what each seat was allowed to do while it answered.
+
+The room gives you five surfaces:
+
+- `@all` sends one brief to every seat: Claude Code, Codex, Antigravity,
+  Cursor, and Grok. The seats answer side by side, each in its own
+  column.
+- `ctrl+r` arms a rebuttal round. Each seat then reads the other seats'
+  last answers, fenced and labelled as untrusted material.
+- A gate card stops a seat that asks before a write, and `y` approves it.
+  The posture rail beside the card says what each seat may do, and it
+  marks a posture that no run measured. `?` explains each badge.
+- `/arena` races one brief across the seats, each attempt in its own git
+  worktree. The room ranks the attempts by diff, and `/arena check
+  <command>` adds a PASS or a FAIL from a real exit code. `/adopt` merges
+  the attempt you pick.
+- `--record <file>` keeps a real run, with every seat's output and every
+  card. `--replay <file>` plays it back with the same renderer, and
+  `telltale council replay-check <file>` reports what the file carries
+  before you share it.
+
+Every number comes from measured tool output, and an empty gauge means
+telltale did not measure it.
+
+**Sixty seconds.** Install on Windows with one paste:
+
+```powershell
+irm https://raw.githubusercontent.com/sanlee-ys/telltale/main/packaging/install.ps1 | iex
+```
+
+The script checks the archive against `checksums.txt`, and the binary is
+not signed. [Install](#install) states every route.
+
+Play a room back:
+
+```
+telltale council --replay examples/demo.jsonl --replay-speed 8
+```
+
+That file is a scrubbed recording of a real room, and it plays on a
+machine with nothing installed.
+
+Then read what this machine has:
+
+```
+telltale doctor
+```
 
 > A telltale is the ribbon on a sail. It shows the air. It does not interpret it.
 
@@ -44,7 +86,8 @@ Every number comes from measured tool output.
      The runbook is packaging/tape/README.md. No cast or GIF is in this
      repository today. -->
 
-**v0.2.0** (2026-08-14). Windows is verified on every commit.
+**v0.2.0** (2026-08-14). `main` carries work past that tag, and
+[STATE.md](STATE.md) lists it. Windows is verified on every commit.
 The crew work after the tag (per-seat turns, worktrees, `@auto`,
 `--record`/`--replay`, the Unix host, three long-lived seats) is built and
 tested offline; the live runs it owes are listed in [STATE.md](STATE.md).
@@ -59,6 +102,9 @@ No binary is signed. Check `checksums.txt` on the release.
 Detail: [SECURITY.md](SECURITY.md). The v1 cut gates are in [docs/design.md §1](docs/design.md#s1).
 
 ## Install
+
+This section states every install route, including the one paste from the
+sixty-second path above.
 
 **From source**
 
