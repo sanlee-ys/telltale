@@ -1271,6 +1271,10 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			// Every byte of vendor output reaches state through the redactor,
 			// which is the single choke point Render can be reasoned about from.
 			c.Body += m.redact(ev.Vendor, ev.Text)
+			// The seat spoke, so the quiet clock restarts (Column.LastOut).
+			// Stamped from the room's own clock rather than from the wall, so a
+			// replay measures the recording's silence and Render stays pure.
+			c.LastOut = m.st.Now
 			if c.Phase == PhaseWaiting {
 				// It streamed after all. Upgrading the phase is honest in this
 				// direction only: the column now IS showing incremental output.
@@ -1290,6 +1294,11 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			for _, a := range ev.Acts {
 				c.recordAct(a, m.redactWhole)
 			}
+			// An act is the seat working, so it restarts the quiet clock on the
+			// same terms a text chunk does. A seat that runs a six-minute build
+			// and says nothing is NOT silent, and a clock that ignored acts
+			// would report it as stopped.
+			c.LastOut = m.st.Now
 			m.armArenaRefresh(ev.Vendor)
 
 		case runner.KindSession:

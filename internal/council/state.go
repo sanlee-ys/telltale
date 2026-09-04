@@ -423,6 +423,26 @@ type Column struct {
 	// read inside Render, so the strip stays pure over State. Reset by startTurn
 	// like every other per-turn fact.
 	Ended time.Time
+	// LastOut is when this seat last SAID or DID something on the current turn
+	// — the room's clock at the newest text chunk or tool act it delivered.
+	// Zero means the seat has delivered nothing at all this turn.
+	//
+	// It is a different measurement from Started, and the difference is the one
+	// fact a long turn was not stating. Started answers "how long has this turn
+	// run", which the column header already draws; this answers "how long has
+	// this seat been silent", which nothing drew. A reader at minute six of a
+	// waiting column could not tell a vendor that is working from one that has
+	// stopped, because both render the same growing number.
+	//
+	// Stamped from State.Now in applyEvents, so the figure moves on the same
+	// schedule as every other clock in the room and Render still reads no wall
+	// clock. Text and acts stamp it; a session id or a cost line does not,
+	// because those are the room's own bookkeeping and not the seat working.
+	//
+	// Zero and a measured instant render differently (§4a.1): a turn with no
+	// output draws no quiet clock at all, never `quiet 0s`. Reset by startTurn
+	// like every other per-turn fact.
+	LastOut time.Time
 	// LastFocus is when the reader last had the keys on this column — stamped
 	// when focus ENTERS it and again when focus LEAVES it (setFocus), so it
 	// marks the end of the last look rather than its start. A turn that ended
@@ -668,6 +688,10 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	c.CostSession = false
 	c.Started = time.Time{}
 	c.Ended = time.Time{}
+	// Back to UNMEASURED. A new turn has heard nothing from this seat yet, and
+	// carrying the last turn's stamp would draw a quiet clock counting from a
+	// sentence the seat said before the brief was sent.
+	c.LastOut = time.Time{}
 	c.Elapsed = 0
 	// Back to UNMEASURED, not to zero. The record above owns the old turn's
 	// figure, and a new turn that has raised no card has not made the operator

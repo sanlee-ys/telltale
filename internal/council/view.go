@@ -797,28 +797,47 @@ func columnCell(st State, c Column, f seatFocus, hint []string, w, h int, sty St
 	avail := h - len(chrome)
 	win, above, below := scrollWindow(c, body, avail)
 
-	// The turn coordinate rides on the column the keys move and on no other,
-	// which is §9.12's rule about hints applied to a fact: an unfocused marker
-	// is already spending its cells on `tab to focus`, the one thing a reader
-	// looking at that column can act on, and a turn number in front of it would
-	// crowd the answer to make room for the address.
-	turnUp, turnDown := "", ""
-	if f.hasKeys() {
-		turnUp = turnLabel(anchors, above-1)
-		turnDown = turnLabel(anchors, above+len(win))
+	// The turn coordinate rides on EVERY column now, and that reverses §9.20's
+	// call. §9.20 gave the coordinate to the focused column alone, because an
+	// unfocused marker was already spending its cells on `tab to focus` and a
+	// turn number would have crowded the one thing a reader could act on. That
+	// arithmetic was correct while the marker lived on a body row it had to
+	// share. The cue row below gives the marker a row of its own, so nothing is
+	// crowded — and the final frame of a long room measured the cost of the old
+	// rule: four columns each showed the tail of a DIFFERENT turn, and only one
+	// of them said which. Four unlabelled tails is the state a turn coordinate
+	// exists to prevent.
+	turnUp := turnLabel(anchors, above-1)
+	turnDown := turnLabel(anchors, above+len(win))
+
+	// The ABOVE marker moves off the body and onto the column's own cue row
+	// (columnChrome's last line), so the first content row is content.
+	//
+	// It was measured competing: `↑ 178 more above  │  tab to focus` sat on the
+	// first row of every column with history, above the turn rule, so the first
+	// thing a reader's eye reached in four columns at once was chrome about
+	// scrolling. The row it now uses is the blank columnChrome already reserves,
+	// so the grid does not shear and no column gains or loses a row — the body
+	// simply keeps the row the marker used to take.
+	//
+	// The BELOW marker stays where it is. It sits on the bottom edge, against
+	// the composer, which is where a reader already looks for "there is more
+	// this way"; hoisting it would put a claim about the bottom of the column at
+	// the top of it.
+	if avail > 0 && len(chrome) > 0 && above > 0 {
+		cue := overflowMarker(g.Up, above, "above", turnUp, hint, w, g)
+		chrome = append(append([]string{}, chrome[:len(chrome)-1]...),
+			sty.Muted.Render(padRight(cue, w, g)))
 	}
 
 	bodyLines := make([]string, 0, len(win))
 	for i, l := range win {
-		// The overflow markers replace the first and last visible lines rather
-		// than sitting outside the body, because the body area is the whole
-		// budget. Spending a line to say "there is more" is worth it: silent
-		// clipping is indistinguishable from a vendor that stopped talking,
-		// which is exactly the ambiguity §4a.1 forbids.
+		// The overflow marker replaces the last visible line rather than sitting
+		// outside the body, because the body area is the whole budget. Spending
+		// a line to say "there is more" is worth it: silent clipping is
+		// indistinguishable from a vendor that stopped talking, which is exactly
+		// the ambiguity §4a.1 forbids.
 		switch {
-		case i == 0 && above > 0:
-			bodyLines = append(bodyLines, sty.Muted.Render(padRight(
-				overflowMarker(g.Up, above, "above", turnUp, hint, w, g), w, g)))
 		case i == len(win)-1 && below > 0:
 			// The hint is named once per column. On a column with content hidden
 			// both ways it has already been said above, and saying it twice in
@@ -1927,6 +1946,12 @@ func columnLines(st State, c Column, w int, sty Styles, g Glyphs) ([]string, []t
 			inFlightBody(c.Phase, c.Gran, c.Body, len(c.Acts) > 0, w), sty)...)
 	}
 
+	// What this seat is doing NOW, under the turn it is doing it on.
+	if nl := nowLine(st, c, w, sty, g); len(nl) > 0 {
+		out = append(out, "")
+		out = append(out, nl...)
+	}
+
 	// Everything this seat has sat out SINCE its last turn, which is where the
 	// post-#99 room spends most of its rows: the default route is one seat, so
 	// three columns skip every ordinary turn.
@@ -2361,6 +2386,74 @@ func inFlightBody(phase Phase, gran Granularity, body string, acted bool, w int)
 	default:
 		return wrap(body, w)
 	}
+}
+
+// nowLine is what a WORKING seat is doing at this instant: how many acts it has
+// made on this turn, and how long it has been silent.
+//
+// It exists because the frame between two briefs said almost nothing. On the
+// owner's own desk geometry a dispatched turn drew about sixty blank rows per
+// column, a header reading `waiting 0s`, and one static sentence about the
+// vendor's granularity — so a room that was working and a room that had stopped
+// rendered the same picture for minutes at a time.
+//
+// The two figures are chosen because they are MEASURED and because nothing else
+// on the frame carries them (§4a.1):
+//
+//   - the ACT COUNT. The trace draws every call, and at eight calls over forty
+//     wrapped rows nobody counts them. The count is the one number that says
+//     how much this seat has done without reading what it did.
+//   - the QUIET CLOCK, which is the whole point of the line. The header's clock
+//     counts from the DISPATCH and grows whether or not the vendor is alive;
+//     this one counts from the seat's last word or last act (Column.LastOut),
+//     so a stalled seat and a busy one stop rendering the same number.
+//
+// A guess at progress is not drawn and there is no bar here. Nothing in this
+// room knows how far through a turn a vendor is, and a figure that implied it
+// would be exactly the invented reading §4a.1 forbids.
+//
+// Zero and absent stay apart. A seat that has made no calls draws `no acts yet`,
+// which is measured; a seat that has delivered nothing at all draws `nothing has
+// arrived`, never `quiet 0s`, because no instant has been measured to count
+// from.
+//
+// Drawn in labelRule's grammar — a word, a rule, the numbers that belong to it —
+// which is what turnRule and the cleared marker already use for "a boundary in
+// this transcript". The boundary here is the present moment.
+func nowLine(st State, c Column, w int, sty Styles, g Glyphs) []string {
+	if c.Phase != PhaseStreaming && c.Phase != PhaseWaiting {
+		return nil
+	}
+	acts := "no acts yet"
+	switch n := len(c.Acts); {
+	case n == 1:
+		acts = "1 act"
+	case n > 1:
+		acts = strconv.Itoa(n) + " acts"
+	}
+	quiet := "nothing has arrived"
+	if !c.LastOut.IsZero() {
+		d := st.Now.Sub(c.LastOut)
+		if d < 0 {
+			d = 0
+		}
+		quiet = "quiet " + dur(d)
+	}
+	// Widest first, like every shedding list in this file. The QUIET clock
+	// outranks the count, because the count can be recovered by reading the
+	// trace above it and the clock is stated nowhere else in the room.
+	//
+	// A width that holds neither figure draws NOTHING. labelRule sheds its meta
+	// and keeps the label, and `now  ─────` with no number on it is chrome
+	// asserting a boundary that carries no reading — the one shape this line
+	// must never take.
+	for _, meta := range []string{acts + "  " + quiet, quiet, acts} {
+		line := labelRule("now", meta, w, g)
+		if lipgloss.Width(line) <= w && strings.HasSuffix(line, meta) {
+			return []string{sty.Muted.Render(padRight(line, w, g))}
+		}
+	}
+	return nil
 }
 
 // trailingSkip is the run of turns this seat has sat out since its last one,
