@@ -40,10 +40,15 @@ import (
 // Three absences decide as much of this adapter as the presences do, and each
 // one is a thing print mode HAD:
 //
-//   - **No cost, and no token usage anywhere.** Print mode's `result` carried a
-//     `usage` block; the ACP turn resolves with `{"stopReason":…}` and nothing
-//     else. CostUSD was already nil for this vendor forever (no monetary figure
-//     exists in the bundle); now the token counts are gone too.
+//   - **No cost, and no token usage anywhere — TRUE AT 1.0.4, NOT AT 1.0.13.**
+//     Print mode's `result` carried a `usage` block; the 1.0.4 ACP turn resolved
+//     with `{"stopReason":…}` and nothing else. Re-measured 2026-09-04 at 1.0.13
+//     (§9.57): the prompt response now carries `_meta.usage` with token counts,
+//     `modelCalls`, `apiDurationMs`, a per-model map, and `costUsdTicks` — a cost
+//     in a unit nobody has measured, so CostUSD stays nil until the tick is
+//     pinned against grok.com's billing; the token counts are readable now and
+//     this adapter does not read them yet. Also at 1.0.13: `session/new` returns
+//     no `modes` and no `configOptions` (the frame quoted above is 1.0.4's).
 //   - **No final whole reply, so no safety net.** Print mode's `result` carried
 //     the entire answer, and §9.6c leaned on it explicitly as the fallback if the
 //     dedup fields ever changed: "the failure mode is a column that fills at the
