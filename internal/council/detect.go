@@ -575,10 +575,11 @@ func writeDetail(v model.VendorID, asking bool) string {
 	case model.VendorCodex, model.VendorGrok, model.VendorAntigravity:
 		// The three seats that moved to long-lived processes on 2026-09-02
 		// (design.md §9.57), each on a documentation read rather than a live
-		// run. The shape words come first, in the vocabulary the column
-		// header already speaks, and "unmeasured" is in them by construction:
-		// seatShape refuses to spell the word "measured" for a seat nobody has
-		// driven, so a badge cannot claim a gate it has not seen.
+		// run; grok's was driven on 2026-09-04. The shape words come first,
+		// in the vocabulary the column header already speaks, and the
+		// evidence word is in them by construction: seatShape refuses to
+		// spell the word "measured" for a seat nobody has driven, so a badge
+		// cannot claim a gate it has not seen.
 		return seatShape(v, false) + ": " + shared + ". " + liveSeatDetail(v, asking)
 	}
 	return shared
@@ -593,11 +594,12 @@ func writeDetail(v model.VendorID, asking bool) string {
 // evidence class with the version it was read or measured at. The evidence
 // word is the load-bearing one and it is chosen by CONSTRUCTION rather than by
 // hand: the live shapes were built from vendor documentation on 2026-09-02
-// (design.md §9.57) and nothing here has watched one run, so every live entry
-// says `unmeasured at <version>`; the fallback entries name the batch
-// invocation each seat was measured driving and the build it was measured
-// at. A later change that drives a live shape on the reference box may flip
-// exactly one word, and the checklist in §9.57 is the price of flipping it.
+// (design.md §9.57), and a live entry says `unmeasured at <version>` until
+// the checklist in §9.57 is paid for that seat on the reference box; the
+// fallback entries name the batch invocation each seat was measured driving
+// and the build it was measured at. Grok's live entry flipped on 2026-09-04,
+// and the flip moved its asking word too, because the drive that paid the
+// checklist measured the server not asking.
 //
 // fellBack is whether the room retreated to the measured batch adapter after
 // the live handshake failed (vendors.LiveFallback, fallback.go). The room
@@ -615,7 +617,15 @@ func seatShape(v model.VendorID, fellBack bool) string {
 		if fellBack {
 			return "single · unasked · fallback, measured at 1.0.4"
 		}
-		return "acp · asks · unmeasured at 1.0.13"
+		// The first live shape to flip its evidence word, 2026-09-04
+		// (design.md §9.57's grok items; vendors/acp.go's header). Both of
+		// the other words moved with it: `unasked`, because a write session
+		// on this server resolves its own permission interactions and raised
+		// no request in two trials — the channel exists behind a toggle the
+		// seat does not send — and `measured`, because the handshake, a
+		// turn, the mode, the permissions and the resume were all driven at
+		// this build.
+		return "acp · unasked · measured at 1.0.13"
 	case model.VendorAntigravity:
 		if fellBack {
 			return "print · unasked · fallback, measured at 1.1.13"
@@ -735,20 +745,30 @@ func liveSeatDetail(v model.VendorID, asking bool) string {
 			". If the app-server handshake is refused the seat falls back to " +
 			"`codex exec --json`, which asks about nothing"
 	case model.VendorGrok:
-		const shape = "This seat is one live `grok agent stdio` ACP process"
+		// MEASURED 2026-09-04 at 1.0.13 (vendors/acp.go's header). The
+		// server does not ask: it resolves its own permission interactions
+		// unless a `/always-approve off` prompt is sent first, and this seat
+		// sends none. So neither branch may promise a card, and the
+		// difference the asking flag makes is what the room WOULD do with a
+		// request that will not come.
+		const shape = "This seat is one live `grok agent stdio` ACP process, and it does " +
+			"NOT ask: measured at 1.0.13, a write brief created a directory and a " +
+			"file with no permission request, twice, because the server approves " +
+			"its own tool calls by default. The channel exists — after a " +
+			"`/always-approve off` prompt the server asked before a file write, " +
+			"and a rejection kept the file off disk — but council sends no such " +
+			"prompt today, and a shell command was never asked about even then. " +
+			"The boundary is the directory, not a card"
 		if asking {
-			return shape + ", and a permission request it raises is an approval card " +
-				"here, answered down the same pipe. Whether it raises one before a " +
-				"write at all is unknown: on the measured invocation (`--single`) it " +
-				"wrote with no request under every flag tried." + boundary +
-				". If the ACP handshake is refused the seat falls back to `--single`, " +
-				"which asks about nothing and is where its cost figure comes from"
+			return shape + ". A request this server did raise would be an approval " +
+				"card here, answered down the same pipe. If the ACP handshake is " +
+				"refused the seat falls back to `--single`, which asks about nothing " +
+				"and is where its cost figure comes from"
 		}
-		return shape + ", and with asking off the room answers yes to any permission " +
-			"request without drawing a card. Whether it raises one before a write " +
-			"at all is unknown." + boundary +
-			". If the ACP handshake is refused the seat falls back to `--single`, " +
-			"which asks about nothing and is where its cost figure comes from"
+		return shape + ". With asking off the room would answer yes to a request " +
+			"without drawing a card. If the ACP handshake is refused the seat falls " +
+			"back to `--single`, which asks about nothing and is where its cost " +
+			"figure comes from"
 	case model.VendorAntigravity:
 		return "This seat is one live `agy --input-format stream-json` process that " +
 			"stays open across turns, and NOTHING on that channel asks: the envelope " +
@@ -829,12 +849,14 @@ func gatedDetail(hooked bool) string {
 // `item/*/requestApproval` through the room's card and the grok ACP seat
 // routes `session/request_permission` the same way — so "the gate can ask"
 // both, in the sense that a request the vendor raises reaches a person. What
-// neither has is a coverage measurement: no live run on either path has
-// produced a request at all, let alone shown one raised before every write.
-// Their write badges say `asks · unmeasured` where the argument lives, and
-// stay `WRITES`. The day a capture shows one of them asking before every
-// change, this list is the one line to change and §9.57 is the record to
-// update.
+// neither has is a coverage measurement. Codex's path has produced no request
+// in a live run. Grok's was measured on 2026-09-04 and the measurement is the
+// opposite of coverage: the server asks about nothing by default, and with
+// its `/always-approve off` toggle sent it asked before a file write and NOT
+// before a shell command. Their write badges carry that where the argument
+// lives, and stay `WRITES`. The day a capture shows one of them asking before
+// every change, this list is the one line to change and §9.57 is the record
+// to update.
 func canGate(v model.VendorID) bool {
 	return v == model.VendorClaude
 }
@@ -1003,33 +1025,40 @@ func sandboxFor(v model.VendorID, windows bool) SandboxClaim {
 				"was written to over ACP without a prompt",
 		}
 	case model.VendorGrok:
+		// SandboxNone until 2026-09-04, and the level moved on a measurement
+		// of the ACP seat rather than on the batch seat's history — which is
+		// why this now reads like the Cursor branch and the fallback branch
+		// (fallbackClaim) still reads like Antigravity's. The batch seat's
+		// `--permission-mode plan` was REFUTED: asked to create a file under
+		// it, it wrote the file, exactly as the run without it did. The ACP
+		// seat's `session/set_mode plan` is a different mechanism and it was
+		// measured HOLDING: two write briefs under it ran no shell and wrote
+		// nothing in the workspace, and a read brief still listed and read
+		// files (vendors/acp.go's header, grok 1.0.13, Windows 11).
+		//
+		// `ro:requested`, never `ro:enforced`, on the cursor seat's own
+		// reasoning: the request is accepted with `{}` for ANY id, a nonsense
+		// one included, so the acceptance proves nothing; what the mode did
+		// is the evidence, it is two trials, and the refusal is worded as the
+		// model obeying its mode (it asked to leave plan mode and was told
+		// no) rather than as a layer stopping it. The --sandbox clause stays
+		// because it is about THIS TOOL's own argv: the flag was shown
+		// unobservable and council passes it nowhere.
 		return SandboxClaim{
-			Level: SandboxNone,
-			// Refuted, not unverified, and refuted twice over — which is why
-			// this reads like the Antigravity branch rather than like the
-			// Cursor one. Asked to create a file under --permission-mode plan,
-			// it called its `write` tool, reported the call "completed", said
-			// so, and the file was on disk afterwards. The control run without
-			// the flag also wrote its file. The only difference between the two
-			// arms was which write tool the model picked.
-			//
-			// The --sandbox clause is a DIFFERENT kind of evidence and is worth
-			// its own sentence: that flag was never refuted, it was shown to be
-			// unobservable. Handed a profile name that cannot exist it neither
-			// errored nor warned, so council has no way to tell a real profile
-			// from a typo, and asks for nothing rather than putting a word in
-			// this badge that the CLI may never have read.
-			Detail: seatShape(model.VendorGrok, false) + ": treat this column as able " +
-				"to change your files, and that is " +
-				"MEASURED rather than assumed: asked to write a file under " +
-				"--permission-mode plan, it wrote the file, exactly as the run " +
-				"without it did. Council passes neither that nor --sandbox — " +
-				"--sandbox silently ACCEPTS a profile name that does not exist, so " +
-				"nothing council asked of it could be observed. The workspace above " +
-				"is the containment, not a flag. Since 2026-09-02 the seat is one " +
-				"`grok agent stdio` ACP process, read from the 1.0.13 docs and not yet " +
-				"driven; a permission request it raises in this posture is refused by " +
-				"the room itself, and whether it raises one before a write is unknown",
+			Level: SandboxRequested,
+			Detail: seatShape(model.VendorGrok, false) + ": asked for, and two trials " +
+				"say it held: this seat is put in the ACP server's `plan` mode, and " +
+				"asked to make a directory and a file it ran nothing and created " +
+				"nothing, both times; asked to list and read, it read. Treat it as " +
+				"able to run things anyway — a mode the model obeys is not a layer " +
+				"that stops it, and the server accepts ANY mode id with the same " +
+				"empty answer, so what the mode did is the only evidence. Measured " +
+				"on Windows 11 at 1.0.13, not on macOS. A permission request in this " +
+				"posture is refused by the room itself, and none was raised. Council " +
+				"passes neither --permission-mode nor --sandbox — the batch seat's " +
+				"plan flag was measured writing the file, and --sandbox silently " +
+				"ACCEPTS a profile name that does not exist. The workspace above is " +
+				"the containment, not the mode",
 		}
 	default:
 		return SandboxClaim{}

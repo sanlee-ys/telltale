@@ -18668,7 +18668,7 @@ so nobody reads the registry and assumes the debt was paid.
 | seat | live shape | fallback (measured) | built from |
 |---|---|---|---|
 | Codex | `codex app-server`, one process, `thread/start{cwd, sandbox, approvalPolicy}`, `turn/start` per turn, `item/*/requestApproval` answered through the room's card | `codex exec --json` (codex.go, 0.149.1) | the protocol capture of §9.50 at **0.149.1**; the app-server README on `openai/codex` main and `app-server-protocol/src/protocol/v2/{shared,item}.rs`, read 2026-09-02, for the `approvalPolicy` enum (`untrusted`, `on-request`, `never`), the v2 decision enum (`accept`, `acceptForSession`, `decline`, `cancel`), the approval params (`itemId`, `command`, `cwd`, `reason`, `grantRoot`), and `turn.status: "interrupted"`. Installed build **0.152.1**, undriven |
-| Grok | `grok agent stdio`, the ACP client of §9.36 under a second dialect, `session/new{cwd}`, `session/prompt` per turn, `session/request_permission` answered by kind through the room's card | `grok --single=` (grok.go, 1.0.4) | docs.x.ai/build/cli/headless-scripting and zed.dev/acp/agent/grok-build, read 2026-09-02, for the subcommand and the `--cwd` / `--resume` flags this seat deliberately does not pass; agentclientprotocol.com/protocol/schema for `loadSession`, the option `kind` values and the `cancelled` outcome. Grok Build **1.0.13**, undriven |
+| Grok | `grok agent stdio`, the ACP client of §9.36 under a second dialect, `session/new{cwd}`, `session/prompt` per turn, `session/request_permission` answered by kind through the room's card | `grok --single=` (grok.go, 1.0.4) | docs.x.ai/build/cli/headless-scripting and zed.dev/acp/agent/grok-build, read 2026-09-02, for the subcommand and the `--cwd` / `--resume` flags this seat deliberately does not pass; agentclientprotocol.com/protocol/schema for `loadSession`, the option `kind` values and the `cancelled` outcome. Grok Build **1.0.13**, undriven at the time; driven 2026-09-04 (the checklist below) |
 | Antigravity | `agy --input-format stream-json --output-format stream-json`, one process, `{"event":"user","message":{"content":…}}` per turn, `result` ends the turn | `agy -p` (agy.go, 1.1.13) | antigravity.google/docs/cli/headless and the changelog entry for **1.1.15** (2026-08-19), read 2026-09-02, for the flag, the envelope, "one turn per message in a single conversation", and "close stdin … the process exits after the input pipe is closed and the current turn completes". Installed build **1.1.24**, undriven |
 
 Three shapes in the package carry the move:
@@ -18772,9 +18772,42 @@ README there; a claim that is not captured is not made.
   reached the model as text and was answered with a description of the TUI's slash commands.
   stderr carried `BatchLogProcessor.ExportError … network error` lines throughout — grok's own
   OTLP exporter pushing at a collector that was not running (§7.16a), harmless here.
-- [ ] **Grok, a permission request.** A write-posture session asked to run a command off the
-  allowlist and to write a file: does `session/request_permission` arrive for either, what
-  `optionId`s and `kind`s it offers, and do `allow_once` and `reject_once` do what they say.
+- [x] **Grok, a permission request.** PAID 2026-09-04 at grok 1.0.13 (5e9a58528b76), Windows 11,
+  with the seat's own frames (the transcripts are filed privately, desk/research, one per arm;
+  `vendors/acp.go`'s header carries what each showed). Two findings, and a third the item did
+  not ask for. **The server does not ask by default.** A write session given "run `mkdir zzz`
+  and create probe.txt" raised NO `session/request_permission` in two trials; the wire showed
+  `_x.ai/session_notification{pending_interaction, kind: "permission"}` followed at once by
+  `interaction_resolved`, `_x.ai/sessions/changed` reported `"yolo":true`, and both trials
+  put `zzz` and `probe.txt` on disk. After the prompt `/always-approve off` — handled by the
+  agent as a host turn, no model call — the `write` tool DID raise the request: `toolCall.kind:
+  "edit"`, options `allow-edits-session` (allow_always), `allow-once` (allow_once),
+  `reject-once` (reject_once), cursor's spelling to the letter and the tool's `_meta` naming
+  the `opencode` namespace. `reject-once` ended the turn `stopReason: cancelled` with no
+  `probe.txt`; `allow-once` put it on disk; `mkdir zzz` through `run_terminal_command` asked in
+  NEITHER trial and landed in both. The seat sends no toggle, so its badge now reads `acp ·
+  unasked · measured at 1.0.13` and the write detail says why. **The read posture's mode.**
+  `session/new` advertises no `modes` at this build, and `session/set_mode` answers `{}` to
+  every id — `plan`, `agent`, `read`, `bogus-mode-xyz` — so the acceptance is no evidence;
+  only `plan` and `agent` echoed a `current_mode_update` in both runs. Under `set_mode plan`
+  the same write brief ran no shell and wrote nothing in the workspace, two of two: the agent
+  wrote its plan into `~/.grok/sessions/<cwd>/…`, raised the server request
+  `_x.ai/exit_plan_mode{planContent}`, the client's empty result for an unknown request was
+  read as "the user wants to revise the plan", and the turn ended. A read brief under `plan`
+  still ran `list_dir` and `read_file` and answered from the file. So `grokDialect.readModeID`
+  is `plan` since this date and the ACP seat's read badge is `ro:requested`, on exactly the
+  evidence class cursor's is: a mode the model obeys, two trials, never `ro:enforced`. The
+  `acpDialect` bullet above that says "grok: none" was true until this date. **`x.ai/hooks` is
+  not a wire protocol**: it is the agent's on-disk hook system (`~/.grok/hooks`, listed by the
+  agent-handled `/hooks-list`; every tool call produced a `hook_execution` notification naming
+  the operator's own hook). Declaring the block under `clientCapabilities._meta` changed
+  nothing — the initialize response was byte-identical and no hook-shaped request reached the
+  client — so a client cannot hold a posture through it. Also measured: closing stdin ends the
+  process in 2.2–4.4 s (exit 0, twelve of twelve), above the 2 s grace, so the kill lands
+  first; and a `/`-brief is eaten when its name is an advertised command and passed to the
+  model when it is not (`/help`, item above). Not measured: macOS, and whether the seat should
+  send `/always-approve off` itself so the room's card can gate this seat's file writes — that
+  is a design choice, recorded as open in STATE.md rather than made here.
 - [x] **Grok, cost — HALF PAID 2026-09-04 at grok 1.0.13 (5e9a58528b76).** No `total_cost_usd` anywhere. But the
   prompt response's `_meta` now carries `usage` with `inputTokens`, `outputTokens`,
   `cachedReadTokens`, `cacheCreationTokens`, `reasoningTokens`, `modelCalls`, `apiDurationMs`,
@@ -18784,8 +18817,17 @@ README there; a claim that is not captured is not made.
   counts and must keep the cost cell absent until the tick is measured against grok.com's own
   billing page for the same turn. The adapter header's "no cost, and no token usage anywhere"
   was true at 1.0.4 and is not true at 1.0.13; the header says so now. Owed: the tick's unit.
-- [ ] **Grok, `session/load`.** A saved id reloaded in a new process, if `loadSession` is
-  advertised; the refusal shape if it is not held.
+- [x] **Grok, `session/load`.** PAID 2026-09-04 at grok 1.0.13 (5e9a58528b76). `loadSession:
+  true` is advertised on every handshake and honoured: `session/load{sessionId, cwd,
+  mcpServers}` in a NEW process, from the SAME cwd, answered with `models` and `_meta` (no
+  session id, as the adapter assumes) after streaming the whole prior conversation back as
+  `session/update` lines — `user_message_chunk`, `agent_message_chunk`, `tool_call`,
+  `hook_execution` — which is the replay `acp.go`'s guard drops; a prompt after it recalled the
+  earlier turn's files by name. The refusal shape is `-32603 "Path not found."` with `data.code:
+  FS_NOT_FOUND`, and it is the SAME for an unknown id and for a known id loaded from a
+  different cwd: the store is keyed by cwd, so a moved room cannot resume. The process survives
+  the refusal and `session/new` answers in it, which is the branch the cursor capture measured
+  at `-32602`. The `costUsdTicks` unit (the cost item above) is still owed.
 - [ ] **Antigravity, the stream handshake.** `agy --version`; two turns down one stdin with the
   seat's own argv: same pid, same `conversation_id` on both `result` events, and the second turn
   answering a question only the first could. Then close stdin and time the exit against the 3 s

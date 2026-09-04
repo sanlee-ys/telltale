@@ -49,6 +49,74 @@ import (
 //     pinned against grok.com's billing; the token counts are readable now and
 //     this adapter does not read them yet. Also at 1.0.13: `session/new` returns
 //     no `modes` and no `configOptions` (the frame quoted above is 1.0.4's).
+//
+// THE GROK SEAT WAS DRIVEN ON 2026-09-04 at grok 1.0.13 (5e9a58528b76), Windows
+// 11, with this file's own frames from scratch directories (design.md §9.57's
+// grok items; the transcripts are filed privately under desk/research, one
+// per arm). What the wire showed, arm by arm:
+//
+//   - **`session/set_mode` answers `{}` to EVERY id.** `plan`, `agent`,
+//     `read`, `bogus-mode-xyz` and `another-bogus` all drew `"result":{}`; no
+//     error for an id the server does not have. The response alone therefore
+//     proves nothing. The one tell is a `current_mode_update` notification,
+//     and it followed `plan` and `agent` in both runs, followed no bogus id in
+//     either, and followed `read` in one run of two. `session/new` advertises
+//     no `modes` block at 1.0.13, so `plan` and `agent` are known from the
+//     echo and from what they did, not from any list.
+//   - **`plan` HELD, two of two.** After `set_mode plan`, the brief "run
+//     `mkdir zzz` and create probe.txt" ran no shell and wrote nothing in the
+//     workspace. The agent wrote its plan into its own store under
+//     `~/.grok/sessions/<cwd>/…` (an `edit` act on that path reaches the
+//     trace, honestly), then raised a SERVER REQUEST `_x.ai/exit_plan_mode`
+//     {sessionId, toolCallId, planContent}. This file answers a request it
+//     does not know with an empty result (serverRequest), and the agent read
+//     that as "the user wants to revise the plan", ended the turn, and the
+//     disk was empty both times. A read brief under `plan` still inspected:
+//     `list_dir` and `read_file` ran and the answer was read off the file
+//     (one trial). That is the same evidence class cursor's `plan` has — a
+//     mode the model obeys, one and two trials — and it is why grokDialect
+//     now asks for it and the read badge says `ro:requested`.
+//   - **The server does not ask by default.** In a write session the same
+//     brief raised NO `session/request_permission` in two trials; the wire
+//     showed `_x.ai/session_notification{pending_interaction, kind:
+//     "permission"}` followed at once by `interaction_resolved`, and
+//     `_x.ai/sessions/changed` reported the session `"yolo":true`. Both trials
+//     put `zzz` and `probe.txt` on disk. After the prompt `/always-approve
+//     off` (handled by the agent as a host turn: no model call, `totalTokens`
+//     0), the `write` tool DID raise `session/request_permission`, with the
+//     options `allow-edits-session` (allow_always), `allow-once` (allow_once)
+//     and `reject-once` (reject_once) — cursor's spelling to the letter, and
+//     the tool's `_meta` names the `opencode` namespace. `reject-once` ended
+//     the turn `stopReason: cancelled` with no `probe.txt`; `allow-once` put
+//     it on disk. `mkdir zzz` through `run_terminal_command` asked in NEITHER
+//     trial and landed in both. This seat sends no toggle, so the measured
+//     state of the seat as built is unasked; the write badge says so.
+//   - **`x.ai/hooks` is not a wire protocol.** The `_meta` block on
+//     `agentCapabilities` advertises hooks the agent loads from disk
+//     (`~/.grok/hooks`, listed by the agent-handled `/hooks-list`); every tool
+//     call produced a `hook_execution` notification naming the operator's own
+//     hook script. Declaring the same block under `clientCapabilities._meta`
+//     changed nothing: the initialize response was byte-identical and no
+//     hook-shaped request reached the client. A client cannot hold a posture
+//     through it.
+//   - **`session/load` resumes, in a new process, from the SAME cwd.** The
+//     response carries `models` and `_meta` and no session id; the whole
+//     prior conversation streams back first as `session/update` lines
+//     (`user_message_chunk`, `agent_message_chunk`, `tool_call`, …), which is
+//     the replay the guard below drops; a prompt after it recalled the earlier
+//     turn's files. From a DIFFERENT cwd the same id is refused, and an unknown
+//     id is refused the same way: `-32603 "Path not found."` with `data.code:
+//     FS_NOT_FOUND`. The process survives the refusal and `session/new`
+//     answers in it — the branch the cursor capture measured, at a different
+//     error code.
+//   - **A brief beginning `/` is eaten when the name is an advertised
+//     command.** `/hooks-list` and `/always-approve off` were handled by the
+//     agent with no model call; `/help`, which is not in
+//     `available_commands_update`, reached the model as text (the item-14
+//     drive). Nothing here rewrites a brief either way.
+//   - **Closing stdin ends the process in 2.2–4.4 s**, exit 0, twelve of
+//     twelve. Grace is 2 s, so the kill behind it usually fires first; that is
+//     a cost of a second or two per teardown, not a leak.
 //   - **No final whole reply, so no safety net.** Print mode's `result` carried
 //     the entire answer, and §9.6c leaned on it explicitly as the fallback if the
 //     dedup fields ever changed: "the failure mode is a column that fills at the
@@ -72,9 +140,9 @@ import (
 // whether `session/load` may be sent without the server advertising it. The
 // state machine, the replay guard, the terminal handshake state and every
 // refusal are one implementation, so a fix on one seat is a fix on the other
-// and a divergence between them has exactly one place to hide. Everything a
-// dialect field says about grok is UNMEASURED and labelled so at its
-// definition; design.md §9.57 lists the runs that would change that.
+// and a divergence between them has exactly one place to hide. Each dialect
+// field's grok value was measured on 2026-09-04 (the block above); design.md
+// §9.57 carries the checklist those runs paid.
 
 // acpProtocol is one ACP conversation, for the life of one process.
 //
@@ -356,7 +424,7 @@ type acpPending struct {
 // vendor.
 //
 // Three fields, each one a decision that a live capture settled for cursor-agent
-// and that nothing has settled for grok. Anything NOT in this struct is shared
+// on 2026-08-08 and for grok on 2026-09-04. Anything NOT in this struct is shared
 // by construction: the state machine, the queue, the replay guard, the terminal
 // handshake state and the refusal of every unanswered request are one
 // implementation, so a divergence between the two seats has exactly one place
@@ -366,27 +434,32 @@ type acpDialect struct {
 	seat string
 	// readModeID is the `session/set_mode` id a read posture asks for, or ""
 	// when this seat asks for no mode at all. See acpMode for the cursor
-	// measurement behind "plan"; an empty value here is not "the same mode
-	// under another name", it is the seat declining to request a mode nobody
-	// has seen its server honour.
+	// measurement behind "plan", and the file header for grok's; an empty
+	// value here is not "the same mode under another name", it is the seat
+	// declining to request a mode nobody has seen its server honour.
 	readModeID string
 	// fixedOptions answers a permission request with the option ids the vendor
 	// was MEASURED offering (acpDecision), rather than with an id picked by kind
 	// from the request itself. Cursor keeps the measured spelling on purpose:
 	// a request whose option list changed shape would then be answered with an
 	// id the vendor refuses, visibly, rather than with a remembered one that
-	// still parses. A seat nobody has captured has no measured spelling to
-	// keep, so it picks by kind — the field the protocol defines — and answers
-	// `cancelled` when the kind it wants was not offered.
+	// still parses. The grok seat picks by kind — the field the protocol
+	// defines — and answers `cancelled` when the kind it wants was not
+	// offered. Its server was measured (2026-09-04) offering cursor's exact
+	// ids, `allow-once` and `reject-once`, and by-kind picked them; the seat
+	// keeps picking by kind because that measurement was one request shape
+	// on one tool, and a spelling carried over from another vendor's capture
+	// is the guess this field exists to refuse.
 	fixedOptions bool
 	// loadNeedsCapability gates `session/load` on the server having advertised
 	// `agentCapabilities.loadSession: true`. The ACP schema requires a client
 	// to check it; cursor-agent's capture carried it true on every handshake,
 	// so the cursor seat never needed the gate and does not get one now, which
-	// keeps its measured behaviour byte-identical. A seat whose server has not
-	// been captured gets the gate, because sending a method the server never
-	// offered is the one shape of handshake failure a client can avoid by
-	// reading what it was told.
+	// keeps its measured behaviour byte-identical. The grok seat keeps the
+	// gate: its server advertised `loadSession: true` on every 1.0.13
+	// handshake and honoured it (file header), and the gate costs nothing
+	// while it does; the day a build stops advertising it, the gate is what
+	// keeps the seat from sending a method it was told is not there.
 	loadNeedsCapability bool
 }
 
@@ -394,17 +467,26 @@ type acpDialect struct {
 // arms of 2026-08-08 drove (design.md §9.36).
 var cursorDialect = acpDialect{seat: "cursor", readModeID: "plan", fixedOptions: true}
 
-// grokDialect is the UNMEASURED seat, and each zero value is a claim withheld
-// rather than a default accepted. READ FROM DOCS, NOT FROM A RUN: Grok Build
-// 1.0.13's `grok agent stdio` is described as an ACP server over stdin/stdout
+// grokDialect is the grok seat, MEASURED 2026-09-04 at grok 1.0.13
+// (5e9a58528b76) on Windows 11; the file header holds each arm. Until that
+// day every value here was a claim withheld on a documentation read
 // (docs.x.ai/build/cli/headless-scripting and zed.dev/acp/agent/grok-build,
-// both read 2026-09-02), and nothing in either page names a mode id, a
-// permission option id, or whether session/load is advertised. So: no mode is
-// requested in the read posture (the room refuses that posture's permission
-// requests itself, which is the containment the badge claims and no more),
-// options are picked by kind from each request, and session/load is sent only
-// when the server says it may be. design.md §9.57 lists the runs owed.
-var grokDialect = acpDialect{seat: "grok", loadNeedsCapability: true}
+// 2026-09-02), and the read posture asked for no mode at all.
+//
+//   - `plan` is requested in the read posture because it was measured
+//     holding: two write briefs under it wrote nothing in the workspace, and
+//     a read brief under it still listed and read files. `session/set_mode`
+//     answers `{}` to any id, a nonsense one included, so the request's
+//     acceptance is not the evidence; what the mode DID is. That is exactly
+//     the standing of cursor's `plan` (acpMode), and the badge word is the
+//     same: `ro:requested`, never `ro:enforced`.
+//   - Options are picked by kind from each request. The server offered
+//     `allow-once` / `reject-once` / `allow-edits-session`, and only after
+//     `/always-approve off`; the seat sends no such toggle, so in a write
+//     session it is not asked (header).
+//   - `session/load` is gated on the advertised capability, which the server
+//     carried true and honoured.
+var grokDialect = acpDialect{seat: "grok", readModeID: "plan", loadNeedsCapability: true}
 
 // mode is the session mode this posture asks for under this dialect, or ""
 // when nothing is requested. See acpMode for the cursor measurement.
@@ -512,7 +594,7 @@ func (a *acpProtocol) openSession() []byte {
 // acpMode is the session mode this posture asks for ON THE CURSOR SEAT. It is
 // the value cursorDialect.readModeID carries, kept as a function so the
 // measurement below stays beside the word it justifies; the grok dialect asks
-// for no mode, and that is a withheld claim rather than a different answer.
+// for the same id on its own measurement (grokDialect, and the file header).
 //
 // MEASURED, one trial each, and the two results are not equally strong:
 //
@@ -675,10 +757,14 @@ func (a *acpProtocol) Closing() [][]byte {
 }
 
 // Grace is how long the room waits after closing stdin before it kills the
-// process. Two seconds, and the figure is a bound rather than a measurement:
-// no ACP server here has been watched exiting on a closed pipe, and the kill
-// behind it is what actually ends the process. A number that was measured
-// would be quoted with its capture; this one is quoted with its absence.
+// process. Two seconds, and the figure is a bound rather than a measurement
+// on the cursor seat: that server has not been watched exiting on a closed
+// pipe, and the kill behind it is what actually ends the process. The grok
+// server HAS been watched (2026-09-04, 1.0.13): it exits 0 on its own 2.2–4.4
+// s after stdin closes, twelve of twelve, so on that seat the kill usually
+// lands first. The bound stays at 2 s because a seat that is slower to die
+// costs a second of teardown, and a bound raised to fit one vendor's tail
+// would make every other seat's teardown wait for it.
 func (a *acpProtocol) Grace() time.Duration { return 2 * time.Second }
 
 // Dead reports the terminal handshake state, for the room's fallback decision
@@ -823,6 +909,15 @@ func (a *acpProtocol) serverRequest(msg acpLine) ([]runner.Event, [][]byte) {
 		// inventing a side of a protocol it has not read. An empty object is the
 		// smallest well-formed thing that unblocks it, and the vendor accepted
 		// it — the call it belonged to completed immediately afterwards.
+		//
+		// The grok seat's read posture rests on this branch, and that was
+		// measured rather than hoped (2026-09-04, 1.0.13, two of two): in
+		// `plan` mode the agent raises `_x.ai/exit_plan_mode` carrying the
+		// plan it wants to execute, and this empty result was read as "the
+		// user wants to revise the plan" — the turn ended, the plan was not
+		// executed, and nothing landed in the workspace. So the one request
+		// that could lift the read posture is answered, by construction,
+		// with the one answer that does not.
 		return nil, [][]byte{acpEmptyResult(msg.ID)}
 	}
 
@@ -990,16 +1085,32 @@ func (a *acpProtocol) notification(msg acpLine) ([]runner.Event, [][]byte) {
 // backticks are stripped: they are markdown for a chat client, and the trace
 // renders its entries in plain text beside three other vendors that send none.
 //
+// Stripped only when they WRAP the title. Cursor's titles are the bare command
+// in backticks ("`mkdir zzz`"); grok's (measured 2026-09-04) put a verb in
+// front — "Write `probe.txt`", "Execute `mkdir zzz`" — and trimming the ends
+// of those left an orphan backtick on the card. A pair left inside a title is
+// legible in plain text; half of one is not.
+//
 // rawInput.command is the fallback, and the bare kind is the last resort. A call
 // that named itself nothing still lands, because a column that went quiet during
 // the part of the turn it was busiest reads as one that hung.
 func acpCallText(title, kind, command string) string {
-	for _, s := range []string{strings.Trim(strings.TrimSpace(title), "`"), command, kind} {
+	for _, s := range []string{unwrapBackticks(title), command, kind} {
 		if strings.TrimSpace(s) != "" {
 			return clipArg(s)
 		}
 	}
 	return "tool call"
+}
+
+// unwrapBackticks removes one pair of backticks that encloses the whole title,
+// and leaves any other arrangement alone. See acpCallText.
+func unwrapBackticks(title string) string {
+	s := strings.TrimSpace(title)
+	if len(s) >= 2 && s[0] == '`' && s[len(s)-1] == '`' {
+		return strings.TrimSpace(s[1 : len(s)-1])
+	}
+	return s
 }
 
 // acpAct turns one tool_call or tool_call_update into a trace entry.
