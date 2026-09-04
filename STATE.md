@@ -137,18 +137,23 @@ a demo of the crew is a demo of measured claims only after that list is paid.
   **What `telltale probe` pays off this list, once the operator runs it, and
   what it does not (2026-09-04).** The mode drives each installed seat through
   its handshake, one turn of one word, and its stop, and records the result per
-  machine under `~/.telltale/probe/<vendor>.json`. It therefore PAYS the
-  handshake-and-one-turn half of item 17 and of §9.57's Antigravity stream
-  item, and the stdin-close-to-exit timing in item 11 and §9.57's stop items,
-  for whichever seats that machine has installed, one run each rather than
-  five, and it records the number rather than a badge. It pays NOTHING ELSE
-  here, by design. Items 10 and 15 need a write brief and a person answering an
-  approval card; 12 and 19 need a build without the subcommand; 16 needs a
-  saved id and grok.com's billing page; 18 needs a second conversation; 1
-  through 8 are the crew's own surfaces at real widths; 13 and 20 through 22
-  are the Mac. A probe that quietly drove any of those would spend more of the
-  operator's money than the sentence on screen promises, so each stays a hand
-  measurement with a reader.
+  machine under `~/.telltale/probe/<vendor>.json`. Stated by MEASUREMENT rather
+  than by item number, because the numbers here move as lines are paid and
+  deleted. It PAYS three things, for whichever seats that machine has
+  installed: that a live process comes up and names a session, that a brief
+  goes down that pipe and the turn ends the way the adapter says a turn ends,
+  and how many seconds pass between a closed stdin and the exit. That is the
+  Antigravity stream item's handshake-and-one-turn half, and the stop timing
+  the codex interrupt-and-stop line asks for. It is one run each rather than
+  five, and it records the number rather than a badge.
+
+  It pays NOTHING ELSE here, by design. An approval flow needs a write brief
+  and a person answering a card; a fallback trigger needs a build without the
+  subcommand; a resume needs a saved id; a cost figure needs the vendor's own
+  billing page; the crew's own surfaces need real widths and eyes; and the Mac
+  lines need the Mac. A probe that quietly drove any of those would spend more
+  of the operator's money than the sentence on screen promises, so each stays a
+  hand measurement with a reader.
 
 
 - **The 3-minute demo path is DEFINED (owner's ruling, 2026-08-15).** It is link
