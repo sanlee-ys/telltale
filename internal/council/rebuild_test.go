@@ -55,7 +55,7 @@ func TestRebuildLaunchesEveryRestorableSeat(t *testing.T) {
 	if !strings.HasPrefix(m.st.Notice, "rebuilding 2 seats") {
 		t.Errorf("the notice does not count the seats: %q", m.st.Notice)
 	}
-	if !strings.Contains(m.st.Notice, "loads each saved thread") {
+	if !strings.Contains(m.st.Notice, "loads its saved thread") {
 		t.Errorf("the notice does not explain what a rebuild is: %q", m.st.Notice)
 	}
 }

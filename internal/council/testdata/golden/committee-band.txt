@@ -4,7 +4,7 @@
                                                                                                                         
 ▌ ▸ 1 CC Claude Code  ───  ⠋ streaming  │    2 CX Codex  ────────  ⠋ streaming  │    3 AG Antigravity  ──  ⠋ streaming  
 ▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
-                                                                                                                        
+▌ now  ──────────────────  no acts yet  │  now  ─────────────────  no acts yet  │  now  ─────────────────  no acts yet  
                                                                                                                         
                                                                                                                         
                                                                                                                         

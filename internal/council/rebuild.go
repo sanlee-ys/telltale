@@ -466,7 +466,7 @@ func (m *Model) rebuildStartNotice() string {
 	// right at a narrow terminal, so the number of seats — which nothing else
 	// states — survives a width the explanation does not.
 	return "rebuilding " + itoa(n) + " " + plural(n, "seat") +
-		" — a new process loads each saved thread."
+		" — each loads its saved thread."
 }
 
 // rebuildSettledNotice is the room fact once they have.

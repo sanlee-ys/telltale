@@ -1,18 +1,18 @@
   council READ hosted  │  ~/code/telltale                                           turn 2  │  4/5 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  UNREAD   2 Codex done   4 Grok failed                                                                                 
+  UNREAD   2 Codex   4 Grok failed                                                                                      
   ⚠ 1 seat is not on screen: Cursor (installed but not drivable)  │  --vendor all seats them anyway                     
   › tighten the parser's error path                                                                                     
                                                                                                                         
 ▌ ▸ 1 CC Cl… ⠋ streaming 30s  │    2 CX Codex ✓ done 12s    │    3 AG Antigra… ✓ done 6s  │    4 GR Grok ✗ failed 2s    
 ▌   ro:tools  tokens          │    ro:enforced  final only  │    unsandboxed  final only  │    unsandboxed  tokens      
-▌                             │                             │                             │                             
-▌ ↑ 5 more above              │                             │                             │                             
-▌   ✓                         │                             │                             │                             
-▌ ⚙ Bash: go test             │                             │                             │                             
-▌   ./internal/parser ✗       │                             │                             │                             
+▌ ↑ 3 more above  │  turn 1   │                             │                             │                             
+▌ Claude Code.                │                             │                             │                             
+▌ turn 2  ──────────────────  │                             │                             │                             
+▌ ⚙ Read: …/parser.go ✓       │                             │                             │                             
+▌ ⚙ Bash: go test …/parser ✗  │                             │                             │                             
 ▌     exit status 1           │  turn 1  ─────────────  9s  │                             │                             
-▌ ⚙ Edit: internal/parser.go  │  › say your seat name       │  turn 1  ─────────────────  │  turn 2  ─────────────────  
+▌ ⚙ Edit: …/parser.go         │  › say your seat name       │  turn 1  ─────────────────  │  turn 2  ─────────────────  
 ▌                             │                             │  › say your seat name       │                             
 ▌ Reading the parser first.   │  Codex.                     │                             │                             
 ▌                             │  turn 2  ─────────────────  │  Antigravity.               │  ⚠ You've hit your usage    

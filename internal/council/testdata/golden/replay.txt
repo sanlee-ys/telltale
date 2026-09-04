@@ -1,11 +1,11 @@
   council ⚠ REPLAY  │  ~/code/example                                    turn 1 → everyone  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  UNREAD   2 Codex done                                                                                                 
+  UNREAD   2 Codex                                                                                                      
   › add a --version flag and a test for it                                                                              
                                                                                                                         
 ▌ ▸ 1 CC Claude Code ⠋ streaming 3s     │    2 CX Codex  ──────────  ✓ done 3s  │    3 AG Antigravity ⠋ streaming 5s    
 ▌   REPLAY  gated  tokens               │    REPLAY  WRITES  final only         │    REPLAY  WRITES  final only         
-                                                                                                                        
+▌ now  ─────────────  quiet 0s  2 acts  │                                       │  now  ───────  quiet 0s  no acts yet  
                                                                                                                         
                                                                                                                         
                                                                                                                         

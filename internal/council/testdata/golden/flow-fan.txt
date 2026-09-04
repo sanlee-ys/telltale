@@ -4,7 +4,7 @@
                                                                                                                         
 ▌ 1 CC ○ idle         │    2 CX codex  ────────  ⠋ waiting  │  3 AG ○ idle         │    4 CU cursor  ──────  ⠋ waiting  
 ▌                     │    shared tree                      │                      │    shared tree                     
-                                                                                                                        
+▌                     │  now  ───────────────  no acts yet  │                      │  now  ──────────────  no acts yet  
                                                                                                                         
                                                                                                                         
                                                                                                                         

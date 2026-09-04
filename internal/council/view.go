@@ -3010,7 +3010,12 @@ func shortPaths(text string, w int, g Glyphs) string {
 	fields := strings.Split(text, " ")
 	for i, f := range fields {
 		cut := strings.LastIndexAny(f, `\/`)
-		if cut <= 0 || cut == len(f)-1 {
+		// A SHORT token is left alone whatever separators it holds, and that is
+		// a correctness floor rather than a threshold to tune. `go test ./...`
+		// carries a slash and is not a path; shortening it produced `…/...`,
+		// which names no file and reads as a clipped one. Nothing under
+		// seventeen cells is worth shortening anyway — it fits.
+		if cut < 2 || cut == len(f)-1 || len([]rune(f)) <= 16 {
 			continue
 		}
 		fields[i] = g.Ellipsis + f[cut:]

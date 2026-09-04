@@ -2,8 +2,8 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ▌ ▸ 1 CC Claude Code  ─────────────────────────────────────  ⠋ streaming  │  2 CX ✓ done         │  3 AG ⚠ cancelled    
 ▌   ro:tools  tokens                                                      │  ro:requested        │  unsandboxed         
+▌                                                                         │  ↑ 2  │  turn 1      │                      
 ▌                                                                         │                      │                      
-▌                                                                         │  ↑ 2 more above      │                      
 ▌                                                                         │  answer to turn 1    │                      
 ▌                                                                         │  ○ not addressed in  │                      
 ▌                                                                         │    turn 2            │                      
