@@ -2,6 +2,7 @@ package vendors
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -13,16 +14,17 @@ import (
 
 // The Grok ACP seat's tests.
 //
-// Every line here is SYNTHESIZED from the ACP schema
-// (agentclientprotocol.com/protocol/schema, read 2026-09-02) and from the
-// shapes cursor-agent was measured sending under the same protocol
-// (design.md §9.36), with ONE exception: grokPromptMeta reproduces the SHAPE
-// of the prompt response `grok agent stdio` was measured sending at 1.0.13
-// on 2026-09-04 (acp.go's header quotes it), with every id and every figure
-// replaced by a fake of the same type. The option ids below are invented so
-// that a test can prove the seat reads them off the request rather than
-// knowing them. §9.57 lists the runs that would replace the rest with a
-// version-pinned capture.
+// Every line here is SYNTHESIZED: from the ACP schema
+// (agentclientprotocol.com/protocol/schema, read 2026-09-02), from the shapes
+// cursor-agent was measured sending under the same protocol (design.md
+// §9.36), and — since 2026-09-04 — from the shapes `grok agent stdio` was
+// measured sending at 1.0.13 (acp.go's header; the transcripts are private).
+// The values are fake on CLAUDE.md's rule. The option ids in grokPermission
+// are deliberately NOT the spelling the server was measured offering, so
+// that a test proves the seat reads them off the request rather than
+// knowing them; grokPermissionMeasured carries the measured spelling.
+// grokPromptMeta reproduces the prompt response's `_meta` shape from the
+// same drive, every id and figure a fake of the same type.
 
 func grokDriver(p Posture) *acpProtocol {
 	return newACPProtocolWith(grokDialect, "C:\\Users\\dev\\code\\example-app", "", p)
@@ -51,6 +53,23 @@ const (
 	grokPermission = `{"jsonrpc":"2.0","id":0,"method":"session/request_permission","params":{"sessionId":"55555555-5555-4555-8555-555555555555","toolCall":{"toolCallId":"call-9","title":"` + "`mkdir zzz`" + `","kind":"execute","status":"pending"},"options":[{"optionId":"proceed_once","name":"Allow once","kind":"allow_once"},{"optionId":"proceed_always","name":"Allow always","kind":"allow_always"},{"optionId":"refuse","name":"Reject","kind":"reject_once"}]}}`
 	// The same request offering nothing the room could honestly select.
 	grokPermissionAlwaysOnly = `{"jsonrpc":"2.0","id":0,"method":"session/request_permission","params":{"sessionId":"55555555-5555-4555-8555-555555555555","toolCall":{"toolCallId":"call-9","title":"` + "`mkdir zzz`" + `","kind":"execute"},"options":[{"optionId":"proceed_always","name":"Allow always","kind":"allow_always"}]}}`
+	// The request the server was MEASURED raising (2026-09-04, 1.0.13) for a
+	// `write` once `/always-approve off` had been sent: the tool kind is
+	// `edit`, and the ids are cursor's spelling to the letter. Values fake.
+	grokPermissionMeasured = `{"jsonrpc":"2.0","id":0,"method":"session/request_permission","params":{"sessionId":"55555555-5555-4555-8555-555555555555","toolCall":{"toolCallId":"call-7","kind":"edit","title":"Write ` + "`probe.txt`" + `","rawInput":{"variant":"Write","file_path":"probe.txt","content":"probe\n"}},"options":[{"optionId":"allow-edits-session","name":"Yes, allow all edits during this session","kind":"allow_always"},{"optionId":"allow-once","name":"Yes","kind":"allow_once"},{"optionId":"reject-once","name":"No, and tell Grok what to do differently","kind":"reject_once"}]}}`
+	// The mode echo that followed `set_mode plan` in both runs, and the
+	// server's `{}` answer to the request itself.
+	grokModeSet  = `{"jsonrpc":"2.0","id":3,"result":{}}`
+	grokModeEcho = `{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"55555555-5555-4555-8555-555555555555","update":{"sessionUpdate":"current_mode_update","currentModeId":"plan"},"_meta":{"eventId":"55555555-5555-4555-8555-555555555555-2"}}}`
+	// The one server request `plan` mode raises: the agent asking to leave
+	// it, with the plan it wants to run. Measured two of two.
+	grokExitPlan = `{"jsonrpc":"2.0","id":0,"method":"_x.ai/exit_plan_mode","params":{"sessionId":"55555555-5555-4555-8555-555555555555","toolCallId":"call-11","planContent":"# Create zzz and probe.txt\n\n1. mkdir zzz\n2. create probe.txt\n"}}`
+	// `session/load` refused at 1.0.13: an unknown id, or a known id from a
+	// different cwd, both draw this. The code is not cursor's -32602.
+	grokLoadNotFound = `{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"Path not found.","data":{"code":"FS_NOT_FOUND","detail":"The system cannot find the path specified. (os error 3)"}}}`
+	// The fresh session that follows a refused load is the seat's THIRD
+	// request, so its answer carries id 3.
+	grokSessionAfterLoad = `{"jsonrpc":"2.0","id":3,"result":{"sessionId":"66666666-6666-4666-8666-666666666666"}}`
 )
 
 func TestGrokAgentInvokesAgentStdioAndNothingElse(t *testing.T) {
@@ -101,13 +120,20 @@ func TestGrokACPHandshakeOpensASessionInTheWorkspaceAndReleasesTheHeldBrief(t *t
 	if _, ok := params["mcpServers"]; !ok {
 		t.Fatal("mcpServers is required by the schema and must be present, empty")
 	}
-	// No mode is requested in the read posture: nothing has named one for
-	// this server, and a refused set_mode fails the turn.
-	if d.sent("session/set_mode") {
-		t.Fatal("the grok dialect must not ask for a mode nobody has seen its server honour")
+	// The read posture asks for `plan` — measured holding two of two at
+	// 1.0.13 (acp.go's header) — and the held brief waits for the answer, on
+	// the cursor seat's sequencing: a brief that went out before the mode
+	// landed would run under the server's default with the badge saying
+	// otherwise.
+	sm := d.find("session/set_mode")
+	if sm == nil {
+		t.Fatal("the read posture must ask for the measured mode")
 	}
-	if !d.sent("session/prompt") {
-		t.Fatal("the held brief must go out once the session exists")
+	if p, _ := sm["params"].(map[string]any); p["modeId"] != "plan" {
+		t.Fatalf("the mode asked for must be the one measured holding, got %v", p["modeId"])
+	}
+	if d.sent("session/prompt") {
+		t.Fatal("the brief went out before the mode was set")
 	}
 	var session string
 	for _, ev := range d.events {
@@ -117,6 +143,136 @@ func TestGrokACPHandshakeOpensASessionInTheWorkspaceAndReleasesTheHeldBrief(t *t
 	}
 	if session != "55555555-5555-4555-8555-555555555555" {
 		t.Fatalf("the session id must reach the room, got %q", session)
+	}
+	// `{}` is the whole of the server's answer, and the echo is chrome the
+	// room does not render; the brief goes out on the answer.
+	d = drive(p, grokModeSet, grokModeEcho)
+	if !d.sent("session/prompt") {
+		t.Fatal("the held brief must go out once the mode is set")
+	}
+	for _, ev := range d.events {
+		if ev.Kind == runner.KindText || ev.Kind == runner.KindError {
+			t.Fatalf("the mode echo is chrome, not a thing the vendor said: %+v", ev)
+		}
+	}
+	// The write postures ask for nothing: `agent` is the default the server
+	// echoes on its own, and a request to reassert it is a request the room
+	// would then have to defend.
+	for _, post := range []Posture{PostureWrite, PostureWriteGated} {
+		q := grokDriver(post)
+		q.Turn("the brief")
+		w := drive(q, grokInitBare, grokSession)
+		if w.sent("session/set_mode") {
+			t.Fatalf("posture %v asked for a mode the write posture does not want", post)
+		}
+		if !w.sent("session/prompt") {
+			t.Fatalf("posture %v held the brief with nothing to wait for", post)
+		}
+	}
+}
+
+// TestGrokACPPlanModeExitRequestIsAnsweredWithTheAnswerThatKeepsIt: the one
+// server request `plan` raises is `_x.ai/exit_plan_mode`, and the empty result
+// the client sends to any request it does not know was MEASURED (two of two)
+// being read as "revise the plan" — the turn ends and nothing runs. Pinned so
+// a future special case cannot quietly approve it.
+func TestGrokACPPlanModeExitRequestIsAnsweredWithTheAnswerThatKeepsIt(t *testing.T) {
+	p := grokDriver(PostureRead)
+	p.Turn("run `mkdir zzz` and create probe.txt")
+	d := drive(p, grokInitBare, grokSession, grokModeSet, grokExitPlan)
+	var answered bool
+	for _, r := range d.replies {
+		var m map[string]any
+		if json.Unmarshal(r, &m) != nil || m["id"] != float64(0) {
+			continue
+		}
+		answered = true
+		res, ok := m["result"].(map[string]any)
+		if !ok || len(res) != 0 {
+			t.Fatalf("the exit request must be answered with an empty result, got %s", r)
+		}
+		if _, has := m["error"]; has {
+			t.Fatalf("an error would leave the agent blocked, got %s", r)
+		}
+	}
+	if !answered {
+		t.Fatalf("the agent is blocked on _x.ai/exit_plan_mode until it is answered; replies: %s", d.replies)
+	}
+	for _, ev := range d.events {
+		if ev.Kind == runner.KindGate {
+			t.Fatal("a read-only room offered the user a way out of the read posture")
+		}
+	}
+}
+
+// TestGrokACPReadPostureRefusesAMeasuredRequestByItsOwnIds: the measured
+// spelling, picked by kind. The server offered cursor's ids to the letter; the
+// seat still reads them off the request, so this passes by the same path that
+// passed with invented ids and not by a remembered string.
+func TestGrokACPReadPostureRefusesAMeasuredRequestByItsOwnIds(t *testing.T) {
+	r := grokDriver(PostureRead)
+	_, out := r.Inbound([]byte(grokPermissionMeasured))
+	if len(out) != 1 || !bytes.Contains(out[0], []byte(`"optionId":"reject-once"`)) {
+		t.Fatalf("want the measured reject id, got %s", out)
+	}
+	w := grokDriver(PostureWrite)
+	evs, _ := w.Inbound([]byte(grokPermissionMeasured))
+	if len(evs) != 1 || evs[0].Kind != runner.KindGate || evs[0].Gate.Tool != "edit" || evs[0].Gate.Text != "Write `probe.txt`" {
+		t.Fatalf("the card must carry the measured kind and title, got %+v", evs)
+	}
+	lines, err := w.Decide(evs[0].Gate.RequestID, true, "", nil)
+	if err != nil || len(lines) != 1 || !bytes.Contains(lines[0], []byte(`"optionId":"allow-once"`)) {
+		t.Fatalf("allow must select the measured allow_once id, got %s %v", lines, err)
+	}
+}
+
+// TestGrokACPRefusedLoadOpensAFreshSessionInTheSameProcess pins the measured
+// refusal shape — `-32603` with `FS_NOT_FOUND`, for an unknown id and for a
+// known id from another cwd alike — and that the seat spends the id and opens
+// `session/new` in the same process, which the drive showed answering.
+func TestGrokACPRefusedLoadOpensAFreshSessionInTheSameProcess(t *testing.T) {
+	const saved = "22222222-2222-4222-8222-222222222222"
+	p := newACPProtocolWith(grokDialect, "C:/ws", saved, PostureWrite)
+	p.Turn("the brief")
+	d := drive(p, grokInitCanLoad, grokLoadNotFound, grokSessionAfterLoad)
+	if !d.sent("session/load") || !d.sent("session/new") {
+		t.Fatalf("want load then new, sent %s", d.replies)
+	}
+	for _, ev := range d.events {
+		if ev.Kind == runner.KindError {
+			t.Fatalf("a refused load costs a round trip, not the turn: %+v", ev)
+		}
+	}
+	if !d.sent("session/prompt") {
+		t.Fatal("the brief must go out on the fresh session")
+	}
+	var session string
+	for _, ev := range d.events {
+		if ev.Kind == runner.KindSession {
+			session = ev.SessionID
+		}
+	}
+	if session != "66666666-6666-4666-8666-666666666666" {
+		t.Fatalf("the room must learn the fresh id, not keep the spent one, got %q", session)
+	}
+}
+
+// TestACPCallTextStripsOnlyAWrappingPairOfBackticks: cursor's titles are the
+// command in backticks and lose them; grok's measured titles carry a verb
+// before a backticked name, and those keep the pair rather than losing half
+// of it.
+func TestACPCallTextStripsOnlyAWrappingPairOfBackticks(t *testing.T) {
+	for title, want := range map[string]string{
+		"`mkdir zzz`":         "mkdir zzz",
+		" `mkdir zzz` ":       "mkdir zzz",
+		"Write `probe.txt`":   "Write `probe.txt`",
+		"Execute `mkdir zzz`": "Execute `mkdir zzz`",
+		"list_dir":            "list_dir",
+		"`":                   "`",
+	} {
+		if got := acpCallText(title, "execute", ""); got != want {
+			t.Errorf("acpCallText(%q) = %q, want %q", title, got, want)
+		}
 	}
 }
 

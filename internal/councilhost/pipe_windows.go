@@ -569,6 +569,18 @@ func Dial(name string, timeout time.Duration) (*Conn, error) {
 		return nil, err
 	}
 	deadline := time.Now().Add(timeout)
+	// A BUSY name is refused, but not on the first read. This is the grace the
+	// Unix Dial carries for the same window, and it was owed here for the same
+	// reason. The host writes the detach answer on its client's instance and
+	// then closes that instance, so between the two the name is still held and
+	// a dial in that gap reads ERROR_PIPE_BUSY. The ordinary rejoin is exactly
+	// the client that just detached, dialling back. Measured: CI on PR #356
+	// (2026-09-04, windows-latest) refused that rejoin once with "serving
+	// another client", and a local run of TestAReadRoomDetaches at -count=200
+	// reproduced the same refusal once. A bounded grace turns the gap into a
+	// wait. A room that another client holds stays busy past it and is refused
+	// as before, with the same sentence.
+	busyUntil := time.Now().Add(min(timeout, 500*time.Millisecond))
 	for {
 		h, err := windows.CreateFile(namep,
 			windows.GENERIC_READ|windows.GENERIC_WRITE,
@@ -590,6 +602,10 @@ func Dial(name string, timeout time.Duration) (*Conn, error) {
 		// means no host is running, and that is the answer rather than a
 		// failure to retry forever.
 		if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+		if errors.Is(err, windows.ERROR_PIPE_BUSY) && time.Now().Before(busyUntil) {
 			time.Sleep(20 * time.Millisecond)
 			continue
 		}

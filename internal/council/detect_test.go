@@ -657,27 +657,51 @@ func TestNoVendorClaimsUnverifiedEnforcement(t *testing.T) {
 	if got := sandboxFor(model.VendorClaude, true).Level; got != SandboxTools {
 		t.Errorf("claude claims %v, want SandboxTools", got)
 	}
-	// Grok is the Antigravity case with a second, weaker-looking half that is
-	// actually the sharper one. --permission-mode plan was REFUTED (asked to
-	// write a file under it, it wrote the file), which is what forces
-	// SandboxNone. --sandbox was not refuted but shown UNOBSERVABLE: it
-	// silently accepts a profile name that cannot exist, so council has no way
-	// to distinguish a real request from a typo and asks for neither (§9.39).
+	// Grok's BATCH seat is the Antigravity case with a second, weaker-looking
+	// half that is actually the sharper one. --permission-mode plan was
+	// REFUTED (asked to write a file under it, it wrote the file), which is
+	// what forces SandboxNone on the fallback. --sandbox was not refuted but
+	// shown UNOBSERVABLE: it silently accepts a profile name that cannot
+	// exist, so council has no way to distinguish a real request from a typo
+	// and asks for neither (§9.39).
 	for _, win := range []bool{true, false} {
-		if got := sandboxFor(model.VendorGrok, win).Level; got != SandboxNone {
-			t.Errorf("grok claims %v, want SandboxNone — plan mode was measured writing the file", got)
+		if got := fallbackClaim(model.VendorGrok, win, false).Level; got != SandboxNone {
+			t.Errorf("grok's fallback claims %v, want SandboxNone — plan mode was measured writing the file", got)
 		}
 	}
-	if got := sandboxFor(model.VendorGrok, true).Badge(); strings.HasPrefix(got, "ro:") {
-		t.Errorf("grok badge is %q; a vendor measured writing must not wear an ro: prefix", got)
+	if got := fallbackClaim(model.VendorGrok, true, false).Badge(); strings.HasPrefix(got, "ro:") {
+		t.Errorf("grok's fallback badge is %q; a vendor measured writing must not wear an ro: prefix", got)
+	}
+	// The LIVE seat is a different mechanism with a different measurement
+	// (2026-09-04, 1.0.13): `session/set_mode plan` held two write briefs and
+	// let a read brief read, so it wears `ro:requested` on the cursor seat's
+	// reasoning and NOT `ro:enforced` — the server accepts any mode id with
+	// the same empty answer, so only what the mode did is evidence, and that
+	// is two trials of a model obeying a mode. Measured on Windows only, and
+	// the detail must say so; the level is the same off Windows because the
+	// request is the same and the claim is about the request.
+	for _, win := range []bool{true, false} {
+		live := sandboxFor(model.VendorGrok, win)
+		if live.Level != SandboxRequested {
+			t.Errorf("grok's live seat (windows=%v) claims %v, want SandboxRequested — plan mode was measured holding", win, live.Level)
+		}
+		if !strings.Contains(live.Detail, "not on macOS") {
+			t.Errorf("grok's live detail does not say where it was measured: %q", live.Detail)
+		}
+		if !strings.Contains(live.Detail, "ANY mode id") {
+			t.Errorf("grok's live detail does not say why the acceptance is not the evidence: %q", live.Detail)
+		}
 	}
 	// The same this-tool's-own-behaviour rule the agy detail is held to: the
 	// badge may not say council passes a flag it does not pass. Asserted as the
 	// absence of the two flag names in any affirmative form by checking the
 	// invocation instead — vendors.TestGrokAsksForNothingInEitherPosture owns
-	// that half — and here by requiring the detail to name why nothing is asked.
-	if d := sandboxFor(model.VendorGrok, true).Detail; !strings.Contains(d, "--sandbox") {
-		t.Errorf("the grok detail does not explain the unobservable sandbox flag: %q", d)
+	// that half — and here by requiring both details to name why nothing is
+	// asked for on the argv.
+	for _, d := range []string{sandboxFor(model.VendorGrok, true).Detail, fallbackClaim(model.VendorGrok, true, false).Detail} {
+		if !strings.Contains(d, "--sandbox") {
+			t.Errorf("the grok detail does not explain the unobservable sandbox flag: %q", d)
+		}
 	}
 	for _, v := range []model.VendorID{model.VendorClaude, model.VendorCodex,
 		model.VendorAntigravity, model.VendorGrok} {
