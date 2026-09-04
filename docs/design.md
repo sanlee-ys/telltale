@@ -18853,7 +18853,19 @@ write postures, on both paths, and its absence on read. The two posture tests no
 grant is the WHOLE difference between the postures. `TestAgyStreamSessionKeepsEveryFlagAndNoPrompt`
 pins both flags on the stream session.
 
-**Not verified here: a live `/arena` race through the room.** The council TUI takes no scripted
-input, so the racer's exact argv was run by hand in the arena worktree instead (rows seven and
-eight above), and `git status` in that worktree shows the files against `5664d51`. The first
-`/arena` after this lands is the check, and it is the operator's.
+**Verified live by the operator, 2026-09-04, race t13.** The section shipped saying the council
+TUI takes no scripted input, so the racer's exact argv had been run by hand instead (rows seven
+and eight above) and the live race was left as the operator's check. That check has now run:
+four seats, the same `haiku.md` brief, in `~\Desktop\telltale-rooms\scratch`.
+
+The Antigravity column reported `4th of 4 · done · 8m19s`, `committed 3c9df8c`, and a stat of
+`haiku.md | 3 +++`. Its trace showed `write_to_file` and `view_file` on
+`scratch-arena-t13-agy\haiku.md`, then four `run_command` steps inspecting the tree with `git
+status` and `git diff`. On disk afterwards, `3c9df8c` on `arena/t13/agy` carries `haiku.md` and
+three insertions, and the file holds the haiku. Agy's own scratch directory received nothing:
+the `haiku.md` sitting there is still the turn-9 one, dated 2026-09-03.
+
+**The rank is the honest part.** This seat placed 3rd of 4 before the fix, on a worktree it had
+never touched, and 4th of 4 after it, on work it actually did — the slowest of the four at
+8m19s, where the other three finished in 29s, 36s and 1m41s. The fix did not make the column
+win. It made the column true.
