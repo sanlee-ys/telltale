@@ -819,12 +819,27 @@ func ReplayCheck(path string, w io.Writer) error {
 	for _, line := range selfReads(rec, path) {
 		fmt.Fprintln(w, line)
 	}
-	fmt.Fprintf(w, "vendor output: %d text %s, %d chars, verbatim and unredacted\n", texts, plural(texts, "event"), textChars)
+	// `verbatim` is the whole warning on these two lines, and it is a claim
+	// about the bytes rather than a label on the count. A scrubbed file's
+	// words are synthesized, so the word changes with the file: a check that
+	// went on saying `verbatim` over a scrub would be telling a reviewer to
+	// fear a conversation that is not in there.
+	source := "verbatim and unredacted"
+	briefSource := "verbatim"
+	if h.Scrubbed {
+		source, briefSource = "synthesized", "synthesized"
+	}
+	fmt.Fprintf(w, "vendor output: %d text %s, %d chars, %s\n", texts, plural(texts, "event"), textChars, source)
 	dispatchWord := "dispatches"
 	if dispatches == 1 {
 		dispatchWord = "dispatch"
 	}
-	fmt.Fprintf(w, "briefs: %d %s, %d chars, verbatim\n", dispatches, dispatchWord, briefChars)
+	fmt.Fprintf(w, "briefs: %d %s, %d chars, %s\n", dispatches, dispatchWord, briefChars, briefSource)
+	if h.Scrubbed {
+		fmt.Fprintln(w, "This file carries no conversation: the room's shape is real and every word in it was replaced.")
+		fmt.Fprintln(w, "Read the file whole before you commit it, the same as a capture.")
+		return nil
+	}
 	fmt.Fprintln(w, "This file carries the conversation. This check lists identities and paths and does not read the prose;")
 	fmt.Fprintln(w, "read the file whole before you commit or share it.")
 	return nil

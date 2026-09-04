@@ -338,6 +338,14 @@ func actHead(s string) (head string, rest string, ok bool) {
 	if !scrubToolVerbs[cand] && !strings.Contains(cand, "_") {
 		return "", s, false
 	}
+	// A doubled underscore is how every measured vendor spells an MCP tool:
+	// `<server>__<tool>`. The server half names something the OPERATOR wired
+	// up rather than something the vendor ships, so the whole line is
+	// replaced. shape() keeps the underscores and the length, so the trace
+	// still draws a long namespaced tool name of the same width.
+	if strings.Contains(cand, "__") {
+		return "", s, false
+	}
 	tail := string(runes[i:])
 	switch {
 	case tail == "":
