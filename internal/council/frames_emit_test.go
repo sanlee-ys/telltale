@@ -87,37 +87,10 @@ func TestEmitFramesFromRecording(t *testing.T) {
 		}
 		m := newReplayModel(Options{}, rec, from)
 		m.st.Width, m.st.Height = w, h
-		// Stale exits: a persistent seat's previous process ends within a
-		// second of the dispatch that replaced it, and the recording carries
-		// only the vendor name, so a replay marks the NEW turn failed. The
-		// live room did not show that. Skip them here; the product fix is a
-		// separate change.
-		// The rule: a `done` from a seat that has not said one word on this
-		// turn is the previous process ending, not this turn's end. In the
-		// recording those land 0.1s to 11s after the dispatch.
-		stale := map[int]bool{}
-		spoke := map[string]bool{}
-		for i := range rec.lines {
-			l := &rec.lines[i]
-			switch {
-			case l.Kind == "dispatch":
-				spoke = map[string]bool{}
-			case l.Kind == "event" && l.Event == "text":
-				spoke[l.Vendor] = true
-			case l.Kind == "event" && l.Event == "done" && !spoke[l.Vendor]:
-				stale[i] = true
-			}
-		}
 		played := 0
 		for n, mo := range moments {
 			for played <= mo.after {
-				if stale[played] {
-					// applyReplay drops any index but the next one, so the
-					// skipped record has to be consumed, not bypassed.
-					m.replay.i++
-				} else {
-					m.Update(replayMsg{played})
-				}
+				m.Update(replayMsg{played})
 				played++
 			}
 			plain := Render(m.st, PlainStyles(), GlyphsFor(false))
