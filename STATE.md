@@ -901,8 +901,17 @@ Nothing open. The last one here was the 44 seconds, and it was measured
      `telltale council` removed `host.json` and rebuilt five seats over a host
      that was alive. The probe now forgives that one rename
      (`sameImage` in `internal/councilhost/process_windows.go`, with the
-     measurement); the rejoin half of the drive is still owed, on a binary
-     nobody reinstalls while it runs.
+     measurement). **The rejoin half ran 2026-09-04 on `cc851af`, with no
+     reinstall in flight, through the plain client (stdin piped):** one read
+     brief to `claude,codex,agy,grok` in this repo; all four answered and the
+     persistent seat settled `done`; `/detach` left pid 6980; `ls` reported
+     RUNNING; `telltale council` printed *rejoined the host that was already
+     running … nothing was rebuilt, and no session was resumed* with all four
+     answers intact; a second `/detach`, then `kill`. What that run cannot
+     show is the TUI half of the claim — columns, rail and badges surviving a
+     rejoin on a real terminal — because a piped stdin takes the plain client
+     by design. That observation is the owner's, one command while a host is
+     up, and it is the only piece of this line still open.
   2. **The live seat in a hosted room.** `--live` with `--host` is refused
      with one sentence. A pseudoconsole child in the host and its cell grid on
      the wire is a second wire format and a second spawn guard.
