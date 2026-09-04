@@ -59,3 +59,11 @@ is no longer the price of a change.
   arrived yet` as the description of a quiet seat; the strip form above the
   threshold. `docs/room-identity.md` carries the argument. The identity does not
   move.
+- **2026-09-04 — A recording's SHAPE may be committed; its WORDS may not.** (The
+  scrub lane, on the 2026-09-04 adversarial review's fault F.) "Fixtures are
+  synthesized, never real" binds the content, so `telltale council replay-scrub`
+  keeps every structural fact of a real room and replaces every word with
+  synthesized text of the same length. `examples/demo.jsonl` is the first such
+  file, and two goldens pin its frames. The claim travels in the file
+  (`scrubbed: true` on the room line), because a scrubbed replay must never pass
+  for a capture: same rule that puts REPLAY on every frame.

@@ -298,6 +298,22 @@ the file read answers after the sink exits.
 `TestNoGaugeReadsTheEventStore` fails the build if a gauge ever imports either
 package.
 
+A **fifth** exception is that same kind again, and it is the only one that
+writes OUTSIDE `~/.telltale`: the room's **recording** (`telltale council
+--record <file>`, design.md §9.56) writes the conversation verbatim, at a path
+the operator typed. Scope contains it rather than redaction, and the scope is
+three facts: the flag is typed at the door and no key in the room starts one, a
+path that resolves under `~/.telltale` is refused before a byte is written, and
+an existing file is refused rather than truncated or extended.
+**`telltale council replay-scrub <in> <out>` writes under that same grant and
+no wider.** It reads one recording and writes a second at a second path the
+operator typed, under the same two refusals; it starts no vendor, opens no
+room, and reads no state of its own. What it writes is the SHAPE of a real room
+with every word synthesized (`internal/council/scrub.go`), which is what makes
+`examples/demo.jsonl` a file this public repository can carry and the fixture
+rule below can accept. `telltale council replay-check <file>` is a reader of
+the same file and writes stdout only.
+
 **Who may push to the two listening modes** (`telltale otel grok`, `telltale
 events`) is its own contract, added 2026-08-16 (design.md §7.24). A loopback
 bind is not containment on its own: a web page the operator merely visits
@@ -356,7 +372,11 @@ nowhere else.
   package — a bare `// renders the header` is below this repo's bar.
 - **Fixtures are synthesized, never real.** Test data uses fake session ids, fake
   paths, realistic shape only. No real session content belongs in this
-  repository — it's public.
+  repository — it's public. `examples/demo.jsonl` keeps this rule rather than
+  bending it: the CONTENT is what the rule binds, every word in that file is
+  synthesized by `telltale council replay-scrub`, and only the event shape is a
+  real room's. The file says `scrubbed: true` on its own room line, and the
+  replay and `replay-check` both repeat the claim.
 - **`internal/theme` stays stdlib-only.** It's the shared palette both
   `internal/hud` and `internal/council` map into `lipgloss` values, specifically
   so the `telltale statusline` **code path** never reaches the Bubble Tea/Lipgloss

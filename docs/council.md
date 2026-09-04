@@ -838,6 +838,40 @@ prose. That is the README's frame review, given a tool. What a recording does no
 cancels and give-ups (a column you cancelled live replays as the vendor's own exit), focus
 and scrolling, and the `--brief` file's text.
 
+**Where you put the recording matters, and the room now says so.** A seat reads a file it can
+reach. On 2026-09-03 a seat read the room's own recording while the room was running, and the
+trace showed the read with nothing to say what the file was. `--record` prints one warning
+line before the room opens when the file sits inside the workspace, or in the directory just
+above it, where each writing seat's worktree also sits. It stays a warning and not a refusal,
+because the path is yours. `replay-check` names the other half, in a line under the tool calls
+it lists: `self-read: <vendor> read this recording at <ms>`, for any act that names the
+recording itself.
+
+**A scrubbed recording keeps the shape and replaces the words.** `telltale council replay-scrub
+<in> <out>` reads a capture and writes a second recording beside it. It keeps every structural
+fact: the record kinds, the millisecond offsets, the turn numbers, the routes, the seats with
+their labels and postures, the event kinds, the act outcomes, the exit codes, the gate
+decisions and the cost figures. It replaces every word: each brief, each reply chunk, each act
+name and path, each session id, each request and tool-use id, the workspace, and the room's
+wall stamp. Each replacement is the same length as what it replaced and keeps every newline,
+so a scrubbed replay wraps and scrolls exactly as the capture does, and a fake Windows path
+truncates on the trace line where the real one did. The generator is deterministic, so two
+scrubs of one file write one file and a regenerated fixture is reviewable by diff. The output
+says what it is: the room line carries `scrubbed: true`, the replay says `scrubbed` in its
+notice at the open and at the close, and `replay-check` says it on its first line and reports
+the prose as `synthesized` rather than `verbatim`. That is the same honesty rule that puts
+REPLAY on every frame. A scrubbed file is therefore committable, and one is committed:
+`examples/demo.jsonl` is a real room of 2026-09-03 with every word replaced, and
+
+```
+telltale council --replay examples/demo.jsonl --replay-speed 8
+```
+
+plays it on a machine with no vendor CLI installed. Two goldens pin its frames, at the gate
+card and at the end, so the event shape of a room nobody wrote is a regression fixture for the
+renderer. The scrub writes only to the path you type, and it refuses the two paths `--record`
+refuses: anything under `~/.telltale`, and a file that already exists.
+
 ## Flags
 
 `telltale council` flags: `--fresh` (start over instead of reattaching), `--cd <dir>`
@@ -854,7 +888,8 @@ without asking will not detach; [design.md §7.29](design.md), and §7.30 for ma
 Linux), `--live claude` (seat a pane showing claude's own terminal screen beside the
 measured seats; display only, and nothing on it is read as a number; [design.md
 §9.53](design.md)), `--ascii`, `--no-title`. `telltale council replay-check <file>` reviews
-a recording without opening it; `telltale council ls` prints the saved room and whether a
+a recording without opening it; `telltale council replay-scrub <in> <out>` writes a copy of
+one with every word replaced; `telltale council ls` prints the saved room and whether a
 host is running, and writes nothing.
 
 `--vendor <list>` decides who is in the room: `all` keeps every detected seat on screen
