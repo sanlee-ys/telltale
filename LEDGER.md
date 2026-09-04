@@ -52,7 +52,7 @@ is no longer the price of a change.
   the first mode that SPENDS the operator's money, so three things bind it: it
   states the cost before it runs, it refuses to run with no terminal unless
   `--yes` is given, and its one-word brief is a constant rather than a flag. Its
-  file is a fourth bounded write exception and the strictest one — no brief, no
+  file is a fourth bounded write exception and the strictest one: no brief, no
   reply, no session id, no path, and no failure reason, because a vendor's own
   error line carries paths. Reason: `doctor` could say telltale's survey was
   stale and nothing on the machine could answer it, so every live claim was paid

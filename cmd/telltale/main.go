@@ -69,7 +69,7 @@
 // line: a live seat, a brief of one word, and a timed stop, on the operator's
 // own account. It is asked for explicitly, it names the cost before it starts,
 // it refuses to run with no terminal unless `--yes` is given, and nothing else
-// in this binary reaches it — no gauge, no room, no schedule.
+// in this binary reaches it: no gauge, no room, no schedule.
 package main
 
 import (
@@ -739,7 +739,7 @@ func runDoctor(args []string) error {
 // `doctor` widened the no-vendor rule to `<binary> --version` and drew the new
 // line at cost and side effect (design.md §9.42). This mode is on the far side
 // of that line: it brings each installed seat up as a live process, hands it a
-// brief of one word, and times its stop — one billed turn per seat, on the
+// brief of one word, and times its stop. That is one billed turn per seat, on the
 // operator's own account. So it says the cost before it starts, it asks, and it
 // refuses to run at all when nobody is there to answer.
 //
@@ -755,7 +755,7 @@ func runProbe(args []string) error {
 	// One deadline per CHECK rather than one for the run, on runDoctor's
 	// argument: a wedged seat must cost its own timeout and not the report. The
 	// default is far longer than doctor's because what is being waited on is
-	// different in kind — a cold vendor CLI takes seconds to start (§9.33) and
+	// different in kind. A cold vendor CLI takes seconds to start (§9.33), and
 	// then a model has to answer, and a one-word turn on this fleet was measured
 	// at about 25 seconds when every turn paid a fresh session init
 	// (runner/session.go). Too short renders a FAILED that is this flag's fault.
@@ -794,7 +794,7 @@ func runProbe(args []string) error {
 		// Named before it is driven, not after. A seat can take minutes, and a
 		// terminal that goes quiet while an agent runs on the operator's account
 		// is the state this whole product exists to refuse.
-		fmt.Printf("\ndriving %s — a handshake, one turn, a stop…\n", s.Vendor)
+		fmt.Printf("\ndriving %s: a handshake, one turn, a stop…\n", s.Vendor)
 		res := probe.RunSeat(ctx, s, opts)
 		results = append(results, res)
 		if !res.Drove() {
@@ -818,8 +818,8 @@ func runProbe(args []string) error {
 // probeSeats resolves which seats a `telltale probe` run drives.
 //
 // No argument means every installed seat. A named seat is resolved through
-// council's own @mention vocabulary — the same table `--vendor` and `@codex`
-// read — because a word the room prints and this mode rejects would be the
+// council's own @mention vocabulary, the same table `--vendor` and `@codex`
+// read. A word the room prints and this mode rejects would be the
 // binary being clever at the operator's expense.
 //
 // A named seat that is not installed is an ERROR rather than a silent drop. The
@@ -848,7 +848,7 @@ func probeSeats(args []string) ([]probe.Seat, error) {
 			}
 		}
 		if !found {
-			return nil, errors.New(string(want) + " is not a seat this machine can drive — " +
+			return nil, errors.New(string(want) + " is not a seat this machine can drive. " +
 				"`telltale doctor` names every place it looked for it, and why it is not seatable")
 		}
 	}
@@ -1606,7 +1606,7 @@ usage:
                          refuses to run with no terminal unless you pass --yes.
                          Every seat runs in a throwaway empty directory, never
                          in this one. The result goes to
-                         ~/.telltale/probe/<vendor>.json as numbers and keys —
+                         ~/.telltale/probe/<vendor>.json as numbers and keys:
                          the version, the day, this telltale build, and three
                          results with their milliseconds. No brief, no reply, no
                          session id, no path, and no failure reason: the reason
@@ -1696,7 +1696,7 @@ telltale probe flags:
                               because a model has to answer inside it, not just
                               a flag parser
 A named seat that is not installed is refused rather than skipped, and the seats
-are driven one at a time — two agents answering at once would make the durations
+are driven one at a time, because two agents answering at once would make the durations
 a reading of this machine's load rather than of the vendor.
 
 telltale otel grok flags:

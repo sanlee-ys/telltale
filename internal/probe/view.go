@@ -13,8 +13,8 @@ import (
 // an issue, and every distinction it makes has to survive a pipe. No colour, no
 // alternate screen, nothing for --ascii or NO_COLOR to switch off.
 //
-// Render is PURE over its results. Everything measured — a duration, a version
-// string, a vendor's own failure sentence — is measured in the drive and
+// Render is PURE over its results. Everything measured, a duration, a version
+// string or a vendor's own failure sentence, is measured in the drive and
 // arrives here as data, which is the same rule the room's own Render and the
 // preflight's both keep.
 
@@ -30,8 +30,8 @@ const (
 // Warning is the sentence the operator reads BEFORE anything is driven, and it
 // is the reason this mode has a confirmation at all.
 //
-// It names the cost in the unit the operator pays it in — one turn per seat, on
-// their own account, under their own vendor credentials — and it names the
+// It names the cost in the unit the operator pays it in: one turn per seat, on
+// their own account, under their own vendor credentials. It also names the
 // seats, because "all of them" is a different bill on a five-seat machine than
 // on a one-seat one. Every other mode in this binary reads; this one spends, and
 // a mode that spends without saying so is the thing this repository refuses one
@@ -45,7 +45,7 @@ func Warning(seats []Seat) string {
 		return "No seat on this machine can be driven, so nothing would be probed."
 	}
 	return fmt.Sprintf(
-		"This SPENDS a turn. `telltale probe` drives %d seat(s) — %s — through a handshake, "+
+		"This SPENDS a turn. `telltale probe` drives %d seat(s) (%s) through a handshake, "+
 			"one turn of one word, and a stop. Each turn runs on your own vendor "+
 			"credentials, on your own account, and is billed like any other turn you type. "+
 			"Every seat runs in a throwaway empty directory, never in this one, and the "+
@@ -89,7 +89,7 @@ const legend = "Three states and no fourth, the same three `telltale doctor` pri
 	"read `not checked` rather than being guessed at."
 
 const closing = "What was written: the vendor, the version, the day, this telltale build, and " +
-	"the three results with their milliseconds. The failure reason above is NOT written — a " +
+	"the three results with their milliseconds. The failure reason above is NOT written: a " +
 	"vendor's own error line carries paths and session ids, and the files under " +
 	"~/.telltale hold numbers and keys only. Read the reason here, where it was measured. " +
 	"`telltale doctor` reports what the file holds, on each seat's own row."
@@ -114,7 +114,7 @@ func writeCheck(b *strings.Builder, c Check) {
 		if text == "" {
 			text = took
 		} else {
-			text = took + " — " + text
+			text = took + ", " + text
 		}
 	}
 	b.WriteString(prefix)

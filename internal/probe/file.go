@@ -26,7 +26,7 @@ import (
 //
 // Numbers and keys only, exactly as `council/room.json`, `quota/<vendor>.json`
 // and `usage/<vendor>.json` are. A probe DRIVES an agent, so the material it
-// touches is the most sensitive telltale ever holds — the brief, the reply, the
+// touches is the most sensitive telltale ever holds: the brief, the reply, the
 // session id the vendor named, and the directory the seat ran in. None of the
 // four reaches this file. What is written is the vendor id, the version string
 // the binary printed, the day, the telltale build that probed, and three check
@@ -35,7 +35,7 @@ import (
 // The failure REASON is deliberately absent too, and that is the sharpest of
 // these decisions. A vendor's first stderr line routinely carries an absolute
 // path, a workspace name or a session id, so a file that carried it would carry
-// content by the back door — and it would do it on exactly the runs a reader is
+// content by the back door, on exactly the runs a reader is
 // most likely to paste somewhere. The reason is printed in the operator's own
 // terminal, where the probe ran, and it stops there. `doctor` therefore reports
 // WHICH check failed and names the command that shows why, rather than quoting
@@ -54,7 +54,7 @@ type Record struct {
 	// Vendor is the lower-case vendor id, matching model.VendorID.
 	Vendor string `json:"vendor"`
 	// Version is the string the vendor's own binary printed, unchanged. Empty
-	// when this machine did not print one — absent, never a guess.
+	// when this machine did not print one. Absent, never a guess.
 	Version string `json:"version,omitempty"`
 	// ProbedAt is when the drive ran, RFC 3339 through time.Time's own
 	// marshaller.
@@ -78,7 +78,7 @@ type CheckRecord struct {
 	Status string `json:"status"`
 	// Millis is how long the check took. A POINTER, so that "the check took no
 	// measurable time" and "the check did not run" stay different states on
-	// disk — design.md §4a.1's rule, applied to the one number this file
+	// disk. That is design.md §4a.1's rule, applied to the one number this file
 	// carries. A check that did not run writes no `ms` key at all.
 	Millis *int64 `json:"ms,omitempty"`
 }
@@ -93,7 +93,7 @@ const (
 	StatusNotRun = "not_run"
 )
 
-// Dir is the probe directory, ~/.telltale/probe — beside council's room.json,
+// Dir is the probe directory, ~/.telltale/probe. It sits beside council's room.json,
 // the quota relay and the token relay, and under the same root every telltale
 // write lives under.
 func Dir() (string, error) {
@@ -108,7 +108,7 @@ func Dir() (string, error) {
 //
 // Atomic for `quotacache.Write`'s reason: `doctor` reads this file, and a
 // reader that caught a torn write would report a probe that never happened. A
-// temp file in the SAME directory, then a rename — rename is only atomic within
+// temp file in the SAME directory, then a rename. A rename is only atomic within
 // one volume.
 //
 // A record naming no vendor writes nothing. There is no file name for it, and
@@ -150,7 +150,7 @@ func Write(dir string, rec Record) error {
 //
 // An absent file and an unreadable file both report false, and that collapse is
 // correct HERE and nowhere else: the caller renders "probed here: never", which
-// is the honest sentence for both — nothing on this machine says this seat was
+// is the honest sentence for both, because nothing on this machine says this seat was
 // driven. What must never happen is the other collapse, an absent file
 // rendering as a pass, and the boolean is what stops a caller writing that by
 // accident.

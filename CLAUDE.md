@@ -352,7 +352,7 @@ stated before the run, the operator is asked at the terminal, and a run with no
 terminal is refused unless `--yes` is given: a mode that spends money must not
 be reachable from a hook, a script or a CI step by accident. Nothing else in
 the binary calls it. Do not wire it into a gauge, the room, a test or a
-schedule, and do not make its one-word brief configurable — a settable brief is
+schedule, and do not make its one-word brief configurable. A settable brief is
 a way to spend a real turn through a mode that promised a trivial one.
 
 Two sharper versions of the same boundary, worth reading before you touch either

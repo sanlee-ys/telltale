@@ -34,8 +34,8 @@ import (
 //
 // The binary it is handed is a path exec.LookPath cannot find, which is what
 // makes the suite's spawn guard let it through: nothing launches, so nothing
-// costs anything. Everything the drive asks of a seat — the spec, the turn
-// line, the parser — is answered here rather than mocked at the boundary,
+// costs anything. Everything the drive asks of a seat, the spec, the turn
+// line and the parser, is answered here rather than mocked at the boundary,
 // because the property under test is what this package DOES with a seat's
 // answers.
 type fakeSeat struct{ id model.VendorID }
@@ -92,7 +92,7 @@ type stubSession struct {
 	closeOnce sync.Once
 
 	// exitAfterClose is how long after CloseInput this process "exits". A
-	// negative value never exits, which is the case the stop check exists for —
+	// negative value never exits, which is the case the stop check exists for:
 	// §9.50 measured a real seat doing exactly that.
 	exitAfterClose time.Duration
 }
@@ -295,7 +295,7 @@ func TestAProcessThatDiesBeforeItNamesASessionCarriesTheVendorsWords(t *testing.
 }
 
 // The turn check fails when the seat names a session and then never ends the
-// turn. The handshake keeps its pass — it happened — and only the stop goes
+// turn. The handshake keeps the pass it earned, and only the stop goes
 // unchecked.
 func TestATurnThatNeverEndsFailsWithTheHandshakeStillPassed(t *testing.T) {
 	sess := newStub(0)
@@ -322,8 +322,8 @@ func TestATurnThatNeverEndsFailsWithTheHandshakeStillPassed(t *testing.T) {
 }
 
 // The stop check is the one §9.50 forced. A closed stdin was measured NOT
-// ending `codex app-server` — four runs exited in 1.5–3.3 s and one was alive
-// at 15 s — so a check that accepted the room's own kill as an exit would
+// ending `codex app-server`. Four runs exited in 1.5 to 3.3 s, and one was
+// alive at 15 s. So a check that accepted the room's own kill as an exit would
 // report every seat passing. Here the process never exits on its own, and the
 // check has to say so.
 func TestAProcessThatOutlivesItsGraceFailsTheStop(t *testing.T) {
@@ -459,7 +459,7 @@ func TestAnUnreadVersionStaysEmptyAndTheDriveStillRuns(t *testing.T) {
 
 // A seat whose adapter states no grace still gets a bound. The stream-json seat
 // is in that position because a closed stdin was MEASURED sufficient for it, so
-// the adapter has nothing to say — but a check that could wait forever is not a
+// the adapter has nothing to say. But a check that could wait forever is not a
 // check.
 func TestASeatWithNoStatedGraceStillStopsWithinABound(t *testing.T) {
 	sess := newStub(0)

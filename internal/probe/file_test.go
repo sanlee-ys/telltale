@@ -82,7 +82,7 @@ func TestTheProbeFileCarriesKeysAndNumbersOnly(t *testing.T) {
 // The failure reason is the sharpest, and it is why the record drops Detail on
 // every branch: a vendor's own first stderr line routinely carries an absolute
 // path or a session id, so a file that quoted it would carry content by the
-// back door — on exactly the runs a reader is most likely to paste somewhere.
+// back door, on exactly the runs a reader is most likely to paste somewhere.
 func TestNoPlantedContentSurvivesIntoTheFile(t *testing.T) {
 	const marker = "PLANTED-CONTENT"
 	res := passingResult()
@@ -183,7 +183,7 @@ func TestTheStampIsRFC3339(t *testing.T) {
 	}
 }
 
-// An absent file, an unreadable one and one naming no seat all report false —
+// An absent file, an unreadable one and one naming no seat all report false.
 // and the caller renders "never" for all three, which is the honest sentence
 // for each. What may never happen is the other collapse, so the boolean is what
 // stops a caller writing a pass by accident.

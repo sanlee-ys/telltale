@@ -15,7 +15,7 @@ import (
 // its reason.
 //
 // That guard exists because a plain `go test ./internal/council` was measured
-// starting `codex exec --json -s danger-full-access` — a live agent turn with
+// starting `codex exec --json -s danger-full-access`, a live agent turn with
 // full write access, on the operator's own account. This package is the one
 // place in the repository where spawning a vendor is the POINT, so the same
 // defect here would not be an accident in a test that wanted a second column:
@@ -24,14 +24,14 @@ import (
 //
 // The rule is copied rather than re-invented. A binary `exec.LookPath` cannot
 // resolve launches nothing, costs nothing and reaches no account, so it is let
-// through to the real call and fails there — which is what the tests below
+// through to the real call and fails there. That is what the tests below
 // assert on. A binary it CAN resolve is a real program about to run on
 // somebody's machine, and no spelling of a test's intent makes that cheaper.
 //
 // HOME and USERPROFILE are redirected for the same file's second reason. This
 // package writes ~/.telltale/probe, and a suite that wrote the operator's own
 // probe files would put a result on their disk that no probe of theirs
-// produced — which `telltale doctor` would then report as a measurement made
+// produced, and `telltale doctor` would then report it as a measurement made
 // here. That is worse than the council case it is copied from: council's file
 // pointed a room at a deleted directory, and this one would be a false claim on
 // a surface built to carry true ones.
@@ -65,12 +65,12 @@ func refuseRealVendor(site string, spec runner.Spec) {
 		return
 	}
 	panic(fmt.Sprintf(
-		"probe test spawned a REAL vendor process via %s — this package's whole job is "+
+		"probe test spawned a REAL vendor process via %s. This package's whole job is "+
 			"to spend a billed turn, so a suite that reaches a resolvable binary spends "+
 			"the operator's money.\n"+
 			"  binary: %s\n"+
 			"  args:   %q\n"+
 			"  dir:    %s\n"+
-			"Stub the spawn vars in this test — stubSpawn(t) does both.",
+			"Stub the spawn vars in this test: stubSpawn(t) does both.",
 		site, spec.Binary, spec.Args, spec.Dir))
 }

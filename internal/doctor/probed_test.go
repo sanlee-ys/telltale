@@ -28,7 +28,7 @@ func day() time.Time { return time.Date(2026, 9, 4, 9, 0, 0, 0, time.UTC) }
 
 // The absent case, and it is the one this line exists for. A machine where
 // nothing has ever driven this seat gets the sentence saying so and the command
-// that fixes it — never a blank, never a missing line, and nothing shaped like
+// that fixes it. Never a blank, never a missing line, and nothing shaped like
 // a pass.
 func TestASeatNobodyProbedSaysNeverAndNamesTheCommand(t *testing.T) {
 	r := Run([]Seat{seat("claude")}, answering("2.1.226 (Claude Code)"))
@@ -77,7 +77,7 @@ func TestAProbedSeatNamesTheBuildTheDayAndEachCheck(t *testing.T) {
 }
 
 // A failed probe reports WHICH check failed and leaves the checks under it
-// unrun. The reason is deliberately absent — it never reached the file — so the
+// unrun. The reason is deliberately absent, because it never reached the file, so the
 // line must not imply it has one.
 func TestAFailedProbeNamesTheCheckAndLeavesTheRestNotChecked(t *testing.T) {
 	s := seat("codex")
@@ -193,7 +193,7 @@ func TestAProbeWithNoChecksSaysItCannotBeRead(t *testing.T) {
 }
 
 // A probe whose own version was never read states that, rather than putting a
-// date after a blank — which would read as a probe of whatever is installed
+// date after a blank, which would read as a probe of whatever is installed
 // today.
 func TestAProbeWithNoVersionSaysSoRatherThanShowingABlank(t *testing.T) {
 	s := seat("cursor")

@@ -1,5 +1,5 @@
 // Package probe drives one installed vendor seat through the live shape the
-// room uses — the handshake, one turn, and the stop — and writes what it
+// room uses: the handshake, one turn, and the stop. It writes what it
 // measured under ~/.telltale/probe.
 //
 // # Why this may run a vendor, when almost nothing else may
@@ -25,23 +25,23 @@
 // A reader of `telltale doctor` today is told that telltale's survey is older
 // than the binary on this disk, and nothing on the machine can do anything
 // about it. After a probe, `doctor` can say the seat was driven HERE, at THIS
-// build, on THIS day — a machine-paid fact rather than a maintainer's note.
+// build, on THIS day. That is a machine-paid fact, not a maintainer's note.
 //
 // # What it drives, and what it deliberately does not
 //
 // Three checks, in order, stopping at the first failure on that seat:
 //
-//   - handshake — the process comes up and the seat names a session.
-//   - turn — a brief of ONE WORD goes down the same pipe, the reply arrives,
+//   - handshake: the process comes up and the seat names a session.
+//   - turn: a brief of ONE WORD goes down the same pipe, the reply arrives,
 //     and the turn ends the way the adapter says a turn ends.
-//   - stop — the seat's own closing lines go out, stdin closes, and the
+//   - stop: the seat's own closing lines go out, stdin closes, and the
 //     process exits inside the grace the adapter states.
 //
 // Those are the three things every dispatch in the room depends on, and they
 // are the three the repository already calls owed: STATE.md's crew checklist
 // and design.md §9.57 both name a handshake, a turn and a timed stop per seat.
 // Nothing else is driven. No write is asked for, no approval flow is
-// exercised, no second turn tests a resume — each of those is a separate item
+// exercised, no second turn tests a resume. Each of those is a separate item
 // on that checklist, each needs a person to read what came back, and a probe
 // that quietly did them would be spending more of the operator's money than the
 // sentence on screen said it would.
@@ -51,7 +51,7 @@
 // Every probe points its seat at a fresh empty temporary directory, removed
 // when the seat is done. Three of the room's seats act unasked on a write and
 // the room says so (docs/council.md), so the containment that actually holds is
-// the directory — and a preflight that pointed a live agent at the operator's
+// the directory. A preflight that pointed a live agent at the operator's
 // own repository to ask it one word would be spending that containment for
 // nothing. The posture asked for is the read posture, which is the most
 // read-only invocation each vendor honours; the directory is what makes the
@@ -84,7 +84,7 @@ const (
 // flag.
 //
 // A flag here would be a way to spend a real turn through a mode that promises
-// a trivial one — the operator was told "one word" and the sentence has to stay
+// a trivial one. The operator was told "one word", and the sentence has to stay
 // true. One word is also what makes the turn check honest about what it
 // measures: that the seat took a brief and ended a turn, not that a model
 // answered anything well.
@@ -98,14 +98,14 @@ const Brief = "ping"
 // doc: Claude Code exits 0 on a closed stdin), so the adapter has nothing to
 // say. A bound is still owed: the check is "the process exits", and a check
 // that can wait forever is not a check. This number is this package's own and
-// says so — it is not a claim about the vendor, and nothing renders it as one.
+// says so. It is not a claim about the vendor, and nothing renders it as one.
 const defaultGrace = 5 * time.Second
 
 // eventBuffer is how many events may sit between the runner and this drive.
 //
 // Generous, because a one-word turn on a streaming seat still arrives as
-// hundreds of text deltas — the grok handshake capture of 2026-09-04 counted
-// 853 chunks on one brief — and a full channel BLOCKS the runner's reader
+// hundreds of text deltas. The grok handshake capture of 2026-09-04 counted
+// 853 chunks on one brief. A full channel BLOCKS the runner's reader
 // goroutine. That would not lose events, it would slow the drive and charge the
 // delay to a vendor, which is the one thing a measurement must not do.
 const eventBuffer = 1024
@@ -144,7 +144,7 @@ var startRPCSession = func(ctx context.Context, spec runner.Spec, out chan<- run
 // Seat is one vendor the probe can drive, flattened into what the drive needs.
 //
 // It is filled by internal/council, which is where detection, the binary
-// resolution and the adapter registry already live — the same seam
+// resolution and the adapter registry already live. It is the same seam
 // `doctor.Seat` is filled through, and for the same reason. Two copies of
 // "where does cursor-agent live" is the agreement that silently stops holding.
 type Seat struct {
@@ -155,8 +155,8 @@ type Seat struct {
 	// Adapter is the registered seat. A seat with none cannot be driven and is
 	// reported as such rather than skipped silently.
 	Adapter vendors.Vendor
-	// VersionArgs is the argv after Binary that asks this vendor its version —
-	// per-seat because of the Cursor bundle (council's versionArgs).
+	// VersionArgs is the argv after Binary that asks this vendor its version.
+	// It is per-seat because of the Cursor bundle (council's versionArgs).
 	VersionArgs []string
 }
 
@@ -190,7 +190,7 @@ type Check struct {
 	// one distinction is how a reader ends up believing a `not run` here means
 	// something other than a `not checked` there.
 	Status doctor.Status
-	// Took is measured, and it is zero on a check that did not run — which is
+	// Took is measured, and it is zero on a check that did not run. That is
 	// why nothing renders it without its own status beside it.
 	Took time.Duration
 	// Detail is the vendor's own first line of stderr, or the sentence the
@@ -208,7 +208,7 @@ type Result struct {
 	Version  string
 	Checks   []Check
 	ProbedAt time.Time
-	// Skipped says why this seat was never driven — no binary, no adapter, no
+	// Skipped says why this seat was never driven: no binary, no adapter, no
 	// live shape. A skipped seat carries no checks and writes no file: an
 	// absent file is what "nobody probed this here" already says, and a file
 	// full of `not_run` would be the probe claiming a visit it did not make.
@@ -400,8 +400,8 @@ func spawn(ctx context.Context, s Seat, dir string, events chan runner.Event) (s
 }
 
 // sendBrief encodes the one word for whichever shape this seat is and hands it
-// over. Both shapes may legally return no lines — an RPC protocol takes a turn
-// it cannot encode yet — so an empty result is passed through rather than
+// over. Both shapes may legally return no lines, because an RPC protocol takes
+// a turn it cannot encode yet. So an empty result is passed through rather than
 // treated as a refusal.
 func sendBrief(sess session, wire any) error {
 	var lines [][]byte
@@ -430,7 +430,7 @@ func sendBrief(sess session, wire any) error {
 // A session id is the right thing to wait for rather than "the process did not
 // die", and the difference is the whole value of this check. Every seat's next
 // turn is a resume keyed on that id, so a process that comes up and never names
-// one is a seat the room can dispatch to exactly once — a fault that looks like
+// one is a seat the room can dispatch to exactly once. That fault looks like
 // a working column until the second brief.
 func waitForSession(ctx context.Context, events <-chan runner.Event, started time.Time,
 	timeout time.Duration) Check {
@@ -526,8 +526,8 @@ func waitForTurn(ctx context.Context, events <-chan runner.Event, timeout time.D
 //
 // The kill still follows on every branch, exactly as it does in the room, and
 // it is NOT what this check measures. §9.50 measured a closed stdin failing to
-// end `codex app-server` — four runs exited in 1.5–3.3 s and one was alive at
-// 15 s — which is why the room kills unconditionally and why a check that
+// end `codex app-server`. Four runs exited in 1.5 to 3.3 s, and one was alive
+// at 15 s. That is why the room kills unconditionally, and why a check that
 // accepted the kill as an exit would report every seat passing.
 func stop(ctx context.Context, sess session, wire any, events <-chan runner.Event) Check {
 	c := Check{Name: CheckStop}

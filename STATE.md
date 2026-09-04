@@ -140,7 +140,7 @@ a demo of the crew is a demo of measured claims only after that list is paid.
   machine under `~/.telltale/probe/<vendor>.json`. It therefore PAYS the
   handshake-and-one-turn half of item 17 and of §9.57's Antigravity stream
   item, and the stdin-close-to-exit timing in item 11 and §9.57's stop items,
-  for whichever seats that machine has installed — one run each rather than
+  for whichever seats that machine has installed, one run each rather than
   five, and it records the number rather than a badge. It pays NOTHING ELSE
   here, by design. Items 10 and 15 need a write brief and a person answering an
   approval card; 12 and 19 need a build without the subcommand; 16 needs a

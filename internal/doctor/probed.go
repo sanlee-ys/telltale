@@ -12,15 +12,15 @@ import (
 // # What it is for
 //
 // pin.go's line says "telltale's field map for this vendor was measured at
-// 0.147.0, but this machine reports 0.151.0 — re-measure before trusting the
+// 0.147.0, but this machine reports 0.151.0, so re-measure before trusting the
 // fields". That sentence is honest, and a reader hears the second half of it:
 // every live claim this repository makes was paid by the maintainer's hand, and
 // nothing on this machine re-pays any of it. `telltale probe` is what pays one
 // part of it here, and this line is where the payment shows up.
 //
 // So the two lines are deliberately adjacent and deliberately different. The
-// survey line is about TELLTALE — how old this repository's homework is. This
-// line is about THIS MACHINE — whether the seat came up, took a brief and
+// survey line is about TELLTALE: how old this repository's homework is. This
+// line is about THIS MACHINE: whether the seat came up, took a brief and
 // stopped, when somebody last asked it to. A reader who has both can tell
 // "telltale has not looked at this vendor since August" from "this vendor does
 // not work here", which used to be one undifferentiated worry.
@@ -39,7 +39,7 @@ import (
 //
 // The one thing this line may never do is let a seat nobody probed read like a
 // seat that passed. A machine with no probe file gets the sentence saying so,
-// with the command that would fix it — never a blank, and never a missing line,
+// with the command that would fix it. Never a blank, and never a missing line,
 // because a seat whose row simply is not drawn reads as a seat with nothing to
 // report. That is design.md §4a.1's zero-versus-absent rule on a surface that
 // has no gauge on it.
@@ -49,7 +49,7 @@ import (
 //
 // A plain struct of measured values, like Pin and Posture, so this package
 // stays stdlib-only. It is filled by internal/council, which reads the probe
-// file — the same seam the capability, the survey and the posture arrive
+// file. It is the same seam the capability, the survey and the posture arrive
 // through, and for the same stated reason: doctor holds no inventory and does
 // no reading of its own.
 type Probed struct {
@@ -76,7 +76,7 @@ type ProbedCheck struct {
 	// the two mean different things.
 	Status Status
 	// Took is how long the check took, and it is rendered only beside a status
-	// that ran — a `not checked` row carrying "0.00s" would read as an instant
+	// that ran. A `not checked` row carrying "0.00s" would read as an instant
 	// pass.
 	Took time.Duration
 }
@@ -89,7 +89,7 @@ const probedLabel = "probed here: "
 
 // probedNote words one seat's probe line.
 //
-// installed is the version this preflight actually READ on this run — the value
+// installed is the version this preflight actually READ on this run: the value
 // off a version check that passed, and the empty string on every other branch.
 // It is the same argument surveyNote makes with the same parameter: a
 // comparison against a version nobody read is a verdict computed against
@@ -105,7 +105,7 @@ func probedNote(vendor string, p *Probed, installed string) string {
 		// carries the command rather than only the fact, because a reader who
 		// has just been told a seat is unproven and not told how to prove it
 		// has been given a worry instead of a next step.
-		return "never — nothing on this machine has driven this seat. `telltale probe " +
+		return "never. Nothing on this machine has driven this seat. `telltale probe " +
 			vendor + "` brings it up, spends ONE turn of one word on it, and times its stop."
 	}
 
@@ -113,7 +113,7 @@ func probedNote(vendor string, p *Probed, installed string) string {
 		", " + checkWords(p.Checks)
 
 	if p.Version == "" || installed == "" {
-		// Nothing to compare, so nothing is claimed in either direction —
+		// Nothing to compare, so nothing is claimed in either direction:
 		// neither that the probe is current nor that it is stale.
 		return line
 	}
@@ -124,7 +124,7 @@ func probedNote(vendor string, p *Probed, installed string) string {
 	if probed == here {
 		return line
 	}
-	return line + "; this machine now reports " + installed + " — re-run `telltale probe " +
+	return line + "; this machine now reports " + installed + ", so re-run `telltale probe " +
 		vendor + "` before trusting this row"
 }
 
