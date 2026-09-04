@@ -10,12 +10,19 @@ import (
 //
 // Every other golden here renders a State a test built, which means every
 // other golden pins the room a test author thought of. This one is a real
-// evening: five seats, seven briefs over forty minutes, a gate card raised and
-// answered, a race, a fan-out, a seat cancelled mid-answer, ten stale exits
-// from replaced processes, and 1,412 streamed text events arriving one and two
-// runes at a time. CLAUDE.md's fixture rule is kept and not bent -- every word
-// in the file is synthesized (scrub.go) -- and what is real is the event
+// evening: five seats with one of them off the dispatch, seven briefs over
+// forty minutes, a gate card raised on a write and answered, two turns routed
+// to two seats and one to a single seat, ten stale exits from replaced
+// processes, 314 tool calls, and 1,412 streamed text events arriving one and
+// two runes at a time. CLAUDE.md's fixture rule is kept and not bent -- every
+// word in the file is synthesized (scrub.go) -- and what is real is the event
 // shape, which is the thing a renderer regression breaks.
+//
+// What it does NOT carry, measured over all 1,863 records rather than assumed:
+// no column ever reaches PhaseCancelled, and no race board is drawn. A
+// recording does not hold the operator's cancels (recording.go), and it has no
+// record kind for a race, so a claim about either would be a claim about a
+// frame this file cannot produce.
 //
 // It is read from the repository root rather than from testdata because it is
 // a PRODUCT artifact first: the README's sixty-second path plays this file, so
