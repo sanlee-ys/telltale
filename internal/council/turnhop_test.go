@@ -210,16 +210,25 @@ func TestTheOverflowMarkerNamesWhichTurnIsHidden(t *testing.T) {
 	}
 	golden(t, "turn-hop-marker", got)
 
-	// A column the keys do not move keeps its address instead: §9.12 rules that
-	// a marker states the key for THIS column, and a coordinate in front of the
-	// only thing a reader can act on there would crowd the answer to make room
-	// for the question.
+	// A column the keys do not move carries BOTH the coordinate and its address,
+	// and that reverses §9.20's focused-only rule (the density pass, 2026-09-03).
+	// The old rule was arithmetic over a marker sharing a body row; the cue row
+	// gives every column a row of its own, so nothing is crowded — and the frame
+	// that forced it drew four columns showing the tails of four different turns
+	// with one label between them.
 	side := walking()
-	side.Columns[1].Phase = PhaseDone
-	side.Columns[1].Body = longBody(60)
-	side.Columns[1].Follow, side.Columns[1].Scroll = false, 20
-	if line := columnMarkerLine(render(side), "tab to focus"); strings.Contains(line, "turn ") {
-		t.Errorf("an unfocused column spends its marker on a coordinate: %q", line)
+	sc := &side.Columns[1]
+	// A turn of its own, so the column HAS a coordinate to name. Without one
+	// there is no anchor and the row correctly says nothing about turns.
+	sc.startTurn(2, "brief 2", false)
+	sc.Phase, sc.Elapsed = PhaseDone, 5*time.Second
+	sc.Body = longBody(60)
+	sc.Follow, sc.Scroll = false, 20
+	// `tab`, not `tab to focus`: the coordinate takes cells the widest hint form
+	// wanted, and the hint sheds to its short form rather than leaving.
+	line := columnMarkerLine(render(side), "tab")
+	if !strings.Contains(line, "turn ") {
+		t.Errorf("an unfocused column does not name the turn its tail is on: %q", line)
 	}
 }
 

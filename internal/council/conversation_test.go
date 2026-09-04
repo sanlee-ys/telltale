@@ -510,7 +510,10 @@ func TestARebuttalTurnReportsTheQuotesRatherThanEchoingThem(t *testing.T) {
 	if !strings.Contains(got, "given those answers") {
 		t.Error("the brief itself is missing")
 	}
-	if !strings.Contains(got, "quoted to this one") {
+	// The separator's own word, not the sentence. The sentence is a fact about
+	// the DISPATCH and the room's own surfaces draw it whole; inside a column it
+	// rides on the line that names the turn (turnHead, the density pass).
+	if !strings.Contains(got, quotedTag) {
 		t.Error("a rebuttal turn does not say the other seats' answers rode along")
 	}
 }

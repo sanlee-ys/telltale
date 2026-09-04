@@ -43,14 +43,20 @@ func TestRebuildLaunchesEveryRestorableSeat(t *testing.T) {
 		if _, ok := m.procs[v]; !ok {
 			t.Errorf("%s has no process after the rebuild", v)
 		}
-		if got := m.column(v).Note; !strings.Contains(got, "rebuilding this seat") {
+		if got := m.column(v).Note; got != "rebuilding" {
 			t.Errorf("%s does not report that it is rebuilding: %q", v, got)
 		}
 	}
-	// The room fact goes in the notice; the honest clause goes in the columns,
-	// where it cannot be truncated.
-	if !strings.Contains(m.st.Notice, "rebuilding 2 seats") {
+	// The room fact and its explanation go in the notice, ONCE. The columns say
+	// the one word that is true of each seat on its own; the sentence behind it
+	// was identical on all of them, so four copies of it left the frame with the
+	// density pass. The COUNT leads the notice so it survives a truncation the
+	// explanation does not.
+	if !strings.HasPrefix(m.st.Notice, "rebuilding 2 seats") {
 		t.Errorf("the notice does not count the seats: %q", m.st.Notice)
+	}
+	if !strings.Contains(m.st.Notice, "loads each saved thread") {
+		t.Errorf("the notice does not explain what a rebuild is: %q", m.st.Notice)
 	}
 }
 

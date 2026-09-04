@@ -453,7 +453,20 @@ func (m *Model) rebuildStartNotice() string {
 	if n == 0 {
 		return ""
 	}
-	return "rebuilding " + itoa(n) + " " + plural(n, "seat")
+	// The CLAUSE rides here now, and it rides here ONCE.
+	//
+	// It used to sit on every rebuilt column — "rebuilding this seat — a new
+	// process is loading the saved thread." — so a four-seat room drew the same
+	// sentence four times across a frame that had not yet shown one reply. What
+	// it explains is the same for every seat, which is what makes it a fact
+	// about the room; what is true of one SEAT is that it is one of them, and
+	// the column says that in a word.
+	//
+	// The count keeps the front of the line. A notice is truncated from the
+	// right at a narrow terminal, so the number of seats — which nothing else
+	// states — survives a width the explanation does not.
+	return "rebuilding " + itoa(n) + " " + plural(n, "seat") +
+		" — a new process loads each saved thread."
 }
 
 // rebuildSettledNotice is the room fact once they have.
