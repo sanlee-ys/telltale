@@ -249,19 +249,18 @@ func statusWord(s doctor.Status) string {
 	}
 }
 
-// Run drives every seat in order and returns one Result each. Seats are driven
-// one at a time on purpose: two live agents answering at once would make the
-// durations this mode exists to measure a reading of the machine's load rather
-// than of the vendor.
-func Run(ctx context.Context, seats []Seat, o Options) []Result {
-	out := make([]Result, 0, len(seats))
-	for _, s := range seats {
-		out = append(out, RunSeat(ctx, s, o))
-	}
-	return out
-}
-
-// RunSeat drives one seat.
+// RunSeat drives ONE seat, and one seat is the whole of what this package
+// offers a caller.
+//
+// There is deliberately no Run(seats) beside it. Two live agents answering at
+// once would make the durations this mode exists to measure a reading of the
+// machine's load rather than of the vendor, so the seats have to be driven one
+// at a time. A batch entry point that looped for the caller would also take the
+// two things the caller has to keep: naming each seat on screen BEFORE it is
+// driven, because a terminal that goes quiet while an agent runs on the
+// operator's account is the state this product refuses; and writing each
+// result before the next seat starts, because the turn is already spent and a
+// run stopped halfway must not lose what was paid for.
 func RunSeat(ctx context.Context, s Seat, o Options) Result {
 	res := Result{Vendor: s.Vendor, Label: s.Label, ProbedAt: o.now()}
 	if s.Binary == "" {
