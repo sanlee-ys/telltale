@@ -177,6 +177,10 @@ func TestTheWireCarriesWhatTheRoomDraws(t *testing.T) {
 		Acts: []runner.ActCall{{ID: "c1", Outcome: runner.ActFailed, Detail: "exit 1"}}}, t0.Add(3*time.Second))
 	cost := 0.0123
 	r.applyAt(runner.Event{Vendor: model.VendorCodex, Kind: runner.KindMeta, CostUSD: &cost}, t0.Add(4*time.Second))
+	// A reported count lands beside the cost, on the same terms. The
+	// figures are fakes.
+	r.applyAt(runner.Event{Vendor: model.VendorCodex, Kind: runner.KindMeta,
+		Tokens: &model.TokenCounts{Input: 3210, Output: 45}}, t0.Add(4*time.Second))
 	r.applyAt(runner.Event{Vendor: model.VendorCodex, Kind: runner.KindDone}, t0.Add(5*time.Second))
 
 	s := r.Seats[0]
@@ -189,6 +193,9 @@ func TestTheWireCarriesWhatTheRoomDraws(t *testing.T) {
 	if s.CostUSD == nil || *s.CostUSD != cost || s.CostSession {
 		t.Fatalf("a batch seat's reported cost did not land as this turn's spend: %+v", s)
 	}
+	if s.Tokens == nil || *s.Tokens != (TokenCounts{In: 3210, Out: 45}) {
+		t.Fatalf("the reported count did not land on the seat: %+v", s.Tokens)
+	}
 
 	r.beginTurn(2, "second brief", map[model.VendorID]bool{model.VendorCodex: true}, t0.Add(time.Minute))
 	s = r.Seats[0]
@@ -197,10 +204,10 @@ func TestTheWireCarriesWhatTheRoomDraws(t *testing.T) {
 	}
 	h := s.History[0]
 	if h.N != 1 || h.Prompt != "first brief" || h.Body != "answer one" || h.Phase != PhaseDone ||
-		h.Elapsed != 5*time.Second || len(h.Acts) != 1 || h.CostUSD == nil {
+		h.Elapsed != 5*time.Second || len(h.Acts) != 1 || h.CostUSD == nil || h.Tokens == nil {
 		t.Fatalf("the record lost a field on the way in: %+v", h)
 	}
-	if s.Body != "" || s.Acts != nil || s.Prompt != "second brief" || s.Turn != 2 || s.Elapsed != 0 || !s.Ended.IsZero() {
+	if s.Body != "" || s.Acts != nil || s.Prompt != "second brief" || s.Turn != 2 || s.Elapsed != 0 || !s.Ended.IsZero() || s.Tokens != nil {
 		t.Fatalf("the new turn inherited the old one's fields: %+v", s)
 	}
 
@@ -217,6 +224,14 @@ func TestTheWireCarriesWhatTheRoomDraws(t *testing.T) {
 	got := f.Room.Seats[0]
 	if len(got.History) != 1 || got.History[0].CostUSD == nil || *got.History[0].CostUSD != cost {
 		t.Fatalf("history did not survive the wire: %+v", got.History)
+	}
+	if got.History[0].Tokens == nil || got.History[0].Tokens.In != 3210 || got.History[0].Tokens.Out != 45 {
+		t.Fatalf("the count did not survive the wire: %+v", got.History[0].Tokens)
+	}
+	c0 := r.clone()
+	r.Seats[0].History[0].Tokens.In = 1
+	if c0.Seats[0].History[0].Tokens.In == 1 {
+		t.Fatal("the clone shares a count pointer with the room")
 	}
 	if got.History[0].Acts[0].Status != ActFailed {
 		t.Fatalf("an act's status did not survive the wire: %+v", got.History[0].Acts)

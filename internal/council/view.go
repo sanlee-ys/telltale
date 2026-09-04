@@ -9,6 +9,7 @@ import (
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
 	"github.com/sanlee-ys/telltale/internal/model"
+	"github.com/sanlee-ys/telltale/internal/theme"
 )
 
 // Render draws one frame.
@@ -2852,6 +2853,12 @@ func historyMeta(h TurnRecord) string {
 	if s := operatorCell(h.GateWait, shortForm); s != "" {
 		parts = append(parts, s)
 	}
+	// The count ahead of the cost, exactly as the badge row orders them
+	// (badgeRow), so a figure a reader learned to find on the live chrome is
+	// in the same place on the separator that files it.
+	if t := tokensCell(Column{Tokens: h.Tokens}); t != "" {
+		parts = append(parts, t)
+	}
 	if h.CostUSD != nil {
 		cost := "$" + strconv.FormatFloat(*h.CostUSD, 'f', 4, 64)
 		if h.CostSession {
@@ -3563,6 +3570,25 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 	}
 
 	cost := costCell(c)
+	// The turn's token count sits INSIDE the cost's slot, ahead of the dollar
+	// figure, and it is one right-anchored figure with the cost rather than a
+	// second anchor: two numbers the vendor reported about one turn read as
+	// one reading, and the ladder below then has one width to weigh. It
+	// yields FIRST. A count is the least a reader loses on this row — the
+	// transcript keeps it on every turn's separator (historyMeta) and the turn
+	// page carries it whole — so when the row cannot hold both figures the
+	// count leaves and the cost stays, and when it cannot hold the cost either
+	// the cost leaves on its own ruling below. Never clipped, on the same rule
+	// as the cost: a clipped `in 32.2k out 181` is a different number.
+	if tok := tokensCell(c); tok != "" {
+		joined := tok
+		if cost != "" {
+			joined = tok + "  " + cost
+		}
+		if w-lipgloss.Width(left)-lipgloss.Width(joined) >= 1 {
+			cost = joined
+		}
+	}
 
 	// A FIGURE IS SHOWN WHOLE OR NOT SHOWN. When the cost cannot sit beside the
 	// claims with one cell of clearance, it leaves this row whole, exactly as
@@ -3690,6 +3716,33 @@ func costCell(c Column) string {
 		cost += " session"
 	}
 	return cost
+}
+
+// tokensCell is the turn's token count as the vendor reported it, in the
+// HUD's own spelling — `in 32.2k out 181` — so one product says one count one
+// way (internal/hud/usage.go's spend line, theme.Tokens for the digits).
+//
+// It renders ONLY when the vendor reported a count. A turn that reported zero
+// draws `in 0 out 0`; a turn that reported nothing draws no cell at all, which
+// is what every seat but the grok ACP seat draws today — the same two facts
+// costCell keeps apart, kept apart for the same reason. There is no total:
+// the vendor reports one and the room could add the two halves, and both of
+// those are a third number on a row that already has the two it read.
+//
+// theme.Tokens floors, and that is the right direction here as it is on the
+// HUD: a count that renders short has understated what a machine spent, and a
+// count that rounds up has invented tokens nobody was billed for.
+//
+// `in`, not the HUD's `uncached in`: that word is a claim an adapter makes
+// when it knows its input figure excludes the cache, and on this wire whether
+// `cachedReadTokens` sits inside `inputTokens` or beside it is unmeasured
+// (vendors/acp.go, acpMeta). The cell says what the vendor said under the
+// vendor's own name, and no more.
+func tokensCell(c Column) string {
+	if c.Tokens == nil {
+		return ""
+	}
+	return "in " + theme.Tokens(c.Tokens.Input) + " out " + theme.Tokens(c.Tokens.Output)
 }
 
 // reattachCard is what a restored seat says before its first brief.

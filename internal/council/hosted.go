@@ -242,6 +242,7 @@ func columnFromSeat(s councilhost.Seat, prev Column, write, windows bool) Column
 	c.GateWait = runner.Span{}
 	c.CostUSD = s.CostUSD
 	c.CostSession = s.CostSession
+	c.Tokens = tokensFromWire(s.Tokens)
 	// None of these happen in a hosted room, and a value carried across from
 	// a previous column would be a claim about a seat the host never made.
 	c.Restored = false
@@ -324,6 +325,7 @@ func historyFromWire(in []councilhost.TurnRecord) []TurnRecord {
 			Elapsed:     h.Elapsed,
 			CostUSD:     h.CostUSD,
 			CostSession: h.CostSession,
+			Tokens:      tokensFromWire(h.Tokens),
 			Phase:       phaseFromWire(h.Phase),
 		}
 		if h.ExitCode != nil && *h.ExitCode != 0 && rec.Note == "" {
@@ -332,6 +334,16 @@ func historyFromWire(in []councilhost.TurnRecord) []TurnRecord {
 		out = append(out, rec)
 	}
 	return out
+}
+
+// tokensFromWire is a reported count as the host sent it, or nil. Two
+// integers cross as two integers; nil stays nil, so a hosted seat that
+// reported no count draws no cell, exactly as the single-process room does.
+func tokensFromWire(t *councilhost.TokenCounts) *model.TokenCounts {
+	if t == nil {
+		return nil
+	}
+	return &model.TokenCounts{Input: t.In, Output: t.Out}
 }
 
 // waitHost parks one reader on the wire and delivers the next frame.

@@ -62,6 +62,9 @@ type turnEntry struct {
 	Elapsed     time.Duration
 	CostUSD     *float64
 	CostSession bool
+	// Tokens is the turn's own count, on Column.Tokens' terms, carried so the
+	// page states the same figure the column and the separator do.
+	Tokens *model.TokenCounts
 
 	// GateWait is the operator's own share of this seat's turn, carried across
 	// so the page states the same split the column does (§9.45). Unmeasured on
@@ -118,6 +121,7 @@ func (s State) turnEntries(n int) []turnEntry {
 				Body: c.Body, Acts: c.Acts,
 				Elapsed: c.Elapsed, GateWait: c.GateWait,
 				CostUSD: c.CostUSD, CostSession: c.CostSession,
+				Tokens:  c.Tokens,
 				Started: c.Started, Live: true,
 				Settling: c.Settling,
 			}
@@ -144,6 +148,7 @@ func (s State) turnEntries(n int) []turnEntry {
 				Note: h.Note, NoteDetail: h.NoteDetail, NoteCalm: h.NoteCalm,
 				Elapsed: h.Elapsed, GateWait: h.GateWait,
 				CostUSD: h.CostUSD, CostSession: h.CostSession,
+				Tokens: h.Tokens,
 			})
 			break
 		}
@@ -446,6 +451,11 @@ func seatMeta(st State, e turnEntry, g Glyphs) string {
 	}
 	if s := operatorCell(op, longForm); s != "" {
 		parts = append(parts, s)
+	}
+	// The count ahead of the cost, in badgeRow's order and spelling
+	// (tokensCell): one figure, three surfaces, one place on each.
+	if t := tokensCell(Column{Tokens: e.Tokens}); t != "" {
+		parts = append(parts, t)
 	}
 	if e.CostUSD != nil {
 		cost := "$" + strconv.FormatFloat(*e.CostUSD, 'f', 4, 64)

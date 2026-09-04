@@ -1328,6 +1328,11 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			if ev.CostUSD != nil {
 				c.CostUSD = ev.CostUSD
 			}
+			// A reported count lands on the same terms as a reported cost: the
+			// vendor's own figure, replaced only by the vendor's next one.
+			if ev.Tokens != nil {
+				c.Tokens = ev.Tokens
+			}
 			// End-of-turn result text.
 			//
 			// Flush the streaming redactor FIRST. A single-token reply

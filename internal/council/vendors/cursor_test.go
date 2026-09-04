@@ -391,6 +391,9 @@ func TestACPTurnEndsOnTheResponseAndCarriesNoCost(t *testing.T) {
 	if end.CostUSD != nil {
 		t.Error("a cost appeared; this vendor publishes no monetary figure anywhere")
 	}
+	if end.Tokens != nil {
+		t.Errorf("tokens = %+v; this vendor's prompt response carries no _meta and no usage, so the count is absent", *end.Tokens)
+	}
 	if end.Text != "" {
 		t.Error("the turn's end carries reply text; ACP has no final whole reply and inventing one would be a fabrication")
 	}

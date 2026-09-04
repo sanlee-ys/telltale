@@ -1,0 +1,24 @@
+  council READ  │  ~/code/telltale                                                  turn 2  │  3/3 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▌ ▸ 1 CC Claude Code  ────────  ○ idle  │    2 CX Codex  ─────────────  ○ idle  │    3 GR Grok  ───────────  ✓ done 9s  
+▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  tokens                
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▌                                       │                                       │  turn 1  ──────  4s  in 24.5k out 40  
+▌                                       │                                       │  › say your seat name                 
+▌                                       │                                       │                                       
+▌                                       │                                       │  Grok.                                
+▌                                       │                                       │  turn 2  ───────────────────────────  
+▌                                       │                                       │  › count the lines in README.md       
+▌                                       │                                       │                                       
+▌ no turn dispatched yet.               │  no turn dispatched yet.              │  Forty-one lines.                     
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  ›                                                                                                               │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
+                    ↑↓ scroll  │  [ ] turn  │  f expand  │  tab focus  │  1-3 seat  │  i compose  │  ? help  │  q quit  

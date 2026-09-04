@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sanlee-ys/telltale/internal/council/runner"
+	"github.com/sanlee-ys/telltale/internal/model"
 )
 
 // The ACP wire, as it was actually driven.
@@ -40,15 +41,44 @@ import (
 // Three absences decide as much of this adapter as the presences do, and each
 // one is a thing print mode HAD:
 //
-//   - **No cost, and no token usage anywhere — TRUE AT 1.0.4, NOT AT 1.0.13.**
-//     Print mode's `result` carried a `usage` block; the 1.0.4 ACP turn resolved
-//     with `{"stopReason":…}` and nothing else. Re-measured 2026-09-04 at 1.0.13
-//     (§9.57): the prompt response now carries `_meta.usage` with token counts,
-//     `modelCalls`, `apiDurationMs`, a per-model map, and `costUsdTicks` — a cost
-//     in a unit nobody has measured, so CostUSD stays nil until the tick is
-//     pinned against grok.com's billing; the token counts are readable now and
-//     this adapter does not read them yet. Also at 1.0.13: `session/new` returns
-//     no `modes` and no `configOptions` (the frame quoted above is 1.0.4's).
+//   - **No cost, and no token usage anywhere — TRUE OF CURSOR-AGENT ON EVERY
+//     CAPTURE; NOT OF GROK AT 1.0.13.** Print mode's `result` carried a
+//     `usage` block; every cursor-agent ACP turn resolved with
+//     `{"stopReason":…}` and nothing else. Grok was measured 2026-09-04 at
+//     **1.0.13 (5e9a58528b76)**, two turns of one `grok agent stdio` process
+//     on Windows 11 (the item-14 drive PR #357 recorded), and its prompt
+//     response carries a `_meta` object. Verbatim shape from the first captured
+//     turn, with only the three ids elided; the figures are the capture's own,
+//     because a count is the measurement and an id is not:
+//
+//	<< {"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn","_meta":{
+//	     "sessionId":"…","requestId":"…","promptId":"…","modelId":"grok-4.6",
+//	     "inputTokens":32277,"outputTokens":181,"totalTokens":32458,
+//	     "cachedReadTokens":24064,"reasoningTokens":155,
+//	     "usage":{"inputTokens":56373,"outputTokens":705,"totalTokens":57078,
+//	              "cachedReadTokens":27008,"cacheCreationTokens":0,"reasoningTokens":562,
+//	              "modelCalls":2,"apiDurationMs":15263,"costUsdTicks":129988800,
+//	              "numTurns":2,"modelUsage":{"grok-4.6-build":{…the same nine keys…}}}}}}
+//
+//     Two accountings sit in that one object, and acpMeta says which this seat
+//     reads: the TOP-LEVEL counts are this prompt's (they sit beside its
+//     `promptId`, and `numTurns` is not among them), the `usage` block is the
+//     SESSION's running total (`numTurns` 2 then 3 across the two captured
+//     turns, every count in it larger than the top-level one beside it). The
+//     `usage` block is, value for value, the `turn_completed.usage` record the
+//     same session wrote to `~/.grok/sessions/…/updates.jsonl` — checked on
+//     both captured turns the same day, which is what lets `internal/adapter/
+//     grok`'s reading of that file stand as the measurement of THIS object's
+//     `costUsdTicks` scale (1e10 ticks to the dollar, measured 2026-08-09 at
+//     1.0.0 against the batch wire's own `total_cost_usd`). CostUSD stays nil
+//     on this seat all the same, by the ruling that filed this change: the
+//     tick has never been checked against a dollar figure on THIS seam at
+//     THIS build, and the figure is cumulative, so it would wear the `session`
+//     word. What would pay for it is one ACP turn's `costUsdTicks` read
+//     against grok.com's own billing page for the same turn, which is the
+//     account owner's check, on the web UI. Also at 1.0.13: `session/new`
+//     returns no `modes` and no `configOptions` (the frame quoted above is
+//     1.0.4's).
 //
 // THE GROK SEAT WAS DRIVEN ON 2026-09-04 at grok 1.0.13 (5e9a58528b76), Windows
 // 11, with this file's own frames from scratch directories (design.md §9.57's
@@ -1358,10 +1388,71 @@ func (a *acpProtocol) fail(note string) []runner.Event {
 	return acpFailed(note)
 }
 
+// acpMeta is the `_meta` object grok puts on a session/prompt response,
+// MEASURED at 1.0.13 (the file header quotes the frame and names the runs).
+// The ACP schema declares `_meta` as a free extension slot, so every key here
+// is grok's own and a server that sends none — cursor-agent, on every capture
+// — leaves every field nil and the turn carries no count.
+//
+// TWO ACCOUNTINGS SIT IN ONE OBJECT, AND THIS SEAT RENDERS THE PER-PROMPT ONE.
+// The top-level counts describe this prompt: they sit beside its `promptId`,
+// and the session's `numTurns` is not among them. The `usage` block is the
+// session's running total, and the two do not reconcile by subtraction on the
+// capture — the second turn's top-level `inputTokens` was 50,963 while the
+// `usage` block grew by 62,054 — so nothing here derives one from the other,
+// and the room shows the figure that already means what its cell means. Every
+// column figure in this room is THIS TURN's unless a word says otherwise
+// (costCell's `session`), and the per-prompt count needs no word.
+//
+// Pointers on the per-prompt counts so "the vendor sent no count" stays apart
+// from "the vendor counted zero", the distinction the whole product exists to
+// keep. The cumulative block is parsed so a reader can see its shape beside
+// the one that is rendered, and NOTHING reads it: its `costUsdTicks` in
+// particular is left where it is, for the reason the file header gives.
+type acpMeta struct {
+	ModelID          string `json:"modelId"`
+	InputTokens      *int64 `json:"inputTokens"`
+	OutputTokens     *int64 `json:"outputTokens"`
+	TotalTokens      *int64 `json:"totalTokens"`
+	CachedReadTokens *int64 `json:"cachedReadTokens"`
+	ReasoningTokens  *int64 `json:"reasoningTokens"`
+	Usage            *struct {
+		InputTokens         int64 `json:"inputTokens"`
+		OutputTokens        int64 `json:"outputTokens"`
+		TotalTokens         int64 `json:"totalTokens"`
+		CachedReadTokens    int64 `json:"cachedReadTokens"`
+		CacheCreationTokens int64 `json:"cacheCreationTokens"`
+		ReasoningTokens     int64 `json:"reasoningTokens"`
+		ModelCalls          int64 `json:"modelCalls"`
+		NumTurns            int64 `json:"numTurns"`
+		APIDurationMs       int64 `json:"apiDurationMs"`
+		// CostUsdTicks is a cumulative cost in a fixed-point unit. Never
+		// converted here; see the file header for what is measured about it
+		// and what is not.
+		CostUsdTicks int64 `json:"costUsdTicks"`
+	} `json:"usage"`
+}
+
+// turnTokens is the per-prompt count as the room carries it, or nil.
+//
+// Both halves or neither: a count with one side missing is not a count this
+// room has a cell for, and half a figure would render as a whole one. The two
+// were present together on every captured turn, so the branch is a guard
+// against a future frame rather than a case that was seen. `inputTokens` is
+// carried as the vendor reported it; whether `cachedReadTokens` is inside it
+// or beside it is unmeasured, which is why the cell says `in` and not
+// `uncached in` (the HUD's word for an adapter that knows).
+func (m *acpMeta) turnTokens() *model.TokenCounts {
+	if m == nil || m.InputTokens == nil || m.OutputTokens == nil {
+		return nil
+	}
+	return &model.TokenCounts{Input: *m.InputTokens, Output: *m.OutputTokens}
+}
+
 // acpUsage is the optional token block the ACP schema declares on a
-// session/prompt response. See the field comment in acpTurnEnded for the
-// version it was read at, the measurement that found it absent, and why nothing
-// consumes it yet.
+// session/prompt response — `result.usage`, which is NOT grok's `_meta.usage`
+// above. See the field comment in acpTurnEnded for the version it was read
+// at, the measurement that found it absent, and why nothing consumes it yet.
 //
 // Pointers on the three optional counts so that "the vendor did not send this"
 // stays distinguishable from "the vendor sent zero" the day a capture arrives —
@@ -1414,6 +1505,11 @@ func acpTurnEnded(msg acpLine, textChunks int, acts []string) []runner.Event {
 		// question that only a live capture at a pinned version can close.
 		// Displaying it first and asking after is the ADR-001 violation itself.
 		Usage *acpUsage `json:"usage"`
+		// Meta is grok's extension slot, and the one place on this wire a
+		// per-turn count was MEASURED (acpMeta). It is read on every dialect
+		// because the shared client reads what arrives, not what a seat is
+		// expected to send: cursor-agent sends none and gets nil.
+		Meta *acpMeta `json:"_meta"`
 	}
 	_ = json.Unmarshal(msg.Result, &out)
 	switch out.StopReason {
@@ -1423,7 +1519,12 @@ func acpTurnEnded(msg acpLine, textChunks int, acts []string) []runner.Event {
 		// words it. An empty reason is treated as a clean end rather than as an
 		// error, because a turn that produced a whole reply and then resolved
 		// without saying why is not evidence of a failure.
-		ev := runner.Event{Kind: runner.KindMeta, EndsTurn: true}
+		//
+		// The count rides the end-of-turn event and nothing else: it is a fact
+		// about the turn that just closed, and the room copies it onto the
+		// column exactly where it copies a reported cost. CostUSD is left nil
+		// here deliberately — acpMeta and the file header say why.
+		ev := runner.Event{Kind: runner.KindMeta, EndsTurn: true, Tokens: out.Meta.turnTokens()}
 		if textChunks == 0 {
 			ev.Text = acpFallbackSummary(acts, out.StopReason)
 		}

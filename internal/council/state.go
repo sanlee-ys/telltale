@@ -283,6 +283,8 @@ type TurnRecord struct {
 	// on the way into history would read as that turn's spend.
 	CostUSD     *float64
 	CostSession bool
+	// Tokens is the turn's own count, on Column.Tokens' terms.
+	Tokens *model.TokenCounts
 
 	Phase Phase
 }
@@ -509,6 +511,16 @@ type Column struct {
 	// cost from token counts, which is on this repo's deliberately-rejected list
 	// (design.md §8).
 	CostUSD *float64
+	// Tokens is THIS TURN's token count AS REPORTED BY THE VENDOR, on CostUSD's
+	// own terms: a pointer, so "counted zero" and "sent no count" stay apart,
+	// and the integers inside are the vendor's figures with no arithmetic of
+	// the room's. One seat reports one today — the grok ACP seat, whose
+	// prompt response carries a per-prompt count beside a cumulative one, and
+	// vendors/acp.go's acpMeta names which of the two lands here and why. It
+	// is per-turn by construction, so it never wears the `session` word the
+	// cost cell needs; a seat whose wire reports only a running total leaves
+	// this nil rather than lending it that word.
+	Tokens *model.TokenCounts
 	// Restored reports that this seat's vendor session id came back from a saved
 	// room rather than from a turn dispatched in this process.
 	//
@@ -636,6 +648,7 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 			GateWait:    c.GateWait,
 			CostUSD:     c.CostUSD,
 			CostSession: c.CostSession,
+			Tokens:      c.Tokens,
 			Phase:       c.Phase,
 		}
 		if c.Skipped {
@@ -686,6 +699,9 @@ func (c *Column) startTurn(n int, prompt string, quoted bool) {
 	c.ArenaHunk = 0
 	c.CostUSD = nil
 	c.CostSession = false
+	// Back to ABSENT, not to zero: the record above owns the old turn's count,
+	// and a new turn nothing has counted yet has no figure (§4a.1).
+	c.Tokens = nil
 	c.Started = time.Time{}
 	c.Ended = time.Time{}
 	// Back to UNMEASURED. A new turn has heard nothing from this seat yet, and

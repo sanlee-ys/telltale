@@ -116,6 +116,13 @@ type Seat struct {
 	// spend, which is what the badge says beside it.
 	CostUSD     *float64 `json:"cost_usd,omitempty"`
 	CostSession bool     `json:"cost_session,omitempty"`
+	// Tokens is this turn's token count AS REPORTED BY THE VENDOR, on
+	// CostUSD's terms: a pointer, so a seat that counted zero and a seat that
+	// sent no count stay apart on the wire, and two integers under two keys
+	// (numbers and keys, never content). Per-turn by construction — the one
+	// wire that reports it says so beside its prompt id (council's
+	// vendors/acp.go) — so it carries no `session` word.
+	Tokens *TokenCounts `json:"tokens,omitempty"`
 	// Settling reports that this seat has ANSWERED and its process has not
 	// exited yet: the column is terminal, the turn is not (§9.33). A batch seat
 	// that says `turn.completed` seconds before it exits spends those seconds
@@ -211,6 +218,14 @@ type TurnRecord struct {
 	Elapsed     time.Duration `json:"elapsed,omitempty"`
 	CostUSD     *float64      `json:"cost_usd,omitempty"`
 	CostSession bool          `json:"cost_session,omitempty"`
+	Tokens      *TokenCounts  `json:"tokens,omitempty"`
+}
+
+// TokenCounts is a reported count on the wire: the vendor's two integers, and
+// nothing derived from them.
+type TokenCounts struct {
+	In  int64 `json:"in"`
+	Out int64 `json:"out"`
 }
 
 // maxHistory is how many finished turns one seat keeps, matched to council's
@@ -335,6 +350,13 @@ func (r *Room) applyAt(ev runner.Event, now time.Time) bool {
 			c := *ev.CostUSD
 			s.CostUSD = &c
 			s.CostSession = s.Persistent
+			changed = true
+		}
+		// A reported count lands beside a reported cost, copied rather than
+		// shared for clone's reason: the writer marshals this seat while the
+		// fold goroutine moves on.
+		if ev.Tokens != nil {
+			s.Tokens = &TokenCounts{In: ev.Tokens.Input, Out: ev.Tokens.Output}
 			changed = true
 		}
 		if !ev.EndsTurn {
@@ -549,6 +571,7 @@ func (s *Seat) startTurn(n int, prompt string, now time.Time) {
 			Note: s.Note, NoteDetail: s.NoteDetail, Phase: s.Phase,
 			ExitCode: s.ExitCode, Elapsed: s.Elapsed,
 			CostUSD: s.CostUSD, CostSession: s.CostSession,
+			Tokens: s.Tokens,
 		}
 		if s.Skipped {
 			// The note on the seat is about a turn it sat out, which is a
@@ -573,6 +596,7 @@ func (s *Seat) startTurn(n int, prompt string, now time.Time) {
 	s.ExitCode = nil
 	s.CostUSD = nil
 	s.CostSession = false
+	s.Tokens = nil
 	s.Started = now
 	s.Ended = time.Time{}
 	s.Elapsed = 0
@@ -611,6 +635,7 @@ func (r *Room) clone() *Room {
 		s.Acts = cloneActs(s.Acts)
 		s.ExitCode = cloneInt(s.ExitCode)
 		s.CostUSD = cloneFloat(s.CostUSD)
+		s.Tokens = cloneTokens(s.Tokens)
 		if n := len(r.Seats[i].History); n > 0 {
 			s.History = make([]TurnRecord, n)
 			copy(s.History, r.Seats[i].History)
@@ -619,6 +644,7 @@ func (r *Room) clone() *Room {
 				h.Acts = cloneActs(h.Acts)
 				h.ExitCode = cloneInt(h.ExitCode)
 				h.CostUSD = cloneFloat(h.CostUSD)
+				h.Tokens = cloneTokens(h.Tokens)
 			}
 		}
 	}
@@ -643,6 +669,14 @@ func cloneInt(p *int) *int {
 }
 
 func cloneFloat(p *float64) *float64 {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
+func cloneTokens(p *TokenCounts) *TokenCounts {
 	if p == nil {
 		return nil
 	}

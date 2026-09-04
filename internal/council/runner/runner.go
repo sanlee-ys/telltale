@@ -270,7 +270,18 @@ type Event struct {
 	// CostUSD is a pointer so "the vendor reported zero" and "the vendor
 	// reported nothing" stay distinguishable — the same rule the HUD's schema
 	// follows (design.md §4a.1).
-	CostUSD  *float64
+	CostUSD *float64
+	// Tokens is this TURN's token count as the vendor reported it, on the
+	// same rule as CostUSD: a pointer, so "the vendor reported zero tokens"
+	// and "the vendor reported no count" stay different facts, and the
+	// integers inside it are the vendor's own figures with no arithmetic of
+	// the room's applied (model.TokenCounts states that rule for the HUD).
+	//
+	// Set on one wire today: the grok ACP seat's `session/prompt` response,
+	// whose `_meta` carries a per-prompt count beside a cumulative one
+	// (vendors/acp.go names which of the two this is and why). A seat whose
+	// wire reports no per-turn count leaves it nil, and nil renders nothing.
+	Tokens   *model.TokenCounts
 	ExitCode int
 	Err      error
 	// Note is a human-readable reason, already assembled, for a column card.

@@ -175,6 +175,11 @@ func TestAnEventRoundTripsThroughTheFile(t *testing.T) {
 		}},
 		{Vendor: model.VendorClaude, Kind: runner.KindSession, SessionID: "sess-1"},
 		{Vendor: model.VendorClaude, Kind: runner.KindMeta, SessionID: "sess-1", CostUSD: &cost, Text: "final", EndsTurn: true},
+		// The grok ACP seat's end of turn: a count and no cost. A zero count
+		// rides too, because a replay must draw `in 0 out 0` where the live
+		// room did and draw nothing where the vendor sent nothing.
+		{Vendor: model.VendorGrok, Kind: runner.KindMeta, EndsTurn: true, Tokens: &model.TokenCounts{Input: 3210, Output: 45}},
+		{Vendor: model.VendorGrok, Kind: runner.KindMeta, EndsTurn: true, Tokens: &model.TokenCounts{}},
 		{Vendor: model.VendorClaude, Kind: runner.KindGate, Gate: &runner.Gate{
 			RequestID: "r", ToolUseID: "t", Tool: "Edit", Text: "Edit: f", OldContent: "a", NewContent: "b",
 			Input: map[string]any{"file_path": "f"}}},
@@ -194,6 +199,9 @@ func TestAnEventRoundTripsThroughTheFile(t *testing.T) {
 		}
 		if (ev.CostUSD == nil) != (back.CostUSD == nil) || (ev.CostUSD != nil && *ev.CostUSD != *back.CostUSD) {
 			t.Errorf("cost changed: %v -> %v", ev.CostUSD, back.CostUSD)
+		}
+		if (ev.Tokens == nil) != (back.Tokens == nil) || (ev.Tokens != nil && *ev.Tokens != *back.Tokens) {
+			t.Errorf("tokens changed: %v -> %v", ev.Tokens, back.Tokens)
 		}
 		if (ev.Err == nil) != (back.Err == nil) || (ev.Err != nil && ev.Err.Error() != back.Err.Error()) {
 			t.Errorf("err changed: %v -> %v", ev.Err, back.Err)
