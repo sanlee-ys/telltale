@@ -45,7 +45,8 @@ telltale council --replay examples/demo.jsonl --replay-speed 8
 ```
 
 That file is a scrubbed recording of a real room, and it plays on a
-machine with nothing installed.
+machine with nothing installed. Its shape is real and its words are
+synthesized.
 
 Then read what this machine has:
 
