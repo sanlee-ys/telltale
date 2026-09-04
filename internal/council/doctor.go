@@ -4,11 +4,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/adapter/pins"
 	"github.com/sanlee-ys/telltale/internal/council/vendors"
 	"github.com/sanlee-ys/telltale/internal/doctor"
 	"github.com/sanlee-ys/telltale/internal/model"
+	"github.com/sanlee-ys/telltale/internal/probe"
 )
 
 // DoctorSeats flattens what detection found into the shape `telltale doctor`
@@ -60,6 +62,13 @@ func DoctorSeats() []doctor.Seat {
 				Incomparable:    p.Incomparable,
 			}
 		}
+		// The probe file, read at the same seam and for the same stated reason:
+		// doctor stays stdlib-only and reads nothing of its own. Unlike the pin
+		// and the capability this is not a claim from this repository — it is
+		// what a `telltale probe` run on THIS machine recorded, and an absent
+		// file stays a nil pointer so the preflight renders "never" rather than
+		// a blank.
+		s.Probed = probedSeat(v)
 		// A resolved binary with no note still owes the reader a sentence: an
 		// unusable seat always carries one (classify writes it), but a seat that
 		// detection never reached at all would otherwise render a blank reason.
@@ -67,6 +76,88 @@ func DoctorSeats() []doctor.Seat {
 			s.Note = "detection resolved nothing and said nothing about why"
 		}
 		out = append(out, s)
+	}
+	return out
+}
+
+// probedSeat flattens one vendor's probe file into the shape the preflight
+// prints, or nil when there is none.
+//
+// Every failure path here returns nil, and that collapse is the honest one: a
+// home directory this process cannot resolve, a file that is not there, and a
+// file that will not parse all mean the same thing to the reader — nothing on
+// this machine says this seat was driven. What must never happen is the other
+// collapse, so there is no branch here that returns a Probed with anything
+// invented in it.
+func probedSeat(v model.VendorID) *doctor.Probed {
+	dir, err := probe.Dir()
+	if err != nil {
+		return nil
+	}
+	rec, ok := probe.Read(dir, string(v))
+	if !ok {
+		return nil
+	}
+	p := &doctor.Probed{
+		Version:         rec.Version,
+		When:            rec.ProbedAt,
+		TelltaleVersion: rec.TelltaleVersion,
+	}
+	for _, c := range rec.Checks {
+		pc := doctor.ProbedCheck{Name: c.Name, Status: probedStatus(c.Status)}
+		if c.Millis != nil {
+			pc.Took = time.Duration(*c.Millis) * time.Millisecond
+		}
+		p.Checks = append(p.Checks, pc)
+	}
+	return p
+}
+
+// probedStatus maps the file's three words onto the report's three states.
+//
+// A word this build does not know maps to NotChecked, which is the safe
+// direction and the only one: a file written by a future telltale that grew a
+// fourth word must not be able to render as a pass on a seat nobody proved.
+func probedStatus(word string) doctor.Status {
+	switch word {
+	case probe.StatusOK:
+		return doctor.Passed
+	case probe.StatusFailed:
+		return doctor.Failed
+	default:
+		return doctor.NotChecked
+	}
+}
+
+// ProbeSeats is what `telltale probe` drives, and it is DoctorSeats' sibling:
+// the same detection, the same binary resolution, the same registry, flattened
+// for a mode that spends a turn instead of reading a version.
+//
+// It returns only seats detection says council will actually drive. A seat that
+// is not installed, or whose only entry point is a shim council refuses, has no
+// live shape to bring up — so it is absent from this list rather than present
+// with a failure attached, and `telltale doctor` is the mode that already
+// explains why. A probe that reported a failed handshake for a binary that is
+// not on the machine would be spending a row on a question detection answered
+// for free.
+func ProbeSeats() []probe.Seat {
+	reg := vendors.Registry()
+	out := make([]probe.Seat, 0, len(reg))
+	for _, info := range Detect() {
+		if info.Avail != AvailInstalled {
+			continue
+		}
+		adapter, ok := reg[info.Vendor]
+		if !ok {
+			continue
+		}
+		out = append(out, probe.Seat{
+			Vendor:      info.Vendor,
+			Label:       info.Label,
+			Binary:      info.Binary,
+			Adapter:     adapter,
+			VersionArgs: versionArgs(info),
+		})
 	}
 	return out
 }

@@ -89,6 +89,15 @@ func Render(r Report, o Options) string {
 			// survey look like a failed check on a seat that works. See pin.go.
 			writeSeatLine(&b, surveyLabel+s.Survey, cols)
 		}
+		if s.Probe != "" {
+			// Under the survey line, and the order is the argument. The line
+			// above says how old telltale's homework is; this one says whether
+			// anything on THIS machine has ever driven the seat, which is the
+			// question the line above leaves a reader holding. It is outside
+			// the check block for the third time in a row, and this time
+			// because the measurement was made on another day. See probed.go.
+			writeSeatLine(&b, probedLabel+s.Probe, cols)
+		}
 	}
 
 	// The posture block, between the seats and the notes, and that position is
