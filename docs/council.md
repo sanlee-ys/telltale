@@ -422,6 +422,26 @@ brief: the column's note names the invocation, and the postures page reads `exec
 nothing. Quitting the room gives each live seat its closing message, closes its stdin and
 waits a bounded grace before the kill that still follows.
 
+**`telltale probe` is how a machine pays for the word `unmeasured` itself.** The postures
+page above states each seat's shape and the version it was read at, and until now nothing
+on your machine could check that the shape still comes up. This mode does: for each
+installed seat it brings the live process up, waits for the seat to name a session, sends
+a brief of ONE WORD, waits for the turn to end, then sends the seat's closing lines,
+closes stdin and times the exit against the grace that seat states. It stops a seat at its
+first failure, so the checks under a failure read `not checked` rather than being guessed
+at. **This SPENDS a turn per seat**, on your own account and under your own vendor
+credentials, so the command says so before it starts, asks at the terminal, and refuses to
+run when stdin is not a terminal unless you pass `--yes`. Every seat runs in a throwaway
+empty directory the mode makes and removes, never in your workspace: three of the four
+seats act unasked on a write, and the directory is the containment that actually holds.
+The result goes to `~/.telltale/probe/<vendor>.json` as numbers and keys only, and
+`telltale doctor` prints it on that seat's own row, next to the survey line. A seat nobody
+has probed reads `probed here: never` with the command that fixes it. It never reads as a
+pass. What the probe does NOT drive is as deliberate as what it does: no write, no
+approval flow, no second turn testing a resume. Each of those is a separate item on the
+crew checklist, each needs a person to read what came back, and a probe that quietly did
+them would spend more of your money than the sentence on screen promised.
+
 **`a` on the approval card stops the asking.** `y` approves, `n` denies, `a` approves this
 call and every one after it — on the card rather than in the composer, because that is
 where you decide you have been asked enough. It drains the queue behind the card rather

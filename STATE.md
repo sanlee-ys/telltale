@@ -134,6 +134,22 @@ a demo of the crew is a demo of measured claims only after that list is paid.
   22. Unpack the `darwin_arm64` archive by hand and run `telltale doctor` —
       retires PARITY's "not walked at all".
 
+  **What `telltale probe` pays off this list, once the operator runs it, and
+  what it does not (2026-09-04).** The mode drives each installed seat through
+  its handshake, one turn of one word, and its stop, and records the result per
+  machine under `~/.telltale/probe/<vendor>.json`. It therefore PAYS the
+  handshake-and-one-turn half of item 17 and of §9.57's Antigravity stream
+  item, and the stdin-close-to-exit timing in item 11 and §9.57's stop items,
+  for whichever seats that machine has installed — one run each rather than
+  five, and it records the number rather than a badge. It pays NOTHING ELSE
+  here, by design. Items 10 and 15 need a write brief and a person answering an
+  approval card; 12 and 19 need a build without the subcommand; 16 needs a
+  saved id and grok.com's billing page; 18 needs a second conversation; 1
+  through 8 are the crew's own surfaces at real widths; 13 and 20 through 22
+  are the Mac. A probe that quietly drove any of those would spend more of the
+  operator's money than the sentence on screen promises, so each stays a hand
+  measurement with a reader.
+
 
 - **The 3-minute demo path is DEFINED (owner's ruling, 2026-08-15).** It is link
   1 of the outward chain above, and both later links consume it. Eight beats, in

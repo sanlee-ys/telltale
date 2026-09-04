@@ -46,6 +46,18 @@ is no longer the price of a change.
   overrule a lead at Alert. The inbox now opens `UNREAD` with no mark; one
   blocked seat on the line brings `⚠ NEEDS YOU` back. The recorder was not at
   fault: `replay-check` reported no gate card because there was none.
+- **2026-09-04 — A machine may pay for a live claim, and it must ask first.**
+  `telltale probe` drives each installed seat through its handshake, one turn of
+  one word and its stop, and `telltale doctor` reports what it recorded. This is
+  the first mode that SPENDS the operator's money, so three things bind it: it
+  states the cost before it runs, it refuses to run with no terminal unless
+  `--yes` is given, and its one-word brief is a constant rather than a flag. Its
+  file is a fourth bounded write exception and the strictest one — no brief, no
+  reply, no session id, no path, and no failure reason, because a vendor's own
+  error line carries paths. Reason: `doctor` could say telltale's survey was
+  stale and nothing on the machine could answer it, so every live claim was paid
+  by hand and recorded in prose. What is NOT probed is part of the ruling: no
+  write, no approval flow, no resume. Those stay hand measurements with a reader.
 - **2026-09-03 — Telltale spends width on the trace that needs it, time on the
   silence between acts, and states each fact once where it belongs.** (The integrating session, on
   an independent audit of three prototypes rendered from a real recorded room.)

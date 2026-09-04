@@ -33,15 +33,26 @@ statusline`, `telltale hud` and `telltale snapshot` read the session files that
 the vendor CLIs already write on this machine. They make no network calls. They
 read no credentials. No keybinding changes vendor state.
 
-**Three bounded write exceptions exist.** All three write under `~/.telltale/`,
-and all three write numbers and keys only, never session content. `telltale
+**Four bounded write exceptions exist.** All four write under `~/.telltale/`,
+and all four write numbers and keys only, never session content. `telltale
 council` writes `council/room.json` (session ids and the workspace path). The
 statusline writes `quota/<vendor>.json` (the rate-limit windows it just
 rendered). The relays write `usage/<vendor>.json` (per-turn token totals).
 `telltale hook cursor` and `telltale otel grok` are the two writers of that last
 file. The OTLP listener binds the loopback interface only, and the vendor pushes
-to it, so the gauges still make no network calls of their own. A test pins the
-serialized form of each of the three files to keys and numbers.
+to it, so the gauges still make no network calls of their own. `telltale probe`
+writes `probe/<vendor>.json`: the vendor id, the version string that binary
+printed, the day, the telltale build that probed, and one result plus a
+millisecond count for each of its three checks. A test pins the serialized form
+of each of the four files to keys and numbers.
+
+**The probe file is the strictest of the four, because its writer drives an
+agent.** The brief, the reply, the session id the vendor named and the
+directory the seat ran in never reach it. Neither does the failure reason: a
+vendor's own first line of standard error routinely carries a path or a session
+id, so `telltale probe` prints that line in the terminal where it ran and stops
+there. `telltale doctor` reports which check failed and names the command that
+shows why.
 
 **The event sink is different, and it says so.** `telltale events` stores hook
 payloads verbatim under `~/.telltale/events/`, so that directory holds content,
@@ -54,6 +65,16 @@ operator already installed and already trusts, in the operator's own workspace,
 under the operator's own vendor credentials. telltale adds no account and holds
 no token of its own. A seat can write to the workspace, and the room shows which
 sandbox posture each seat runs under.
+
+**`telltale probe` starts them too, and it spends a turn.** It brings each
+installed seat up, sends a brief of one word, and times the stop. That is one
+billed turn per seat, on the operator's own account and under the same
+credentials. The mode says so before it starts, it asks at the terminal, and it
+refuses to run when standard input is not a terminal unless `--yes` is given, so
+a hook, a script or a CI step cannot reach it by accident. Every seat runs in a
+throwaway empty directory that the mode makes and removes, never in the
+operator's own workspace. Nothing else in the binary calls it: no gauge, no
+room, and no scheduled path.
 
 **Two adapters meet credential material, and both refuse it by construction.**
 The Cursor adapter reads a store that holds OAuth and refresh tokens in the same
