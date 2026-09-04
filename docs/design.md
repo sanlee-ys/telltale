@@ -18625,11 +18625,11 @@ Each item names the command to run on the reference box and the sentence it woul
 change. Capture the wire under `vendors/testdata/wire/<vendor>-<version>-<arm>.jsonl` per the
 README there; a claim that is not captured is not made.
 
-- [ ] **Codex, read liveness (the §9.50 debt).** `codex --version`; then, through the seat's own
-  argv (`telltale council --read` with only codex seated, or a driver issuing `initialize`,
-  `thread/start{sandbox:"read-only",approvalPolicy:"never"}`), a brief that lists the workspace
-  and reads one file. Three trials. Passes when every trial inspects. Until then the Windows
-  detail keeps "two of three read turns".
+- [x] **Codex, read liveness (the §9.50 debt).** PAID. MEASURED 2026-09-04 at codex-cli 0.151.0, Windows 11: a hosted read room (`telltale council --host --read --cd <this repo> --vendor codex`, driven through the plain client with stdin piped), the brief "list this directory and read README.md" three times; every turn ran `cmd.exe /c 'dir /a'` and `cmd.exe /c 'type README.md'` and settled `done (exit 0)`. Three of three inspected. The transcript is filed privately (desk/research, 2026-09-04).
+  The Windows detail's "two of three read turns" is retired by this run; it was true at 0.149.1
+  and is not true at 0.151.0 on this path. What this run does NOT re-measure: the sandbox's
+  refusal of a write under `-s read-only` (no write was attempted), so PARITY's `ro:enforced`
+  still rests on the 2026-08-29 measurement.
 - [ ] **Codex, the approval flow, both branches.** A write-posture thread (`workspace-write`,
   `on-request`) asked to write OUTSIDE the workspace and to reach the network: does
   `item/commandExecution/requestApproval` or `item/fileChange/requestApproval` arrive, does the
