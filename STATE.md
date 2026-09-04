@@ -108,13 +108,15 @@ a demo of the crew is a demo of measured claims only after that list is paid.
       `fallback.go`'s offline-only standing.
   13. Item 9 on the Mac, into PARITY.md — retires the off-Windows
       `ro:requested` (§9.57 item 4).
-  15. Grok permissions: a write brief "run `mkdir zzz` and create probe.txt";
-      whether `session/request_permission` arrives, its option ids and kinds,
-      what each does — retires the other half (§9.57 item 7).
-  16. Grok `session/load`: a saved id in a new process (`loadSession` is
-      advertised at 1.0.13); and the `costUsdTicks` unit, one turn checked
-      against grok.com's billing — retires §9.57's resume claim and its cost
-      half (token counts are on the wire since 2026-09-04; the tick is not).
+  16. Grok `costUsdTicks` unit: one turn checked against grok.com's billing —
+      retires §9.57's cost half (token counts are on the wire since
+      2026-09-04; the tick is not). The permissions and `session/load` halves
+      were PAID 2026-09-04 (§9.57's grok items). One design choice came out
+      of them and is open: the server asks about nothing until a
+      `/always-approve off` prompt is sent, after which it asks before a file
+      write and not before a shell command. The seat sends no such prompt, so
+      the gate cannot card its writes; sending one is a new frame on the
+      brief channel, and whether the room should is the owner's call.
   17. Antigravity stream: two `{"event":"user",…}` lines down one stdin; same
       pid, same `conversation_id`, the second turn recalling the first; the
       exit timed after stdin close against 3 s — retires `stream-json ·

@@ -11,13 +11,14 @@ import (
 // The three seats that moved to long-lived processes on 2026-09-02 (design.md
 // §9.54), and what their badges may and may not say about it.
 //
-// None of the three shapes has been driven from this repository: each was
-// built from vendor documentation at a named version, and the badge is the
-// place a reader learns that before trusting a column. So the property pinned
-// here is the WORD. "unmeasured" is in every live badge by construction
-// (seatShape), and the spelling that would let a future edit quietly promote a
-// reading into a measurement — "measured at <the unmeasured version>" — is
-// asserted absent.
+// Each was built from vendor documentation at a named version, and the badge
+// is the place a reader learns whether it has been driven since. So the
+// property pinned here is the WORD. "unmeasured" is in a live badge by
+// construction (seatShape) until the §9.57 checklist is paid for that seat,
+// and the spelling that would let a future edit quietly promote a reading into
+// a measurement — "measured at <the unmeasured version>" — is asserted absent
+// on the rows that still owe it. Grok's row flipped on 2026-09-04, and the
+// table below says so rather than the assertion looking away.
 
 // seatFallbacks seats every LiveFallback vendor's batch adapter for the life
 // of one test: the room after a full retreat, and the only room that still
@@ -41,14 +42,18 @@ func seatFallbacks(t *testing.T) {
 var liveSeatRows = []struct {
 	v        model.VendorID
 	live     string // the first word of the live badge: the protocol
-	readAt   string // the version the live shape was read from docs at
+	readAt   string // the version the live shape was read from docs at, or driven at
 	fallback string // the first word of the fallback badge: the batch invocation
 	measured string // the version the fallback was measured at
-	asks     bool   // whether the live shape carries an approval channel
+	asks     bool   // whether the live shape asks: a channel, and a server that uses it
+	driven   bool   // whether the §9.57 checklist is paid, so the live badge says measured
 }{
-	{model.VendorCodex, "app-server", "0.152.1", "exec", "0.149.1", true},
-	{model.VendorGrok, "acp", "1.0.13", "single", "1.0.4", true},
-	{model.VendorAntigravity, "stream-json", "1.1.24", "print", "1.1.13", false},
+	{model.VendorCodex, "app-server", "0.152.1", "exec", "0.149.1", true, false},
+	// Driven 2026-09-04 (vendors/acp.go's header). `asks` is false on a
+	// measurement, not on a missing channel: the server resolves its own
+	// permission interactions unless a toggle the seat does not send is sent.
+	{model.VendorGrok, "acp", "1.0.13", "single", "1.0.4", false, true},
+	{model.VendorAntigravity, "stream-json", "1.1.24", "print", "1.1.13", false, false},
 }
 
 func TestLiveSeatBadgesSayUnmeasuredAndNameTheVersion(t *testing.T) {
@@ -57,19 +62,23 @@ func TestLiveSeatBadgesSayUnmeasuredAndNameTheVersion(t *testing.T) {
 		if !strings.HasPrefix(shape, row.live+" · ") {
 			t.Errorf("%s: live badge %q does not open with the protocol %q", row.v, shape, row.live)
 		}
-		if !strings.HasSuffix(shape, "unmeasured at "+row.readAt) {
-			t.Errorf("%s: live badge %q does not say unmeasured at %s", row.v, shape, row.readAt)
+		word := "unmeasured at "
+		if row.driven {
+			word = "measured at "
+		}
+		if !strings.HasSuffix(shape, " · "+word+row.readAt) {
+			t.Errorf("%s: live badge %q does not say %s%s", row.v, shape, word, row.readAt)
 		}
 		asks := strings.Contains(shape, " · asks · ")
 		if asks != row.asks {
 			t.Errorf("%s: live badge %q says asks=%v, want %v", row.v, shape, asks, row.asks)
 		}
 		if !row.asks && !strings.Contains(shape, " · unasked · ") {
-			t.Errorf("%s: a seat with no approval channel must say so: %q", row.v, shape)
+			t.Errorf("%s: a seat that is not asked must say so: %q", row.v, shape)
 		}
 		// The spelling a quiet promotion would use. A badge that read
 		// "measured at 0.152.1" would be claiming a run nobody made.
-		if strings.Contains(shape, " measured at "+row.readAt) {
+		if !row.driven && strings.Contains(shape, " measured at "+row.readAt) {
 			t.Errorf("%s: live badge claims a measurement at %s: %q", row.v, row.readAt, shape)
 		}
 
@@ -106,17 +115,27 @@ func TestLiveSeatWriteDetailsOpenWithTheShapeAndStayWRITES(t *testing.T) {
 			if !strings.HasPrefix(claim.Detail, seatShape(row.v, false)+": ") {
 				t.Errorf("%s (asking=%v): write detail does not open with its shape: %q", row.v, asking, claim.Detail)
 			}
-			if !strings.Contains(claim.Detail, "not from a live turn") {
-				t.Errorf("%s (asking=%v): write detail does not say the shape is unwatched: %q", row.v, asking, claim.Detail)
+			if unwatched := strings.Contains(claim.Detail, "not from a live turn"); unwatched == row.driven {
+				t.Errorf("%s (asking=%v): write detail says unwatched=%v, but driven=%v: %q", row.v, asking, unwatched, row.driven, claim.Detail)
 			}
-			if row.asks && !strings.Contains(claim.Detail, "falls back to") {
+			if row.driven && !strings.Contains(claim.Detail, "measured at "+row.readAt) {
+				t.Errorf("%s (asking=%v): a driven seat's write detail must name the build it was measured at: %q", row.v, asking, claim.Detail)
+			}
+			channel := row.asks || row.v == model.VendorGrok
+			if channel && !strings.Contains(claim.Detail, "falls back to") {
 				t.Errorf("%s (asking=%v): write detail does not name the fallback: %q", row.v, asking, claim.Detail)
 			}
-			if row.asks && asking && !strings.Contains(claim.Detail, "approval card") {
+			if channel && asking && !strings.Contains(claim.Detail, "approval card") {
 				t.Errorf("%s: with asking on, the detail must say a request becomes a card: %q", row.v, claim.Detail)
 			}
-			if row.asks && !asking && !strings.Contains(claim.Detail, "without drawing a card") {
+			if channel && !asking && !strings.Contains(claim.Detail, "without drawing a card") {
 				t.Errorf("%s: with asking off, the detail must not promise cards: %q", row.v, claim.Detail)
+			}
+			// A seat measured NOT asking may not promise that a card will
+			// come, in either branch; the sentence that says why is the one
+			// the measurement paid for.
+			if row.driven && !row.asks && !strings.Contains(claim.Detail, "does NOT ask") {
+				t.Errorf("%s (asking=%v): a seat measured not asking must say so: %q", row.v, asking, claim.Detail)
 			}
 		}
 		// The read posture leads with the same words: the shape is a fact
@@ -133,8 +152,9 @@ func TestLiveSeatWriteDetailsOpenWithTheShapeAndStayWRITES(t *testing.T) {
 // TestTheGateStillBelongsToOneSeat: two more seats can now be ASKED — the
 // codex app-server routes item/*/requestApproval through the room's card and
 // the grok ACP seat routes session/request_permission the same way — and
-// neither is `gated`, because canGate is a coverage measurement and no live
-// run on either path has produced a request at all.
+// neither is `gated`, because canGate is a coverage measurement: codex's path
+// has produced no request in a live run, and grok's was measured (2026-09-04)
+// asking about nothing by default and never about a shell command.
 func TestTheGateStillBelongsToOneSeat(t *testing.T) {
 	for id := range vendors.Registry() {
 		if got := canGate(id); got != (id == model.VendorClaude) {
