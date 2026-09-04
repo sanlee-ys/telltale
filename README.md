@@ -332,7 +332,9 @@ a reading.
 with its timing; `--replay <file>` plays it back with the same renderer
 on a machine with nothing installed, labelled `REPLAY` on every frame;
 `telltale council replay-check <file>` lists what the file carries
-before it is shared. No recording of a real five-seat room exists yet.
+before it is shared. `examples/demo.jsonl` is a real room of 2026-09-03
+with every word replaced by `telltale council replay-scrub`; the real
+recording stays with its operator.
 
 `--host` opens a read room in a process that outlives the terminal, on
 Windows, macOS, and Linux; `/detach` walks away, `telltale council`
