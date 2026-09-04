@@ -16,10 +16,13 @@ import (
 // Every line here is SYNTHESIZED from the ACP schema
 // (agentclientprotocol.com/protocol/schema, read 2026-09-02) and from the
 // shapes cursor-agent was measured sending under the same protocol
-// (design.md §9.36). Nothing was captured from `grok agent stdio`; the option
-// ids below in particular are invented so that a test can prove the seat
-// reads them off the request rather than knowing them. §9.57 lists the runs
-// that would replace these with a version-pinned capture.
+// (design.md §9.36), with ONE exception: grokPromptMeta reproduces the SHAPE
+// of the prompt response `grok agent stdio` was measured sending at 1.0.13
+// on 2026-09-04 (acp.go's header quotes it), with every id and every figure
+// replaced by a fake of the same type. The option ids below are invented so
+// that a test can prove the seat reads them off the request rather than
+// knowing them. §9.57 lists the runs that would replace the rest with a
+// version-pinned capture.
 
 func grokDriver(p Posture) *acpProtocol {
 	return newACPProtocolWith(grokDialect, "C:\\Users\\dev\\code\\example-app", "", p)
@@ -32,6 +35,16 @@ const (
 	grokSession     = `{"jsonrpc":"2.0","id":2,"result":{"sessionId":"55555555-5555-4555-8555-555555555555"}}`
 	grokChunk       = `{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"55555555-5555-4555-8555-555555555555","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"ok"}}}}`
 	grokPromptDone  = `{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}`
+	// The 1.0.13 shape: a per-prompt count at the top of `_meta`, and the
+	// session's running total under `usage` with a `costUsdTicks` in it. The
+	// figures are fakes chosen so the two accountings are visibly different
+	// and neither is the other's multiple: a test that lands the wrong one
+	// cannot pass by coincidence.
+	grokPromptMeta = `{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn","_meta":{"sessionId":"55555555-5555-4555-8555-555555555555","requestId":"66666666-6666-4666-8666-666666666666","promptId":"66666666-6666-4666-8666-666666666666","modelId":"grok-9.9","inputTokens":3210,"outputTokens":45,"totalTokens":3255,"cachedReadTokens":2000,"reasoningTokens":12,"usage":{"inputTokens":7777,"outputTokens":111,"totalTokens":7888,"cachedReadTokens":4000,"cacheCreationTokens":0,"reasoningTokens":30,"modelCalls":2,"apiDurationMs":1500,"costUsdTicks":123456789,"numTurns":2,"modelUsage":{"grok-9.9-build":{"inputTokens":7777,"outputTokens":111,"totalTokens":7888,"cachedReadTokens":4000,"cacheCreationTokens":0,"reasoningTokens":30,"modelCalls":2,"apiDurationMs":1500,"costUsdTicks":123456789}}}}}}`
+	// A measured ZERO, which is a different fact from no count at all.
+	grokPromptMetaZero = `{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn","_meta":{"inputTokens":0,"outputTokens":0,"totalTokens":0}}}`
+	// Half a count: one side present, the other absent. Never seen; guarded.
+	grokPromptMetaHalf = `{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn","_meta":{"inputTokens":3210}}}`
 	// A permission request whose option ids are NOT cursor's spelling, so a
 	// seat that answered with "allow-once" would be caught echoing an id this
 	// vendor never offered.
@@ -159,10 +172,91 @@ func TestGrokACPStreamsTextAndEndsWithNoCost(t *testing.T) {
 		t.Fatalf("the prompt response must end the turn cleanly, got %+v", end)
 	}
 	// ABSENT, never zero. The batch seat reads the vendor's own
-	// total_cost_usd off its `end` frame; the ACP prompt response is
-	// `{stopReason, _meta?}` and nothing says what grok puts in _meta.
+	// total_cost_usd off its `end` frame; this prompt response is
+	// `{stopReason}` and nothing else, so there is no count and no cost.
 	if end.CostUSD != nil {
 		t.Fatalf("cost = %v on a wire nobody has seen carry one", *end.CostUSD)
+	}
+	if end.Tokens != nil {
+		t.Fatalf("tokens = %+v on a frame that carried no _meta", *end.Tokens)
+	}
+}
+
+// endOf is the event that ended the turn, or nil.
+func endOf(d *driven) *runner.Event {
+	var end *runner.Event
+	for i := range d.events {
+		if d.events[i].EndsTurn {
+			end = &d.events[i]
+		}
+	}
+	return end
+}
+
+// TestGrokACPCountsThisPromptsTokensAndStillShowsNoCost is the whole of the
+// 1.0.13 change on this seat, and the two halves are one rule.
+//
+// The count that lands is the PER-PROMPT one at the top of `_meta`, never the
+// session's running total under `usage`: the column's figure means this turn
+// everywhere else in the room, and the vendor reports this turn's figure
+// under its own name, so nothing is subtracted to get it. The cost stays
+// ABSENT although `costUsdTicks` is right there on the same frame — a
+// cumulative figure in a fixed-point unit that has never been checked against
+// a dollar on this seam (acp.go's header says what is measured and what is
+// not). Absent, not zero: `$0.0000` would be a claim.
+func TestGrokACPCountsThisPromptsTokensAndStillShowsNoCost(t *testing.T) {
+	p := grokDriver(PostureWrite)
+	p.Turn("reply with the word ok")
+	d := drive(p, grokInitBare, grokSession, grokChunk, grokPromptMeta)
+	end := endOf(d)
+	if end == nil || end.Kind != runner.KindMeta {
+		t.Fatalf("the prompt response must end the turn cleanly, got %+v", end)
+	}
+	if end.Tokens == nil {
+		t.Fatal("the per-prompt count on `_meta` did not reach the room")
+	}
+	if end.Tokens.Input != 3210 || end.Tokens.Output != 45 {
+		t.Fatalf("tokens = %+v, want this prompt's own 3210/45, not the session total 7777/111", *end.Tokens)
+	}
+	if end.CostUSD != nil {
+		t.Fatalf("cost = %v on a frame whose only cost is a tick nobody has priced on this seam", *end.CostUSD)
+	}
+	for _, ev := range d.events {
+		if ev.CostUSD != nil {
+			t.Fatalf("a cost reached the room on some other event: %+v", ev)
+		}
+	}
+}
+
+// TestGrokACPKeepsZeroTokensApartFromNoCount is §4a.1 on the count: a vendor
+// that counted zero and a vendor that sent no count must not land alike, and a
+// count with one half missing is no count.
+func TestGrokACPKeepsZeroTokensApartFromNoCount(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		frame string
+		want  *model.TokenCounts
+	}{
+		{"1.0.4 shape, no _meta", grokPromptDone, nil},
+		{"a measured zero", grokPromptMetaZero, &model.TokenCounts{}},
+		{"half a count", grokPromptMetaHalf, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := grokDriver(PostureWrite)
+			p.Turn("the brief")
+			end := endOf(drive(p, grokInitBare, grokSession, grokChunk, tc.frame))
+			if end == nil {
+				t.Fatal("the turn did not end")
+			}
+			switch {
+			case tc.want == nil && end.Tokens != nil:
+				t.Fatalf("tokens = %+v, want absent", *end.Tokens)
+			case tc.want != nil && end.Tokens == nil:
+				t.Fatal("tokens absent, want a measured zero")
+			case tc.want != nil && *end.Tokens != *tc.want:
+				t.Fatalf("tokens = %+v, want %+v", *end.Tokens, *tc.want)
+			}
+		})
 	}
 }
 

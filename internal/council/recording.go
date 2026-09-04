@@ -148,11 +148,15 @@ type recordLine struct {
 	EndsTurn  bool        `json:"ends_turn,omitempty"`
 	Acts      []recordAct `json:"acts,omitempty"`
 	CostUSD   *float64    `json:"cost_usd,omitempty"`
-	ExitCode  int         `json:"exit,omitempty"`
-	Err       string      `json:"err,omitempty"`
-	Note      string      `json:"note,omitempty"`
-	Failure   int         `json:"failure,omitempty"`
-	Gate      *recordGate `json:"gate,omitempty"`
+	// Tokens is the event's reported count: two integers under two keys, and
+	// absent when the vendor sent none, so a replay draws the cell exactly
+	// where the live room did and nowhere it did not.
+	Tokens   *recordTokens `json:"tokens,omitempty"`
+	ExitCode int           `json:"exit,omitempty"`
+	Err      string        `json:"err,omitempty"`
+	Note     string        `json:"note,omitempty"`
+	Failure  int           `json:"failure,omitempty"`
+	Gate     *recordGate   `json:"gate,omitempty"`
 
 	// The gate line.
 	RequestID string `json:"request_id,omitempty"`
@@ -236,6 +240,12 @@ func eventKind(word string) (runner.EventKind, bool) {
 	return 0, false
 }
 
+// recordTokens is a reported count on the file: numbers and keys.
+type recordTokens struct {
+	In  int64 `json:"in"`
+	Out int64 `json:"out"`
+}
+
 // eventRecord is one runner.Event as a line. Input is dropped, as the file's
 // doc comment says; everything else the room could read off the event is kept.
 func eventRecord(ev runner.Event) recordLine {
@@ -253,6 +263,9 @@ func eventRecord(ev runner.Event) recordLine {
 	}
 	if ev.Err != nil {
 		r.Err = ev.Err.Error()
+	}
+	if ev.Tokens != nil {
+		r.Tokens = &recordTokens{In: ev.Tokens.Input, Out: ev.Tokens.Output}
 	}
 	for _, a := range ev.Acts {
 		r.Acts = append(r.Acts, recordAct{ID: a.ID, Text: a.Text, Outcome: int(a.Outcome), Detail: a.Detail})
@@ -288,6 +301,9 @@ func (r recordLine) event() (runner.Event, bool) {
 	}
 	if r.Err != "" {
 		ev.Err = errors.New(r.Err)
+	}
+	if r.Tokens != nil {
+		ev.Tokens = &model.TokenCounts{Input: r.Tokens.In, Output: r.Tokens.Out}
 	}
 	for _, a := range r.Acts {
 		ev.Acts = append(ev.Acts, runner.ActCall{ID: a.ID, Text: a.Text, Outcome: runner.ActStatus(a.Outcome), Detail: a.Detail})
