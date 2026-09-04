@@ -157,6 +157,7 @@ statusline links no TUI framework.
 |---|---|---|---|
 | Model | stdin `model.display_name` (falls back to `model.id`) | hide if both empty | **built** |
 | Context % | stdin `context_window.used_percentage` (input-token based per docs) | hide segment | **built** |
+| Cache hit % | stdin `prompt_cache.hit_ratio` (vendor-COMPUTED over the session's main-conversation requests; ×100 is a unit conversion), gated on `prompt_cache.caching_observed` | absent block, null ratio, or `caching_observed` false all hide; 0 with caching observed is a reading and renders `cache 0%` | **built** (§7.16c) |
 | Session cost | stdin `cost.total_cost_usd` | hide segment | **built** |
 | Quota pacing (5h) | stdin `rate_limits.five_hour.used_percentage` + `resets_at` (unix s) | rate_limits absent on API-key logins; each window independently absent → hide, never zero; countdown hides without `resets_at` | **built** |
 | Quota pacing (7d) | stdin `rate_limits.seven_day.*` | same rule | **built** |
@@ -193,6 +194,13 @@ are modelled and **render nothing and relay nothing** — they describe one API 
 from them. That is the whole of §7.16b, and the tolerance of unknown fields above is why
 every release between 2.1.90 and 2.1.233 was unaffected by the growth. The segment table
 above is unchanged: no new segment was added.
+
+**Re-measured 2026-09-04 at CLI 2.1.260 by source read (§7.16c), and this time the growth
+DID earn a segment.** The payload gained `prompt_cache` at 2.1.251 — the vendor's own
+prompt-cache statistics for the main conversation — and one of its fields is a number the
+vendor computes rather than a count telltale would have to combine. The segment table above
+carries the new row; §7.16c carries the measurement and the reason the transcript adapter
+was left alone.
 
 **Known divergence from `theme`, deliberate and unresolved:** the statusline's local
 `pct` uses `%.1f`, which rounds, and its local `shortDur` has no days branch. The shared
@@ -5127,6 +5135,110 @@ is re-openable against that field and nothing else.
   emit `permission_mode`, but the statusline calls it with two arguments, so the field is
   `undefined` and never serialized. The exclusion is now a property of the call site rather
   than of the schema, and a future version that passes the argument would ship it.
+
+<a id="s7-16c"></a>
+
+### 7.16c The cache hit ratio — the vendor computes it, so telltale may render it (2026-09-04)
+
+§7.16b is the record of a seam that measured out to nothing. This is its mirror image on the
+same payload: a number arrived that telltale is allowed to display, and the reason it is
+allowed is the whole content of this section.
+
+**The question was whether any surface telltale already reads passively carries prompt-cache
+counts.** Two do, and the difference between them decided where the work went.
+
+#### What was measured, and how
+
+- **The transcript on disk carries the raw counts and not the ratio.** A read-only pass over
+  the owner's corpus on 2026-09-04 — 300 transcripts sampled from 1,508, 65,589 records —
+  found `message.usage.cache_read_input_tokens` and
+  `message.usage.cache_creation_input_tokens` on 32,416 records, written by six CLI builds
+  from 2.1.209 to 2.1.258, plus the same two keys nested under `message.usage.iterations[]`
+  and under `toolUseResult.usage`. No `prompt_cache` and no `hit_ratio` key occurs at any
+  depth. `internal/adapter/claudecode` has parsed both counts since v1 and folds them into
+  `contextIn()`.
+- **The statusline payload carries the ratio itself, computed by the vendor.** Source read of
+  the shipped executable at **2.1.260** (the same field names are present in the 2.1.251
+  build on the same machine, and 2.1.251 is the floor the vendor documents). One function
+  assembles the block and returns an empty object — so the whole key is absent — while
+  `requests` is 0:
+
+  ```js
+  function WZt(w=Date.now()){let x=JUt(void 0,w);
+    if(x.requests===0||x.lastRequest===null)return{};
+    return{prompt_cache:{warm:x.warm,caching_observed:x.cachingObserved,ttl:…,
+      requests:x.requests,misses:x.misses,expected_rebuilds:x.expectedRebuilds,
+      hit_ratio:x.hitRatio,cache_write_tokens:x.cacheWriteTokens,…}}}
+  ```
+
+  and the ratio comes from the accumulator's `summary()`:
+
+  ```js
+  let n=this.cacheReadTokens+this.cacheCreationTokens+this.inputTokens;
+  … hitRatio: n>0 ? this.cacheReadTokens/n : null
+  ```
+
+#### The ruling
+
+**A ratio derived from the transcript is refused; the reported ratio is rendered.** They are
+the same formula and they are not the same claim. Dividing the adapter's own counts would be
+arithmetic telltale invented, which is the ADR-001 §4a.1 refusal, and it would additionally
+be wrong in scope: the adapter reads a head+tail window of a file that reaches 7.7 MB, so a
+"session" ratio built there is a ratio over whatever the windows happened to cover, silently.
+The vendor's figure is taken over every main-conversation request of the session. telltale
+reads that quotient and multiplies by 100 — the unit conversion §2.1 already permits for
+Antigravity's `remaining_fraction` — and computes nothing else.
+
+So the adapter gains nothing and stays exactly as it was. That is the answer to "add a cache
+ratio to the Claude adapter": the honest place for it was the other Claude seam.
+
+#### What was built
+
+- **`internal/claude`**: `StatuslineInput` gains `PromptCache`, modelling four of the
+  block's fourteen fields. `HitRatio` renders. `CachingObserved` gates it. `Warm` and
+  `Requests` are parsed and rendered by nothing, each for a reason stated on the field.
+  The struct is the allowlist for the block, the `internal/cursorhook` technique reused.
+- **`internal/statusline`**: one segment, `cache 91%`, placed directly after `ctx` because
+  the two answer one question together — how full the window is, and how much of what fills
+  it came from cache.
+- **No threshold colour, and this is a rule rather than a preference.** Every other
+  percentage on that line is a consumption, so `pct()` paints high values red. A hit ratio
+  inverts that, and nothing here has measured the ratio at which a cache becomes bad, so
+  inventing an inverted scale would be inventing a judgment. The value renders unpainted and
+  the word `cache` carries the distinction, which is what §9's accessibility rule asks of
+  every distinction anyway.
+- **Three absences hide the segment and none renders as zero**: no block (a CLI older than
+  2.1.251, or a session before its first API response), a null `hit_ratio` (the vendor's own
+  `n>0` guard), and `caching_observed` false (the provider or gateway reports no cache tokens
+  at all). The last is the sharp one: it is an unread field, not a 0% hit rate. A ratio of 0
+  **with** caching observed is a reading and renders `cache 0%`.
+- **Pinned on both halves**: the parse tests cover the measured shape, both flavours of an
+  absent block, and the `caching_observed: false` case; the render tests pin the line, prove
+  the segment reads the reported ratio rather than the per-call counts sitting beside it in
+  the same fixture (they would yield 75%, not 91%), and assert the value carries no ANSI. CI
+  asserts on the **built binary** that the 2.1.233 fixture grows no cache segment and that
+  the 2.1.260 fixture renders `cache 91%` and nothing else from the block.
+
+#### Known limitations
+
+- **This is a source read with no live capture behind it**, which is weaker than §7.16b
+  ended up being. The formula, the field names and the absence semantics come from the
+  2.1.260 executable and the vendor's documentation page agreeing with each other; no
+  interactive session was teed to watch a real `prompt_cache` block arrive on the wire, and
+  no cold-cache or `caching_observed: false` payload has been observed. A capture would
+  close all three at once and is the obvious next measurement.
+- **The docs page's field table is not the whole block.** The same source read found two
+  fields it does not list: `last_miss_cause` (an object carrying `causes`, `tools_added`,
+  `tools_removed`, `system_char_delta`) and `miss_causes`. That is §7.16b's `prompt_id`
+  finding repeating, and it is recorded rather than modelled — absence of need is a result.
+- **Eight documented siblings are deliberately unmodelled**: `ttl`, `expires_at`, `misses`,
+  `expected_rebuilds`, `cache_write_tokens`, `miss_recache_tokens`, `last_miss_at`,
+  `recache_tokens_if_cold`. `warm` is the one to reopen first — a cold prefix makes a healthy
+  ratio unusable, and a cold mark on the segment is a second claim that needs its own ruling.
+- **The statistics cover the main conversation only.** The vendor excludes subagent requests,
+  so a fan-out's cache behaviour is not in this number and the segment does not imply it is.
+- **§7.16b's relay refusal is untouched.** Nothing here writes `usage/claude.json`; a ratio
+  is not a count, and the two CI relay assertions still stand beside the new ones.
 
 <a id="s7-17"></a>
 

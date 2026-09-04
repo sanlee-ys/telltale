@@ -21,6 +21,13 @@
 // more measured-but-unmodelled field: `effort`. Design.md §7.16b's
 // known-limitations record carries the numbers.
 //
+// Re-measured again on 2026-09-04 by source read at CLI 2.1.260, and the
+// payload had grown a block worth a SEGMENT rather than a footnote:
+// `prompt_cache`, the vendor's own prompt-cache statistics for the main
+// conversation. Unlike the 2.1.233 growth, this one carries a number the vendor
+// COMPUTES — `hit_ratio` — so rendering it derives nothing. PromptCache below
+// carries the measurement and design.md §7.16c carries the ruling.
+//
 // The parser's tolerance of unknown fields (see Parse) is what made that growth
 // a non-event for every telltale release in between.
 package claude
@@ -40,6 +47,7 @@ type StatuslineInput struct {
 	Workspace      *Workspace     `json:"workspace,omitempty"`
 	Cost           *Cost          `json:"cost,omitempty"`
 	ContextWindow  *ContextWindow `json:"context_window,omitempty"`
+	PromptCache    *PromptCache   `json:"prompt_cache,omitempty"`
 	RateLimits     *RateLimits    `json:"rate_limits,omitempty"`
 	Worktree       *Worktree      `json:"worktree,omitempty"`
 	Agent          *Agent         `json:"agent,omitempty"`
@@ -143,6 +151,100 @@ type CurrentUsage struct {
 	OutputTokens             *int64 `json:"output_tokens,omitempty"`
 	CacheCreationInputTokens *int64 `json:"cache_creation_input_tokens,omitempty"`
 	CacheReadInputTokens     *int64 `json:"cache_read_input_tokens,omitempty"`
+}
+
+// PromptCache is the vendor's own prompt-cache statistics for the session's
+// MAIN conversation. It arrived at CLI 2.1.251 and it is the reason this seam
+// gained a cache segment while the transcript adapter did not (design.md
+// §7.16c).
+//
+// # Why this is a reading and not a derivation
+//
+// The distinction is the whole point. The transcript on disk carries
+// `message.usage.cache_read_input_tokens` and
+// `cache_creation_input_tokens` — measured on the owner's corpus 2026-09-04,
+// 32,416 of 65,589 records across 300 of 1,508 transcripts, written by six CLI
+// builds from 2.1.209 to 2.1.258 — and `internal/adapter/claudecode` already
+// parses both into contextIn(). A hit ratio built from those counts would be
+// ARITHMETIC THIS PROGRAM INVENTED over a head+tail read window, which is the
+// "never derive a number and present it as a reading" refusal (ADR-001, §4a.1).
+// No `prompt_cache` or `hit_ratio` key occurs at ANY depth on disk in that same
+// corpus, so the transcript sources the inputs and never the ratio.
+//
+// This payload sources the ratio itself. Source-read of the shipped executable
+// at Claude Code **2.1.260** (the same field names are present at 2.1.251, the
+// floor the vendor documents), where one function assembles the block:
+//
+//	function WZt(w=Date.now()){let x=JUt(void 0,w);
+//	  if(x.requests===0||x.lastRequest===null)return{};
+//	  return{prompt_cache:{warm:x.warm,caching_observed:x.cachingObserved,
+//	    ttl:x.lastRequest.ttl,expires_at:…,requests:x.requests,misses:x.misses,
+//	    expected_rebuilds:x.expectedRebuilds,hit_ratio:x.hitRatio,…}}}
+//
+// and the ratio itself comes from the accumulator's summary():
+//
+//	let n=this.cacheReadTokens+this.cacheCreationTokens+this.inputTokens;
+//	… hitRatio: n>0 ? this.cacheReadTokens/n : null
+//
+// So the vendor sums the three token classes across every main-conversation
+// request of the session and divides. telltale reads that quotient. The one
+// arithmetic telltale does is ×100 to reach a percentage, the same unit
+// conversion §2.1 already permits for Antigravity's `remaining_fraction`.
+//
+// # Absence, in three distinct shapes
+//
+// All three must stay separable from a measured zero (§4a.1), so every field is
+// a pointer and the block itself is one:
+//
+//   - the whole key is absent on a CLI older than 2.1.251, and absent on a
+//     newer one until the main conversation's first API response — WZt returns
+//     `{}` while `requests` is 0;
+//   - `caching_observed` false means no response this session reported cache
+//     tokens at all: prompt caching is off, or the provider or gateway does not
+//     report it. That is "this source does not exist here", not "0% of input
+//     came from cache", and the renderer must not collapse them;
+//   - `hit_ratio` is null while the three token counts are all zero — the
+//     vendor's own `n>0` guard, and the same refusal to divide by nothing.
+//
+// # What is deliberately not modelled
+//
+// This struct is the whole allowlist for the block, the technique
+// internal/cursorhook uses: encoding/json drops every sibling with no
+// destination, so nothing else here can reach a caller by accident. Eight
+// documented siblings (`ttl`, `expires_at`, `misses`, `expected_rebuilds`,
+// `cache_write_tokens`, `miss_recache_tokens`, `last_miss_at`,
+// `recache_tokens_if_cold`) are left out because nothing renders them, and the
+// same 2026-09-04 source read found TWO MORE the documentation page's field
+// table does not list at all — `last_miss_cause` (an object carrying `causes`,
+// `tools_added`, `tools_removed`, `system_char_delta`) and `miss_causes`. That
+// is the §7.16b situation repeating: a field measured in the bundle but absent
+// from the docs is still a measured field, and it is recorded here rather than
+// modelled, because absence of need is a result and not an omission.
+type PromptCache struct {
+	// HitRatio is 0..1, the quotient shown above. Rendered.
+	HitRatio *float64 `json:"hit_ratio,omitempty"`
+
+	// CachingObserved gates the segment. It is modelled rather than inferred
+	// from a nil HitRatio because the two absences mean different things and
+	// this repo exists to keep them apart: a null ratio is "nothing to divide
+	// yet", a false caching_observed is "this provider reports no cache at
+	// all". Only the second is permanent for the session.
+	CachingObserved *bool `json:"caching_observed,omitempty"`
+
+	// Warm is whether the cached prefix is still inside its TTL. Parsed and
+	// rendered by NOTHING today, and modelled for one reason: it is the only
+	// field that separates a healthy ratio the session can still USE from the
+	// same ratio over a prefix that has gone cold. A cold-cache mark is a
+	// second claim on the line and needs its own ruling, so the field is here
+	// and the segment stays one number (§7.16c).
+	Warm *bool `json:"warm,omitempty"`
+
+	// Requests is the main-conversation request count the ratio is taken over.
+	// Also unrendered. It is the denominator's provenance: a ratio over three
+	// requests and a ratio over three hundred read identically on a statusline,
+	// and a future reader deciding whether the number is worth trusting needs
+	// the count that WZt gates the whole block on.
+	Requests *int64 `json:"requests,omitempty"`
 }
 
 // RateLimits appears only for Pro/Max subscribers after the first API

@@ -193,3 +193,117 @@ func TestAnOlderPayloadLeavesTheTokenCountsAbsent(t *testing.T) {
 		t.Errorf("prompt_id = %q for a payload that carried none", in.PromptID)
 	}
 }
+
+// TestThePromptCacheBlockParsesAtTheMeasuredVersion pins the 2.1.260 shape
+// (§7.16c). The payload here is the one measured in the shipped executable on
+// 2026-09-04, undocumented siblings included, because the allowlist claim in
+// PromptCache's doc is only worth making against a payload that actually
+// carries the fields it drops.
+func TestThePromptCacheBlockParsesAtTheMeasuredVersion(t *testing.T) {
+	payload := `{
+	  "session_id": "abc",
+	  "version": "2.1.260",
+	  "model": {"id": "claude-opus-5", "display_name": "Opus"},
+	  "prompt_cache": {
+	    "warm": true,
+	    "caching_observed": true,
+	    "ttl": "1h",
+	    "expires_at": 1754078400,
+	    "requests": 14,
+	    "misses": 2,
+	    "expected_rebuilds": 1,
+	    "hit_ratio": 0.91,
+	    "cache_write_tokens": 352000,
+	    "miss_recache_tokens": 310200,
+	    "last_miss_at": 1754070000,
+	    "last_miss_cause": {"causes": ["tools_changed"], "tools_added": 3},
+	    "miss_causes": {"tools_changed": 2},
+	    "recache_tokens_if_cold": 45000
+	  }
+	}`
+
+	in, err := Parse(strings.NewReader(payload))
+	if err != nil {
+		t.Fatalf("Parse failed on the 2.1.260 shape: %v", err)
+	}
+	pc := in.PromptCache
+	if pc == nil {
+		t.Fatal("prompt_cache is nil at the version that ships it")
+	}
+	if pc.HitRatio == nil || *pc.HitRatio != 0.91 {
+		t.Errorf("hit_ratio = %v, want 0.91", pc.HitRatio)
+	}
+	if pc.CachingObserved == nil || !*pc.CachingObserved {
+		t.Errorf("caching_observed = %v, want true", pc.CachingObserved)
+	}
+	if pc.Warm == nil || !*pc.Warm {
+		t.Errorf("warm = %v, want true", pc.Warm)
+	}
+	if pc.Requests == nil || *pc.Requests != 14 {
+		t.Errorf("requests = %v, want 14", pc.Requests)
+	}
+}
+
+// TestAPayloadWithoutThePromptCacheBlockLeavesItAbsent covers the two ways the
+// key does not arrive, and they are one nil for two different reasons: a CLI
+// older than 2.1.251 never sends it, and a newer one withholds it until the
+// main conversation's first API response, because the assembly function returns
+// an empty object while `requests` is 0. Neither may become a zeroed struct —
+// a PromptCache with a 0 HitRatio would render `cache 0%` and claim a cache
+// reading nobody took (§4a.1).
+func TestAPayloadWithoutThePromptCacheBlockLeavesItAbsent(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload string
+	}{
+		{"pre-2.1.251 CLI", `{"session_id":"a","version":"2.1.233","model":{"id":"m"}}`},
+		{"before the first API response", `{"session_id":"a","version":"2.1.260","model":{"id":"m"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in, err := Parse(strings.NewReader(tc.payload))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if in.PromptCache != nil {
+				t.Errorf("prompt_cache = %+v for a payload that carried none; absent must not become zero", in.PromptCache)
+			}
+		})
+	}
+}
+
+// TestCachingObservedFalseIsNotAMissingBlock is the sharpest case in this file.
+//
+// A provider or gateway that reports no cache tokens still gets a prompt_cache
+// object: `caching_observed` is false, `hit_ratio` is null, and `requests`
+// counts real requests. Three states meet here and all three must stay
+// separable — no block at all, a block saying this source does not exist, and a
+// block reporting a measured 0.0 ratio. Collapsing any pair is the
+// zero-vs-absent regression this repo exists to prevent.
+func TestCachingObservedFalseIsNotAMissingBlock(t *testing.T) {
+	payload := `{
+	  "session_id": "abc",
+	  "version": "2.1.260",
+	  "model": {"id": "claude-opus-5"},
+	  "prompt_cache": {"warm": false, "caching_observed": false, "requests": 4,
+	                   "hit_ratio": null, "expires_at": null, "last_miss_at": null}
+	}`
+
+	in, err := Parse(strings.NewReader(payload))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	pc := in.PromptCache
+	if pc == nil {
+		t.Fatal("prompt_cache went nil for a provider that reports no cache tokens; " +
+			"that is a different state from a payload with no block at all")
+	}
+	if pc.HitRatio != nil {
+		t.Errorf("hit_ratio = %v for an explicit JSON null; null must not become 0", *pc.HitRatio)
+	}
+	if pc.CachingObserved == nil || *pc.CachingObserved {
+		t.Errorf("caching_observed = %v, want a parsed false", pc.CachingObserved)
+	}
+	if pc.Requests == nil || *pc.Requests != 4 {
+		t.Errorf("requests = %v, want 4 — the session made requests, they just reported no cache", pc.Requests)
+	}
+}

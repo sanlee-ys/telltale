@@ -13,6 +13,7 @@ package statusline
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -61,6 +62,9 @@ func Render(in *claude.StatuslineInput, opts Options) string {
 	if s, ok := contextSegment(in, opts); ok {
 		segs = append(segs, s)
 	}
+	if s, ok := cacheSegment(in, opts); ok {
+		segs = append(segs, s)
+	}
 	if s, ok := costSegment(in, opts); ok {
 		segs = append(segs, s)
 	}
@@ -100,6 +104,70 @@ func contextSegment(in *claude.StatuslineInput, opts Options) (string, bool) {
 	}
 	p := *in.ContextWindow.UsedPercentage
 	return fmt.Sprintf("ctx %s", pct(p, opts)), true
+}
+
+// cacheSegment renders the session's prompt-cache hit ratio: "cache 91%".
+//
+// It sits beside `ctx` because the two answer one question together — how full
+// the window is, and how much of what fills it the vendor served from cache.
+//
+// # Why this segment is allowed to exist and a transcript-derived one is not
+//
+// `prompt_cache.hit_ratio` is REPORTED. The vendor sums cache reads, cache
+// writes and uncached input across the session's main-conversation requests and
+// divides, and claude.PromptCache's doc pins that formula to a 2026-09-04
+// source read at CLI 2.1.260. This function reads the quotient and multiplies
+// by 100 — the unit conversion §2.1 already permits — and computes nothing
+// else. The same ratio built from the transcript's own
+// `cache_read_input_tokens` would be arithmetic telltale invented over a
+// head+tail read window, which ADR-001 refuses, so the adapter keeps the counts
+// and gains no gauge.
+//
+// # Three absences hide the segment, and none of them renders as zero
+//
+//   - `prompt_cache` absent — a CLI older than 2.1.251, or a session before its
+//     first API response (the vendor emits the key only once `requests` is
+//     nonzero);
+//   - `caching_observed` false — no response this session reported cache tokens,
+//     so prompt caching is off or this provider does not report it. That is an
+//     unread field, not a 0% hit rate, and rendering `cache 0%` there would
+//     claim a measurement nobody took;
+//   - `hit_ratio` null — the vendor's own guard against dividing by three zero
+//     counts.
+//
+// A ratio of 0 with caching observed IS a reading and renders `cache 0%`.
+//
+// # Why this number carries no threshold colour
+//
+// Every other percentage on this line is a CONSUMPTION — context filled, quota
+// spent — so pct() paints high values red. A cache hit ratio inverts that: 91%
+// is the healthy end. Reusing pct() would paint a well-cached session red, and
+// inverting the scale would mean picking the ratio at which a cache becomes
+// "bad", which nothing here has measured. So the value renders unpainted and
+// the word `cache` carries the whole distinction — which is what the ASCII /
+// NO_COLOR / 16-colour rule asks of every distinction on this UI anyway.
+func cacheSegment(in *claude.StatuslineInput, opts Options) (string, bool) {
+	pc := in.PromptCache
+	if pc == nil || pc.HitRatio == nil {
+		return "", false
+	}
+	if pc.CachingObserved == nil || !*pc.CachingObserved {
+		return "", false
+	}
+	// One decimal only when the source has one, matching pct()'s convention on
+	// this line. The ×100 is the unit conversion; nothing else is computed.
+	//
+	// The rounding is display precision and it is not optional here: a ratio
+	// arrives as a raw quotient, and 0.87*100 lands on 87.00000000000001 in
+	// float64, so the whole-number branch below would miss and the line would
+	// read `cache 87.0%` for one value and `cache 91%` for the next. Rounding
+	// to the tenth this line already shows makes that branch answer the
+	// question it means to ask.
+	p := math.Round(*pc.HitRatio*1000) / 10
+	if p == float64(int64(p)) {
+		return fmt.Sprintf("cache %d%%", int64(p)), true
+	}
+	return fmt.Sprintf("cache %.1f%%", p), true
 }
 
 func costSegment(in *claude.StatuslineInput, opts Options) (string, bool) {

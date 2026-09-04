@@ -191,3 +191,123 @@ func TestUnknownFieldsIgnored(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// TestCacheSegmentRendersTheReportedRatio pins the segment's place on the line
+// and its one arithmetic.
+//
+// `cache 91%` sits directly after `ctx 8%` on purpose: the two answer one
+// question together — how full the window is, and how much of what fills it the
+// vendor served from cache. The 91 is hit_ratio (0.91) times 100 and nothing
+// else; the fixture's own cache_read_input_tokens (12000) does NOT produce it,
+// which is the difference between reading a number and inventing one.
+func TestCacheSegmentRendersTheReportedRatio(t *testing.T) {
+	got := renderPlain(t, "prompt-cache.json")
+	want := "Opus │ ctx 8% │ cache 91% │ $0.01 │ 5h 23.5% ↻ 2h13m │ 7d 41.2% ↻ 5d02h │ myproject"
+	if got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}
+
+// TestTheCacheSegmentReadsTheRatioAndDerivesNothing guards the temptation the
+// whole §7.16c ruling exists to refuse.
+//
+// prompt-cache.json carries BOTH the vendor's computed hit_ratio and the raw
+// per-call counts it would take to compute one here. Only the reported quotient
+// may reach the line. A ratio built from current_usage would be arithmetic
+// telltale invented (ADR-001, §4a.1), and it would also be the WRONG number:
+// current_usage describes one API call, while hit_ratio is taken over every
+// main-conversation request of the session.
+func TestTheCacheSegmentReadsTheRatioAndDerivesNothing(t *testing.T) {
+	in := load(t, "prompt-cache.json")
+	if in.PromptCache == nil || in.PromptCache.HitRatio == nil ||
+		in.ContextWindow == nil || in.ContextWindow.CurrentUsage == nil {
+		t.Fatal("prompt-cache.json no longer carries both the ratio and the raw counts; this test would assert nothing")
+	}
+	u := in.ContextWindow.CurrentUsage
+	// The per-call ratio the fixture's counts would yield: 12000/(1200+2800+12000)
+	// = 0.75. It differs from the reported 0.91 by construction, so a renderer
+	// that silently switched sources fails here instead of drifting quietly.
+	perCall := float64(*u.CacheReadInputTokens) /
+		float64(*u.InputTokens+*u.CacheCreationInputTokens+*u.CacheReadInputTokens)
+	if perCall == *in.PromptCache.HitRatio {
+		t.Fatal("the fixture's per-call ratio now equals the reported one; " +
+			"this test can no longer tell a derivation from a reading")
+	}
+
+	got := renderPlain(t, "prompt-cache.json")
+	for _, n := range []string{"75%", "352000", "310200", "45000", "14", "2800", "12000"} {
+		if strings.Contains(got, n) {
+			t.Errorf("a number the cache segment may not source reached the line (%q in %q). "+
+				"§7.16c: hit_ratio is the ONE reported figure here; the counts, the write "+
+				"totals and the request count are parsed or dropped, never rendered", n, got)
+		}
+	}
+}
+
+// TestTheCacheSegmentHidesOnEveryAbsence covers the three ways the number is
+// not there, and none of them may render as zero.
+//
+// The last case is the one worth stating: a session whose provider reports no
+// cache tokens has a real prompt_cache block with a real request count and a
+// null ratio. `cache 0%` there would claim a measurement nobody took. A ratio
+// of 0 WITH caching observed is a different thing entirely — it is a reading,
+// and it renders.
+func TestTheCacheSegmentHidesOnEveryAbsence(t *testing.T) {
+	yes, no := true, false
+	zero, ratio := 0.0, 0.91
+	for _, tc := range []struct {
+		name string
+		pc   *claude.PromptCache
+		want string
+	}{
+		{"no block at all (pre-2.1.251, or before the first response)", nil, ""},
+		{"block present, ratio still null", &claude.PromptCache{CachingObserved: &yes}, ""},
+		{"provider reports no cache tokens", &claude.PromptCache{CachingObserved: &no, HitRatio: &ratio}, ""},
+		{"a measured zero is a reading", &claude.PromptCache{CachingObserved: &yes, HitRatio: &zero}, "cache 0%"},
+		{"a measured ratio renders", &claude.PromptCache{CachingObserved: &yes, HitRatio: &ratio}, "cache 91%"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := &claude.StatuslineInput{
+				Model:       claude.Model{DisplayName: "Opus"},
+				PromptCache: tc.pc,
+			}
+			got := Render(in, Options{NoColor: true, Now: testNow})
+			if tc.want == "" {
+				if strings.Contains(got, "cache") {
+					t.Errorf("segment rendered on an absent source: %q", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("got %q, want it to contain %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestTheCacheRatioCarriesNoThresholdColor is a rule, not a preference.
+//
+// Every other percentage on this line is a consumption, so pct() paints high
+// values red. A cache hit ratio inverts that — 91% is the healthy end — and
+// nothing here has measured the ratio at which a cache becomes bad. So the
+// value renders unpainted, and the word `cache` carries the distinction, which
+// is what this UI asks of every distinction anyway.
+func TestTheCacheRatioCarriesNoThresholdColor(t *testing.T) {
+	yes := true
+	for _, r := range []float64{0.02, 0.65, 0.91} {
+		ratio := r
+		in := &claude.StatuslineInput{
+			Model:       claude.Model{DisplayName: "Opus"},
+			PromptCache: &claude.PromptCache{CachingObserved: &yes, HitRatio: &ratio},
+		}
+		got := Render(in, Options{Now: testNow})
+		i := strings.Index(got, "cache ")
+		if i < 0 {
+			t.Fatalf("no cache segment at ratio %v: %q", r, got)
+		}
+		if strings.ContainsAny(got[i:], "\x1b") {
+			t.Errorf("the cache ratio carries styling at %v (%q); pct()'s scale reads "+
+				"high-is-bad and would paint a well-cached session red", r, got[i:])
+		}
+	}
+}
