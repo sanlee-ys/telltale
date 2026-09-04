@@ -17,7 +17,7 @@
 ▌ no turn dispatched  │                                     │  no turn dispatched  │                                    
 ▌ yet.                │  turn 1  ─────────────────────────  │  yet.                │  turn 1  ────────────────────────  
 ▌                     │  working — nothing has arrived      │                      │  working — nothing has arrived     
-▌ f widens            │  yet.                               │  3 then f widens     │  yet.                              
+▌ f expand            │  yet.                               │  3 then f expand     │  yet.                              
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  ›                                                                                                               │  
   ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  

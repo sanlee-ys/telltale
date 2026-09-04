@@ -32,7 +32,7 @@ import (
 //	⚙ Read ✓            one row per tool act: the TOOL NAME, no path
 //	⚙ cmd.exe ✗
 //	<last sentence>     the tail of the reply, which is the seat's conclusion
-//	2 then f widens     how to read the rest of it
+//	2 then f expand     how to read the rest of it
 //
 // Nothing here is inferred. The turn number, the clock, the acts and their
 // outcome marks, and the reply text are the same measured values the wide column
@@ -412,21 +412,25 @@ func stripWidenHint(st State, c Column, w int) string {
 	} else {
 		switch {
 		case st.focusedIs(c):
-			// The keys are already here, so `f` widens this column by itself. A
+			// The keys are already here, so `f` expands this column by itself. A
 			// key in front of it would name a press that changes nothing
 			// (design.md §7.8, the same rule `scrollHint` drops `f` under). The
 			// STRIP lane offered `tab then f widens` on this column, which is a
 			// false instruction: it sends the reader away from the seat they are
-			// widening.
-			forms = []string{"f widens"}
+			// expanding.
+			//
+			// `f expand` is the mode line's own spelling, and this row uses it
+			// rather than the lane's `f widens`. One key, one word: two spellings
+			// of one press read as two presses.
+			forms = []string{"f expand"}
 		case st.SeatNumber(c) > 0:
 			// The seat's own number, because it is the key that reaches THIS seat
 			// while `tab` reaches the next one, and the strip's header prints that
 			// number two rows above.
 			num := strconv.Itoa(st.SeatNumber(c))
-			forms = []string{num + " then f widens", num + " then f", "f widens"}
+			forms = []string{num + " then f expand", num + " then f", "f expand"}
 		default:
-			forms = []string{"tab then f widens", "f widens"}
+			forms = []string{"tab then f expand", "f expand"}
 		}
 	}
 	for _, s := range forms {

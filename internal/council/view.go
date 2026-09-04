@@ -553,6 +553,21 @@ func columnsBody(st State, lay Layout, sty Styles, g Glyphs) string {
 		if f == seatFocused {
 			hint = scrollHint(st, g)
 		}
+		// A STRIP names its own key, on its last row, and it names more of it:
+		// `2 then f widens` is the seat number AND the key that widens it, where
+		// the cue row's hint is `tab to focus` alone (stripWidenHint). Offering
+		// both put the same six cells on one column twice, which is this pass's
+		// own finding committed by its own graft — measured on the real room at
+		// 180x50, where a composing frame drew `tab to focus` on the cue row and
+		// again on the widen row of the same strip.
+		//
+		// The cue row still WINS the row: it keeps the overflow count, the quiet
+		// clock and the turn coordinate, and it sheds only the KEY. That is
+		// CLOCK's own shedding order, where the key ranks fourth of five because
+		// the mode line names it at every width.
+		if w <= stripWidth && f != seatFocused {
+			hint = nil
+		}
 		cells[j] = columnCell(st, st.Columns[idx], f, hint, w, lay.Body, sty, g)
 	}
 

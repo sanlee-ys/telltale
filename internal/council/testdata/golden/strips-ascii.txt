@@ -13,7 +13,7 @@
 [ turn 4  ---------------------------------------  |                      |                      |  no turn dispatched  
 [ : where does the resume path break?              |  (no reply)          |  (no reply)          |  yet.                
 [                                                  |                      |                      |                      
-[ Reading resume.go now.                           |  2 then f widens     |  3 then f widens     |  4 then f widens     
+[ Reading resume.go now.                           |  2 then f expand     |  3 then f expand     |  4 then f expand     
   +------------------------------------------------------------------------------------------------------------------+  
   |  :                                                                                                               |  
   +---------------------------------------------------------------------------------------------------------  VIEW  -+  
