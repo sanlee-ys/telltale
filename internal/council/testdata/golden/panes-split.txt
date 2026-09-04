@@ -14,10 +14,10 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                                                                                                                        
-                                                                                                                        
 ▌                                                                         │  no turn dispatched  │  no turn dispatched  
-▌ no turn dispatched yet.                                                 │  yet.                │  yet.                
+▌                                                                         │  yet.                │  yet.                
+▌                                                                         │                      │                      
+▌ no turn dispatched yet.                                                 │  2 then f expand     │  3 then f expand     
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  ›                                                                                                               │  
   ╰────────────────────────────────────────────────────────────────────────────────────  VIEW  │  ^w e panes split  ─╯  

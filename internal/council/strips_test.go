@@ -342,7 +342,12 @@ func TestAStripSaysItsPhraseOnOneLine(t *testing.T) {
 	joined := strings.Join(strips, "\n")
 
 	// The two things a strip exists to say, each on a line of its own.
-	for _, phrase := range []string{"not addressed", "last: turn"} {
+	//
+	// The wording moved with the strip FORM (strip.go): §9.19's sentence is a
+	// wide column's, and at strip width the same two facts are `turn 3 ✓` and
+	// `sat out 4`. The property this test holds is unchanged — the phrase that
+	// carries the meaning must not break across two rows.
+	for _, phrase := range []string{"sat out", "turn 3"} {
 		found := false
 		for _, l := range strips {
 			if strings.Contains(l, phrase) {

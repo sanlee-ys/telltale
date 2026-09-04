@@ -4,10 +4,10 @@
                                                                                                                         
 ▌ ▸ 1 CC Claude Code  ───  ⚠ needs you  │    2 CX Codex  ─────  ⠋ streaming 2s  │    3 AG Antigravity  ─  ⠋ waiting 2s  
 ▌   REPLAY  gated  tokens               │    REPLAY  WRITES  final only         │    REPLAY  WRITES  final only         
-▌ ⚠ waiting on you: Write:              │                                       │                                       
+▌ ⚠ waiting on you: Write:              │  now  ───────  quiet 0s  no acts yet  │  now  ─────────────────  no acts yet  
 ▌   cmd/example/version.go              │                                       │                                       
 ▌   y approve   n deny   a stop asking  │                                       │                                       
-                                                                                                                        
+▌ now  ────────────────────────  1 act  │                                       │                                       
                                                                                                                         
                                                                                                                         
                                                                                                                         

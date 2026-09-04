@@ -145,3 +145,61 @@ Lipgloss degrades a hex to the writer's profile; nobody has measured what a
 16-colour console produces from this palette. On such a terminal the ink scale
 collapses toward the words and marks that were already carrying every distinction,
 which is the reason the accessibility floor is a floor.
+
+## Density and repetition: what a column owes the reader
+
+The identity of 2026-09-03 was designed against synthesized fixtures at 180x50.
+It says nothing about DENSITY or about REPETITION. A pass on 2026-09-03 answered
+both, against a real recorded room at the owner's own desk geometry. The identity
+does not move: seat hues stay retired, truecolour may enhance and never define,
+and no ink, weight or ground changed.
+
+**Two classes of finding, and they need different cures.** The first class is
+REPETITION: a fact about the room printed once per column. The quoted-material
+sentence, the live skip, the rebuild notice and the unseated seat were four
+sentences the grid said two, three or four times each. The second class is
+DENSITY: a column that has twenty cells cannot carry a transcript. A Windows path
+wrapped to ten rows there, and the trace this page calls the flight recorder was
+the least readable thing on screen exactly where the reader had least room. A
+row given back to a starved column does not fix the second class, and a shorter
+path does not fix the first.
+
+**Three lanes argued it, and an independent audit chose.** LEDGER held that a
+room fact prints once on the room's own line. STRIP held that a narrow column is
+a strip and not a shrunken column. CLOCK held that the frame between two briefs
+must read as time passing. The audit ranked CLOCK strongest as a base, STRIP
+strongest on density, and LEDGER strongest on repetition, and it ruled the graft.
+
+**What landed, and where.** CLOCK is the base, whole: the cue row on the chrome
+row the column already reserved, the quiet clock measured from the seat's last
+word or act, the act count, the overflow cue off the first content row, and the
+turn coordinate in every column. From LEDGER: `roomline.go`, the room line above
+the grid, which takes the unseated seat, the seats that sat the LIVE turn out
+(named, never counted), and a room fact too long for the footer; and the rebuild
+note off the columns, so the column says one word and the room states the
+sentence and the measured cost once. From STRIP: `strip.go` and a hard width
+threshold, below which a column states the turn and its clock, one ordered row
+per tool act with the tool name and no path, the last substantive sentence, and
+how to widen it.
+
+**What was refused, and why.** The LEDGER lane's narrow-width transcript
+geometry: a full column made thinner is not a usable column. The STRIP lane's
+history-navigation row: CLOCK's cue row is the better home, so a strip draws no
+scroll cue of its own. The sentence `nothing has arrived yet` as the description
+of a quiet seat: it reports absence without naming the act the room waits for,
+and the cue row answers with `no acts yet` and then a measurement. The strip form
+above the threshold: at a usable width the transcript is EVIDENCE and it stays a
+transcript. And the audit's own last item, removing the seat names from the
+UNREAD strip: the strip says a reply is UNREAD, which no header says, and the
+names are that fact. The phase word had already gone.
+
+**What is asserted, and what is only claimed.** Asserted by a test: that the live
+skip leaves the column and the room line names the seat; that a settled rebuild
+carries no per-seat note while the room states both halves; that the strip's turn
+line sheds the clock before the mark and never clips the number; that the strip
+keeps the tool and drops the path; and that the whole strip form survives
+`GlyphsFor(true)` with no Unicode mark left in it. Claimed and not asserted: that
+these frames read better to a person. Every frame this pass was judged on is a
+replay of one recording through the same `Render` the goldens use, which is the
+strongest evidence this repository holds short of a demo. Nobody has driven this
+room on a live vendor since the pass.

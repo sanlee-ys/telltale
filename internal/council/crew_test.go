@@ -442,7 +442,9 @@ func inboxRoom() State {
 func TestTheInboxListsASeatThatLandedWhileYouWereElsewhere(t *testing.T) {
 	golden(t, "inbox-landed", render(inboxRoom()))
 	line := needsYouRowOf(t, render(inboxRoom()))
-	for _, want := range []string{"2 Codex done", "3 Antigravity failed"} {
+	// No word after an ordinary landing: the column header says `done` two rows
+	// below it (landedWord). A failure keeps its word.
+	for _, want := range []string{"2 Codex", "3 Antigravity failed"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("the strip does not list %q: %q", want, line)
 		}

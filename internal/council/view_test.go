@@ -1157,8 +1157,15 @@ func TestUnaddressedColumnSaysSo(t *testing.T) {
 	st.Columns[2].Phase = PhaseWaiting
 
 	got := render(st)
-	if !strings.Contains(got, "not addressed in turn 2") {
-		t.Error("a column left out of the turn does not say so")
+	// The COLUMN no longer says it and the ROOM line does, once, naming the seat
+	// (from the LEDGER lane, roomline.go). One dispatch described three times was
+	// the finding; a room of four idle seats printed the same sentence four times
+	// about one turn.
+	if strings.Contains(got, "not addressed in turn 2") {
+		t.Error("a column still prints a fact about the whole dispatch")
+	}
+	if !strings.Contains(got, "sat turn 2 out: "+st.Columns[1].Label) {
+		t.Errorf("the room line does not name the seat the turn left out\n%s", got)
 	}
 	golden(t, "unaddressed-column", got)
 }

@@ -4,7 +4,7 @@
                                                                                                                         
 ▌ ▸ 1 CC Claude Code  ───  ⠋ streaming  │    2 CX Codex  ──────────  ⠋ waiting  │    3 AG Antigravity  ───────  ○ idle  
 ▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
-▌                                       │                                       │                                       
+▌                                       │  now  ─────────────────  no acts yet  │                                       
 ▌ turn 1  ──────────────  12s  $0.0123  │                                       │                                       
 ▌ › should council resume sessions or   │                                       │                                       
 ▌   re-send the transcript?             │                                       │                                       

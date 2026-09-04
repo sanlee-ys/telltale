@@ -46,3 +46,16 @@ is no longer the price of a change.
   overrule a lead at Alert. The inbox now opens `UNREAD` with no mark; one
   blocked seat on the line brings `⚠ NEEDS YOU` back. The recorder was not at
   fault: `replay-check` reported no gate card because there was none.
+- **2026-09-03 — Telltale spends width on the trace that needs it, time on the
+  silence between acts, and states each fact once where it belongs.** (The integrating session, on
+  an independent audit of three prototypes rendered from a real recorded room.)
+  The density and repetition pass. CLOCK is the base: the cue row, the quiet
+  clock, the act count, the scroll cue on the chrome row, and the per-column turn
+  coordinate. From LEDGER, as a hard invariant: a fact about the ROOM prints once
+  on the room's own line, and a column prints only what is true of that seat.
+  From STRIP: a hard width threshold, below which a column changes FORM to a
+  strip. Refused, and named on the page: the LEDGER lane's narrow-width
+  transcript geometry; the STRIP lane's history-navigation row; `nothing has
+  arrived yet` as the description of a quiet seat; the strip form above the
+  threshold. `docs/room-identity.md` carries the argument. The identity does not
+  move.

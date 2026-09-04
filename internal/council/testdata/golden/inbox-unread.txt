@@ -1,6 +1,6 @@
   council ⚠ WRITE  │  ~/code/telltale                                                                             turn 3  │  5/5 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  UNREAD   2 Codex done   3 Antigravity done   4 Cursor done   5 Grok done                                                                            
+  UNREAD   2 Codex   3 Antigravity   4 Cursor   5 Grok                                                                                                
 ▌ ▸ 1 CC Claude C… ✓ done 3s  │    2 CX Codex ✓ done 3s     │    3 AG Antigra… ✓ done 3s  │    4 CU Cursor ✓ done 3s    │    5 GR Grok  ─  ✓ done 3s  
 ▌   gated  tokens             │    gated  final only        │    gated  final only        │    gated  events            │    gated  final only        
                                                                                                                                                       

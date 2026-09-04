@@ -470,9 +470,13 @@ func allLandedRoom() State {
 // TestAnInboxWithNoPendingGateSaysUnread is the fix for the frame allLandedRoom
 // rebuilds. The strip on it may not say `NEEDS YOU`: no vendor is stopped on a
 // keystroke, and the word that means that is not available for a reply that can
-// wait. It says `UNREAD`, with no warning mark, over the same four entries with
-// the same phase words — so the inbox keeps everything §9.54 gave it except the
-// alarm. The footer's key follows the lead, and --ascii keeps the word.
+// wait. It says `UNREAD`, with no warning mark, over the same four entries — so
+// the inbox keeps everything §9.54 gave it except the alarm. The footer's key
+// follows the lead, and --ascii keeps the word.
+//
+// The entries carry NO phase word for an ordinary landing since the density
+// pass (landedWord): the column header two rows below already says `done`, and
+// the strip's own claim is the lead. The names are what it lists.
 func TestAnInboxWithNoPendingGateSaysUnread(t *testing.T) {
 	st := allLandedRoom()
 	if len(st.Gates) != 0 {
@@ -488,10 +492,13 @@ func TestAnInboxWithNoPendingGateSaysUnread(t *testing.T) {
 	if !strings.HasPrefix(strings.TrimSpace(line), unreadLead) {
 		t.Errorf("the strip does not open with %q and no mark: %q", unreadLead, line)
 	}
-	for _, want := range []string{"2 Codex done", "3 Antigravity done", "4 Cursor done", "5 Grok done"} {
+	for _, want := range []string{"2 Codex", "3 Antigravity", "4 Cursor", "5 Grok"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("the inbox lost an entry %q: %q", want, line)
 		}
+	}
+	if strings.Contains(line, "done") {
+		t.Errorf("the strip repeats the word every column header already says: %q", line)
 	}
 	if strings.Contains(line, "Claude") {
 		t.Errorf("the seat the reader is on is listed: %q", line)
@@ -521,8 +528,8 @@ func TestAnInboxWithNoPendingGateSaysUnread(t *testing.T) {
 
 // TestABlockedSeatOutranksTheInboxOnAMixedStrip: one seat stopped on a gate and
 // one that landed share the line, and the line says `NEEDS YOU` — a vendor
-// waiting on a key is the claim that cannot wait — while the landed entry keeps
-// its phase word so nothing is dropped.
+// waiting on a key is the claim that cannot wait — while a landing that ended
+// BADLY keeps its word, so three outcomes cannot read alike (§4a.1).
 func TestABlockedSeatOutranksTheInboxOnAMixedStrip(t *testing.T) {
 	st := inboxRoom()
 	st.Gates = []PendingGate{{Vendor: model.VendorCursor, RequestID: "r4", ToolUseID: "t4",
@@ -533,7 +540,7 @@ func TestABlockedSeatOutranksTheInboxOnAMixedStrip(t *testing.T) {
 	if !strings.Contains(line, needsYouLead) || strings.Contains(line, unreadLead) {
 		t.Errorf("a strip with a blocked seat on it does not say %q: %q", needsYouLead, line)
 	}
-	for _, want := range []string{"2 Codex done", "3 Antigravity failed", "4 Cursor"} {
+	for _, want := range []string{"2 Codex", "3 Antigravity failed", "4 Cursor"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("the mixed strip lost %q: %q", want, line)
 		}

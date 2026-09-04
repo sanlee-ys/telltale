@@ -1,10 +1,11 @@
   council READ  │  ~/code/telltale                     turn 1  │  hop 1/2 @codex & @cursor  │  4/4 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  2 seats sat turn 1 out: claude, agy                                                                                   
   › the poller                                                                                                          
                                                                                                                         
 ▌ 1 CC ○ idle         │    2 CX codex  ────────  ⠋ waiting  │  3 AG ○ idle         │    4 CU cursor  ──────  ⠋ waiting  
 ▌                     │    shared tree                      │                      │    shared tree                     
-                                                                                                                        
+▌                     │  now  ───────────────  no acts yet  │                      │  now  ──────────────  no acts yet  
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -14,10 +15,9 @@
                                                                                                                         
                                                                                                                         
 ▌ no turn dispatched  │                                     │  no turn dispatched  │                                    
-▌ yet.                │                                     │  yet.                │                                    
-▌                     │  turn 1  ─────────────────────────  │                      │  turn 1  ────────────────────────  
-▌ ○ not addressed in  │  working — nothing has arrived      │  ○ not addressed in  │  working — nothing has arrived     
-▌   turn 1            │  yet.                               │    turn 1            │  yet.                              
+▌ yet.                │  turn 1  ─────────────────────────  │  yet.                │  turn 1  ────────────────────────  
+▌                     │  working — nothing has arrived      │                      │  working — nothing has arrived     
+▌ f expand            │  yet.                               │  3 then f expand     │  yet.                              
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  ›                                                                                                               │  
   ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  

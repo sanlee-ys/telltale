@@ -12,13 +12,13 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-▌                                       │  this seat's thread came back. the    │                                       
-▌ this seat's thread came back. the     │  next brief continues it.             │                                       
-▌ next brief continues it.              │                                       │                                       
-▌                                       │  rebuilding this seat — a new         │  no thread came back for this seat.   
-▌ rebuilding this seat — a new process  │  process is loading the saved         │  its next brief opens a new session,  
-▌ is loading the saved thread.          │  thread.                              │  with the brief re-applied.           
+                                                                                                                        
+                                                                                                                        
+▌ this seat's thread came back. the     │  this seat's thread came back. the    │                                       
+▌ next brief continues it.              │  next brief continues it.             │  no thread came back for this seat.   
+▌                                       │                                       │  its next brief opens a new session,  
+▌ rebuilding                            │  rebuilding                           │  with the brief re-applied.           
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │  ›                                                                                                               │  
   ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  VIEW  ─╯  
-              ⚠ reattached from ~/.telltale/council/room.json — turn 7 was the last, saved 2h ago · rebuilding 2 seats  
+   ⚠ reattached from ~/.telltale/council/room.json — turn 7 was the last, saved 2h ago · rebuilding 2 seats — each lo…  

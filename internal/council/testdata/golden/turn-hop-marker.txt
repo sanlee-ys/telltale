@@ -3,8 +3,8 @@
   ▸ 1 CC Claude Code    2 CX Codex    3 AG Antigravity                                                                  
     1 CC Claude Code  ───────────────────────────────────────────────────────────────────────────────────  ⠋ streaming  
     ro:tools  tokens                                                                                                    
-                                                                                                                        
   ↑ 25 more above  │  turn 3  │  ↑↓ scroll  │  f expand                                                                 
+  line 1 of the reply                                                                                                   
   line 2 of the reply                                                                                                   
   line 3 of the reply                                                                                                   
   line 4 of the reply                                                                                                   

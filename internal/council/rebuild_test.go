@@ -43,14 +43,20 @@ func TestRebuildLaunchesEveryRestorableSeat(t *testing.T) {
 		if _, ok := m.procs[v]; !ok {
 			t.Errorf("%s has no process after the rebuild", v)
 		}
-		if got := m.column(v).Note; !strings.Contains(got, "rebuilding this seat") {
+		if got := m.column(v).Note; got != "rebuilding" {
 			t.Errorf("%s does not report that it is rebuilding: %q", v, got)
 		}
 	}
-	// The room fact goes in the notice; the honest clause goes in the columns,
-	// where it cannot be truncated.
-	if !strings.Contains(m.st.Notice, "rebuilding 2 seats") {
+	// The room fact and its explanation go in the notice, ONCE. The columns say
+	// the one word that is true of each seat on its own; the sentence behind it
+	// was identical on all of them, so four copies of it left the frame with the
+	// density pass. The COUNT leads the notice so it survives a truncation the
+	// explanation does not.
+	if !strings.HasPrefix(m.st.Notice, "rebuilding 2 seats") {
 		t.Errorf("the notice does not count the seats: %q", m.st.Notice)
+	}
+	if !strings.Contains(m.st.Notice, "loads its saved thread") {
+		t.Errorf("the notice does not explain what a rebuild is: %q", m.st.Notice)
 	}
 }
 
@@ -123,25 +129,40 @@ func TestRebuildingAndRebuiltDoNotShareASentence(t *testing.T) {
 	if launching == settled {
 		t.Fatalf("rebuilding and rebuilt render identically: %q", settled)
 	}
-	if !strings.Contains(settled, "came back") {
-		t.Errorf("a settled seat does not say its thread came back: %q", settled)
+	// A SETTLED SEAT NOW SAYS NOTHING, and the room says it once instead (from
+	// the LEDGER lane, roomline.go). The sentence that used to stand here was
+	// word for word the same in every rebuilt column, so a four-seat room printed
+	// one room fact four times at room open. The rung is unmoved: `rebuilding`
+	// still may not claim the thread came back, and the two states still do not
+	// share a sentence. One is a word and the other is silence under a room line.
+	if settled != "" {
+		t.Errorf("a settled seat still carries a note of its own: %q", settled)
 	}
-	// And it says what did NOT come back, which is the half the existing
-	// reattach card cannot say.
-	if !strings.Contains(settled, "NEW process") {
-		t.Errorf("a rebuilt seat does not say the process is new: %q", settled)
+	// The room says both halves, once, when the run settles. The reattach card on
+	// the column says the thread came back; this says what did NOT come back.
+	m.applyEvents([]runner.Event{{
+		Vendor: model.VendorCursor, Kind: runner.KindSession, SessionID: "sess-cursor",
+	}})
+	rn := m.st.Notice
+	if !strings.Contains(rn, "seats rebuilt in") {
+		t.Errorf("the room does not say how many seats came back: %q", rn)
 	}
-	if !strings.Contains(settled, "ended when the room closed") {
-		t.Errorf("a rebuilt seat does not say what happened to the old process: %q", settled)
+	if !strings.Contains(rn, "NEW processes, not the ones you left") {
+		t.Errorf("the room does not say the processes are new: %q", rn)
 	}
 }
 
-// THE COST IS STATED PER SEAT AND BOTH HALVES ARE STATED. The ~25s moved; the
+// THE COST IS STATED ONCE AND BOTH HALVES ARE STATED. The ~25s moved; the
 // ~$0.23 did not. Naming only the seconds would read as though the reopen were
 // free; naming only the dollars would read as though the room had just spent
-// them. It lives on the column rather than in the notice because the notice is
-// one truncated line and a cost that vanishes at a hundred columns is not a
-// stated cost — and because "$0.23 a seat" is a per-seat fact to begin with.
+// them.
+//
+// It lives on State.RoomNote, which the room line draws above the grid, rather
+// than under every rebuilt column (from the LEDGER lane): the figures are per
+// seat and IDENTICAL for every seat, which makes them a room fact. It is not in
+// the footer notice either, and that half of the original argument stands: the
+// notice is one truncated line, and a cost that vanishes at a hundred columns is
+// not a stated cost. The room line is full width and sheds whole segments.
 func TestRebuiltSeatStatesBothHalvesOfTheMeasuredCost(t *testing.T) {
 	countSpawns(t)
 	m := rebuiltRoom(t)
@@ -151,14 +172,14 @@ func TestRebuiltSeatStatesBothHalvesOfTheMeasuredCost(t *testing.T) {
 		{Vendor: model.VendorCursor, Kind: runner.KindSession, SessionID: "sess-cursor"},
 	})
 
-	detail := m.column(model.VendorClaude).NoteDetail
+	detail := m.st.RoomNote
 	for _, want := range []string{
-		"~25s of startup is spent now instead of on your first brief",
-		"still bills its ~$0.23",
+		"~25s of startup each, spent now instead of on your first brief",
+		"still billing ~$0.23 a seat",
 		"measured once, on a one-word turn",
 	} {
 		if !strings.Contains(detail, want) {
-			t.Errorf("the rebuilt seat does not say %q:\n%s", want, detail)
+			t.Errorf("the room does not say %q:\n%s", want, detail)
 		}
 	}
 	// Neither figure may appear as a counted value: one measurement of one
@@ -380,6 +401,10 @@ func TestRebuildGoldens(t *testing.T) {
 		{Vendor: model.VendorCursor, Kind: runner.KindSession, SessionID: "sess-cursor"},
 	})
 	st.Notice = m.st.Notice
+	// The measured cost is the ROOM's now, and the room line draws it above the
+	// grid (roomline.go). Copied here for the same reason the notice is: this
+	// golden renders a State the model built.
+	st.RoomNote = m.st.RoomNote
 	st.Columns[0].Note = m.column(model.VendorClaude).Note
 	st.Columns[0].NoteDetail = m.column(model.VendorClaude).NoteDetail
 	st.Columns[1].Note = m.column(model.VendorCursor).Note

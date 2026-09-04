@@ -4,8 +4,8 @@
                                                                                                                         
 [ ] 1 CC Claude Code  ---  - streaming  |    2 CX Codex  ----------  - waiting  |    3 AG Antigravity  -------  . idle  
 [   ro:tools  tokens                    |    ro:requested  final only           |    unsandboxed  final only            
+[ ^ 3 more above  |  turn 1             |  now  -----------------  no acts yet  |                                       
 [                                       |                                       |                                       
-[ ^ 3 more above  |  ^v scroll          |                                       |                                       
 [ Resume. Re-sending grows input        |                                       |                                       
 [ quadratically.                        |                                       |                                       
 [ turn 2  ------------------------  8s  |                                       |                                       

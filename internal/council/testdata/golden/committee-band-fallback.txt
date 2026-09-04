@@ -2,7 +2,7 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ▌ ▸ 1 CC Claude Code  ───  ⠋ streaming  │    2 CX Codex  ────────  ⠋ streaming  │    3 AG Antigravity  ──  ⠋ streaming  
 ▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
-▌                                       │                                       │                                       
+▌ now  ──────────────────  no acts yet  │  now  ─────────────────  no acts yet  │  now  ─────────────────  no acts yet  
 ▌ turn 4  ────────────────────────────  │  turn 4  ───────────────────────────  │  turn 4  ───────────────────────────  
 ▌ › @all does the room read better      │  › @all does the room read better     │  › @all does the room read better     
 ▌   with one brief or four?             │    with one brief or four?            │    with one brief or four?            

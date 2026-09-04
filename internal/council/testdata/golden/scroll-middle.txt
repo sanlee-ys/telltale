@@ -2,8 +2,8 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ▌ ▸ 1 CC Claude Code  ────────  ✓ done  │    2 CX Codex  ─────────────  ○ idle  │    3 AG Antigravity  ───────  ○ idle  
 ▌   ro:tools  tokens                    │    ro:requested  final only           │    unsandboxed  final only            
-▌                                       │                                       │                                       
 ▌ ↑ 20 more above  │  ↑↓ scroll         │                                       │                                       
+▌ line 21 of the reply                  │                                       │                                       
 ▌ line 22 of the reply                  │                                       │                                       
 ▌ line 23 of the reply                  │                                       │                                       
 ▌ line 24 of the reply                  │                                       │                                       

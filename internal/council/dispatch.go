@@ -985,6 +985,12 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 		m.setDraft("")
 	}
 	m.st.Notice = ""
+	// The room line's own transient goes with it (roomline.go). The rebuild's
+	// measured cost answers "what did reopening this room cost", and the first
+	// brief is the moment that question is answered: from here the room is
+	// spending on this turn instead. A cost that stayed would be the finding
+	// this pass deletes — one room fact on every frame of a long session.
+	m.st.RoomNote = ""
 	if len(busy) > 0 {
 		// A partial send says so: who took the brief and who was skipped, and
 		// why. Measured, both halves — the seats in ts.live and the seats whose
@@ -1271,6 +1277,10 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			// Every byte of vendor output reaches state through the redactor,
 			// which is the single choke point Render can be reasoned about from.
 			c.Body += m.redact(ev.Vendor, ev.Text)
+			// The seat spoke, so the quiet clock restarts (Column.LastOut).
+			// Stamped from the room's own clock rather than from the wall, so a
+			// replay measures the recording's silence and Render stays pure.
+			c.LastOut = m.st.Now
 			if c.Phase == PhaseWaiting {
 				// It streamed after all. Upgrading the phase is honest in this
 				// direction only: the column now IS showing incremental output.
@@ -1290,6 +1300,11 @@ func (m *Model) applyEvents(batch []runner.Event) {
 			for _, a := range ev.Acts {
 				c.recordAct(a, m.redactWhole)
 			}
+			// An act is the seat working, so it restarts the quiet clock on the
+			// same terms a text chunk does. A seat that runs a six-minute build
+			// and says nothing is NOT silent, and a clock that ignored acts
+			// would report it as stopped.
+			c.LastOut = m.st.Now
 			m.armArenaRefresh(ev.Vendor)
 
 		case runner.KindSession:
