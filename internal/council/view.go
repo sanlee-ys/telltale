@@ -1701,6 +1701,36 @@ func stoppedOnYou(st State, c Column) bool {
 	return st.gateStopped(c.Vendor)
 }
 
+// turnClock is the ONE clock a column's current turn wears, wherever the room
+// draws it: the header (columnStatus) and the strip's turn line (stripTurn).
+//
+// While the seat is in flight the clock runs, from Column.Started against
+// State.Now. Once the turn has ended the clock is the figure the turn earned,
+// Column.Elapsed, and it stops. Both forms take the operator's own share back
+// out (§9.45).
+//
+// One function rather than two copies of the rule, because the two copies
+// disagreed (measured 2026-09-04 on a real recording): the strip read the
+// running clock on a turn that had ended, so a seat that finished turn 9 in
+// 71s and then sat out three turns wore `turn 9 ✓ 25m35s` at strip width and
+// `done 1m11s` one resize wider. The number under a turn has to be time spent
+// on that turn (§4a.1), and a clock that keeps counting after the answer landed
+// is billing the seat for the room's silence.
+//
+// Empty when there is nothing measured: a seat that has not started, or a
+// finished turn with no stamp. A blank is honest where a zero would be a claim.
+func turnClock(st State, c Column) string {
+	if c.Phase == PhaseStreaming || c.Phase == PhaseWaiting {
+		return elapsed(st, c)
+	}
+	if c.Elapsed > 0 {
+		// The test is on the WALL clock, so a turn that was all card still
+		// prints `0s` — a measured zero, not a blank.
+		return dur(vendorElapsed(c.Elapsed, c.GateWait))
+	}
+	return ""
+}
+
 // columnStatus is the state word with its mark and, where there is one, the
 // clock that says how long it took or has taken.
 // Three pieces rather than one string, because the middle piece is a READING
@@ -1759,23 +1789,16 @@ func columnStatus(st State, c Column, g Glyphs) (head, clock, tail string) {
 		// Appended only when there IS one: the old code always added the space
 		// and left a trailing cell on every column that had not started, which
 		// pushed the state word one cell off the right edge it was aligned to.
-		if e := elapsed(st, c); e != "" {
+		if e := turnClock(st, c); e != "" {
 			clock = " " + e
 		}
 		return phaseMark(c.Phase, st, g) + " " + status, clock, ""
 	}
-	if c.Elapsed > 0 {
+	if e := turnClock(st, c); e != "" {
 		// Kept after the turn ends. A finished column should still be able to
 		// say how long it made you wait, which is the only way the asymmetry
 		// between a streaming vendor and a final-only one is ever legible.
-		//
-		// The operator's own share comes back out of it, exactly as it does
-		// while the turn is running (§9.45). The gate is why a turn ends this
-		// side of five minutes, and a `done 5m` that was four minutes of
-		// somebody reading a card is the same false reading after the fact as
-		// during. The test is on the WALL clock, so a turn that was all card
-		// still prints `done 0s` — a measured zero, not a blank.
-		clock = " " + dur(vendorElapsed(c.Elapsed, c.GateWait))
+		clock = " " + e
 	}
 	if c.Settling {
 		// The answer landed; the process has not gone yet. A WORD rather than a
