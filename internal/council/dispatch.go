@@ -1229,11 +1229,26 @@ func (m *Model) waitEvents() tea.Cmd {
 }
 
 func (m *Model) applyEvents(batch []runner.Event) {
+	// One stamp per batch, read before the first event lands, so the file's
+	// clock is the moment the batch arrived (a nil recorder stamps nothing).
+	ms := m.rec.ms()
 	for _, ev := range batch {
 		c := m.column(ev.Vendor)
 		if c == nil {
 			continue
 		}
+		// A stale exit is dropped BEFORE it is recorded. The --record file
+		// carries what this function applied to the room, not what the
+		// channel delivered: an exit the liveness test attributes to a
+		// replaced process changes nothing on screen here, and a replay has
+		// no process to run that test against, so a recorded stale exit would
+		// end the NEW turn on the file where the live room did not (design.md
+		// §9.56, measured 2026-09-03). staleExit holds the one liveness test
+		// the KindDone and KindError branches used to make inline.
+		if m.staleExit(ev) {
+			continue
+		}
+		m.rec.event(ev, ms)
 		// A seat the room-open rebuild is still launching owns its own events
 		// (rebuild.go, design.md §9.52). Intercepted BEFORE the switch rather
 		// than handled inside it, because every branch below is written for a
@@ -1520,9 +1535,9 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				m.finishColumn(c, PhaseDone)
 				continue
 			}
-			if p, ok := m.procs[ev.Vendor]; ok && p.sess != nil && p.sess.Alive() {
-				continue
-			}
+			// The predecessor guard itself ran before the switch (staleExit),
+			// so an exit that reaches this line is the CURRENT process's.
+			//
 			// A persistent process reaching here has DIED — the turn's end never
 			// takes it down. Either the room is quitting, or something ended it
 			// under us; both mean the seat has no process any more.
@@ -1546,7 +1561,16 @@ func (m *Model) applyEvents(batch []runner.Event) {
 				// settleRestoredThread, inside finishColumn: for that seat the
 				// death IS the reattach being refused, and "the process ended"
 				// would describe the symptom rather than the cause.
-				c.Elapsed = time.Since(c.Started)
+				//
+				// Elapsed is filled only when nothing has: finishColumn's own
+				// guard, repeated here because a replay stamps the figure from
+				// the recording's clock BEFORE the event lands (replayEvent),
+				// and an unguarded wall read over a recorded Started was the
+				// 62-minute elapsed the first real replay drew on a 4-second
+				// turn (design.md §9.56, measured 2026-09-03).
+				if c.Elapsed == 0 && !c.Started.IsZero() {
+					c.Elapsed = time.Since(c.Started)
+				}
 				c.Note = "the vendor process ended mid-turn — the next brief starts a new session"
 				m.finishColumn(c, PhaseFailed)
 				continue
@@ -1603,9 +1627,9 @@ func (m *Model) applyEvents(batch []runner.Event) {
 					// The racer itself crashed. Fall through: the tail below
 					// sets the note from the event and finishColumn — which is
 					// what reaps the dead racer — runs on the Err/ExitCode test.
-				} else if p, ok := m.procs[ev.Vendor]; ok && p.sess != nil && p.sess.Alive() {
-					continue
 				}
+				// With no racer, the predecessor guard ran before the switch
+				// (staleExit): an exit here is the current process's own.
 			}
 			c.Body += m.flush(ev.Vendor)
 			// A seat already told that its saved thread was refused keeps that
@@ -2581,6 +2605,52 @@ func (m *Model) racing(v model.VendorID) bool {
 func (m *Model) isPersistent(v model.VendorID) bool {
 	ts := m.turnOf(v)
 	return ts != nil && ts.persistent[v]
+}
+
+// staleExit reports whether a process-level terminal event belongs to a
+// process this seat has already replaced, and so changes nothing in the room.
+//
+// A terminal event names a VENDOR, not a process. When the seat's CURRENT
+// process is alive, the exit is a predecessor's — the one a /cd respawn or a
+// posture respawn killed (stopProc), or one that died while the room was idle
+// and whose exit sat queued until the next turn drained the channel. A process
+// that exited cannot be Alive, so the test is exact. Acting on a stale exit
+// would fail the live turn, drop the live process from procs (leaving it
+// running and invisible, which is the exact state this product refuses), and
+// discard the earned thread through the probation rule.
+//
+// The exclusions are the branches that read a terminal event BEFORE this
+// guard used to run inline, each with its own attribution rule: a seat cut
+// with `x` (process bookkeeping only), a seat the rebuild still owns, an
+// ephemeral racer (two processes behind one vendor id, attributed by the
+// racer's liveness), and a one-shot racer beside a live room seat, whose
+// exit IS its end of turn (KindDone only; KindError has no such branch). A
+// vendor-REPORTED failure (EndsTurn) rides the current process's own stdout
+// and is never stale.
+//
+// It is one function rather than two inline tests because the recorder needs
+// the same answer: an exit the room discards must not reach the --record
+// file, or a replay — which has no process to ask — would end the new turn
+// on it (applyEvents).
+func (m *Model) staleExit(ev runner.Event) bool {
+	switch ev.Kind {
+	case runner.KindDone:
+	case runner.KindError:
+		if ev.EndsTurn {
+			return false
+		}
+	default:
+		return false
+	}
+	v := ev.Vendor
+	if m.wasGivenUp(v) || m.rebuildOwns(v) || m.ephemeralRacer(v) != nil {
+		return false
+	}
+	if ev.Kind == runner.KindDone && m.arenaRacing(v) {
+		return false
+	}
+	p, ok := m.procs[v]
+	return ok && p.sess != nil && p.sess.Alive()
 }
 
 // ephemeralRacer returns the throwaway session racing this vendor in the

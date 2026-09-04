@@ -212,7 +212,13 @@ func (m *Model) applyReplay(msg replayMsg) tea.Cmd {
 	case "dispatch":
 		m.replayDispatch(line)
 	case "event":
-		m.replayEvent(line)
+		// A stale exit is consumed and not applied (markStaleExits): the live
+		// room dropped it on a liveness test a replay cannot run, and landing
+		// it here would fail the new turn and stamp an Elapsed the vendor
+		// never took.
+		if !line.stale {
+			m.replayEvent(line)
+		}
 	case "gate":
 		m.replayGate(line)
 	}

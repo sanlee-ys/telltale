@@ -1,0 +1,12 @@
+{"kind":"room","v":1,"started":"2026-09-03T10:00:00Z","workspace":"~/code/example","write":true,"seats_only":["claude","codex"],"seats":[{"vendor":"claude","label":"Claude Code","avail":0,"sandbox":6,"detail":"asks before every tool call that changes anything","gran":1},{"vendor":"codex","label":"Codex","avail":0,"sandbox":5,"detail":"no read-only posture was requested","gran":3}]}
+{"kind":"dispatch","ms":1000,"turn":1,"route":{},"sent":[{"vendor":"claude","prompt":"name one risk of a shared remote","persistent":true},{"vendor":"codex","prompt":"name one risk of a shared remote"}]}
+{"kind":"event","ms":1100,"vendor":"claude","event":"done","exit":1}
+{"kind":"event","ms":1500,"vendor":"claude","event":"session","session_id":"22222222-3333-4444-8555-666666666666"}
+{"kind":"event","ms":2000,"vendor":"claude","event":"activity","acts":[{"id":"toolu_fixture11","text":"Read: README.md"}]}
+{"kind":"event","ms":2200,"vendor":"claude","event":"activity","acts":[{"id":"toolu_fixture11","text":"","outcome":1}]}
+{"kind":"event","ms":2400,"vendor":"claude","event":"text","text":"Two agents pushing to one branch, each rebasing over the other.\n"}
+{"kind":"event","ms":2500,"vendor":"codex","event":"text","text":"A force-push from one agent erasing another's commit.\n"}
+{"kind":"event","ms":3000,"vendor":"claude","event":"meta","ends_turn":true,"cost_usd":0.0456}
+{"kind":"event","ms":4000,"vendor":"codex","event":"done","exit":0}
+{"kind":"dispatch","ms":10000,"turn":2,"route":{"vendors":["claude"]},"sent":[{"vendor":"claude","prompt":"and the control that closes it","persistent":true}]}
+{"kind":"event","ms":12000,"vendor":"claude","event":"done","exit":1}

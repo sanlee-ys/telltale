@@ -683,12 +683,16 @@ func (m *Model) reattach(re Reattachment) {
 		// this, a thread the vendor no longer has would be retried on every turn
 		// of the session instead of once.
 		m.unproven[v] = true
-		if c := m.column(v); c != nil && c.Avail == AvailInstalled {
+		if c := m.column(v); c != nil && m.st.seats(*c) {
 			// Only a SEATED column is marked restored. An id for a vendor that
 			// is not installed on this machine is dead weight rather than a
 			// thread, and a card claiming a restored conversation above an
 			// "is not seated" card would be two contradictory statements in one
-			// column.
+			// column. Seated by State.seats — drivable AND in the --vendor
+			// roster — because Restored is what the room-open rebuild launches
+			// from (rebuildable): a seat --vendor left out that was marked here
+			// got a process it could never take a turn on, and the notice
+			// counted it as "5/4 seats rebuilt" (measured 2026-09-03).
 			c.Restored = true
 			seats++
 		}
@@ -1043,10 +1047,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The one parked reader has delivered; the pump is free to be re-armed
 		// by whatever below decides the room still needs it (waitEvents).
 		m.eventsArmed = false
-		// The --record file sees exactly the batch applyEvents is about to see
-		// (recording.go): same events, same order, before any of them has
-		// changed the room. A nil recorder is a no-op.
-		m.rec.events(msg.events)
+		// The --record file is written inside applyEvents (recording.go):
+		// the same events in the same order, each one just before it changes
+		// the room, minus the exits the stale-exit guard discards. A nil
+		// recorder is a no-op.
 		m.applyEvents(msg.events)
 		// A racer that landed in this batch may have queued a check run
 		// (arenacheck.go). Drained before the branch below, because that branch
