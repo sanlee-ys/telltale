@@ -825,7 +825,7 @@ func columnCell(st State, c Column, f seatFocus, hint []string, w, h int, sty St
 	// this way"; hoisting it would put a claim about the bottom of the column at
 	// the top of it.
 	if avail > 0 && len(chrome) > 0 && above > 0 {
-		cue := overflowMarker(g.Up, above, "above", turnUp, hint, w, g)
+		cue := cueMarker(above, turnUp, hint, w, g)
 		chrome = append(append([]string{}, chrome[:len(chrome)-1]...),
 			sty.Muted.Render(padRight(cue, w, g)))
 	}
@@ -999,6 +999,44 @@ func overflowMarker(mark string, n int, where, turn string, hints []string, w in
 	// Narrower than the count itself. padRight clips it and says so, which is
 	// the only honest answer left at a width that cannot hold a number.
 	return forms[len(forms)-1]
+}
+
+// cueMarker is the column's cue row: how much is hidden above, WHICH TURN the
+// top of the window belongs to, and the key that reaches it.
+//
+// It is overflowMarker with one rule reversed, and only on this row. Down in the
+// body the marker's own words outrank the turn coordinate, because a marker
+// sharing a content line has to say what it is before it says where it is. The
+// cue row has no content to share with, and the fact it was measured failing to
+// carry is the coordinate: the final frame of a forty-minute room drew four
+// columns, each showing the tail of a DIFFERENT turn, and the two narrow columns
+// spent their cells on `more above` and named no turn at all. Four tails and one
+// label is the state this row exists to end.
+//
+// So the count sheds its own words to keep the turn — `↑ 137  │  turn 11` rather
+// than `↑ 137 more above` — and the COUNT itself is still never traded, which is
+// §9.20's one clause this reversal leaves standing. A column with no turn to
+// name falls straight back to overflowMarker, so nothing changes where there is
+// nothing to add.
+func cueMarker(n int, turn string, hints []string, w int, g Glyphs) string {
+	if turn != "" {
+		count := g.Up + " " + strconv.Itoa(n)
+		sep := "  " + g.Sep + "  "
+		for _, s := range []string{count + " more above", count + " above", count} {
+			if lipgloss.Width(s) > w {
+				continue
+			}
+			tail := turn
+			if len(hints) > 0 &&
+				lipgloss.Width(s+sep+turn+sep+hints[0]) <= w {
+				tail = turn + sep + hints[0]
+			}
+			if lipgloss.Width(s+sep+tail) <= w {
+				return s + sep + tail
+			}
+		}
+	}
+	return overflowMarker(g.Up, n, "above", "", hints, w, g)
 }
 
 // scrollHint is the keys that move the focused column, as the CURRENT mode has
@@ -2431,8 +2469,13 @@ func nowLine(st State, c Column, w int, sty Styles, g Glyphs) []string {
 	case n > 1:
 		acts = strconv.Itoa(n) + " acts"
 	}
-	quiet := "nothing has arrived"
-	if !c.LastOut.IsZero() {
+	// ABSENT, not zero, and absent draws nothing here. A seat that has delivered
+	// nothing has no instant to count from, so the cell simply is not on the
+	// line — never `quiet 0s`, which would be a reading (§4a.1). The card above
+	// already says the seat is working and what to expect from it, so this line
+	// does not restate that in a second sentence.
+	quiet := ""
+	if !c.LastOut.IsZero() && !st.Now.IsZero() {
 		d := st.Now.Sub(c.LastOut)
 		if d < 0 {
 			d = 0
@@ -2447,7 +2490,11 @@ func nowLine(st State, c Column, w int, sty Styles, g Glyphs) []string {
 	// and keeps the label, and `now  ─────` with no number on it is chrome
 	// asserting a boundary that carries no reading — the one shape this line
 	// must never take.
-	for _, meta := range []string{acts + "  " + quiet, quiet, acts} {
+	forms := []string{acts}
+	if quiet != "" {
+		forms = []string{acts + "  " + quiet, quiet, acts}
+	}
+	for _, meta := range forms {
 		line := labelRule("now", meta, w, g)
 		if lipgloss.Width(line) <= w && strings.HasSuffix(line, meta) {
 			return []string{sty.Muted.Render(padRight(line, w, g))}
@@ -2587,8 +2634,34 @@ func lastTurnLine(c Column, st State, w int, sty Styles, g Glyphs) []string {
 // per turn, paid out of the scrollback rather than out of the live turn, and
 // the scrollback is the part with rows to spare.
 func turnHead(n int, meta, prompt string, quoted bool, w int, sty Styles, g Glyphs) []string {
+	// The rebuttal notice is ONE WORD on this rule, not a sentence under the
+	// echo, and that is a density ruling rather than a rewording.
+	//
+	// "the other seats' last answers were quoted to this one" is a fact about
+	// the DISPATCH. It wraps to two rows in a thirty-six-cell column, and a
+	// four-seat rebuttal turn therefore spent eight rows saying it four times,
+	// once in each column, in addition to the copy the band draws above them
+	// all. The room's own surfaces keep the sentence — the live band, the turn
+	// page and the ledger each draw the brief ONCE and each say it whole, which
+	// is where a reader learns what the word means. Inside a column the fact is
+	// a property of the turn, so it rides on the line that names the turn, next
+	// to that turn's clock and cost.
+	//
+	// It leads the meta, in front of the numbers, because it changes what the
+	// reply below is a reply TO — and it sheds with the meta at a width that
+	// cannot hold either, which is turnRule's own order (the number outranks
+	// everything that belongs to it).
+	if quoted {
+		if meta == "" {
+			meta = quotedTag
+		} else {
+			meta = quotedTag + "  " + meta
+		}
+	}
 	out := []string{sty.Muted.Render(padRight(turnRule(n, meta, w, g), w, g))}
-	echo := promptEcho(prompt, quoted, w, sty, g)
+	// quoted is spent above. Passing it on would put the sentence back under the
+	// echo, which is the row cost this ruling removes.
+	echo := promptEcho(prompt, false, w, sty, g)
 	out = append(out, echo...)
 	if len(echo) > 0 {
 		out = append(out, "")
@@ -2725,6 +2798,16 @@ func promptEcho(prompt string, quoted bool, w int, sty Styles, g Glyphs) []strin
 // are reading the same sentence about the same dispatch.
 const quotedNotice = "+ the other seats' last answers were quoted to this one"
 
+// quotedTag is the same fact on a turn separator, where there is room for a
+// word and not for a sentence (turnHead).
+//
+// It keeps the sentence's own leading `+`, so the two spellings read as one
+// vocabulary: the reader who learned `+ the other seats' last answers…` on the
+// band meets `+ quoted` on the rule and does not have to be taught a second
+// mark. Never the whole sentence and never a different word, which is the drift
+// quotedNotice's own comment refuses one constant up.
+const quotedTag = "+ quoted"
+
 // pastTurn renders a finished turn: what the seat did, what it said, and how it
 // ended.
 //
@@ -2780,7 +2863,7 @@ func actLines(a Act, w int, sty Styles, g Glyphs) []string {
 // and a failure's detail is bounded. A ledger that re-implemented them would
 // re-implement the ANSI trap (§9.5) at a width where the goldens are blind to it.
 func actLinesMarked(a Act, mark string, style lipgloss.Style, w int, sty Styles, g Glyphs) []string {
-	text := a.Text
+	text := shortPaths(a.Text, w, g)
 	if mark != "" {
 		text += " " + mark
 	}
@@ -2819,6 +2902,50 @@ func actLinesMarked(a Act, mark string, style lipgloss.Style, w int, sty Styles,
 		}
 	}
 	return lines
+}
+
+// narrowTrace is the column width at or below which a trace entry drops the
+// directories out of its paths and keeps the file names.
+//
+// Thirty-four, and the number is read off the frame it was written for rather
+// than chosen. With one seat focused at the owner's desk width the other three
+// columns fall to about twenty cells, and one Windows path then wraps to ten
+// rows: the flight recorder, which is the answer to "what did this agent
+// actually do", becomes a column of path fragments with no tool name in sight.
+// Four columns of forty-one cells — the reference geometry with no seat focused
+// — sit above this line and are untouched, so the wide column keeps the whole
+// path exactly as it had it.
+const narrowTrace = 34
+
+// shortPaths is that reduction: every whitespace-separated token that carries a
+// path separator keeps its last segment.
+//
+// Taken from the STRIP lane's thesis, which says a narrow column should change
+// FORM rather than shrink. This lane takes only the trace half of it, because
+// the trace is the one body element measured wrapping to ten rows, and leaves
+// the rest of the column's form alone.
+//
+// The ellipsis says the token was shortened, which is this room's rule for every
+// string it clips: `…\hello.py` is a reader being told there was a directory,
+// while `hello.py` would be the room quietly asserting a bare file name the
+// vendor never wrote. The full path is still on the wide column and on the turn
+// page, so nothing is lost, only moved to a width that can hold it.
+//
+// Untouched above narrowTrace, and untouched for any token with no separator in
+// it, so a command, a flag and a bare tool name all render exactly as they did.
+func shortPaths(text string, w int, g Glyphs) string {
+	if w > narrowTrace || w < 1 {
+		return text
+	}
+	fields := strings.Split(text, " ")
+	for i, f := range fields {
+		cut := strings.LastIndexAny(f, `\/`)
+		if cut <= 0 || cut == len(f)-1 {
+			continue
+		}
+		fields[i] = g.Ellipsis + f[cut:]
+	}
+	return strings.Join(fields, " ")
 }
 
 // recorderHead sets the first line of a trace entry as three claims rather than

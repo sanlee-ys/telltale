@@ -210,7 +210,14 @@ func (m *Model) startRebuild() tea.Cmd {
 		if want != "" {
 			m.forkWatch[id] = want
 		}
-		c.Note = "rebuilding this seat — a new process is loading the saved thread."
+		// One word, because the sentence is a fact about the ROOM and the room
+		// says it once, three lines below (rebuildStartNotice on st.Notice).
+		// Every seat in a rebuild is doing the same thing for the same reason,
+		// so "rebuilding this seat — a new process is loading the saved thread."
+		// was drawn four times, word for word, across four columns of a frame
+		// that had not yet shown a single reply. What is per SEAT is that this
+		// seat is one of them, and that is what the column now says.
+		c.Note = "rebuilding"
 		c.NoteCalm = true
 	}
 

@@ -95,16 +95,28 @@ func (c needsYouCell) text() string {
 // LANDED rather than one that is blocked — the phase word that says how.
 type needsYouEntry struct {
 	idx int
-	// word is empty for a blocked seat and the terminal phase's own word for a
-	// landed one; see needsYouCell.word.
+	// word is the qualifier printed after the seat's name, and it is EMPTY on
+	// two different entries now: a blocked seat, which has no outcome yet, and a
+	// seat whose turn ended the ordinary way, whose header two rows below
+	// already says `done` (landedWord). So it can no longer answer "is this seat
+	// blocked" and the field below does.
 	word string
+	// stopped reports that a gate holds this seat, which is the one claim on
+	// this line that a reader must not miss.
+	//
+	// It is a field rather than a test over word, and the swap is forced. The
+	// old test was `word == ""`, on the ground that needsYou wrote a phase word
+	// for every landed entry — true until the density pass dropped `done`,
+	// after which an ordinary landed seat would have read as a blocked one and
+	// the strip would have opened `⚠ NEEDS YOU` over a room with no gate up.
+	// That is the exact frame LEDGER.md's 2026-09-03 ruling forbids, so the fact
+	// is now stored rather than inferred.
+	stopped bool
 }
 
 // blocked reports that this entry is a seat stopped on a gate rather than one
-// that landed. The absence of a phase word is the whole test, because needsYou
-// writes one for every landed entry and never for a blocked one, and a second
-// field for the same fact would be the drift §9.30 removed everywhere else here.
-func (e needsYouEntry) blocked() bool { return e.word == "" }
+// that landed.
+func (e needsYouEntry) blocked() bool { return e.stopped }
 
 // needsYouLead is the words, and the words are the whole signal.
 //
@@ -223,14 +235,38 @@ func needsYou(st State) []needsYouEntry {
 			// Blocked outranks landed on the same seat, and it cannot arise: a
 			// card is up only while the seat's turn is open, and a landing
 			// happens only when it closes. Listed once either way.
-			out = append(out, needsYouEntry{idx: i})
+			out = append(out, needsYouEntry{idx: i, stopped: true})
 			continue
 		}
 		if landedUnread(c) {
-			out = append(out, needsYouEntry{idx: i, word: c.Phase.String()})
+			out = append(out, needsYouEntry{idx: i, word: landedWord(c)})
 		}
 	}
 	return out
+}
+
+// landedWord is what a landed entry says after the seat's name, and for the
+// ordinary outcome it says NOTHING.
+//
+// The strip and the column headers were stating one fact twice. A finished room
+// drew `UNREAD   2 Codex done   3 Antigravity done` over a grid whose headers
+// already read `2 CX ✓ done` and `3 AG ✓ done`, so four of the strip's words
+// were a second copy of four words two rows below them. The strip's own claim is
+// not the phase — it is that these replies landed WHILE THE READER WAS
+// ELSEWHERE — and the lead already says that in one word. The names are the
+// answer; `done` after each of them is the room reading its own headers out.
+//
+// A turn that ended BADLY keeps its word, and that is §4a.1 rather than a
+// refinement. `failed` and `cancelled` must not render as `done`, and dropping
+// every word would leave three outcomes listed alike on the one line that
+// reports them to the room. So the case that sheds is the case the header
+// behind it already covers, and the two that must not be missed stay on the
+// line.
+func landedWord(c Column) string {
+	if c.Phase == PhaseDone {
+		return ""
+	}
+	return c.Phase.String()
 }
 
 // landedUnread reports that this column's turn ended since the reader last had
