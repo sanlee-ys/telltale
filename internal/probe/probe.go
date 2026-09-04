@@ -320,7 +320,7 @@ func drive(ctx context.Context, s Seat, dir string, o Options) []Check {
 			{Name: CheckStop, Status: doctor.NotChecked},
 		}
 	}
-	defer sess.Kill()
+	defer teardown(sess, events)
 
 	started := time.Now()
 	// The brief goes down the pipe BEFORE the handshake is scored, and that
@@ -362,6 +362,45 @@ func drive(ctx context.Context, s Seat, dir string, o Options) []Check {
 
 	return []Check{hs, turn, stop(ctx, sess, wire, events)}
 }
+
+// teardown ends the process on EVERY exit path and waits, bounded, for it to be
+// reaped, draining the event channel while it waits.
+//
+// Both halves are load-bearing, and neither is tidiness.
+//
+// The DRAIN is what stops a failed check leaking a blocked goroutine.
+// `runner.pumpStdout` writes each event to the channel unconditionally, with no
+// select and no deadline, so a drive that stopped reading on a failed handshake
+// would leave that reader blocked once the buffer filled. The runner's own
+// lifecycle goroutine waits on that reader before it reaps the child, so
+// nothing downstream of it would run either.
+//
+// The WAIT is what makes the throwaway directory removable. RunSeat deletes it
+// as the drive returns, and on Windows a directory a live child still holds a
+// handle in does not delete. Waiting for the reap first turns that from a
+// leftover directory into a deleted one.
+//
+// Bounded, never open-ended: this runs after the checks are already scored, so
+// a vendor that will not die must cost a few seconds and not the report.
+func teardown(sess session, events <-chan runner.Event) {
+	sess.Kill()
+	deadline := time.NewTimer(teardownGrace)
+	defer deadline.Stop()
+	for {
+		select {
+		case <-sess.Done():
+			return
+		case <-events:
+		case <-deadline.C:
+			return
+		}
+	}
+}
+
+// teardownGrace bounds that wait. It is this package's own number and not a
+// claim about any vendor: the kill has already been issued when it starts, so
+// what it waits on is the operating system reaping a killed process.
+const teardownGrace = 5 * time.Second
 
 // spawn brings the seat's live process up, through the same two call shapes the
 // room's own spawnSeat uses.
