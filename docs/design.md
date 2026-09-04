@@ -144,6 +144,18 @@ numbers-and-keys, and the fourth is named as an exception instead of being folde
 them. §7.21 carries the record and CLAUDE.md's boundary section carries the same
 exception.
 
+**Amended 2026-09-04: the numbers-and-keys list is FOUR, not three.** `telltale probe`
+(LEDGER, 2026-09-04) writes `probe/<vendor>.json` per seat: the vendor id, the version
+string that binary printed, the day, the telltale build that probed, and one result plus
+a millisecond count for each of its three checks. It is the strictest of the four,
+because its writer DRIVES an agent: the brief, the reply, the session id and the
+workspace path are all within reach of it and none is written, and neither is the failure
+reason, because a vendor's own error line carries paths. It is not a gauge, so the
+paragraph above is unchanged in what it says about `internal/hud` and
+`internal/statusline`. SECURITY.md and CLAUDE.md carry the same four; a count in prose
+goes stale with nothing to catch it, so `internal/history/boundary_test.go` enumerates
+the writer packages by name and states none.
+
 The two gauge paths share exactly two packages: `internal/model` (the schema) and
 `internal/theme` (thresholds and value formatters). `internal/theme` is stdlib-only and
 holds no style type, which is what lets both surfaces share the numbers while the

@@ -141,6 +141,18 @@ Two consequences when you write a council test:
   run, not a declared intent — an opt-in marker would just become the thing a
   future test copies without meaning it.
 
+**`internal/probe` carries the same guard over its own two spawn vars**, and it
+needs it more than any package here. That package exists to spend a billed turn,
+so a test of it that reached a resolvable binary would not be an accident in a
+test that wanted a second column: it would be the suite doing the exact thing
+the operator is asked to confirm. Its `TestMain` wraps `startSession` and
+`startRPCSession` on the identical rule (a binary this machine can resolve
+panics; one it cannot is let through to fail), and it points HOME and
+USERPROFILE at a sandbox for the same reason council's does, sharpened: a suite
+that wrote the operator's own `~/.telltale/probe` files would put a result on
+their disk that no probe of theirs produced, and `telltale doctor` would then
+report it as a measurement made on that machine.
+
 ## A council test never writes the operator's own state
 
 Same file, same reason, quieter defect. `TestMain` points `HOME` and
@@ -250,7 +262,7 @@ running, and it holds every clause above unchanged — the liveness probe asks
 whether a pipe NAME exists (`WaitNamedPipe`) and never opens it, so the listing
 cannot end the room it is listing, and a **stale `host.json` is reported and
 never removed**, because a reader that tidied would be a writer. The room
-removes that file; `ls` only says it is there. **Three** deliberate, bounded exceptions
+removes that file; `ls` only says it is there. **Four** deliberate, bounded exceptions
 exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
 
 - `telltale council` — spawns vendor CLIs; writes `council/room.json` (session
@@ -283,8 +295,22 @@ exist, all under `~/.telltale/` and all numbers-and-keys only, never content:
   grok on arrival) — the writes, the cache and the HUD's read of them are all
   wired, and nothing renders a total today. Don't "clean up" the reader on the
   grounds that it is unused; being wired is the point of it.
+- **`telltale probe`** — `probe/<vendor>.json`, one file per seat: the vendor
+  id, the version string that binary printed, the day, the telltale build that
+  probed, and one result plus a millisecond count for each of the three checks
+  it ran (handshake, one turn of one word, stop). It is the strictest of the
+  four because its writer DRIVES an agent, so four kinds of content are within
+  reach of it and none of them may be written: the brief, the reply, the
+  session id the vendor named, and the directory the seat ran in. **The failure
+  reason is refused too**, and that is the decision to read before changing
+  anything here: a vendor's own first stderr line routinely carries a path or a
+  session id, so it would carry content by the back door, on exactly the runs a
+  reader is most likely to paste somewhere. The reason prints in the terminal
+  where the probe ran and stops there; `telltale doctor` reports WHICH check
+  failed and names the command that shows why. `Result.Record` is the one place
+  that decides what reaches disk, and it drops the reason on every branch.
 
-A fourth exception is different in kind and says so: the **event sink**
+A fifth exception is different in kind and says so: the **event sink**
 (`telltale events`, design.md §7.21) stores hook payloads VERBATIM under
 `~/.telltale/events/` — content, not numbers-and-keys. What contains it is
 scope, not redaction: it is its own foreground mode the operator starts, the
@@ -312,11 +338,22 @@ completely and on purpose: it can write `usage/<vendor>.json` directly, which
 `internal/usagecache/trust_test.go` pins, so a bearer token on the HTTP path
 would buy nothing against it.
 
-Each of the three relay exceptions carries a test pinning the serialized form
+Each of the four exceptions carries a test pinning the serialized form
 to keys and numbers. If you're
 adding a feature to `internal/hud` or `internal/statusline` that would write
 anywhere else, shell out, or touch a credential store, that is almost certainly
 the wrong package for it.
+
+**`telltale probe` is also the one mode that SPENDS a vendor turn**, and that
+is a second boundary, separate from what it writes. `doctor` widened the
+no-vendor rule to `<binary> --version` and drew the line at cost and side
+effect (design.md §9.42); this mode is on the far side of it. So the cost is
+stated before the run, the operator is asked at the terminal, and a run with no
+terminal is refused unless `--yes` is given: a mode that spends money must not
+be reachable from a hook, a script or a CI step by accident. Nothing else in
+the binary calls it. Do not wire it into a gauge, the room, a test or a
+schedule, and do not make its one-word brief configurable. A settable brief is
+a way to spend a real turn through a mode that promised a trivial one.
 
 Two sharper versions of the same boundary, worth reading before you touch either
 seam. The Cursor **adapter** (`internal/adapter/cursor`) reads an on-disk store

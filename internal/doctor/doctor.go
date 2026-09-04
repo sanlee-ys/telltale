@@ -24,8 +24,14 @@
 // vendor is forbidden": this package spawns `<binary> --version`, and it does
 // not start a turn, does not read or write a credential store, does not touch
 // ~/.telltale, and makes no network call. See CLAUDE.md's read/write boundary —
-// doctor adds no fourth exception to the three writes listed there, because it
-// writes nothing at all.
+// doctor adds no write exception of its own to the ones listed there, because
+// it writes nothing at all.
+//
+// `telltale probe` (internal/probe) is the far side of that same line, and this
+// package reports what it recorded without ever calling it. A probe SPENDS a
+// turn per seat, so it is its own foreground mode the operator asks for; what
+// arrives here is a `Probed` value council read off a file, which costs this
+// report nothing. See probed.go.
 //
 // # Three states, and no fourth
 //
@@ -203,6 +209,15 @@ type Seat struct {
 	// second copy here would be a table that agrees today and drifts later. See
 	// posture.go.
 	Posture Posture
+	// Probed is what `telltale probe` recorded for this seat on THIS machine,
+	// or nil when nothing has.
+	//
+	// A POINTER, because absent and present-but-failing are different facts and
+	// nothing here may collapse them: nil renders the sentence saying nobody has
+	// driven this seat, never a blank and never a plausible pass. Like the three
+	// fields above it is filled by council, which reads the file; unlike them it
+	// is not a claim this repository wrote down. See probed.go.
+	Probed *Probed
 }
 
 // ProbeResult is what one bounded version probe produced. Out is the vendor's
@@ -300,6 +315,12 @@ type SeatReport struct {
 	// why a staleness fact must not become a fourth state. Nothing in Tally or
 	// Ready reads it, so the counts and the exit code are unchanged by it.
 	Drifted bool
+	// Probe is this seat's probe line, already worded (probed.go). Never empty:
+	// a seat nobody has probed carries the sentence that says so, because a
+	// missing line reads as a seat with nothing to report. Nothing in Tally or
+	// Ready reads it either — a probe is a measurement some earlier run made,
+	// not a check this one did.
+	Probe string
 	// Posture is the seat's sandbox claim, carried through unchanged from the
 	// Seat. Nothing in Tally or Ready reads it either, for posture.go's reason:
 	// a claim about what a vendor's flags buy is not a check on this machine.
@@ -439,6 +460,10 @@ func runSeat(s Seat, probe Probe) SeatReport {
 		installed = vc.Value
 	}
 	out.Survey, out.Drifted = surveyNote(s.Pin, installed)
+	// The probe line hangs off the same read, for the same reason: a probe
+	// recorded at one version is only comparable against a version this run
+	// actually read, and an unread version claims nothing in either direction.
+	out.Probe = probedNote(s.Vendor, s.Probed, installed)
 
 	out.Checks = append(out.Checks,
 		Skip("auth", authSkip),

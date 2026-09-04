@@ -19,9 +19,13 @@ import (
 const historyPkg = "github.com/sanlee-ys/telltale/internal/history"
 
 // writerPkgs are every package in this repository that WRITES under
-// ~/.telltale/. The read/write boundary names three bounded exceptions and this
-// mode is not one of them, so reaching any of these from here would silently add
-// a fourth writer to a contract that enumerates its writers by name.
+// ~/.telltale/. The read/write boundary enumerates its writers by name and this
+// mode is not one of them, so reaching any of these from here would silently
+// add another to that list.
+//
+// The list has no count in it on purpose. It gained `internal/probe` on
+// 2026-09-04, and a comment that had said "three bounded exceptions" would have
+// gone on saying three with four in the slice under it.
 //
 // The check is on DIRECT imports, and that is the right scope rather than a
 // weaker one. A transitive assertion would fail today for a reason that is not a
@@ -35,6 +39,7 @@ var writerPkgs = []string{
 	"github.com/sanlee-ys/telltale/internal/eventsink",
 	"github.com/sanlee-ys/telltale/internal/eventview",
 	"github.com/sanlee-ys/telltale/internal/council",
+	"github.com/sanlee-ys/telltale/internal/probe",
 }
 
 // TestHistoryWritesNothing pins the sentence this package's doc opens its

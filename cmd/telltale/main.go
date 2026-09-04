@@ -1,6 +1,6 @@
 // telltale — an honest gauge for your coding agents.
 //
-// One binary, nine modes (decisions/002, decisions/008):
+// One binary, ten modes (decisions/002, decisions/008):
 //
 //	telltale statusline   read a vendor statusline JSON payload on stdin, print one
 //	                      line (Claude Code, or Antigravity CLI via its documented
@@ -39,6 +39,10 @@
 //	                      scan per call, stdio only (design.md §7.25)
 //	telltale doctor       launch-time preflight: which vendor binaries are here,
 //	                      what version each reports, and what was never checked
+//	telltale probe        drive each installed seat through its handshake, one
+//	                      turn of one word and its stop, and record the result
+//	                      under ~/.telltale/probe. The one mode that SPENDS a
+//	                      vendor turn, so it says so and asks first
 //
 // The two GAUGES — statusline and hud — share the normalized session model and
 // internal/theme's numbers, and nothing else. Neither calls the network or
@@ -60,9 +64,16 @@
 // turn, and it is bounded to `<binary> --version`: no model, no session, no
 // quota, no credential, no network, and nothing written anywhere (design.md
 // §9.42, internal/doctor's package doc).
+//
+// probe is the only mode that SPENDS one, and it is the far side of the same
+// line: a live seat, a brief of one word, and a timed stop, on the operator's
+// own account. It is asked for explicitly, it names the cost before it starts,
+// it refuses to run with no terminal unless `--yes` is given, and nothing else
+// in this binary reaches it: no gauge, no room, no schedule.
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -101,6 +112,7 @@ import (
 	"github.com/sanlee-ys/telltale/internal/hud"
 	"github.com/sanlee-ys/telltale/internal/mcpserver"
 	"github.com/sanlee-ys/telltale/internal/model"
+	"github.com/sanlee-ys/telltale/internal/probe"
 	"github.com/sanlee-ys/telltale/internal/quotacache"
 	"github.com/sanlee-ys/telltale/internal/snapshot"
 	"github.com/sanlee-ys/telltale/internal/statusline"
@@ -170,6 +182,11 @@ func main() {
 	case "doctor":
 		if err := runDoctor(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "telltale doctor:", err)
+			os.Exit(1)
+		}
+	case "probe":
+		if err := runProbe(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "telltale probe:", err)
 			os.Exit(1)
 		}
 	case "version", "--version", "-v":
@@ -714,6 +731,156 @@ func runDoctor(args []string) error {
 	// from "doctor itself broke", and would put a red cross in any CI that ever
 	// ran it for information.
 	return nil
+}
+
+// runProbe is the one mode in this binary that SPENDS the operator's money, and
+// every decision below follows from that.
+//
+// `doctor` widened the no-vendor rule to `<binary> --version` and drew the new
+// line at cost and side effect (design.md §9.42). This mode is on the far side
+// of that line: it brings each installed seat up as a live process, hands it a
+// brief of one word, and times its stop. That is one billed turn per seat, on the
+// operator's own account. So it says the cost before it starts, it asks, and it
+// refuses to run at all when nobody is there to answer.
+//
+// The refusal is the part worth stating. A mode that spends money must not be
+// reachable from a script, a hook or a scheduled job by accident, and stdin not
+// being a terminal is exactly the shape of every one of those. `--yes` is how
+// somebody who means it says so; without it, a non-interactive run is an error
+// with the flag named, never a silent spend.
+func runProbe(args []string) error {
+	fs := flag.NewFlagSet("telltale probe", flag.ContinueOnError)
+	yes := fs.Bool("yes", false,
+		"spend the turns without asking. Required when stdin is not a terminal")
+	// One deadline per CHECK rather than one for the run, on runDoctor's
+	// argument: a wedged seat must cost its own timeout and not the report. The
+	// default is far longer than doctor's because what is being waited on is
+	// different in kind. A cold vendor CLI takes seconds to start (§9.33), and
+	// then a model has to answer, and a one-word turn on this fleet was measured
+	// at about 25 seconds when every turn paid a fresh session init
+	// (runner/session.go). Too short renders a FAILED that is this flag's fault.
+	timeout := fs.Duration("timeout", 2*time.Minute,
+		"how long each check gets on its own (handshake, then turn)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	seats, err := probeSeats(fs.Args())
+	if err != nil {
+		return err
+	}
+	if len(seats) == 0 {
+		// Not an error. No seat installed is a true answer about this machine,
+		// and `doctor` is the mode that already says where it looked.
+		fmt.Println("No seat on this machine can be driven, so nothing was probed. " +
+			"`telltale doctor` names every place it looked.")
+		return nil
+	}
+
+	fmt.Println(probe.Warning(seats))
+	if err := confirm(*yes); err != nil {
+		return err
+	}
+
+	dir, err := probe.Dir()
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	opts := probe.Options{Timeout: *timeout, TelltaleVersion: version}
+	results := make([]probe.Result, 0, len(seats))
+	for _, s := range seats {
+		// Named before it is driven, not after. A seat can take minutes, and a
+		// terminal that goes quiet while an agent runs on the operator's account
+		// is the state this whole product exists to refuse.
+		fmt.Printf("\ndriving %s: a handshake, one turn, a stop…\n", s.Vendor)
+		res := probe.RunSeat(ctx, s, opts)
+		results = append(results, res)
+		if !res.Drove() {
+			continue
+		}
+		// Written per seat rather than at the end. The turn is already spent by
+		// this point, and a run interrupted on the seat after this one must not
+		// lose what the operator already paid for.
+		if err := probe.Write(dir, res.Record(version)); err != nil {
+			fmt.Fprintln(os.Stderr, "telltale probe: the result could not be written:", err)
+		}
+	}
+
+	fmt.Print("\n" + probe.Render(results, dir))
+	// Exit 0 whatever the report says, on runDoctor's reason exactly: a failed
+	// CHECK is this command working. A non-zero exit would make "this vendor's
+	// handshake is broken here" indistinguishable from "probe itself broke".
+	return nil
+}
+
+// probeSeats resolves which seats a `telltale probe` run drives.
+//
+// No argument means every installed seat. A named seat is resolved through
+// council's own @mention vocabulary, the same table `--vendor` and `@codex`
+// read. A word the room prints and this mode rejects would be the
+// binary being clever at the operator's expense.
+//
+// A named seat that is not installed is an ERROR rather than a silent drop. The
+// operator asked for it by name and is owed the sentence, exactly as the room
+// owes a card to a seat somebody typed for.
+func probeSeats(args []string) ([]probe.Seat, error) {
+	installed := council.ProbeSeats()
+	if len(args) == 0 {
+		return installed, nil
+	}
+	sel, err := council.ParseSeats(strings.Join(args, ","))
+	if err != nil {
+		return nil, err
+	}
+	if sel.All || len(sel.Only) == 0 {
+		return installed, nil
+	}
+	out := make([]probe.Seat, 0, len(sel.Only))
+	for _, want := range sel.Only {
+		found := false
+		for _, s := range installed {
+			if s.Vendor == want {
+				out = append(out, s)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, errors.New(string(want) + " is not a seat this machine can drive. " +
+				"`telltale doctor` names every place it looked for it, and why it is not seatable")
+		}
+	}
+	return out, nil
+}
+
+// confirm holds the spend until somebody says yes.
+//
+// The terminal test is `os.ModeCharDevice` on stdin, which is what separates a
+// person at a keyboard from a pipe, a hook and a CI step. A run with no person
+// behind it does not get a prompt it can never answer: it gets the error, with
+// the flag that means "I know what this costs" in it.
+func confirm(yes bool) error {
+	if yes {
+		return nil
+	}
+	fi, err := os.Stdin.Stat()
+	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+		return errors.New("this spends a vendor turn per seat and stdin is not a terminal, " +
+			"so there is nobody to ask. Re-run with --yes if you mean to spend them")
+	}
+	fmt.Print("\nType y to spend those turns: ")
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil && strings.TrimSpace(line) == "" {
+		return errors.New("nothing was typed, so nothing was spent")
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return nil
+	default:
+		return errors.New("not confirmed, so nothing was spent")
+	}
 }
 
 // allAdapters is the registered adapter set, in one place because two read
@@ -1430,6 +1597,21 @@ usage:
                          "not checked": nothing here probes a login or calls
                          the network, and a preflight that implied otherwise
                          would be trusted on the one day it was wrong
+  telltale probe [vendor...]
+                         drive each installed seat through the live shape the
+                         room uses, and record what came back: the handshake,
+                         one turn of one word, and the stop. THIS SPENDS A
+                         TURN per seat, on your own account and under your own
+                         vendor credentials, so it says so before it starts and
+                         refuses to run with no terminal unless you pass --yes.
+                         Every seat runs in a throwaway empty directory, never
+                         in this one. The result goes to
+                         ~/.telltale/probe/<vendor>.json as numbers and keys:
+                         the version, the day, this telltale build, and three
+                         results with their milliseconds. No brief, no reply, no
+                         session id, no path, and no failure reason: the reason
+                         is printed here, where it was measured. "telltale
+                         doctor" reads that file and reports it per seat
   telltale help          this text. A bare "telltale" prints a short first
                          frame instead — three modes that need no
                          configuration, and which one to start with
@@ -1500,6 +1682,22 @@ telltale doctor flags:
   --width <n>                 wrap column for the report (default 80)
 It prints words and no colour, so it reads the same in a terminal, in a pipe and
 in a pasted issue; --ascii and NO_COLOR have nothing to switch off.
+
+telltale probe flags:
+  --yes                       spend the turns without asking. Required when
+                              stdin is not a terminal: a mode that spends money
+                              must not be reachable from a hook, a script or a
+                              CI step by accident, and no terminal is the shape
+                              of every one of those
+  --timeout <dur>             how long each check gets on its own (default 2m).
+                              One deadline per check, not one for the run: a
+                              wedged seat costs its own timeout and reports a
+                              failed check. It is far longer than doctor's
+                              because a model has to answer inside it, not just
+                              a flag parser
+A named seat that is not installed is refused rather than skipped, and the seats
+are driven one at a time, because two agents answering at once would make the durations
+a reading of this machine's load rather than of the vendor.
 
 telltale otel grok flags:
   --addr <host:port>          listen address (default 127.0.0.1:4318, the OTLP
