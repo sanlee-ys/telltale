@@ -96,9 +96,6 @@ a demo of the crew is a demo of measured claims only after that list is paid.
      dated paragraph). The rendering of that recording is the density pass's.
   8. The routing cell against the live quota relay, and `@auto` with Claude's
      5h window beside agy's weekly bucket — retires §9.56's routing items.
-  9. Codex read liveness: `telltale council --read`, brief "list this
-     directory and read README.md", three trials, every trial must inspect —
-     retires the Windows detail's "two of three read turns" (§9.57 item 1).
   10. Codex approvals: a write room, a brief that writes `%TEMP%\outside.txt`
       and runs `curl example.com`, `y` and `n` on separate trials, the disk
       checked — retires `app-server · asks · unmeasured` (§9.57 item 2).
