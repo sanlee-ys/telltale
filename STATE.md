@@ -227,13 +227,14 @@ MEASURED CLAIMS rather than the precondition for the tag.
      repository for them. The replay is also the fallback if a seat dies on
      stage.
 
-  **Cut on 2026-09-04, with the reason.** Four surfaces leave the demo and stay
-  in the README. `telltale doctor` is no longer the opening beat: it becomes a
-  one-line credibility aside after beat 3 if time allows, and it is not a beat.
-  `telltale hud`, `telltale snapshot` and the `y` clipboard beat leave outright.
-  The owner's reason, from the 2026-09-04 review: those are observability
-  surfaces, which is ground other tools already own, and the demo's first ninety
-  seconds must do the things a session supervisor has no verb for.
+  **Cut on 2026-09-04, with the reason.** Three surfaces leave the demo:
+  `telltale hud`, `telltale snapshot` and the `y` clipboard beat. All three stay
+  in the README. A fourth is demoted rather than cut: `telltale doctor` is no
+  longer the opening beat, it becomes a one-line credibility aside after beat 3
+  if time allows, and it is not a beat. The owner's reason, from the 2026-09-04
+  review: those are observability surfaces, which is ground other tools already
+  own, and the demo's first ninety seconds must do the things a session
+  supervisor has no verb for.
 
   **The old honesty beat is folded rather than cut.** Its price half is the last
   sentence of beat 1: the route line shows no money and never promises a price.
