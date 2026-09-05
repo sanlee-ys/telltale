@@ -408,7 +408,10 @@ sends a write brief to a seat that is not `gated`, it stops on one card that nam
 seat: `2 seats write unasked: Antigravity, Cursor`, or `asking unmeasured: Codex`, or both
 claims at once. A seat nothing has measured is named as unmeasured and never as unasked.
 `y` sends the turn as addressed. `n` drops those seats and sends to the rest, or cancels
-the turn when no seat is left. `a` sends and stops asking for the rest of the room, which
+the turn when no seat is left; a race and a `/flow` stage cannot lose a seat, so `n`
+cancels those, and the key reads `n cancel the turn` before you press it. `ctrl+c` gives
+the room back with the brief still in the composer.
+`a` sends and stops asking for the rest of the room, which
 is the approval card's own `a`, with the footer's `a not asking` cell as the way back. An
 `--auto` room and a `--read` room never raise the card, and neither does a room where `a`
 is already remembered: one has answered the question and the other writes nothing.
@@ -546,8 +549,9 @@ to Codex runs there too. Five writers in one tree are not five answers — that 
 the race's founding rule — and now that seats answer concurrently, two writers in one tree
 would be one trampled tree. Only Claude is measured asking before a write; the other four
 act unasked, or on a request nobody has yet watched arrive, so the containment has to be
-structural rather than a card. A read room keeps the shared tree, because nothing in it writes, and so does a
-`/flow` read hop in a write room. `--shared-tree` is the opt-out: the older room, every
+structural. The acknowledgement card above names those seats before the brief goes; the
+worktree is what holds them once it has. A read room keeps the shared tree, because
+nothing in it writes, and so does a `/flow` read hop in a write room. `--shared-tree` is the opt-out: the older room, every
 seat writing into the workspace.
 
 **The badge says which containment holds.** `wt: seat/codex` on a column whose process
