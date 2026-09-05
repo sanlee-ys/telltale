@@ -47,12 +47,16 @@ func pumpSeatSetup(t *testing.T, m *Model, cmd tea.Cmd) tea.Cmd {
 
 // sendNow types a brief, presses enter, and drives whatever setup stood in
 // front of it, so the seat has spawned when it returns.
+// sendNow types a brief, presses enter, drives any worktree setup to
+// completion, and answers the write acknowledgement card (ack.go). Four steps
+// for one operator gesture, and each is a real stop the room makes.
 func sendNow(t *testing.T, m *Model, brief string) {
 	t.Helper()
 	m.st.Mode = ModeComposing
 	m.setDraft(brief)
 	_, cmd := m.key(key("enter"))
 	pumpSeatSetup(t, m, cmd)
+	answerAck(m)
 }
 
 func land(m *Model, v model.VendorID) {
@@ -82,6 +86,7 @@ func TestAWritingSeatGetsItsOwnWorktreeOnceAndReusesIt(t *testing.T) {
 		t.Errorf("the room is cutting a worktree and the frame does not say so: %q", m.st.TreeSetup)
 	}
 	pumpSeatSetup(t, m, cmd)
+	answerAck(m)
 
 	if log.n() != 1 || m.turnOf(model.VendorCodex) == nil {
 		t.Fatalf("the brief did not spawn after the setup: %d spawns, %q", log.n(), m.st.Notice)
@@ -107,6 +112,7 @@ func TestAWritingSeatGetsItsOwnWorktreeOnceAndReusesIt(t *testing.T) {
 	land(m, model.VendorCodex)
 	m.setDraft("@codex and add tests")
 	_, cmd = m.key(key("enter"))
+	answerAck(m)
 	if m.seatPrep != nil {
 		t.Fatal("the second brief cut a second worktree instead of reusing the first")
 	}
@@ -142,7 +148,11 @@ func TestANonGitWorkspaceFallsBackToTheSharedTreeAndSaysSo(t *testing.T) {
 	log := countSpawns(t)
 	m := crewRoom(t)
 	m.setDraft("@codex refactor the poller")
-	_, cmd := m.key(key("enter"))
+	m.key(key("enter"))
+	// The write acknowledgement card holds the brief first (ack.go), so the
+	// dispatch's own command comes back from the card's y rather than from the
+	// enter that raised it.
+	cmd := answerAck(m)
 	if m.seatPrep != nil {
 		t.Fatal("a workspace outside git started a worktree setup")
 	}

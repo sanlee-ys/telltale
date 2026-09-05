@@ -1400,6 +1400,18 @@ type State struct {
 	// disagree about what `y` means.
 	Gates []PendingGate
 
+	// Ack is the write brief the room holds until the operator acknowledges
+	// the seats it reaches (ack.go, LEDGER.md 2026-09-04). Nil is the ordinary
+	// room, and nil is the zero value, so every State a test types out by hand
+	// draws no card.
+	//
+	// A pointer beside a slice, and the difference is what each one is. Gates
+	// is a QUEUE: several vendors can be stopped at once and each keeps its own
+	// card. This is ONE card for ONE dispatch, raised by the operator's own
+	// enter and answered by the next keystroke, so a second one cannot exist
+	// while the first is up.
+	Ack *PendingAck
+
 	// Expanded gives the focused column the whole width.
 	//
 	// Three columns are for comparing at a glance; one is for actually reading

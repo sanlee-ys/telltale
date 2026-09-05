@@ -65,9 +65,14 @@ func endArenaSetup(p *arenaPrep) {
 // and returns, and the turn is born several messages later in applyArenaSetup.
 // A test that called dispatch alone would be asserting against a room that has
 // prepared nothing — a real state, just not the one those tests are about.
+// The write acknowledgement card is answered here too (ack.go): a race gives
+// every seat write posture, so the last thing the setup does is raise the card
+// and stop. TestARaceStopsOnTheCardBeforeASeatSpawns is where that stop is the
+// subject; here it is one more keystroke on the way to a running race.
 func raceNow(t *testing.T, m *Model) {
 	t.Helper()
 	pumpArenaSetup(t, m, m.dispatch())
+	answerAck(m)
 }
 
 // arenaRoom is a write room seated in a real git repository, ready to race.
@@ -118,6 +123,7 @@ func TestARaceLeavesTheRoomDrawingAndReadingKeys(t *testing.T) {
 	}
 
 	pumpArenaSetup(t, m, cmd)
+	answerAck(m)
 	if !m.anyInFlight() {
 		t.Fatal("the setup finished and no turn started")
 	}

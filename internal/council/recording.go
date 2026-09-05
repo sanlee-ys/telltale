@@ -92,6 +92,17 @@ import (
 //	{"kind":"dispatch","ms":…,"turn":N,"route":{…},"sent":[{"vendor":…,"prompt":…}]}
 //	{"kind":"event","ms":…,"vendor":…,"event":"text|activity|session|meta|gate|done|error",…}
 //	{"kind":"gate","ms":…,"vendor":…,"request_id":…,"allow":…}
+//	{"kind":"ack","ms":…,"unasked":[…],"unmeasured":[…],"rest":…}
+//	{"kind":"ack","ms":…,"decision":"send|drop|send-stop-asking"}
+//
+// The fifth kind is the write acknowledgement card (ack.go), and it writes
+// TWO lines per card for the reason the gate does: a card is a stretch of
+// time, not an instant. The gate spends an `event` to raise the card and a
+// `gate` line to answer it, and the operator's think time is the gap between
+// them; this card is raised by the operator's own enter rather than by a
+// vendor, so both of its lines are this one kind. The first names the seats,
+// the second carries the decision. A replay that had one line could draw the
+// card or take it down, never both.
 //
 // One flat record type rather than four, so a hand-written fixture is
 // readable and the reader has one shape to validate. runner.Gate.Input — the
@@ -168,6 +179,15 @@ type recordLine struct {
 	// The gate line.
 	RequestID string `json:"request_id,omitempty"`
 	Allow     bool   `json:"allow,omitempty"`
+
+	// The two ack lines (ack.go). Unasked, Unmeasured and Rest describe the
+	// card as it went up; Decision is the keystroke that answered it. Never
+	// both on one line: the reader tells the two apart by whether Decision is
+	// set, which is what makes each line one moment on the clock.
+	Unasked    []string `json:"unasked,omitempty"`
+	Unmeasured []string `json:"unmeasured,omitempty"`
+	Rest       bool     `json:"rest,omitempty"`
+	Decision   string   `json:"decision,omitempty"`
 
 	// stale marks an event line the replay must not apply: a process exit
 	// that belongs to a seat's replaced process (markStaleExits). Derived on
@@ -456,6 +476,61 @@ func (r *recorder) gate(p PendingGate, allow bool) {
 	r.write(recordLine{Kind: "gate", MS: r.ms(), Vendor: string(p.Vendor), RequestID: p.RequestID, Allow: allow})
 }
 
+// The three answers a write acknowledgement card can take, as the words the
+// file carries. Words rather than the keys, on eventWords' rule: a fixture
+// reads as what it is, and a fourth answer has to be named here before a
+// recording can carry it.
+const (
+	ackDecisionSend           = "send"
+	ackDecisionDrop           = "drop"
+	ackDecisionSendStopAsking = "send-stop-asking"
+)
+
+// ackDecisions is the set a reader accepts.
+var ackDecisions = map[string]bool{
+	ackDecisionSend:           true,
+	ackDecisionDrop:           true,
+	ackDecisionSendStopAsking: true,
+}
+
+// ackRaised writes the card as it went up: the seats it named, by class.
+func (r *recorder) ackRaised(a *PendingAck) {
+	if r == nil || a == nil {
+		return
+	}
+	line := recordLine{Kind: "ack", MS: r.ms(), Rest: a.Rest}
+	for _, v := range a.Unasked {
+		line.Unasked = append(line.Unasked, string(v))
+	}
+	for _, v := range a.Unmeasured {
+		line.Unmeasured = append(line.Unmeasured, string(v))
+	}
+	r.write(line)
+}
+
+// ackDecided writes the keystroke that answered the card.
+func (r *recorder) ackDecided(decision string) {
+	if r == nil {
+		return
+	}
+	r.write(recordLine{Kind: "ack", MS: r.ms(), Decision: decision})
+}
+
+// recordAckRaised and recordAckDecision are ack.go's two hooks, shaped like
+// recordGate: nil-safe, and reading the card the room is actually holding
+// rather than an argument the caller assembled a second time.
+func (m *Model) recordAckRaised(a *PendingAck) { m.rec.ackRaised(a) }
+
+func (m *Model) recordAckDecision(decision string) {
+	if m.st.Ack == nil {
+		// Nothing is up, so nothing was answered. Guarded rather than trusted,
+		// because a decision line with no card in front of it is a file the
+		// replay would draw a take-down for and never a card.
+		return
+	}
+	m.rec.ackDecided(decision)
+}
+
 // close ends the file and reports the first write error, if any.
 func (r *recorder) close() error {
 	if r == nil {
@@ -512,6 +587,11 @@ func (m *Model) recordGate(allow bool) {
 type recording struct {
 	room  recordLine
 	lines []recordLine
+	// unknown counts the records this build skipped because it does not know
+	// their kind (parseRecording's default branch). Zero for every file
+	// telltale has ever written at this version, and non-zero only for a file
+	// a NEWER telltale wrote.
+	unknown int
 }
 
 // readRecording loads and validates a file. Every refusal names the line, so
@@ -595,8 +675,37 @@ func parseRecording(src io.Reader, path string) (*recording, error) {
 			if line.RequestID == "" || !seats[line.Vendor] {
 				return nil, fmt.Errorf("--replay %s: line %d: a gate decision needs a seat and a request id", path, n)
 			}
+		case "ack":
+			if line.Decision != "" {
+				if !ackDecisions[line.Decision] {
+					return nil, fmt.Errorf("--replay %s: line %d: unknown ack decision %q", path, n, line.Decision)
+				}
+				break
+			}
+			if len(line.Unasked)+len(line.Unmeasured) == 0 {
+				return nil, fmt.Errorf("--replay %s: line %d: an ack names the seats it holds, or the decision that answered it", path, n)
+			}
+			for _, v := range append(append([]string(nil), line.Unasked...), line.Unmeasured...) {
+				if !seats[v] {
+					return nil, fmt.Errorf("--replay %s: line %d: ack names %q, which the room line does not seat", path, n, v)
+				}
+			}
 		default:
-			return nil, fmt.Errorf("--replay %s: line %d: unknown record kind %q", path, n, line.Kind)
+			// A kind this build does not know is SKIPPED and COUNTED, never
+			// refused (the 2026-09-04 ruling that added the ack kind).
+			//
+			// The refusal that used to be here made the format one-way: a file
+			// written by a newer telltale would not open at all in an older
+			// one, so every kind added after a release retired every binary
+			// before it. A skip keeps the file readable and the count keeps it
+			// honest: ReplayCheck prints how many records this build did not
+			// understand, and the replay's own notice says so, so a reader is
+			// never shown a room quietly missing part of what happened.
+			//
+			// The clock has already been checked above, so a skipped line
+			// cannot smuggle a record that runs backwards past the reader.
+			rec.unknown++
+			continue
 		}
 		rec.lines = append(rec.lines, line)
 	}
@@ -796,6 +905,17 @@ func ReplayCheck(path string, w io.Writer) error {
 	if n := rec.staleExits(); n > 0 {
 		fmt.Fprintf(w, "  stale exits: %d (a replaced process ending after its seat moved on; a replay skips them)\n", n)
 	}
+	if rec.unknown > 0 {
+		// Said in the summary rather than buried, because it is the one line
+		// that tells a reviewer this check did not see the whole file.
+		fmt.Fprintf(w, "  unknown records: %d (a newer telltale wrote them; this build skips them)\n", rec.unknown)
+	}
+	// The write acknowledgements (ack.go). A review reads them for the same
+	// reason it reads gate cards: each one is the keystroke that let a write
+	// brief reach a seat the room could not make ask.
+	for _, l := range ackLines(rec) {
+		fmt.Fprintln(w, l)
+	}
 
 	fmt.Fprintln(w, "session ids the file carries:")
 	if len(ids) == 0 {
@@ -859,6 +979,42 @@ func ReplayCheck(path string, w io.Writer) error {
 	fmt.Fprintln(w, "This file carries the conversation. This check lists identities and paths and does not read the prose;")
 	fmt.Fprintln(w, "read the file whole before you commit or share it.")
 	return nil
+}
+
+// ackLines is every write acknowledgement card the file carries, with the
+// seats it named and the answer it took.
+//
+// A card with no answer after it is reported as such rather than left out. An
+// unanswered card is a room that was closed on the question, and a review that
+// saw only the answered ones would read the file as more decided than it was.
+func ackLines(rec *recording) []string {
+	var out []string
+	open := -1
+	for _, l := range rec.lines {
+		if l.Kind != "ack" {
+			continue
+		}
+		if l.Decision == "" {
+			if open >= 0 {
+				out[open] += "  → never answered in this file"
+			}
+			seats := strings.Join(append(append([]string(nil), l.Unasked...), l.Unmeasured...), ", ")
+			out = append(out, "  write acknowledged for "+seats)
+			open = len(out) - 1
+			continue
+		}
+		if open >= 0 {
+			out[open] += "  → " + l.Decision
+			open = -1
+		}
+	}
+	if open >= 0 {
+		out[open] += "  → never answered in this file"
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return append([]string{"write acknowledgement cards (each let a brief reach a seat the room cannot make ask):"}, out...)
 }
 
 // selfReads names every act that read the recording it is recorded in (the

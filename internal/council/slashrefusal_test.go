@@ -22,9 +22,13 @@ import (
 // the vendors. Tests drive this rather than roomCommand alone, because "was not
 // intercepted" and "was billed" are two different claims and only the second one
 // is the defect.
+// enter presses enter in the composer, and answers the write acknowledgement
+// card when one goes up (ack.go). A refusal raises no card, so every test in
+// this file that asserts a refusal is untouched by the second keystroke.
 func enter(m *Model) {
 	m.st.Mode = ModeComposing
 	m.composeKey(key("enter"))
+	answerAck(m)
 }
 
 // TestAMistypedCommandSpawnsNothing is the defect, asserted where it hurt: the

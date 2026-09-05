@@ -72,11 +72,21 @@ func TestTheRecorderWritesWhatApplyEventsSawAndNothingElse(t *testing.T) {
 	for _, l := range got.lines {
 		kinds = append(kinds, l.Kind+":"+l.Event)
 	}
-	want := []string{"dispatch:", "event:text", "event:done", "dispatch:", "event:gate", "gate:"}
+	// The two `ack` lines in front of each dispatch are the write
+	// acknowledgement card and the key that answered it (ack.go): `send`
+	// presses enter and then y, which is what an operator does in a writing
+	// room, and the file records both moments so a replay can draw the card.
+	// The two `ack` lines are the card and the key that answered it. Only the
+	// FIRST dispatch has them: it addresses codex, which the room cannot make
+	// ask, while the second addresses claude alone and claude is gated.
+	want := []string{
+		"ack:", "ack:", "dispatch:", "event:text", "event:done",
+		"dispatch:", "event:gate", "gate:",
+	}
 	if strings.Join(kinds, " ") != strings.Join(want, " ") {
 		t.Fatalf("records = %v, want %v", kinds, want)
 	}
-	d := got.lines[0]
+	d := got.lines[2]
 	if d.Turn != 1 || len(d.Sent) != 1 || d.Sent[0].Vendor != "codex" || d.Sent[0].Prompt != "go" {
 		t.Errorf("dispatch = %+v", d)
 	}
@@ -86,18 +96,18 @@ func TestTheRecorderWritesWhatApplyEventsSawAndNothingElse(t *testing.T) {
 	// Verbatim: what applyEvents saw, not what it drew. The replay runs the
 	// same redactor over it, so the frame comes out the same; the file does
 	// not (recording.go's ruling, and replay-check's warning).
-	if got.lines[1].Text != raw {
-		t.Errorf("text was not recorded verbatim: %q", got.lines[1].Text)
+	if got.lines[3].Text != raw {
+		t.Errorf("text was not recorded verbatim: %q", got.lines[3].Text)
 	}
-	if got.lines[3].Sent[0].Persistent != true {
+	if got.lines[5].Sent[0].Persistent != true {
 		t.Error("the persistent seat was not marked persistent")
 	}
-	g := got.lines[4]
+	g := got.lines[6]
 	if g.Gate == nil || g.Gate.RequestID != "req-1" || g.Gate.Text != "Write: notes.txt" {
 		t.Errorf("gate event = %+v", g.Gate)
 	}
-	if got.lines[5].RequestID != "req-1" || !got.lines[5].Allow || got.lines[5].Vendor != "claude" {
-		t.Errorf("gate decision = %+v", got.lines[5])
+	if got.lines[7].RequestID != "req-1" || !got.lines[7].Allow || got.lines[7].Vendor != "claude" {
+		t.Errorf("gate decision = %+v", got.lines[7])
 	}
 	for i := 1; i < len(got.lines); i++ {
 		if got.lines[i].MS < got.lines[i-1].MS {
@@ -273,6 +283,16 @@ func TestReplayCheckListsTheIdentities(t *testing.T) {
 
 // TestAMalformedRecordingIsRefusedAtTheLine. Every refusal names the line,
 // so a hand-edited fixture is fixed where it broke.
+//
+// One row LEFT this table on 2026-09-04: an unknown record KIND. It used to be
+// refused here beside the malformed lines, and the ruling that added the `ack`
+// kind (LEDGER.md) overrode that: a refusal made the format one-way, so a file
+// a newer telltale wrote would not open in an older one and every kind added
+// after a release retired every binary before it. An unknown kind is now
+// skipped and counted, which TestAnUnknownRecordKindIsSkippedAndCounted pins.
+// Everything else in this table is still refused, including an ack line that
+// names no seat and carries no decision: the skip is for a kind this build
+// does not know, never for one it does.
 func TestAMalformedRecordingIsRefusedAtTheLine(t *testing.T) {
 	room := `{"kind":"room","v":1,"started":"2026-09-01T10:00:00Z","workspace":"~/x","seats":[{"vendor":"codex","label":"Codex"}]}`
 	for _, tc := range []struct {
@@ -286,7 +306,6 @@ func TestAMalformedRecordingIsRefusedAtTheLine(t *testing.T) {
 			`{"kind":"event","ms":4,"vendor":"codex","event":"text"}`, "line 3 runs backwards"},
 		{"unknown event", room + "\n" + `{"kind":"event","vendor":"codex","event":"sparkle"}`, `unknown event "sparkle"`},
 		{"unseated vendor", room + "\n" + `{"kind":"event","vendor":"grok","event":"text"}`, "does not seat"},
-		{"unknown kind", room + "\n" + `{"kind":"keystroke"}`, "unknown record kind"},
 		{"not json", room + "\n" + `{`, "not a record"},
 		{"dispatch without seats", room + "\n" + `{"kind":"dispatch","turn":1}`, "at least one seat"},
 	} {

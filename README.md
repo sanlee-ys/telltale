@@ -80,7 +80,7 @@ telltale doctor
      It is the last open piece of adoption item 1 (docs/design.md §8). Two
      conditions bind whatever lands here, and neither is negotiable by the
      session that lands it:
-     1. The owner drives the eight beats. A scripted race is an invented
+     1. The owner drives the five beats. A scripted race is an invented
         recording (design.md §8, the recording chain).
      2. Every frame gets a review for workspace paths, session names and seat
         identity before the capture is committed (owner's ruling, 2026-08-17).

@@ -394,6 +394,7 @@ func ordinaryTurn(t *testing.T) (*Model, map[model.VendorID]*recordedKill, map[m
 	m := flowRoom(t, true)
 	m.st.Draft = "@all an ordinary brief"
 	m.dispatch()
+	answerAck(m)
 	if !m.anyInFlight() {
 		t.Fatalf("fixture: no turn in flight (%d spawns)", log.n())
 	}

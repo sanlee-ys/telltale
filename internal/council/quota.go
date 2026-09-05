@@ -591,9 +591,16 @@ func (m *Model) dispatchAuto() (tea.Cmd, bool) {
 	_, brief := ParseRoute(typed)
 	m.setDraft("@" + string(v) + " " + brief)
 	cmd := m.dispatch()
-	if m.turnOf(v) == nil {
+	if m.turnOf(v) == nil && !ackWants(m.st) {
 		// Refused: dispatch wrote the reason. The draft it left is the
 		// rewritten one, so the typed one goes back.
+		//
+		// A HELD card is not a refusal, which is why it is asked about here
+		// (ack.go). The seat is picked, the brief is the room's to send, and
+		// the operator is one keystroke from sending it; putting `@auto` back
+		// in the composer would offer them a second pick they never asked for,
+		// and the notice below is the one that says which seat the card is
+		// about.
 		m.setDraft(typed)
 		return cmd, true
 	}

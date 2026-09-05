@@ -71,6 +71,21 @@ is no longer the price of a change.
   arrived yet` as the description of a quiet seat; the strip form above the
   threshold. `docs/room-identity.md` carries the argument. The identity does not
   move.
+- **2026-09-04 — The stage sentence's second clause is a mechanism now, and it
+  is the write acknowledgement card.** (San, on the 2026-09-04 adversarial
+  review's fault C.) Two honest fixes existed, narrow the sentence or make the
+  room refuse; the ruling took the second. A write brief reaches a seat that is
+  not `gated` only after the operator answers one card that names the seat, by
+  class: `write unasked` for a seat measured or read as not asking, `asking
+  unmeasured` for a seat that can be asked where nothing has measured that it
+  does. `y` sends, `n` drops those seats or cancels the turn, `a` sends and
+  stops asking for the rest of the room. `--auto`, `--read` and a room with `a`
+  remembered raise nothing, on one flag. The card is NOT containment and does
+  not claim to be: the workspace still holds a seat that writes. It is the
+  acknowledgement, and `internal/council/ack.go` is the page. The 2026-09-03
+  `NEEDS YOU` ruling holds against it: no vendor is stopped while the card is
+  up, because none has been started, so the strip does not say those words and
+  the card wears the gate card's own lead instead.
 - **2026-09-04 — A recording's SHAPE may be committed; its WORDS may not.** (The
   scrub lane, on the 2026-09-04 adversarial review's fault F.) "Fixtures are
   synthesized, never real" binds the content, so `telltale council replay-scrub`
@@ -79,3 +94,22 @@ is no longer the price of a change.
   file, and two goldens pin its frames. The claim travels in the file
   (`scrubbed: true` on the room line), because a scrubbed replay must never pass
   for a capture: same rule that puts REPLAY on every frame.
+- **2026-09-04 — The demo is five beats, and the observability surfaces leave
+  it.** (San.) The room and one `@all` brief, `ctrl+r`, the gated write card
+  with the posture rail, `/arena` with its check and `/adopt`, and the whole
+  session under `--record` with a `replay-check` and a scrubbed replay to close.
+  `telltale doctor` becomes a one-line aside after the card beat, and `telltale
+  hud`, `telltale snapshot` and the `y` clipboard beat leave the demo and stay
+  in the README. Reason: those are observability surfaces, which is ground other
+  tools already own, and the demo's first ninety seconds must do the things a
+  session supervisor has no verb for. This closes the beat order the 2026-08-17
+  amendment reopened. The geometry is ruled with it: the 38-inch 3840x1600
+  display shared through Zoom, at the ordinary desk window of about 181 by 71
+  cells, never maximized.
+- **2026-09-04 — v0.3.0 is cut with the crew checklist unpaid.** (San.) The
+  2026-09-02 amendment made that checklist the next minor's precondition. It
+  stays the precondition for a demo of measured claims, and it is no longer the
+  precondition for the tag. Reason: the README installs v0.2.0 of 2026-08-14,
+  more than 130 commits behind `main`, and a visitor who follows the README must
+  get the room the README describes. The release notes name the checklist as
+  owed.
