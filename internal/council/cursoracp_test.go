@@ -15,6 +15,11 @@ import (
 // once — so "one process across many turns" is not an implementation detail
 // here, it IS the feature, and a spawn that quietly crept back onto the per-turn
 // path would undo the change while every other test still passed.
+//
+// Every dispatch below is followed by answerAck (ack.go): this seat writes
+// unasked, so since the 2026-09-04 ruling a write brief to it stops on a card
+// that names it, and the process counts these tests are about are counted after
+// the operator answers. The card itself is the subject of ack_test.go.
 
 // exitedSession is a process that has gone. Distinct from deadSession, whose
 // name is about spawning nothing rather than about being dead: that one reports
@@ -52,6 +57,7 @@ func TestTheCursorSeatKeepsOneProcessAcrossTurns(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		m.st.Draft = "@cursor say something"
 		m.dispatch()
+		answerAck(m)
 		endCursorTurn(m)
 	}
 
@@ -80,9 +86,11 @@ func TestTheCursorSeatIsBriefedOncePerProcess(t *testing.T) {
 
 	m.st.Draft = "@cursor first"
 	m.dispatch()
+	answerAck(m)
 	endCursorTurn(m)
 	m.st.Draft = "@cursor second"
 	m.dispatch()
+	answerAck(m)
 	endCursorTurn(m)
 
 	if p := m.procs[model.VendorCursor]; p == nil || p.sent != 2 {
@@ -106,6 +114,7 @@ func TestAMovedRoomReplacesTheCursorSeatToo(t *testing.T) {
 
 	m.st.Draft = "@cursor first"
 	m.dispatch()
+	answerAck(m)
 	endCursorTurn(m)
 
 	first := m.procs[model.VendorCursor]
@@ -116,6 +125,7 @@ func TestAMovedRoomReplacesTheCursorSeatToo(t *testing.T) {
 
 	m.st.Draft = "@cursor after the move"
 	m.dispatch()
+	answerAck(m)
 	endCursorTurn(m)
 
 	if log.n() != 2 {
@@ -143,6 +153,7 @@ func TestAFailedCursorSeatDoesNotFallBackToSpawnPerTurn(t *testing.T) {
 
 	m.st.Draft = "@cursor say something"
 	m.dispatch()
+	answerAck(m)
 
 	// The process dies mid-turn. Reported as dead as well as failing, because
 	// the eleventh amendment's guard exists precisely to ignore a terminal event
@@ -188,6 +199,7 @@ func TestASeatWhoseWireRefusesIsKilledRatherThanKeptAndRetried(t *testing.T) {
 
 	m.st.Draft = "@cursor first"
 	m.dispatch()
+	answerAck(m)
 	proc := m.procs[model.VendorCursor]
 	if proc == nil {
 		t.Fatal("no process to fail")
@@ -208,6 +220,7 @@ func TestASeatWhoseWireRefusesIsKilledRatherThanKeptAndRetried(t *testing.T) {
 	// spawns its replacement inside the same dispatch.
 	m.st.Draft = "@cursor second"
 	m.dispatch()
+	answerAck(m)
 
 	if log.n() != 2 {
 		t.Fatalf("%d spawns, want 2 — the room kept handing briefs to a dead protocol", log.n())
@@ -245,6 +258,7 @@ func TestAStaleExitDoesNotFailTheLiveCursorSeat(t *testing.T) {
 
 	m.st.Draft = "@cursor say something"
 	m.dispatch()
+	answerAck(m)
 	live := m.procs[model.VendorCursor]
 	if live == nil {
 		t.Fatal("no live process to protect")
@@ -273,6 +287,7 @@ func TestCursorACPZeroTextChunksFillsColumnBody(t *testing.T) {
 
 	m.st.Draft = "@cursor test fallback"
 	m.dispatch()
+	answerAck(m)
 	endCursorTurn(m)
 
 	c := m.column(model.VendorCursor)

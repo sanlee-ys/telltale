@@ -363,6 +363,8 @@ func TestAnOrdinaryBriefStaysVerbatim(t *testing.T) {
 	m := flowRoom(t, true)
 	m.st.Draft = "@all add a marker file"
 	m.dispatch()
+	// A write brief stops on the acknowledgement card first (ack.go).
+	answerAck(m)
 	if !m.anyInFlight() {
 		t.Fatal("the turn did not dispatch")
 	}

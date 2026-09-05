@@ -651,6 +651,13 @@ func scrubRecording(rec *recording) []recordLine {
 			}
 		case "gate":
 			line.RequestID = s.id(line.RequestID)
+		case "ack":
+			// Nothing to replace. A write acknowledgement line carries seat
+			// ids, a decision word and a bool, and every one of those is
+			// telltale's own vocabulary rather than something a vendor or an
+			// operator wrote (ack.go). It is structure, so the scrub keeps it
+			// whole, which is what makes a scrubbed file a fixture for this
+			// card as well as for the rest of the room.
 		}
 		out = append(out, line)
 	}

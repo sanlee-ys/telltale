@@ -398,11 +398,20 @@ approval card, all the flag still did was make a room you opened to get work don
 to do any until you remembered a word — the same reason the workspace stopped being an
 invocation input.
 
-**The containment is the workspace, not the flag** — so the room states its posture where
-it cannot be missed: `⚠ WRITE` in the header for the whole session, and the same `WRITES`
-badge on every column, uniform on purpose because grading them would imply a safety
-difference that does not exist. A `--read` room says `READ` in the same place, because
-absence of a badge is not a claim.
+**The containment is the workspace, and the card is the acknowledgement that a write brief
+is reaching a seat the room cannot make ask.** A flag contains nothing; the directory does.
+So the room states its posture where it cannot be missed: `⚠ WRITE` in the header for the
+whole session, and the same `WRITES` badge on every column, uniform on purpose because
+grading them would imply a safety difference that does not exist. A `--read` room says
+`READ` in the same place, because absence of a badge is not a claim. And before the room
+sends a write brief to a seat that is not `gated`, it stops on one card that names that
+seat: `2 seats write unasked: Antigravity, Cursor`, or `asking unmeasured: Codex`, or both
+claims at once. A seat nothing has measured is named as unmeasured and never as unasked.
+`y` sends the turn as addressed. `n` drops those seats and sends to the rest, or cancels
+the turn when no seat is left. `a` sends and stops asking for the rest of the room, which
+is the approval card's own `a`, with the footer's `a not asking` cell as the way back. An
+`--auto` room and a `--read` room never raise the card, and neither does a room where `a`
+is already remembered: one has answered the question and the other writes nothing.
 
 **Every seat is a live process now, and only one of them is measured asking.** Claude
 Code's stream-json session raises an approval card for every tool call, verified live, and
@@ -834,7 +843,10 @@ and each answer you gave a card, with the clock each one landed on. `telltale co
 <file>` opens a room fed from that file instead of from vendors, at the original pace
 (`--replay-speed N` multiplies it), and draws it with the same renderer: the columns stream,
 the card goes up and comes down when you answered it, the elapsed figures count the seconds
-the vendor actually took.
+the vendor actually took. The write acknowledgement card replays the same way, from two
+records: the seats it named, then the key you pressed. A record kind this build does not
+know is skipped and counted rather than refused, so a file a newer telltale wrote still
+opens, and the replay says how many records it did not understand.
 
 **A replay is labelled on every frame.** `⚠ REPLAY` sits in the header where `WRITE` or `READ`
 sits, `REPLAY` leads every column's badge row ahead of the recorded posture, and the compose
@@ -853,8 +865,8 @@ and so it is never anything under `~/.telltale`: a `--record` path there is refu
 existing file is refused rather than overwritten or extended, and no key inside the room
 starts one. Before a capture goes anywhere, `telltale council replay-check <file>` prints what
 a review needs to see: the workspace, the seats, every session id, every tool line and gate
-card (each may name a path), how much prose is in it, and a reminder that it did not read the
-prose. That is the README's frame review, given a tool. What a recording does not hold: your
+card (each may name a path), every write acknowledgement with the seats it named and the key
+that answered it, how much prose is in it, and a reminder that it did not read the prose. That is the README's frame review, given a tool. What a recording does not hold: your
 cancels and give-ups (a column you cancelled live replays as the vendor's own exit), focus
 and scrolling, and the `--brief` file's text.
 
