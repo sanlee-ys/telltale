@@ -55,6 +55,21 @@ func Render(st State, sty Styles, g Glyphs) string {
 		b.WriteString(fit(framePadStr+noticeLine(st, l, sty, g, st.Width-2*framePad), st.Width))
 		b.WriteString("\n")
 	}
+	// The write acknowledgement card (ack.go), under the room's own facts and
+	// above the live turn's brief.
+	//
+	// Under the room line because the room line states what IS — a seat off
+	// screen, a seat that sat the last turn out — and this card states what
+	// the room is about to do. Above the band because the band is the last
+	// brief and this is the next one, held.
+	//
+	// fit, not padRight: the two lines carry escapes from two styles.
+	if lay.Ack > 0 {
+		for _, l := range ackCardLines(st, st.Width-2*framePad, sty, g) {
+			b.WriteString(fit(framePadStr+l, st.Width))
+			b.WriteString("\n")
+		}
+	}
 	// The live turn's brief, once, above the columns that were asked it (§9.30).
 	// It sits under the notice for the same reason the notice sits under the rule:
 	// the collapsed-seat line is a fact about the ROOM and this is a fact about
@@ -170,6 +185,10 @@ func layoutFor(st State, g Glyphs) Layout {
 		// would make a room's ROW COUNT depend on --ascii, which no other chrome
 		// line does.
 		NeedsYou: needsYouRows(st) > 0,
+		// Asked of the held card for the same two reasons: its height is
+		// ackRows or none by construction, and a card whose row count moved
+		// with --ascii would move the whole room's geometry with it.
+		Ack: ackWants(st),
 	})
 }
 
@@ -4092,6 +4111,20 @@ func composerBottom(st State, lay Layout, sty Styles, g Glyphs) string {
 func composerLabel(st State, lay Layout, sty Styles, g Glyphs) (styled, plain string) {
 	word, style := "VIEW", sty.Strong
 	switch {
+	case ackWants(st):
+		// HOLD: the room has a write brief and will not send it until the
+		// operator answers the card two rows up (ack.go). It ranks above GATE
+		// for the mode line's reason, and it is a word of its own rather than
+		// GATE reused: GATE says a vendor is stopped mid-call, and while this
+		// card is up no vendor has been started. Two states that read alike on
+		// the border would teach the operator to read neither.
+		//
+		// It is also the branch that keeps the border honest about the draft.
+		// The brief stays in the composer while the card is up, so the mode is
+		// still ModeComposing, and a border reading COMPOSE over a room that
+		// will not take a keystroke of text would be the word describing a
+		// thing the room has stopped doing.
+		word, style = "HOLD", sty.Alert
 	case st.Gating():
 		// Same rank it has on the mode line: a gate is the only state in this room
 		// where something is STOPPED until a key is pressed, so it outranks both
@@ -4847,6 +4880,25 @@ func modeLine(st State, lay Layout, sty Styles, g Glyphs) string {
 	// that exists because it used to is how a footer becomes a wall again.
 	const left = ""
 	switch {
+	case ackWants(st):
+		// The write acknowledgement card (ack.go). It outranks the gate here
+		// because it outranks it in the keymap, and the two must agree: the
+		// mode line is the contract that says what every key means on every
+		// frame, so a footer naming the gate's `y approve` over a keystroke
+		// that sends a turn would be the contract broken on the one card that
+		// guards a write.
+		//
+		// The card's own question is NOT repeated here. It is two rows above,
+		// full width, and a room fact prints once (roomline.go). What this
+		// line carries is the three keys, which is what the footer is for.
+		return statusLine(left,
+			[]hint{
+				{key: "y", label: "send"},
+				{key: "n", label: ackDropLabel(st)},
+				{key: "a", label: "send, stop asking"},
+				{key: "ctrl+c", label: "hold the brief"},
+			},
+			lay, sty, g)
 	case st.Gating():
 		// Outranks both other modes, because it is the only state in this room
 		// where something is STOPPED until a key is pressed. The notice is not

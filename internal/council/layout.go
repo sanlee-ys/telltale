@@ -250,6 +250,10 @@ type Layout struct {
 	// NeedsYou is 1 when a row under the header names the seats a pending
 	// approval gate is stopped on (§9.40), 0 otherwise.
 	NeedsYou int
+	// Ack is how many rows the write acknowledgement card spends above the
+	// columns (ack.go): ackRows, or 0. It never sheds a row, for the reason
+	// NeedsYou does not: the room is STOPPED behind it.
+	Ack int
 	// Band is how many rows the live turn's brief spends as a full-width band
 	// above the columns (§9.30). Zero means no band — and it is the SAME zero the
 	// columns read to decide whether to echo the brief themselves, so the two can
@@ -283,6 +287,10 @@ type layoutInput struct {
 	// (§9.40). One row or none — the strip sheds rather than wraps, so unlike
 	// Band there is no height to pass in here.
 	NeedsYou bool
+	// Ack reports that the write acknowledgement card is up (ack.go). A bool
+	// for NeedsYou's reason: the card sheds rather than wraps, so its height is
+	// the constant ackRows and no width has to cross this boundary.
+	Ack bool
 	// Band is how many rows the live-turn band WANTS, before the tier and the
 	// height floor get a say. Zero when the turn addresses fewer than two
 	// on-screen seats, or when the body is not the grid at all — there is no
@@ -381,6 +389,26 @@ func resolveLayoutIn(in layoutInput) Layout {
 	if in.NeedsYou {
 		rows++
 		l.NeedsYou = 1
+	}
+	// The write acknowledgement card costs ackRows and it does NOT yield, on
+	// the needs-you strip's own argument one step further: the strip says a
+	// vendor is stopped, and this card IS the stop. The room has spawned
+	// nothing and will spawn nothing until a key is pressed, so a frame that
+	// reclaimed these rows would hide the only thing on screen that says why
+	// enter did nothing.
+	//
+	// Spent in every tier, for the strip's reason as well. At the tabs tier
+	// the seats the card names may be the columns that are not on screen,
+	// which is exactly where a reader has no other way to learn they were
+	// addressed.
+	//
+	// Before the band, so the band yields to it rather than the other way
+	// round. The band describes the LIVE turn's brief; this card describes the
+	// turn the room has not sent, and a room that dropped the question to keep
+	// the last answer's heading would have the two backwards.
+	if in.Ack {
+		rows += ackRows
+		l.Ack = ackRows
 	}
 
 	// The band is room chrome and it is spent HERE — after the tier, out of the
