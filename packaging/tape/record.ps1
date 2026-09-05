@@ -56,7 +56,7 @@
   Unattended only. The characters that quit the recorded program.
 
 .EXAMPLE
-  # The demo tape: a shell you drive by hand through the eight beats.
+  # The demo tape: a shell you drive by hand through the five beats.
   .\record.ps1 -Command "pwsh -NoLogo" -Cast $HOME\Videos\telltale-demo.cast
 
 .EXAMPLE
