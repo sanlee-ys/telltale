@@ -1,6 +1,6 @@
 # The demo-tape recording chain
 
-The fallback tape is a recording of the demo path. `STATE.md` holds the eight
+The fallback tape is a recording of the demo path. `STATE.md` holds the five
 beats and the rule that binds them: capture the demo, do not invent it. This
 file records the chain that captures it, and every claim here comes from a run
 on the reference box.
@@ -170,7 +170,7 @@ test:
 
 `record.ps1` also leaves PowerSession's `--stdin` flag off, which keeps the
 operator's typing out of the file. That flag writes keystrokes into the cast as
-`"i"` events, so it would capture the brief the owner types in beat 3. agg
+`"i"` events, so it would capture the brief the owner types in beat 1. agg
 renders only `"o"` events, so the flag costs content and buys the GIF nothing.
 Keys still reach the recorded program without it, because the recorder always
 forwards its own standard input down the pty. Both ways were measured
@@ -187,16 +187,29 @@ repository holds the script that makes it.
 
 The chain works. The tape does not exist yet, and no script can create it.
 
-The owner must drive the eight beats of the demo path in one recorded session.
-`STATE.md` defines the beats and records that both of its honest markers are
-paid. Beat 3 carries one residue: the composer draws a pasted three-line brief
-as a single row, so type or paste the brief and trust the wire.
+The owner must drive the five beats of the demo path in one recorded session.
+`STATE.md` defines the beats and is the durable copy; the list below names only
+the command each beat opens on, so this runbook says what it records without
+holding a second copy of the path.
+
+1. `telltale council`, then one brief to `@all`.
+2. `ctrl+r`, the rebuttal.
+3. A write brief, and `y` on the card the gated seat raises.
+4. `/arena <brief>`, `/arena check <command>`, `/adopt`.
+5. `q`, then `telltale council replay-check <file>`, then `telltale council
+   --replay examples/demo.jsonl --replay-speed 8`.
+
+Beat 5 records the room a second way. The session runs under `--record`, so the
+tape and the recording capture the same run, and the recording plays back
+without a cast. Keep the `--record` file outside the workspace: council warns
+when it sits inside, and a seat can read a file it can reach.
 
 Steps on the day:
 
 1. Size the terminal window. The HUD and the room keep the size you record.
+   Use the window that `STATE.md`'s demo geometry paragraph names.
 2. Check `NO_COLOR` is not set.
-3. Start the recording, then drive the eight beats:
+3. Start the recording, then drive the five beats:
 
    ```powershell
    .\packaging\tape\record.ps1 -Command "pwsh -NoLogo" -Cast $HOME\Videos\telltale-demo.cast
@@ -209,4 +222,4 @@ Steps on the day:
    agg --theme asciinema $HOME\Videos\telltale-demo.cast $HOME\Videos\telltale-demo.gif
    ```
 
-A staged tape is forbidden. The arena race in beat 6 must be a race that ran.
+A staged tape is forbidden. The arena race in beat 4 must be a race that ran.
