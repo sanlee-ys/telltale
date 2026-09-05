@@ -614,6 +614,77 @@ func TestTheAckCardFrameInBothGlyphSets(t *testing.T) {
 	}
 }
 
+// TestTheCardHasThreeFormsAndOneGrammar pins the sentence in each of the three
+// shapes the classes can take, and the ladder it sheds down.
+//
+// A table over ackSubject rather than over whole frames, because what is under
+// test is the WORDS: the count, the claim, the seats, and the separator between
+// two claims. The frame around them is the goldens' job.
+func TestTheCardHasThreeFormsAndOneGrammar(t *testing.T) {
+	st := ackRoom(t).st
+	g := GlyphsFor(false)
+	for _, tc := range []struct {
+		name string
+		ack  PendingAck
+		want string
+	}{
+		{
+			"unasked alone",
+			PendingAck{Unasked: []model.VendorID{model.VendorAntigravity, model.VendorCursor}},
+			"2 seats write unasked: Antigravity, Cursor",
+		},
+		{
+			"unmeasured alone",
+			PendingAck{Unmeasured: []model.VendorID{model.VendorCodex}},
+			"1 seat asking unmeasured: Codex",
+		},
+		{
+			"both",
+			PendingAck{
+				Unasked:    []model.VendorID{model.VendorAntigravity, model.VendorCursor},
+				Unmeasured: []model.VendorID{model.VendorCodex},
+			},
+			"3 seats write unasked: Antigravity, Cursor  │  asking unmeasured: Codex",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st.Ack = &tc.ack
+			if got := ackSubject(st, 120, g); got != tc.want {
+				t.Errorf("subject = %q, want %q", got, tc.want)
+			}
+		})
+	}
+
+	// The ladder, on the widest of the three. Names, then tags, then the claims
+	// alone: each rung yields WHOLE, so a seat is never half-named (§9.18).
+	st.Ack = &PendingAck{
+		Unasked:    []model.VendorID{model.VendorAntigravity, model.VendorCursor},
+		Unmeasured: []model.VendorID{model.VendorCodex},
+	}
+	full := "3 seats write unasked: Antigravity, Cursor  │  asking unmeasured: Codex"
+	tags := "3 seats write unasked: AG, CU  │  asking unmeasured: CX"
+	bare := "3 seats write unasked  │  asking unmeasured"
+	for _, tc := range []struct {
+		w    int
+		want string
+	}{
+		{120, full},
+		{len([]rune(full)), full},
+		{len([]rune(full)) - 1, tags},
+		{len([]rune(tags)), tags},
+		{len([]rune(tags)) - 1, bare},
+		{len([]rune(bare)), bare},
+	} {
+		if got := ackSubject(st, tc.w, g); got != tc.want {
+			t.Errorf("at %d cells the subject is %q, want %q", tc.w, got, tc.want)
+		}
+	}
+	// Below the floor it is cut, and the cut says it was cut.
+	if got := ackSubject(st, 20, g); !strings.HasSuffix(got, g.Ellipsis) {
+		t.Errorf("the floor did not say it was clipped: %q", got)
+	}
+}
+
 // TestTheFooterAndTheBorderSayTheRoomIsHoldingTheBrief.
 //
 // The mode line is the contract that names every key on every frame (§7.8), and
