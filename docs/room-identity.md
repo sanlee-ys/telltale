@@ -203,3 +203,90 @@ these frames read better to a person. Every frame this pass was judged on is a
 replay of one recording through the same `Render` the goldens use, which is the
 strongest evidence this repository holds short of a demo. Nobody has driven this
 room on a live vendor since the pass.
+
+## The Zoom viewer, measured (2026-09-04)
+
+An independent audit failed three prototypes on a projector test at 180x50 on
+2026-09-03. It judged the quiet clocks, the act counts, the abbreviated tool rows
+and the fine rules too slight for the back of a room. Nobody changed anything for
+that finding, and nobody measured it. This section replaces the judgement with a
+measurement, and it changes two inks.
+
+**The viewing condition.** The demo of 2026-09-30 runs on the owner's Windows PC.
+The display is 3840 by 1600. The room takes a window of about 181 by 71 cells,
+which is about 1900 by 1500 pixels at the owner's present font. That gives a cell
+of 10.5 by 21 pixels. Zoom carries that surface to people who watch on laptops of
+about 1440 by 900. The reader is therefore not on the owner's screen, and the
+share is resampled on the way.
+
+**The method.** The frames come from the public scrubbed room,
+`examples/demo.jsonl`, played through the same `Render` the goldens use
+(`internal/council/frames_emit_test.go`). Four moments were taken at 181x71 and
+at 180x50: a dispatch, a gate with the card still open, a turn end, and the final
+frame. Two notes on the moments. The scrubbed room holds no arena, so the turn
+end stands in for the arena end. The scrubbed room also answers its one gate in
+the same record that raises it, so the emitter's gate moment shows an answered
+gate; the gate frame here was taken one record earlier, by hand.
+Each dark SVG was rendered to PNG at the owner's own pixel size with Chrome,
+then scaled the way a viewer's client scales it. Every judgement below was made
+on the viewer's own pixels at 1:1, with no further resampling.
+
+| case | share | room | viewer cell | result |
+|---|---|---|---|---|
+| a | whole screen, 0.375 | 181x71 | 3.94 x 7.88 px | fails |
+| b2 | window, fit to 1440x900, 0.60 | 181x71 | 6.30 x 12.60 px | marginal |
+| b | window, 0.75 | 181x71 | 7.88 x 15.75 px | reads, one item under its floor |
+| c | window, 0.75, larger font | 180x50 | 11.25 x 22.50 px | reads with margin |
+
+**Item by item.** At case a the column header words, the posture rail badges, the
+cue row's quiet clock and act count, the strip's one-act rows and the room line
+all arrive as texture. Only the loudest anchors survive: the seat names, the
+`✓ done` marks and the measured figures. That is a geometry failure and no ink
+can fix it. At case b every named item reads. The header words, the badges, the
+`quiet 1m18s  1 act` cue, the strip rows `⚙ Read ✓` and `turn 11 ✓  2m1s`, the
+room line and the composer are all legible. The hairline leader is the faintest
+thing on the frame. At case c every item reads with margin, and the hairline
+leader and the column separators are plainly present.
+
+**The demo rule, as one sentence.** Share the terminal WINDOW and never the whole
+screen, and set the terminal font so the room is 180 by 50 cells rather than 181
+by 71: that gives the viewer a cell of 11.25 by 22.50 pixels, which is the
+smallest cell size measured at which every named item reads and every rule still
+clears its 3:1 floor.
+
+**What failed at the recommended mode, and what changed.** One thing failed, and
+it was an ink. A rule is one device pixel of a 21-pixel row, so the resample
+blends it with the ground while the prose beside it keeps almost all of its ink.
+Measured on the emitted picture, the hairline leader left the owner's screen at
+3.1:1 and arrived at the viewer at 2.9:1 at case c and at 2.3:1 at case b. Both
+are under the 3:1 floor a non-text component needs, which is the floor this
+identity adopted on 2026-09-03. So the two rule inks were raised to carry the
+resample's own cost as headroom.
+
+| ink | ground | before | after | at the viewer, case c |
+|---|---|---|---|---|
+| Hair | night `#0c0c0c` | `#675f53` 3.11:1 | `#766c5f` 3.80:1 | 2.85:1 to 3.44:1 |
+| RuleInk | night `#0c0c0c` | `#736a5d` 3.68:1 | `#827869` 4.51:1 | thick glyph, no loss |
+| Hair | paper `#ffffff` | `#969288` 3.10:1 | `#86837a` 3.79:1 | not measured |
+
+RuleInk moved because the two rule weights must differ by ink as well as by
+stroke, and a raised Hair alone would have inverted them. Paper's RuleInk did not
+move, because 10.5:1 already carries the headroom twice over. Dim did not move,
+because prose is many pixels thick and loses almost nothing to the resample. The
+scale keeps its order and it is tighter now: Muted 6.2, Dim 5.1, RuleInk 4.5,
+Hair 3.8. Nothing here is a glyph or a layout, so the 118 layout goldens did not
+move; the two hero pictures did, because they draw the coloured set.
+
+**What is asserted, and what was only looked at.** Asserted by a test: that Hair
+and RuleInk clear 3.75:1 on both grounds, that RuleInk stays above Hair, and that
+the night scale keeps the order Muted, Dim, RuleInk, Hair
+(`TestTheRuleInksCarryTheZoomHeadroom`). Measured but not asserted: every
+contrast figure read back off a rendered pixel, because the number depends on the
+renderer and on the resampler, and a test that pinned it would be pinning Chrome
+and Pillow rather than this room. Looked at and not measured at all: whether a
+person reads these frames faster. One honest limit on the figures above. They
+come from an SVG rendered by Chrome, which antialiases a one-pixel rule that
+Windows Terminal draws crisp, so the figures are a floor and the owner's own
+screen is better than they say. Case b after the raise still puts the hairline
+leader at 2.7:1 through that path, which is why the rule above asks for the
+larger font and not for the ink alone.
