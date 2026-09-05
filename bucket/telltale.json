@@ -1,12 +1,12 @@
 {
-    "version": "0.2.0",
+    "version": "0.3.0",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/sanlee-ys/telltale/releases/download/v0.2.0/telltale_0.2.0_windows_amd64.zip",
+            "url": "https://github.com/sanlee-ys/telltale/releases/download/v0.3.0/telltale_0.3.0_windows_amd64.zip",
             "bin": [
                 "telltale.exe"
             ],
-            "hash": "7a2401aad45ba1ac91e3ada364bbc692f4901f0c92873eaed08a47d433772528"
+            "hash": "0525c0b4df0ec86510930b92643df03d28a43bd399aa5e08066b85b50c93d8f2"
         }
     },
     "homepage": "https://github.com/sanlee-ys/telltale",
