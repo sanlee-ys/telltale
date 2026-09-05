@@ -90,7 +90,7 @@ import (
 //
 // The order the scale depends on is unchanged and is now tighter: Muted 6.2,
 // Dim 5.1, RuleInk 4.5, Hair 3.8. The gap between Dim and RuleInk is the one
-// this raise spent, and it is accepted — prose and a rule never compete as the
+// this raise spent, and it is accepted. Prose and a rule never compete as the
 // same kind of ink, and shape separates them before value does.
 // TestTheRuleInksCarryTheZoomHeadroom is the gate; docs/room-identity.md's last
 // section is the measurement.
@@ -393,7 +393,7 @@ func PaperPalette() Palette {
 		// page, and 10.5:1 is already that.
 		//
 		// Hair was darkened again on 2026-09-04, from 3.1:1 to 3.8:1, for the
-		// Zoom viewer rather than for the projector — a one-pixel mark loses
+		// Zoom viewer rather than for the projector. A one-pixel mark loses
 		// contrast when the share is resampled, and 3.1:1 arrived under the 3:1
 		// floor. RuleInk needed nothing here; 10.5:1 carries the headroom twice
 		// over.

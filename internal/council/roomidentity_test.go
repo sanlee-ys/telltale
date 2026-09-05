@@ -94,7 +94,7 @@ const zoomHeadroom = 3.75
 // The two tests assert different things and both are needed. The projector test
 // says an ink clears its floor at the reader's eye. This says the two THIN marks
 // leave with enough contrast that the floor is still met after the share is
-// resampled — which is the demo's real viewing condition, and the one the
+// resampled. That is the demo's real viewing condition, and it is the one the
 // audit's "the projector test is still open" was pointing at.
 func TestTheRuleInksCarryTheZoomHeadroom(t *testing.T) {
 	for _, ground := range []struct {
