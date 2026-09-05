@@ -386,7 +386,7 @@ func (m *Model) ackFor(route Route, reg map[model.VendorID]vendors.Vendor, whole
 		case ackUnmeasured:
 			a.Unmeasured = append(a.Unmeasured, c.Vendor)
 		default:
-			// Gated, and therefore the rest `n` sends to — unless this turn is
+			// Gated, and therefore the rest `n` sends to, unless this turn is
 			// one no seat may be dropped from (PendingAck.Rest).
 			a.Rest = !whole
 		}
@@ -551,14 +551,14 @@ func (m *Model) cancelAck(t *ackTurn, lead string) {
 //
 // The notice is set AFTER sendTurn and only into an empty slot. sendTurn
 // clears the notice on a successful dispatch and writes its own on a partial
-// one — a seat that went busy while the card was up — and that sentence is
+// one, for a seat that went busy while the card was up. That sentence is
 // about the turn the operator just sent, so it outranks a report of the
 // keystroke that sent it.
 //
 // A notice the room was ALREADY showing survives into that empty slot too, and
 // it survives because of what a notice under this card is: the room is stopped
 // and nothing else has happened, so whatever it says is about this brief.
-// `@auto` is the case that made this a rule rather than a nicety — it names the
+// `@auto` is the case that made this a rule rather than a nicety. It names the
 // seat its readings picked, after the routing cell that made the pick has gone
 // (dispatchAuto), and a dispatch that cleared it would leave the operator
 // holding a turn with nothing on screen saying who it went to.

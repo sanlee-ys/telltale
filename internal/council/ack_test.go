@@ -825,7 +825,7 @@ func TestARaceStopsOnTheCardBeforeASeatSpawns(t *testing.T) {
 //
 // A race is all or nothing (§9.37). Dropping a racer after its worktree was
 // cut would leave an `arena/<n>/<seat>` branch with no attempt on it, and
-// `/arena record` counts a branch as a seat that raced — so the record would
+// `/arena record` counts a branch as a seat that raced, so the record would
 // carry a loss nobody ran. The key says cancel before it is pressed, the trees
 // already cut are kept and the room says so, and the brief goes back in the
 // composer, which is stopArenaSetup's own sentence for the same stop one step
