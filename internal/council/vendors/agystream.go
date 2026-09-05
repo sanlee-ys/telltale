@@ -24,7 +24,8 @@ import (
 //   - antigravity.google/changelog: **1.1.15 (2026-08-19)** "Added
 //     `--input-format stream-json` to print mode, which reads newline-delimited
 //     JSON prompts from stdin and runs one turn per message in a single
-//     conversation". The current build is 1.1.24.
+//     conversation". The current build was 1.1.24 when this was written; the
+//     stream path was re-measured at 1.1.26 on 2026-09-05 (design.md §9.57).
 //   - antigravity.google/docs/cli/headless: the stdin line is
 //     `{ "event": "user", "message": { "content": "…" } }`, one object per
 //     line, "The event key specifies the message type (matching the output
@@ -95,13 +96,15 @@ func (AntigravityStream) NextTurn(prompt, workspace, binary, sessionID string, p
 //
 // The FORK — an unknown `--conversation` id opening a new conversation, exit
 // 0, a different id reported — was measured on `agy -p` at 1.1.11 (agy.go).
-// Whether the same flag under `--input-format stream-json` forks the same way,
-// refuses loudly, or is ignored is unmeasured; implementing the interface here
+// Under `--input-format stream-json` a KNOWN id was measured RESUMING at 1.1.26
+// (2026-09-05, §9.57): the same id back, num_turns continued, the earlier turn
+// recalled. Whether an UNKNOWN id forks the same way, refuses loudly, or is
+// ignored on this path is still unmeasured; implementing the interface here
 // is the conservative reading, because the room's response to it is a
 // COMPARISON that fires only on a mismatch. A vendor that refuses loudly is
 // caught by the ordinary lost-thread path and never reaches it.
 func (AntigravityStream) SilentResumeForkMeasuredAt() string {
-	return Antigravity{}.SilentResumeForkMeasuredAt() + " on agy -p; the stream-json input path is unmeasured"
+	return Antigravity{}.SilentResumeForkMeasuredAt() + " on agy -p; under stream-json input a known id resumed at 1.1.26 (2026-09-05) and the unknown-id arm is unmeasured"
 }
 
 // Session is the persistent invocation: one process, many turns, fed JSONL on
@@ -138,8 +141,9 @@ func (a AntigravityStream) Session(workspace, binary, _ string, p Posture) (runn
 // SessionResume is Session started on a conversation from a previous room.
 //
 // `--conversation` before the input flag, as it sits before `-p` on the batch
-// path. Composition with `--input-format` is UNMEASURED; see the type comment
-// for why sending it is safe anyway.
+// path. Composition with `--input-format` was measured at 1.1.26 (2026-09-05,
+// §9.57): a known id resumed with the same id back; see the type comment for
+// the unknown-id arm, which is still open.
 func (a AntigravityStream) SessionResume(workspace, binary, hooksFile, sessionID string, p Posture) (runner.Spec, error) {
 	if sessionID == "" {
 		return runner.Spec{}, ErrNoResume
