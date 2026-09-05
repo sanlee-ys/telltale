@@ -603,10 +603,11 @@ func TestAppServerClosingOwnsTheKillInOrder(t *testing.T) {
 			t.Fatal("a brief held at teardown went out anyway")
 		}
 	})
-	// The bound sits just past the measured exits (1.5–3.3 s) and well under
-	// the one that had to be killed (alive at 15 s).
-	if g := appServerDriver(PostureRead).Grace(); g < 3300*time.Millisecond || g > 10*time.Second {
-		t.Fatalf("grace = %v, want a bound past the measured exits and short of the outlier", g)
+	// The bound sits past every measured exit. The longest of the forty runs
+	// at 0.151.0 was 14.73 s, and every one of them was the operator's
+	// SessionEnd hooks running (see Grace). It is still a bound: a quit ends.
+	if g := appServerDriver(PostureRead).Grace(); g < 15*time.Second || g > 30*time.Second {
+		t.Fatalf("grace = %v, want a bound past the measured exits and short of a quit nobody waits for", g)
 	}
 }
 

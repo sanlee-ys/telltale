@@ -18768,9 +18768,18 @@ README there; a claim that is not captured is not made.
   after the frame. **The teardown half fails the grace:** with no turn live `Closing()` sends
   nothing, and after stdin close the process exited 0 after 6.79, 1.76, 6.69, 7.77 and 6.42 s —
   four of five over the 4 s grace, so the room's reaper ends this seat before it ends itself
-  most of the time. No stderr on any run. The mechanism is not diagnosed here (the shim's
-  `cmd.exe` and node exit are both in the path); the fix is routed to its own change rather than
-  a grace raised to fit.
+  most of the time. No stderr on any run. **DIAGNOSED the same day, same build, forty runs, stdin
+  closed with a thread open:** the shim is innocent (`cmd.exe /c codex.cmd`, `node.exe codex.js`
+  and the native `codex.exe` each took 6-8 s, five runs each); no shutdown frame exists in the
+  schema, and `thread/unsubscribe` and `thread/archive` before the close changed nothing; a process
+  with no thread exits in 0.03 s; with `--disable hooks` the same process exited in 0.06-0.08 s
+  with its MCP servers still configured, and with `mcp_servers={}` and the hooks kept it took
+  4.5 s. The cost is the operator's own `SessionEnd` hooks in `~/.codex/hooks.json`, one of which
+  took 4.5-6.6 s run by hand, and the server writes nothing to stdout while they run. The room may
+  not disable them (the fleet's guard hooks ride the same flag), so the fix is the last resort the
+  chip named, with the diagnosis attached: `Grace()` is 20 s, a bound on the operator's hooks
+  rather than on the vendor. Five runs after, through the shim with an interrupted turn: 4.46,
+  4.33, 14.73, 7.55 and 2.45 s, all inside it. The 14.73 s run is the same hook under load.
 - [ ] **Codex, macOS.** The read sandbox on the app-server path, on the Mac, before the
   off-Windows badge may return to `ro:enforced`. Record in PARITY.md.
 - [ ] **Codex, the exec fallback trigger.** Run the seat against a build without `app-server`
