@@ -668,6 +668,13 @@ func (a *appServerProtocol) Closing() [][]byte {
 // the four runs that DID exit on a closed pipe took 1.5–3.3 s (§9.50), so a
 // bound just past that lets the ordinary case end on its own and spends the
 // kill on the case that was measured needing it — the one still alive at 15 s.
+// MEASURED 2026-09-05 at codex-cli 0.151.0 (design.md §9.57): after `turn/interrupt`
+// completed and stdin closed, the process exited after 6.79, 1.76, 6.69, 7.77
+// and 6.42 s — four of five runs over this grace. The value is left as it is
+// on purpose: raising it to fit would hide a teardown nobody has diagnosed
+// (the `codex.cmd` shim's cmd.exe and node's own exit are both in the path).
+// The fix is routed to its own change; until it lands, the reaper ends this
+// seat most of the time, and that is the measured truth of this number.
 func (a *appServerProtocol) Grace() time.Duration { return 4 * time.Second }
 
 // Dead reports the terminal handshake state, for the room's fallback decision
