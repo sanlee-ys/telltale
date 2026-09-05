@@ -257,11 +257,11 @@ clears its 3:1 floor.
 **What failed at the recommended mode, and what changed.** One thing failed, and
 it was an ink. A rule is one device pixel of a 21-pixel row, so the resample
 blends it with the ground while the prose beside it keeps almost all of its ink.
-Measured on the emitted picture, the hairline leader left the owner's screen at
-3.1:1 and arrived at the viewer at 2.9:1 at case c and at 2.3:1 at case b. Both
-are under the 3:1 floor a non-text component needs, which is the floor this
-identity adopted on 2026-09-03. So the two rule inks were raised to carry the
-resample's own cost as headroom.
+The hairline ink was authored at 3.11:1. Read back off the rendered pixels, the
+hairline leader arrived at 2.8:1 at the owner's own pixel size, at 2.9:1 at case
+c, and at 2.3:1 at case b. The last two are under the 3:1 floor a non-text
+component needs, which is the floor this identity adopted on 2026-09-03. So the
+two rule inks were raised to carry the resample's own cost as headroom.
 
 | ink | ground | before | after | at the viewer, case c |
 |---|---|---|---|---|
