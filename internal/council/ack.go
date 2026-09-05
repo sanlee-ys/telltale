@@ -448,6 +448,15 @@ func (m *Model) clearAck() *ackTurn {
 // keystroke is the operator's way out of a state the room put them in, and
 // once they are out, a second ctrl+c means what it meant before.
 func (m *Model) ackKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.ackTurn == nil {
+		// A card with no held turn behind it. The one way to reach this is a
+		// REPLAY, whose card is drawn from the file and answered by it
+		// (replayAck); replayKey takes y, n and a before this and says so, and
+		// this is the guard that keeps the remaining keys from reaching for a
+		// dispatch that does not exist.
+		m.st.Notice = ackHeldNotice(m.st)
+		return m, nil
+	}
 	switch msg.String() {
 	case "y":
 		// Recorded before it is answered, so a --record file holds the card as
@@ -487,9 +496,16 @@ func (m *Model) ackKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.cancelAck(m.clearAck(), "the brief was not sent")
 		return m, nil
 	}
-	m.st.Notice = "the room is holding this brief — y sends, n " + ackDropLabel(m.st) +
-		", a sends and stops asking"
+	m.st.Notice = ackHeldNotice(m.st)
 	return m, nil
+}
+
+// ackHeldNotice answers a key this card does not take, in the three keys it
+// does. A dead key must say why it did nothing (§9.12), and the answer here is
+// the whole keymap, because the keymap is three keys long.
+func ackHeldNotice(st State) string {
+	return "the room is holding this brief: y sends, n " + ackDropLabel(st) +
+		", a sends and stops asking"
 }
 
 // cancelAck gives the room back with nothing dispatched, and says what is left
