@@ -70,6 +70,78 @@ func TestTheInkScaleClearsTheProjectorFloor(t *testing.T) {
 	}
 }
 
+// zoomHeadroom is the contrast the two RULE inks carry ABOVE the 3:1 floor a
+// non-text component needs, so that a one-pixel mark still clears that floor
+// after a Zoom share has been resampled onto a laptop.
+//
+// Where 3.75 comes from, and it is measured rather than chosen. The 2026-09-04
+// pass rendered the room at the owner's own pixel size, scaled it the way a
+// viewer's client does, and read the arrived pixels back. A one-pixel horizontal
+// rule left the owner's screen at 3.1:1 and arrived at 2.3:1 under a 0.75
+// resample: the mark keeps about 0.72 of its contrast above 1. An ink that has
+// to arrive at 3:1 must therefore leave at 1 + 2/0.72 = 3.8:1, and 3.75 is that
+// number with the rounding room a floor needs. docs/room-identity.md's last
+// section carries the measurement and the frames it was read from.
+//
+// It applies to Hair and RuleInk and to nothing else. Prose is many pixels thick
+// and loses almost nothing to a resample, so widening this to the text inks
+// would be raising a floor that no measurement asked for.
+const zoomHeadroom = 3.75
+
+// TestTheRuleInksCarryTheZoomHeadroom is the 2026-09-04 finding turned into a
+// gate, the way TestTheInkScaleClearsTheProjectorFloor is the 2026-09-03 one.
+//
+// The two tests assert different things and both are needed. The projector test
+// says an ink clears its floor at the reader's eye. This says the two THIN marks
+// leave with enough contrast that the floor is still met after the share is
+// resampled. That is the demo's real viewing condition, and it is the one the
+// audit's "the projector test is still open" was pointing at.
+func TestTheRuleInksCarryTheZoomHeadroom(t *testing.T) {
+	for _, ground := range []struct {
+		name string
+		bg   string
+		pal  Palette
+	}{
+		{"night", svgframe.Dark().Background, NightPalette()},
+		{"paper", svgframe.Light().Background, PaperPalette()},
+	} {
+		for _, tok := range []struct{ name, hex string }{
+			{"Hair", ground.pal.Hair}, {"RuleInk", ground.pal.RuleInk},
+		} {
+			if c := svgframe.Contrast(tok.hex, ground.bg); c < zoomHeadroom {
+				t.Errorf("%s: %s is %.2f:1 on %s, below the %.2f:1 a rule needs to survive a Zoom share",
+					ground.name, tok.name, c, ground.bg, zoomHeadroom)
+			}
+		}
+		// The two rule weights differ by INK as well as by stroke, and raising
+		// both is how that stayed true. A reader at a projector width cannot
+		// resolve a stroke; they can resolve which line is darker.
+		hair := svgframe.Contrast(ground.pal.Hair, ground.bg)
+		rule := svgframe.Contrast(ground.pal.RuleInk, ground.bg)
+		if rule <= hair {
+			t.Errorf("%s: RuleInk is %.2f:1 and Hair is %.2f:1; the two rule weights no longer differ by ink",
+				ground.name, rule, hair)
+		}
+	}
+	// Night keeps the ordered scale the identity is built on, and the raise
+	// spent the gap between Dim and the ink rule. Assert what is left, so a
+	// later raise cannot invert it by accident.
+	n := NightPalette()
+	bg := svgframe.Dark().Background
+	for _, pair := range []struct{ above, below string }{
+		{"Muted", "Dim"}, {"Dim", "RuleInk"}, {"RuleInk", "Hair"},
+	} {
+		hex := map[string]string{
+			"Muted": n.Muted, "Dim": n.Dim, "RuleInk": n.RuleInk, "Hair": n.Hair,
+		}
+		a, b := svgframe.Contrast(hex[pair.above], bg), svgframe.Contrast(hex[pair.below], bg)
+		if a <= b {
+			t.Errorf("night: %s (%.2f:1) is not above %s (%.2f:1); the ink scale is out of order",
+				pair.above, a, pair.below, b)
+		}
+	}
+}
+
 // TestTheRailIsLegibleOnBothGrounds pins the posture rail's own two properties,
 // which pull against each other.
 //

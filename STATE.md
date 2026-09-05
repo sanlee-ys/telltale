@@ -256,9 +256,15 @@ MEASURED CLAIMS rather than the precondition for the tag.
   **The demo geometry, ruled 2026-09-04.** The demo runs on the owner's Windows
   PC, on its 38-inch 3840x1600 display, and it is shared through Zoom to viewers
   on laptops. The room stays at its ordinary desk window of about 181 by 71
-  cells, and it is never maximized. A parallel lane is measuring what that share
-  looks like on a viewer's laptop and will add the font-size rule to this entry;
-  that measurement is owed, and no number stands here yet.
+  cells, and it is never maximized. **The share rule, measured 2026-09-04:**
+  share the terminal WINDOW and never the whole screen, and set the terminal
+  font so the room is 180 by 50 cells rather than 181 by 71. A whole-screen
+  share reaches a 1440x900 laptop at 0.375 scale, where no word on the frame
+  reads. A window share at the 181x71 font reads, with the one-pixel horizontal
+  rule under its 3:1 floor. At 180 by 50 every named item reads and every rule
+  clears the floor. The measurement, its method and its limits are the last
+  section of [docs/room-identity.md](docs/room-identity.md). Nobody has yet
+  watched a real Zoom share of this room; the resample was modelled.
 
 - **The Grok seat is landed, was broken on its first live turn, and is fixed.**
   The fifth seat (§9.39) is built, registered, and verified end to end against
