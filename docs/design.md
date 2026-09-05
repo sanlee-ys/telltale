@@ -18759,9 +18759,18 @@ README there; a claim that is not captured is not made.
   `item/commandExecution/requestApproval` or `item/fileChange/requestApproval` arrive, does the
   vendor BLOCK until answered, does `accept` run it and `decline` stop it, and does the file
   land or not. This is what lets `asks · unmeasured` become `asks · measured`.
-- [ ] **Codex, `turn/interrupt` and teardown order.** Interrupt a running turn: does
-  `turn/completed` arrive with `status: "interrupted"`; then `Closing()` + stdin close: how long
-  until exit, across five runs, against the 4 s grace.
+- [x] **Codex, `turn/interrupt` and teardown order.** MEASURED 2026-09-05 at codex-cli 0.151.0,
+  Windows 11, five runs of `codex app-server` through the same `codex.cmd` shim `doctor` names as
+  the seat's entry point, with the seat's own `initialize`, `thread/start{sandbox:"read-only",
+  approvalPolicy:"never"}` and `turn/start` frames on this repo as cwd (transcript filed
+  privately, desk/research). **The interrupt half passes clean:** `turn/interrupt` on a running
+  read turn produced `turn/completed` with `status: "interrupted"` on every run, 0.10–0.13 s
+  after the frame. **The teardown half fails the grace:** with no turn live `Closing()` sends
+  nothing, and after stdin close the process exited 0 after 6.79, 1.76, 6.69, 7.77 and 6.42 s —
+  four of five over the 4 s grace, so the room's reaper ends this seat before it ends itself
+  most of the time. No stderr on any run. The mechanism is not diagnosed here (the shim's
+  `cmd.exe` and node exit are both in the path); the fix is routed to its own change rather than
+  a grace raised to fit.
 - [ ] **Codex, macOS.** The read sandbox on the app-server path, on the Mac, before the
   off-Windows badge may return to `ro:enforced`. Record in PARITY.md.
 - [ ] **Codex, the exec fallback trigger.** Run the seat against a build without `app-server`

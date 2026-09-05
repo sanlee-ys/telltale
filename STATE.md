@@ -111,9 +111,6 @@ MEASURED CLAIMS rather than the precondition for the tag.
   10. Codex approvals: a write room, a brief that writes `%TEMP%\outside.txt`
       and runs `curl example.com`, `y` and `n` on separate trials, the disk
       checked — retires `app-server · asks · unmeasured` (§9.57 item 2).
-  11. Codex interrupt and stop: `ctrl+c` mid-turn, then `q`; `turn/completed`'s
-      status, and seconds from stdin close to exit over five runs against the
-      4 s grace — retires §9.57 item 3 and the integration's stop timing.
   12. Codex fallback: the seat against a build without `app-server`, or logged
       out; the column's "fell back to `codex exec --json`" note and the
       postures page's `exec · unasked · fallback` — retires §9.57 item 5 and
