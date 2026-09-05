@@ -249,8 +249,41 @@ func (m *Model) applyReplay(msg replayMsg) tea.Cmd {
 		}
 	case "gate":
 		m.replayGate(line)
+	case "ack":
+		m.replayAck(line)
 	}
 	return m.replayNext()
+}
+
+// replayAck draws the write acknowledgement card and takes it down, the way
+// replayGate takes a gate card down (ack.go, recording.go).
+//
+// The two lines of the file are the two moments: the first puts the card on
+// State, and every frame between here and the second one draws it, so a
+// replayed room shows the question for exactly as long as the operator looked
+// at it. The second takes it down and says which key answered it.
+//
+// It changes NOTHING else. `a` on a live card stops the room asking, and this
+// does not copy that across: a replay's postures are the recorded room's, off
+// the file's own room line, and re-deriving one here would let the replay
+// disagree with the room it is replaying. What the operator's answer did is
+// visible where it is honest to read it — in the dispatch line that follows,
+// which names the seats the brief actually reached.
+func (m *Model) replayAck(line recordLine) {
+	if line.Decision != "" {
+		m.st.Ack = nil
+		m.st.Notice = "write acknowledgement: " + line.Decision
+		return
+	}
+	a := &PendingAck{Rest: line.Rest}
+	for _, v := range line.Unasked {
+		a.Unasked = append(a.Unasked, model.VendorID(v))
+	}
+	for _, v := range line.Unmeasured {
+		a.Unmeasured = append(a.Unmeasured, model.VendorID(v))
+	}
+	m.st.Ack = a
+	m.st.Notice = ""
 }
 
 // replayDispatch puts the recorded seats on the recorded turn, the way
@@ -462,7 +495,11 @@ func (m *Model) replayKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		m.teardown()
 		return true, tea.Quit
 	}
-	if m.st.Gating() {
+	if m.st.Gating() || ackWants(m.st) {
+		// The write acknowledgement card takes the same three keys as the gate
+		// card and is refused for the same reason: the recording answers its
+		// own cards, and a key here would send a brief in a room with no seat
+		// to send it to.
 		switch k {
 		case "y", "n", "a":
 			m.st.Notice = replayNotice

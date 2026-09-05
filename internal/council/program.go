@@ -543,6 +543,23 @@ type Model struct {
 	writePending bool
 	// flowWritePending is true while a write hop awaits y/n before any vendor spawn.
 	flowWritePending bool
+	// ackTurn is the dispatch held behind the write acknowledgement card
+	// (ack.go). Nil whenever State.Ack is nil, and the two are written and
+	// cleared together: State carries what the card SAYS, this carries what it
+	// releases.
+	//
+	// It holds the arena setup as well, so a race that has already cut its
+	// worktrees is released or dropped without cutting them twice.
+	ackTurn *ackTurn
+	// ackArmed is set by `y` and by `a` on that card, and consumed by the one
+	// dispatch it releases.
+	//
+	// It exists for flowWriteArmed's reason: the dispatch path recomputes the
+	// card from the room's own facts, so the answered brief would raise the
+	// same card again on its way through. `n` sets nothing, because the route
+	// it sends is narrowed to the seats the card did not name and therefore
+	// raises no card at all.
+	ackArmed bool
 	// flowWriteArmed is set by y so the next dispatch may Start the write hop.
 	flowWriteArmed bool
 	// flowReadHop marks the dispatch in progress as a /flow hop with NO declared
@@ -1226,6 +1243,22 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.seatPrep != nil && msg.String() == "ctrl+c" {
 		m.stopSeatSetup()
 		return m, nil
+	}
+	// The write acknowledgement card (ack.go), and it outranks the gate.
+	//
+	// The room's usual order puts the gate first, because a gate is a vendor
+	// stopped mid-call. That order is wrong for these two together, and the
+	// reason is the keys rather than the urgency: both cards take y, n and a,
+	// and they mean different things on each. A gate answered under an ack
+	// card would be the operator approving a vendor's write while reading a
+	// question about a turn they have not sent.
+	//
+	// It cannot starve the blocked vendor. This card is answered in ONE
+	// keystroke, it is raised only by the operator's own enter, and the
+	// needs-you strip goes on naming the stopped seat above it, so the next
+	// key after this one reaches the gate.
+	if ackWants(m.st) {
+		return m.ackKey(msg)
 	}
 	if m.st.Gating() {
 		return m.gateKey(msg)

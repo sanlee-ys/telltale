@@ -71,6 +71,21 @@ is no longer the price of a change.
   arrived yet` as the description of a quiet seat; the strip form above the
   threshold. `docs/room-identity.md` carries the argument. The identity does not
   move.
+- **2026-09-04 — The stage sentence's second clause is a mechanism now, and it
+  is the write acknowledgement card.** (San, on the 2026-09-04 adversarial
+  review's fault C.) Two honest fixes existed, narrow the sentence or make the
+  room refuse; the ruling took the second. A write brief reaches a seat that is
+  not `gated` only after the operator answers one card that names the seat, by
+  class: `write unasked` for a seat measured or read as not asking, `asking
+  unmeasured` for a seat that can be asked where nothing has measured that it
+  does. `y` sends, `n` drops those seats or cancels the turn, `a` sends and
+  stops asking for the rest of the room. `--auto`, `--read` and a room with `a`
+  remembered raise nothing, on one flag. The card is NOT containment and does
+  not claim to be: the workspace still holds a seat that writes. It is the
+  acknowledgement, and `internal/council/ack.go` is the page. The 2026-09-03
+  `NEEDS YOU` ruling holds against it: no vendor is stopped while the card is
+  up, because none has been started, so the strip does not say those words and
+  the card wears the gate card's own lead instead.
 - **2026-09-04 — A recording's SHAPE may be committed; its WORDS may not.** (The
   scrub lane, on the 2026-09-04 adversarial review's fault F.) "Fixtures are
   synthesized, never real" binds the content, so `telltale council replay-scrub`

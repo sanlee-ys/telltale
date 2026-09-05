@@ -157,6 +157,9 @@ func TestAFannedWriteStageGatesOnceAndNamesEveryTarget(t *testing.T) {
 		t.Errorf("the gate does not name every write hop: %q", m.st.Notice)
 	}
 	m.key(key("y"))
+	// The write acknowledgement card is the stage's second stop (ack.go), and
+	// it is one card for the stage exactly as this gate is one gate for it.
+	answerAck(m)
 	if log.n() != 2 {
 		t.Fatalf("one y did not release the whole stage: %d spawns", log.n())
 	}

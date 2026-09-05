@@ -579,6 +579,46 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 		return nil
 	}
 
+	// The write acknowledgement card (ack.go, LEDGER.md 2026-09-04).
+	//
+	// Raised HERE, at the one choke point every dispatch crosses: an ordinary
+	// brief, a /flow stage, and a race all arrive at this function, so one hook
+	// covers the three the ruling names and a fourth path could not be added
+	// without crossing it.
+	//
+	// After the busy refusal above and before everything below it. After,
+	// because a brief that reaches only busy seats sends nothing and must not
+	// cost the operator a keystroke on a card for a turn that is not going
+	// anywhere. Before, because nothing under this line is reversible in the
+	// room's own terms: endRebuild retires a run, the geometry moves, and the
+	// column loop resets every addressed seat.
+	//
+	// The fanned prompts are handed BACK while the card is up. They were
+	// consumed on the way in, and a stage released a keystroke later has to
+	// read the same map the held one would have; releaseAck puts them back.
+	//
+	// A race and a `/flow` stage are ALL OR NOTHING here, which the card reads
+	// as `whole`: the first because §9.37 says a race is one turn across every
+	// seat, the second because a stage that ran some of its hops is not the
+	// stage the operator typed. On those two `n` cancels rather than narrowing,
+	// and PendingAck.Rest carries the whole argument.
+	whole := race != nil || m.flowChain != nil
+	if m.ackArmed {
+		m.ackArmed = false
+	} else if ack := m.ackFor(route, reg, whole); ack != nil {
+		m.st.Ack = ack
+		m.ackTurn = &ackTurn{
+			route: route, prompt: prompt, race: race, fan: fan,
+			whole: whole, chain: m.flowChain != nil, named: ack.Named(),
+		}
+		m.recordAckRaised(ack)
+		// The card is the statement, full width, two rows above the columns.
+		// A notice repeating it would be the room saying one thing twice
+		// (roomline.go), and a stale notice under a new card would be worse.
+		m.st.Notice = ""
+		return nil
+	}
+
 	// The first brief retires the room-open rebuild (rebuild.go): startTurn is
 	// about to clear every per-turn field including the note the rebuild wrote,
 	// and a run left standing would go on owning events for a seat this turn is

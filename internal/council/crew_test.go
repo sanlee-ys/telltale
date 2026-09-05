@@ -85,12 +85,21 @@ func crewRoom(t *testing.T) *Model {
 	return m
 }
 
-// send types a brief and presses enter, the way an operator dispatches.
+// send types a brief and presses enter, the way an operator dispatches — and
+// then answers the write acknowledgement card when one goes up.
+//
+// The second keystroke is not a convenience. Since the 2026-09-04 ruling a
+// write brief in a writing room stops on a card that names every addressed seat
+// the room cannot make ask (ack.go), so "dispatch" is two keys now and this
+// helper is where the tests that are about something else learn it. A room with
+// no card up is untouched: a read room, a refused brief and a route that
+// reaches only the gated seat all take this unchanged.
 func send(t *testing.T, m *Model, brief string) {
 	t.Helper()
 	m.st.Mode = ModeComposing
 	m.setDraft(brief)
 	m.key(key("enter"))
+	answerAck(m)
 }
 
 // fakeHandles replaces every one-shot handle on the seat's dispatch with an

@@ -333,6 +333,9 @@ func TestWriteHopSpawnsNothingBeforeTheUserSaysYes(t *testing.T) {
 	// And y is what releases it — otherwise this test would also pass on a flow
 	// that never dispatches at all.
 	m.key(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	// And then the write acknowledgement card, which the released hop stops
+	// on because codex is a seat the room cannot make ask (ack.go).
+	answerAck(m)
 	if log.n() != 1 {
 		t.Fatalf("after y: %d spawns, want exactly 1", log.n())
 	}
@@ -538,6 +541,7 @@ func TestAWriteHopAsksForNoModeInAWriteRoom(t *testing.T) {
 	m := flowRoom(t, true)
 	m.st.Draft = "@cursor review this"
 	m.dispatch()
+	answerAck(m)
 
 	if log.n() != 1 {
 		t.Fatalf("%d spawns, want 1: %+v", log.n(), log.specs)

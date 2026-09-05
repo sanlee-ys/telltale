@@ -1,0 +1,24 @@
+  council ⚠ WRITE  │  ~/code/telltale                                          no turn yet  │  4/4 seated  │  no brief  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⚠ 3 seats write unasked: Antigravity, Cursor  │  asking unmeasured: Codex                                             
+    y send   n drop them   a send, stop asking                                                                          
+▌ ▸ 1 CC Claude Code ○ idle   │    2 CX Codex  ───  ○ idle  │    3 AG Antigravity ○ idle  │    4 CU Cursor  ──  ○ idle  
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▌ no turn dispatched yet.     │  no turn dispatched yet.    │  no turn dispatched yet.    │  no turn dispatched yet.    
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │  › @all add a marker file_                                                                                       │  
+  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────  HOLD  ─╯  
+                                              y send  │  n drop them  │  a send, stop asking  │  ctrl+c hold the brief  
