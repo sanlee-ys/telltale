@@ -18840,17 +18840,27 @@ README there; a claim that is not captured is not made.
   different cwd: the store is keyed by cwd, so a moved room cannot resume. The process survives
   the refusal and `session/new` answers in it, which is the branch the cursor capture measured
   at `-32602`. The `costUsdTicks` unit (the cost item above) is still owed.
-- [ ] **Antigravity, the stream handshake.** `agy --version`; two turns down one stdin with the
-  seat's own argv: same pid, same `conversation_id` on both `result` events, and the second turn
-  answering a question only the first could. Then close stdin and time the exit against the 3 s
-  grace.
-- [ ] **Antigravity, `--conversation` under stream input.** Resume a saved id: same id back
-  (resumed), a different id back (the §9.43 fork, on this path), or a refusal.
-- [ ] **Antigravity, `--print-timeout` under stream input.** Whether 30m bounds each turn or the
-  whole process. A per-process bound ends the seat half an hour into a room.
-- [ ] **Antigravity, the fallback trigger.** The exact exit code and stderr line a build without
-  `--input-format` produces. The room retreats on the SHAPE (a first-turn death with no session
-  named) rather than on that line, so the reading confirms the trigger rather than gates it.
+- [x] **Antigravity, the stream handshake.** PAID 2026-09-05 at agy 1.1.26, Windows 11, the seat's
+  own argv and line shape from a scratch workspace (transcripts filed privately, desk/research).
+  Two `{"event":"user",…}` lines down one stdin: one pid, the same `conversation_id` on both
+  `result` events (`num_turns` 1 then 2), and the second turn answered a question only the first
+  could ("copper"). stdin closed → exit 0 after **0.08 s**, well inside the 3 s grace. No stderr.
+- [x] **Antigravity, `--conversation` under stream input.** PAID 2026-09-05 at agy 1.1.26: the id
+  from the run above, resumed in a NEW process with `--conversation <id>` after `--input-format`
+  — the SAME id came back, `num_turns` 3, and the word was recalled. Resumed, not forked, on this
+  path. The unknown-id arm (§9.43's fork, measured on `agy -p` at 1.1.11) was NOT re-run under
+  stream input and stays as `agystream.go` states it.
+- [x] **Antigravity, `--print-timeout` under stream input.** PAID 2026-09-05 at agy 1.1.26, with a
+  stand-in: `--print-timeout 20s`, turn one answered, **35 s idle**, turn two answered on the
+  same pid. The bound is per turn and idle does not count against it; a 30m bound therefore does
+  not end a seat half an hour into a room. The 30m value itself was not waited out.
+- [x] **Antigravity, the fallback trigger.** MEASURED 2026-09-05 at agy 1.1.26, and it does NOT
+  produce the shape the retreat keys on. With the seat's batch argv, no `-p` and no
+  `--input-format`, a stream line on stdin was read as the PROMPT: `init` with a fresh
+  `conversation_id`, three `step_update`s, then `result` `status: SUCCESS` with the answer the
+  JSON asked for, exit 0, **zero stderr**, 14.3 s. No first-turn death, no missing session — a
+  silent misparse. So on 1.1.26 the retreat is never triggered by this arm; it remains built for
+  a build that lacks the flag, and this reading confirms only that 1.1.26 is not that build.
 
 #### Verification
 

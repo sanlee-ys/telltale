@@ -129,14 +129,6 @@ MEASURED CLAIMS rather than the precondition for the tag.
       write and not before a shell command. The seat sends no such prompt, so
       the gate cannot card its writes; sending one is a new frame on the
       brief channel, and whether the room should is the owner's call.
-  17. Antigravity stream: two `{"event":"user",…}` lines down one stdin; same
-      pid, same `conversation_id`, the second turn recalling the first; the
-      exit timed after stdin close against 3 s — retires `stream-json ·
-      unasked · unmeasured` (§9.57 item 10).
-  18. Antigravity `--conversation <id>` and `--print-timeout 30m` under stream
-      input — retires §9.57 items 11 and 12.
-  19. Antigravity without `--input-format`: the exit code and stderr line —
-      confirms the retreat's trigger (§9.57 item 13).
   20. On the Mac: `telltale council --host --read`, `/detach`, `telltale
       council ls`, rejoin, `/quit`; then a host left up, `telltale council
       kill`; then `kill -9` on a host and `ls` — retires §7.30's "macOS is
