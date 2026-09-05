@@ -50,8 +50,8 @@ import (
 //	Text     (the terminal's)    vendor prose — see Palette.Text
 //	Muted    (#9a9081)           chrome, labels, the caps words
 //	Dim      (#8a8174)           the reading area of a column the keys do not move
-//	RuleInk  (#736a5d)           the ink rule: ━, and the composer's box
-//	Hair     (#675f53)           the hairline: ─, the separators, the leaders
+//	RuleInk  (#827869)           the ink rule: ━, and the composer's box
+//	Hair     (#766c5f)           the hairline: ─, the separators, the leaders
 //
 // # The bottom three values were RAISED on 2026-09-03, and it was not taste
 //
@@ -69,6 +69,31 @@ import (
 // Broke are the portfolio's own pigments and carry the portfolio's own measured
 // figures; re-tinting them would have thrown away that provenance to fix a
 // problem they did not have.
+//
+// # The two RULE inks were raised again on 2026-09-04, for the Zoom viewer
+//
+// The 2026-09-03 raise set the floor at the OWNER's screen. The demo audience
+// is not on the owner's screen: it watches a Zoom share on a laptop, and the
+// share is resampled on the way. A rule is one device pixel of a 21-pixel row,
+// so the resample blends it with the ground and the ink loses contrast that the
+// prose beside it does not. Measured on the emitted picture, at the recommended
+// share mode: the hairline leader left the owner's screen at 3.1:1 and arrived
+// at the viewer at 2.3:1, under the 3:1 floor a non-text component needs. The
+// heavy rule did not lose the same amount, because ━ is a thick glyph and a
+// thick glyph survives a resample.
+//
+// So the two rule inks now carry the resample's own cost as HEADROOM: Hair is
+// 3.8:1 and RuleInk is 4.5:1 on Campbell, against 3.1 and 3.7 before, which is
+// what puts both above 3:1 at the viewer rather than at the owner. Paper's Hair
+// moved by the same rule and to the same figure (3.8:1); paper's RuleInk did
+// not, because 10.5:1 already carries the headroom twice over.
+//
+// The order the scale depends on is unchanged and is now tighter: Muted 6.2,
+// Dim 5.1, RuleInk 4.5, Hair 3.8. The gap between Dim and RuleInk is the one
+// this raise spent, and it is accepted — prose and a rule never compete as the
+// same kind of ink, and shape separates them before value does.
+// TestTheRuleInksCarryTheZoomHeadroom is the gate; docs/room-identity.md's last
+// section is the measurement.
 //
 // The one thing a reader is told to look at is the brightest ink on screen, and
 // the several hundred lines a vendor emitted sit BELOW the six characters that
@@ -315,14 +340,20 @@ func NightPalette() Palette {
 		Measured: "#ece4d5",
 		Text:     "",
 		Muted:    "#9a9081",
-		// The three raised on 2026-09-03 — 5.0:1, 3.6:1 and 3.0:1 on #0c0c0c,
+		// The three raised on 2026-09-03 — 5.1:1, 3.7:1 and 3.1:1 on #0c0c0c,
 		// against 4.0, 3.2 and 1.9 before. See the projector paragraph on
 		// Styles. Every figure here is computed against Campbell rather than
 		// cited, because these three are this room's own pigments and not the
 		// site's.
+		//
+		// The two RULE inks were raised again on 2026-09-04, to 4.5:1 and
+		// 3.8:1, so that a one-pixel mark still clears 3:1 AFTER a Zoom share
+		// resamples it. Dim did not move: prose is many pixels thick and it
+		// loses almost nothing to the resample. See the Zoom paragraph on
+		// Styles.
 		Dim:     "#8a8174",
-		RuleInk: "#736a5d",
-		Hair:    "#675f53",
+		RuleInk: "#827869",
+		Hair:    "#766c5f",
 		// 1.25:1 against the same ground: a band a reader SEES and does not
 		// READ. Every ink the badge row spends clears WCAG AA on it (Muted, the
 		// quietest of them, at 4.98:1), which is the constraint that picked this
@@ -356,13 +387,19 @@ func PaperPalette() Palette {
 		// Darkened on 2026-09-03 for the projector, exactly as the night set's
 		// three were lightened: Dim was 3.6:1 on white and Hair was 1.5:1, and a
 		// hairline at 1.5:1 is a rule that exists in a screenshot and not in a
-		// room. They are 5.4:1 and 3.1:1 now. Dim stays LIGHTER than Muted
-		// (6.37:1), which is the ordering the unfocused column depends on.
-		// RuleInk did not move: on paper the ink rule is meant to be the heaviest
-		// line on the page, and 10.4:1 is already that.
+		// room. Dim is 5.4:1 now, and it stays LIGHTER than Muted (6.65:1),
+		// which is the ordering the unfocused column depends on. RuleInk did not
+		// move: on paper the ink rule is meant to be the heaviest line on the
+		// page, and 10.5:1 is already that.
+		//
+		// Hair was darkened again on 2026-09-04, from 3.1:1 to 3.8:1, for the
+		// Zoom viewer rather than for the projector — a one-pixel mark loses
+		// contrast when the share is resampled, and 3.1:1 arrived under the 3:1
+		// floor. RuleInk needed nothing here; 10.5:1 carries the headroom twice
+		// over.
 		Dim:     "#6f6a64",
 		RuleInk: "#423f3c",
-		Hair:    "#969288",
+		Hair:    "#86837a",
 		// 1.29:1 on white — the same barely-there band as the night set's, on
 		// the other side of the ink scale, and every badge ink clears WCAG AA on
 		// it (Muted at 5.15:1).
