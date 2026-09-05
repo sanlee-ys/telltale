@@ -79,3 +79,22 @@ is no longer the price of a change.
   file, and two goldens pin its frames. The claim travels in the file
   (`scrubbed: true` on the room line), because a scrubbed replay must never pass
   for a capture: same rule that puts REPLAY on every frame.
+- **2026-09-04 — The demo is five beats, and the observability surfaces leave
+  it.** (San.) The room and one `@all` brief, `ctrl+r`, the gated write card
+  with the posture rail, `/arena` with its check and `/adopt`, and the whole
+  session under `--record` with a `replay-check` and a scrubbed replay to close.
+  `telltale doctor` becomes a one-line aside after the card beat, and `telltale
+  hud`, `telltale snapshot` and the `y` clipboard beat leave the demo and stay
+  in the README. Reason: those are observability surfaces, which is ground other
+  tools already own, and the demo's first ninety seconds must do the things a
+  session supervisor has no verb for. This closes the beat order the 2026-08-17
+  amendment reopened. The geometry is ruled with it: the 38-inch 3840x1600
+  display shared through Zoom, at the ordinary desk window of about 181 by 71
+  cells, never maximized.
+- **2026-09-04 — v0.3.0 is cut with the crew checklist unpaid.** (San.) The
+  2026-09-02 amendment made that checklist the next minor's precondition. It
+  stays the precondition for a demo of measured claims, and it is no longer the
+  precondition for the tag. Reason: the README installs v0.2.0 of 2026-08-14,
+  more than 130 commits behind `main`, and a visitor who follows the README must
+  get the room the README describes. The release notes name the checklist as
+  owed.

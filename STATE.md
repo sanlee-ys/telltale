@@ -59,8 +59,20 @@ pinned over stubbed processes and no lane and no integration ran a vendor. So
 the next minor's precondition is not more code: it is the checklist at the head
 of *In flight*, run on the reference box and the Mac, each line retiring one
 `unmeasured` badge, one "owed" sentence, or one "has not run" claim. The outward
-chain above is unchanged by this; the demo path's eight beats still stand, and
-a demo of the crew is a demo of measured claims only after that list is paid.
+chain above is unchanged by this; the demo path's beats still stand (the
+2026-09-04 re-cut below sets them at five), and a demo of the crew is a demo of
+measured claims only after that list is paid.
+
+**Superseded in part on 2026-09-04, by the owner: v0.3.0 is cut with the
+checklist unpaid.** The sentence above is not deleted, because it is still right
+about what the checklist buys. What moved is the tag. The README installs v0.2.0
+of 2026-08-14, which is more than 130 commits behind `main`, so a visitor who
+follows the README gets a binary with none of the crew, the record and replay
+pair, the room identity or the density pass in it. A visitor who follows the
+README must get the room the README describes, and that outranks an unpaid
+checklist. So v0.3.0 is cut before the checklist is paid, the release notes name
+the checklist as owed, and the checklist stays the precondition for a demo of
+MEASURED CLAIMS rather than the precondition for the tag.
 
 ## In flight
 
@@ -158,22 +170,21 @@ a demo of the crew is a demo of measured claims only after that list is paid.
   hand measurement with a reader.
 
 
-- **The 3-minute demo path is DEFINED (owner's ruling, 2026-08-15).** It is link
-  1 of the outward chain above, and both later links consume it. Eight beats, in
-  order. Every beat names a surface that exists today. Two beats carry an honest
-  marker, because they rest on a configuration nobody has run yet.
+- **The 3-minute demo path is DEFINED (owner's ruling, 2026-08-15), and it is
+  RE-CUT to five beats (owner's ruling, 2026-09-04).** It is link 1 of the
+  outward chain above, and both later links consume it. Five beats, in order.
+  Every beat names a surface that exists today. The 2026-08-17 amendment
+  reopened the beat order; this re-cut closes it, and it also cuts three
+  surfaces from the demo.
 
-  1. **`telltale doctor`, 15 seconds.** The preflight names each seat it
-     resolved, where the binary was found, and the version it reports. One
-     sentence explains `not checked`: nothing here probes a login or calls the
-     network, so auth and network never read as a pass.
-  2. **`telltale council`.** The bare command opens the one room and reattaches
-     to the standing conversations. Each seat picks up its own thread, and the
-     turn counter continues at N+1.
-  3. **One brief, addressed `@all`.** Five columns answer side by side. Before
-     enter, the composer footer states the resolved ROUTE: the seat names, plus
-     the seat count from two seats up. The footer says which seats the turn
-     reaches. It shows no money, and this beat must never promise a price.
+  1. **`telltale council`, then one brief to `@all`.** The bare command opens
+     the one room and reattaches to the standing conversations. Each seat picks
+     up its own thread, and the turn counter continues at N+1. Then one real
+     brief goes to `@all`. The brief is chosen for the people in the room, and
+     four seats answer it blind, side by side. Before enter, the composer footer
+     states the resolved ROUTE: the seat names and the seat count. The footer
+     says which seats the turn reaches. It shows no money, and this beat must
+     never promise a price.
      **Paid, 2026-08-15/16.** A pasted three-line brief was sent with enter:
      one dispatch, and the newlines verified as bytes in the seat's own
      transcript ([design.md §9.38](docs/design.md)'s dated payment).
@@ -182,42 +193,72 @@ a demo of the crew is a demo of measured claims only after that list is paid.
      trust the wire and not the row count. A live 5/5 room at a recorded 170x54
      drew three rows, matching the sweep, so wire AND render are both verified
      and the beat can be demonstrated as it reads.
-  4. **One honesty beat.** A column whose vendor reported no cost renders no
-     cost cell at all. A turn that reported zero renders `$0.0000`. The two
-     states stay apart on screen. The `~` estimate marker is NOT on this
-     surface: council renders no `~`, so beat 7 carries that half.
-  5. **`y`.** The focused column's reply goes to the clipboard over OSC 52, and
-     a notice names what was copied. The sequence returns no acknowledgement,
-     so the paste is the proof.
-  6. **`/arena <brief>`, then `/adopt <seat>`.** Each seat races the same brief
-     in its own git worktree, on branch `arena/t<N>/<vendor>`. A racing column
-     shows `arena · so far` while it works. A finisher carries its rank, its
-     phase word and its own clock. An attempt that changed something shows
-     `committed <sha>.`. `/adopt` cuts `adopt/t<N>-<vendor>` behind a y/n card
-     and merges the attempt there.
+  2. **`ctrl+r`, the rebuttal.** The key arms a rebuttal turn, and the same
+     seats read each other's finals as fenced, labelled untrusted material and
+     revise. The snapshot is taken per seat, at the moment that seat's brief is
+     sent, so a neighbour that is still answering contributes its last finished
+     reply. This is the beat the audience watches most closely.
+  3. **A write brief, and the card the gated seat raises.** The brief makes the
+     gated seat ask before it writes, and the operator answers `y`. The posture
+     rail beside the card states what each seat may do, and `?` opens the
+     postures page, which marks every posture that no run measured.
+     **Conditional, not a fact:** a parallel lane is building an acknowledgement
+     card that names a seat which writes unasked, before a write brief reaches
+     it. If that card lands before the rehearsal, it is the first card the
+     audience sees on this beat.
+  4. **`/arena <brief>`, `/arena check <command>`, `/adopt`.** Each seat races
+     the same brief in its own git worktree, on branch `arena/t<N>/<vendor>`. A
+     racing column shows `arena · so far` while it works. A finisher carries its
+     rank, its phase word and its own clock. An attempt that changed something
+     shows `committed <sha>.`. `/arena check <command>` runs one named command
+     in each racer's worktree and renders PASS or FAIL from its real exit code.
+     `/adopt` cuts `adopt/t<N>-<vendor>` behind a y/n card and merges the
+     attempt there.
      **Paid, 2026-08-15/16, race t9 — both halves.** The first 5-of-5 ran, and
      two columns were watched drawing a non-empty `arena · so far` that GREW
      before the settled block replaced it ([design.md §9.37](docs/design.md)'s
      dated payment carries the full record, including the two give-ups).
-  7. **`telltale hud`.** The grid shows the fleet at a glance. `enter` opens the
-     detail pane, whose `not sourced` line names the fields that vendor can
-     never source. A `~` on a context cell marks a percentage telltale computed
-     rather than read.
-  8. **`telltale snapshot --compact`, piped to a parser, 10 seconds.** One line
-     of JSON carries the same truth as the grid, for a reader that is a program.
-     Absent is `null`, a measured zero is `0`, and no optional key is omitted.
+     `/arena check` is the one part of this beat with no live race behind it,
+     and the known gap below carries that debt.
+  5. **The whole session ran under `--record`.** `q` closes the room. Then
+     `telltale council replay-check <file>` runs on screen, and `telltale
+     council --replay examples/demo.jsonl --replay-speed 8` closes the demo.
+     Everything the audience watched is a file, and a scrubbed one is in the
+     repository for them. The replay is also the fallback if a seat dies on
+     stage.
 
-  **The path is frozen as recorded.** Both markers were paid by the owner's
-  drive on 2026-08-15/16 (race t9), each with a live run behind it. Beat 3's
-  render caveat was the one residue, and it is retired as of 2026-08-17 — the
-  path now carries no unpaid marker.
+  **Cut on 2026-09-04, with the reason.** Three surfaces leave the demo:
+  `telltale hud`, `telltale snapshot` and the `y` clipboard beat. All three stay
+  in the README. A fourth is demoted rather than cut: `telltale doctor` is no
+  longer the opening beat, it becomes a one-line credibility aside after beat 3
+  if time allows, and it is not a beat. The owner's reason, from the 2026-09-04
+  review: those are observability surfaces, which is ground other tools already
+  own, and the demo's first ninety seconds must do the things a session
+  supervisor has no verb for.
 
-  **Amended 2026-08-17: the beat ORDER is reopened, by the owner's ruling.**
-  A re-cut is planned for the final two weeks before the demo: open on the
-  room, fold `doctor` into a later credibility moment, and add `t` and `Y` as
-  the payoff after the `@all` beat. The eight surfaces stay; only the order
-  moves. The re-cut lands as its own edit to this entry before the final
-  rehearsal, and until it lands the order above is the one to rehearse.
+  **The old honesty beat is folded rather than cut.** Its price half is the last
+  sentence of beat 1: the route line shows no money and never promises a price.
+  Its `~` estimate half left the demo with `telltale hud`, which was the only
+  demo surface that rendered a `~`.
+
+  **The beat ORDER is now CLOSED.** The 2026-08-17 amendment reopened it and
+  planned a re-cut before the final rehearsal. This entry is that re-cut, and
+  the order above is the one to rehearse. That amendment also planned `t` and
+  `Y` as a payoff after the `@all` beat; neither is in the five, and `Y` left
+  with the clipboard beat.
+
+  **What is paid and what is not.** Beats 1 and 4 keep the payments of the
+  owner's 2026-08-15/16 drive, and beat 1 carries no unpaid marker. Beats 2, 3
+  and 5 name surfaces that shipped after that drive, so no live demo run stands
+  behind them yet. The checklist at the head of *In flight* is where those
+  payments land.
+
+  **The demo geometry, ruled 2026-09-04.** The demo runs on the owner's Windows
+  PC, on its 38-inch 3840x1600 display, and it is shared through Zoom to viewers
+  on laptops. The room stays at its ordinary desk window of about 181 by 71
+  cells, and it is never maximized. A parallel lane is measuring what that share
+  looks like on a viewer's laptop and will add the font-size rule to this entry;
+  that measurement is owed, and no number stands here yet.
 
 - **The Grok seat is landed, was broken on its first live turn, and is fixed.**
   The fifth seat (§9.39) is built, registered, and verified end to end against
