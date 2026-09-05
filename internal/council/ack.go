@@ -142,13 +142,24 @@ type PendingAck struct {
 	// Unmeasured names the addressed seats that can be asked where nothing has
 	// measured that they do, in seating order.
 	Unmeasured []model.VendorID
-	// Rest reports that at least one addressed seat is NOT on this card, so
-	// `n` has somewhere to send the turn.
+	// Rest reports that `n` has somewhere to send the turn: at least one
+	// addressed seat is not on this card, AND this turn is one a seat can be
+	// dropped from at all.
 	//
-	// Stored rather than derived, because the renderer cannot see the route.
-	// It decides one word on the keys line, and that word must be true: `n
-	// drop them` over a card that names every addressed seat would promise a
-	// turn that is about to be cancelled instead (§7.8).
+	// Stored rather than derived, because the renderer cannot see the route or
+	// the dispatch. It decides one word on the keys line, and that word must be
+	// true: `n drop them` over a turn that is about to be cancelled instead
+	// would be §7.8's surprise on the one line that guards a write.
+	//
+	// The second half is what makes a race and a `/flow` stage different from
+	// an ordinary brief, and both rules are the room's own. A race is all or
+	// nothing (§9.37): every attempt runs from one commit in its own worktree,
+	// and a racer dropped after its tree was cut would leave an `arena/<n>/<seat>`
+	// branch with no attempt on it, which `/arena record` would then count as a
+	// seat that raced and lost. A stage runs whole for the fan's own reason: a
+	// stage that ran two of its three hops is not the stage the operator typed,
+	// and the join would wait for a hop nothing dispatched. So on those two, `n`
+	// cancels.
 	Rest bool
 }
 
@@ -328,6 +339,13 @@ type ackTurn struct {
 	// given back to the room while the card is up so the released dispatch
 	// reads it exactly as the held one would have.
 	fan map[model.VendorID]string
+	// whole reports that this turn cannot lose a seat: a race, or a `/flow`
+	// stage. PendingAck.Rest states the consequence and says why.
+	whole bool
+	// chain reports that a `/flow` chain is behind this turn, so a refusal
+	// retires the chain rather than leaving a hop marked running with nothing
+	// dispatched (flowWriteGateKey's own rule, §9.35).
+	chain bool
 	// named is every seat the card names, so `n` drops exactly those and not
 	// whatever the classes would say a keystroke later.
 	named []model.VendorID
@@ -350,7 +368,7 @@ type ackTurn struct {
 // idle, and holding an adapter. A seat that is answering an earlier brief is
 // not on this turn, and a seat with no adapter never spawns; naming either
 // would ask the operator to acknowledge a write that is not going to happen.
-func (m *Model) ackFor(route Route, reg map[model.VendorID]vendors.Vendor) *PendingAck {
+func (m *Model) ackFor(route Route, reg map[model.VendorID]vendors.Vendor, whole bool) *PendingAck {
 	if !m.st.Write || !m.st.Asking() || m.flowReadHop {
 		return nil
 	}
@@ -368,8 +386,9 @@ func (m *Model) ackFor(route Route, reg map[model.VendorID]vendors.Vendor) *Pend
 		case ackUnmeasured:
 			a.Unmeasured = append(a.Unmeasured, c.Vendor)
 		default:
-			// Gated, and therefore the rest `n` sends to.
-			a.Rest = true
+			// Gated, and therefore the rest `n` sends to — unless this turn is
+			// one no seat may be dropped from (PendingAck.Rest).
+			a.Rest = !whole
 		}
 	}
 	if a.Count() == 0 {
@@ -442,11 +461,12 @@ func (m *Model) ackKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.recordAckDecision(ackDecisionDrop)
 		t := m.clearAck()
 		rest := m.ackRest(t)
+		if t.whole {
+			m.cancelAck(t, "the turn was cancelled: no seat may be dropped from it")
+			return m, nil
+		}
 		if len(rest) == 0 {
-			// Nothing legal is left, so the turn goes rather than being sent
-			// to nobody. The draft stays where it was typed: the operator may
-			// want to re-address it.
-			m.st.Notice = "the turn was cancelled: every seat it addressed writes without a card you have seen"
+			m.cancelAck(t, "the turn was cancelled: every seat it addressed writes with no card")
 			return m, nil
 		}
 		return m, m.releaseAck(t, Route{Vendors: rest},
@@ -464,13 +484,50 @@ func (m *Model) ackKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.releaseAck(t, t.route,
 			"sent, and nothing will ask again this session · a starts asking")
 	case "ctrl+c":
-		m.clearAck()
-		m.st.Notice = "the brief was not sent — it is still in the composer"
+		m.cancelAck(m.clearAck(), "the brief was not sent")
 		return m, nil
 	}
 	m.st.Notice = "the room is holding this brief — y sends, n " + ackDropLabel(m.st) +
 		", a sends and stops asking"
 	return m, nil
+}
+
+// cancelAck gives the room back with nothing dispatched, and says what is left
+// behind.
+//
+// Three things happen, and each one is an existing rule rather than a new one:
+//
+//   - A `/flow` chain is RETIRED. launchFlowStage marked the stage running
+//     before it reached the dispatch, so a chain left standing would carry a
+//     hop marker over a hop nothing sent, and its join would wait forever. That
+//     is flowWriteGateKey's own answer to a refused write hop (§9.35): the
+//     whole chain goes, because a chain whose write was refused has nothing
+//     legal to do next.
+//   - A race's WORKTREES are kept and the notice says so, which is
+//     stopArenaSetup's sentence exactly. The trees are the operator's, at names
+//     they can read, and `git worktree remove` clears one.
+//   - The BRIEF goes back in the composer. An ordinary turn never lost it; a
+//     race cleared it at enter, several seconds and one worktree setup ago, so
+//     it is put back the way stopArenaSetup puts it back.
+func (m *Model) cancelAck(t *ackTurn, lead string) {
+	if t == nil {
+		return
+	}
+	var why string
+	switch {
+	case t.race != nil:
+		why = "no racer started, and any worktree already added is kept · git worktree remove clears one"
+		if m.st.Draft == "" {
+			m.setDraft("/arena " + t.prompt)
+		}
+	case t.chain:
+		m.endFlowChain()
+		why = "the chain is retired: a stage that ran some of its hops is not the stage you typed"
+	default:
+		why = "the brief is still in the composer"
+	}
+	m.st.Notice = lead + " · " + why
+	m.st.Mode = ModeComposing
 }
 
 // releaseAck sends the held brief on the route the keystroke chose, and says
@@ -481,14 +538,27 @@ func (m *Model) ackKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // one — a seat that went busy while the card was up — and that sentence is
 // about the turn the operator just sent, so it outranks a report of the
 // keystroke that sent it.
+//
+// A notice the room was ALREADY showing survives into that empty slot too, and
+// it survives because of what a notice under this card is: the room is stopped
+// and nothing else has happened, so whatever it says is about this brief.
+// `@auto` is the case that made this a rule rather than a nicety — it names the
+// seat its readings picked, after the routing cell that made the pick has gone
+// (dispatchAuto), and a dispatch that cleared it would leave the operator
+// holding a turn with nothing on screen saying who it went to.
 func (m *Model) releaseAck(t *ackTurn, route Route, notice string) tea.Cmd {
 	if t == nil {
 		return nil
 	}
+	held := m.st.Notice
 	m.fanPrompts = t.fan
 	cmd := m.sendTurn(route, t.prompt, t.race)
-	if notice != "" && m.st.Notice == "" {
-		m.st.Notice = notice
+	if m.st.Notice == "" {
+		if notice != "" {
+			m.st.Notice = notice
+		} else {
+			m.st.Notice = held
+		}
 	}
 	return cmd
 }

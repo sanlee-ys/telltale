@@ -596,11 +596,21 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 	// The fanned prompts are handed BACK while the card is up. They were
 	// consumed on the way in, and a stage released a keystroke later has to
 	// read the same map the held one would have; releaseAck puts them back.
+	//
+	// A race and a `/flow` stage are ALL OR NOTHING here, which the card reads
+	// as `whole`: the first because §9.37 says a race is one turn across every
+	// seat, the second because a stage that ran some of its hops is not the
+	// stage the operator typed. On those two `n` cancels rather than narrowing,
+	// and PendingAck.Rest carries the whole argument.
+	whole := race != nil || m.flowChain != nil
 	if m.ackArmed {
 		m.ackArmed = false
-	} else if ack := m.ackFor(route, reg); ack != nil {
+	} else if ack := m.ackFor(route, reg, whole); ack != nil {
 		m.st.Ack = ack
-		m.ackTurn = &ackTurn{route: route, prompt: prompt, race: race, fan: fan, named: ack.Named()}
+		m.ackTurn = &ackTurn{
+			route: route, prompt: prompt, race: race, fan: fan,
+			whole: whole, chain: m.flowChain != nil, named: ack.Named(),
+		}
 		m.recordAckRaised(ack)
 		// The card is the statement, full width, two rows above the columns.
 		// A notice repeating it would be the room saying one thing twice

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/sanlee-ys/telltale/internal/council/vendors"
 	"github.com/sanlee-ys/telltale/internal/model"
 )
@@ -27,10 +29,16 @@ import (
 // writing room stops on this card, so "type it and press enter" is two
 // keystrokes and the helpers say so. A room with no card up is untouched, so a
 // refused brief and a read room still take the helper unchanged.
-func answerAck(m *Model) {
-	if ackWants(m.st) {
-		m.key(key("y"))
+//
+// It returns the released dispatch's own command, and nil when no card was up,
+// because that command is the room's event reader: a test asserting the
+// dispatch produced one has to read it from the keystroke that sent the turn.
+func answerAck(m *Model) tea.Cmd {
+	if !ackWants(m.st) {
+		return nil
 	}
+	_, cmd := m.key(key("y"))
+	return cmd
 }
 
 // sendHeld types a brief and presses enter, and STOPS there.
@@ -742,6 +750,81 @@ func TestARaceStopsOnTheCardBeforeASeatSpawns(t *testing.T) {
 	}
 }
 
+// TestNCancelsARaceRatherThanRacingFewerSeats.
+//
+// A race is all or nothing (§9.37). Dropping a racer after its worktree was
+// cut would leave an `arena/<n>/<seat>` branch with no attempt on it, and
+// `/arena record` counts a branch as a seat that raced — so the record would
+// carry a loss nobody ran. The key says cancel before it is pressed, the trees
+// already cut are kept and the room says so, and the brief goes back in the
+// composer, which is stopArenaSetup's own sentence for the same stop one step
+// earlier.
+func TestNCancelsARaceRatherThanRacingFewerSeats(t *testing.T) {
+	log := countSpawns(t)
+	m := arenaRoom(t)
+	m.st.Draft = "/arena add a marker file"
+
+	pumpArenaSetup(t, m, m.dispatch())
+	if m.st.Ack == nil {
+		t.Fatal("the race raised no card")
+	}
+	if m.st.Ack.Rest {
+		t.Error("the card offers to drop a seat from a race")
+	}
+	if got := ackDropLabel(m.st); got != "cancel the turn" {
+		t.Errorf("the key reads %q over a race it cannot narrow", got)
+	}
+
+	m.key(key("n"))
+	if log.n() != 0 {
+		t.Fatalf("%d racer(s) started after n", log.n())
+	}
+	if m.anyInFlight() {
+		t.Error("a race is in flight after n cancelled it")
+	}
+	if !strings.Contains(m.st.Notice, "worktree") {
+		t.Errorf("the room did not say what happened to the trees: %q", m.st.Notice)
+	}
+	if m.st.Draft != "/arena add a marker file" {
+		t.Errorf("the cancelled race did not put its brief back: %q", m.st.Draft)
+	}
+}
+
+// TestNRetiresAFlowChainRatherThanSendingPartOfAStage.
+//
+// launchFlowStage marks the stage running before it reaches the dispatch, so a
+// chain left standing after a refusal would carry a hop marker over a hop
+// nothing sent, and a fanned stage's join would wait on a hop that never
+// lands. That is flowWriteGateKey's own answer to a refused write hop (§9.35):
+// the whole chain goes.
+func TestNRetiresAFlowChainRatherThanSendingPartOfAStage(t *testing.T) {
+	log := countSpawns(t)
+	m := flowRoom(t, true)
+	m.st.Draft = "/flow @codex publish write:docs/a.md & @cursor publish write:docs/b.md -> @claude review"
+	m.dispatch()
+	m.key(key("y")) // the flow write gate
+	if m.st.Ack == nil {
+		t.Fatal("the stage raised no card")
+	}
+	if m.st.Ack.Rest {
+		t.Error("the card offers to drop a hop from a stage")
+	}
+
+	m.key(key("n"))
+	if log.n() != 0 {
+		t.Fatalf("%d hop(s) spawned after n", log.n())
+	}
+	if m.flowChain != nil {
+		t.Error("the chain outlived the stage its operator refused")
+	}
+	if m.st.FlowSteps != 0 {
+		t.Errorf("the header still claims hop %d/%d", m.st.FlowHop, m.st.FlowSteps)
+	}
+	if !strings.Contains(m.st.Notice, "chain is retired") {
+		t.Errorf("the room did not say the chain went: %q", m.st.Notice)
+	}
+}
+
 // TestTheCardReadsTheFallbackRatherThanTheLiveShape. A seat that retreated to
 // its batch adapter asks about nothing, and it was MEASURED asking about
 // nothing, so it moves out of `asking unmeasured` and into `write unasked`.
@@ -778,7 +861,7 @@ func TestASeatWithNoAdapterIsNeverNamed(t *testing.T) {
 		}
 		reg[k] = v
 	}
-	ack := m.ackFor(Route{}, reg)
+	ack := m.ackFor(Route{}, reg, false)
 	if ack == nil {
 		t.Fatal("no card at all")
 	}
