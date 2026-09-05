@@ -642,9 +642,14 @@ func (a *appServerProtocol) cancelHeld() [][]byte {
 // reused rather than rewritten. Nothing is written for an idle thread: an
 // interrupt names a turn id, and there is none to name.
 //
-// Whether `turn/interrupt` before the close shortens the exit is UNMEASURED;
-// the interrupt itself is a schema read (see Interrupt). What is measured is
-// only that the kill is needed, and the kill is still there.
+// MEASURED 2026-09-05 at codex-cli 0.151.0: `turn/interrupt` before the close
+// does not change the exit. An idle thread and an interrupted one took the
+// same 2-15 s to exit, and a process with no thread took 0.03 s, so the cost is
+// the thread's own teardown (Grace carries the diagnosis). No frame this
+// protocol offers ends it sooner. `thread/unsubscribe` answered `unsubscribed`
+// and changed nothing, `thread/archive` refused with no rollout and changed
+// nothing, and `ClientRequest.json` at this build has no `shutdown`. So this
+// method gained no line, and the kill is still there.
 func (a *appServerProtocol) Closing() [][]byte {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -664,18 +669,41 @@ func (a *appServerProtocol) Closing() [][]byte {
 
 // Grace is how long the room waits after closing stdin before the kill.
 //
-// Four seconds, and the number comes from the capture rather than from taste:
-// the four runs that DID exit on a closed pipe took 1.5–3.3 s (§9.50), so a
-// bound just past that lets the ordinary case end on its own and spends the
-// kill on the case that was measured needing it — the one still alive at 15 s.
-// MEASURED 2026-09-05 at codex-cli 0.151.0 (design.md §9.57): after `turn/interrupt`
-// completed and stdin closed, the process exited after 6.79, 1.76, 6.69, 7.77
-// and 6.42 s — four of five runs over this grace. The value is left as it is
-// on purpose: raising it to fit would hide a teardown nobody has diagnosed
-// (the `codex.cmd` shim's cmd.exe and node's own exit are both in the path).
-// The fix is routed to its own change; until it lands, the reaper ends this
-// seat most of the time, and that is the measured truth of this number.
-func (a *appServerProtocol) Grace() time.Duration { return 4 * time.Second }
+// Twenty seconds, and the number bounds the OPERATOR's hooks rather than the
+// vendor's exit. DIAGNOSED 2026-09-05 at codex-cli 0.151.0 on Windows 11, over
+// forty runs of `codex app-server` driven with the seat's own frames, stdin
+// closed with a thread open, and the exit timed (PARITY.md's Codex row carries
+// the numbers; design.md §9.57 the record):
+//
+//   - The shim is innocent. `cmd.exe /c codex.cmd`, `node.exe codex.js` and
+//     the native `codex.exe` each took 6-8 s to exit, five runs each.
+//   - No shutdown frame exists. `ClientRequest.json` at this build lists no
+//     `shutdown`; `thread/unsubscribe` and `thread/archive` sent before the
+//     close changed nothing (see Closing).
+//   - A process with NO thread exits in 0.03 s, and `initialize` alone in
+//     0.05 s. The cost is the thread's teardown, and an interrupted turn adds
+//     nothing to it.
+//   - The thread's teardown is the operator's `SessionEnd` hooks. With
+//     `--disable hooks` the same process, MCP servers and all, exited in
+//     0.06-0.08 s. With `-c mcp_servers={}` and the hooks kept, 4.5 s. The
+//     operator's `~/.codex/hooks.json` names two `SessionEnd` scripts, and one
+//     of them, run by hand with a synthetic payload, took 4.5-6.6 s alone.
+//   - The server is SILENT while they run. Nothing reaches stdout after the
+//     close, no `hook/started` included, so the seat has no signal to wait on
+//     and a fixed bound is the only shape this wait can take.
+//
+// So the seat may not shorten it. The hooks are the operator's contract with
+// the vendor, and the fleet's guard hooks (`PreToolUse`) ride the same feature
+// flag, so `--disable hooks` is not a fix the room may apply. What the room can
+// stop doing is killing the operator's own script mid-run on a number chosen at
+// another build. Five runs through the shim with an interrupted turn, the
+// item-11 shape, exited in 4.46, 4.33, 14.73, 7.55 and 2.45 s, and the 14.73 s
+// run is the same hook under load. Twenty seconds covers every one of the forty
+// with margin, and the kill still follows: a hook that hangs is ended here, and
+// that is the room's bound on the operator's hooks, said out loud. The 4 s this
+// replaces came from §9.50's 1.5-3.3 s exits at 0.149.1, timed before anyone
+// asked what the process was doing in those seconds.
+func (a *appServerProtocol) Grace() time.Duration { return 20 * time.Second }
 
 // Dead reports the terminal handshake state, for the room's fallback decision
 // (vendors.LiveFallback). It is the flag Turn refuses on; exposing it lets the
