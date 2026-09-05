@@ -87,11 +87,12 @@ telltale doctor
      The runbook is packaging/tape/README.md. No cast or GIF is in this
      repository today. -->
 
-**v0.2.0** (2026-08-14). `main` carries work past that tag, and
-[STATE.md](STATE.md) lists it. Windows is verified on every commit.
-The crew work after the tag (per-seat turns, worktrees, `@auto`,
-`--record`/`--replay`, the Unix host, three long-lived seats) is built and
-tested offline; the live runs it owes are listed in [STATE.md](STATE.md).
+**v0.3.0** (2026-09-04). Windows is verified on every commit.
+The crew (per-seat turns, worktrees, `@auto`, `--record`/`--replay`, the
+Unix host, three long-lived seats) is in this tag. It is built and tested
+offline, and the live runs it owes are listed in [STATE.md](STATE.md). The
+tag was cut with that list unpaid, by the owner's ruling of 2026-09-04, so a
+visitor who follows this page gets the room this page describes.
 A `darwin` CI job on Apple Silicon runs the suite and the binary smokes on
 a runner with no vendor CLI; its first run (2026-09-02, on the crew PR) found
 a socket path past macOS's 104-byte bound and a test that read a sentence
@@ -150,17 +151,17 @@ The binary is still **not signed**: the tap changes how it arrives, not what
 it is. Apple Silicon gets `darwin_arm64`, Intel gets `darwin_amd64`, and
 Linux gets `linux_amd64`. goreleaser rewrites
 [Formula/telltale.rb](Formula/telltale.rb) at each tag; the one checked in
-names `v0.2.0` with the sha256 values from that release's `checksums.txt`.
+names `v0.3.0` with the sha256 values from that release's `checksums.txt`.
 
 **macOS, curl** (measured on Intel macOS against `v0.2.0`, 2026-08-17; on
 Apple Silicon write `darwin_arm64` for `darwin_amd64`, a substitution nobody
 has walked by hand)
 
 ```
-curl -fLO https://github.com/sanlee-ys/telltale/releases/download/v0.2.0/telltale_0.2.0_darwin_amd64.tar.gz
-curl -fLO https://github.com/sanlee-ys/telltale/releases/download/v0.2.0/checksums.txt
+curl -fLO https://github.com/sanlee-ys/telltale/releases/download/v0.3.0/telltale_0.3.0_darwin_amd64.tar.gz
+curl -fLO https://github.com/sanlee-ys/telltale/releases/download/v0.3.0/checksums.txt
 shasum -a 256 -c checksums.txt --ignore-missing
-tar -xzf telltale_0.2.0_darwin_amd64.tar.gz
+tar -xzf telltale_0.3.0_darwin_amd64.tar.gz
 ./telltale doctor
 ```
 
