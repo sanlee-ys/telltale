@@ -13,11 +13,13 @@ off work. `unknown` is a legal value; an honest blank beats a plausible guess.
 
 ## Current objective
 
-v1 is cut: **v0.2.0, 2026-08-14**. The room is built, tagged and downloadable,
-and every claim it makes was checked by the person who wrote it.
+**v0.3.0 is published** (2026-09-09). The draft staged 2026-09-05 is live at
+https://github.com/sanlee-ys/telltale/releases/tag/v0.3.0. The README names
+that tag. `install.ps1` reads GitHub's latest release and now fetches this
+build.
 
-**The next minor is the OUTWARD CHAIN** (owner's ruling, 2026-08-15). Three
-links, in this order, and each one is the input to the next:
+**The outward chain (owner's ruling, 2026-08-15) is paid through the release.**
+Three links, in this order:
 
 1. **The demo path is defined.** One named route through the room, written
    down rather than improvised on the day. A separate entry owns what that
@@ -28,8 +30,11 @@ links, in this order, and each one is the input to the next:
    two seats given up with `x` after vendor-side stalls, both keeping their
    receipts, and `/adopt` exercised through its dirty-room refusal and then
    cleanly. The full record is design.md §9.37's dated payment block.
-3. **The launch post fires.** The post, the install it points at, and a reader
-   who arrives at the room the post described.
+3. **The launch post fires.** The GitHub release is the install a stranger
+   fetches. Show HN and directory listings stay owner actions on surfaces
+   outside this repo (design.md §8). They are not opened by a contributor
+   session. The paste for Show HN lives in the 2026-09-09 ship session, not
+   here.
 
 **What the chain buys is a room that has been witnessed** — driven end to end
 by someone who did not build it. That is the one thing a tag cannot supply and
