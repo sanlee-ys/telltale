@@ -182,8 +182,17 @@ go build -o telltale ./cmd/telltale
 `darwin_arm64`, and `linux_amd64`, plus `checksums.txt`. Unpack one archive
 and put `telltale` on `PATH`. The `curl` block above is that walk, measured.
 
-**Windows, winget.** Not submitted. Use the one paste above, scoop, or a
-source build. Draft: [packaging/](packaging/).
+**Windows, winget** (the `0.2.0` manifest merged into
+`microsoft/winget-pkgs` on 2026-09-10, PR #417671; not yet exercised by a
+`winget install` from the community source, and the first one is owed)
+
+```
+winget install --id sanlee-ys.telltale
+```
+
+winget delivers `0.2.0` until a `0.3.0` manifest is submitted; the one paste
+and scoop above deliver `v0.3.0` today. The manifests and the new-version
+flow are in [packaging/](packaging/).
 
 Run `telltale` with no arguments for the first frame.
 `telltale doctor` is the preflight. `telltale council` opens the room.

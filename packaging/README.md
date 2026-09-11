@@ -195,12 +195,19 @@ rehearsal tag never moves the formula users installed from.
 
 ## winget
 
-The three manifests in `winget/` are a **draft**. They are not submitted, and
-`telltale` is not in `microsoft/winget-pkgs` — the name was checked free there
-(and in the scoop `Main`/`Extras` buckets) at packaging time.
+The three manifests in `winget/` are the **template**. Their `0.2.0` instance
+was submitted by hand from the `telltale-0.2.0` branch of the
+`sanlee-ys/winget-pkgs` fork and **merged into `microsoft/winget-pkgs` on
+2026-09-10** as [#417671](https://github.com/microsoft/winget-pkgs/pull/417671)
+(`manifests/s/sanlee-ys/telltale/0.2.0/`), so `winget install --id
+sanlee-ys.telltale` resolves. What the merge does not cover: **`0.3.0` is not
+submitted** (the winget channel lags the release until it is), and nobody has
+yet run `winget install` against the community source — the first install is
+owed and belongs in PARITY.md when it happens.
 
-Submission is an external pull request to a Microsoft-owned repository, so it
-stays a human action. The flow, on the day:
+Each later version is its own pull request ("New version:" rather than "New
+package:"), against the same Microsoft-owned repository, so it stays a human
+action. The flow, on the day:
 
 1. Publish the GitHub release first. winget validation downloads the installer
    URL, so it must resolve.
@@ -250,8 +257,9 @@ What is still not done, each with its reason:
   measures that number (README's badge rule says why nothing renders it
   either). The tap is the channel until then, and the formula is already in
   the shape a core submission starts from.
-- **winget.** Drafted, not submitted (above). Submission is a pull request to
-  a Microsoft-owned repository and stays a human action.
+- **winget, for the current release.** `0.2.0` is merged (above); `0.3.0` is
+  not submitted. Each version's submission is a pull request to a
+  Microsoft-owned repository and stays a human action.
 - **Signing and notarization.** Not built, and the decision is the owner's
   (design.md §8, item 8): both need a credential the owner holds, Apple's
   costs a yearly fee, and no arrangement of the workflow produces a signature

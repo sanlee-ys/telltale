@@ -8776,6 +8776,17 @@ that file is the procedure, and neither restates the other.
    and nothing here measures that number; **winget**, per this item; **signing and
    notarization**, per (8). packaging/README.md is the runbook.
 
+   **Amended 2026-09-11: winget carries `0.2.0`.** The manifest drafted above was
+   submitted by hand, as this item required, and merged into
+   `microsoft/winget-pkgs` on 2026-09-10 as #417671 (`sanlee-ys.telltale`,
+   the publisher-qualified id from (2)). Nothing about "not automated" moves:
+   `v0.3.0` was published 2026-09-09 and has no manifest there, because each
+   version is its own pull request against a Microsoft-owned repository and a
+   session does not open those. So the winget channel lags the release by
+   exactly the submissions the owner has made, and the README says which
+   version it delivers. No `winget install` has been run against the community
+   source; the first one is a PARITY.md entry, the same debt the tap carries.
+
 8. **Not signed, and the decision is the owner's** (recorded 2026-08-16). No
    artifact carries a signature. `.goreleaser.yaml` declares no `signs` block and
    `release.yml` holds no signing secret, so the claim is checkable from the two

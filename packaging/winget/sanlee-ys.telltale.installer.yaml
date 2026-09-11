@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
 #
-# DRAFT. Not submitted. See packaging/README.md.
+# TEMPLATE. The 0.2.0 instance merged into microsoft/winget-pkgs on
+# 2026-09-10 (#417671). See packaging/README.md for the new-version flow.
 #
 # Shape: telltale ships as a zip holding a single portable exe, so this is
 # InstallerType: zip + NestedInstallerType: portable — the same shape fzf,
