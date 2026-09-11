@@ -412,11 +412,51 @@ clean directory on the same day, and every line exited 0.
 - **The `darwin_arm64` archive.** It was not walked at all. Since 2026-09-02
   `ci.yml`'s `darwin` job runs a binary built from each commit on an Apple
   Silicon runner, which retires "built, not run" for the platform; the archive
-  goreleaser attaches is still the thing nobody has unpacked and run there,
-  and the Homebrew tap that hands a user that archive has not been exercised.
+  goreleaser attaches is still the thing nobody has unpacked and run there.
+  The Homebrew tap on Apple Silicon is also unwalked; the Intel walk below
+  installed `darwin_amd64`.
 
 Windows and SmartScreen belong to the other machine. `SECURITY.md` still records
 that prompt as unmeasured, and nothing here changes it.
+
+## Homebrew tap, walked 2026-09-11
+
+The tap was already present on this Intel Mac. `brew install telltale` failed
+until an explicit trust grant. Homebrew 6.0.22 refuses to load a third-party
+formula from an untrusted tap. The error named two remedies. This walk used
+the formula-level grant, because Homebrew prefers a narrow grant over whole-tap
+trust:
+
+```
+brew trust --formula sanlee-ys/telltale/telltale
+```
+
+stdout: `Trusted formula: https://github.com/sanlee-ys/telltale/telltale`.
+`brew tap-info sanlee-ys/telltale` still printed `Untrusted` after that, which
+is the tap-level state. The formula grant is what `brew install telltale`
+needs.
+
+| field | value |
+|---|---|
+| machine | Intel x86_64 MBP |
+| OS | macOS 26.6.2, build 25G83 (`sw_vers`) |
+| Homebrew | 6.0.22 |
+| tap HEAD | `2b6d511` (same as `origin/main` that day) |
+| tag walked | `v0.3.0`, formula URL `telltale_0.3.0_darwin_amd64.tar.gz` |
+| install | `brew install telltale` wrote `/usr/local/Cellar/telltale/0.3.0` (6 files, 11.5MB) |
+| PATH | `/usr/local/bin/telltale` → `../Cellar/telltale/0.3.0/bin/telltale` |
+| version | `telltale version` printed `telltale 0.3.0` |
+| `brew test` | ran `${bin}/telltale version`, exit 0 |
+| quarantine | `xattr -l /usr/local/bin/telltale` printed nothing |
+| signature | `codesign -dvv` printed `code object is not signed at all` |
+| doctor | exit 0; 6 passed, 3 failed (`codex`, `agy`, `cursor-agent` absent on PATH), 16 not checked |
+| `council ls` | `host none is running`; `no room is saved yet` |
+
+Homebrew printed an Intel x86_64 support warning (no bottles as of September
+2026). The formula does not use a bottle. It fetches the GitHub release
+archive. The warning did not block the install.
+
+Apple Silicon `brew install` remains unwalked.
 
 ## Terminal profile
 

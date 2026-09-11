@@ -135,10 +135,6 @@ MEASURED CLAIMS rather than the precondition for the tag.
       council ls`, rejoin, `/quit`; then a host left up, `telltale council
       kill`; then `kill -9` on a host and `ls` — retires §7.30's "macOS is
       NOT measured" and PARITY's "expected to match".
-  21. Tag a release and publish the draft; on the MacBook `brew tap
-      sanlee-ys/telltale https://github.com/sanlee-ys/telltale`, `brew install
-      telltale`, `brew test telltale`; record it in PARITY — retires "not yet
-      exercised by a `brew install`".
   22. Unpack the `darwin_arm64` archive by hand and run `telltale doctor` —
       retires PARITY's "not walked at all".
 

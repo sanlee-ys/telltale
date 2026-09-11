@@ -59,6 +59,7 @@ telltale council
 
 ```
 brew tap sanlee-ys/telltale https://github.com/sanlee-ys/telltale
+brew trust --formula sanlee-ys/telltale/telltale
 brew install telltale
 brew test telltale
 telltale version
@@ -157,9 +158,13 @@ runs:
 
 ```
 brew tap sanlee-ys/telltale https://github.com/sanlee-ys/telltale
+brew trust --formula sanlee-ys/telltale/telltale
 brew install telltale
 ```
 
+Homebrew 6 refuses to load a third-party formula from an untrusted tap.
+`brew install telltale` fails until the trust command runs. The grant is
+per formula, not the whole tap, because Homebrew prefers a narrow grant.
 `brew tap <user>/<name> <url>` accepts any git repository with a `Formula/`
 directory, so the tap needs no `homebrew-telltale` repository; the URL is what
 makes the short name resolve. The formula picks `darwin_arm64` on Apple
@@ -182,12 +187,13 @@ it is published the URLs in the fresh formula 404. Then, on a Mac,
 the tap is done by hand at a release, and nothing about it needs a secret
 beyond the token the release already holds.
 
-**The checked-in formula predates the first automated one.** It names
-`v0.2.0`, with the four sha256 values taken from that release's
-`checksums.txt` on 2026-09-02, in the shape goreleaser v2.17.1 writes
-(verified against a `--snapshot` run's output). goreleaser overwrites it
-whole at the next tag. Nobody has run `brew install telltale` against it yet;
-the first install is owed and belongs in PARITY.md when it happens.
+**The first `brew install` ran on 2026-09-11.** Intel x86_64, Homebrew 6.0.22,
+tag `v0.3.0`. The trust grant was the missing step: without it, `brew install
+telltale` refused to load the formula. After `brew trust --formula
+sanlee-ys/telltale/telltale`, install and `brew test` both exited 0, and
+`telltale version` printed `telltale 0.3.0`. The measurement is in
+[PARITY.md](../PARITY.md). goreleaser still overwrites the formula whole at
+each tag. Apple Silicon `brew install` is unwalked.
 
 **An `-rc` tag leaves the formula alone.** `skip_upload: auto` skips the
 publisher on a prerelease, the same rule the scoop bucket follows, so a
