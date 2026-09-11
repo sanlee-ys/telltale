@@ -143,7 +143,13 @@ The consequences, per platform:
   `Formula/telltale.rb` fetches the release archive with `curl` into
   Homebrew's cache, and `curl` writes no `com.apple.quarantine` attribute
   (measured 2026-08-17 with `xattr -l`, above), so Gatekeeper is never
-  consulted and the binary runs as installed. That is a property of the
+  consulted and the binary runs as installed. **Confirmed on a real
+  `brew install` of `v0.3.0`, 2026-09-11**, Intel x86_64, Homebrew 6.0.22:
+  `xattr -l /usr/local/bin/telltale` printed nothing, and `telltale doctor`
+  ran at exit 0. Homebrew 6 needs `brew trust --formula
+  sanlee-ys/telltale/telltale` before it will load the formula; the README
+  install block names that command. The measurement is in PARITY.md.
+  That is a property of the
   transport and not a signature: the archive the tap installs is the same
   unsigned, un-notarized one, and the formula is chosen over a cask precisely
   because a cask arrives quarantined and would need an `xattr` hook to run

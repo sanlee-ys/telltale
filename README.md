@@ -136,16 +136,19 @@ scoop bucket add telltale https://github.com/sanlee-ys/telltale
 scoop install telltale
 ```
 
-**macOS, Homebrew** (the tap lives in this repository; not yet exercised by
-a `brew install`, and the first one is owed)
+**macOS, Homebrew** (measured on Intel macOS against `v0.3.0`, 2026-09-11;
+Apple Silicon `brew install` is unwalked)
 
 ```
 brew tap sanlee-ys/telltale https://github.com/sanlee-ys/telltale
+brew trust --formula sanlee-ys/telltale/telltale
 brew install telltale
 telltale doctor
 ```
 
-Homebrew fetches the release archive into its own cache and sets no
+Homebrew 6 refuses to load a third-party formula until that trust command
+runs. The grant covers this formula only. A later `brew upgrade telltale`
+reuses it. Homebrew fetches the release archive into its own cache and sets no
 `com.apple.quarantine` mark, so Gatekeeper is never asked about the binary.
 The binary is still **not signed**: the tap changes how it arrives, not what
 it is. Apple Silicon gets `darwin_arm64`, Intel gets `darwin_amd64`, and
