@@ -503,6 +503,16 @@ Nothing open. The last one here was the 44 seconds, and it was measured
 
 ## Known gaps, not yet owned
 
+- **winget delivers `0.2.0`; the release is `v0.3.0` (2026-09-11).** The
+  `sanlee-ys.telltale` 0.2.0 manifest merged into `microsoft/winget-pkgs` on
+  2026-09-10 (#417671), so the channel exists. Two things are owed, both the
+  owner's: a `0.3.0` new-version pull request (the sha256 is on the v0.3.0
+  release's `checksums.txt`; the flow is packaging/README.md's winget section),
+  and one `winget install --id sanlee-ys.telltale` on a Windows box to record in
+  PARITY.md — no install from the community source is recorded anywhere in
+  this repo. Submitting stays a human action under the same ruling as the
+  directory listings below.
+
 - **The codex sandbox claims are pinned at 0.149.1 and the installed build
   is 0.151.0 (2026-09-01).** The chip that traced the seat's `failed (exit 1)`
   re-ran the three seat argv shapes at 0.151.0 and all parsed, so no flag
