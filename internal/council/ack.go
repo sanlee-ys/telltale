@@ -211,10 +211,23 @@ func ackLabel(st State, v model.VendorID) string {
 	return string(v)
 }
 
-// ackClause is one claim and the seats it names: `write unasked: Antigravity,
-// Cursor`.
-func ackClause(words string, names []string) string {
-	return words + ": " + strings.Join(names, ", ")
+// ackClause is one claim, counted, and the seats it names: `2 seats write
+// unasked: Antigravity, Cursor`. With no names it is the counted claim alone:
+// `2 seats write unasked`.
+//
+// **The count is the clause's own, never the card's.** Until 2026-09-13 one
+// head carried the card's total over the first clause only, so a card with two
+// claims read `3 seats write unasked: Antigravity, Cursor  │  asking
+// unmeasured: Codex`: a three, then two names, and the reader stopped there.
+// The 2026-09-13 review named it fault N5. A number now sits beside the thing
+// it counts, and PendingAck.Count is still the card's total for the rows and
+// for `n`; it is no longer a word on the card.
+func ackClause(n int, words string, names []string) string {
+	s := itoa(n) + " " + plural(n, "seat") + " " + words
+	if len(names) == 0 {
+		return s
+	}
+	return s + ": " + strings.Join(names, ", ")
 }
 
 // ackSubject is the card's question at width w.
@@ -229,37 +242,40 @@ func ackClause(words string, names []string) string {
 //  3. the claims alone, with no seat named.
 //
 // **The floor keeps the words and loses the names**, exactly as the needs-you
-// strip's floor does. `4 seats write unasked` is still true, still says what
-// the operator is being asked, and is honest about being unable to say who at
-// that width. Dropping the card instead would trade the only statement that a
-// write brief is reaching an unwatched seat for a handful of cells.
+// strip's floor does. `2 seats write unasked  │  1 seat asking unmeasured` is
+// still true, still says what the operator is being asked, and is honest about
+// being unable to say who at that width. Dropping the card instead would trade
+// the only statement that a write brief is reaching an unwatched seat for a
+// handful of cells. Each clause keeps its own count on every rung (ackClause),
+// so the floor never binds one total to one claim's verb.
 //
 // Nothing is ever clipped at rungs 1 and 2. A clipped seat name is not a
 // shortened seat name (§9.18), so the rung yields whole and the next one is
 // tried.
 func ackSubject(st State, w int, g Glyphs) string {
 	a := st.Ack
-	n := a.Count()
-	head := itoa(n) + " " + plural(n, "seat")
 	sep := strings.Repeat(" ", gutter) + g.Sep + strings.Repeat(" ", gutter)
 
+	// build is one rung. A nil name is the floor: the claims stand counted,
+	// with no seat named.
 	build := func(name func(model.VendorID) string) string {
 		var clauses []string
-		if len(a.Unasked) > 0 {
-			var names []string
-			for _, v := range a.Unasked {
-				names = append(names, name(v))
+		for _, c := range []struct {
+			words string
+			seats []model.VendorID
+		}{{ackUnaskedWords, a.Unasked}, {ackUnmeasuredWords, a.Unmeasured}} {
+			if len(c.seats) == 0 {
+				continue
 			}
-			clauses = append(clauses, ackClause(ackUnaskedWords, names))
-		}
-		if len(a.Unmeasured) > 0 {
 			var names []string
-			for _, v := range a.Unmeasured {
-				names = append(names, name(v))
+			if name != nil {
+				for _, v := range c.seats {
+					names = append(names, name(v))
+				}
 			}
-			clauses = append(clauses, ackClause(ackUnmeasuredWords, names))
+			clauses = append(clauses, ackClause(len(c.seats), c.words, names))
 		}
-		return head + " " + strings.Join(clauses, sep)
+		return strings.Join(clauses, sep)
 	}
 
 	byLabel := build(func(v model.VendorID) string { return ackLabel(st, v) })
@@ -270,14 +286,7 @@ func ackSubject(st State, w int, g Glyphs) string {
 	if lipgloss.Width(byTag) <= w {
 		return byTag
 	}
-	var words []string
-	if len(a.Unasked) > 0 {
-		words = append(words, ackUnaskedWords)
-	}
-	if len(a.Unmeasured) > 0 {
-		words = append(words, ackUnmeasuredWords)
-	}
-	bare := head + " " + strings.Join(words, sep)
+	bare := build(nil)
 	if lipgloss.Width(bare) <= w {
 		return bare
 	}

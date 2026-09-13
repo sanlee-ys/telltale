@@ -405,8 +405,8 @@ whole session, and the same `WRITES` badge on every column, uniform on purpose b
 grading them would imply a safety difference that does not exist. A `--read` room says
 `READ` in the same place, because absence of a badge is not a claim. And before the room
 sends a write brief to a seat that is not `gated`, it stops on one card that names that
-seat: `2 seats write unasked: Antigravity, Cursor`, or `asking unmeasured: Codex`, or both
-claims at once. A seat nothing has measured is named as unmeasured and never as unasked.
+seat: `2 seats write unasked: Antigravity, Cursor`, or `1 seat asking unmeasured: Codex`, or both
+claims at once, each with its own count. A seat nothing has measured is named as unmeasured and never as unasked.
 `y` sends the turn as addressed. `n` drops those seats and sends to the rest, or cancels
 the turn when no seat is left; a race and a `/flow` stage cannot lose a seat, so `n`
 cancels those, and the key reads `n cancel the turn` before you press it. `ctrl+c` gives

@@ -455,7 +455,7 @@ func TestAReplayDrawsTheCardAndTakesItDown(t *testing.T) {
 		t.Fatal("the ack record did not raise a card")
 	}
 	frame := render(m.st)
-	for _, want := range []string{"2 seats", "write unasked: Antigravity", "asking unmeasured: Codex", "y send"} {
+	for _, want := range []string{"1 seat write unasked: Antigravity", "1 seat asking unmeasured: Codex", "y send"} {
 		if !strings.Contains(frame, want) {
 			t.Errorf("the replayed frame does not say %q:\n%s", want, frame)
 		}
@@ -644,7 +644,7 @@ func TestTheCardHasThreeFormsAndOneGrammar(t *testing.T) {
 				Unasked:    []model.VendorID{model.VendorAntigravity, model.VendorCursor},
 				Unmeasured: []model.VendorID{model.VendorCodex},
 			},
-			"3 seats write unasked: Antigravity, Cursor  │  asking unmeasured: Codex",
+			"2 seats write unasked: Antigravity, Cursor  │  1 seat asking unmeasured: Codex",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -661,9 +661,9 @@ func TestTheCardHasThreeFormsAndOneGrammar(t *testing.T) {
 		Unasked:    []model.VendorID{model.VendorAntigravity, model.VendorCursor},
 		Unmeasured: []model.VendorID{model.VendorCodex},
 	}
-	full := "3 seats write unasked: Antigravity, Cursor  │  asking unmeasured: Codex"
-	tags := "3 seats write unasked: AG, CU  │  asking unmeasured: CX"
-	bare := "3 seats write unasked  │  asking unmeasured"
+	full := "2 seats write unasked: Antigravity, Cursor  │  1 seat asking unmeasured: Codex"
+	tags := "2 seats write unasked: AG, CU  │  1 seat asking unmeasured: CX"
+	bare := "2 seats write unasked  │  1 seat asking unmeasured"
 	for _, tc := range []struct {
 		w    int
 		want string
