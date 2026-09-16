@@ -36,3 +36,5 @@ own exit.
 Read `telltale council replay-check examples/demo.jsonl` for the identities the
 file carries. They are synthesized too, and the first line of the output says
 so.
+
+**Recorded before the hold card (2026-09-16).** The capture carries no `ack` record, so its replay never draws the write acknowledgement card. The test-only stand-in is the synthesized `internal/council/testdata/replay/hold-card.jsonl`, which feeds the `demo-ack` golden until an owner records a room with the card in it.

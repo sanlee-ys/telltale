@@ -1,0 +1,15 @@
+{"kind":"room","v":1,"started":"2026-09-16T10:00:00Z","workspace":"~/code/example","write":true,"briefed":true,"seats":[{"vendor":"claude","label":"Claude Code","avail":0,"sandbox":6,"detail":"asks before every tool call that changes anything","gran":1},{"vendor":"codex","label":"Codex","avail":0,"sandbox":5,"detail":"can be asked; nothing has measured that it does","gran":3},{"vendor":"agy","label":"Antigravity","avail":0,"sandbox":5,"detail":"writes with no card","gran":3},{"vendor":"grok","label":"Grok","avail":0,"sandbox":5,"detail":"writes with no card","gran":1}]}
+{"kind":"ack","ms":1200,"unasked":["agy","grok"],"unmeasured":["codex"],"rest":true}
+{"kind":"ack","ms":4800,"decision":"send"}
+{"kind":"dispatch","ms":4900,"turn":1,"route":{},"sent":[{"vendor":"claude","prompt":"add a marker file and name the seat that wrote it","persistent":true},{"vendor":"codex","prompt":"add a marker file and name the seat that wrote it"},{"vendor":"agy","prompt":"add a marker file and name the seat that wrote it"},{"vendor":"grok","prompt":"add a marker file and name the seat that wrote it"}]}
+{"kind":"event","ms":5400,"vendor":"claude","event":"session","session_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}
+{"kind":"event","ms":5900,"vendor":"grok","event":"session","session_id":"ffffffff-1111-4222-8333-444444444444"}
+{"kind":"event","ms":6300,"vendor":"claude","event":"text","text":"Reading the tree first, then the marker goes in.\n"}
+{"kind":"event","ms":6800,"vendor":"grok","event":"text","text":"Marker written: marker-grok.md names this seat.\n"}
+{"kind":"event","ms":7200,"vendor":"grok","event":"done","exit":0}
+{"kind":"event","ms":8100,"vendor":"codex","event":"text","text":"Marker written: marker-codex.md names this seat.\n"}
+{"kind":"event","ms":8400,"vendor":"codex","event":"done","exit":0}
+{"kind":"event","ms":9000,"vendor":"claude","event":"text","text":"Marker written: marker-claude.md names this seat.\n"}
+{"kind":"event","ms":9300,"vendor":"claude","event":"meta","ends_turn":true}
+{"kind":"event","ms":9700,"vendor":"agy","event":"text","text":"Marker written: marker-agy.md names this seat.\n"}
+{"kind":"event","ms":10000,"vendor":"agy","event":"done","exit":0}
