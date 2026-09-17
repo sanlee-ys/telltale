@@ -17675,6 +17675,7 @@ room two spellings of one thing, which is the defect §9.31 records under its ow
 | `^w` `>` | grow: move the focused pane's boundary right by one step |
 | `^w` `<` | shrink: move the focused pane's boundary left by one step |
 | `^w` `e` | even: every pane gets the same width again, and the split clears |
+| `^w` `c` | compare (added 2026-09-16): the focused pane joins the split's owner, and the two share the reading width. With no split in force it is a split. On a third seat it replaces the peer. `docs/room-identity.md` carries the rule |
 | any other key | cancels the prefix, and is swallowed |
 
 **An unrecognised key is swallowed and NOT re-dispatched.** A prefix that let the second key
@@ -17698,7 +17699,7 @@ character.
 
 **An armed prefix says so.** The composer box's bottom border reads `PANES` while the room waits
 for the second key, at the rank `GATE` and `COMPOSE` already take (§9.44), and the footer names
-the four keys. §7.8 forbids a mode that changes what an unmodified key means without saying so.
+the pane keys (five since `c` joined on 2026-09-16). §7.8 forbids a mode that changes what an unmodified key means without saying so.
 This is such a mode, for exactly one keystroke.
 
 #### The arithmetic, and the two invariants it may not break
@@ -17749,7 +17750,7 @@ for a grid is too narrow before a pane key is pressed, and it stays that way aft
 
 Below the columns tier the pane controls do nothing, and the room refuses to offer them: `^w`
 does not arm at the tabs tier, over a turn page, over an arena record, or in a zoomed frame.
-That refusal is the reason the footer needs no permanent pane cell at all — the four keys are
+That refusal is the reason the footer needs no permanent pane cell at all — the pane keys are
 named only while they are live, so there is never a frame that promises a key which does
 nothing. It is §9.11's rule reached by a different route: that section drops `f` and `tab`
 outright in a one-seat room, and this one never offers the keys in the first place.
@@ -18661,6 +18662,27 @@ seat restored only if `State.seats` says it takes turns, and the room line lists
 act carrying an outcome and no text, 112 of them for one seat); those fold into one count per
 seat. The replay half of the owed measurement is done; the hero decision still stays the
 owner's, and the rendering of that recording belongs to the density pass.
+
+**2026-09-16: the replay draws its provenance on the room line.** Before this date, the
+recording's stamp lived only in `replay-check`'s stdout, and the scrubbed claim lived on the
+entry notice and the closing notice. The entry notice is gone at the first dispatch, so a
+reader who looked at a frame in the middle of a replay saw `REPLAY` and nothing that said which
+run it was or whether the prose was real. The room line (`roomline.go`, `replayFact`) now
+prints the provenance on every replayed frame, first among the room facts: `recorded
+2026-09-03 21:14 -0400` for a capture, and `recorded 2026-01-01 09:00 UTC · scrubbed: the
+shape is real; the date and every word are synthesized` for a scrubbed file. Each clause
+follows §4a.1. The date is the file's own stamp in the zone the recorder wrote. A file with no
+readable stamp draws no date; it never draws the epoch or this machine's clock. A scrubbed
+file's stamp is `scrub.go`'s constant, so the clause says the date is synthesized with the
+words. The vendor CLI versions are NOT drawn, because the format carries no version field
+(`recordLine`) and a version read off this machine would describe a room that ran somewhere
+else. A version field on the room line, written when the room learns one, is owed and is not
+started here. The two notices keep their words. The cost is one room-line row on every replay
+frame, so the `replay`, `replay-gate`, `replay-ascii`, `demo-gate`, `demo-final` and
+`demo-ack` goldens moved by that row, and `demo-compare` and `demo-compare-route` are new (the
+compare is `docs/room-identity.md`'s 2026-09-16 section; `panes-keys` moved by the `c compare`
+cell and `panes-compare` is new). `TestTheReplayFactIsHonestAboutWhatTheFileCarries`
+pins each clause.
 <a id="s9-57"></a>
 
 ### 9.57 three seats stay up between briefs, on a reading rather than a run (2026-09-02)

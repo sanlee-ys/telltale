@@ -40,6 +40,11 @@ import (
 // in roomLine, at the width the frame actually has.
 func roomFacts(st State, g Glyphs) []string {
 	var out []string
+	if r := replayFact(st); r != "" {
+		// FIRST, on this file's own order: it is the fact about the whole
+		// room, and it stands for the whole replay.
+		out = append(out, r)
+	}
 	if n := collapsedNotice(st, g); n != "" {
 		out = append(out, n)
 	}
@@ -53,6 +58,46 @@ func roomFacts(st State, g Glyphs) []string {
 		out = append(out, st.RoomNote)
 	}
 	return out
+}
+
+// replayFact is a replay's provenance: when the file was recorded, and
+// whether its words are real (2026-09-16, design.md §9.56's dated paragraph).
+//
+// It is a room fact by the rule at the top of this file: the date and the
+// scrubbed claim are true of the whole room and of no one seat, and they hold
+// for the whole replay. Before this the date lived only in `replay-check`'s
+// stdout, and the scrubbed claim on two notices, so a reader who looked up
+// mid-replay had a header saying REPLAY and no frame saying which run or
+// whether the prose was real.
+//
+// The honest-gauge rule decides each clause (§4a.1). The date is the file's
+// own stamp, formatted in the zone the recorder wrote, and a file with no
+// readable stamp draws NO date rather than the epoch. A scrubbed file's stamp
+// is itself synthesized (scrub.go, scrubbedStart), so the scrubbed clause
+// says the date is synthesized too rather than letting a reader take it for
+// the evening the room ran. The vendor CLI versions are not drawn at all:
+// the recording format carries no version field (recordLine), so there is
+// nothing to draw, and a version read off this machine would be a guess about
+// a room that ran somewhere else.
+//
+// Empty for a live room, which costs it no row.
+func replayFact(st State) string {
+	if !st.Replay {
+		return ""
+	}
+	date := ""
+	if !st.Recorded.IsZero() {
+		date = "recorded " + st.Recorded.Format("2006-01-02 15:04 MST")
+	}
+	if !st.Scrubbed {
+		return date
+	}
+	scrub := "scrubbed: the shape is real; every word is synthesized"
+	if date != "" {
+		scrub = "scrubbed: the shape is real; the date and every word are synthesized"
+		return date + " · " + scrub
+	}
+	return scrub
 }
 
 // satOutFact names the on-screen seats the live turn did not reach.

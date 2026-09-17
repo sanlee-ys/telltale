@@ -962,6 +962,9 @@ func (s State) PanesArranged() bool {
 	if s.PaneOwner != "" {
 		return true
 	}
+	if s.PanePeer != "" {
+		return true
+	}
 	for _, g := range s.PaneGrow {
 		if g != 0 {
 			return true
@@ -1438,6 +1441,19 @@ type State struct {
 	// budget for.
 	PaneOwner model.VendorID
 
+	// PanePeer is the second seat of a two-seat compare (`^w c`, 2026-09-16;
+	// docs/room-identity.md). With PaneOwner it makes TWO equal columns at the
+	// reading width, and every other pane holds at stripColumn.
+	//
+	// A second field rather than a slice, because the compare is bounded at two
+	// by design: the demo beat compares two answers, and at the share geometry
+	// (180 cells) two seats get 63 and 62 cells where a third would take the
+	// pair down to 47 each. Empty means no compare, which is every frame this
+	// room drew before the key, so no golden taken before it moved. Meaningless
+	// without PaneOwner: framePrimary reads it only beside an owner, and the
+	// keys never set it alone.
+	PanePeer model.VendorID
+
 	// PaneGrow is the operator's own width bias per seat, in cells (§9.51).
 	//
 	// Nil or empty means they have moved no boundary. One press of the resize
@@ -1455,7 +1471,7 @@ type State struct {
 	//
 	// A mode that lasts exactly one keystroke, and it is on State because the
 	// room has to SAY it is in one: the composer border reads PANES and the
-	// footer names the four keys while this is set. §7.8 forbids a mode that
+	// footer names the pane keys while this is set. §7.8 forbids a mode that
 	// changes what an unmodified key means without saying so, and for that one
 	// keystroke `s` is not the letter s.
 	PanePrefix bool
@@ -1527,6 +1543,23 @@ type State struct {
 	// README's "invented recording" in a new form: a real run, shown as
 	// though it were happening now.
 	Replay bool
+
+	// Recorded is the wall instant the recording started, off its room line,
+	// and the zero time when the file carries no readable stamp.
+	//
+	// On State because the room line prints it on every replayed frame
+	// (roomline.go, replayFact). The zero time renders as ABSENT: a replay
+	// whose file has no stamp draws no date, and never the epoch or the wall
+	// clock (§4a.1). A scrubbed file carries a synthesized stamp
+	// (scrub.go, scrubbedStart), and the room line says so beside the date.
+	Recorded time.Time
+
+	// Scrubbed reports that the recording is the shape of a real room with
+	// every word synthesized (scrub.go). The room line repeats the claim on
+	// every frame, so a reader who arrives mid-replay is not reading filler as
+	// a capture. The entry and closing notices still say it too; those are the
+	// two moments a reader is most likely to be looking at the footer.
+	Scrubbed bool
 
 	// Live is the seat whose pane draws a real terminal screen (§9.53).
 	//

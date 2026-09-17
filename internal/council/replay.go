@@ -111,6 +111,11 @@ func newReplayModel(opts Options, rec *recording, path string) *Model {
 	h := rec.room
 	st := NewState()
 	st.Replay = true
+	// The file's own provenance, for the room line (roomline.go, replayFact):
+	// the stamp as started() reads it, zero when it cannot, and the scrubbed
+	// claim off the room line. Nothing here is this machine's clock.
+	st.Recorded = rec.started()
+	st.Scrubbed = rec.room.Scrubbed
 	st.ASCII = opts.ASCII
 	st.Workspace = h.Workspace
 	st.Write = h.Write

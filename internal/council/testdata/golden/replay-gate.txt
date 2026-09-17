@@ -1,5 +1,6 @@
   council ⚠ REPLAY  │  ~/code/example                                    turn 1 → everyone  │  3/3 seated  │  no brief  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  recorded 2026-09-01 10:00 UTC                                                                                         
   › add a --version flag and a test for it                                                                              
                                                                                                                         
 ▌ ▸ 1 CC Claude Code  ───  ⚠ needs you  │    2 CX Codex  ─────  ⠋ streaming 2s  │    3 AG Antigravity  ─  ⠋ waiting 2s  
@@ -8,7 +9,6 @@
 ▌   cmd/example/version.go              │                                       │                                       
 ▌   y approve   n deny   a stop asking  │                                       │                                       
 ▌ now  ────────────────────────  1 act  │                                       │                                       
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         
