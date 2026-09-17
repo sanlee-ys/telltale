@@ -1294,7 +1294,7 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// that key is.
 	//
 	// Over the mode split because for exactly one keystroke the prefix IS the
-	// mode, and routing it through viewKey would put the four pane letters into
+	// mode, and routing it through viewKey would put the pane letters into
 	// that keymap's own switch, where `s` already stops a flow chain and `e` is
 	// free only by accident.
 	if m.st.PanePrefix {
@@ -1323,6 +1323,8 @@ func (m *Model) paneKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "s":
 		m.paneSplit()
+	case "c":
+		m.paneCompare()
 	case "e":
 		m.paneEven()
 	case ">", ".":
@@ -2676,8 +2678,8 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		//
 		// **Armed only when a pane key would do something.** panesLive answers
 		// that, and refusing here rather than inside each act is what keeps the
-		// promise the footer makes: an armed prefix draws a line naming four keys,
-		// and arming it on a page or at the tabs tier would name four keys that
+		// promise the footer makes: an armed prefix draws a line naming the pane
+		// keys, and arming it on a page or at the tabs tier would name keys that
 		// all do nothing — §7.8's surprise, delivered by the one line that exists
 		// to prevent it.
 		//
@@ -3195,6 +3197,44 @@ func (m *Model) paneSplit() {
 		return
 	}
 	m.st.PaneOwner = c.Vendor
+	// A split has one answer, so a compare in force ends here: the peer is
+	// dropped, and `^w c` on another seat names a new one.
+	m.st.PanePeer = ""
+}
+
+// paneCompare pairs the focused pane with the split's owner, so the two of
+// them share the reading width and the rest hold at stripColumn (2026-09-16;
+// docs/room-identity.md carries the rule and the measured widths).
+//
+// The question it answers is "which two seats am I comparing", and the answer
+// is the owner and the seat the keys are on. With no split in force it IS a
+// split: the focused seat becomes the owner, and a second press on another
+// seat completes the pair. On the owner itself it changes nothing. On a third
+// seat it re-points the PEER and keeps the owner, on paneSplit's own rule that
+// a press re-points rather than accumulates: the operator named the owner
+// first, and the seat they are on now is the one they want beside it.
+//
+// The route can draw the same frame with no key at all. A brief sent to two
+// seats sets FrameOwners to those two (frameOwnersFor), and weightedWidths
+// gives them the same two columns. This key is for the turn that went to
+// everyone, where the grid is four equal columns and the operator wants two
+// of the four raw answers wide.
+func (m *Model) paneCompare() {
+	if !m.panesLive() {
+		return
+	}
+	c := m.focused()
+	if c == nil {
+		return
+	}
+	if m.st.PaneOwner == "" {
+		m.st.PaneOwner = c.Vendor
+		return
+	}
+	if m.st.PaneOwner == c.Vendor {
+		return
+	}
+	m.st.PanePeer = c.Vendor
 }
 
 // paneEven returns every pane to the same width and drops the split (§9.51).
@@ -3209,6 +3249,7 @@ func (m *Model) paneSplit() {
 // would be this control reaching into a fact it does not own.
 func (m *Model) paneEven() {
 	m.st.PaneOwner = ""
+	m.st.PanePeer = ""
 	m.st.PaneGrow = nil
 }
 

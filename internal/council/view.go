@@ -207,6 +207,12 @@ func layoutFor(st State, g Glyphs) Layout {
 // It also outlives the turn. A dispatch replaces FrameOwners and never touches
 // PaneOwner, so a room the operator arranged stays arranged across turns — which
 // is the difference between a layout control and a side effect of routing.
+//
+// A compare (`^w c`, 2026-09-16) is the request with TWO seats in it. The
+// owner and its peer share the wide region the way two routed seats do, and
+// the rest hold at stripColumn. The peer counts only beside an owner: a peer
+// on its own is a State no key writes, and reading it would make the compare
+// a second spelling of the split.
 func framePrimary(st State, vis []int) []bool {
 	if st.Expanded || len(vis) < 2 {
 		return nil
@@ -214,6 +220,9 @@ func framePrimary(st State, vis []int) []bool {
 	owners := st.FrameOwners
 	if st.PaneOwner != "" {
 		owners = []model.VendorID{st.PaneOwner}
+		if st.PanePeer != "" && st.PanePeer != st.PaneOwner {
+			owners = append(owners, st.PanePeer)
+		}
 	}
 	if len(owners) == 0 {
 		return nil
@@ -4220,8 +4229,17 @@ func composerLabel(st State, lay Layout, sty Styles, g Glyphs) (styled, plain st
 // Two facts, one cell. `split` and `sized` are independent — an operator can
 // grow a pane inside a split — and a second separated cell for the second fact
 // would double the legend's width to say one more word.
+//
+// A compare says `compared` where a split says `split` (2026-09-16). Two wide
+// panes beside two strips look as deliberate as one, and the word is what
+// tells an operator who inherited the room that two seats were named rather
+// than one seat named and one boundary grown.
 func paneArrangement(st State) string {
 	split := st.PaneOwner != ""
+	shape := "split"
+	if split && st.PanePeer != "" && st.PanePeer != st.PaneOwner {
+		shape = "compared"
+	}
 	sized := false
 	for _, g := range st.PaneGrow {
 		if g != 0 {
@@ -4231,9 +4249,9 @@ func paneArrangement(st State) string {
 	}
 	switch {
 	case split && sized:
-		return "panes split, sized"
+		return "panes " + shape + ", sized"
 	case split:
-		return "panes split"
+		return "panes " + shape
 	case sized:
 		return "panes sized"
 	}
@@ -4567,6 +4585,7 @@ func modeHints(st State, g Glyphs) []hint {
 	if st.PanePrefix {
 		return []hint{
 			{key: "s", label: "split"},
+			{key: "c", label: "compare"},
 			{key: "< >", label: "resize"},
 			{key: "e", label: "even"},
 			{key: "any", label: "cancel"},

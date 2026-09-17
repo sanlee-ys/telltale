@@ -1,11 +1,11 @@
   council ⚠ REPLAY  │  ~                                                                                                                        turn 12  │  4/5 seated  │  briefed  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   UNREAD   2 Codex   3 Antigravity   4 Grok                                                                                                                                         
+  recorded 2026-01-01 09:00 UTC · scrubbed: the shape is real; the date and every word are synthesized                                                                              
   ⚠ 1 seat is not on screen: Cursor (left out by --vendor)  │  --vendor all seats them anyway  │  3 seats sat turn 12 out: Codex, Antigravity, Grok                                 
 ▌ ▸ 1 CC Claude Code  ───────────────────────────────────────────────────────────────────────────  ✓ done 46s  │  2 CX ✓ done         │  3 AG ✓ done         │  4 GR ✓ done         
 ▌   REPLAY  gated  tokens                                                                     $0.5082 session  │  REPLAY              │  REPLAY              │  REPLAY              
-▌ ↑ 104 more above  │  turn 12  │  ↑↓ scroll                                                                   │                      │                      │                      
-▌   node column input beside still begin below                                                                 │                      │                      │                      
+▌ ↑ 105 more above  │  turn 12  │  ↑↓ scroll                                                                   │                      │                      │                      
 ▌                                                                                                              │                      │                      │                      
 ▌   light but field term window tree reads limit rule opens limit each end piece footer small tree enough      │                      │                      │                      
 ▌   fast and same report enough sh                                                                             │                      │                      │                      

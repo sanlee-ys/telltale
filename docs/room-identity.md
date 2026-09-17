@@ -290,3 +290,53 @@ Windows Terminal draws crisp, so the figures are a floor and the owner's own
 screen is better than they say. Case b after the raise still puts the hairline
 leader at 2.7:1 through that path, which is why the rule above asks for the
 larger font and not for the ink alone.
+
+## The two-seat compare at share geometry (2026-09-16)
+
+The demo's camera beat shows two seats' raw answers side by side, then the
+hold card and the posture rail. The two 180x50 goldens of 2026-09-04 show a
+different frame: one seat at the reading width, three strips, and the `UNREAD`
+strip. That is the frame a one-seat brief draws. A brief to everyone draws
+four equal columns of 40 cells (41 for the leftmost, which takes the
+remainder), and no key gave two of the four the width.
+
+**The rule.** At share geometry (a 180x50 window, the section above), a
+two-seat compare draws the two named seats as two equal columns, every other
+seat as a strip of 18 cells, and the `UNREAD` strip above them for the rest.
+No ink, weight or ground changes, so the 2026-09-04 measurement stands and
+every rule stays above its 3:1 floor.
+
+**The widths, measured through `layoutFor`.** At 180 cells the chrome is 19
+cells (two pads and three separators with their gutters), the two strips take
+36, and the two named seats share 125: 63 and 62 cells. Both clear
+`minColumn` (24) by more than twice, and `weightedWidths` refuses the split
+before either could fall under it. At the reference width of 120 with three
+seats, the pair gets 44 cells each.
+
+**Two roads draw it, and the frame is the same.** The route: a brief sent to
+two seats sets `FrameOwners` to those two (`frameOwnersFor`), which already
+gave the pair the wide region, so `--replay` of turn 11 of `examples/demo.jsonl`
+draws it with no key. The operator: `^w s` on one seat and `^w c` on another
+(`State.PaneOwner` and `State.PanePeer`, `paneCompare`). The compare is the
+split with two seats in it. It is bounded at two by design: the beat compares
+two answers, and a third seat at 180 cells would take the pair from 63 cells
+down to 47 each.
+`^w c` with no split in force is a split. `^w c` on a third seat replaces the
+peer and keeps the owner. `^w s` ends the compare, because a split has one
+answer. `^w e` clears the pair. The composer border says `^w e panes
+compared`, and the armed footer names `c compare`, so the arrangement is
+carried by words that survive `--ascii` and `NO_COLOR`.
+
+**What is asserted.** `demo-compare` (the operator's road, after turn 9) and
+`demo-compare-route` (the route's road, after turn 11) pin both frames at
+180x50. `TestTheDemoRoomComparesTwoSeatsToAGolden` asserts two wide panes
+equal to within the remainder and two strips on each. `panes-compare` pins the
+reference width. Not asserted, and said here: that a viewer reads two 63-cell
+columns of raw answers faster than four of 41. The 2026-09-04 method (SVG,
+Chrome, the viewer's own pixels) was not re-run for this frame, because the
+frame changes no ink and no cell size.
+
+**The provenance line rides with it.** From the same date the room line
+prints the recording's stamp and the scrubbed claim on every replayed frame
+(`design.md` §9.56's 2026-09-16 paragraph). It costs one row, which the demo
+frames pay from the body.

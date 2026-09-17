@@ -3,6 +3,8 @@ package council
 import (
 	"strings"
 	"testing"
+
+	"github.com/sanlee-ys/telltale/internal/model"
 )
 
 // demoRecording is the scrubbed room in examples/, and it is the only fixture
@@ -91,6 +93,96 @@ func TestTheDemoRoomReplaysToAGolden(t *testing.T) {
 	// left looking at.
 	if !strings.Contains(atEnd, "scrubbed") {
 		t.Errorf("the last frame of a scrubbed replay does not say so:\n%s", atEnd)
+	}
+	// The provenance, on the room line of every frame (roomline.go,
+	// replayFact): the file's stamp, and that the stamp is synthesized with
+	// the words. The stamp is scrub.go's own constant.
+	for name, frame := range map[string]string{"demo-gate": atGate, "demo-final": atEnd} {
+		for _, want := range []string{"recorded 2026-01-01 09:00 UTC", "the date and every word are synthesized"} {
+			if !strings.Contains(frame, want) {
+				t.Errorf("%s: the frame does not say %q:\n%s", name, want, frame)
+			}
+		}
+	}
+}
+
+// demoDispatch is the index of the demo recording's dispatch line for one
+// turn, found rather than pinned for the reason the gate is.
+func demoDispatch(t *testing.T, rec *recording, turn int) int {
+	t.Helper()
+	for i, l := range rec.lines {
+		if l.Kind == "dispatch" && l.Turn == turn {
+			return i
+		}
+	}
+	t.Fatalf("the demo recording has no dispatch for turn %d", turn)
+	return -1
+}
+
+// TestTheDemoRoomComparesTwoSeatsToAGolden pins the two-seat compare at the
+// share geometry (docs/room-identity.md, 2026-09-16), by both roads to it.
+//
+// The operator's road: after turn 9, which went to everyone, the grid is four
+// equal columns, and `^w s` on Claude then `^w c` on Codex gives those two the
+// reading width. The route's road: turn 11 went to Codex and Grok, so
+// FrameOwners already holds the pair and no key is pressed. Both frames are
+// two wide columns beside two strips, with the UNREAD strip naming the rest.
+func TestTheDemoRoomComparesTwoSeatsToAGolden(t *testing.T) {
+	countSpawns(t)
+	rec, err := readRecording(demoRecording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	twoWide := func(name string, st State) {
+		t.Helper()
+		got := widths(st)
+		if len(got) != 4 {
+			t.Fatalf("%s: %d panes drawn, want 4", name, len(got))
+		}
+		wide, strips := 0, 0
+		var w []int
+		for _, v := range got {
+			switch {
+			case v == stripColumn:
+				strips++
+			case v >= minColumn:
+				wide++
+				w = append(w, v)
+			}
+		}
+		if wide != 2 || strips != 2 {
+			t.Errorf("%s: widths %v, want two wide panes and two strips", name, got)
+		}
+		if len(w) == 2 && (w[0]-w[1] < 0 || w[0]-w[1] > 1) {
+			t.Errorf("%s: the pair is %v, want equal to within the remainder", name, w)
+		}
+	}
+
+	m := newReplayModel(Options{}, rec, demoRecording)
+	m.st.Width, m.st.Height = 180, 50
+	play(m, 0, demoDispatch(t, rec, 10))
+	if m.st.FrameOwners != nil {
+		t.Fatalf("turn 9 went to everyone, yet the frame has owners %v", m.st.FrameOwners)
+	}
+	m.st.PaneOwner, m.st.PanePeer = model.VendorClaude, model.VendorCodex
+	keys := render(m.st)
+	golden(t, "demo-compare", keys)
+	twoWide("demo-compare", m.st)
+	if !strings.Contains(keys, "panes compared") {
+		t.Errorf("the compared frame does not say so:\n%s", keys)
+	}
+
+	r := newReplayModel(Options{}, rec, demoRecording)
+	r.st.Width, r.st.Height = 180, 50
+	play(r, 0, demoDispatch(t, rec, 12))
+	if len(r.st.FrameOwners) != 2 {
+		t.Fatalf("turn 11 went to two seats, yet the frame has owners %v", r.st.FrameOwners)
+	}
+	route := render(r.st)
+	golden(t, "demo-compare-route", route)
+	twoWide("demo-compare-route", r.st)
+	if strings.Contains(route, "panes") {
+		t.Errorf("the routed frame claims an arrangement no key made:\n%s", route)
 	}
 }
 

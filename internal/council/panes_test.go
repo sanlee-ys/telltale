@@ -128,6 +128,94 @@ func TestSplitGivesTheFocusedPaneTheReadingWidth(t *testing.T) {
 	}
 }
 
+// TestCompareGivesTwoPanesTheReadingWidth. `^w c` pairs the focused pane with
+// the split's owner (2026-09-16): the two share the wide region the way two
+// routed seats do, and the rest hold at stripColumn.
+func TestCompareGivesTwoPanesTheReadingWidth(t *testing.T) {
+	m := &Model{st: paneRoom(), glyphs: GlyphsFor(false)}
+	m.key(key("ctrl+w"))
+	m.key(key("s"))
+	m.st.Focus = 2
+	m.key(key("ctrl+w"))
+	m.key(key("c"))
+	if m.st.PaneOwner != model.VendorClaude || m.st.PanePeer != model.VendorAntigravity {
+		t.Fatalf("owner %q peer %q, want claude and antigravity", m.st.PaneOwner, m.st.PanePeer)
+	}
+	got := widths(m.st)
+	if got[1] != stripColumn {
+		t.Errorf("the pane between the pair is %d cells, want stripColumn %d", got[1], stripColumn)
+	}
+	if got[0] <= stripColumn || got[2] <= stripColumn {
+		t.Errorf("the pair is %d and %d cells, want both wide", got[0], got[2])
+	}
+	if d := got[0] - got[2]; d < 0 || d > 1 {
+		t.Errorf("the pair is %d and %d cells, want equal to within the remainder", got[0], got[2])
+	}
+
+	// On the owner it changes nothing.
+	m.st.Focus = 0
+	m.key(key("ctrl+w"))
+	m.key(key("c"))
+	if m.st.PaneOwner != model.VendorClaude || m.st.PanePeer != model.VendorAntigravity {
+		t.Errorf("a compare on the owner moved the pair to %q and %q", m.st.PaneOwner, m.st.PanePeer)
+	}
+	// On a third seat it re-points the peer and keeps the owner.
+	m.st.Focus = 1
+	m.key(key("ctrl+w"))
+	m.key(key("c"))
+	if m.st.PaneOwner != model.VendorClaude || m.st.PanePeer != model.VendorCodex {
+		t.Errorf("a compare on a third seat gave owner %q peer %q, want claude and codex", m.st.PaneOwner, m.st.PanePeer)
+	}
+	// A split has one answer, so `^w s` ends the compare.
+	m.st.Focus = 2
+	m.key(key("ctrl+w"))
+	m.key(key("s"))
+	if m.st.PaneOwner != model.VendorAntigravity || m.st.PanePeer != "" {
+		t.Errorf("a split after a compare gave owner %q peer %q, want antigravity alone", m.st.PaneOwner, m.st.PanePeer)
+	}
+	// `^w e` clears the pair with everything else.
+	m.key(key("ctrl+w"))
+	m.key(key("c"))
+	m.key(key("ctrl+w"))
+	m.key(key("e"))
+	if m.st.PanesArranged() {
+		t.Errorf("^w e left owner %q peer %q", m.st.PaneOwner, m.st.PanePeer)
+	}
+}
+
+// TestCompareWithNoSplitIsASplit. With no owner to pair with, `^w c` names the
+// focused seat as the owner, so the second press on another seat completes the
+// pair and the operator never has to know which key came first.
+func TestCompareWithNoSplitIsASplit(t *testing.T) {
+	m := &Model{st: paneRoom(), glyphs: GlyphsFor(false)}
+	m.key(key("ctrl+w"))
+	m.key(key("c"))
+	if m.st.PaneOwner != model.VendorClaude || m.st.PanePeer != "" {
+		t.Fatalf("owner %q peer %q, want claude alone", m.st.PaneOwner, m.st.PanePeer)
+	}
+	if got := widths(m.st); got[1] != stripColumn || got[2] != stripColumn {
+		t.Errorf("widths %v, want the split frame", got)
+	}
+}
+
+// TestTheCompareIsSaidInWords. Two wide panes look as deliberate as one, so the
+// border says `compared`, and the armed footer names the key.
+func TestTheCompareIsSaidInWords(t *testing.T) {
+	st := paneRoom()
+	st.PaneOwner, st.PanePeer = model.VendorClaude, model.VendorCodex
+	for _, ascii := range []bool{false, true} {
+		got := Render(st, PlainStyles(), GlyphsFor(ascii))
+		if !strings.Contains(got, "^w e panes compared") {
+			t.Errorf("ascii=%v: the frame never says the panes are compared\n%s", ascii, got)
+		}
+	}
+	armed := paneRoom()
+	armed.PanePrefix = true
+	if got := render(armed); !strings.Contains(got, "c compare") {
+		t.Errorf("the footer does not name c while the prefix is armed:\n%s", got)
+	}
+}
+
 // TestSplitDoesNotFollowFocus. A split that followed focus would reflow the
 // whole grid on every `tab` press, which today moves a marker — the moving cell
 // §7.1 rule 4 does not budget for.
@@ -282,7 +370,7 @@ func TestEvenPutsEverythingBack(t *testing.T) {
 }
 
 // TestThePrefixRefusesWhereThereIsNoBoundary. An armed prefix draws a footer
-// naming four keys, so arming it where all four do nothing would be §7.8's
+// naming the pane keys, so arming it where all of them do nothing would be §7.8's
 // surprise delivered by the one line that exists to prevent it.
 func TestThePrefixRefusesWhereThereIsNoBoundary(t *testing.T) {
 	for _, tc := range []struct {
@@ -383,7 +471,7 @@ func TestAnUntouchedRoomSaysNothingAboutPanes(t *testing.T) {
 	}
 }
 
-// TestThePanelTeachesThePrefix. The four pane keys are documented by the mode
+// TestThePanelTeachesThePrefix. The pane keys are documented by the mode
 // line, on every frame of the one moment they are live (flowStopHint's
 // precedent) — but a reader has to know the prefix before they can get there, so
 // the panel names it.
@@ -417,6 +505,10 @@ func TestPaneGoldens(t *testing.T) {
 	split.PaneOwner = model.VendorClaude
 	golden(t, "panes-split", render(split))
 	golden(t, "panes-split-ascii", Render(split, PlainStyles(), GlyphsFor(true)))
+
+	compared := paneRoom()
+	compared.PaneOwner, compared.PanePeer = model.VendorClaude, model.VendorAntigravity
+	golden(t, "panes-compare", render(compared))
 
 	sized := paneRoom()
 	sized.PaneGrow = map[model.VendorID]int{
