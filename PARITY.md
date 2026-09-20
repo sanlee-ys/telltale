@@ -163,8 +163,11 @@ not visible before, because that job runs `go test ./...` without `-v`. That
 command prints one `ok` line for each package, and a package that skips one
 test still prints `ok`. The `ci` workflow now runs this one test by name after
 `Test (fixture eval)`, with `-v` and with `-count=1`. The step reports the
-verdict and it does not gate. From GitHub Actions run 35539004963, job
-106153105114:
+verdict. A skip keeps the step green, because `go test` exits 0 on a skip. A
+runner image that no longer grants the privilege is then a fact in this log and
+not a red build. A test failure turns the step red, and the `Test (fixture
+eval)` step above fails on the same test first. From GitHub Actions run
+35539004963, job 106153105114:
 
 ```
 === RUN   TestSeedSymlinksAreNamedNotFollowed

@@ -74,10 +74,11 @@ jobs:
           # nothing measured (design.md §9.42).
           #
           # The "writes nothing" half is a BEFORE/AFTER of ~/.telltale rather
-          # than a Test-Path. `go test ./...` ran two steps ago and the cache
-          # packages' own tests use the real home directory, so the directory
-          # already exists here — and an assertion that cannot tell doctor's
-          # writes from an earlier step's is not an assertion about doctor.
+          # than a Test-Path. The `Test (fixture eval)` step above ran
+          # `go test ./...` and the cache packages' own tests use the real home
+          # directory, so the directory already exists here — and an assertion
+          # that cannot tell doctor's writes from an earlier step's is not an
+          # assertion about doctor.
           function Snapshot {
             $dir = "$env:USERPROFILE\.telltale"
             if (-not (Test-Path $dir)) { return '<absent>' }
