@@ -41,6 +41,28 @@ jobs:
         run: go vet ./...
       - name: Test (fixture eval)
         run: go test ./...
+      # Does the symlink refusal actually run here? The step above prints one
+      # `ok` line for each package, so a test that skipped and a test that
+      # passed look the same in this log. `TestSeedSymlinksAreNamedNotFollowed`
+      # skips itself when `os.Symlink` is refused, and an ordinary Windows
+      # shell is refused unless it holds `SeCreateSymbolicLinkPrivilege` or
+      # Developer Mode is on. PARITY.md carried that gap as "still not visible"
+      # until this step.
+      #
+      # The gap mattered because of what the test pins. design.md §9.37 refuses
+      # to follow a symlink BECAUSE Windows is primary and symlink semantics
+      # differ per platform. So the platform that claim is about is the one
+      # platform whose verdict has to be readable.
+      #
+      # `-v` prints the verdict. `-count=1` is necessary: `go test` caches a
+      # passing package and replays its output, so a skip census over a cached
+      # run measures the cache (PARITY.md, measured 2026-08-09).
+      #
+      # This step REPORTS and it does not gate. A runner image that stops
+      # granting the privilege is a fact to read in this log. It is not a red
+      # build over an environment this repository does not own.
+      - name: Report (does the symlink refusal run on windows-latest?)
+        run: go test ./internal/council -run '^TestSeedSymlinksAreNamedNotFollowed$' -v -count=1
       - name: Build
         run: go build -o telltale.exe ./cmd/telltale
       - name: Smoke (doctor's three states through the real binary)
@@ -52,10 +74,11 @@ jobs:
           # nothing measured (design.md §9.42).
           #
           # The "writes nothing" half is a BEFORE/AFTER of ~/.telltale rather
-          # than a Test-Path. `go test ./...` ran two steps ago and the cache
-          # packages' own tests use the real home directory, so the directory
-          # already exists here — and an assertion that cannot tell doctor's
-          # writes from an earlier step's is not an assertion about doctor.
+          # than a Test-Path. The `Test (fixture eval)` step above ran
+          # `go test ./...` and the cache packages' own tests use the real home
+          # directory, so the directory already exists here — and an assertion
+          # that cannot tell doctor's writes from an earlier step's is not an
+          # assertion about doctor.
           function Snapshot {
             $dir = "$env:USERPROFILE\.telltale"
             if (-not (Test-Path $dir)) { return '<absent>' }

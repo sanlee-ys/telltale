@@ -158,8 +158,28 @@ granted at logon — an already-running terminal picks it up immediately. And
 **an elevated shell also passes** (Administrators hold the privilege) but does
 not close this gap, because the point is that the test runs in ordinary use.
 
-Still not visible: whether CI's `windows-latest` job skips it, because that job
-runs `go test` without `-v`. It runs for real on the `ubuntu-latest` race job.
+**Measured on CI, 2026-09-20: the `windows-latest` job runs the test.** It was
+not visible before, because that job runs `go test ./...` without `-v`. That
+command prints one `ok` line for each package, and a package that skips one
+test still prints `ok`. The `ci` workflow now runs this one test by name after
+`Test (fixture eval)`, with `-v` and with `-count=1`. The step reports the
+verdict. A skip keeps the step green, because `go test` exits 0 on a skip. A
+runner image that no longer grants the privilege is then a fact in this log and
+not a red build. A test failure turns the step red, and the `Test (fixture
+eval)` step above fails on the same test first. From GitHub Actions run
+35539004963, job 106153105114:
+
+```
+=== RUN   TestSeedSymlinksAreNamedNotFollowed
+--- PASS: TestSeedSymlinksAreNamedNotFollowed (0.57s)
+```
+
+So the runner image grants what `os.Symlink` needs. The primary platform now
+checks the refusal on every push to `main` and on every pull request. The
+`ubuntu-latest` race job runs the test too. That job prints no test name
+either, but `os.Symlink` needs no privilege on Linux, so the skip branch
+cannot start there. `-count=1` is on the command for the reason the paragraph
+below gives.
 
 **One test still skips on Windows, and this one is legitimate.**
 `TestSavedRoomIsNotWorldReadable` (`internal/council/resume_test.go:446`) skips
