@@ -481,6 +481,9 @@ func (m *Model) spawnSeat(v vendors.Vendor, c *Column, resumeID string, want ven
 	dir := m.seatDir(c.Vendor)
 	if cv, ok := v.(vendors.Conversational); ok {
 		spec, proto, err := cv.Open(dir, c.Binary, resumeID, want)
+		if err == nil {
+			spec, err = m.withSeatModel(spec)
+		}
 		if err != nil {
 			return nil, nil, false, err
 		}
@@ -523,6 +526,10 @@ func (m *Model) spawnSeat(v vendors.Vendor, c *Column, resumeID string, want ven
 			spec = rs
 			resumed = true
 		}
+	}
+	// After the resume choice, so the request rides whichever argv is spawned.
+	if spec, err = m.withSeatModel(spec); err != nil {
+		return nil, nil, false, err
 	}
 	sess, err := startSession(m.roomCtx, spec, m.events, pv.ParseEvent)
 	if err != nil {
@@ -567,6 +574,9 @@ func (m *Model) spawnSeat(v vendors.Vendor, c *Column, resumeID string, want ven
 // force, not less, and nothing here claims a confinement nothing measured.
 func (m *Model) startEphemeralRacer(ctx context.Context, cv vendors.Conversational, c *Column, tree, prompt, race string) (seatSession, error) {
 	spec, proto, err := cv.Open(tree, c.Binary, "", vendors.PostureWrite)
+	if err == nil {
+		spec, err = m.withSeatModel(spec)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -1230,6 +1230,10 @@ func runCouncil(args []string) error {
 	// same class of fact as the workspace — and the badge on every column
 	// says which holds either way.
 	sharedTree := fs.Bool("shared-tree", false, "let writing seats share the workspace instead of each getting its own worktree (<repo>-seat-<vendor>, branch seat/<vendor>) — the column badge says which holds")
+	// The model each seat is asked for (internal/council/seatmodel.go). The
+	// column shows the request beside the model the vendor's own session
+	// record names, because a request alone says nothing about what ran.
+	models := fs.String("model", "", "ask a seat for a model: seat=model, comma list (e.g. codex=gpt-5.6-sol,grok=grok-4.5). The column shows what was asked beside what the vendor's own session record says ran, or unknown. A seat with no measured model flag is refused")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1261,6 +1265,12 @@ func runCouncil(args []string) error {
 	if err != nil {
 		return err
 	}
+	// Same discipline for --model: a seat with no measured model flag is a
+	// line on stderr before the room opens, never a request the room drops.
+	seatModels, err := council.ParseModels(*models)
+	if err != nil {
+		return err
+	}
 
 	opts := council.Options{
 		Dir:        *dir,
@@ -1276,6 +1286,7 @@ func runCouncil(args []string) error {
 		TracePath:  *trace,
 		Live:       liveSeat,
 		SharedTree: *sharedTree,
+		Models:     seatModels,
 
 		RecordPath:  *record,
 		ReplayPath:  *replay,

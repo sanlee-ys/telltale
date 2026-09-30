@@ -111,6 +111,17 @@ type Options struct {
 	// fact as the workspace itself, and the badge on every column says which
 	// holds so the choice is never off screen.
 	SharedTree bool
+
+	// Models is the model each seat is asked for, from --model (seatmodel.go).
+	// A seat with no entry is asked for nothing and runs its vendor's default.
+	// ParseModels has already refused a seat with no measured model flag, so
+	// every entry here has a place on that seat's argv.
+	//
+	// A launch flag and never saved in room.json, like --auto: the next room
+	// asks for what its own command line says. The column shows the request
+	// beside what the vendor's record says ran, so a room that reattaches with
+	// no request still shows the model of the session it continued.
+	Models map[model.VendorID]string
 }
 
 // Model is the Bubble Tea model. It owns State plus the things Render must not
@@ -847,6 +858,7 @@ func stateWith(opts Options, hooked bool) State {
 			Gran:    granularityFor(info.Vendor),
 			Phase:   PhaseIdle,
 			Follow:  true,
+			Model:   seatModelFor(opts.Models[info.Vendor]),
 		})
 	}
 	// Focus lands on a column that is actually drawn. Left at 0 it would sit on
@@ -974,6 +986,11 @@ func (m *Model) Init() tea.Cmd {
 		// rather than sequenced because it is independent of everything else
 		// here.
 		readQuotaCmd(),
+		// A reattached room holds its seats' session ids before any turn, so
+		// the record of each restored session is read at open too
+		// (seatmodel.go). A cold room holds no ids, and the read returns
+		// nothing and draws nothing.
+		m.readSeatModelsCmd(),
 		// The room-open rebuild (rebuild.go, design.md §9.52). Nil when there
 		// is nothing to rebuild, so a cold room and a room whose vendors are
 		// absent both start exactly as they did.
@@ -1098,7 +1115,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// accounts the recording spent (replay.go).
 			m.dispatchEnded = false
 			if m.replay == nil {
-				cmds = append(cmds, readQuotaCmd())
+				// The seat's model record is re-read at the same moment and
+				// for a sharper reason: a seat first holds a session id when
+				// its first turn lands, and a vendor that re-routes a model
+				// does it per turn (seatmodel.go).
+				cmds = append(cmds, readQuotaCmd(), m.readSeatModelsCmd())
 			}
 		}
 		if m.anyInFlight() || m.rebuildInFlight() {
@@ -1159,6 +1180,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the user's own statusline fires and a poll would re-read unmoved
 		// bytes on every frame (quota.go).
 		m.applyQuota(msg)
+		return m, nil
+
+	case seatModelMsg:
+		// One read of every seat's session record landing (seatmodel.go). No
+		// follow-up command: the next read is launched when a dispatch ends.
+		m.applySeatModels(msg)
 		return m, nil
 
 	case spinMsg:

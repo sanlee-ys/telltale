@@ -610,6 +610,15 @@ type Column struct {
 	// stays pure over State — the read itself runs as a Cmd.
 	Quota *SeatQuota
 
+	// Model is the model the room asked this seat for, beside the model the
+	// vendor's own session record says ran (seatmodel.go). Nil is no request
+	// and no read, and draws nothing.
+	//
+	// NOT a per-turn fact, on Quota's argument: it describes the seat's
+	// session, and only the next read of that session's record replaces it.
+	// The read runs as a Cmd, so Render stays pure over State.
+	Model *SeatModel
+
 	// Containment is where this seat's process runs, as the badge row states
 	// it (seattree.go, §9.55): its own worktree, the shared tree, or the shared
 	// tree with the reason the room could not give it its own. Stamped at
