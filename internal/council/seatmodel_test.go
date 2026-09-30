@@ -263,6 +263,44 @@ func TestAReadLandsOnTheColumnsAndClearsAGoneSession(t *testing.T) {
 	}
 }
 
+// TestAStaleReadDoesNotLandOnANewSession is the overlap case: two reads in
+// flight, and the slow one was made for a session the seat no longer holds. Its
+// name belongs to another conversation and must not reach the column.
+func TestAStaleReadDoesNotLandOnANewSession(t *testing.T) {
+	fixtureSources(t)
+	m := newModel(Options{}, room())
+	m.sessions[model.VendorClaude] = "00000000-aaaa-4bbb-8ccc-000000000001"
+	stale := m.readSeatModelsCmd()().(seatModelMsg)
+
+	// The seat moves to a new session, and the read for it lands first.
+	m.sessions[model.VendorClaude] = "00000000-aaaa-4bbb-8ccc-00000000ffff"
+	m.applySeatModels(m.readSeatModelsCmd()().(seatModelMsg))
+	if got := m.st.Columns[0].Model; got == nil || !got.Read || got.Resolved != "" {
+		t.Fatalf("the new session's read = %+v, want an unknown read", got)
+	}
+	// Then the old read lands. It must change nothing.
+	m.applySeatModels(stale)
+	if got := m.st.Columns[0].Model; got == nil || got.Resolved != "" {
+		t.Fatalf("a stale read landed on a new session: %+v", got)
+	}
+}
+
+// TestAModelForASeatTheRosterLeavesOutIsRefused is the other half of "refused,
+// not dropped": a typed roster that does not seat codex never spawns codex, so
+// a codex model would reach no argv.
+func TestAModelForASeatTheRosterLeavesOutIsRefused(t *testing.T) {
+	models := map[model.VendorID]string{model.VendorCodex: "gpt-5.6-sol"}
+	if err := refuseUnseatedModels(Seats{Only: []model.VendorID{model.VendorClaude}}, models); err == nil ||
+		!strings.Contains(err.Error(), "codex") {
+		t.Fatalf("err = %v, want a refusal that names codex", err)
+	}
+	for _, seats := range []Seats{{}, {All: true}, {Only: []model.VendorID{model.VendorCodex}}} {
+		if err := refuseUnseatedModels(seats, models); err != nil {
+			t.Errorf("roster %+v refused a seated model: %v", seats, err)
+		}
+	}
+}
+
 // ---------------------------------------------------------------- the render
 
 // modelRoom is the demo roster, four model families, at the ruled demo

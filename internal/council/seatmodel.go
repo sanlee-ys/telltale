@@ -232,8 +232,21 @@ func (m *Model) withSeatModel(spec runner.Spec) (runner.Spec, error) {
 // seatModelMsg is one finished read of every seat's session record.
 type seatModelMsg struct {
 	// readings holds one entry per seat that held a session id when the read
-	// started. The value is the resolved model, or empty for unknown.
-	readings map[model.VendorID]string
+	// started, keyed by vendor.
+	readings map[model.VendorID]seatModelReading
+}
+
+// seatModelReading is one seat's read: the session id it looked up, and the
+// resolved model, or empty for unknown.
+//
+// The id travels with the name so a read can be matched to the session it was
+// made for. Two reads can be in flight at once (two dispatches end close
+// together), and a slow read of an old session must not land on a seat that
+// now holds a new one: that would print a real name from the wrong
+// conversation.
+type seatModelReading struct {
+	session string
+	model   string
 }
 
 // seatModelSources maps a seat to the HUD adapter that reads its vendor's
@@ -329,9 +342,9 @@ func (m *Model) readSeatModelsCmd() tea.Cmd {
 			order = append(order, v)
 		}
 		sort.Slice(order, func(i, j int) bool { return order[i] < order[j] })
-		out := make(map[model.VendorID]string, len(ids))
+		out := make(map[model.VendorID]seatModelReading, len(ids))
 		for _, v := range order {
-			out[v] = readSeatModel(ctx, v, ids[v])
+			out[v] = seatModelReading{session: ids[v], model: readSeatModel(ctx, v, ids[v])}
 		}
 		return seatModelMsg{readings: out}
 	}
@@ -339,21 +352,30 @@ func (m *Model) readSeatModelsCmd() tea.Cmd {
 
 // applySeatModels lands one read on the columns.
 //
-// A seat the read spoke for gets its reading, `unknown` included. A seat the
-// read did not speak for held no session id when the read started, so it has
-// no reading, and a reading from its previous session is CLEARED rather than
-// kept: a new session may run a different model, and the old name would be a
-// claim about a conversation that is gone.
+// Each seat is decided against the session it holds NOW, not the one the read
+// was started for:
+//
+//   - the read spoke for the seat's current session: the reading lands,
+//     `unknown` included.
+//   - the seat holds no session now: any old name is CLEARED, and a request
+//     keeps only its `asked` half. A new session may run a different model,
+//     and the old name would be a claim about a conversation that is gone.
+//   - the seat holds a different session from the one the read looked up, or
+//     one the read did not look up: the reading is STALE and the column is
+//     left as it is. A newer read is already on its way, because every
+//     dispatch that ends starts one.
 func (m *Model) applySeatModels(msg seatModelMsg) {
 	for i := range m.st.Columns {
 		c := &m.st.Columns[i]
-		resolved, read := msg.readings[c.Vendor]
 		requested := m.opts.Models[c.Vendor]
-		if !read && requested == "" {
-			c.Model = nil
-			continue
+		now := m.sessions[c.Vendor]
+		r, read := msg.readings[c.Vendor]
+		switch {
+		case now == "":
+			c.Model = seatModelFor(requested)
+		case read && r.session == now:
+			c.Model = &SeatModel{Requested: requested, Read: true, Resolved: r.model}
 		}
-		c.Model = &SeatModel{Requested: requested, Read: read, Resolved: resolved}
 	}
 }
 
@@ -364,6 +386,41 @@ func seatModelFor(requested string) *SeatModel {
 		return nil
 	}
 	return &SeatModel{Requested: requested}
+}
+
+// refuseUnseatedModels refuses a model request for a seat the roster leaves
+// out.
+//
+// Run calls it once the roster is decided (a typed --vendor, or the saved
+// room's roster), before the alternate screen. A roster that names its seats
+// and does not name this one will never spawn it, so the request would reach
+// no argv while the command line said it was asked. That is a drop, and the
+// rule is to refuse. The default roster (no list) seats every seat that can be
+// driven, and a seat that cannot be driven says so on its own card.
+func refuseUnseatedModels(seats Seats, models map[model.VendorID]string) error {
+	if seats.All || len(seats.Only) == 0 {
+		return nil
+	}
+	var out []string
+	for v := range models {
+		if !seats.names(v) {
+			out = append(out, string(v))
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.Strings(out)
+	return fmt.Errorf("--model names %s, and this room seats only %s: add the seat with --vendor, or drop its model",
+		strings.Join(out, ", "), seatList(seats.Only))
+}
+
+func seatList(vs []model.VendorID) string {
+	s := make([]string, len(vs))
+	for i, v := range vs {
+		s[i] = string(v)
+	}
+	return strings.Join(s, ", ")
 }
 
 // errModelHosted is refuseHostedFlags' sentence for --model.

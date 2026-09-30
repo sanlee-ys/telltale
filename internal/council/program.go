@@ -3578,6 +3578,11 @@ func Run(opts Options) error {
 	// an explicit launch flag overrides. Neither is restored from a room --fresh
 	// declined; see seatsFor.
 	opts.Seats = seatsFor(opts.Seats, re.Room.Seats, re.Active() && !re.Offered)
+	// A model asked for a seat this roster leaves out is refused here, on
+	// stderr, for the --brief reason: before the alternate screen (seatmodel.go).
+	if err := refuseUnseatedModels(opts.Seats, opts.Models); err != nil {
+		return err
+	}
 
 	var hooks GateHook
 	if wantsGateHook(opts) {
