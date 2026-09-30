@@ -113,3 +113,16 @@ is no longer the price of a change.
   more than 130 commits behind `main`, and a visitor who follows the README must
   get the room the README describes. The release notes name the checklist as
   owed.
+- **2026-09-30 — A seat's model is read back from the vendor's own record,
+  and a request is never shown as what ran.** (The seat-model lane, on the
+  parked idea "name the model in the seat".) `--model seat=model` puts the
+  request on argv at the position each CLI's `--help` names; a seat with no
+  measured flag is refused. After each dispatch the room reads the seat's
+  session record through the HUD's own adapters and shows `asked` beside
+  `ran`, or `ran unknown`. Reason: a request alone is a gauge that reads its
+  own dial, and an auto route would stay invisible. Three choices ride with
+  it. The mismatch test is textual and the room keeps no alias table, because
+  a table would be the room's guess shown as the vendor's word. The seat's
+  reply text is never a source. On the badge row the granularity word yields
+  to the model cell, because the header restates that word and no other row
+  shows the model.

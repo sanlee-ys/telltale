@@ -923,7 +923,11 @@ rejoins, `telltale council kill` ends it — a read room only, because a room th
 without asking will not detach; [design.md §7.29](design.md), and §7.30 for macOS and
 Linux), `--live claude` (seat a pane showing claude's own terminal screen beside the
 measured seats; display only, and nothing on it is read as a number; [design.md
-§9.53](design.md)), `--ascii`, `--no-title`. `telltale council replay-check <file>` reviews
+§9.53](design.md)), `--model seat=model,...` (ask a seat for a model; the badge row shows
+`asked` beside the `ran` model that the vendor's own session record names, or `ran unknown`,
+and marks a mismatch with `⚠`; a seat with no measured model flag is refused, and
+`--host` refuses the flag; `internal/council/seatmodel.go` and `LEDGER.md` 2026-09-30),
+`--ascii`, `--no-title`. `telltale council replay-check <file>` reviews
 a recording without opening it; `telltale council replay-scrub <in> <out>` writes a copy of
 one with every word replaced; `telltale council ls` prints the saved room and whether a
 host is running, and writes nothing.
