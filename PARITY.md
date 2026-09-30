@@ -218,6 +218,35 @@ take on the Mac:** confirm `~/.cursor/chats` exists and holds the same
 that is absent costs nothing — the reader reports the store absent and the Composer
 rows still render — so this is a coverage gap, not a suspected defect.
 
+## Seat model flags, read 2026-09-30
+
+`telltale council --model` puts a request on each seat's argv. The flags
+below were read off each CLI's own `--help` on the Windows 11 PC on
+2026-09-30. A help line says what the CLI PARSES. No live turn was driven
+with any of these flags, so no row says the vendor honours the request.
+That question is the column's `ran` reading, not this table.
+
+| Seat | Build | Flag council passes | Where on argv |
+|---|---|---|---|
+| Claude Code | 2.1.273 | `--model <m>` | first |
+| Codex | codex-cli 0.151.0 | `-c model="<m>"` | before the stdin `-` on `exec` and `exec resume`; after `app-server`, which lists no `-m` |
+| Antigravity | 1.2.14 (newest `agy changelog` entry; no `--version`) | `--model <m>` | first, before `-p` |
+| Grok | 1.0.13 (5e9a58528b76) | `--model <m>` | between `agent` and `stdio` on the live seat (`grok agent stdio --help` lists no model option); first on the batch fallback |
+| Cursor | not installed | none | refused: no help line to read |
+
+The `ran` reading joins the seat's session id to the id in the vendor's
+store (`internal/council/seatmodel.go`). Only the fixture trees of the
+adapters exercise that join. **Unmeasured on a live seat, every vendor:**
+whether Claude's stream `session_id`, the Codex app-server `thread.id`,
+agy's `conversation_id`, grok's ACP `sessionId` and Cursor's ACP
+`sessionId` each equal the id the store files the session under. A join
+that does not hold reads `ran unknown`, never a neighbour's model. The
+Claude and Codex joins have indirect support: `claude --resume` and
+`codex exec resume` both find the stored session by that same id. To
+measure one: open a room with `--model`, send one brief, and compare the
+`ran` cell with the store record by hand. **macOS:** nothing here was
+read there.
+
 ## Killing the seats when the room dies abnormally
 
 **Measured 2026-08-17**, on the Mac (Intel x86_64, macOS 26.5.2), against

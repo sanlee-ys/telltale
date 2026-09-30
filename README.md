@@ -349,6 +349,14 @@ before it is shared. `examples/demo.jsonl` is a real room of 2026-09-03
 with every word replaced by `telltale council replay-scrub`; the real
 recording stays with its operator.
 
+`--model codex=gpt-5.6-sol,grok=grok-4.5` asks a seat for a model. The
+badge row shows the request (`asked`) beside the model that the vendor's
+own session record names after a turn (`ran`). A mismatch wears `⚠`, and
+a record that names no model reads `ran unknown`. The mismatch test is
+textual, so an alias such as `opus` shows beside its full id: pass the
+full id to compare exactly. A seat with no measured model flag (Cursor
+today) is refused before the room opens, and `--host` refuses the flag.
+
 `--host` opens a read room in a process that outlives the terminal, on
 Windows, macOS, and Linux; `/detach` walks away, `telltale council`
 rejoins, `telltale council kill` ends it. Measured on Windows and Linux;

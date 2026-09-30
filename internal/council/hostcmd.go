@@ -134,6 +134,12 @@ func refuseHostedFlags(opts Options) error {
 	case opts.TracePath != "":
 		return fmt.Errorf("%w: --trace writes each turn's measured clock from the runner, and the "+
 			"runner lives in the host", ErrHostedFlag)
+	case len(opts.Models) > 0:
+		// Refused rather than dropped (seatmodel.go). A rejoin reaches a host
+		// whose seats are already running, and a new host would start them
+		// with no model request, so in both cases the request would reach no
+		// argv while the operator believed it had.
+		return fmt.Errorf("%w: %w", ErrHostedFlag, errModelHosted)
 	}
 	return nil
 }

@@ -873,6 +873,10 @@ func (m *Model) sendTurn(route Route, prompt string, race *arenaSetupResult) tea
 				ts.arenaEphemeral[c.Vendor] = sess
 			} else {
 				spec, err := v.FirstTurn(vendorPrompt, tree, c.Binary, vendors.PostureWrite)
+				if err == nil {
+					// A racer is the seat, so it races on the seat's model.
+					spec, err = m.withSeatModel(spec)
+				}
 				if err != nil {
 					failures = append(failures, dispatchFailedMsg{c.Vendor, err.Error()})
 					continue
@@ -1228,13 +1232,22 @@ func (m *Model) specFor(v vendors.Vendor, c *Column, prompt string) (runner.Spec
 		// Resume: the brief is already in this vendor's own history.
 		spec, err := v.NextTurn(prompt, dir, c.Binary, id, p)
 		if err == nil {
-			return spec, id, nil
+			// The model request rides every turn, a resume included: each
+			// turn of a batch seat is a new process with a new argv, and a
+			// resume that dropped the request would let turn 2 run the
+			// vendor default under a column that still says `asked`.
+			spec, err = m.withSeatModel(spec)
+			return spec, id, err
 		}
 	}
 	// First turn for THIS vendor, so it gets the operating context. Per vendor
 	// rather than per room: a seat added to a later turn is still a stranger,
 	// and would otherwise be the only one guessing.
 	spec, err := v.FirstTurn(m.brief.Apply(prompt), dir, c.Binary, p)
+	if err != nil {
+		return spec, "", err
+	}
+	spec, err = m.withSeatModel(spec)
 	return spec, "", err
 }
 

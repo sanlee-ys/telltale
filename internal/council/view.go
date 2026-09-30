@@ -3647,6 +3647,48 @@ func badgeRow(st State, c Column, w int, sty Styles, g Glyphs) string {
 		cost = ""
 	}
 
+	// The seat's model: what the room asked for and what the vendor's record
+	// says ran (seatmodel.go, 2026-09-30). It takes the space the row has LEFT,
+	// on the quota reading's ruling below: a new claim does not evict the
+	// posture, the containment or the cost.
+	//
+	// One older word does yield to it, and it is the granularity word. That
+	// word is restated on the header one row up (stripBadges' own argument for
+	// shedding it first), so dropping it here loses nothing a reader cannot
+	// see. The seat's model is on no other row. LEDGER.md carries the ruling.
+	//
+	// Nil draws nothing and takes nothing, so a room with no --model and no
+	// read yet is byte for byte the room before this cell existed.
+	modelAvail := func() int {
+		if cost == "" {
+			return w - lipgloss.Width(left) - 2
+		}
+		return w - lipgloss.Width(left) - lipgloss.Width(cost) - 3
+	}
+	ms, mp := seatModelCell(c.Model, modelAvail(), sty.onRail(), g)
+	if mp == "" && gran != "" && modelForms(c.Model, g) != nil {
+		// Ask again with the left words rebuilt without the granularity word,
+		// and keep the rebuild only when the cell then fits: a word dropped
+		// for a cell that still does not fit would be a loss for nothing. The
+		// word is always the last one on the left, so it is the last element.
+		keepPlain, keepStyled, keepLeft, keepLeftS := plain, styled, left, leftS
+		plain, styled = plain[:len(plain)-1], styled[:len(styled)-1]
+		left, leftS = strings.Join(plain, "  "), strings.Join(styled, air)
+		if left != "" {
+			left, leftS = "  "+left, air+leftS
+		}
+		if ms, mp = seatModelCell(c.Model, modelAvail(), sty.onRail(), g); mp == "" {
+			plain, styled, left, leftS = keepPlain, keepStyled, keepLeft, keepLeftS
+		}
+	}
+	if mp != "" {
+		if left == "" {
+			left, leftS = "  "+mp, air+ms
+		} else {
+			left, leftS = left+"  "+mp, leftS+air+ms
+		}
+	}
+
 	// The seat's relayed account quota (§9.21, amended 2026-08-17), and it takes
 	// only the space the row has LEFT after everything already on it.
 	//
