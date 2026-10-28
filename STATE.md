@@ -954,6 +954,26 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   is stated in the header rather than applied silently, on the retention
   discipline `telltale events` already has (§7.21).
 
+  **Measured 2026-10-28, on Linux with stubbed seats** —
+  [design.md §7.28](docs/design.md#s7-28)'s dated amendment has the table and
+  the method; `TELLTALE_MEASURE_HOST_MEMORY=1 go test ./internal/councilhost
+  -run TestHostMemoryPerTurn -v` reproduces it (`go1.26.10 linux/amd64`,
+  `Linux vm 6.18.44-fc-v180 x86_64`, tree `30b1aef` plus the harness). Four
+  seats (all a host can drive), 150 turns. Per turn while the history fills:
+  +10.5 KiB heap and +9.1 KiB frame at 2 KiB of body per seat; +130.6 KiB and
+  +130.6 KiB at 32 KiB. The frame stops growing at turn 51 because §7.31's
+  `maxHistory = 50` caps it (464 KiB and 6.51 MiB at the cap), and the heap
+  stops with it, so the room is bounded today and "unbounded" above is stale
+  by one section. Two findings the owner should read before ruling on a
+  ceiling: the plateau heap saws between the capped history and about twice
+  it (7.1 to 14.4 MiB at 32 KiB, period 57 turns), because the reslice in
+  `startTurn` leaves dropped records reachable until `append` reallocates; and
+  at 48 KiB per seat the frame crossed the 8 MiB line at turn 42, after which
+  the pump wrote no frame for the remaining 108 turns while the host kept
+  taking dispatches — the client freezes, the host does not. Not shown: real
+  vendor output shape, a host in its own process, the pipe, Windows. No
+  ceiling is picked here.
+
 - **The hosted room draws with the plain client, not council's own `Model`
   (2026-09-01). PAID 2026-09-02, [design.md §7.31](docs/design.md#s7-31).**
   `telltale council --host` and a rejoin now draw with the room's own columns,
