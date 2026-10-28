@@ -7861,6 +7861,45 @@ host holds the room.
 - **Host memory is unbounded.** A room accumulates turns for as long as it lives. A turn
   ceiling is owed before detach ships, and the drop must be stated in the header rather than
   applied silently, on the retention discipline `telltale events` already has (§7.21).
+
+  **Amendment, 2026-10-28 — measured, and the first half of the sentence above is no longer
+  true as written.** `TestHostMemoryPerTurn` (`internal/councilhost/memory_test.go`, skipped
+  unless `TELLTALE_MEASURE_HOST_MEMORY=1`) drove an in-process host through 150 turns on the
+  four seats a host can drive (claude persistent, codex/agy/grok through their batch
+  fallbacks; cursor is refused, so a hosted room has no fifth producing column), with stubbed
+  seats that each said a fixed body per turn plus two acts, and read the live heap after every
+  turn with the collector forced and the room frame in `FrameWriter`'s own bytes. Measured on
+  Linux (`Linux vm 6.18.44-fc-v180 x86_64`, `go1.26.10 linux/amd64`, tree `30b1aef` plus the
+  harness), `maxHistory = 50`, `maxFrame = 8 MiB`:
+
+  | body per seat per turn | fill, turns 2–50 (heap / frame per turn) | frame at the cap (turn 51) | heap floor on the plateau | measured 8 MiB crossing |
+  |---|---|---|---|---|
+  | 2 KiB | +10.5 KiB / +9.1 KiB | 464 KiB | 0.79 MiB | never |
+  | 32 KiB | +130.6 KiB / +130.6 KiB | 6.51 MiB (79% of the ceiling) | 6.9 MiB | never |
+  | 48 KiB | +185 KiB / refused | refused | 10.2 MiB | **turn 42** (8.01 MiB at turn 41) |
+
+  Three things the numbers say. **The room is already bounded by `maxHistory`, which §7.31
+  added for the frame and which bounds the heap with it**: the frame stops growing at turn 51
+  (+0.01 KiB/turn after that, every variant), and the heap stops too, so a turn ceiling would be
+  a second cap under a first one. **The plateau is not flat.** `startTurn` trims `History` by
+  reslicing, the dropped records stay reachable in the slice's backing array until `append`
+  reallocates it, and the live heap saws between the capped history and about twice it: at
+  32 KiB it climbed from 7.1 MiB to 14.4 MiB and dropped back at turns 73, 130 and 187 (period
+  57). On top of that, a reading that lands while the pump is mid-write also holds one clone and
+  one encoded frame, which put single readings as high as 30 MiB on the 32 KiB run; that is the
+  host's real transient peak, not retained memory. **Crossing `maxFrame` is silent and
+  one-way.** At 48 KiB per seat the frame passed 8 MiB at turn 42; the pump had written 61 frames
+  by then and 61 by the end of the run 108 turns later, because `pump` returns on
+  `ErrFrameTooLong` and nothing restarts it, while `serveClient` keeps accepting dispatches. A
+  client of such a room sees it freeze with the host still working. The ceiling §7.31 named is
+  therefore reached by a full-history room at roughly 40 KiB of body per seat per turn, with
+  four seats, before any turn ceiling would matter.
+
+  What this does not show: a vendor's own output shape (the bodies are flat text with a newline
+  every 80 columns and two acts, no notes and no token counts), a host in its own process (the
+  heap is the test binary's with the baseline subtracted), the pipe (the frame is measured at
+  the encoder, not at a client's read), and Windows. No number here is a ceiling; the owner
+  rules on that.
 - **One client at a time, and the OPERATING SYSTEM refuses the second.** The pipe is created
   with one instance, so a second open comes back `ERROR_PIPE_BUSY` and the client renders that
   as "one client at a time". An earlier draft of this section said the refusal would name the
