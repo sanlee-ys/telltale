@@ -69,6 +69,14 @@ func liveMarker(l LiveSeat, w int, g Glyphs) string {
 	case LiveUnavailable:
 		return truncate(g.Warn+" live seat unavailable", w, g.Ellipsis)
 	}
+	if l.Typing {
+		// KEYS: the pane holds the keyboard (livekeys.go). A word, in the
+		// state slot that never sheds, because it is the one fact on this row
+		// that changes what the next keystroke does — and it is spelled in
+		// capitals the way the border spells its mode word, so the two read
+		// as the same kind of claim.
+		state += " · KEYS"
+	}
 	full := state + " · second process · display only"
 	// The pane sheds the explanation before it sheds the word, because a narrow
 	// pane that dropped `live` would be a screen with no label at all — which is

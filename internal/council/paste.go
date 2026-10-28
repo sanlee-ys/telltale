@@ -133,6 +133,15 @@ func (m *Model) paste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 	if msg.Content == "" {
 		return m, nil
 	}
+	if m.st.Live.Typing {
+		// The pane holds the keyboard, so it gets the paste too (livekeys.go).
+		// RAW, with no bracketed-paste markers around it: whether the guest
+		// has asked for them is a mode the emulator consumed and nothing here
+		// reads, so wrapping would be a guess sent as bytes. Owed in §9.53's
+		// amendment, beside the cursor-mode question it shares a cause with.
+		m.liveWrite([]byte(msg.Content))
+		return m, nil
+	}
 	if m.st.Gating() {
 		m.st.Notice = "a vendor is waiting on you — the paste was not inserted · y approves, n denies"
 		return m, nil

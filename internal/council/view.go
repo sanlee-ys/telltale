@@ -4162,6 +4162,12 @@ func composerBottom(st State, lay Layout, sty Styles, g Glyphs) string {
 func composerLabel(st State, lay Layout, sty Styles, g Glyphs) (styled, plain string) {
 	word, style := "VIEW", sty.Strong
 	switch {
+	case st.Live.Typing:
+		// KEYS: the live pane holds the keyboard (livekeys.go). Above HOLD and
+		// GATE because key() ranks it there — while the pane has the keys,
+		// nothing on the composer or on a card can take one — and the border
+		// word must never say a mode the keys are not in.
+		word = "KEYS"
 	case ackWants(st):
 		// HOLD: the room has a write brief and will not send it until the
 		// operator answers the card two rows up (ack.go). It ranks above GATE
@@ -4624,6 +4630,16 @@ func modeHints(st State, g Glyphs) []hint {
 	// does: an unrecognised key drops the prefix and is swallowed. Naming `esc`
 	// alone would promise that the other keys fall through, and one of them is
 	// `q`.
+	// The live pane's keyboard (livekeys.go). The line is REPLACED, on the
+	// pane prefix's precedent just below: every ordinary key is now a byte
+	// for the guest, so naming any of them here would be the false promise
+	// §7.8 forbids. Two cells say where the keys go and how to get them back.
+	if st.Live.Typing {
+		return []hint{
+			{key: "keys", label: "to " + liveSeatLabel(st)},
+			{key: liveLeaveKey, label: "back to the room"},
+		}
+	}
 	if st.PanePrefix {
 		return []hint{
 			{key: "s", label: "split"},
@@ -4881,6 +4897,12 @@ func modeHints(st State, g Glyphs) []hint {
 	}
 	return append(hs, hint{key: "i", label: "compose"},
 		hint{key: "?", label: "help"}, hint{key: "q", label: "quit"})
+}
+
+// liveSeatLabel is the live seat's column label, for the footer cell that says
+// where the keys are going.
+func liveSeatLabel(st State) string {
+	return seatLabel(st, st.Live.Seat)
 }
 
 // cancelLabel is what ctrl+c will do, in the footer's words, now that the key
@@ -5572,7 +5594,11 @@ func helpKeys(lay Layout, sty Styles, g Glyphs) []string {
 		// after it read as the same sentence without repeating it.
 		"  f / t / T    f gives one column the full width; t one turn the whole room; " +
 			"T that turn's acts (in compose, text)",
-		"  ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted",
+		// `^]` merged onto this row rather than given one: the panel's budget
+		// is hard (above), and this is the row of modifier chords that change
+		// where the next keystroke goes. Spelled `^]` the way the focus row
+		// spells `^w`; the footer, with more room, spells it `ctrl+]`.
+		"  ctrl+r / ^]  arm rebuttal: vendors see the others' answers, quoted as untrusted; ^] types into a live pane",
 		// Two keys on one line, because this panel has to fit a 24-row terminal
 		// and the line they were competing with is "? this help" — which toggles,
 		// and is therefore the only documented way back out of here.
