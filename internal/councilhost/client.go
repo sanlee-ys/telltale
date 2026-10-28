@@ -59,6 +59,11 @@ type ClientConfig struct {
 	Seats []model.VendorID
 	// Read opens a deliberation-only room.
 	Read bool
+	// Saved is the saved room's keys, when the caller read one and was not
+	// told --fresh: the turn, when it was written, and one session id per
+	// vendor. Sent on the hello and never on argv (Frame.Saved). Nil opens
+	// every seat fresh.
+	Saved *SavedKeys
 	// Exe is the telltale binary to start as the host. Empty uses this
 	// process's own executable, which is the ordinary case and the reason a
 	// version mismatch on the handshake means something has gone wrong.
@@ -133,7 +138,9 @@ func Join(cfg JoinConfig) (*Client, error) {
 		return nil, err
 	}
 	c := &Client{conn: conn, fr: NewFrameReader(conn), fw: NewFrameWriter(conn)}
-	if err := c.handshake(); err != nil {
+	// A rejoin carries no saved keys: the room it reaches is already running
+	// on its own ids, and the host would ignore them anyway (reattach).
+	if err := c.handshake(nil); err != nil {
 		conn.Close()
 		return nil, err
 	}
@@ -194,7 +201,7 @@ func Open(cfg ClientConfig) (*Client, error) {
 	}
 
 	c := &Client{conn: conn, fr: NewFrameReader(conn), fw: NewFrameWriter(conn), owned: proc}
-	if err := c.handshake(); err != nil {
+	if err := c.handshake(cfg.Saved); err != nil {
 		conn.Close()
 		_ = proc.Kill()
 		return nil, err
@@ -202,8 +209,8 @@ func Open(cfg ClientConfig) (*Client, error) {
 	return c, nil
 }
 
-func (c *Client) handshake() error {
-	if err := c.fw.Write(Frame{Kind: KindHello, Protocol: ProtocolVersion}); err != nil {
+func (c *Client) handshake(saved *SavedKeys) error {
+	if err := c.fw.Write(Frame{Kind: KindHello, Protocol: ProtocolVersion, Saved: saved}); err != nil {
 		return err
 	}
 	f, err := c.fr.Read()

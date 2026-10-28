@@ -239,9 +239,12 @@ func StartHosted(opts Options, in io.Reader, out io.Writer) error {
 	}
 	var re Reattachment
 	if !opts.Fresh {
-		// The saved room's workspace and roster, as the ordinary room reads
-		// them; its session ids are NOT handed to the host, which starts every
-		// seat fresh (§7.31's named limitation). --fresh declines even that.
+		// The saved room, as the ordinary room reads it: its workspace and
+		// roster shape the launch here, and its session ids and turn go to
+		// the host on the hello (councilhost.SavedKeys), so each seat resumes
+		// its thread and the host writes room.json from the saved turn on —
+		// the same keys the single-process room restores (program.go).
+		// --fresh declines all of it, exactly as it does there.
 		loaded, err := LoadRoom()
 		if err != nil && !errors.Is(err, ErrNoSavedRoom) {
 			loaded = Reattachment{}
@@ -275,6 +278,7 @@ func StartHosted(opts Options, in io.Reader, out io.Writer) error {
 		RoomKey:   councilhost.RoomKey(ws),
 		Seats:     hostSeatVendors(Detect(), seats),
 		Read:      !opts.Write,
+		Saved:     savedKeys(re),
 	})
 	if err != nil {
 		return err
@@ -283,6 +287,29 @@ func StartHosted(opts Options, in io.Reader, out io.Writer) error {
 		return runHostedClient(c, in, out)
 	}
 	return runHostedTUI(opts, c, "", out)
+}
+
+// savedKeys is what a usable saved room hands the host: council's reattach
+// (program.go) with the seat marking left to the host, because the host is
+// the process that knows which seats it drives. The ids leave this process on
+// the pipe and reach disk again only through the host's own room.json write,
+// so resume.go's leak sentence is as true of the hosted room as of this one.
+// A room that was ignored, declined by --fresh, or never saved hands nothing.
+func savedKeys(re Reattachment) *councilhost.SavedKeys {
+	if !re.Active() {
+		return nil
+	}
+	sessions := make(map[model.VendorID]string, len(re.Room.Sessions))
+	for v, id := range re.Room.Sessions {
+		if id != "" {
+			sessions[v] = id
+		}
+	}
+	return &councilhost.SavedKeys{
+		Turn:     re.Room.Turn,
+		SavedAt:  re.Room.SavedAt,
+		Sessions: sessions,
+	}
 }
 
 // runHostedTUI draws a hosted room with the room's own Model (design.md

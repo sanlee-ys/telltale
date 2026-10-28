@@ -8581,9 +8581,35 @@ live stream shape, which §9.57 lists as unmeasured.
 - **A hosted room starts every seat fresh.** The host is handed a roster and never a saved
   session id, so no `Restored` card is drawn and no thread is resumed. This predates this
   section. It is named here so the missing card is read as honest rather than as a defect.
+  **Paid 2026-10-28.** The client that starts a host reads `room.json` through `LoadRoom`,
+  exactly as the single-process room does, and hands the saved turn, timestamp and session
+  ids to the host on the **hello frame** (`Frame.Saved`, `councilhost.SavedKeys`) — on the
+  wire and never on argv, because the pipe already carries transcript content behind an
+  explicit descriptor and a process argument list is readable by every process on the
+  machine. The host places each id on its drivable seat, marks it `Restored`, continues the
+  turn count from the saved number and carries `Room.Reattached` so a rejoining client
+  builds the same card from its first frame; the first dispatch spawns the vendor's resume
+  shape. council's one-attempt rule holds on the host (`Seat.settleRestored`): a restored id
+  whose first turn fails is let go with council's own card, a cancelled turn keeps it on
+  probation, and a vendor that answers on a different id takes the marker off. **One
+  narrowing, named rather than guessed:** the host carries no failure classifier, so the
+  sixteenth amendment's transient exception does not apply there — every failed first turn
+  costs the id, which is the rule as it stood before that amendment. A rejoin sends no keys
+  and the host ignores keys on any hello but the first over an unmoved room.
 - **The host does not write `room.json`.** [§7.28](#s7-28) said it would, on the room's own
   schedule. It does not, and no code in `internal/councilhost` reaches `SaveRoom`. A hosted
-  room's session ids therefore never reach disk. `STATE.md` carries it.
+  room's session ids therefore never reach disk. `STATE.md` carries it. **Paid 2026-10-28.**
+  The host writes `council/room.json` through its own `RoomFile` (`roomfile.go`) — the same
+  keys, the same schema version, the same atomic write and the same 0600/0700 as `SaveRoom`,
+  because the host cannot import package council. Two tests hold the two writers together:
+  `TestTheHostsRoomFileIsNumbersAndKeysOnly`-style key pinning in `councilhost`, and
+  `TestTheRoomReadsWhatTheHostWrote` in `council`, which reads a host-written file through
+  `LoadRoom` field by field. The schedule is council's: after a turn ends on a seat, after
+  an interrupt or a host-side refusal retires one, and on the way out; never before the
+  first turn. Every saved id for a vendor the host has no seat for is **held** and written
+  back, so a one-seat host does not cost the operator the other threads. A hosted room's
+  roster is always explicit, so the file records it as the typed list (`seats.only`). No
+  `brief_path`: the host takes no brief.
 - **No vendor has been dispatched through a hosted TUI room.** Every seat in both suites is
   stubbed. The stubbed end-to-end in `internal/council/hosted_e2e_test.go` re-executes the
   test binary as a real host with an empty roster and drives the `Model` over a real pipe.
