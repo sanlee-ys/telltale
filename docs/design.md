@@ -7314,6 +7314,31 @@ or measured the coverage; it is no longer refused on fields. The general rule th
 worth more than the row: **before a vendor is built here, re-read its records, not its
 struct.**
 
+**Amended 2026-10-28: that rule stopped the grok build one step later, and the row below
+says so.** A lane re-read the records before building the grok reader and found that this
+repository holds TWO measurements of the same `turn_completed.usage` object which disagree on
+the one property a day sum rests on — whether a record is one turn's counts or the session's
+running total. [§3.9a](#s3-9a)'s 2026-08-29 re-measure at grok 1.0.5, through the CLI,
+read two records of one session at `inputTokens` 21548 then 21958 — "the second is not the
+first plus anything" — with `numTurns` at 1 on every record. `internal/council/vendors/acp.go`'s
+header, 2026-09-04 at grok 1.0.13 through `grok agent stdio`, read the prompt response's
+`_meta.usage` as the SESSION's running total — `numTurns` 2 then 3, every count larger than
+the per-prompt count beside it — and records it as value-for-value the `turn_completed.usage`
+record the same session wrote to `updates.jsonl`. The same capture says the total does not
+reconcile by subtraction with the per-prompt count (top-level `inputTokens` 50,963 against a
+`usage` block that grew by 62,054), so no delta over consecutive records recovers a turn
+either. Whether that is build drift or two shapes for two drivers, neither measurement says,
+and no on-disk record at 1.0.13 is in this repository. A day sum over running totals counts
+every earlier turn again, and subtraction is measured not to work, so **the reader was not
+built and nothing here guesses which measurement wins.** Owed before any block: one read of
+`updates.jsonl` at the installed build, from a session driven each way, stating which shape
+the disk holds and whether `numTurns` tells the two apart. Two smaller facts are owed with it
+and are named so they are not rediscovered: the envelope `timestamp` is an integer of what
+`internal/adapter/grok`'s 2026-08-09 fixture shapes as unix seconds, and no measurement in
+this document states its unit; and the record carries no `cwd` of its own — the workspace
+would come from `summary.json`'s `info.cwd`, present on 30 of 30 sessions surveyed. The
+cache-read unit trap the row names is unchanged and still stands beside both.
+
 | vendor | counts on disk? | dated? | verdict |
 |---|---|---|---|
 | **claude** | **yes** — `message.usage` carries four raw counts (`input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, `output_tokens`) on every assistant record | **yes** — RFC3339 `timestamp`, and `cwd` on the same record | **COVERED.** Four billed categories, dated, per request, per project. The only vendor with the cache split that makes four honest columns. Pinned at Claude Code 2.1.233 (§3.1) |
@@ -7321,7 +7346,7 @@ struct.**
 | gemini | partial — `tokens.input` is `promptTokenCount`, which [§3.7](#s3-7)'s adapter labels a context-occupancy proxy, and the cached subset is not separable from what it parses | yes | refused on UNITS. Summing an occupancy proxy per day counts one conversation's prefix once per turn, under a header that would read like uncached input |
 | agy | yes, and the best-guarded in the fleet — `gen_metadata` carries uncached input and output per generation behind the `thinking + answer == output` identity §3.8 requires | **no** — the reverse-engineered field map carries no per-generation timestamp | refused for want of a DAY. Real numbers, no axis to put them on |
 | cursor | **no** — `tokenCount.inputTokens`/`outputTokens` were 0 in 310 of 310 message rows; declared `CapNone` (§7.16) | n/a | nothing to read. This vendor's counts arrive by hook, not on disk |
-| grok | **yes, and this row said "a total only" until 2026-08-29** — `turn_completed`'s `usage` carries `inputTokens`, `outputTokens`, `cachedReadTokens` and `cacheCreationTokens` beside `totalTokens`, measured at grok 1.0.5 and on disk since 1.0.0 ([§3.9a](#s3-9a)) | **yes** — the envelope's own `timestamp`, which `internal/adapter/grok`'s struct does not parse | **the old verdict described the adapter's STRUCT, not the record**, and both halves of it were wrong about the file. Not refused on fields any more; simply not built. One unit trap is owed first: `inputTokens` INCLUDES the cache read here and claude's `input_tokens` excludes it, so the four columns are not the same four |
+| grok | **yes, and this row said "a total only" until 2026-08-29** — `turn_completed`'s `usage` carries `inputTokens`, `outputTokens`, `cachedReadTokens` and `cacheCreationTokens` beside `totalTokens`, measured at grok 1.0.5 and on disk since 1.0.0 ([§3.9a](#s3-9a)) | **yes** — the envelope's own `timestamp`, which `internal/adapter/grok`'s struct does not parse | **the old verdict described the adapter's STRUCT, not the record**, and both halves of it were wrong about the file. Not refused on fields any more; simply not built. One unit trap is owed first: `inputTokens` INCLUDES the cache read here and claude's `input_tokens` excludes it, so the four columns are not the same four. **Amended 2026-10-28: a second thing is owed ahead of that one, and it is a measurement, not work** — the 1.0.5 and 1.0.13 readings disagree on whether `usage` is one turn's counts or the session's running total (the amendment above the table), and a day sum has no honest input until one read of `updates.jsonl` at the installed build settles it |
 | pi | yes — `message.usage.{input,output}` per assistant message, with a `cwd` | yes — record `timestamp` | datable, second after codex. No cache split, and it carries `usage.cost.total` per message — money, which this mode renders nowhere and would have to rule on |
 
 `self-reported` is absent from the table and that is not an omission: §7.23's drop-file rows
