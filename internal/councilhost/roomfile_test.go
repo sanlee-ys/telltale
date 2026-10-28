@@ -41,9 +41,23 @@ func hostOverSavedRoom(t *testing.T, saved *SavedKeys) (*Host, string, *spawnLog
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
 	h.roomCtx, h.roomCancel = context.WithCancel(ctx)
-	go h.fold()
+	// Cleanup waits for fold to return, not just for the cancel to be sent.
+	// fold writes room.json synchronously after a seat retires, and a test
+	// that ends on the seat's phase alone can return while that write still
+	// holds its temp file. The TempDir cleanup registered above runs after
+	// this one, so by then the directory is quiet. Windows refuses to remove
+	// a directory with an open file in it; Linux does not, which is why this
+	// only reddened CI.
+	folded := make(chan struct{})
+	go func() {
+		defer close(folded)
+		h.fold()
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-folded
+	})
 	h.reattach(saved)
 	return h, dir, log
 }
