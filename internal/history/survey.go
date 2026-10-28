@@ -63,6 +63,34 @@ type Coverage struct {
 // generalises to every uncovered row here: BEFORE a vendor is built, re-read its
 // records, not its struct.
 //
+// # The same rule stopped the grok build on 2026-10-28, one step later
+//
+// A lane sat down to build the grok reader against that corrected verdict and
+// re-read the records as the rule says. This repository holds TWO measurements
+// of the same `turn_completed.usage` object, and they disagree on the one
+// property a day sum rests on — whether a record is one turn's counts or the
+// session's running total:
+//
+//   - 2026-08-29, grok 1.0.5, the CLI (design.md §3.9a's re-measure): per-turn.
+//     Two records of one session read inputTokens 21548 then 21958, "the second
+//     is not the first plus anything", and numTurns is 1 on every record.
+//   - 2026-09-04, grok 1.0.13, `grok agent stdio` (internal/council/vendors/
+//     acp.go's header): the prompt response's `_meta.usage` is the SESSION's
+//     running total — numTurns 2 then 3, every count larger than the per-prompt
+//     count beside it — and it is recorded as value-for-value the
+//     `turn_completed.usage` record the same session wrote to updates.jsonl.
+//     The same capture says the total does not reconcile by subtraction with
+//     the per-prompt count (top-level inputTokens 50,963 against a usage block
+//     that grew by 62,054), so no delta over consecutive records recovers a
+//     turn either.
+//
+// Whether that is build drift (1.0.5 to 1.0.13) or two shapes for two drivers
+// is not something either measurement answers, and no on-disk sample at 1.0.13
+// is in this repository: acp.go quotes the wire and asserts the disk matched.
+// Summing running totals per day counts every earlier turn again, and
+// subtracting them is measured not to work, so the reader was NOT built. The
+// verdict below says what is owed instead of guessing which measurement wins.
+//
 // # Order
 //
 // FIXED FLEET ORDER — claude, codex, gemini, agy, cursor, grok — the same order
@@ -125,15 +153,22 @@ var survey = []Coverage{
 	{
 		Vendor:  model.VendorGrok,
 		Covered: false,
-		Why: "the split and the date are both there, and this verdict said the " +
-			"opposite until 2026-08-29. A turn_completed record's usage carries " +
-			"inputTokens, outputTokens, cachedReadTokens and cacheCreationTokens " +
-			"beside the envelope's own timestamp — measured at grok 1.0.5, and on " +
-			"disk since 1.0.0 (design.md §3.9a). internal/adapter/grok parses " +
-			"totalTokens alone, which is what the old reading described. A unit " +
-			"trap is owed before any block: inputTokens INCLUDES the cache read " +
-			"here, where claude's input_tokens excludes it, so the four columns " +
-			"are not the same four.",
+		Why: "the split and the date are both there, and two measurements of " +
+			"the same record disagree on what one record IS, which is what blocks " +
+			"a day sum. At grok 1.0.5 a turn_completed record's usage is one " +
+			"turn's counts and numTurns reads 1 on every record (design.md §3.9a, " +
+			"2026-08-29, the CLI). At grok 1.0.13 the same usage object is the " +
+			"SESSION's running total — numTurns 2 then 3 — recorded as " +
+			"value-for-value the record updates.jsonl wrote " +
+			"(internal/council/vendors/acp.go, 2026-09-04, grok agent stdio), and " +
+			"that capture says the total does not reconcile by subtraction with " +
+			"the per-prompt count beside it. Summing a running total per day counts " +
+			"every earlier turn again, and no delta recovers a turn, so nothing is " +
+			"built on either reading. Owed first: one read of updates.jsonl at the " +
+			"installed build, driven both ways, saying which shape the disk holds " +
+			"and whether numTurns tells them apart. The unit trap stands beside it: " +
+			"inputTokens INCLUDES the cache read here, where claude's input_tokens " +
+			"excludes it, so the four columns are not the same four.",
 	},
 	{
 		Vendor:  model.VendorPi,

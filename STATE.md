@@ -567,11 +567,21 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   the same day** (#316): a live re-measure at grok 1.0.5 read a `turn_completed` record off
   disk carrying a full input/output/cache split beside the envelope's own timestamp. The
   survey had read `internal/adapter/grok`'s struct, which parses `totalTokens` alone, and a
-  record struct is an allowlist — what it omits is a decision, not an absence. grok is still
-  uncovered and is now unowned rather than refused, behind one named unit trap: its
-  `inputTokens` INCLUDES the cache read where claude's `input_tokens` excludes it. The
+  record struct is an allowlist — what it omits is a decision, not an absence. The
   general rule that bought is in §7.26 — before a vendor is built there, re-read its
-  records, not its struct — and it applies to every remaining row.
+  records, not its struct — and it applies to every remaining row. **That rule stopped the
+  grok build on 2026-10-28, one step later, and grok is blocked on a MEASUREMENT now, not on
+  the unit trap alone.** A lane re-read the records and found two measurements of the same
+  `turn_completed.usage` object in this repository that disagree on whether a record is one
+  turn's counts (§3.9a, grok 1.0.5, the CLI, `numTurns` 1 on every record) or the session's
+  running total (`internal/council/vendors/acp.go`, grok 1.0.13, `grok agent stdio`,
+  `numTurns` 2 then 3, recorded as value-for-value the disk record). A day sum over running
+  totals double-counts, and that capture says subtraction does not recover a turn, so nothing
+  was built on either reading. What pays this is one read of `updates.jsonl` at the installed
+  build from a session driven each way, and it is the owner's to take: this box has no grok
+  store and the question is which shape the vendor writes, not which telltale prefers. The
+  unit trap stands beside it: `inputTokens` INCLUDES the cache read where claude's
+  `input_tokens` excludes it. §7.26's 2026-10-28 amendment carries the figures.
 
 - **The arena record has never been opened against a real pile of leftovers
   (2026-08-29).** `/arena record` (design.md §9.47) tallies every seat's adopted-of-decided
