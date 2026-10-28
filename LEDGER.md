@@ -126,3 +126,15 @@ is no longer the price of a change.
   reply text is never a source. On the badge row the granularity word yields
   to the model cell, because the header restates that word and no other row
   shows the model.
+- **2026-10-26 — The `go` directive moves to 1.26.10.** (Claude, on the
+  scheduled govulncheck run 40332604706.) The monitor reported eight reachable
+  standard-library findings in go1.26.6, all in `net/http`, `net/textproto`
+  and `crypto/tls` except GO-2026-6809 in `crypto/x509`. Seven are fixed in
+  go1.26.9 and GO-2026-6809 in go1.26.10. No required module caused any of
+  them. The remedy is the one `design.md` §8 records from 2026-08-16: raise
+  the single source every job reads. Measured both ways: govulncheck v1.7.0
+  under go1.26.10 reports `No vulnerabilities found`, and the built binary
+  reports `go1.26.10` under `go version -m`. The codeql run that failed the
+  same day is a different fault: its analysis completed and uploaded, and the
+  post-step "improved incremental analysis" failed on runner disk, which the
+  action records so the next run skips it.
