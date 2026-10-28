@@ -36,6 +36,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/sanlee-ys/telltale/internal/model"
 )
@@ -136,6 +137,26 @@ type Frame struct {
 	Seats []model.VendorID `json:"seats,omitempty"`
 	// Room is set on KindRoom.
 	Room *Room `json:"room,omitempty"`
+	// Saved is set on KindHello by the client that STARTED this host, and by
+	// nobody else: it is the saved room's keys, read off room.json by
+	// council's own loader, handed over so the host can resume each seat's
+	// thread and continue the turn count (Host.reattach). A rejoin sends
+	// none — the room it reaches is already running on its own ids — and
+	// the host ignores the field on any hello but the first.
+	//
+	// On the WIRE rather than on argv, deliberately. The pipe already carries
+	// transcript content behind an explicit security descriptor; a process
+	// argument list is readable by every process on the machine.
+	Saved *SavedKeys `json:"saved,omitempty"`
+}
+
+// SavedKeys is what a saved room contributes to a hosted one: the keys, and
+// only the keys, in resume.go's sense. The turn count and the timestamp are
+// what the reattach card prints; the sessions are what each seat resumes.
+type SavedKeys struct {
+	Turn     int                       `json:"turn"`
+	SavedAt  time.Time                 `json:"saved_at"`
+	Sessions map[model.VendorID]string `json:"sessions,omitempty"`
 }
 
 // ErrFrameTooLong is returned when one line exceeds maxFrame.

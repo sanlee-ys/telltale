@@ -136,6 +136,14 @@ func stateFromRoom(r councilhost.Room, prev State, windows bool) State {
 	st := prev
 	st.Workspace = r.Workspace
 	st.Turn = r.Turn
+	// The saved room's provenance, as the host carries it: the two numbers
+	// the reattach card prints, and the condition that card draws under
+	// (view.go's idle branch). Nil on the wire is a fresh room, and the zero
+	// Reattach is what a fresh single-process room holds too.
+	st.Reattached = Reattach{}
+	if r.Reattached != nil {
+		st.Reattached = Reattach{Turn: r.Reattached.Turn, SavedAt: r.Reattached.SavedAt}
+	}
 	st.Write = r.Posture == "write"
 	// A hosted room asks nobody: §7.28 refuses to host a gated room, so a
 	// hosted write room runs every tool call as though --auto were typed. The
@@ -243,9 +251,14 @@ func columnFromSeat(s councilhost.Seat, prev Column, write, windows bool) Column
 	c.CostUSD = s.CostUSD
 	c.CostSession = s.CostSession
 	c.Tokens = tokensFromWire(s.Tokens)
-	// None of these happen in a hosted room, and a value carried across from
-	// a previous column would be a claim about a seat the host never made.
-	c.Restored = false
+	// The host's own claim, never the previous column's: the host marks a
+	// seat Restored when it placed a saved id on it and clears the mark when
+	// the thread is let go (councilhost.Seat.Restored), so the card reads off
+	// the frame alone.
+	c.Restored = s.Restored
+	// Neither of these happens in a hosted room, and a value carried across
+	// from a previous column would be a claim about a seat the host never
+	// made.
 	c.Cleared = false
 	c.Arena = nil
 	c.ArenaInterim = nil

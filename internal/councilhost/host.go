@@ -233,6 +233,16 @@ type Host struct {
 	mu    sync.Mutex
 	room  Room
 	dirty bool
+	// held is every saved session id for a vendor this host has NO seat for,
+	// kept so the room file it writes does not lose them. council's Model
+	// keeps every saved id in m.sessions whether or not the vendor is seated,
+	// and writes them all back; a host that wrote only its roster's ids would
+	// make the first hosted turn cost the operator every other vendor's
+	// thread. Guarded by mu with the room. Numbers and keys, never content.
+	held map[model.VendorID]string
+	// reattached reports that reattach has run, so a later hello cannot run
+	// it again over a room that has moved on. Guarded by mu.
+	reattached bool
 
 	// pmu guards the process maps. Separate from mu because a spawn can take
 	// hundreds of milliseconds and the fold goroutine must not wait on one to
@@ -297,6 +307,7 @@ func New(cfg Config) (*Host, error) {
 		events:   make(chan runner.Event, eventBuffer),
 		sessions: map[model.VendorID]seatSession{},
 		handles:  map[model.VendorID]seatProcess{},
+		held:     map[model.VendorID]string{},
 	}
 	h.room = Room{
 		Version:   RoomVersion,
@@ -593,6 +604,12 @@ func (h *Host) accept(ctx context.Context, bounded bool) (*Conn, error) {
 // mechanism the design always described: the containment is a consequence of
 // the host dying, not an action the host takes.
 func (h *Host) Shutdown() {
+	// Written before anything is killed, so the last thing the room does with
+	// its state is preserve it — council's own teardown order (dispatch.go's
+	// quit path). Redundant with the per-turn save in the common case and
+	// kept for the same reason: it refreshes saved_at, which is what the
+	// reattach card ages.
+	h.saveRoom()
 	h.pmu.Lock()
 	sessions := h.sessions
 	handles := h.handles
@@ -632,14 +649,134 @@ func (h *Host) fold() {
 		select {
 		case ev := <-h.events:
 			h.mu.Lock()
-			if h.room.Apply(ev) {
+			changed := h.room.Apply(ev)
+			if changed {
 				h.dirty = true
 			}
+			retired := changed && h.room.turnEnded(ev.Vendor)
 			h.mu.Unlock()
+			if retired {
+				// The turn is over on this seat, so the id it produced is
+				// worth keeping — council's saveRoom at the end of a dispatch,
+				// and for its reason: the failure this exists to survive is
+				// the host not getting a clean exit, and a file written only
+				// at Shutdown would be missing in exactly that case.
+				h.saveRoom()
+			}
 		case <-h.roomCtx.Done():
 			return
 		}
 	}
+}
+
+// reattach takes a saved room's keys from the client that started this host:
+// council's reattach in program.go, on the host.
+//
+// Every saved id is kept. The ones with a drivable seat are placed on that
+// seat, marked Restored and put on probation; the ones with no seat, or with a
+// seat the host will not drive, are HELD for the room file so the next launch
+// finds them where it left them. The turn count continues from the saved
+// number, so the first hosted brief is turn N+1 and the room file's turn
+// never runs backwards over the saved one.
+//
+// Taken ONCE, from the first hello, and only over a room that has not moved —
+// no turn dispatched, no seat holding an id of its own. A rejoin sends no
+// keys, and a hello that did arrive later would be describing a room that no
+// longer exists; applying it would put a saved id over a live thread.
+func (h *Host) reattach(saved *SavedKeys) {
+	if saved == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.reattached || h.room.Turn > 0 {
+		return
+	}
+	for _, s := range h.room.Seats {
+		if s.SessionID != "" {
+			return
+		}
+	}
+	h.reattached = true
+	for v, id := range saved.Sessions {
+		if id == "" {
+			continue
+		}
+		i := h.room.seatIndex(v)
+		if i < 0 || !h.room.Seats[i].Drivable {
+			h.held[v] = id
+			continue
+		}
+		s := &h.room.Seats[i]
+		s.SessionID = id
+		s.Restored = true
+		s.unproven = true
+	}
+	if saved.Turn > 0 {
+		h.room.Turn = saved.Turn
+		h.room.Reattached = &Reattached{Turn: saved.Turn, SavedAt: saved.SavedAt}
+	}
+	h.dirty = true
+}
+
+// saveRoom writes council/room.json, on council's own schedule and terms
+// (dispatch.go's saveRoom): after a turn ends on a seat, after an interrupt
+// retires one, when a seat is refused, and on the way out. Never before the
+// first turn — a room with no turns has no keys to save, and a file per
+// launch is the thing council's rule refuses. Best effort: a room that
+// cannot write its state file is still a working room, and the failure is
+// said on the room's notice line rather than swallowed.
+//
+// A reattached room at its saved turn with no new dispatch still writes on
+// the way out, exactly as council does: the write refreshes saved_at and
+// carries every id, placed or held, back to where it came from.
+func (h *Host) saveRoom() {
+	if h.cfg.CouncilDir == "" {
+		return
+	}
+	h.mu.Lock()
+	if h.room.Turn == 0 {
+		h.mu.Unlock()
+		return
+	}
+	sessions := make(map[model.VendorID]string, len(h.room.Seats)+len(h.held))
+	for v, id := range h.held {
+		sessions[v] = id
+	}
+	roster := make([]model.VendorID, 0, len(h.room.Seats))
+	for _, s := range h.room.Seats {
+		roster = append(roster, s.Vendor)
+		if s.SessionID != "" {
+			sessions[s.Vendor] = s.SessionID
+		}
+	}
+	f := RoomFile{
+		Workspace: h.room.Workspace,
+		Seats:     RoomRoster{Only: roster},
+		Posture:   h.room.Posture,
+		Turn:      h.room.Turn,
+		Sessions:  sessions,
+		SavedAt:   time.Now(),
+	}
+	h.mu.Unlock()
+	if err := WriteRoomFile(h.cfg.CouncilDir, f); err != nil {
+		h.mu.Lock()
+		h.room.Notice = "the room state could not be saved: " + err.Error()
+		h.dirty = true
+		h.mu.Unlock()
+	}
+}
+
+// turnEnded reports that the named seat has just RETIRED a turn: it took
+// one, and it is no longer busy. Read under the room's lock by the fold,
+// which is the one place an event lands.
+func (r *Room) turnEnded(v model.VendorID) bool {
+	i := r.seatIndex(v)
+	if i < 0 {
+		return false
+	}
+	s := r.Seats[i]
+	return s.Turn > 0 && !s.busy() && !s.Ended.IsZero()
 }
 
 // serveClient runs the handshake and then the frame loop for one client.
@@ -670,6 +807,10 @@ func (h *Host) serveClient(ctx context.Context, conn *Conn) error {
 	}); err != nil {
 		return err
 	}
+	// Before the first room frame, so the client that started this host
+	// draws the Restored cards and the saved turn on its very first frame
+	// rather than one tick later.
+	h.reattach(hello.Saved)
 
 	// The first room goes out immediately rather than on the next tick, so a
 	// client that connected to an idle room draws something at once instead of
@@ -937,6 +1078,11 @@ func (h *Host) dispatchPersistent(p vendors.Persistent, s Seat, prompt string) e
 		if s.SessionID != "" {
 			spec, err = p.SessionResume(h.cfg.Workspace, s.Binary, "", s.SessionID, h.cfg.Posture)
 			if errors.Is(err, vendors.ErrNoResume) {
+				// The vendor cannot build a resume, so the seat starts fresh
+				// and must not claim otherwise: council's own fallback drops
+				// the id rather than carrying it into a thread it never
+				// reached.
+				h.letThreadGo(s.Vendor)
 				spec, err = p.Session(h.cfg.Workspace, s.Binary, "", h.cfg.Posture)
 			}
 		} else {
@@ -970,6 +1116,7 @@ func (h *Host) dispatchBatch(v vendors.Vendor, s Seat, prompt string) error {
 	if s.SessionID != "" {
 		spec, err = v.NextTurn(prompt, h.cfg.Workspace, s.Binary, s.SessionID, h.cfg.Posture)
 		if errors.Is(err, vendors.ErrNoResume) {
+			h.letThreadGo(s.Vendor)
 			spec, err = v.FirstTurn(prompt, h.cfg.Workspace, s.Binary, h.cfg.Posture)
 		}
 	} else {
@@ -1002,6 +1149,18 @@ func (h *Host) dispatchBatch(v vendors.Vendor, s Seat, prompt string) error {
 // v0Parse is the vendor's own line parser, named so the spawn call reads as
 // what it is.
 func v0Parse(p vendors.Persistent) runner.ParseFunc { return p.ParseEvent }
+
+// letThreadGo drops one seat's id and its Restored marker under the room's
+// lock: the seat is about to be started fresh, and a frame that still said
+// its thread came back would be a claim the next spawn contradicts.
+func (h *Host) letThreadGo(v model.VendorID) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if i := h.room.seatIndex(v); i >= 0 {
+		h.room.Seats[i].dropThread()
+		h.dirty = true
+	}
+}
 
 // interrupt asks the named seats — every seat, when none is named — to abandon
 // the turn in flight.
@@ -1057,6 +1216,7 @@ func (h *Host) interrupt(seats []model.VendorID) {
 	}
 	h.mu.Lock()
 	now := time.Now()
+	cancelled := false
 	for i := range h.room.Seats {
 		if !wanted(h.room.Seats[i].Vendor) {
 			continue
@@ -1066,9 +1226,15 @@ func (h *Host) interrupt(seats []model.VendorID) {
 		// the distinction council.PhaseCancelled exists for.
 		if h.room.Seats[i].cancel(now) {
 			h.dirty = true
+			cancelled = true
 		}
 	}
 	h.mu.Unlock()
+	if cancelled {
+		// A cancelled turn is still a turn that ended (council saves at the
+		// end of every dispatch, cancelled ones included).
+		h.saveRoom()
+	}
 }
 
 // noteSeat records a host-side refusal on one seat's card.
@@ -1078,7 +1244,6 @@ func (h *Host) interrupt(seats []model.VendorID) {
 // stamp.
 func (h *Host) noteSeat(v model.VendorID, ph Phase, note string) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if i := h.room.seatIndex(v); i >= 0 {
 		s := &h.room.Seats[i]
 		s.Phase = ph
@@ -1087,8 +1252,17 @@ func (h *Host) noteSeat(v model.VendorID, ph Phase, note string) {
 		now := time.Now()
 		s.stampElapsed(now)
 		s.Ended = now
+		// A refused spawn on a restored id is that id's one attempt, on the
+		// same rule as a failed turn: the seat let it go. settleRestored
+		// rewrites the note to say so, which outranks the spawn error — the
+		// operator's question is what happens to the next brief.
+		s.settleRestored()
 		h.dirty = true
 	}
+	h.mu.Unlock()
+	// A refusal retires the turn on this seat, so the room is saved as it is
+	// after any other turn end.
+	h.saveRoom()
 }
 
 // Snapshot copies the room out. For tests and for a caller that wants the state

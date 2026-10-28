@@ -1020,13 +1020,21 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   3. **The rebuttal in a hosted room.** `ctrl+r` is refused with one
      sentence. A quoting turn hands each seat a different prompt, and the
      dispatch frame carries one.
-  4. **A hosted room starts every seat fresh.** The host is handed a roster
-     and never a saved session id, so no thread is resumed and no `Restored`
-     card is drawn. This predates §7.31 and is named there.
-  5. **The host does not write `room.json`.** §7.28 said it would, on the
-     room's own schedule; no code in `internal/councilhost` reaches `SaveRoom`,
-     so a hosted room's session ids never reach disk. Named in §7.31.
-  6. **The frame cost is unmeasured.** Every frame carries every seat's
+  4. **The resume and the room file, PAID 2026-10-28 in code, and the live
+     half is the owner's.** The host now takes the saved session ids on the
+     first hello, resumes each seat's thread, draws the `Restored` card, and
+     writes `council/room.json` on council's own schedule (§7.31's two
+     amended bullets have the mechanism). Every claim is pinned by stubbed
+     tests on both sides of the boundary; none is measured against a vendor.
+     Owed: one `telltale council --host --read` opened over a saved room on
+     the built binary, with a brief to the claude seat, must show the card,
+     the vendor answering on the SAVED id (not a fork), and `room.json` at
+     the new turn afterwards; then `telltale council` without `--host` must
+     rebuild from that file. One ruling made in code rather than guessed:
+     the host has no failure classifier, so the sixteenth amendment's
+     transient exception does not reach a hosted room — a failed first turn
+     on a restored id costs the id there, every time.
+  5. **The frame cost is unmeasured.** Every frame carries every seat's
      history, bounded by the 50 ms tick and the 8 MiB line ceiling. Nothing
      has measured a long room against that ceiling, and the host's memory
      ceiling above is still owed with it.

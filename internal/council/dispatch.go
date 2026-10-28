@@ -2587,9 +2587,9 @@ func (m *Model) saveRoom() {
 	// A replay never writes room.json (replay.go): its turn counter is the
 	// recording's, and saving it would point the operator's next live room at
 	// a conversation that happened on another day, possibly on another
-	// machine. A hosted room never writes it either (hosted.go): the client
-	// holds no session id, and a file it wrote would describe a room another
-	// process owns.
+	// machine. A hosted room's CLIENT never writes it either (hosted.go): the
+	// HOST writes it, on this same schedule (councilhost.Host.saveRoom), and
+	// a file the client wrote would describe a room another process owns.
 	if m.st.Turn == 0 || m.replay != nil || m.hosted != nil {
 		return
 	}

@@ -46,7 +46,10 @@ type HostFile struct {
 	Workspace string `json:"workspace"`
 	// Seats is the roster, by vendor id.
 	Seats []model.VendorID `json:"seats"`
-	// Turn is how many turns the host has dispatched.
+	// Turn is the room's turn count: how many turns the host has dispatched,
+	// on top of the saved turn it continued from when it opened over a saved
+	// room (Host.reattach) — the same number room.json carries and the room's
+	// header draws.
 	Turn int `json:"turn"`
 }
 

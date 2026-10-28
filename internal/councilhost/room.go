@@ -43,6 +43,20 @@ type Room struct {
 	// Seats is the roster, in the order the host was given it. Fixed order,
 	// because position is the navigation on every other council surface.
 	Seats []Seat `json:"seats"`
+	// Reattached is set when the host opened over a saved room (Host.reattach):
+	// the turn the saved room had completed and when it was written. Two
+	// numbers, which is what the client's reattach card prints — council's
+	// own State.Reattached, carried on the wire so that a rejoining client
+	// builds the same card from its first frame as the client that started
+	// the host. Nil on a fresh room, and that is a different fact from a
+	// saved room at turn zero, which council never writes.
+	Reattached *Reattached `json:"reattached,omitempty"`
+}
+
+// Reattached is the saved room's provenance: council.Reattach, on the wire.
+type Reattached struct {
+	Turn    int       `json:"turn"`
+	SavedAt time.Time `json:"saved_at"`
 }
 
 // Seat is one vendor's column, as the host holds it.
@@ -65,6 +79,20 @@ type Seat struct {
 	// SessionID is the vendor's own id for its conversation, which is what
 	// makes the next turn a resume. A key, never content.
 	SessionID string `json:"session_id,omitempty"`
+	// Restored reports that SessionID came back from a saved room rather than
+	// from this host's own run, so the client can draw council's Restored
+	// card ("this seat's thread came back. the next brief continues it.").
+	// Set by Host.reattach on a drivable seat only, for program.go's reason:
+	// an id for a seat the host will not drive is dead weight rather than a
+	// thread. Cleared by settleRestored when the thread is let go, and by
+	// adoptSession when the vendor answers on a DIFFERENT id — the seat is
+	// then on a thread the saved room never named, and the marker would be a
+	// claim about a conversation it is not in.
+	Restored bool `json:"restored,omitempty"`
+	// unproven is council's Model.unproven for this seat: a restored id that
+	// has not yet survived a turn. Not on the wire — it is the host's own
+	// bookkeeping, and the client has no decision to make with it.
+	unproven bool
 	// Turn is which dispatch Body, Acts and Prompt belong to. Zero means this
 	// seat has never been dispatched to, which is what keeps an unaddressed
 	// column's history truthful: it records nothing for a turn it sat out.
@@ -333,12 +361,12 @@ func (r *Room) applyAt(ev runner.Event, now time.Time) bool {
 		if ev.SessionID == "" || ev.SessionID == s.SessionID {
 			return false
 		}
-		s.SessionID = ev.SessionID
+		s.adoptSession(ev.SessionID)
 		return true
 	case runner.KindMeta:
 		changed := false
 		if ev.SessionID != "" && ev.SessionID != s.SessionID {
-			s.SessionID = ev.SessionID
+			s.adoptSession(ev.SessionID)
 			changed = true
 		}
 		// A reported cost is the vendor's own figure, and since §7.31 the TUI
@@ -382,6 +410,7 @@ func (r *Room) applyAt(ev runner.Event, now time.Time) bool {
 		}
 		s.Phase = PhaseDone
 		s.stampElapsed(now)
+		s.settleRestored()
 		if s.Persistent {
 			// On a persistent seat this is the ONLY end-of-turn signal there is
 			// (Seat.Persistent's doc has the measurement), so the turn retires
@@ -429,6 +458,7 @@ func (r *Room) applyAt(ev runner.Event, now time.Time) bool {
 		}
 		s.stampElapsed(now)
 		s.Ended = now
+		s.settleRestored()
 		return true
 	case runner.KindError:
 		// A process exit landing on a seat the vendor already failed keeps the
@@ -462,9 +492,75 @@ func (r *Room) applyAt(ev runner.Event, now time.Time) bool {
 		s.Settling = false
 		s.stampElapsed(now)
 		s.Ended = now
+		s.settleRestored()
 		return true
 	}
 	return false
+}
+
+// adoptSession records the id the vendor announced.
+//
+// A restored seat whose vendor answers on a DIFFERENT id is no longer on the
+// thread the saved room named: the marker that says it is comes off, and so
+// does its probation, because there is nothing left to prove about an id the
+// vendor has already replaced (council's adoptSession makes the same
+// correction). The new id is kept, for council's reason: the reply already
+// happened inside it, and the next brief continues from this turn. The host
+// raises no card for it — council's fork card is gated on a MEASURED vendor
+// (vendors.SilentResumeFork), and nothing has measured the shape through a
+// host, so the host says nothing rather than something it has not seen.
+func (s *Seat) adoptSession(id string) {
+	if s.Restored && s.SessionID != "" && id != s.SessionID {
+		s.Restored = false
+		s.unproven = false
+	}
+	s.SessionID = id
+}
+
+// settleRestored decides the fate of a restored id that has now had a turn:
+// council's settleRestoredThread, one rule, on the host.
+//
+// A turn that ANSWERED proves the thread, and the probation is over. A turn
+// that FAILED lets the id go, because retrying a dead id rebuilds the same
+// doomed invocation on every turn for the life of the room — the wedge
+// council's ninth amendment closed. A CANCELLED turn learned nothing about the
+// thread and keeps it on probation, which is why this is not called from
+// cancel.
+//
+// # What the host does NOT carry: the transient exception
+//
+// council keeps a restored id through a turn its failure classifier calls
+// transient (a pre-flight refusal, agy's own 503 — the sixteenth amendment).
+// The host has no classifier: the fold reads runner events and the
+// classification lives on council's Model. So a hosted room is the
+// one-attempt default on every failure, which is the rule as it stood before
+// that amendment and the smaller of the two faithful behaviours. STATE.md
+// names it. The asymmetry is the safe direction: a thread dropped on a hiccup
+// costs a conversation; a dead id retried forever costs the seat.
+func (s *Seat) settleRestored() {
+	if !s.unproven {
+		return
+	}
+	switch s.Phase {
+	case PhaseDone:
+		s.unproven = false
+	case PhaseFailed:
+		s.dropThread()
+		// council's own words (settleRestoredThread), title and body, so the
+		// hosted column says the same thing the single-process one says.
+		s.Note = "thread not restored — starting fresh"
+		s.NoteDetail = "the first turn on the saved thread failed, so this seat let it go. " +
+			"your next brief opens a new session, with the brief re-applied."
+	}
+}
+
+// dropThread lets a restored id go: the three facts council's clearSeat and
+// settleRestoredThread drop together, because an id left in any one of them
+// gets rebuilt into the next invocation.
+func (s *Seat) dropThread() {
+	s.SessionID = ""
+	s.Restored = false
+	s.unproven = false
 }
 
 // stampElapsed records the turn's wall time once. A seat that answered and
@@ -628,6 +724,10 @@ func (s *Seat) cancel(now time.Time) bool {
 // it, which is the kind of race that shows up as a corrupted frame once a week.
 func (r *Room) clone() *Room {
 	out := *r
+	if r.Reattached != nil {
+		re := *r.Reattached
+		out.Reattached = &re
+	}
 	out.Seats = make([]Seat, len(r.Seats))
 	copy(out.Seats, r.Seats)
 	for i := range out.Seats {
