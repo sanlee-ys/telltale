@@ -526,6 +526,18 @@ a turn you cannot explain and you get *that* turn, not the next one. `/trace off
 the room keeps measuring; bare `/trace` reports. Council never picks the path: that is what
 keeps `room.json` the only file it writes on its own initiative.
 
+**`ctrl+]` types into the live pane, and `ctrl+]` comes back.** A room opened with `--live
+claude` draws claude's own terminal screen on its seat. Focus that seat and press `ctrl+]`:
+the marker row reads `live · KEYS`, the border reads `KEYS`, and from then on every key —
+letters, enter, backspace, arrows, tab, `ctrl+c`, all of it — goes to that terminal as the
+bytes a terminal would send, and none of it reaches the room: `q` is the letter q, `?` is a
+question mark, and `ctrl+c` interrupts claude rather than cancelling a turn. A paste goes
+there too. `ctrl+]` is the one key the pane never receives; it hands the keyboard back, and
+the draft in the composer is exactly as you left it. A gate raised by the structured seat
+meanwhile waits on the `⚠ NEEDS YOU` strip until you come back. The pane still measures
+nothing — keys go in, and nothing comes out of it but the screen
+([design.md §9.53](design.md), amended 2026-10-28).
+
 **The crew's controls, in one place.** Each is explained where it belongs; this list is so a
 reader who learned the room as a committee finds every key it grew. `.` jumps to the next seat
 on the `⚠ NEEDS YOU` strip (reading, above). `@auto` is a route word that lets the readings pick
@@ -922,8 +934,8 @@ process of its own that outlives this terminal: `/detach` walks away, `telltale 
 rejoins, `telltale council kill` ends it — a read room only, because a room that writes
 without asking will not detach; [design.md §7.29](design.md), and §7.30 for macOS and
 Linux), `--live claude` (seat a pane showing claude's own terminal screen beside the
-measured seats; display only, and nothing on it is read as a number; [design.md
-§9.53](design.md)), `--model seat=model,...` (ask a seat for a model; the badge row shows
+measured seats; display only, and nothing on it is read as a number; `ctrl+]` on that seat
+types into it and `ctrl+]` comes back; [design.md §9.53](design.md)), `--model seat=model,...` (ask a seat for a model; the badge row shows
 `asked` beside the `ran` model that the vendor's own session record names, or `ran unknown`,
 and marks a mismatch with `⚠`; a seat with no measured model flag is refused, and
 `--host` refuses the flag; `internal/council/seatmodel.go` and `LEDGER.md` 2026-09-30),

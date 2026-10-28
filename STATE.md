@@ -904,8 +904,17 @@ Nothing open. The last one here was the 44 seconds, and it was measured
   What is still owed is the drive. **No `claude` interactive session has ever
   been run through a pane.** The spawn guard makes that impossible from inside
   the suite by design, so it is the same class of debt as the host's first live
-  turn two entries down: an operator-driven check. Also unbuilt: no key sends a
-  keystroke into the pane, so the pane is a window rather than a terminal.
+  turn two entries down: an operator-driven check. **The pane is a terminal
+  now, offline (2026-10-28):** `ctrl+]` on the focused live seat hands it the
+  keyboard, every key after that is encoded as the bytes a terminal sends and
+  written to the pseudoconsole's input, and `ctrl+]` hands the keys back
+  (`internal/council/livekeys.go`, [design.md §9.53](docs/design.md#s9-53)'s
+  dated amendment). The encoder, the routing and the mode word are all tested
+  against a fake `PTYSession` and never a process. What that leaves owed is
+  the same drive as before, now with a second half: nobody has yet typed into
+  a real `claude` through the pane, so whether the guest sets a cursor-key
+  mode or an input protocol the encoder does not speak is unmeasured. The
+  owner's check, not the suite's.
 
 - **The PTY spike's own measurements (2026-08-31).** The
   spike ran on this machine — Windows 11 build 10.0.26200.9168, go1.26.6 — and

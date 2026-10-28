@@ -18251,12 +18251,73 @@ would have to be taught on the help panel and would be a second way to spend a s
 that the operator has not asked for; the flag is a decision made once, at the point where the
 room is opened, and that is the right place for a control that doubles a bill.
 
-**Nothing types into the pane either.** `PTYSession.Write` exists because the pseudoconsole's
+**Nothing types into the pane either** — as first shipped; the 2026-10-28 amendment below
+retires this paragraph. `PTYSession.Write` exists because the pseudoconsole's
 input pipe exists whether or not anybody writes to it, and no council code calls it. So the
 first cut is a WINDOW, not a terminal: the operator watches the agent's own screen and answers
 it, when it asks something, in the seat's structured column beside it. Sending keystrokes needs
 a key encoding, a focus rule and an answer to what `q` means while a pane has the keyboard, and
 none of those is a display question. Owed, and named here rather than half-built.
+
+#### Amendment, 2026-10-28: the pane takes the keyboard, and gives it back
+
+"Nothing types into the pane either" is no longer true. The three questions that paragraph
+named as owed — a key encoding, a focus rule, and what `q` means while a pane has the keyboard
+— are answered in `internal/council/livekeys.go`, and each answer is a decision rather than a
+default.
+
+**One key, both ways: `ctrl+]`.** In view mode, with the live seat focused, it hands the
+keyboard to the pane; while the pane holds it, the same key hands it back. It is also reachable
+from compose, because it carries no text, and the draft is exactly as it was when the keys
+return. It was chosen because it is the one key a guest is least likely to want: telnet took it
+as its escape and no terminal program since has bound it; 0x1D is a C0 byte the pinned
+ultraviolet decodes as `ctrl+]` under every protocol with nothing negotiated; and it is the ONE
+key the encoder refuses to forward, so a guest can never be sent the byte the room reserves.
+Entering moves nothing — no focus change, no scroll, no panel, no mode change — on §9.51's
+rule that a figure offers the jump and does not take it. A refusal is a sentence in the notice:
+no live seat, a pane that ended or was refused, a pane that is not the focused column, a pane
+that is not on screen.
+
+**The mode is total.** While the pane holds the keyboard, `key()` routes every press to
+`liveKey` before any gate, card or mode, and `liveKey` either writes bytes or drops the key;
+nothing falls through to the room's keymap. So `q` is the letter q, `?` is a question mark, the
+digits are digits, and **`ctrl+c` is the guest's interrupt** (0x03) rather than the room's
+cancel. A gate the structured seat raises meanwhile stays named on the needs-you strip and is
+answered after `ctrl+]`, not by a `y` the operator meant for the guest. The alternative — a
+partial keymap, where some keys reach the room and others the pane — was refused as the worst
+of both: a `q` that quits a room from inside a guest that uses `q`, or a `?` the guest never
+received. A paste while the pane holds the keyboard goes to the pane too, raw. A key the
+encoder has no bytes for is dropped, never guessed and never re-dispatched.
+
+**The encoding is xterm's normal mode.** `encodeKey` maps printable text to itself (alt
+prefixes ESC), ctrl+letter to its C0 byte, the five xterm punctuation chords to theirs,
+enter to CR, tab to HT and shift+tab to `CSI Z`, backspace to DEL (0x7f, not BS — that is
+ctrl+h, a distinction readline keeps), esc to ESC, the cursor keys and home/end to `CSI A..D`
+and `CSI H`/`CSI F` with the `1;m` modifier form, insert/delete/pgup/pgdn and F5-F12 to the
+`CSI n ~` form with `n;m` when modified, and F1-F4 to SS3 unmodified. Every mapping is pinned
+in `TestLiveKeyEncoder`. The pane's keyboard, its routing, the resize, and the mode word have
+tests against a fake `PTYSession`; nothing in the suite starts a pseudoconsole.
+
+**The mode word.** The marker row reads `live · KEYS · second process · display only`, the
+border reads `KEYS` where it read `VIEW`, and the footer line is replaced by two cells —
+`keys to Claude Code` and `ctrl+] back to the room` — on the pane prefix's precedent: every
+ordinary key is now a byte for the guest, so naming any of them would be §7.8's false promise.
+All three are words and survive `--ascii` and `NO_COLOR`; the golden
+`live-keys-go-to-the-pane-ascii.txt` pins them with `PlainStyles` and the ASCII glyph set. The
+help panel teaches the key on the `ctrl+r` row, merged there because the panel's budget is
+hard.
+
+**Still unmeasured, and the list is the point of this paragraph.** No keystroke has been
+typed into a real `claude` through the pane — the spawn guard makes that impossible from the
+suite, as before. So: whether the guest sets DECCKM (application cursor keys, which want
+`SS3 A` rather than `CSI A`) or any keypad mode is unknown, and the encoder speaks normal
+mode only; whether the guest negotiates the kitty keyboard protocol or win32-input-mode is
+unknown, and a guest that did would be answered in neither (the emulator consumes the mode
+set, and nothing here reads it back); whether the guest wants bracketed-paste markers around
+a paste is unknown, so a paste is sent raw; and ConPTY's own translation of the input pipe
+into the console input it hands the child was not exercised, so the encoding assumed here is
+what a terminal sends to a pty, not what ConPTY was observed to accept. The display-only
+contract is untouched by any of this: keys go IN, and nothing comes out of the grid but rows.
 
 #### Verification
 

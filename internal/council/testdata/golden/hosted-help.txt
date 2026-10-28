@@ -13,7 +13,7 @@
                  g / G first turn or newest; [ ] step one turn — or one hunk, in an open patch                          
     d / D / o    d flips a racer's block to the patch; D quotes the ▸ hunk into the draft; o opens its worktree         
     f / t / T    f gives one column the full width; t one turn the whole room; T that turn's acts (in compose, text)    
-    ctrl+r       arm rebuttal: vendors see the others' answers, quoted as untrusted                                     
+    ctrl+r / ^]  arm rebuttal: vendors see the others' answers, quoted as untrusted; ^] types into a live pane          
     ctrl+c / q   ctrl+c cancels the focused seat's turn; q ENDS the room and every seat; /detach leaves it running      
                                                                                                                         
   ↓ 6 more below                                                                                                        

@@ -1650,6 +1650,12 @@ type LiveSeat struct {
 	// renderer can tell a grid that matches the pane from one that has not
 	// caught up with a resize yet, and clip rather than tear.
 	Cols, Rows int
+	// Typing is whether the pane holds the keyboard (livekeys.go). While it
+	// does, every key but ctrl+] is encoded and written to the child, and
+	// nothing reaches the room's own keymap. On State because the marker row,
+	// the border word and the footer all draw it, and a mode that changes what
+	// an unmodified key means without saying so is §7.8's surprise.
+	Typing bool
 	// Grid is the child's screen, one already-decoded row per line, PLAIN.
 	//
 	// Plain, with the guest's colours dropped, and §9.53 argues the trade: a

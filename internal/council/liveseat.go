@@ -241,6 +241,10 @@ func (m *Model) applyPTY(chunks []runner.PTYChunk) {
 	case ended:
 		m.st.Live.Phase = LiveEnded
 		m.st.Live.Note = note
+		// A pane with no process behind it cannot hold the keyboard. Cleared
+		// here so the keys the operator presses next reach the room rather
+		// than a closed pipe (livekeys.go).
+		m.st.Live.Typing = false
 		m.ptyChunks = nil
 		m.live = nil
 	case m.st.Live.Phase == LiveOpening:
@@ -316,6 +320,7 @@ func (m *Model) killLive() bool {
 	}
 	m.live.Kill()
 	m.live = nil
+	m.st.Live.Typing = false
 	return true
 }
 

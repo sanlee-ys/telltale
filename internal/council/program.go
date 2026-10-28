@@ -1236,6 +1236,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // exception to it: something is blocked on a keystroke, the footer says which
 // keystroke, and the keymap is read from the same queue the footer is.
 func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// The live pane's keyboard (livekeys.go), and it outranks everything. While
+	// the pane holds the keyboard the room's keymap is not on the table at all:
+	// a gate raised meanwhile stays named on the needs-you strip and waits for
+	// ctrl+] to hand the keys back, and ctrl+c is the GUEST's interrupt. Half
+	// a keymap leaking through would be worse than either whole — a `y` for
+	// the guest approving a write, or a `q` for the guest quitting the room.
+	if m.st.Live.Typing {
+		return m.liveKey(msg)
+	}
 	// ctrl+c during a race's worktree setup stops the SETUP, in every mode, and
 	// it is checked before anything else for the reason the setup moved off the
 	// loop at all: this keystroke is the operator's only way to end a git
@@ -2238,6 +2247,11 @@ func (m *Model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// ruling — why this chord, why no y/n, what the empty draft does —
 		// lives on clearDraft (§9.38).
 		m.clearDraft()
+	case liveLeaveKey:
+		// Reachable from compose too, because it carries no text and the
+		// draft is kept: the pane borrows the keyboard and ctrl+] returns it
+		// to the composer exactly as it was (livekeys.go).
+		m.enterLive()
 	default:
 		// A key that carries NO text is not text, so it keeps the meaning it has
 		// in view mode. The test is msg.Text rather than a hand-kept list of
@@ -2696,6 +2710,12 @@ func (m *Model) viewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.st.Expanded = !m.st.Expanded
+	case liveLeaveKey:
+		// Hands the keyboard to the live pane (livekeys.go). The same key gives
+		// it back, and every refusal — no pane, a pane that ended, a pane on a
+		// seat that is not focused — is a sentence in the notice.
+		m.enterLive()
+		return m, nil
 	case "ctrl+w":
 		// Arms the pane prefix (§9.51). One binding buys a namespace: `s`, `<`,
 		// `>` and `e` are all live in this room already — `s` stops a flow chain,
